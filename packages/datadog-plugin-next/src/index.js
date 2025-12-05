@@ -13,7 +13,7 @@ class NextPlugin extends ServerPlugin {
 
   constructor (...args) {
     super(...args)
-    this._requests = new WeakMap()
+    this._requestsBySpanId = new Map()
     this.addSub('apm:next:page:load', message => this.pageLoad(message))
   }
 
@@ -35,7 +35,10 @@ class NextPlugin extends ServerPlugin {
 
     analyticsSampler.sample(span, this.config.measured, true)
 
-    this._requests.set(span, req)
+    // Store request by span ID to handle cases where child spans are activated
+    // before pageLoad runs (especially when OpenTelemetry TracerProvider is enabled)
+    const spanId = span.context().toSpanId()
+    this._requestsBySpanId.set(spanId, req)
 
     return { ...store, span }
   }
@@ -81,6 +84,11 @@ class NextPlugin extends ServerPlugin {
     this.config.hooks.request(span, req, res)
 
     span.finish()
+
+    // Cleanup: Remove request from Map to prevent memory leaks
+    // since Map (unlike WeakMap) won't auto-garbage collect
+    const spanId = span.context().toSpanId()
+    this._requestsBySpanId.delete(spanId)
   }
 
   pageLoad ({ page, isAppPath = false, isStatic = false }) {
@@ -89,7 +97,25 @@ class NextPlugin extends ServerPlugin {
     if (!store) return
 
     const span = store.span
-    const req = this._requests.get(span)
+
+    const spanId = span.context().toSpanId()
+
+    // Convert parent ID from hex to decimal to match storage format.
+    // IMPORTANT: toSpanId() returns decimal string (e.g., "457018059221062340")
+    // but _parentId.toString() defaults to hex (e.g., "0657a780e3cf52c4").
+    // We must use toString(10) to get decimal format for Map lookup to work.
+    let parentSpanId = null
+    if (span.context()._parentId) {
+      parentSpanId = span.context()._parentId.toString(10)
+    }
+
+    // Try current span first, then parent span.
+    // This handles cases where pageLoad runs in a child span context
+    // (e.g., when OpenTelemetry TracerProvider creates "resolve page components" span)
+    let req = this._requestsBySpanId.get(spanId)
+    if (!req && parentSpanId) {
+      req = this._requestsBySpanId.get(parentSpanId)
+    }
 
     // safeguard against missing req in complicated timeout scenarios
     if (!req) return
