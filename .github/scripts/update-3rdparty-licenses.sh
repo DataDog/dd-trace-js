@@ -2,7 +2,7 @@
 
 set -e
 
-if git diff --exit-code LICENSE-3rdparty.csv; then
+if git diff --ignore-space-at-eol --exit-code LICENSE-3rdparty.csv; then
   echo "✅ LICENSE-3rdparty.csv is already up to date"
 else
   echo "📝 LICENSE-3rdparty.csv was modified by license attribution command"
