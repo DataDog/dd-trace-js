@@ -968,9 +968,7 @@ describe('integrations', () => {
         if (semifies(realVersion, '<4.87.0')) {
           this.skip()
         }
-
-        // This test validates that reasoning_output_tokens metric is captured
-        // when the model performs reasoning steps (e.g., o1-preview, o1-mini)
+        
         await openai.responses.create({
           model: 'gpt-5-mini',
           input: 'Solve this step by step: What is 15 * 24?',
@@ -995,7 +993,7 @@ describe('integrations', () => {
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
             cache_read_input_tokens: MOCK_NUMBER,
-            reasoning_output_tokens: 128  // This should be non-zero for reasoning models
+            reasoning_output_tokens: 128
           },
           modelName: 'gpt-5-mini-2025-08-07', // update
           modelProvider: 'openai',
