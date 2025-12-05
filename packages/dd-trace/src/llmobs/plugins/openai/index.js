@@ -1,6 +1,7 @@
 'use strict'
 
-const LLMObsPlugin = require('./base')
+const LLMObsPlugin = require('../base')
+const { extractChatTemplateFromInstructions, normalizePromptVariables, extractTextFromContentItem } = require('./utils')
 
 const allowedParamKeys = new Set([
   'max_output_tokens',
@@ -221,7 +222,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   #tagResponse (span, inputs, response, error) {
     // Tag metadata - use allowlist approach for request parameters
 
-    const { input, model, ...parameters } = inputs
+    const { model, ...parameters } = inputs
+    let input = inputs.input
 
     // Create input messages
     const inputMessages = []
@@ -231,10 +233,33 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       inputMessages.push({ role: 'system', content: inputs.instructions })
     }
 
+    // For reusable prompts, use response.instructions if no explicit input is provided
+    if (!input && inputs.prompt && response?.instructions) {
+      input = response.instructions
+    }
+
     // Handle input - can be string or array of mixed messages
     if (Array.isArray(input)) {
       for (const item of input) {
-        if (item.type === 'function_call') {
+        if (item.type === 'message') {
+          // Handle instruction messages (from response.instructions for reusable prompts)
+          const role = item.role
+          if (!role) continue
+
+          let content = ''
+          if (Array.isArray(item.content)) {
+            const textParts = item.content
+              .map(extractTextFromContentItem)
+              .filter(Boolean)
+            content = textParts.join('')
+          } else if (typeof item.content === 'string') {
+            content = item.content
+          }
+
+          if (content) {
+            inputMessages.push({ role, content })
+          }
+        } else if (item.type === 'function_call') {
           // Function call: convert to message with tool_calls
           // Parse arguments if it's a JSON string
           let parsedArgs = item.arguments
@@ -379,6 +404,22 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
 
     this._tagger.tagLLMIO(span, inputMessages, outputMessages)
+
+    // Handle prompt tracking for reusable prompts
+    if (inputs.prompt && response?.prompt) {
+      const { id, version } = response.prompt // ResponsePrompt
+      // TODO: Add proper tagger API for prompt metadata
+      if (id && version) {
+        const normalizedVariables = normalizePromptVariables(inputs.prompt.variables)
+        const chatTemplate = extractChatTemplateFromInstructions(response.instructions, normalizedVariables)
+        this._tagger._setTag(span, '_ml_obs.meta.input.prompt', {
+          id,
+          version,
+          variables: normalizedVariables,
+          chat_template: chatTemplate
+        })
+      }
+    }
 
     const outputMetadata = {}
 
