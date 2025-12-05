@@ -1,10 +1,8 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { createWrapFetch } = require('./helpers/fetch')
 const { addHook, tracingChannel } = require('./helpers/instrument')
 
-const fetchCh = tracingChannel('apm:electron:net:fetch')
 const requestCh = tracingChannel('apm:electron:net:request')
 
 function createWrapRequest (ch) {
@@ -60,7 +58,7 @@ addHook({ name: 'electron', versions: ['>=37.0.0'] }, electron => {
   // Electron exports a string in Node and an object in Electron.
   if (typeof electron === 'string') return electron
 
-  shimmer.wrap(electron.net, 'fetch', createWrapFetch(globalThis.Request, fetchCh))
+  // This also covers `fetch` as it uses `request` under the hood.
   shimmer.wrap(electron.net, 'request', createWrapRequest(requestCh))
 
   return electron
