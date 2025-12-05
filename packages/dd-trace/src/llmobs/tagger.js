@@ -25,6 +25,7 @@ const {
   INPUT_TOKENS_METRIC_KEY,
   OUTPUT_TOKENS_METRIC_KEY,
   TOTAL_TOKENS_METRIC_KEY,
+  REASONING_OUTPUT_TOKENS_METRIC_KEY,
   INTEGRATION,
   DECORATOR,
   PROPAGATED_ML_APP_KEY
@@ -163,6 +164,9 @@ class LLMObsTagger {
           break
         case 'cacheWriteTokens':
           processedKey = CACHE_WRITE_INPUT_TOKENS_METRIC_KEY
+          break
+        case 'reasoningOutputTokens':
+          processedKey = REASONING_OUTPUT_TOKENS_METRIC_KEY
           break
       }
 
