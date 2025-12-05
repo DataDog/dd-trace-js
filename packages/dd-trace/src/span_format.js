@@ -32,13 +32,13 @@ const map = {
   'resource.name': 'resource'
 }
 
-function format (span, isChunkRoot) {
+function format (span) {
   const formatted = formatSpan(span)
 
   extractSpanLinks(formatted, span)
   extractSpanEvents(formatted, span)
   extractRootTags(formatted, span)
-  extractChunkTags(formatted, span, isChunkRoot)
+  extractChunkTags(formatted, span)
   extractTags(formatted, span)
 
   return formatted
@@ -192,10 +192,11 @@ function extractRootTags (formattedSpan, span) {
   addTag({}, formattedSpan.metrics, TOP_LEVEL_KEY, 1)
 }
 
-function extractChunkTags (formattedSpan, span, isChunkRoot) {
+function extractChunkTags (formattedSpan, span) {
   const context = span.context()
-
-  if (!isChunkRoot) return
+  const isLocalRoot = span === context._trace.started[0]
+  
+  if (!isLocalRoot) return
 
   for (const [key, value] of Object.entries(context._trace.tags)) {
     addTag(formattedSpan.meta, formattedSpan.metrics, key, value)

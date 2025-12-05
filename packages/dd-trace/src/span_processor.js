@@ -5,6 +5,7 @@ const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const { getEnvironmentVariable } = require('./config-helper')
+const getProcessTags = require('./process-tags')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -24,6 +25,15 @@ class SpanProcessor {
 
     this._spanSampler = new SpanSampler(config.sampler)
     this._gitMetadataTagger = new GitMetadataTagger(config)
+
+    this._processTags = config.propagateProcessTags?.enabled
+      ? getProcessTags().serialized
+      : false
+    
+    // Pass process tags to exporter so it can add them to the first span of the first chunk
+    if (this._processTags) {
+      this._exporter._processTags = this._processTags
+    }
   }
 
   sample (span) {
@@ -49,14 +59,11 @@ class SpanProcessor {
       this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
-      let isChunkRoot = true
-
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
         } else {
-          const formattedSpan = spanFormat(span, isChunkRoot)
-          isChunkRoot = false
+          const formattedSpan = spanFormat(span)
           this._stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
         }
