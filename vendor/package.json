@@ -4,6 +4,7 @@
     "postinstall": "rspack"
   },
   "dependencies": {
+    "@datadog/openfeature-node-server": "^0.2.0",
     "@datadog/sketches-js": "2.1.1",
     "@isaacs/ttlcache": "^2.0.1",
     "@opentelemetry/core": ">=1.14.0 <1.31.0",

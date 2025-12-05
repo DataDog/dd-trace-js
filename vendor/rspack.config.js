@@ -8,7 +8,7 @@
 //       object or switch to our own internal loader and remove the dependency.
 // TODO: Vendor `dc-polyfill` and figure out why it fails the tests.
 
-const { CopyRspackPlugin } = require('@rspack/core')
+const { CopyRspackPlugin, SourceMapDevToolPlugin } = require('@rspack/core')
 const { LicenseWebpackPlugin } = require('license-webpack-plugin')
 const { join } = require('path')
 const { dependencies } = require('./package.json')
@@ -28,7 +28,7 @@ module.exports = {
   entry: Object.fromEntries(include.difference(exclude).entries()),
   target: 'node',
   mode: 'production',
-  devtool: false,
+  devtool: 'hidden-source-map',
   context: join(__dirname, 'node_modules'),
   optimization: {
     checkIds: 'named',
@@ -36,6 +36,7 @@ module.exports = {
   },
   externals: {
     '@openfeature/core': '@openfeature/core',
+    '@openfeature/server-sdk': '@openfeature/server-sdk',
     '@opentelemetry/api': '@opentelemetry/api'
   },
   plugins: [
