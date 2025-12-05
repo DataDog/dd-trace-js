@@ -55,10 +55,29 @@ function getProdDeps () {
     }
   }
 
+  addProdDeps(deps, process.cwd())
+  addProdDeps(deps, join(process.cwd(), 'vendor'))
+
   // Add vendored dependencies
   addVendoredDeps(deps)
 
   return deps
+}
+
+function addProdDeps (deps, cwd) {
+  const stdout = execSync('yarn list --production --json', {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'inherit'],
+    cwd
+  })
+
+  for (const line of stdout.split('\n')) {
+    if (!line) continue
+    const parsed = JSON.parse(line)
+    if (parsed.type === 'tree' && parsed.data && Array.isArray(parsed.data.trees)) {
+      collectFromTrees(parsed.data.trees, deps)
+    }
+  }
 }
 
 function collectFromTrees (trees, deps) {
