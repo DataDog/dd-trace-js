@@ -155,7 +155,6 @@
     "protobufjs": "^7.5.3",
     "retry": "^0.13.1",
     "rfdc": "^1.4.1",
-    "roundround": "^0.2.0",
     "semifies": "^1.0.0",
     "shell-quote": "^1.8.2",
     "source-map": "^0.7.4",
