@@ -205,3 +205,30 @@ jobs:
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
+
+  google-genai:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: google-genai
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:plugins:ci
+      - run: yarn test:llmobs:plugins:ci
+        shell: bash
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - run: yarn test:llmobs:plugins:ci
+        shell: bash
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: llmobs-${{ github.job }}
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
