@@ -37,3 +37,36 @@ jobs:
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+
+  vendor:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@08eff52bf64351f401fb50d4972fa95b9f2c2d1b # 2.4.0
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        if: steps.metadata.outputs.dependency-group == 'vendor-minor-and-patch-dependencies'
+      - run: yarn
+        working-directory: ./vendor
+        if: steps.metadata.outputs.dependency-group == 'vendor-minor-and-patch-dependencies'
+      - name: Create commits
+        id: create-commits
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add -A
+          git commit -m "update vendored dependencies with new versions"
+
+          echo "commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+        if: steps.metadata.outputs.dependency-group == 'vendor-minor-and-patch-dependencies'
+      - name: Push commits
+        uses: DataDog/commit-headless@5a0f3876e0fbdd3a86b3e008acf4ec562db59eee # action/v2.0.1
+        with:
+          branch: ${{ github.ref_name }}
+          command: push
+          commits: "${{ steps.create-commits.outputs.commits }}"
+        if: steps.metadata.outputs.dependency-group == 'vendor-minor-and-patch-dependencies'

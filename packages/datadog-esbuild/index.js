@@ -114,7 +114,6 @@ ${build.initialOptions.banner.js}`
   }
 
   try {
-    // eslint-disable-next-line n/no-unpublished-require
     require.resolve('@openfeature/core')
   } catch (error) {
     build.initialOptions.external ??= []
@@ -245,29 +244,33 @@ ${build.initialOptions.banner.js}`
         }
       }
 
-      const packageJson = JSON.parse(fs.readFileSync(pathToPackageJson).toString())
+      try {
+        const packageJson = JSON.parse(fs.readFileSync(pathToPackageJson).toString())
 
-      const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
-      if (isESM && !interceptedESMModules.has(fullPathToModule)) {
-        fullPathToModule += ESM_INTERCEPTED_SUFFIX
-      }
-
-      if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
-
-      // https://esbuild.github.io/plugins/#on-resolve-arguments
-      return {
-        path: fullPathToModule,
-        pluginData: {
-          version: packageJson.version,
-          pkg: extracted.pkg,
-          path: extracted.path,
-          full: fullPathToModule,
-          raw: args.path,
-          pkgOfInterest: true,
-          kind: args.kind,
-          internal,
-          isESM
+        const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
+        if (isESM && !interceptedESMModules.has(fullPathToModule)) {
+          fullPathToModule += ESM_INTERCEPTED_SUFFIX
         }
+
+        if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
+
+        // https://esbuild.github.io/plugins/#on-resolve-arguments
+        return {
+          path: fullPathToModule,
+          pluginData: {
+            version: packageJson.version,
+            pkg: extracted.pkg,
+            path: extracted.path,
+            full: fullPathToModule,
+            raw: args.path,
+            pkgOfInterest: true,
+            kind: args.kind,
+            internal,
+            isESM
+          }
+        }
+      } catch {
+        // Skip vendored dependencies which never have a `package.json`.
       }
     }
   })

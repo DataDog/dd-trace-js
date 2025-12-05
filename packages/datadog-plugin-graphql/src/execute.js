@@ -21,7 +21,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     const span = this.startSpan(this.operationName(), {
       service: this.config.service || this.serviceName(),
-      resource: getSignature(document, name, type, this.config.signature),
+      resource: getSignature(document, name, type, this.config.signature, this),
       kind: this.constructor.kind,
       type: this.constructor.type,
       meta: {
@@ -66,7 +66,7 @@ function addVariableTags (config, span, variableValues) {
   span.addTags(tags)
 }
 
-function getSignature (document, operationName, operationType, calculate) {
+function getSignature (document, operationName, operationType, calculate, self) {
   if (calculate !== false && tools !== false) {
     try {
       try {

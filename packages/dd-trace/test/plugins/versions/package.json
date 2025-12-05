@@ -67,6 +67,7 @@
     "@prisma/client": "6.19.0",
     "@redis/client": "5.9.0",
     "@smithy/smithy-client": "4.9.3",
+    "@types/node": "18.19.130",
     "@vitest/coverage-istanbul": "4.0.8",
     "@vitest/coverage-v8": "4.0.8",
     "@vitest/runner": "4.0.8",

@@ -9,7 +9,7 @@ const { assert } = require('chai')
 describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
   let axios, cwd, appDir, appFile, agent, proc
 
-  useSandbox(['typescript', 'express'])
+  useSandbox(['@types/node', 'typescript', 'express'])
 
   before(function () {
     cwd = sandboxCwd()
