@@ -4290,6 +4290,11 @@ rimraf@^3.0.0:
   dependencies:
     glob "^7.1.3"
 
+roundround@^0.2.0:
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/roundround/-/roundround-0.2.0.tgz#ea0e5659d31f0b266bf03d0c040aa51d9da68f79"
+  integrity sha512-6YZ3qbUMtQxczM/i94EnBvyP6EXHTCfagmZAGsyzlnLEXPwGhs+lBvdPKLwNc7Htc8wFMVw0UxNtEFMq4YdqjA==
+
 router@^2.2.0:
   version "2.2.0"
   resolved "https://registry.yarnpkg.com/router/-/router-2.2.0.tgz#019be620b711c87641167cc79b99090f00b146ef"
