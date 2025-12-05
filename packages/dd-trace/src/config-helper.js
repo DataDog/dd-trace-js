@@ -80,10 +80,9 @@ module.exports = {
    * @returns {string|undefined}
    * @throws {Error} if the configuration is not supported
    */
-  // This method, and callers of this method, need to be updated to check for declarative config sources as well.
   getEnvironmentVariable (name) {
     if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
-        !supportedConfigurations[name]) {
+      !supportedConfigurations[name]) {
       throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
     }
     const config = process.env[name]
@@ -95,5 +94,31 @@ module.exports = {
       }
     }
     return config
+  },
+
+  /**
+   * Returns the value stored at the given name, assumed to be in environment variable format,
+   * from the provided source. Falls back to aliases if the canonical name is not set.
+   * Used for stable config sources.
+   *
+   * @param {string} name Environment variable name
+   * @param {object} source Environment source
+   * @returns {string|undefined}
+   * @throws {Error} if the configuration is not supported
+   */
+  getValueFromEnvSource (name, source) {
+    if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
+      !supportedConfigurations[name]) {
+      throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
+    }
+    const value = source[name]
+    if (value === undefined && aliases[name]) {
+      for (const alias of aliases[name]) {
+        if (source[alias] !== undefined) {
+          return source[alias]
+        }
+      }
+    }
+    return value
   }
 }

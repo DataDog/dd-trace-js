@@ -3,7 +3,7 @@ const request = require('../../../exporters/common/request')
 const log = require('../../../log')
 const { safeJSONStringify } = require('../../../exporters/common/util')
 const { JSONEncoder } = require('../../encode/json-encoder')
-const { getEnvironmentVariable } = require('../../../config-helper')
+const { getResolvedEnv } = require('../../../config-env-sources')
 
 const BaseWriter = require('../../../exporters/common/writer')
 
@@ -24,7 +24,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
       path: '/api/v2/logs',
       method: 'POST',
       headers: {
-        'dd-api-key': getEnvironmentVariable('DD_API_KEY'),
+        'dd-api-key': getResolvedEnv('DD_API_KEY'),
         'Content-Type': 'application/json'
       },
       // TODO: what's a good value for timeout for the logs intake?
