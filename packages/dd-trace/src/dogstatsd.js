@@ -152,7 +152,7 @@ class DogStatsDClient {
     const socket = dgram.createSocket(type)
 
     socket.on('error', () => {})
-    socket.unref()
+    socket.unref?.()
 
     return socket
   }
@@ -357,7 +357,7 @@ class CustomMetrics {
     const flush = this.flush.bind(this)
 
     // TODO(bengl) this magic number should be configurable
-    setInterval(flush, 10 * 1000).unref()
+    setInterval(flush, 10 * 1000).unref?.()
 
     process.once('beforeExit', flush)
   }

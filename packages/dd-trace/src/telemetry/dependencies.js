@@ -75,7 +75,7 @@ function waitAndSend (config, application, host) {
     if (savedDependenciesToSend.size > 0) {
       waitAndSend(config, application, host)
     }
-  }).unref()
+  }).unref?.()
 }
 
 function loadAllTheLoadedModules () {

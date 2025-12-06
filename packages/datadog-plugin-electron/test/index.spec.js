@@ -146,6 +146,47 @@ describe('Plugin', () => {
 
           child.send({ name: 'render' })
         })
+
+        it('should do automatic instrumentation for renderer IPC when receiving', done => {
+          agent
+            .assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const { meta } = span
+
+              assert.strictEqual(span.type, 'worker')
+              assert.strictEqual(span.name, 'electron.renderer.receive')
+              assert.strictEqual(span.resource, 'update-counter')
+              assert.strictEqual(span.service, 'test')
+              assert.strictEqual(span.error, 0)
+
+              assert.strictEqual(meta.component, 'electron')
+              assert.strictEqual(meta['span.kind'], 'consumer')
+            })
+            .then(done)
+            .catch(done)
+
+          child.send({ name: 'render' })
+        })
+
+        it('should do automatic instrumentation for renderer IPC when sending', done => {
+          agent
+            .assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const { meta } = span
+
+              assert.strictEqual(span.name, 'electron.renderer.send')
+              assert.strictEqual(span.resource, 'set-title')
+              assert.strictEqual(span.service, 'test')
+              assert.strictEqual(span.error, 0)
+
+              assert.strictEqual(meta.component, 'electron')
+              assert.strictEqual(meta['span.kind'], 'producer')
+            })
+            .then(done)
+            .catch(done)
+
+          child.send({ name: 'render' })
+        })
       })
     })
   })

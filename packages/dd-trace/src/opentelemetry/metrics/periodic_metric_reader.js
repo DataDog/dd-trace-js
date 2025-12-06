@@ -142,7 +142,7 @@ class PeriodicMetricReader {
 
     this.#timer = setInterval(() => {
       this.#collectAndExport()
-    }, this.#exportInterval).unref()
+    }, this.#exportInterval).unref?.()
   }
 
   /**

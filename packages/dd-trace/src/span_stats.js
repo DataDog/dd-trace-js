@@ -149,7 +149,7 @@ class SpanStatsProcessor {
 
     if (this.enabled) {
       this.timer = setInterval(this.onInterval.bind(this), interval * 1e3)
-      this.timer.unref()
+      this.timer.unref?.()
     }
   }
 
