@@ -115,9 +115,10 @@ function createWrapRemoveAllListeners (mappings) {
 }
 
 function createWrapSend (ch, promise = false) {
+  const trace = (promise ? ch.tracePromise : ch.traceSync).bind(ch)
+
   return function wrapSend (send) {
     return function (channel, ...args) {
-      const trace = (promise ? ch.tracePromise : ch.traceSync).bind(ch)
       const ctx = { args, channel, self: this }
 
       return trace(() => send.call(this, channel, ...args), ctx)

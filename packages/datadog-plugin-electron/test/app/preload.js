@@ -14,3 +14,9 @@ if (globalThis.logger) {
 contextBridge.exposeInMainWorld('electronAPI', {
   setTitle: title => ipcRenderer.sendSync('set-title', title)
 })
+
+const listener = () => {
+  ipcRenderer.off('update-counter', listener)
+}
+
+ipcRenderer.on('update-counter', listener)
