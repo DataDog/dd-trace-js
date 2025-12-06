@@ -40,7 +40,7 @@ const SEVERITY_MAP = {
 /**
  * OtlpTransformer transforms log records to OTLP format.
  *
- * This implementation follows the OTLP Logs Data Model specification:
+ * This implementation follows the OTLP Logs v1.7.0 Data Model specification:
  * https://opentelemetry.io/docs/specs/otlp/#log-data-model
  *
  * @class OtlpTransformer
@@ -79,12 +79,12 @@ class OtlpTransformer extends OtlpTransformerBase {
 
     const logsData = {
       resourceLogs: [{
-        resource: this._transformResource(),
+        resource: this.transformResource(),
         scopeLogs: this.#transformScope(logRecords),
       }]
     }
 
-    return this._serializeToProtobuf(protoLogsService, logsData)
+    return this.serializeToProtobuf(protoLogsService, logsData)
   }
 
   /**
@@ -95,11 +95,11 @@ class OtlpTransformer extends OtlpTransformerBase {
   #transformToJson (logRecords) {
     const logsData = {
       resourceLogs: [{
-        resource: this._transformResource(),
+        resource: this.transformResource(),
         scopeLogs: this.#transformScope(logRecords)
       }]
     }
-    return this._serializeToJson(logsData)
+    return this.serializeToJson(logsData)
   }
 
   /**
@@ -108,7 +108,7 @@ class OtlpTransformer extends OtlpTransformerBase {
    * @returns {Object[]} Array of scope log objects
    */
   #transformScope (logRecords) {
-    const groupedRecords = this._groupByInstrumentationScope(logRecords)
+    const groupedRecords = this.groupByInstrumentationScope(logRecords)
     const scopeLogs = []
 
     for (const records of groupedRecords.values()) {
@@ -155,7 +155,7 @@ class OtlpTransformer extends OtlpTransformerBase {
     }
 
     if (logRecord.attributes) {
-      result.attributes = this._transformAttributes(logRecord.attributes)
+      result.attributes = this.transformAttributes(logRecord.attributes)
     }
 
     if (spanContext?.traceFlags !== undefined) {
@@ -232,7 +232,7 @@ class OtlpTransformer extends OtlpTransformerBase {
         kvlistValue: {
           values: Object.entries(body).map(([key, value]) => ({
             key,
-            value: this._transformAnyValue(value)
+            value: this.transformAnyValue(value)
           }))
         }
       }

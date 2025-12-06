@@ -80,7 +80,7 @@ describe('IastContextPlugin', () => {
 
       addSub.firstCall.args[1]()
 
-      expect(startContext).to.be.calledOnce
+      sinon.assert.calledOnce(startContext)
     })
   })
 
@@ -101,7 +101,7 @@ describe('IastContextPlugin', () => {
 
       addSub.firstCall.args[1]()
 
-      expect(finishContext).to.be.calledOnce
+      sinon.assert.calledOnce(finishContext)
     })
   })
 
@@ -134,7 +134,7 @@ describe('IastContextPlugin', () => {
 
       plugin.startContext()
 
-      expect(plugin.getTopContext).to.be.calledOnce
+      sinon.assert.calledOnce(plugin.getTopContext)
       expect(plugin.getRootSpan).to.be.calledWith(store)
     })
 
@@ -244,8 +244,8 @@ describe('IastContextPlugin', () => {
 
       plugin.finishContext()
 
-      expect(cleanIastContext).to.be.calledOnce
-      expect(releaseRequest).to.be.calledOnce
+      sinon.assert.calledOnce(cleanIastContext)
+      sinon.assert.calledOnce(releaseRequest)
     })
 
     it('should not fail if there is no iastContext', () => {
@@ -253,7 +253,7 @@ describe('IastContextPlugin', () => {
 
       plugin.finishContext()
 
-      expect(cleanIastContext).to.be.calledOnce
+      sinon.assert.calledOnce(cleanIastContext)
     })
   })
 })

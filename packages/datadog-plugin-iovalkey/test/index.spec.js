@@ -1,13 +1,13 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const assert = require('node:assert/strict')
 
-const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
@@ -36,18 +36,18 @@ describe('Plugin', () => {
         it('should do automatic instrumentation when using callbacks', async () => {
           agent.assertSomeTraces(() => {}) // wait for initial info command
           const promise = agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', 'get')
-            expect(traces[0][0]).to.have.property('type', 'valkey')
-            expect(traces[0][0].meta).to.have.property('component', 'iovalkey')
-            expect(traces[0][0].meta).to.have.property('_dd.integration', 'iovalkey')
-            expect(traces[0][0].meta).to.have.property('db.name', '0')
-            expect(traces[0][0].meta).to.have.property('db.type', 'valkey')
-            expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-            expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-            expect(traces[0][0].meta).to.have.property('valkey.raw_command', 'GET foo')
-            expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
+            assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+            assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+            assert.strictEqual(traces[0][0].resource, 'get')
+            assert.strictEqual(traces[0][0].type, 'valkey')
+            assert.strictEqual(traces[0][0].meta.component, 'iovalkey')
+            assert.strictEqual(traces[0][0].meta['_dd.integration'], 'iovalkey')
+            assert.strictEqual(traces[0][0].meta['db.name'], '0')
+            assert.strictEqual(traces[0][0].meta['db.type'], 'valkey')
+            assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+            assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
+            assert.strictEqual(traces[0][0].meta['valkey.raw_command'], 'GET foo')
+            assert.strictEqual(traces[0][0].metrics['network.destination.port'], 6379)
           })
 
           await Promise.all([
@@ -61,7 +61,7 @@ describe('Plugin', () => {
 
           return tracer.scope().activate(span, async () => {
             await valkey.get('foo')
-            expect(tracer.scope().active()).to.equal(span)
+            assert.strictEqual(tracer.scope().active(), span)
           })
         })
 
@@ -71,11 +71,11 @@ describe('Plugin', () => {
           agent.assertSomeTraces(() => {}) // wait for initial info command
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('error', 1)
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(traces[0][0].meta).to.have.property('component', 'iovalkey')
+              assert.strictEqual(traces[0][0].error, 1)
+              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
+              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
+              assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+              assert.strictEqual(traces[0][0].meta.component, 'iovalkey')
             })
             .then(done)
             .catch(done)
@@ -89,17 +89,17 @@ describe('Plugin', () => {
         it('should work with userland promises', done => {
           agent.assertSomeTraces(() => {}) // wait for initial info command
           agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', 'get')
-            expect(traces[0][0]).to.have.property('type', 'valkey')
-            expect(traces[0][0].meta).to.have.property('db.name', '0')
-            expect(traces[0][0].meta).to.have.property('db.type', 'valkey')
-            expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-            expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-            expect(traces[0][0].meta).to.have.property('valkey.raw_command', 'GET foo')
-            expect(traces[0][0].meta).to.have.property('component', 'iovalkey')
-            expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
+            assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+            assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+            assert.strictEqual(traces[0][0].resource, 'get')
+            assert.strictEqual(traces[0][0].type, 'valkey')
+            assert.strictEqual(traces[0][0].meta['db.name'], '0')
+            assert.strictEqual(traces[0][0].meta['db.type'], 'valkey')
+            assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+            assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
+            assert.strictEqual(traces[0][0].meta['valkey.raw_command'], 'GET foo')
+            assert.strictEqual(traces[0][0].meta.component, 'iovalkey')
+            assert.strictEqual(traces[0][0].metrics['network.destination.port'], 6379)
           })
             .then(done)
             .catch(done)
@@ -127,7 +127,7 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', 'custom-test')
+              assert.strictEqual(traces[0][0].service, 'custom-test')
             })
             .then(done)
             .catch(done)
@@ -139,7 +139,7 @@ describe('Plugin', () => {
           agent.assertSomeTraces(() => {}) // wait for initial command
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('resource', 'get')
+              assert.strictEqual(traces[0][0].resource, 'get')
             })
             .then(done)
             .catch(done)
@@ -173,7 +173,7 @@ describe('Plugin', () => {
           agent.assertSomeTraces(() => {}) // wait for initial command
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('resource', 'get')
+              assert.strictEqual(traces[0][0].resource, 'get')
             })
             .then(done)
             .catch(done)

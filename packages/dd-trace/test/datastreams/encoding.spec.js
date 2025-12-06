@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 
@@ -13,11 +15,11 @@ describe('encoding', () => {
       const n = 1679672748
       const expectedEncoded = new Uint8Array([216, 150, 238, 193, 12])
       const encoded = encodeVarint(n)
-      expect(encoded.length).to.equal(expectedEncoded.length)
+      assert.strictEqual(encoded.length, expectedEncoded.length)
       expect(encoded.every((val, i) => val === expectedEncoded[i])).to.true
       const [decoded, bytes] = decodeVarint(encoded)
-      expect(decoded).to.equal(n)
-      expect(bytes).to.length(0)
+      assert.strictEqual(decoded, n)
+      assert.strictEqual(bytes.length, 0)
     })
 
     it('encoding then decoding should be a no op for bigger than int32 numbers', () => {
@@ -26,15 +28,15 @@ describe('encoding', () => {
         128, 171, 237, 233, 226, 97
       ])
       const encoded = encodeVarint(n)
-      expect(encoded.length).to.equal(expectedEncoded.length)
+      assert.strictEqual(encoded.length, expectedEncoded.length)
       expect(encoded.every((val, i) => val === expectedEncoded[i])).to.true
       const toDecode = [...encoded, ...encoded]
       const [decoded, bytes] = decodeVarint(toDecode)
-      expect(decoded).to.equal(n)
+      assert.strictEqual(decoded, n)
       expect(bytes.every((val, i) => val === expectedEncoded[i])).to.true
       const [decoded2, bytes2] = decodeVarint(bytes)
-      expect(decoded2).to.equal(n)
-      expect(bytes2).to.length(0)
+      assert.strictEqual(decoded2, n)
+      assert.strictEqual(bytes2.length, 0)
     })
 
     it('encoding a number bigger than Max safe int fails.', () => {

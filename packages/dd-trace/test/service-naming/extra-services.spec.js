@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('tap').mocha
 
 require('../setup/core')
@@ -14,7 +14,7 @@ describe('Extra services', () => {
     it('should register defined service names', () => {
       registerExtraService('service-test')
 
-      expect(getExtraServices()).to.deep.equal(['service-test'])
+      assert.deepStrictEqual(getExtraServices(), ['service-test'])
     })
 
     it('should not register invalid service names', () => {
@@ -22,7 +22,7 @@ describe('Extra services', () => {
       registerExtraService(null)
       registerExtraService('')
 
-      expect(getExtraServices().length).to.equal(0)
+      assert.strictEqual(getExtraServices().length, 0)
     })
 
     it('should register the same service name only once', () => {
@@ -31,8 +31,8 @@ describe('Extra services', () => {
       registerExtraService('service-test')
 
       const extraServices = getExtraServices()
-      expect(extraServices.length).to.equal(1)
-      expect(extraServices).to.deep.equal(['service-test'])
+      assert.strictEqual(extraServices.length, 1)
+      assert.deepStrictEqual(extraServices, ['service-test'])
     })
 
     it('should register a max of 64 service names', () => {
@@ -40,7 +40,7 @@ describe('Extra services', () => {
         registerExtraService(`service-test-${i}`)
       }
 
-      expect(getExtraServices().length).to.equal(64)
+      assert.strictEqual(getExtraServices().length, 64)
     })
   })
 })

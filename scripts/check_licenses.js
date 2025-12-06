@@ -1,68 +1,124 @@
+/* eslint-disable no-console */
 'use strict'
 
-const fs = require('fs')
-const path = require('path')
-const readline = require('readline')
-const pkg = require(path.join(__dirname, '..', '/package.json'))
+const { createReadStream, existsSync } = require('node:fs')
+const { join } = require('node:path')
+const readline = require('node:readline')
+const { execSync } = require('node:child_process')
+const { name: rootPackageName } = require('../package.json')
 
-const filePath = path.join(__dirname, '..', '/LICENSE-3rdparty.csv')
-const deps = new Set(Object.keys(pkg.dependencies || {}))
-const devDeps = new Set(Object.keys(pkg.devDependencies || {}))
-
-let index = 0
-
-const licenses = {
-  require: new Set(),
-  dev: new Set(),
-  file: new Set()
-}
+const filePath = join(__dirname, '..', 'LICENSE-3rdparty.csv')
+const deps = getProdDeps()
+const licenses = new Set()
+let isHeader = true
 
 const lineReader = readline.createInterface({
-  input: fs.createReadStream(filePath)
+  input: createReadStream(filePath)
 })
 
 lineReader.on('line', line => {
-  if (index !== 0) {
-    const columns = line.split(',')
-    const type = columns[0]
-    const license = columns[1]
-
-    licenses[type].add(license)
+  if (isHeader) {
+    isHeader = false
+    return
   }
 
-  index++
+  const trimmed = line.trim()
+  if (!trimmed) return // Skip empty lines
+  const columns = line.split(',')
+  const component = columns[0]
+
+  // Strip quotes from the component name
+  licenses.add(component.replaceAll(/^"|"$/g, ''))
 })
 
 lineReader.on('close', () => {
-  if (!checkLicenses(deps, 'require') || !checkLicenses(devDeps, 'dev')) {
+  if (!checkLicenses(deps)) {
     process.exit(1)
   }
 })
 
-function checkLicenses (typeDeps, type) {
-  /* eslint-disable no-console */
+function getProdDeps () {
+  // Add root package (dd-trace) to the set of dependencies manually as it is not included in the yarn list output.
+  const deps = new Set([rootPackageName])
 
+  // Use yarn to get full tree of production (non-dev) dependencies (format is ndjson)
+  const stdout = execSync('yarn list --production --json', {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'inherit']
+  })
+
+  for (const line of stdout.split('\n')) {
+    if (!line) continue
+    const parsed = JSON.parse(line)
+    if (parsed.type === 'tree' && parsed.data && Array.isArray(parsed.data.trees)) {
+      collectFromTrees(parsed.data.trees, deps)
+    }
+  }
+
+  // Add vendored dependencies
+  addVendoredDeps(deps)
+
+  return deps
+}
+
+function collectFromTrees (trees, deps) {
+  for (const node of trees) {
+    if (typeof node?.name !== 'string') continue
+
+    // Remove version from the package name (e.g. `@protobufjs/pool@1.1.0` -> `@protobufjs/pool`)
+    deps.add(node.name.slice(0, node.name.lastIndexOf('@')))
+
+    if (Array.isArray(node.children) && node.children.length) {
+      collectFromTrees(node.children, deps)
+    }
+  }
+}
+
+function addVendoredDeps (deps) {
+  const vendoredDepsPath = join(__dirname, '..', '.github', 'vendored-dependencies.csv')
+
+  // If the vendored dependencies file doesn't exist, skip
+  if (!existsSync(vendoredDepsPath)) {
+    return
+  }
+
+  const fs = require('node:fs')
+  const content = fs.readFileSync(vendoredDepsPath, 'utf8')
+
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue // Skip empty lines
+
+    const columns = line.split(',')
+    const component = columns[0]
+
+    // Strip quotes from the component name and add to deps
+    deps.add(component.replaceAll(/^"|"$/g, ''))
+  }
+}
+
+function checkLicenses (typeDeps) {
   const missing = []
   const extraneous = []
 
   for (const dep of typeDeps) {
-    if (!licenses[type].has(dep)) {
+    if (!licenses.has(dep)) {
       missing.push(dep)
     }
   }
 
-  for (const dep of licenses[type]) {
+  for (const dep of licenses) {
     if (!typeDeps.has(dep)) {
       extraneous.push(dep)
     }
   }
 
   if (missing.length) {
-    console.log(`Missing 3rd-party license for ${missing.join(', ')}.`)
+    console.error(`Missing 3rd-party license for ${missing.join(', ')}.`)
   }
 
   if (extraneous.length) {
-    console.log(`Extraneous 3rd-party license for ${extraneous.join(', ')}.`)
+    console.error(`Extraneous 3rd-party license for ${extraneous.join(', ')}.`)
   }
 
   return missing.length === 0 && extraneous.length === 0

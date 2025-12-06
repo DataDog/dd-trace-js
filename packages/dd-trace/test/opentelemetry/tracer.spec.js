@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
@@ -22,9 +24,9 @@ function isChildOf (child, parent) {
   const parentContext = parent.context()
   const childContext = child.context()
 
-  expect(childContext.toTraceId()).to.equal(parentContext.toTraceId())
-  expect(childContext.toSpanId()).to.not.equal(parentContext.toSpanId())
-  expect(childContext._parentId).to.eql(parentContext._spanId)
+  assert.strictEqual(childContext.toTraceId(), parentContext.toTraceId())
+  assert.notStrictEqual(childContext.toSpanId(), parentContext.toSpanId())
+  assert.deepStrictEqual(childContext._parentId, parentContext._spanId)
 }
 
 describe('OTel Tracer', () => {
@@ -34,7 +36,7 @@ describe('OTel Tracer', () => {
     })
 
     const tracer = new Tracer({}, {}, tracerProvider)
-    expect(tracer.resource).to.equal(tracerProvider.resource)
+    assert.strictEqual(tracer.resource, tracerProvider.resource)
   })
 
   it('should get active span processor', () => {
@@ -43,8 +45,8 @@ describe('OTel Tracer', () => {
 
     const tracer = new Tracer({}, {}, tracerProvider)
     const processor = tracer.getActiveSpanProcessor()
-    expect(tracerProvider.getActiveSpanProcessor).to.have.been.calledOnce
-    expect(processor).to.equal(tracerProvider.getActiveSpanProcessor())
+    sinon.assert.calledOnce(tracerProvider.getActiveSpanProcessor)
+    assert.strictEqual(processor, tracerProvider.getActiveSpanProcessor())
   })
 
   it('should create a span', () => {
@@ -56,7 +58,7 @@ describe('OTel Tracer', () => {
 
     const ddSpan = span._ddSpan
     expect(ddSpan).to.be.an.instanceOf(DatadogSpan)
-    expect(ddSpan._name).to.be.equal('name')
+    assert.strictEqual(ddSpan._name, 'name')
   })
 
   it('should create a span with attributes (tags)', () => {
@@ -70,7 +72,7 @@ describe('OTel Tracer', () => {
     })
 
     const ddSpanContext = span._ddSpan.context()
-    expect(ddSpanContext._tags).to.have.property('foo', 'bar')
+    assert.strictEqual(ddSpanContext._tags.foo, 'bar')
   })
 
   it('should pass through span kind', () => {
@@ -91,7 +93,7 @@ describe('OTel Tracer', () => {
         kind: input
       })
 
-      expect(span.kind).to.equal(output)
+      assert.strictEqual(span.kind, output)
     }
   })
 
@@ -116,7 +118,7 @@ describe('OTel Tracer', () => {
       const span = otelTracer.startSpan('name', {
         startTime: input
       })
-      expect(span.startTime).to.eql(output)
+      assert.deepStrictEqual(span.startTime, output)
     }
   })
 
@@ -127,7 +129,7 @@ describe('OTel Tracer', () => {
 
     otelTracer.startActiveSpan('name', (span) => {
       expect(span).to.be.an.instanceOf(Span)
-      expect(span._ddSpan).to.equal(tracer.scope().active())
+      assert.strictEqual(span._ddSpan, tracer.scope().active())
     })
   })
 
@@ -179,7 +181,7 @@ describe('OTel Tracer', () => {
       const parentContext = outer._ddSpan.context()
       const childContext = inner._ddSpan.context()
 
-      expect(childContext.toTraceId()).to.not.equal(parentContext.toTraceId())
+      assert.notStrictEqual(childContext.toTraceId(), parentContext.toTraceId())
       expect(childContext._parentId).to.not.eql(parentContext._spanId)
     })
   })

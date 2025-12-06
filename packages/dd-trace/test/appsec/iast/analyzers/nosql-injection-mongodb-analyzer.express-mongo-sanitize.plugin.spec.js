@@ -1,15 +1,16 @@
 'use strict'
 
-const axios = require('axios')
-const { expect } = require('chai')
-const { describe } = require('mocha')
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const { prepareTestServerForIastInExpress } = require('../utils')
+const axios = require('axios')
+const { before, describe } = require('mocha')
+
 const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../../setup/mocha')
+const { prepareTestServerForIastInExpress } = require('../utils')
 
 describe('nosql injection detection in mongodb - whole feature', () => {
   // https://github.com/fiznool/express-mongo-sanitize/issues/200
@@ -72,7 +73,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
                 }
               })
 
-              expect(someRedacted).to.be.true
+              assert.strictEqual(someRedacted, true)
             }
           })
 
@@ -99,7 +100,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
                 }
               })
 
-              expect(someRedacted).to.be.true
+              assert.strictEqual(someRedacted, true)
             }
           })
 
@@ -227,7 +228,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
                 }
               })
 
-              expect(someRedacted).to.be.false
+              assert.strictEqual(someRedacted, false)
             }
           })
         }, {

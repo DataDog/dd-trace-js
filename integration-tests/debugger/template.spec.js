@@ -11,7 +11,7 @@ describe('Dynamic Instrumentation', function () {
   describe('template evaluation', function () {
     const t = setup({ dependencies: ['fastify'] })
 
-    beforeEach(t.triggerBreakpoint)
+    beforeEach(() => { t.triggerBreakpoint() })
 
     it('should evaluate template if it requires evaluation', function (done) {
       t.agent.on('debugger-input', ({ payload: [payload] }) => {

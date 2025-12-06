@@ -39,7 +39,7 @@ describe('RASP - ssrf', () => {
       }))
 
       server = expressApp.listen(0, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({
           baseURL: `http://localhost:${port}`
         })
@@ -247,7 +247,7 @@ describe('RASP - ssrf', () => {
       }))
 
       server.listen(0, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({
           baseURL: `http://localhost:${port}`
         })

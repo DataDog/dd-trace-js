@@ -1,14 +1,15 @@
 'use strict'
 
-const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
 
-const agent = require('../../../../plugins/agent')
+const axios = require('axios')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+
 const { storage } = require('../../../../../../datadog-core')
 const iast = require('../../../../../src/appsec/iast')
 const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
 const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-tracking/operations')
+const agent = require('../../../../plugins/agent')
 const { withVersions } = require('../../../../setup/mocha')
 const {
   HTTP_REQUEST_PATH_PARAM,
@@ -57,9 +58,9 @@ describe('URI sourcing with fastify', () => {
         const store = storage('legacy').getStore()
         const iastContext = iastContextFunctions.getIastContext(store)
         const isPathTainted = isTainted(iastContext, request.raw.url)
-        expect(isPathTainted).to.be.true
+        assert.strictEqual(isPathTainted, true)
         const taintedPathValueRanges = getRanges(iastContext, request.raw.url)
-        expect(taintedPathValueRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_URI)
+        assert.strictEqual(taintedPathValueRanges[0].iinfo.type, HTTP_REQUEST_URI)
         reply.code(200).send()
       })
 
@@ -69,7 +70,7 @@ describe('URI sourcing with fastify', () => {
 
       const response = await axios
         .get(`http://localhost:${port}/path/vulnerable`)
-      expect(response.status).to.be.equal(200)
+      assert.strictEqual(response.status, 200)
     })
   })
 })
@@ -118,9 +119,9 @@ describe('Path params sourcing with fastify', () => {
         for (const pathParamName of ['parameter1', 'parameter2']) {
           const pathParamValue = request.params[pathParamName]
           const isParameterTainted = isTainted(iastContext, pathParamValue)
-          expect(isParameterTainted).to.be.true
+          assert.strictEqual(isParameterTainted, true)
           const taintedParameterValueRanges = getRanges(iastContext, pathParamValue)
-          expect(taintedParameterValueRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_PATH_PARAM)
+          assert.strictEqual(taintedParameterValueRanges[0].iinfo.type, HTTP_REQUEST_PATH_PARAM)
         }
 
         reply.code(200).send()
@@ -132,7 +133,7 @@ describe('Path params sourcing with fastify', () => {
 
       const response = await axios
         .get(`http://localhost:${port}/tainted1/tainted2`)
-      expect(response.status).to.be.equal(200)
+      assert.strictEqual(response.status, 200)
     })
   })
 })

@@ -14,7 +14,7 @@ app.get('/cmdi-vulnerable', (req, res) => {
 app.use('/more', (await import('./more.mjs')).default)
 
 const server = app.listen(process.env.APP_PORT || 0, () => {
-  process.send?.({ port: server.address().port })
+  process.send?.({ port: (/** @type {import('net').AddressInfo} */ (server.address())).port })
 })
 
 Module.register('./custom-noop-hooks.mjs', {

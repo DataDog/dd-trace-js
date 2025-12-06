@@ -1,12 +1,13 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
-const { withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
 const id = require('../../dd-trace/src/id')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   let tracer
@@ -19,14 +20,20 @@ describe('Plugin', () => {
       // This needs to be called synchronously right before each test to make
       // sure a connection is not already established and the request is added
       // to the queue.
-      function connect () {
+      function connect (mongooseVersion) {
+        const connectOptions = {
+          bufferCommands: false
+        }
+
+        // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 5
+        if (semver.lt(mongooseVersion, '5.0.0')) {
+          connectOptions.useNewUrlParser = true
+          connectOptions.useUnifiedTopology = true
+        }
+
         // mongoose.connect('mongodb://username:password@host:port/database?options...');
         // actually the first part of the path is the dbName and not the collection
-        return mongoose.connect(`mongodb://localhost:27017/${dbName}`, {
-          bufferCommands: false,
-          useNewUrlParser: true,
-          useUnifiedTopology: true
-        })
+        return mongoose.connect(`mongodb://localhost:27017/${dbName}`, connectOptions)
       }
 
       beforeEach(() => {
@@ -38,9 +45,11 @@ describe('Plugin', () => {
 
         mongoose = require(`../../../versions/mongoose@${version}`).get()
 
+        const mongooseVersion = require(`../../../versions/mongoose@${version}`).version()
+
         dbName = id().toString()
 
-        await connect()
+        await connect(mongooseVersion)
       })
 
       afterEach(async () => {
@@ -69,7 +78,7 @@ describe('Plugin', () => {
 
         return tracer.scope().activate(span, () => {
           return kitty.save().then(() => {
-            expect(tracer.scope().active()).to.equal(span)
+            assert.strictEqual(tracer.scope().active(), span)
           })
         })
       })
@@ -83,7 +92,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             Cat.find({ name: 'Zildjian' }).exec(() => {
               try {
-                expect(tracer.scope().active()).to.equal(span)
+                assert.strictEqual(tracer.scope().active(), span)
                 done()
               } catch (e) {
                 done(e)
@@ -100,7 +109,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             Cat.aggregate([{ $match: { name: 'Zildjian' } }]).exec(() => {
               try {
-                expect(tracer.scope().active()).to.equal(span)
+                assert.strictEqual(tracer.scope().active(), span)
                 done()
               } catch (e) {
                 done(e)
@@ -120,7 +129,7 @@ describe('Plugin', () => {
 
           return tracer.scope().activate(span, () => {
             return promise.then(() => {
-              expect(tracer.scope().active()).to.equal(span)
+              assert.strictEqual(tracer.scope().active(), span)
             })
           })
         })
@@ -132,7 +141,7 @@ describe('Plugin', () => {
 
           return tracer.scope().activate(span, () => {
             return Cat.find({ name: 'Zildjian' }).exec().then(() => {
-              expect(tracer.scope().active()).to.equal(span)
+              assert.strictEqual(tracer.scope().active(), span)
             })
           })
         })
@@ -144,7 +153,7 @@ describe('Plugin', () => {
 
           return tracer.scope().activate(span, () => {
             return Cat.aggregate([{ $match: { name: 'Zildjian' } }]).exec().then(() => {
-              expect(tracer.scope().active()).to.equal(span)
+              assert.strictEqual(tracer.scope().active(), span)
             })
           })
         })

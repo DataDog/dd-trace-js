@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const { context, propagation, trace, ROOT_CONTEXT } = require('@opentelemetry/api')
@@ -36,8 +38,8 @@ describe('OTel Context Manager', () => {
   it('should create a new context', () => {
     const key1 = api.createContextKey('My first key')
     const key2 = api.createContextKey('My second key')
-    expect(key1.description).to.equal('My first key')
-    expect(key2.description).to.equal('My second key')
+    assert.strictEqual(key1.description, 'My first key')
+    assert.strictEqual(key2.description, 'My second key')
   })
 
   it('should delete a context', () => {
@@ -48,17 +50,17 @@ describe('OTel Context Manager', () => {
     // remove the entry
     const ctx3 = ctx.deleteValue(key)
 
-    expect(ctx3.getValue(key)).to.equal(undefined)
-    expect(ctx2.getValue(key)).to.equal('context 2')
-    expect(ctx.getValue(key)).to.equal(undefined)
+    assert.strictEqual(ctx3.getValue(key), undefined)
+    assert.strictEqual(ctx2.getValue(key), 'context 2')
+    assert.strictEqual(ctx.getValue(key), undefined)
   })
 
   it('should create a new root context', () => {
     const key = api.createContextKey('some key')
     const ctx = api.ROOT_CONTEXT
     const ctx2 = ctx.setValue(key, 'context 2')
-    expect(ctx2.getValue(key)).to.equal('context 2')
-    expect(ctx.getValue(key)).to.equal(undefined)
+    assert.strictEqual(ctx2.getValue(key), 'context 2')
+    assert.strictEqual(ctx.getValue(key), undefined)
   })
 
   it('should return root context', () => {
@@ -71,7 +73,7 @@ describe('OTel Context Manager', () => {
     const ctx = api.context.active()
 
     api.context.with(ctx.setValue(key, 'context 2'), async () => {
-      expect(api.context.active().getValue(key)).to.equal('context 2')
+      assert.strictEqual(api.context.active().getValue(key), 'context 2')
     })
   })
 
@@ -81,21 +83,21 @@ describe('OTel Context Manager', () => {
       return row.name
     })
 
-    expect(name).to.equal('Dummy Name')
+    assert.strictEqual(name, 'Dummy Name')
   })
 
   it('should set active contexts in nested functions', async () => {
     const key = api.createContextKey('Key to store a value')
     const ctx = api.context.active()
-    expect(api.context.active().getValue(key)).to.equal(undefined)
+    assert.strictEqual(api.context.active().getValue(key), undefined)
     api.context.with(ctx.setValue(key, 'context 2'), () => {
-      expect(api.context.active().getValue(key)).to.equal('context 2')
+      assert.strictEqual(api.context.active().getValue(key), 'context 2')
       api.context.with(ctx.setValue(key, 'context 3'), () => {
-        expect(api.context.active().getValue(key)).to.equal('context 3')
+        assert.strictEqual(api.context.active().getValue(key), 'context 3')
       })
-      expect(api.context.active().getValue(key)).to.equal('context 2')
+      assert.strictEqual(api.context.active().getValue(key), 'context 2')
     })
-    expect(api.context.active().getValue(key)).to.equal(undefined)
+    assert.strictEqual(api.context.active().getValue(key), undefined)
   })
 
   it('should not modify contexts, instead it should create new context objects', async () => {
@@ -104,26 +106,26 @@ describe('OTel Context Manager', () => {
     const ctx = api.context.active()
 
     const ctx2 = ctx.setValue(key, 'context 2')
-    expect(ctx.getValue(key)).to.equal(undefined)
+    assert.strictEqual(ctx.getValue(key), undefined)
     expect(ctx).to.be.an.instanceof(ROOT_CONTEXT.constructor)
-    expect(ctx2.getValue(key)).to.equal('context 2')
+    assert.strictEqual(ctx2.getValue(key), 'context 2')
 
     const ret = api.context.with(ctx2, () => {
       const ctx3 = api.context.active().setValue(key, 'context 3')
 
-      expect(api.context.active().getValue(key)).to.equal('context 2')
-      expect(ctx.getValue(key)).to.equal(undefined)
-      expect(ctx2.getValue(key)).to.equal('context 2')
-      expect(ctx3.getValue(key)).to.equal('context 3')
+      assert.strictEqual(api.context.active().getValue(key), 'context 2')
+      assert.strictEqual(ctx.getValue(key), undefined)
+      assert.strictEqual(ctx2.getValue(key), 'context 2')
+      assert.strictEqual(ctx3.getValue(key), 'context 3')
 
       api.context.with(ctx3, () => {
-        expect(api.context.active().getValue(key)).to.equal('context 3')
+        assert.strictEqual(api.context.active().getValue(key), 'context 3')
       })
-      expect(api.context.active().getValue(key)).to.equal('context 2')
+      assert.strictEqual(api.context.active().getValue(key), 'context 2')
 
       return 'return value'
     })
-    expect(ret).to.equal('return value')
+    assert.strictEqual(ret, 'return value')
   })
 
   it('should propagate baggage from an otel span to a datadog span', () => {
@@ -135,7 +137,7 @@ describe('OTel Context Manager', () => {
     const span = makeSpan('otel-to-dd')
     const contextWithSpan = trace.setSpan(contextWithBaggage, span)
     api.context.with(contextWithSpan, () => {
-      expect(tracer.scope().active().getBaggageItem('foo')).to.be.equal('bar')
+      assert.strictEqual(tracer.scope().active().getBaggageItem('foo'), 'bar')
     })
   })
 
@@ -146,10 +148,10 @@ describe('OTel Context Manager', () => {
     ddSpan.setBaggageItem(baggageKey, baggageVal)
     tracer.scope().activate(ddSpan, () => {
       const baggages = propagation.getActiveBaggage().getAllEntries()
-      expect(baggages.length).to.equal(1)
+      assert.strictEqual(baggages.length, 1)
       const baggage = baggages[0]
-      expect(baggage[0]).to.equal(baggageKey)
-      expect(baggage[1].value).to.equal(baggageVal)
+      assert.strictEqual(baggage[0], baggageKey)
+      assert.strictEqual(baggage[1].value, baggageVal)
     })
   })
 
@@ -169,7 +171,7 @@ describe('OTel Context Manager', () => {
         { key1: 'otel1', key2: 'otel2' }
       )
       ddSpan.setBaggageItem('key2', 'dd2')
-      expect(propagation.getActiveBaggage().getAllEntries()).to.deep.equal(
+      assert.deepStrictEqual(propagation.getActiveBaggage().getAllEntries(),
         [['key1', { value: 'otel1' }], ['key2', { value: 'dd2' }]]
       )
     })
@@ -193,7 +195,7 @@ describe('OTel Context Manager', () => {
         { key2: 'dd2' }
       )
       ddSpan.removeBaggageItem('key2')
-      expect(propagation.getActiveBaggage().getAllEntries()).to.deep.equal([])
+      assert.deepStrictEqual(propagation.getActiveBaggage().getAllEntries(), [])
     })
   })
 })

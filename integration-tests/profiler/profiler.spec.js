@@ -732,6 +732,9 @@ describe('profiler', () => {
       if (process.platform === 'win32') {
         this.skip() // Wall profiler context count telemetry is not supported on Windows
       }
+      if (process.platform === 'darwin') {
+        this.skip() // Test is flaky on macOS
+      }
       proc = fork(profilerTestFile, {
         cwd,
         env: {

@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
@@ -37,8 +39,8 @@ describe('span-stats exporter', () => {
 
     exporter.export('')
 
-    expect(writer.append).to.have.been.called
-    expect(writer.flush).to.have.been.called
+    sinon.assert.called(writer.append)
+    sinon.assert.called(writer.flush)
   })
 
   it('should set url from hostname and port', () => {
@@ -48,8 +50,8 @@ describe('span-stats exporter', () => {
 
     exporter = new Exporter({ hostname, port })
 
-    expect(exporter._url).to.be.deep.equal(url)
-    expect(Writer).to.have.been.calledWith({
+    assert.deepStrictEqual(exporter._url, url)
+    sinon.assert.calledWith(Writer, {
       url: exporter._url,
       tags: undefined
     })
@@ -60,7 +62,7 @@ describe('span-stats exporter', () => {
 
     exporter = new Exporter({ url, tags })
 
-    expect(Writer).to.have.been.calledWith({
+    sinon.assert.calledWith(Writer, {
       url: exporter._url,
       tags
     })

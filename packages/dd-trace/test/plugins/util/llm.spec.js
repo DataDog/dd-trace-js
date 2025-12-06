@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 
@@ -19,19 +21,19 @@ describe('llm utils', () => {
 
     it('should normalize text to 128 characters', () => {
       const text = 'a'.repeat(256)
-      expect(utils.normalize(text)).to.equal('a'.repeat(128) + '...')
+      assert.strictEqual(utils.normalize(text), 'a'.repeat(128) + '...')
     })
 
     it('should return undefined for empty text', () => {
-      expect(utils.normalize('')).to.be.undefined
+      assert.strictEqual(utils.normalize(''), undefined)
     })
 
     it('should return undefined for a non-string', () => {
-      expect(utils.normalize(42)).to.be.undefined
+      assert.strictEqual(utils.normalize(42), undefined)
     })
 
     it('should replace special characters', () => {
-      expect(utils.normalize('a\nb\tc')).to.equal('a\\nb\\tc')
+      assert.strictEqual(utils.normalize('a\nb\tc'), 'a\\nb\\tc')
     })
 
     it('should always sample prompt completion', () => {
@@ -51,7 +53,7 @@ describe('llm utils', () => {
 
     it('should normalize text to 100 characters', () => {
       const text = 'a'.repeat(256)
-      expect(utils.normalize(text)).to.equal('a'.repeat(100) + '...')
+      assert.strictEqual(utils.normalize(text), 'a'.repeat(100) + '...')
     })
 
     describe('with sampling rate 0.6', () => {

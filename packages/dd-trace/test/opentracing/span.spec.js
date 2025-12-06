@@ -1,6 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
@@ -64,15 +68,15 @@ describe('Span', () => {
   it('should have a default context', () => {
     span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
-    expect(span.context()._traceId).to.deep.equal('123')
-    expect(span.context()._spanId).to.deep.equal('123')
-    expect(span.context()._isRemote).to.deep.equal(false)
+    assert.deepStrictEqual(span.context()._traceId, '123')
+    assert.deepStrictEqual(span.context()._spanId, '123')
+    assert.deepStrictEqual(span.context()._isRemote, false)
   })
 
   it('should add itself to the context trace started spans', () => {
     span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
-    expect(span.context()._trace.started).to.deep.equal([span])
+    assert.deepStrictEqual(span.context()._trace.started, [span])
   })
 
   it('should calculate its start time and duration relative to the trace start', () => {
@@ -83,8 +87,8 @@ describe('Span', () => {
     span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
     span.finish()
 
-    expect(Math.round(span._startTime)).to.equal(1500000000200)
-    expect(Math.round(span._duration)).to.equal(400)
+    assert.strictEqual(Math.round(span._startTime), 1500000000200)
+    assert.strictEqual(Math.round(span._duration), 400)
   })
 
   it('should use the parent span to find the trace start', () => {
@@ -105,8 +109,8 @@ describe('Span', () => {
     })
     span.finish()
 
-    expect(Math.round(span._startTime)).to.equal(1500000000200)
-    expect(Math.round(span._duration)).to.equal(400)
+    assert.strictEqual(Math.round(span._startTime), 1500000000200)
+    assert.strictEqual(Math.round(span._duration), 400)
   })
 
   it('should generate new timing when the parent was extracted', () => {
@@ -126,8 +130,8 @@ describe('Span', () => {
     })
     span.finish()
 
-    expect(Math.round(span._startTime)).to.equal(1500000000200)
-    expect(Math.round(span._duration)).to.equal(400)
+    assert.strictEqual(Math.round(span._startTime), 1500000000200)
+    assert.strictEqual(Math.round(span._duration), 400)
   })
 
   it('should use a parent context', () => {
@@ -145,11 +149,11 @@ describe('Span', () => {
 
     span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
 
-    expect(span.context()._traceId).to.deep.equal('123')
-    expect(span.context()._parentId).to.deep.equal('456')
-    expect(span.context()._baggageItems).to.deep.equal({ foo: 'bar' })
-    expect(span.context()._trace).to.equal(parent._trace)
-    expect(span.context()._isRemote).to.equal(false)
+    assert.deepStrictEqual(span.context()._traceId, '123')
+    assert.deepStrictEqual(span.context()._parentId, '456')
+    assert.deepStrictEqual(span.context()._baggageItems, { foo: 'bar' })
+    assert.strictEqual(span.context()._trace, parent._trace)
+    assert.strictEqual(span.context()._isRemote, false)
   })
 
   it('should generate a 128-bit trace ID when configured', () => {
@@ -158,9 +162,9 @@ describe('Span', () => {
       traceId128BitGenerationEnabled: true
     })
 
-    expect(span.context()._traceId).to.deep.equal('123')
-    expect(span.context()._trace.tags).to.have.property('_dd.p.tid')
-    expect(span.context()._trace.tags['_dd.p.tid']).to.match(/^[a-f0-9]{8}0{8}$/)
+    assert.deepStrictEqual(span.context()._traceId, '123')
+    assert.ok(Object.hasOwn(span.context()._trace.tags, '_dd.p.tid'))
+    assert.match(span.context()._trace.tags['_dd.p.tid'], /^[a-f0-9]{8}0{8}$/)
   })
 
   it('should be published via dd-trace:span:start channel', () => {
@@ -174,8 +178,8 @@ describe('Span', () => {
     try {
       span = new Span(tracer, processor, prioritySampler, fields)
 
-      expect(onSpan).to.have.been.calledOnce
-      expect(onSpan.firstCall.args[0]).to.deep.equal({ span, fields })
+      sinon.assert.calledOnce(onSpan)
+      assert.deepStrictEqual(onSpan.firstCall.args[0], { span, fields })
     } finally {
       startCh.unsubscribe(onSpan)
     }
@@ -185,7 +189,7 @@ describe('Span', () => {
     it('should return its parent tracer', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
-      expect(span.tracer()).to.equal(tracer)
+      assert.strictEqual(span.tracer(), tracer)
     })
   })
 
@@ -194,7 +198,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'foo' })
       span.setOperationName('bar')
 
-      expect(span.context()._name).to.equal('bar')
+      assert.strictEqual(span.context()._name, 'bar')
     })
   })
 
@@ -243,8 +247,8 @@ describe('Span', () => {
       const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
       span.addLink(span2.context())
-      expect(span).to.have.property('_links')
-      expect(span._links).to.have.lengthOf(1)
+      assert.ok(Object.hasOwn(span, '_links'))
+      assert.strictEqual(span._links.length, 1)
     })
 
     it('sanitizes attributes', () => {
@@ -256,7 +260,7 @@ describe('Span', () => {
         baz: 'qux'
       }
       span.addLink(span2.context(), attributes)
-      expect(span._links[0].attributes).to.deep.equal(attributes)
+      assert.deepStrictEqual(span._links[0].attributes, attributes)
     })
 
     it('sanitizes nested attributes', () => {
@@ -271,7 +275,7 @@ describe('Span', () => {
       }
 
       span.addLink(span2.context(), attributes)
-      expect(span._links[0].attributes).to.deep.equal({
+      assert.deepStrictEqual(span._links[0].attributes, {
         foo: 'true',
         bar: 'hi',
         baz: '1',
@@ -291,7 +295,7 @@ describe('Span', () => {
       }
 
       span.addLink(span2.context(), attributes)
-      expect(span._links[0].attributes).to.deep.equal({
+      assert.deepStrictEqual(span._links[0].attributes, {
         baz: 'valid'
       })
     })
@@ -305,10 +309,10 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
       span.addSpanPointer('pointer_kind', 'd', 'abc123')
-      expect(span._links).to.have.lengthOf(1)
-      expect(span._links[0].context.toTraceId()).to.equal('0')
-      expect(span._links[0].context.toSpanId()).to.equal('0')
-      expect(span._links[0].attributes).to.deep.equal({
+      assert.strictEqual(span._links.length, 1)
+      assert.strictEqual(span._links[0].context.toTraceId(), '0')
+      assert.strictEqual(span._links[0].context.toSpanId(), '0')
+      assert.deepStrictEqual(span._links[0].attributes, {
         'ptr.kind': 'pointer_kind',
         'ptr.dir': 'd',
         'ptr.hash': 'abc123',
@@ -317,15 +321,15 @@ describe('Span', () => {
     })
 
     span.addSpanPointer('another_kind', 'd', '1234567')
-    expect(span._links).to.have.lengthOf(2)
-    expect(span._links[1].attributes).to.deep.equal({
+    assert.strictEqual(span._links.length, 2)
+    assert.deepStrictEqual(span._links[1].attributes, {
       'ptr.kind': 'another_kind',
       'ptr.dir': 'd',
       'ptr.hash': '1234567',
       'link.kind': 'span-pointer'
     })
-    expect(span._links[1].context.toTraceId()).to.equal('0')
-    expect(span._links[1].context.toSpanId()).to.equal('0')
+    assert.strictEqual(span._links[1].context.toTraceId(), '0')
+    assert.strictEqual(span._links[1].context.toSpanId(), '0')
   })
 
   describe('events', () => {
@@ -361,7 +365,7 @@ describe('Span', () => {
           startTime: 1500000000000
         }
       ]
-      expect(events).to.deep.equal(expectedEvents)
+      assert.deepStrictEqual(events, expectedEvents)
     })
   })
 
@@ -370,18 +374,18 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span._spanContext._baggageItems.foo = 'bar'
 
-      expect(span.getBaggageItem('foo')).to.equal('bar')
+      assert.strictEqual(span.getBaggageItem('foo'), 'bar')
     })
   })
 
   describe('getAllBaggageItems', () => {
     it('should get all baggage items', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
-      expect(span.getAllBaggageItems()).to.equal(JSON.stringify({}))
+      assert.strictEqual(span.getAllBaggageItems(), JSON.stringify({}))
 
       span._spanContext._baggageItems.foo = 'bar'
       span._spanContext._baggageItems.raccoon = 'cute'
-      expect(span.getAllBaggageItems()).to.equal(JSON.stringify({
+      assert.strictEqual(span.getAllBaggageItems(), JSON.stringify({
         foo: 'bar',
         raccoon: 'cute'
       }))
@@ -392,9 +396,9 @@ describe('Span', () => {
     it('should remove a baggage item', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span._spanContext._baggageItems.foo = 'bar'
-      expect(span.getBaggageItem('foo')).to.equal('bar')
+      assert.strictEqual(span.getBaggageItem('foo'), 'bar')
       span.removeBaggageItem('foo')
-      expect(span.getBaggageItem('foo')).to.be.undefined
+      assert.strictEqual(span.getBaggageItem('foo'), undefined)
     })
   })
 
@@ -404,7 +408,7 @@ describe('Span', () => {
       span._spanContext._baggageItems.foo = 'bar'
       span._spanContext._baggageItems.raccoon = 'cute'
       span.removeAllBaggageItems()
-      expect(span._spanContext._baggageItems).to.deep.equal({})
+      assert.deepStrictEqual(span._spanContext._baggageItems, {})
     })
   })
 
@@ -413,7 +417,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.setTag('foo', 'bar')
 
-      expect(tagger.add).to.have.been.calledWith(span.context()._tags, { foo: 'bar' })
+      sinon.assert.calledWith(tagger.add, span.context()._tags, { foo: 'bar' })
     })
   })
 
@@ -427,7 +431,7 @@ describe('Span', () => {
 
       span.addTags(tags)
 
-      expect(tagger.add).to.have.been.calledWith(span.context()._tags, tags)
+      sinon.assert.calledWith(tagger.add, span.context()._tags, tags)
     })
 
     it('should sample based on the tags', () => {
@@ -435,7 +439,7 @@ describe('Span', () => {
 
       span.addTags(tags)
 
-      expect(prioritySampler.sample).to.have.been.calledWith(span, false)
+      sinon.assert.calledWith(prioritySampler.sample, span, false)
     })
   })
 
@@ -446,7 +450,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.finish()
 
-      expect(span.context()._trace.finished).to.deep.equal([span])
+      assert.deepStrictEqual(span.context()._trace.finished, [span])
     })
 
     it('should record the span', () => {
@@ -455,7 +459,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.finish()
 
-      expect(processor.process).to.have.been.calledWith(span)
+      sinon.assert.calledWith(processor.process, span)
     })
 
     it('should not record the span if already finished', () => {
@@ -465,7 +469,7 @@ describe('Span', () => {
       span.finish()
       span.finish()
 
-      expect(processor.process).to.have.been.calledOnce
+      sinon.assert.calledOnce(processor.process)
     })
 
     it('should add _dd.integration', () => {
@@ -474,7 +478,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.finish()
 
-      expect(span._spanContext._tags).to.include({ '_dd.integration': 'opentracing' })
+      assertObjectContains(span._spanContext._tags, { '_dd.integration': 'opentracing' })
     })
 
     describe('tracePropagationBehaviorExtract and Baggage', () => {
@@ -502,7 +506,7 @@ describe('Span', () => {
           }
         }
         span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
-        expect(span._spanContext._baggageItems).to.deep.equal({})
+        assert.deepStrictEqual(span._spanContext._baggageItems, {})
       })
 
       it('should propagate baggage items when Trace_Propagation_Behavior_Extract is set to restart', () => {
@@ -512,7 +516,7 @@ describe('Span', () => {
           }
         }
         span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
-        expect(span._spanContext._baggageItems).to.deep.equal({ foo: 'bar' })
+        assert.deepStrictEqual(span._spanContext._baggageItems, { foo: 'bar' })
       })
     })
   })

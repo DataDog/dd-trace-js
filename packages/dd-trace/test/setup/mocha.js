@@ -1,16 +1,14 @@
 'use strict'
 
 const assert = require('node:assert')
-const util = require('node:util')
+const fs = require('node:fs')
 const { platform } = require('node:os')
 const path = require('node:path')
-const fs = require('node:fs')
+const util = require('node:util')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
-
 require('./core')
 
 const externals = require('../plugins/externals.json')
@@ -79,8 +77,8 @@ function withNamingSchema (
                   ? serviceName()
                   : serviceName
 
-                expect(span).to.have.property('name', expectedOpName)
-                expect(span).to.have.property('service', expectedServiceName)
+                assert.strictEqual(span.name, expectedOpName)
+                assert.strictEqual(span.service, expectedServiceName)
               }, { timeoutMs: 25000 })
 
             const testPromise = spanProducerFn(reject)
@@ -120,7 +118,7 @@ function withNamingSchema (
               const expectedServiceName = typeof serviceName === 'function'
                 ? serviceName()
                 : serviceName
-              expect(span).to.have.property('service', expectedServiceName)
+              assert.strictEqual(span.service, expectedServiceName)
             }, { timeoutMs: 15000 })
 
           const testPromise = spanProducerFn(reject)
@@ -168,8 +166,8 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
       await Promise.all([
         agent.assertSomeTraces(traces => {
           const span = traces[0][0]
-          expect(span.meta).to.have.property('peer.service', typeof service === 'function' ? service() : service)
-          expect(span.meta).to.have.property('_dd.peer.service.source', serviceSource)
+          assert.strictEqual(span.meta['peer.service'], typeof service === 'function' ? service() : service)
+          assert.strictEqual(span.meta['_dd.peer.service.source'], serviceSource)
         }),
         spanGenerationPromise
       ])
@@ -177,6 +175,9 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
   })
 }
 
+/**
+ * @typedef {typeof import('../../src/plugins/plugin')} Plugin
+ */
 /**
  * @callback withVersionsCallback
  * @param {string} versionKey - The version string used in the module path
@@ -199,10 +200,6 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
  * @param {string} range - The specific version or range of versions to test, e.g. '>=3' or '3.1.2'
  * @param {withVersionsCallback} cb - The callback function to call with the test case data
  * @returns {void}
- *
- * @typedef {object} Plugin
- * @property {string} name
- * @property {string} version
  */
 function withVersions (plugin, modules, range, cb) {
   if (typeof range === 'function') {

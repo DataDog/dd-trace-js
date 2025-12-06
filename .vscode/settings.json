@@ -1,0 +1,5 @@
+{
+  // Use the workspace version of TypeScript instead of VSCode's bundled version
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+}

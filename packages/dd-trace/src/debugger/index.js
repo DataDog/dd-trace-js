@@ -89,7 +89,7 @@ function start (config, rc) {
 
     log.error('[debugger] worker thread exited unexpectedly', error)
 
-    // Be nice, clean up now that the worker thread encounted an issue and we can't continue
+    // Be nice, clean up now that the worker thread encountered an issue and we can't continue
     rc.removeProductHandler('LIVE_DEBUGGING')
     worker.removeAllListeners()
     configChannel = null

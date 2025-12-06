@@ -35,7 +35,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       })
 
       app.listen({ port: 0 }, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -100,7 +100,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       })
 
       app.listen({ port: 0 }, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -209,7 +209,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       })
 
       app.listen({ port: 0 }, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -298,7 +298,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       })
 
       app.listen({ port: 0 }, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -480,7 +480,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
             })
 
             app.listen({ port: 0 }, () => {
-              const port = server.address().port
+              const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
               axios = Axios.create({ baseURL: `http://localhost:${port}` })
               done()
             })
@@ -574,7 +574,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         })
 
         app.listen({ port: 0 }, () => {
-          const port = server.address().port
+          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
           axios = Axios.create({ baseURL: `http://localhost:${port}` })
           done()
         })
@@ -668,7 +668,7 @@ describe('Api Security - Fastify', () => {
       })
 
       app.listen({ port: 0 }, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })

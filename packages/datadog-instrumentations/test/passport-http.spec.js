@@ -1,9 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const axios = require('axios').create({ validateStatus: null })
 const { expect } = require('chai')
 const dc = require('dc-polyfill')
-const { describe, it, beforeEach, before, after } = require('mocha')
+const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -94,7 +95,7 @@ withVersions('passport-http', 'passport-http', version => {
       passportVerifyChannel.subscribe((data) => subscriberStub(data))
 
       server = app.listen(0, () => {
-        port = server.address().port
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         done()
       })
     })
@@ -116,7 +117,7 @@ withVersions('passport-http', 'passport-http', version => {
         }
       })
 
-      expect(res.status).to.equal(500)
+      assert.strictEqual(res.status, 500)
       expect(subscriberStub).to.not.be.called
     })
 
@@ -128,8 +129,8 @@ withVersions('passport-http', 'passport-http', version => {
         }
       })
 
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Granted')
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'Granted')
       expect(subscriberStub).to.be.calledOnceWithExactly({
         framework: 'passport-basic',
         login: 'test',
@@ -147,8 +148,8 @@ withVersions('passport-http', 'passport-http', version => {
         }
       })
 
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Granted')
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'Granted')
       expect(subscriberStub).to.be.calledOnceWithExactly({
         framework: 'passport-basic',
         login: 'test',
@@ -166,8 +167,8 @@ withVersions('passport-http', 'passport-http', version => {
         }
       })
 
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Denied')
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'Denied')
       expect(subscriberStub).to.be.calledOnceWithExactly({
         framework: 'passport-basic',
         login: 'test',
@@ -190,8 +191,8 @@ withVersions('passport-http', 'passport-http', version => {
         }
       })
 
-      expect(res.status).to.equal(403)
-      expect(res.data).to.equal('Blocked')
+      assert.strictEqual(res.status, 403)
+      assert.strictEqual(res.data, 'Blocked')
       expect(subscriberStub).to.be.calledOnceWithExactly({
         framework: 'passport-basic',
         login: 'test',

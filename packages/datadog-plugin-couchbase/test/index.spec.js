@@ -1,7 +1,9 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const semver = require('semver')
 const sinon = require('sinon')
@@ -59,7 +61,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             const n1qlQuery = N1qlQuery.fromString(query)
             cluster.query(n1qlQuery, (err, rows) => {
-              expect(tracer.scope().active()).to.equal(span)
+              assert.strictEqual(tracer.scope().active(), span)
               done(err)
             })
           })
@@ -70,7 +72,7 @@ describe('Plugin', () => {
 
           tracer.scope().activate(span, () => {
             bucket.get('1', () => {
-              expect(tracer.scope().active()).to.equal(span)
+              assert.strictEqual(tracer.scope().active(), span)
               done()
             })
           })
@@ -83,14 +85,14 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', expectedSchema.query.opName)
-                expect(span).to.have.property('service', expectedSchema.query.serviceName)
-                expect(span).to.have.property('resource', query)
-                expect(span).to.have.property('type', 'sql')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
-                expect(span.meta).to.have.property('component', 'couchbase')
-                expect(span.meta).to.have.property('_dd.integration', 'couchbase')
+                assert.strictEqual(span.name, expectedSchema.query.opName)
+                assert.strictEqual(span.service, expectedSchema.query.serviceName)
+                assert.strictEqual(span.resource, query)
+                assert.strictEqual(span.type, 'sql')
+                assert.strictEqual(span.meta['span.kind'], 'client')
+                assert.strictEqual(span.meta['couchbase.bucket.name'], 'datadog-test')
+                assert.strictEqual(span.meta.component, 'couchbase')
+                assert.strictEqual(span.meta['_dd.integration'], 'couchbase')
               })
               .then(done)
               .catch(done)
@@ -113,12 +115,12 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', expectedSchema.upsert.opName)
-                expect(span).to.have.property('service', expectedSchema.upsert.serviceName)
-                expect(span).to.have.property('resource', 'couchbase.upsert')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
-                expect(span.meta).to.have.property('component', 'couchbase')
+                assert.strictEqual(span.name, expectedSchema.upsert.opName)
+                assert.strictEqual(span.service, expectedSchema.upsert.serviceName)
+                assert.strictEqual(span.resource, 'couchbase.upsert')
+                assert.strictEqual(span.meta['span.kind'], 'client')
+                assert.strictEqual(span.meta['couchbase.bucket.name'], 'datadog-test')
+                assert.strictEqual(span.meta.component, 'couchbase')
               })
               .then(done)
               .catch(done)
@@ -132,7 +134,7 @@ describe('Plugin', () => {
             try {
               bucket.upsert('testdoc', { name: 'Frank' })
             } catch (e) {
-              expect(e.message).to.equal('Third argument needs to be an object or callback.')
+              assert.strictEqual(e.message, 'Third argument needs to be an object or callback.')
               done()
             }
           })
@@ -145,13 +147,13 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', expectedSchema.query.opName)
-                expect(span).to.have.property('service', expectedSchema.query.serviceName)
-                expect(span).to.have.property('resource', query)
-                expect(span).to.have.property('type', 'sql')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
-                expect(span.meta).to.have.property('component', 'couchbase')
+                assert.strictEqual(span.name, expectedSchema.query.opName)
+                assert.strictEqual(span.service, expectedSchema.query.serviceName)
+                assert.strictEqual(span.resource, query)
+                assert.strictEqual(span.type, 'sql')
+                assert.strictEqual(span.meta['span.kind'], 'client')
+                assert.strictEqual(span.meta['couchbase.bucket.name'], 'datadog-test')
+                assert.strictEqual(span.meta.component, 'couchbase')
               })
               .then(done)
               .catch(done)
@@ -204,7 +206,7 @@ describe('Plugin', () => {
 
           tracer.scope().activate(span, () => {
             cluster.query(query).then(rows => {
-              expect(tracer.scope().active()).to.equal(span)
+              assert.strictEqual(tracer.scope().active(), span)
             }).then(done)
               .catch(done)
           })
@@ -214,7 +216,7 @@ describe('Plugin', () => {
           const span = tracer.startSpan('test')
           tracer.scope().activate(span, () => {
             collection.exists('1').then(() => {
-              expect(tracer.scope().active()).to.equal(span)
+              assert.strictEqual(tracer.scope().active(), span)
             }).then(done).catch(done)
           })
         })
@@ -226,12 +228,12 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', expectedSchema.query.opName)
-                expect(span).to.have.property('service', expectedSchema.query.serviceName)
-                expect(span).to.have.property('resource', query)
-                expect(span).to.have.property('type', 'sql')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('component', 'couchbase')
+                assert.strictEqual(span.name, expectedSchema.query.opName)
+                assert.strictEqual(span.service, expectedSchema.query.serviceName)
+                assert.strictEqual(span.resource, query)
+                assert.strictEqual(span.type, 'sql')
+                assert.strictEqual(span.meta['span.kind'], 'client')
+                assert.strictEqual(span.meta.component, 'couchbase')
               })
               .then(done)
               .catch(done)
@@ -243,13 +245,13 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', expectedSchema.upsert.opName)
-                expect(span).to.have.property('service', expectedSchema.upsert.serviceName)
-                expect(span).to.have.property('resource', 'couchbase.upsert')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
-                expect(span.meta).to.have.property('couchbase.collection.name', '_default')
-                expect(span.meta).to.have.property('component', 'couchbase')
+                assert.strictEqual(span.name, expectedSchema.upsert.opName)
+                assert.strictEqual(span.service, expectedSchema.upsert.serviceName)
+                assert.strictEqual(span.resource, 'couchbase.upsert')
+                assert.strictEqual(span.meta['span.kind'], 'client')
+                assert.strictEqual(span.meta['couchbase.bucket.name'], 'datadog-test')
+                assert.strictEqual(span.meta['couchbase.collection.name'], '_default')
+                assert.strictEqual(span.meta.component, 'couchbase')
               })
               .then(done)
               .catch(done)
@@ -281,12 +283,12 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', expectedSchema.query.opName)
-                expect(span).to.have.property('service', expectedSchema.query.serviceName)
-                expect(span).to.have.property('resource', query)
-                expect(span).to.have.property('type', 'sql')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('component', 'couchbase')
+                assert.strictEqual(span.name, expectedSchema.query.opName)
+                assert.strictEqual(span.service, expectedSchema.query.serviceName)
+                assert.strictEqual(span.resource, query)
+                assert.strictEqual(span.type, 'sql')
+                assert.strictEqual(span.meta['span.kind'], 'client')
+                assert.strictEqual(span.meta.component, 'couchbase')
               })
               .then(done)
               .catch(done)
@@ -311,9 +313,9 @@ describe('Plugin', () => {
                 agent
                   .assertSomeTraces(traces => {
                     const span = traces[0][0]
-                    expect(cb).to.have.been.calledOnce
+                    sinon.assert.calledOnce(cb)
                     // different couchbase sdk versions will have different error messages/types
-                    expect(span.error).to.equal(1)
+                    assert.strictEqual(span.error, 1)
                   }).then(done).catch(done)
                 cluster.query(invalidQuery, cb)
               })

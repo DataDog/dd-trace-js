@@ -8,7 +8,7 @@ const { getLocalStateForCallFrame } = require('./utils')
 
 describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', function () {
   describe('error handling', function () {
-    it('should generate a notCapturedReason if an error is thrown during inital collection', async function () {
+    it('should generate a notCapturedReason if an error is thrown during initial collection', async function () {
       const invalidCallFrameThatTriggersAnException = {}
       const processLocalState = await getLocalStateForCallFrame(invalidCallFrameThatTriggersAnException)
       const result = processLocalState()

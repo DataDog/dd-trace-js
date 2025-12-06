@@ -1,6 +1,5 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -30,13 +29,13 @@ describe('Analyzers index', () => {
   it('should enable all analyzers', () => {
     const tracerConfig = {}
     analyzers.enableAllAnalyzers(tracerConfig)
-    expect(fakeAnalyzers.analyzerA.configure).to.have.been.calledOnceWith({ enabled: true, tracerConfig })
-    expect(fakeAnalyzers.analyzerB.configure).to.have.been.calledOnceWith({ enabled: true, tracerConfig })
+    sinon.assert.calledOnceWithExactly(fakeAnalyzers.analyzerA.configure, { enabled: true, tracerConfig })
+    sinon.assert.calledOnceWithExactly(fakeAnalyzers.analyzerB.configure, { enabled: true, tracerConfig })
   })
 
   it('should disable all analyzers', () => {
     analyzers.disableAllAnalyzers()
-    expect(fakeAnalyzers.analyzerA.configure).to.have.been.calledOnceWith(false)
-    expect(fakeAnalyzers.analyzerB.configure).to.have.been.calledOnceWith(false)
+    sinon.assert.calledOnceWithExactly(fakeAnalyzers.analyzerA.configure, false)
+    sinon.assert.calledOnceWithExactly(fakeAnalyzers.analyzerB.configure, false)
   })
 })

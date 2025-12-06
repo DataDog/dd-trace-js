@@ -1,8 +1,9 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
 
+const { expect } = require('chai')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 require('../../../setup/mocha')
 
 const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
@@ -17,7 +18,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
 
     it('should return expected object for primitives', function (done) {
       assertOnBreakpoint(done, (state) => {
-        expect(Object.keys(state).length).to.equal(7)
+        assert.strictEqual(Object.keys(state).length, 7)
         expect(state).to.have.deep.property('undef', { type: 'undefined' })
         expect(state).to.have.deep.property('nil', { type: 'null', isNull: true })
         expect(state).to.have.deep.property('bool', { type: 'boolean', value: 'true' })

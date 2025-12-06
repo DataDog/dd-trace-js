@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 
@@ -15,8 +17,8 @@ describe('TraceState', () => {
   it('should convert from header', () => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo;t.dm:-4')
     expect(ts).to.be.an.instanceOf(Map)
-    expect(ts.get('other')).to.equal('bleh')
-    expect(ts.get('dd')).to.equal('s:2;o:foo;t.dm:-4')
+    assert.strictEqual(ts.get('other'), 'bleh')
+    assert.strictEqual(ts.get('dd'), 's:2;o:foo;t.dm:-4')
   })
 
   it('should convert to header', () => {
@@ -27,7 +29,7 @@ describe('TraceState', () => {
       ['dd', 's:2;o:foo;t.dm:-4'],
       ['other', 'bleh']
     ])
-    expect(ts.toString()).to.equal('other=bleh,dd=s:2;o:foo;t.dm:-4')
+    assert.strictEqual(ts.toString(), 'other=bleh,dd=s:2;o:foo;t.dm:-4')
   })
 
   it('should extract our vendor key as a map', () => {
@@ -38,11 +40,11 @@ describe('TraceState', () => {
       called = true
 
       expect(state).to.be.an.instanceOf(Map)
-      expect(state.get('s')).to.equal('2')
-      expect(state.get('o')).to.equal('foo:bar')
-      expect(state.get('t.dm')).to.equal('-4')
+      assert.strictEqual(state.get('s'), '2')
+      assert.strictEqual(state.get('o'), 'foo:bar')
+      assert.strictEqual(state.get('t.dm'), '-4')
     })
-    expect(called).to.be.true
+    assert.strictEqual(called, true)
   })
 
   it('should mutate value in tracestate when changing value', () => {
@@ -50,14 +52,14 @@ describe('TraceState', () => {
 
     // Set
     ts.forVendor('dd', (state) => {
-      expect(state.changed).to.be.false
+      assert.strictEqual(state.changed, false)
       state.set('o', 'baz:buz')
-      expect(state.changed).to.be.true
+      assert.strictEqual(state.changed, true)
     })
-    expect(ts.get('dd')).to.equal('s:2;o:baz:buz;t.dm:-4')
+    assert.strictEqual(ts.get('dd'), 's:2;o:baz:buz;t.dm:-4')
 
     // Vendor key should move to the front on modification
-    expect(ts.toString()).to.equal('dd=s:2;o:baz:buz;t.dm:-4,other=bleh')
+    assert.strictEqual(ts.toString(), 'dd=s:2;o:baz:buz;t.dm:-4,other=bleh')
   })
 
   it('should mutate value in tracestate when deleting value', () => {
@@ -65,14 +67,14 @@ describe('TraceState', () => {
 
     // Delete
     ts.forVendor('dd', (state) => {
-      expect(state.changed).to.be.false
+      assert.strictEqual(state.changed, false)
       state.delete('o')
-      expect(state.changed).to.be.true
+      assert.strictEqual(state.changed, true)
     })
-    expect(ts.get('dd')).to.equal('s:2;t.dm:-4')
+    assert.strictEqual(ts.get('dd'), 's:2;t.dm:-4')
 
     // Vendor key should move to the front on modification
-    expect(ts.toString()).to.equal('dd=s:2;t.dm:-4,other=bleh')
+    assert.strictEqual(ts.toString(), 'dd=s:2;t.dm:-4,other=bleh')
   })
 
   it('should remove value from tracestate when clearing values', () => {
@@ -80,13 +82,13 @@ describe('TraceState', () => {
 
     // Clear
     ts.forVendor('dd', (state) => {
-      expect(state.changed).to.be.false
+      assert.strictEqual(state.changed, false)
       state.clear()
-      expect(state.changed).to.be.true
+      assert.strictEqual(state.changed, true)
     })
-    expect(ts.get('dd')).to.be.undefined
+    assert.strictEqual(ts.get('dd'), undefined)
 
     // Vendor key should move to the front on modification
-    expect(ts.toString()).to.equal('other=bleh')
+    assert.strictEqual(ts.toString(), 'other=bleh')
   })
 })

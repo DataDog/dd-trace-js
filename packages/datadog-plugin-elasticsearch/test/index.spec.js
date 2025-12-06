@@ -1,12 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const assert = require('node:assert/strict')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { expect } = require('chai')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
@@ -48,7 +50,7 @@ describe('Plugin', () => {
         it('should sanitize the resource name', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('resource', 'POST /logstash-?.?.?/_search')
+              assert.strictEqual(traces[0][0].resource, 'POST /logstash-?.?.?/_search')
             })
             .then(done)
             .catch(done)
@@ -80,19 +82,19 @@ describe('Plugin', () => {
         it('should set the correct tags', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
-              expect(traces[0][0].meta).to.have.property('_dd.integration', 'elasticsearch')
-              expect(traces[0][0].meta).to.have.property('db.type', 'elasticsearch')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
-              expect(traces[0][0].meta).to.have.property('elasticsearch.url', '/docs/_search')
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(traces[0][0].meta.component, 'elasticsearch')
+              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'elasticsearch')
+              assert.strictEqual(traces[0][0].meta['db.type'], 'elasticsearch')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta['elasticsearch.method'], 'POST')
+              assert.strictEqual(traces[0][0].meta['elasticsearch.url'], '/docs/_search')
+              assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
 
               if (hasCallbackSupport) {
-                expect(traces[0][0].meta).to.have.property('elasticsearch.body', '{"query":{"match_all":{}}}')
-                expect(traces[0][0].meta).to.have.property('elasticsearch.params', '{"sort":"name","size":100}')
+                assert.strictEqual(traces[0][0].meta['elasticsearch.body'], '{"query":{"match_all":{}}}')
+                assert.strictEqual(traces[0][0].meta['elasticsearch.params'], '{"sort":"name","size":100}')
               } else {
                 expect(traces[0][0].meta).to.have.property(
                   'elasticsearch.body',
@@ -118,13 +120,13 @@ describe('Plugin', () => {
         it('should set the correct tags on msearch', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
-              expect(traces[0][0].meta).to.have.property('db.type', 'elasticsearch')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
-              expect(traces[0][0].meta).to.have.property('elasticsearch.url', '/_msearch')
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(traces[0][0].meta.component, 'elasticsearch')
+              assert.strictEqual(traces[0][0].meta['db.type'], 'elasticsearch')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta['elasticsearch.method'], 'POST')
+              assert.strictEqual(traces[0][0].meta['elasticsearch.url'], '/_msearch')
               expect(traces[0][0].meta).to.have.property(
                 'elasticsearch.body',
                 '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]'
@@ -154,7 +156,7 @@ describe('Plugin', () => {
         it('should skip tags for unavailable fields', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.not.have.property('elasticsearch.body')
+              assert.ok(!Object.hasOwn(traces[0][0].meta, 'elasticsearch.body'))
             })
             .then(done)
             .catch(done)
@@ -171,10 +173,10 @@ describe('Plugin', () => {
             it('should do automatic instrumentation', done => {
               agent
                 .assertSomeTraces(traces => {
-                  expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-                  expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-                  expect(traces[0][0]).to.have.property('resource', 'HEAD /')
-                  expect(traces[0][0]).to.have.property('type', 'elasticsearch')
+                  assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+                  assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+                  assert.strictEqual(traces[0][0].resource, 'HEAD /')
+                  assert.strictEqual(traces[0][0].type, 'elasticsearch')
                 })
                 .then(done)
                 .catch(done)
@@ -185,8 +187,8 @@ describe('Plugin', () => {
             it('should propagate context', done => {
               agent
                 .assertSomeTraces(traces => {
-                  expect(traces[0][0]).to.have.property('parent_id')
-                  expect(traces[0][0].parent_id).to.not.be.null
+                  assert.ok(Object.hasOwn(traces[0][0], 'parent_id'))
+                  assert.notStrictEqual(traces[0][0].parent_id, null)
                 })
                 .then(done)
                 .catch(done)
@@ -200,7 +202,7 @@ describe('Plugin', () => {
 
             it('should run the callback in the parent context', done => {
               client.ping(error => {
-                expect(tracer.scope().active()).to.be.null
+                assert.strictEqual(tracer.scope().active(), null)
                 done(error)
               })
             })
@@ -210,10 +212,10 @@ describe('Plugin', () => {
 
               agent
                 .assertSomeTraces(traces => {
-                  expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-                  expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                  expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-                  expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
+                  assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
+                  assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
+                  assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+                  assert.strictEqual(traces[0][0].meta.component, 'elasticsearch')
                 })
                 .then(done)
                 .catch(done)
@@ -235,10 +237,10 @@ describe('Plugin', () => {
           it('should do automatic instrumentation', done => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-                expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-                expect(traces[0][0]).to.have.property('resource', 'HEAD /')
-                expect(traces[0][0]).to.have.property('type', 'elasticsearch')
+                assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+                assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+                assert.strictEqual(traces[0][0].resource, 'HEAD /')
+                assert.strictEqual(traces[0][0].type, 'elasticsearch')
               })
               .then(done)
               .catch(done)
@@ -249,8 +251,8 @@ describe('Plugin', () => {
           it('should propagate context', done => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('parent_id')
-                expect(traces[0][0].parent_id).to.not.be.null
+                assert.ok(Object.hasOwn(traces[0][0], 'parent_id'))
+                assert.notStrictEqual(traces[0][0].parent_id, null)
               })
               .then(done)
               .catch(done)
@@ -268,10 +270,10 @@ describe('Plugin', () => {
             let error
 
             agent.assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
+              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
+              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
+              assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+              assert.strictEqual(traces[0][0].meta.component, 'elasticsearch')
             })
               .then(done)
               .catch(done)
@@ -295,9 +297,9 @@ describe('Plugin', () => {
           it('should work with userland promises', done => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('service', 'test-elasticsearch')
-                expect(traces[0][0]).to.have.property('resource', 'HEAD /')
-                expect(traces[0][0]).to.have.property('type', 'elasticsearch')
+                assert.strictEqual(traces[0][0].service, 'test-elasticsearch')
+                assert.strictEqual(traces[0][0].resource, 'HEAD /')
+                assert.strictEqual(traces[0][0].type, 'elasticsearch')
               })
               .then(done)
               .catch(done)
@@ -360,11 +362,11 @@ describe('Plugin', () => {
 
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', 'custom')
-              expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
-              expect(traces[0][0].meta).to.have.property('elasticsearch.params', 'foo')
-              expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, 'custom')
+              assert.strictEqual(traces[0][0].meta.component, 'elasticsearch')
+              assert.strictEqual(traces[0][0].meta['elasticsearch.params'], 'foo')
+              assert.strictEqual(traces[0][0].meta['elasticsearch.method'], 'POST')
             })
             .then(done)
             .catch(done)

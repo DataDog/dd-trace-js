@@ -73,7 +73,7 @@ app.get('/propagation-with-event', async (req, res) => {
   const span = tracer.scope().active()
   span.context()._trace.tags['_dd.p.other'] = '1'
 
-  const port = req.query.port || server.address().port
+  const port = req.query.port || (/** @type {import('net').AddressInfo} */ (server.address())).port
   const url = `http://localhost:${port}/down`
 
   await makeRequest(url)
@@ -82,7 +82,7 @@ app.get('/propagation-with-event', async (req, res) => {
 })
 
 app.get('/propagation-without-event', async (req, res) => {
-  const port = req.query.port || server.address().port
+  const port = req.query.port || (/** @type {import('net').AddressInfo} */ (server.address())).port
   const url = `http://localhost:${port}/down`
 
   const span = tracer.scope().active()
@@ -111,6 +111,6 @@ app.get('/propagation-after-drop-and-call-sdk', async (req, res) => {
 })
 
 const server = http.createServer(app).listen(0, () => {
-  const port = server.address().port
+  const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
   process.send?.({ port })
 })

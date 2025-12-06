@@ -15,7 +15,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
 
     afterEach(teardown)
 
-    describe('shold respect maxFieldCount on each collected scope', function () {
+    describe('should respect maxFieldCount on each collected scope', function () {
       const maxFieldCount = 3
       let state
 

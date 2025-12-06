@@ -1,12 +1,13 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 module.exports = ({ Assertion, expect }, { expectTypes }) => {
   Assertion.addProperty('valueType', function () {
     const obj = this._obj
 
-    expect(obj).to.be.a('object')
-    expect(obj.type).to.be.a('number')
-    expect(obj.unit).to.be.a('number')
+    assert.ok(typeof obj === 'object' && obj !== null)
+    assert.strictEqual(typeof obj.type, 'number')
+    assert.strictEqual(typeof obj.unit, 'number')
   })
 
   Assertion.addProperty('numeric', function () {
@@ -16,43 +17,46 @@ module.exports = ({ Assertion, expect }, { expectTypes }) => {
   Assertion.addProperty('profile', function () {
     const obj = this._obj
 
-    expect(obj).to.be.an('object')
+    assert.ok(typeof obj === 'object' && obj !== null)
 
-    expect(obj.timeNanos).to.be.a('bigint')
+    assert.strictEqual(typeof obj.timeNanos, 'bigint')
     expect(obj.period).to.be.numeric
     expect(obj.periodType).to.be.a.valueType
-    expect(obj.sampleType).to.be.an('array').and.have.length(2)
-    expect(obj.sample).to.be.an('array')
-    expect(obj.location).to.be.an('array')
-    expect(obj.function).to.be.an('array')
-    expect(obj.stringTable.strings).to.be.an('array').and.have.length.at.least(1)
-    expect(obj.stringTable.strings[0]).to.equal('')
+    assert.ok(Array.isArray(obj.sampleType))
+    assert.strictEqual(obj.sampleType.length, 2)
+    assert.ok(Array.isArray(obj.sample))
+    assert.ok(Array.isArray(obj.location))
+    assert.ok(Array.isArray(obj.function))
+    assert.ok(Array.isArray(obj.stringTable.strings))
+    assert.ok(obj.stringTable.strings.length >= 1)
+    assert.strictEqual(obj.stringTable.strings[0], '')
 
     for (const sampleType of obj.sampleType) {
       expect(sampleType).to.be.a.valueType
     }
 
     for (const fn of obj.function) {
-      expect(fn.filename).to.be.a('number')
-      expect(fn.systemName).to.be.a('number')
-      expect(fn.name).to.be.a('number')
-      expect(fn.id).to.match(/\d+/)
+      assert.strictEqual(typeof fn.filename, 'number')
+      assert.strictEqual(typeof fn.systemName, 'number')
+      assert.strictEqual(typeof fn.name, 'number')
+      assert.ok(Number.isSafeInteger(fn.id))
     }
 
     for (const location of obj.location) {
-      expect(location.id).to.match(/\d+/)
-      expect(location.line).to.be.an('array')
+      assert.ok(Number.isSafeInteger(location.id))
+      assert.ok(Array.isArray(location.line))
 
       for (const line of location.line) {
-        expect(line.functionId).to.match(/\d+/)
-        expect(line.line).to.be.a('number')
+        assert.ok(Number.isSafeInteger(line.functionId))
+        assert.strictEqual(typeof line.line, 'number')
       }
     }
 
     for (const sample of obj.sample) {
-      expect(sample.locationId).to.be.an('array')
-      expect(sample.locationId.length).to.be.gte(1)
-      expect(sample.value).to.be.an('array').and.have.length(obj.sampleType.length)
+      assert.ok(Array.isArray(sample.locationId))
+      assert.ok(sample.locationId.length >= 1)
+      assert.ok(Array.isArray(sample.value))
+      assert.strictEqual(sample.value.length, obj.sampleType.length)
     }
   })
 }

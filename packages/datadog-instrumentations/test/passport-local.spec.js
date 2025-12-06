@@ -1,8 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const dc = require('dc-polyfill')
-const { describe, it, beforeEach, before, after } = require('mocha')
+const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -94,7 +96,7 @@ withVersions('passport-local', 'passport-local', version => {
       passportVerifyChannel.subscribe((data) => subscriberStub(data))
 
       server = app.listen(0, () => {
-        port = server.address().port
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         done()
       })
     })
@@ -111,15 +113,15 @@ withVersions('passport-local', 'passport-local', version => {
     it('should not call subscriber when an error occurs', async () => {
       const res = await axios.post(`http://localhost:${port}/`, { username: 'error', password: '1234' })
 
-      expect(res.status).to.equal(500)
+      assert.strictEqual(res.status, 500)
       expect(subscriberStub).to.not.be.called
     })
 
     it('should call subscriber with proper arguments on success', async () => {
       const res = await axios.post(`http://localhost:${port}/`, { username: 'test', password: '1234' })
 
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Granted')
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'Granted')
       expect(subscriberStub).to.be.calledOnceWithExactly({
         framework: 'passport-local',
         login: 'test',
@@ -132,8 +134,8 @@ withVersions('passport-local', 'passport-local', version => {
     it('should call subscriber with proper arguments on success with passReqToCallback set to true', async () => {
       const res = await axios.post(`http://localhost:${port}/req`, { username: 'test', password: '1234' })
 
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Granted')
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'Granted')
       expect(subscriberStub).to.be.calledOnceWithExactly({
         framework: 'passport-local',
         login: 'test',
@@ -146,8 +148,8 @@ withVersions('passport-local', 'passport-local', version => {
     it('should call subscriber with proper arguments on failure', async () => {
       const res = await axios.post(`http://localhost:${port}/`, { username: 'test', password: '1' })
 
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Denied')
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'Denied')
       expect(subscriberStub).to.be.calledOnceWithExactly({
         framework: 'passport-local',
         login: 'test',
@@ -165,8 +167,8 @@ withVersions('passport-local', 'passport-local', version => {
 
       const res = await axios.post(`http://localhost:${port}/`, { username: 'test', password: '1234' })
 
-      expect(res.status).to.equal(403)
-      expect(res.data).to.equal('Blocked')
+      assert.strictEqual(res.status, 403)
+      assert.strictEqual(res.data, 'Blocked')
       expect(subscriberStub).to.be.calledOnceWithExactly({
         framework: 'passport-local',
         login: 'test',

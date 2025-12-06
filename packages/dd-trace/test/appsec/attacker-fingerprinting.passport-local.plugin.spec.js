@@ -60,7 +60,7 @@ withVersions('passport-local', 'passport-local', version => {
       })
 
       server = app.listen(port, () => {
-        port = server.address().port
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({
           baseURL: `http://localhost:${port}`,
           headers: {

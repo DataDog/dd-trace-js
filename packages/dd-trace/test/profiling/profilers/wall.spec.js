@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('tap').mocha
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -56,9 +56,9 @@ describe('profilers/native/wall', () => {
     profiler.start()
 
     // @ts-expect-error: _startProfilerIdleNotifier is not typed on process
-    expect(process._startProfilerIdleNotifier).to.be.a('function')
+    assert.strictEqual(typeof process._startProfilerIdleNotifier, 'function')
     // @ts-expect-error: _stopProfilerIdleNotifier is not typed on process
-    expect(process._stopProfilerIdleNotifier).to.be.a('function')
+    assert.strictEqual(typeof process._stopProfilerIdleNotifier, 'function')
 
     // @ts-expect-error: _startProfilerIdleNotifier is not typed on process
     process._startProfilerIdleNotifier = start
@@ -132,26 +132,26 @@ describe('profilers/native/wall', () => {
     const info = profiler.getInfo()
     profiler.stop()
 
-    expect(info.totalAsyncContextCount).to.not.be.undefined
-    expect(info.usedAsyncContextCount).to.not.be.undefined
+    assert.notStrictEqual(info.totalAsyncContextCount, undefined)
+    assert.notStrictEqual(info.usedAsyncContextCount, undefined)
   })
 
   it('should collect profiles from the internal time profiler', () => {
     const profiler = new NativeWallProfiler()
 
-    expect(profiler.isStarted()).to.be.false
+    assert.strictEqual(profiler.isStarted(), false)
     profiler.start()
-    expect(profiler.isStarted()).to.be.true
+    assert.strictEqual(profiler.isStarted(), true)
 
     const profile = profiler.profile(true)
 
-    expect(profile).to.be.equal(profile0)
+    assert.strictEqual(profile, profile0)
 
     sinon.assert.calledOnce(pprof.time.stop)
     sinon.assert.calledOnce(pprof.time.start)
-    expect(profiler.isStarted()).to.be.true
+    assert.strictEqual(profiler.isStarted(), true)
     profiler.stop()
-    expect(profiler.isStarted()).to.be.false
+    assert.strictEqual(profiler.isStarted(), false)
     sinon.assert.calledTwice(pprof.time.stop)
   })
 
@@ -162,11 +162,11 @@ describe('profilers/native/wall', () => {
 
     const profile = profiler.profile(false)
 
-    expect(profile).to.equal(profile0)
+    assert.strictEqual(profile, profile0)
 
     sinon.assert.calledOnce(pprof.time.stop)
     sinon.assert.calledOnce(pprof.time.start)
-    expect(profiler.isStarted()).to.be.false
+    assert.strictEqual(profiler.isStarted(), false)
     profiler.stop()
     sinon.assert.calledOnce(pprof.time.stop)
   })
@@ -213,10 +213,10 @@ describe('profilers/native/wall', () => {
 
     function expectLabels (context, expected) {
       const actual = profiler._generateLabels({ node: {}, context })
-      expect(actual).to.deep.equal(expected)
+      assert.deepStrictEqual(actual, expected)
     }
 
-    expect(profiler._generateLabels({ node: { name: 'Non JS threads activity' } })).to.deep.equal({
+    assert.deepStrictEqual(profiler._generateLabels({ node: { name: 'Non JS threads activity' } }), {
       'thread name': 'Non-JS threads',
       'thread id': 'NA',
       'os thread id': 'NA'

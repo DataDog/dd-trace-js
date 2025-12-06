@@ -1,10 +1,11 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const { channel } = require('../../src/helpers/instrument')
-
 const {
   joinPath,
   normalizeRoutePath,
@@ -23,70 +24,70 @@ const {
 describe('helpers/router-helper', () => {
   describe('normalizeRoutePath', () => {
     it('should return null for nullish values', () => {
-      expect(normalizeRoutePath(null)).to.equal(null)
-      expect(normalizeRoutePath(undefined)).to.equal(null)
+      assert.strictEqual(normalizeRoutePath(null), null)
+      assert.strictEqual(normalizeRoutePath(undefined), null)
     })
 
     it('should convert regular expressions to strings', () => {
       const regex = /^\/item\/(\d+)$/
-      expect(normalizeRoutePath(regex)).to.equal(regex.toString())
+      assert.strictEqual(normalizeRoutePath(regex), regex.toString())
     })
 
     it('should stringify non-string primitives', () => {
-      expect(normalizeRoutePath(42)).to.equal('42')
-      expect(normalizeRoutePath(true)).to.equal('true')
+      assert.strictEqual(normalizeRoutePath(42), '42')
+      assert.strictEqual(normalizeRoutePath(true), 'true')
     })
   })
 
   describe('normalizeRoutePaths', () => {
     it('should wrap a single string path in an array', () => {
-      expect(normalizeRoutePaths('/foo')).to.deep.equal(['/foo'])
+      assert.deepStrictEqual(normalizeRoutePaths('/foo'), ['/foo'])
     })
 
     it('should flatten nested arrays', () => {
       const input = ['/one', ['/two', ['/three']]]
-      expect(normalizeRoutePaths(input)).to.deep.equal(['/one', '/two', '/three'])
+      assert.deepStrictEqual(normalizeRoutePaths(input), ['/one', '/two', '/three'])
     })
 
     it('should normalize mixed values', () => {
       const regex = /^\/item\/(\d+)$/
       const input = ['/base', [regex, null, undefined]]
-      expect(normalizeRoutePaths(input)).to.deep.equal(['/base', regex.toString()])
+      assert.deepStrictEqual(normalizeRoutePaths(input), ['/base', regex.toString()])
     })
   })
 
   describe('getRouteFullPaths', () => {
     it('should combine route paths with prefix', () => {
       const route = { path: '/child' }
-      expect(getRouteFullPaths(route, '/parent')).to.deep.equal(['/parent/child'])
+      assert.deepStrictEqual(getRouteFullPaths(route, '/parent'), ['/parent/child'])
     })
 
     it('should handle routes without explicit path', () => {
       const route = { path: '' }
-      expect(getRouteFullPaths(route, '/parent')).to.deep.equal(['/parent'])
+      assert.deepStrictEqual(getRouteFullPaths(route, '/parent'), ['/parent'])
     })
 
     it('should fan out multiple route paths', () => {
       const route = { path: ['/one', '/two'] }
-      expect(getRouteFullPaths(route, '/base')).to.deep.equal(['/base/one', '/base/two'])
+      assert.deepStrictEqual(getRouteFullPaths(route, '/base'), ['/base/one', '/base/two'])
     })
   })
 
   describe('joinPath', () => {
     it('should join base and child paths', () => {
-      expect(joinPath('/base', '/child')).to.equal('/base/child')
+      assert.strictEqual(joinPath('/base', '/child'), '/base/child')
     })
 
     it('should handle root base', () => {
-      expect(joinPath('/', '/child')).to.equal('/child')
+      assert.strictEqual(joinPath('/', '/child'), '/child')
     })
 
     it('should handle root path', () => {
-      expect(joinPath('/base', '/')).to.equal('/base')
+      assert.strictEqual(joinPath('/base', '/'), '/base')
     })
 
     it('should return root when both parts empty', () => {
-      expect(joinPath('', '')).to.equal('/')
+      assert.strictEqual(joinPath('', ''), '/')
     })
 
     it('should avoid duplicate slashes when base ends with slash', () => {
@@ -94,23 +95,23 @@ describe('helpers/router-helper', () => {
     })
 
     it('should return null for path without leading slash (not accessible in Express)', () => {
-      expect(joinPath('/v1', 'nested')).to.equal(null)
+      assert.strictEqual(joinPath('/v1', 'nested'), null)
     })
 
     it('should return null for base without leading slash (not accessible in Express)', () => {
-      expect(joinPath('v1', '/nested')).to.equal(null)
+      assert.strictEqual(joinPath('v1', '/nested'), null)
     })
 
     it('should return null for both base and path without leading slashes', () => {
-      expect(joinPath('v1', 'nested')).to.equal(null)
+      assert.strictEqual(joinPath('v1', 'nested'), null)
     })
 
     it('should handle empty string path (used for routes without explicit path)', () => {
-      expect(joinPath('/v1', '')).to.equal('/v1')
+      assert.strictEqual(joinPath('/v1', ''), '/v1')
     })
 
     it('should handle base with trailing slash and path with leading slash correctly', () => {
-      expect(joinPath('/v1/', '/nested')).to.equal('/v1/nested')
+      assert.strictEqual(joinPath('/v1/', '/nested'), '/v1/nested')
     })
   })
 
@@ -130,7 +131,7 @@ describe('helpers/router-helper', () => {
       setRouterMountPath(router, '/dup')
       setRouterMountPath(router, '/dup')
 
-      expect(getRouterMountPaths(router)).to.deep.equal(['/dup'])
+      assert.deepStrictEqual(getRouterMountPaths(router), ['/dup'])
     })
   })
 
@@ -138,30 +139,30 @@ describe('helpers/router-helper', () => {
     it('should default to root when no mount path provided', () => {
       const { mountPaths, startIdx } = extractMountPaths(() => {})
 
-      expect(mountPaths).to.deep.equal(['/'])
-      expect(startIdx).to.equal(0)
+      assert.deepStrictEqual(mountPaths, ['/'])
+      assert.strictEqual(startIdx, 0)
     })
 
     it('should normalize string mount paths', () => {
       const { mountPaths, startIdx } = extractMountPaths('/test')
 
-      expect(mountPaths).to.deep.equal(['/test'])
-      expect(startIdx).to.equal(1)
+      assert.deepStrictEqual(mountPaths, ['/test'])
+      assert.strictEqual(startIdx, 1)
     })
 
     it('should flatten array mount paths including regex', () => {
       const regex = /\/foo/
       const { mountPaths, startIdx } = extractMountPaths([[['/one'], regex]])
 
-      expect(mountPaths).to.deep.equal(['/one', regex.toString()])
-      expect(startIdx).to.equal(1)
+      assert.deepStrictEqual(mountPaths, ['/one', regex.toString()])
+      assert.strictEqual(startIdx, 1)
     })
 
     it('should ignore handlers as mount paths', () => {
       const { mountPaths, startIdx } = extractMountPaths(function handler () {})
 
-      expect(mountPaths).to.deep.equal(['/'])
-      expect(startIdx).to.equal(0)
+      assert.deepStrictEqual(mountPaths, ['/'])
+      assert.strictEqual(startIdx, 0)
     })
   })
 
@@ -170,7 +171,7 @@ describe('helpers/router-helper', () => {
       const leaf = { stack: [] }
       const parent = { stack: [{ handle: leaf }] }
 
-      expect(hasRouterCycle(parent)).to.be.false
+      assert.strictEqual(hasRouterCycle(parent), false)
     })
 
     it('should detect cycles between routers', () => {
@@ -180,14 +181,14 @@ describe('helpers/router-helper', () => {
       a.stack.push({ handle: b })
       b.stack.push({ handle: a })
 
-      expect(hasRouterCycle(a)).to.be.true
+      assert.strictEqual(hasRouterCycle(a), true)
     })
 
     it('should consider router referencing itself a cycle', () => {
       const router = { stack: [] }
       router.stack.push({ handle: router })
 
-      expect(hasRouterCycle(router)).to.be.true
+      assert.strictEqual(hasRouterCycle(router), true)
     })
   })
 
@@ -224,7 +225,7 @@ describe('helpers/router-helper', () => {
 
       collectRoutesFromRouter(router, '/api')
 
-      expect(published).to.deep.equal([
+      assert.deepStrictEqual(published, [
         { method: 'get', path: '/api' },
         { method: 'post', path: '/api' }
       ])
@@ -249,11 +250,11 @@ describe('helpers/router-helper', () => {
 
       collectRoutesFromRouter(parentRouter, '/api')
 
-      expect(published).to.deep.equal([
+      assert.deepStrictEqual(published, [
         { method: 'get', path: '/api/sub/nested' }
       ])
-      expect(getRouterMountPaths(childRouter)).to.deep.equal(['/api/sub'])
-      expect(isAppMounted(childRouter)).to.be.true
+      assert.deepStrictEqual(getRouterMountPaths(childRouter), ['/api/sub'])
+      assert.strictEqual(isAppMounted(childRouter), true)
     })
 
     it('should use layer matchers when mount path is not a string', () => {
@@ -279,10 +280,10 @@ describe('helpers/router-helper', () => {
 
       collectRoutesFromRouter(parentRouter, '/root')
 
-      expect(published).to.deep.equal([
+      assert.deepStrictEqual(published, [
         { method: '*', path: '/root/dynamic/details' }
       ])
-      expect(getRouterMountPaths(childRouter)).to.deep.equal(['/root/dynamic'])
+      assert.deepStrictEqual(getRouterMountPaths(childRouter), ['/root/dynamic'])
     })
   })
 
@@ -304,11 +305,11 @@ describe('helpers/router-helper', () => {
       const context = { foo: 'bar' }
       const returnValue = route.get.call(context, 'arg1', 'arg2')
 
-      expect(returnValue).to.equal('result')
-      expect(calls).to.have.length(1)
-      expect(calls[0].context).to.equal(context)
-      expect(calls[0].args).to.deep.equal(['arg1', 'arg2'])
-      expect(published).to.deep.equal([
+      assert.strictEqual(returnValue, 'result')
+      assert.strictEqual(calls.length, 1)
+      assert.strictEqual(calls[0].context, context)
+      assert.deepStrictEqual(calls[0].args, ['arg1', 'arg2'])
+      assert.deepStrictEqual(published, [
         { method: 'get', path: '/path-a' },
         { method: 'get', path: '/path-b' }
       ])
@@ -323,7 +324,7 @@ describe('helpers/router-helper', () => {
       wrapRouteMethodsAndPublish(route, ['/dup', '/dup'], published.push.bind(published))
       route.get()
 
-      expect(published).to.deep.equal([{ method: 'get', path: '/dup' }])
+      assert.deepStrictEqual(published, [{ method: 'get', path: '/dup' }])
     })
 
     it('should normalise method names for all()', () => {
@@ -335,7 +336,7 @@ describe('helpers/router-helper', () => {
       wrapRouteMethodsAndPublish(route, ['/test'], published.push.bind(published))
       route.all()
 
-      expect(published).to.deep.equal([{ method: '*', path: '/test' }])
+      assert.deepStrictEqual(published, [{ method: '*', path: '/test' }])
     })
 
     it('should no-op when no paths provided', () => {
@@ -347,8 +348,8 @@ describe('helpers/router-helper', () => {
         published = true
       })
 
-      expect(route.get).to.equal(original)
-      expect(published).to.be.false
+      assert.strictEqual(route.get, original)
+      assert.strictEqual(published, false)
     })
   })
 })

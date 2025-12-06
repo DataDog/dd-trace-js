@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, before, after } = require('tap').mocha
 const axios = require('axios')
@@ -20,7 +22,7 @@ describe('ip extractor', () => {
     })
     appListener = server
       .listen(0, 'localhost', () => {
-        port = server.address().port
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         done()
       })
   })
@@ -33,7 +35,7 @@ describe('ip extractor', () => {
     controller = function (req) {
       const ip = extractIp({}, req)
       try {
-        expect(ip).to.be.equal(expected)
+        assert.strictEqual(ip, expected)
         done()
       } catch (e) {
         done(e)
@@ -74,7 +76,7 @@ describe('ip extractor', () => {
     controller = function (req) {
       const ip = extractIp({ clientIpHeader }, req)
       try {
-        expect(ip).to.be.equal(expectedIp)
+        assert.strictEqual(ip, expectedIp)
         done()
       } catch (e) {
         done(e)
@@ -93,7 +95,7 @@ describe('ip extractor', () => {
     controller = function (req) {
       const ip = extractIp({ clientIpHeader }, req)
       try {
-        expect(ip).to.be.equal(expectedIp)
+        assert.strictEqual(ip, expectedIp)
         done()
       } catch (e) {
         done(e)
@@ -112,7 +114,7 @@ describe('ip extractor', () => {
     controller = function (req) {
       const ip = extractIp({ clientIpHeader }, req)
       try {
-        expect(ip).to.be.undefined
+        assert.strictEqual(ip, undefined)
         done()
       } catch (e) {
         done(e)

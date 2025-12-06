@@ -1,16 +1,39 @@
 'use strict'
 
-const { collectionSizeSym, fieldCountSym } = require('./symbols')
+const { collectionSizeSym, fieldCountSym, timeBudgetSym } = require('./symbols')
 const session = require('../session')
 
 const LEAF_SUBTYPES = new Set(['date', 'regexp'])
 const ITERABLE_SUBTYPES = new Set(['map', 'set', 'weakmap', 'weakset'])
 
 module.exports = {
-  getRuntimeObject: getObject
+  collectObjectProperties
 }
 
-async function getObject (objectId, opts, depth = 0, collection = false) {
+/**
+ * @typedef {Object} GetObjectOptions
+ * @property {Object} maxReferenceDepth - The maximum depth of the object to traverse
+ * @property {number} maxCollectionSize - The maximum size of a collection to include in the snapshot
+ * @property {number} maxFieldCount - The maximum number of properties on an object to include in the snapshot
+ * @property {bigint} deadlineNs - The deadline in nanoseconds compared to `process.hrtime.bigint()`
+ * @property {Object} [ctx={}] - A context object to track the state/progress of the snapshot collection.
+ * @property {boolean} [ctx.deadlineReached=false] - Whether the deadline has been reached. Should not be set by the
+ *   caller, but is used to signal the deadline overrun to the caller.
+ */
+
+/**
+ * Collect the properties of an object using the Chrome DevTools Protocol.
+ *
+ * @param {string} objectId - The ID of the object to get the properties of
+ * @param {GetObjectOptions} opts - The options for the snapshot. Also used to track the deadline and communicate the
+ *   deadline overrun to the caller using the `deadlineReached` flag.
+ * @param {number} [depth=0] - The depth of the object. Only used internally by this module to track the current depth
+ *   and should not be set by the caller.
+ * @param {boolean} [collection=false] - Whether the object is a collection. Only used internally by this module to
+ *   track the current object type and should not be set by the caller.
+ * @returns {Promise<Object[]>} The properties of the object
+ */
+async function collectObjectProperties (objectId, opts, depth = 0, collection = false) {
   const { result, privateProperties } = await session.post('Runtime.getProperties', {
     objectId,
     ownProperties: true // exclude inherited properties
@@ -43,7 +66,7 @@ async function traverseGetPropertiesResult (props, opts, depth) {
 
   if (depth >= opts.maxReferenceDepth) return props
 
-  const promises = []
+  const work = []
 
   for (const prop of props) {
     if (prop.value === undefined) continue
@@ -51,24 +74,46 @@ async function traverseGetPropertiesResult (props, opts, depth) {
     if (type === 'object') {
       if (objectId === undefined) continue // if `subtype` is "null"
       if (LEAF_SUBTYPES.has(subtype)) continue // don't waste time with these subtypes
-      promises.push(getObjectProperties(subtype, objectId, opts, depth).then((properties) => {
-        prop.value.properties = properties
-      }))
+      work.push([
+        prop.value,
+        () => collectPropertiesBySubtype(subtype, objectId, opts, depth).then((properties) => {
+          prop.value.properties = properties
+        })
+      ])
     } else if (type === 'function') {
-      promises.push(getFunctionProperties(objectId, opts, depth + 1).then((properties) => {
-        prop.value.properties = properties
-      }))
+      work.push([
+        prop.value,
+        () => getFunctionProperties(objectId, opts, depth + 1).then((properties) => {
+          prop.value.properties = properties
+        })
+      ])
     }
   }
 
-  if (promises.length) {
-    await Promise.all(promises)
+  if (work.length) {
+    // Iterate over the work in chunks of 2. The closer to 1, the less we'll overshoot the deadline, but the longer it
+    // takes to complete. `2` seems to be the best compromise.
+    // Anecdotally, on my machine, with no deadline, a concurrency of `1` takes twice as long as a concurrency of `2`.
+    // From thereon, there's no real measurable savings with a higher concurrency.
+    for (let i = 0; i < work.length; i += 2) {
+      if (overBudget(opts)) {
+        for (let j = i; j < work.length; j++) {
+          work[j][0][timeBudgetSym] = true
+        }
+        break
+      }
+      // eslint-disable-next-line no-await-in-loop
+      await Promise.all([
+        work[i][1](),
+        work[i + 1]?.[1]()
+      ])
+    }
   }
 
   return props
 }
 
-function getObjectProperties (subtype, objectId, opts, depth) {
+function collectPropertiesBySubtype (subtype, objectId, opts, depth) {
   if (ITERABLE_SUBTYPES.has(subtype)) {
     return getIterable(objectId, opts, depth)
   } else if (subtype === 'promise') {
@@ -78,7 +123,7 @@ function getObjectProperties (subtype, objectId, opts, depth) {
   } else if (subtype === 'arraybuffer') {
     return getArrayBuffer(objectId, opts, depth)
   }
-  return getObject(objectId, opts, depth + 1, subtype === 'array' || subtype === 'typedarray')
+  return collectObjectProperties(objectId, opts, depth + 1, subtype === 'array' || subtype === 'typedarray')
 }
 
 // TODO: The following extra information from `internalProperties` might be relevant to include for functions:
@@ -188,4 +233,10 @@ function removeNonEnumerableProperties (props) {
       props.splice(i--, 1)
     }
   }
+}
+
+function overBudget (opts) {
+  if (opts.ctx.deadlineReached) return true
+  opts.ctx.deadlineReached = process.hrtime.bigint() >= opts.deadlineNs
+  return opts.ctx.deadlineReached
 }

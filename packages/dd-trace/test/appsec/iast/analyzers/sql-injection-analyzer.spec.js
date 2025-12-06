@@ -1,13 +1,15 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const dc = require('dc-polyfill')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
-const log = require('../../../../src/log')
 const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
+const log = require('../../../../src/log')
 const { SQL_INJECTION_MARK, COMMAND_INJECTION_MARK } =
  require('../../../../src/appsec/iast/taint-tracking/secure-marks')
 
@@ -67,46 +69,46 @@ describe('sql-injection-analyzer', () => {
   sqlInjectionAnalyzer.configure(true)
 
   it('should subscribe to mysql, mysql2 and pg start query channel', () => {
-    expect(sqlInjectionAnalyzer._subscriptions).to.have.lengthOf(7)
-    expect(sqlInjectionAnalyzer._subscriptions[0]._channel.name).to.equals('apm:mysql:query:start')
-    expect(sqlInjectionAnalyzer._subscriptions[1]._channel.name).to.equals('datadog:mysql2:outerquery:start')
-    expect(sqlInjectionAnalyzer._subscriptions[2]._channel.name).to.equals('apm:pg:query:start')
-    expect(sqlInjectionAnalyzer._subscriptions[3]._channel.name).to.equals('datadog:sequelize:query:finish')
-    expect(sqlInjectionAnalyzer._subscriptions[4]._channel.name).to.equals('datadog:pg:pool:query:finish')
-    expect(sqlInjectionAnalyzer._subscriptions[5]._channel.name).to.equals('datadog:mysql:pool:query:start')
-    expect(sqlInjectionAnalyzer._subscriptions[6]._channel.name).to.equals('datadog:mysql:pool:query:finish')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions.length, 7)
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[0]._channel.name, 'apm:mysql:query:start')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[1]._channel.name, 'datadog:mysql2:outerquery:start')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[2]._channel.name, 'apm:pg:query:start')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[3]._channel.name, 'datadog:sequelize:query:finish')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[4]._channel.name, 'datadog:pg:pool:query:finish')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[5]._channel.name, 'datadog:mysql:pool:query:start')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[6]._channel.name, 'datadog:mysql:pool:query:finish')
 
-    expect(sqlInjectionAnalyzer._bindings).to.have.lengthOf(5)
-    expect(sqlInjectionAnalyzer._bindings[0]._channel.name).to.equals('datadog:sequelize:query:start')
-    expect(sqlInjectionAnalyzer._bindings[1]._channel.name).to.equals('datadog:pg:pool:query:start')
-    expect(sqlInjectionAnalyzer._bindings[2]._channel.name).to.equals('datadog:knex:raw:start')
-    expect(sqlInjectionAnalyzer._bindings[3]._channel.name).to.equals('datadog:knex:raw:subscribes')
-    expect(sqlInjectionAnalyzer._bindings[4]._channel.name).to.equals('datadog:knex:raw:finish')
+    assert.strictEqual(sqlInjectionAnalyzer._bindings.length, 5)
+    assert.strictEqual(sqlInjectionAnalyzer._bindings[0]._channel.name, 'datadog:sequelize:query:start')
+    assert.strictEqual(sqlInjectionAnalyzer._bindings[1]._channel.name, 'datadog:pg:pool:query:start')
+    assert.strictEqual(sqlInjectionAnalyzer._bindings[2]._channel.name, 'datadog:knex:raw:start')
+    assert.strictEqual(sqlInjectionAnalyzer._bindings[3]._channel.name, 'datadog:knex:raw:subscribes')
+    assert.strictEqual(sqlInjectionAnalyzer._bindings[4]._channel.name, 'datadog:knex:raw:finish')
   })
 
   it('should not detect vulnerability when no query', () => {
     const isVulnerable = sqlInjectionAnalyzer._isVulnerable()
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('should not detect vulnerability when no vulnerable query', () => {
     const isVulnerable = sqlInjectionAnalyzer._isVulnerable(NOT_TAINTED_QUERY)
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('should detect vulnerability when vulnerable query', () => {
     const isVulnerable = sqlInjectionAnalyzer._isVulnerable(TAINTED_QUERY)
-    expect(isVulnerable).to.be.true
+    assert.strictEqual(isVulnerable, true)
   })
 
   it('should not detect vulnerability when vulnerable query with sqli secure mark', () => {
     const isVulnerable = sqlInjectionAnalyzer._isVulnerable(TAINTED_SQLI_SECURED)
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('should detect vulnerability when vulnerable query with cmdi secure mark', () => {
     const isVulnerable = sqlInjectionAnalyzer._isVulnerable(TAINTED_CMDI_SECURED)
-    expect(isVulnerable).to.be.true
+    assert.strictEqual(isVulnerable, true)
   })
 
   it('should report "SQL_INJECTION" vulnerability', () => {
@@ -151,8 +153,8 @@ describe('sql-injection-analyzer', () => {
         '../vulnerability-reporter': { addVulnerability }
       })
     proxiedSqlInjectionAnalyzer.analyze(TAINTED_QUERY, undefined, dialect)
-    expect(reportEvidence).to.have.been.calledOnce
-    expect(reportEvidence).to.have.been.calledWithMatch(TAINTED_QUERY, {}, {
+    sinon.assert.calledOnce(reportEvidence)
+    sinon.assert.calledWithMatch(reportEvidence, TAINTED_QUERY, {}, {
       value: TAINTED_QUERY,
       dialect
     })
@@ -247,13 +249,13 @@ describe('sql-injection-analyzer', () => {
     Object.keys(knexDialects).forEach((knexDialect) => {
       it(`should normalize knex dialect ${knexDialect} to uppercase`, () => {
         const normalizedDialect = sqlInjectionAnalyzer.normalizeKnexDialect(knexDialect)
-        expect(normalizedDialect).to.equals(knexDialects[knexDialect])
+        assert.strictEqual(normalizedDialect, knexDialects[knexDialect])
       })
     })
 
     it('should not fail when normalizing a non string knex dialect', () => {
       const normalizedDialect = sqlInjectionAnalyzer.normalizeKnexDialect()
-      expect(normalizedDialect).to.be.undefined
+      assert.strictEqual(normalizedDialect, undefined)
     })
   })
 })
