@@ -135,18 +135,23 @@ for (const packageName of names) {
           }
 
           try {
-            loadChannel.publish({ name, version, file })
-            // Send the name and version of the module back to the callback because now addHook
-            // takes in an array of names so by passing the name the callback will know which module name is being used
-            // TODO(BridgeAR): This is only true in case the name is identical
-            // in all loads. If they deviate, the deviating name would not be
-            // picked up due to the unification. Check what modules actually use the name.
-            // TODO(BridgeAR): Only replace moduleExports if the hook returns a new value.
-            // This allows to reduce the instrumentation code (no return needed).
+            // Electron exports a string in Node which is not supported by
+            // WeakSets.
+            if (typeof moduleExports !== 'string') {
+              loadChannel.publish({ name, version, file })
+              // Send the name and version of the module back to the callback
+              // because now addHook takes in an array of names so by passing
+              // the name the callback will know which module name is being used
+              // TODO(BridgeAR): This is only true in case the name is identical
+              // in all loads. If they deviate, the deviating name would not be
+              // picked up due to the unification. Check what modules actually use the name.
+              // TODO(BridgeAR): Only replace moduleExports if the hook returns a new value.
+              // This allows to reduce the instrumentation code (no return needed).
 
-            moduleExports = hook(moduleExports, version, name, isIitm) ?? moduleExports
-            // Set the moduleExports in the hooks WeakSet
-            hook[HOOK_SYMBOL].add(moduleExports)
+              moduleExports = hook(moduleExports, version, name, isIitm) ?? moduleExports
+              // Set the moduleExports in the hooks WeakSet
+              hook[HOOK_SYMBOL].add(moduleExports)
+            }
           } catch (e) {
             log.info('Error during ddtrace instrumentation of application, aborting.', e)
             telemetry('error', [

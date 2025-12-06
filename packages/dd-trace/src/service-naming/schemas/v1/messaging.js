@@ -24,6 +24,10 @@ const messaging = {
       opName: () => 'azure.eventhubs.send',
       serviceName: identityService
     },
+    'electron:ipc:main:send': {
+      opName: () => 'electron.main.send',
+      serviceName: identityService
+    },
     'google-cloud-pubsub': {
       opName: () => 'gcp.pubsub.send',
       serviceName: identityService
@@ -49,6 +53,10 @@ const messaging = {
   consumer: {
     amqplib: amqpInbound,
     amqp10: amqpInbound,
+    'electron:ipc:main:receive': {
+      opName: () => 'electron.main.receive',
+      serviceName: identityService
+    },
     'google-cloud-pubsub': {
       opName: () => 'gcp.pubsub.process',
       serviceName: identityService
