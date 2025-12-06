@@ -5,6 +5,16 @@ const {
   addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
+
+// Auto-load push subscription plugin to enable pubsub.delivery spans for push subscriptions
+try {
+  const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
+  new PushSubscriptionPlugin(null, {}).configure({})
+} catch (e) {
+  // Push subscription plugin is optional
+  log.debug(`PushSubscriptionPlugin not loaded: ${e.message}`)
+}
 
 const requestStartCh = channel('apm:google-cloud-pubsub:request:start')
 const requestFinishCh = channel('apm:google-cloud-pubsub:request:finish')
@@ -74,12 +84,11 @@ function wrapMethod (method) {
             ctx.error = error
             requestErrorCh.publish(ctx)
           }
-
           return requestFinishCh.runStores(ctx, cb, this, ...arguments)
         })
-
         return method.apply(this, arguments)
       }
+
       return method.apply(this, arguments)
         .then(
           response => {
@@ -147,6 +156,55 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
     }
     return clear.apply(this, arguments)
   })
+
+  return obj
+})
+
+function injectTraceContext (attributes, pubsub, topicName) {
+  if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
+
+  try {
+    const tracer = require('../../dd-trace')
+    const activeSpan = tracer.scope().active()
+    if (!activeSpan) return
+
+    tracer.inject(activeSpan, 'text_map', attributes)
+
+    const traceIdUpperBits = activeSpan.context()._trace.tags['_dd.p.tid']
+    if (traceIdUpperBits) attributes['_dd.p.tid'] = traceIdUpperBits
+  } catch {
+    // Silently fail - trace context injection is best-effort
+  }
+
+  if (pubsub) attributes['gcloud.project_id'] = pubsub.projectId
+  if (topicName) attributes['pubsub.topic'] = topicName
+}
+
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
+  if (!obj.Topic?.prototype) return obj
+
+  // Wrap Topic.publishMessage (modern API)
+  if (obj.Topic.prototype.publishMessage) {
+    shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => function (data) {
+      if (data && typeof data === 'object') {
+        if (!data.attributes) data.attributes = {}
+        injectTraceContext(data.attributes, this.pubsub, this.name)
+      }
+      return publishMessage.apply(this, arguments)
+    })
+  }
+
+  // Wrap Topic.publish (legacy API)
+  if (obj.Topic.prototype.publish) {
+    shimmer.wrap(obj.Topic.prototype, 'publish', publish => function (buffer, attributesOrCallback, callback) {
+      if (typeof attributesOrCallback === 'function' || !attributesOrCallback) {
+        arguments[1] = {}
+        arguments[2] = attributesOrCallback
+      }
+      injectTraceContext(arguments[1], this.pubsub, this.name)
+      return publish.apply(this, arguments)
+    })
+  }
 
   return obj
 })
