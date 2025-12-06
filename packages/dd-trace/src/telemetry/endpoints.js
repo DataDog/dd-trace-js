@@ -63,7 +63,7 @@ function scheduleFlush () {
   flushScheduled = true
   // this used to be setImmediate() instead, but it was making the system test flaky
   // don't ask me why
-  setTimeout(flushAndSend).unref()
+  setTimeout(flushAndSend).unref?.()
 }
 
 /**

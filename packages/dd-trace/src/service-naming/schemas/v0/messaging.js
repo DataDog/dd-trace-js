@@ -36,6 +36,10 @@ const messaging = {
       opName: () => 'electron.main.send',
       serviceName: identityService
     },
+    'electron:ipc:renderer:send': {
+      opName: () => 'electron.renderer.send',
+      serviceName: identityService
+    },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',
       serviceName: ({ tracerService }) => `${tracerService}-pubsub`,
@@ -85,6 +89,10 @@ const messaging = {
     },
     'electron:ipc:main:receive': {
       opName: () => 'electron.main.receive',
+      serviceName: identityService
+    },
+    'electron:ipc:renderer:receive': {
+      opName: () => 'electron.renderer.receive',
       serviceName: identityService
     },
     'google-cloud-pubsub': {
