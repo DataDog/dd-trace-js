@@ -33,7 +33,7 @@ describe('Plugin', () => {
     const startApp = done => {
       const electron = require(`../../../versions/electron@${version}`).get()
 
-      child = proc.spawn(electron, [join(__dirname, 'app')], {
+      child = proc.spawn(electron, [join(__dirname, 'app', 'main')], {
         env: {
           ...process.env,
           NODE_OPTIONS: `-r ${join(__dirname, 'tracer')}`,
@@ -104,6 +104,47 @@ describe('Plugin', () => {
             .catch(done)
 
           child.send({ name: 'request', options: `http://127.0.0.1:${port}/` })
+        })
+
+        it('should do automatic instrumentation for main IPC when receiving', done => {
+          agent
+            .assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const { meta } = span
+
+              assert.strictEqual(span.type, 'worker')
+              assert.strictEqual(span.name, 'electron.main.receive')
+              assert.strictEqual(span.resource, 'set-title')
+              assert.strictEqual(span.service, 'test')
+              assert.strictEqual(span.error, 0)
+
+              assert.strictEqual(meta.component, 'electron')
+              assert.strictEqual(meta['span.kind'], 'consumer')
+            })
+            .then(done)
+            .catch(done)
+
+          child.send({ name: 'render' })
+        })
+
+        it('should do automatic instrumentation for main IPC when sending', done => {
+          agent
+            .assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const { meta } = span
+
+              assert.strictEqual(span.name, 'electron.main.send')
+              assert.strictEqual(span.resource, 'update-counter')
+              assert.strictEqual(span.service, 'test')
+              assert.strictEqual(span.error, 0)
+
+              assert.strictEqual(meta.component, 'electron')
+              assert.strictEqual(meta['span.kind'], 'producer')
+            })
+            .then(done)
+            .catch(done)
+
+          child.send({ name: 'render' })
         })
       })
     })
