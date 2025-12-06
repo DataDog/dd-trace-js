@@ -1,14 +1,20 @@
 'use strict'
 
-const port = process.env.DD_TRACE_AGENT_PORT
+/* eslint-disable no-console */
+
+const logger = globalThis.logger = {
+  debug: (...args) => console.debug(...args),
+  info: (...args) => console.info(...args),
+  warn: (...args) => console.warn(...args),
+  error: (...args) => console.error(...args),
+}
 
 require('../../dd-trace')
   .init({
     service: 'test',
     env: 'tester',
-    port,
+    logger,
     flushInterval: 0,
     plugins: false
   })
   .use('electron', true)
-  .setUrl(`http://127.0.0.1:${port}`)
