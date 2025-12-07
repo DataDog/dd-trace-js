@@ -75,12 +75,10 @@ class ElectronMainSendPlugin extends ProducerPlugin {
   constructor (...args) {
     super(...args)
 
-    this._senders = new WeakMap()
+    this._senders = new WeakSet()
 
-    this.addSub('apm:electron:ipc:main:emit', ({ channel, event, args }) => {
-      if (channel !== 'datadog:apm:full') return
-
-      this._senders.set(event.sender, args[0])
+    this.addSub('apm:electron:ipc:main:full', event => {
+      this._senders.add(event.sender)
     })
   }
 
@@ -94,7 +92,7 @@ class ElectronMainSendPlugin extends ProducerPlugin {
       meta: {}
     }, ctx)
 
-    if (this._senders.get(self.sender)) {
+    if (this._senders.has(self)) {
       const carrier = {}
 
       this._tracer.inject(span, 'text_map', carrier)
