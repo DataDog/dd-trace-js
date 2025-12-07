@@ -117,6 +117,7 @@ describe('Plugin', () => {
               assert.strictEqual(span.resource, 'set-title')
               assert.strictEqual(span.service, 'test')
               assert.strictEqual(span.error, 0)
+              assert.strictEqual(span.parent_id, span.trace_id)
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'consumer')
@@ -158,6 +159,7 @@ describe('Plugin', () => {
               assert.strictEqual(span.resource, 'update-counter')
               assert.strictEqual(span.service, 'test')
               assert.strictEqual(span.error, 0)
+              assert.strictEqual(span.parent_id, span.trace_id)
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'consumer')

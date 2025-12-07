@@ -4,7 +4,7 @@ const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 
 const requestCh = tracingChannel('apm:electron:net:request')
-const mainEmitCh = channel('apm:electron:ipc:main:emit')
+const mainFullCh = channel('apm:electron:ipc:main:full')
 const mainReceiveCh = tracingChannel('apm:electron:ipc:main:receive')
 const mainHandleCh = tracingChannel('apm:electron:ipc:main:handle')
 const mainSendCh = tracingChannel('apm:electron:ipc:main:send')
@@ -126,14 +126,6 @@ function createWrapSend (ch, promise = false) {
   }
 }
 
-function wrapEmit (emit) {
-  return function (channel, event, ...args) {
-    mainEmitCh.publish({ channel, event, args })
-
-    return emit.apply(this, arguments)
-  }
-}
-
 function wrapSendToFrame (send) {
   return function (frameId, channel, ...args) {
     const ctx = { args, channel, frameId, self: this }
@@ -177,7 +169,6 @@ addHook({ name: 'electron', versions: ['>=37.0.0'] }, electron => {
 
   if (ipcMain) {
     shimmer.wrap(ipcMain, 'addListener', createWrapAddListener(mainReceiveCh, listeners))
-    shimmer.wrap(ipcMain, 'emit', wrapEmit)
     shimmer.wrap(ipcMain, 'handle', createWrapAddListener(mainHandleCh, handlers))
     shimmer.wrap(ipcMain, 'handleOnce', createWrapAddListener(mainHandleCh, handlers))
     shimmer.wrap(ipcMain, 'off', createWrapRemoveListener(listeners))
@@ -186,6 +177,8 @@ addHook({ name: 'electron', versions: ['>=37.0.0'] }, electron => {
     shimmer.wrap(ipcMain, 'removeAllListeners', createWrapRemoveAllListeners(listeners))
     shimmer.wrap(ipcMain, 'removeHandler', createWrapRemoveAllListeners(handlers))
     shimmer.wrap(ipcMain, 'removeListener', createWrapRemoveListener(listeners))
+
+    ipcMain.once('datadog:apm:full', event => mainFullCh.publish(event))
   }
 
   if (BrowserWindow) {
@@ -204,6 +197,8 @@ addHook({ name: 'electron', versions: ['>=37.0.0'] }, electron => {
     shimmer.wrap(ipcRenderer, 'once', createWrapAddListener(rendererReceiveCh, listeners))
     shimmer.wrap(ipcRenderer, 'removeListener', createWrapRemoveListener(listeners))
     shimmer.wrap(ipcRenderer, 'removeAllListeners', createWrapRemoveAllListeners(listeners))
+
+    ipcRenderer.send('datadog:apm:full')
   }
 
   return electron
