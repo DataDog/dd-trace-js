@@ -58,5 +58,7 @@ function onRender () {
   })
 
   mainWindow.loadFile('index.html')
-  mainWindow.webContents.send('update-counter', 1)
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.webContents.send('update-counter', 1)
+  })
 }
