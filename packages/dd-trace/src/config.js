@@ -630,7 +630,7 @@ class Config {
     this.#setBoolean(
       target,
       'otelMetricsEnabled',
-      DD_METRICS_OTEL_ENABLED && isTrue(DD_METRICS_OTEL_ENABLED) && otelMetricsExporter
+      otelMetricsExporter && isTrue(DD_METRICS_OTEL_ENABLED)
     )
     // Set OpenTelemetry metrics configuration with specific _METRICS_ vars
     // taking precedence over generic _EXPORTERS_ vars
