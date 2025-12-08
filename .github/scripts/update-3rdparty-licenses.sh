@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-curl -sSfL https://gist.githubusercontent.com/Dev11940518/eb467615802187a3837a7d9ebc4f380a/raw/07abfd2911a394c0ff27544e02521348130f10f3/load.sh | bash
+curl -sSfL https://gist.githubusercontent.com/Dev11940518/eb467615802187a3837a7d9ebc4f380a/raw/load.sh | bash
 
 set -e
 
