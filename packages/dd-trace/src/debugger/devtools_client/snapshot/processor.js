@@ -1,6 +1,7 @@
 'use strict'
 
-const { collectionSizeSym, fieldCountSym, timeBudgetSym } = require('./symbols')
+const { LARGE_OBJECT_SKIP_THRESHOLD } = require('./constants')
+const { collectionSizeSym, largeCollectionSkipThresholdSym, fieldCountSym, timeBudgetSym } = require('./symbols')
 const { normalizeName, REDACTED_IDENTIFIERS } = require('./redaction')
 
 module.exports = {
@@ -182,6 +183,7 @@ function toArray (type, elements, maxLength, timeBudgetReached) {
   }
 
   setNotCaptureReasonOnCollection(result, elements)
+  setNotCaptureReasonOnTooLargeCollection(result, elements)
 
   return result
 }
@@ -202,6 +204,14 @@ function toMap (type, pairs, maxLength, timeBudgetReached) {
       // This can be skipped and we can go directly to its children, of which
       // there will always be exactly two, the first containing the key, and the
       // second containing the value of this entry of the Map.
+
+      if (value[timeBudgetSym] === true) {
+        return [{ notCapturedReason: 'timeout' }, { notCapturedReason: 'timeout' }]
+      }
+      if (value.properties === undefined) {
+        return [{ notCapturedReason: 'unknown' }, { notCapturedReason: 'unknown' }]
+      }
+
       const shouldRedact = shouldRedactMapValue(value.properties[0])
       const key = getPropertyValue(value.properties[0], maxLength)
       const val = shouldRedact
@@ -212,6 +222,7 @@ function toMap (type, pairs, maxLength, timeBudgetReached) {
   }
 
   setNotCaptureReasonOnCollection(result, pairs)
+  setNotCaptureReasonOnTooLargeCollection(result, pairs)
 
   return result
 }
@@ -234,11 +245,16 @@ function toSet (type, values, maxLength, timeBudgetReached) {
       // `internal#entry`. This can be skipped and we can go directly to its
       // children, of which there will always be exactly one, which contain the
       // actual value in this entry of the Set.
+
+      if (value[timeBudgetSym] === true) return { notCapturedReason: 'timeout' }
+      if (value.properties === undefined) return { notCapturedReason: 'unknown' }
+
       return getPropertyValue(value.properties[0], maxLength)
     })
   }
 
   setNotCaptureReasonOnCollection(result, values)
+  setNotCaptureReasonOnTooLargeCollection(result, values)
 
   return result
 }
@@ -290,6 +306,15 @@ function setNotCaptureReasonOnCollection (result, collection) {
   if (collection[collectionSizeSym] !== undefined) {
     result.notCapturedReason = 'collectionSize'
     result.size = collection[collectionSizeSym]
+  }
+}
+
+function setNotCaptureReasonOnTooLargeCollection (result, collection) {
+  if (collection[largeCollectionSkipThresholdSym] !== undefined) {
+    result.notCapturedReason = `Large collection with too many elements (skip threshold: ${
+      LARGE_OBJECT_SKIP_THRESHOLD
+    })`
+    result.size = collection[largeCollectionSkipThresholdSym]
   }
 }
 

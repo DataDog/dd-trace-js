@@ -111,6 +111,29 @@ describe('breakpoints', function () {
       sinon.assert.calledTwice(stateMock.findScriptFromPartialPath)
     })
 
+    it('should initialize lastCaptureNs to ensure first probe hit is always captured', async function () {
+      await addProbe({ sampling: { snapshotsPerSecond: 0.5 } })
+
+      // Verify the probe was stored in the breakpointToProbes map
+      const breakpointId = 'bp-script-1:9:0'
+      const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
+      assert(probesAtLocation, 'Probes should be stored at breakpoint location')
+
+      const probe = probesAtLocation.get('probe-1')
+      assert(probe, 'Probe should be stored in map')
+
+      // Verify lastCaptureNs is initialized to -(2^53 - 1) to ensure first hit is always captured
+      assert.strictEqual(probe.lastCaptureNs, BigInt(Number.MIN_SAFE_INTEGER),
+        'lastCaptureNs should be initialized to -(2^53 - 1) to ensure first probe hit is always captured')
+
+      // Verify nsBetweenSampling is calculated correctly
+      assert.strictEqual(
+        probe.nsBetweenSampling,
+        2000000000n,
+        'nsBetweenSampling should be 2 seconds for 0.5 samples/second'
+      )
+    })
+
     describe('add multiple probes to the same location', function () {
       it('no conditions', async function () {
         await addProbe()
@@ -486,11 +509,12 @@ describe('breakpoints', function () {
  *   { json: { eq: [{ ref: 'foo' }, 42] }, dsl: 'foo = 42' } by default.
  * @returns {{ id: string; version: number; where: object; when: object; }}
  */
-function genProbeConfig ({ id, version, where, when } = {}) {
+function genProbeConfig ({ id, version, where, when, ...rest } = {}) {
   return {
     id: id || 'probe-1',
     version: version || 1,
     where: where || { sourceFile: 'test.js', lines: ['10'] },
-    when
+    when,
+    ...rest
   }
 }

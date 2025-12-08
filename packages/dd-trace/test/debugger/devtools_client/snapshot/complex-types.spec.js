@@ -38,7 +38,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         resolve((await getLocalStateForCallFrame(
           params.callFrames[0],
           { maxFieldCount: Number.MAX_SAFE_INTEGER })
-        )())
+        ).processLocalState())
       })
 
       await setAndTriggerBreakpoint(target, 10)

@@ -1,0 +1,149 @@
+interactions:
+- request:
+    body: "{\n  \"prompt\": {\n    \"id\": \"pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6\",\n
+      \   \"version\": \"1\",\n    \"variables\": {\n      \"phrase\": \"cat in the
+      hat\",\n      \"word\": \"\"\n    }\n  }\n}"
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip,deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '184'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 4.87.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-os
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-package-version
+      : - 4.87.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-retry-count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime-version
+      : - v22.17.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-timeout
+      : - '600000'
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: "{\n  \"id\": \"resp_0c6ecbbba70df92401692080e02b98819598a8b9b42f190477\",\n
+        \ \"object\": \"response\",\n  \"created_at\": 1763737824,\n  \"status\":
+        \"completed\",\n  \"background\": false,\n  \"billing\": {\n    \"payer\":
+        \"developer\"\n  },\n  \"error\": null,\n  \"incomplete_details\": null,\n
+        \ \"instructions\": [\n    {\n      \"type\": \"message\",\n      \"content\":
+        [],\n      \"role\": \"developer\"\n    },\n    {\n      \"type\": \"message\",\n
+        \     \"content\": [\n        {\n          \"type\": \"input_text\",\n          \"text\":
+        \"I saw a cat in the hat and another \"\n        }\n      ],\n      \"role\":
+        \"user\"\n    }\n  ],\n  \"max_output_tokens\": null,\n  \"max_tool_calls\":
+        null,\n  \"model\": \"o4-mini-2025-04-16\",\n  \"output\": [\n    {\n      \"id\":
+        \"rs_0c6ecbbba70df92401692080e090988195905c3ae3100aec76\",\n      \"type\":
+        \"reasoning\",\n      \"summary\": []\n    },\n    {\n      \"id\": \"msg_0c6ecbbba70df92401692080e592408195ad7e5e5a3b30a60f\",\n
+        \     \"type\": \"message\",\n      \"status\": \"completed\",\n      \"content\":
+        [\n        {\n          \"type\": \"output_text\",\n          \"annotations\":
+        [],\n          \"logprobs\": [],\n          \"text\": \"It sounds like you\\u2019re
+        starting a playful rhyme. Would you like help finishing the line? Here are
+        a few options\\u2014feel free to pick one, tweak it, or tell me what mood
+        or style you\\u2019d prefer:\\n\\n1. \\u201cI saw a cat in the hat and another
+        on a mat,  \\n   Both dancing \\u2019round the room in a colorful cravat.\\u201d
+        \ \\n\\n2. \\u201cI saw a cat in the hat and another wearing boots,  \\n   One
+        chased rolling marbles, the other chased small brutes.\\u201d  \\n\\n3. \\u201cI
+        saw a cat in the hat and another with a gnat,  \\n   They argued who was bigger
+        \\u2019til they both grew quite flat.\\u201d  \\n\\n4. \\u201cI saw a cat
+        in the hat and another with a bat,  \\n   They juggled up some popcorn and
+        then sat on a splat.\\u201d  \\n\\nLet me know which you like best or what
+        tone you\\u2019re aiming for, and we can build it out into a full little poem!\"\n
+        \       }\n      ],\n      \"role\": \"assistant\"\n    }\n  ],\n  \"parallel_tool_calls\":
+        true,\n  \"previous_response_id\": null,\n  \"prompt\": {\n    \"id\": \"pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6\",\n
+        \   \"variables\": {\n      \"phrase\": {\n        \"type\": \"input_text\",\n
+        \       \"text\": \"cat in the hat\"\n      },\n      \"word\": {\n        \"type\":
+        \"input_text\",\n        \"text\": \"\"\n      }\n    },\n    \"version\":
+        \"1\"\n  },\n  \"prompt_cache_key\": null,\n  \"prompt_cache_retention\":
+        null,\n  \"reasoning\": {\n    \"effort\": \"medium\",\n    \"summary\": null\n
+        \ },\n  \"safety_identifier\": null,\n  \"service_tier\": \"default\",\n  \"store\":
+        false,\n  \"temperature\": 1.0,\n  \"text\": {\n    \"format\": {\n      \"type\":
+        \"text\"\n    },\n    \"verbosity\": \"medium\"\n  },\n  \"tool_choice\":
+        \"auto\",\n  \"tools\": [],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\":
+        \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 16,\n    \"input_tokens_details\":
+        {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 718,\n    \"output_tokens_details\":
+        {\n      \"reasoning_tokens\": 512\n    },\n    \"total_tokens\": 734\n  },\n
+        \ \"user\": null,\n  \"metadata\": {}\n}"
+    headers:
+      CF-RAY:
+      - 9a211d165c1503f3-CDG
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Fri, 21 Nov 2025 15:10:31 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=0HpM_foHywpoW6._EX94ALugVRAidmAfgAlSmdasPuM-1763737831-1.0.1.1-ql.pMhbt7pntz_jeV3gMMnZNoy4JdwriHUWnKLf92h4zZNipzYhrn_2OMXIoy4QWAlaB7xnYs9a56Pl.tMuxkGawmHJAldmrcbVQak._5sQ;
+        path=/; expires=Fri, 21-Nov-25 15:40:31 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=jk3d8alrSLimfBjsF6JI6CStjpMxdjpRCHxHMmGWfmI-1763737831436-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '7210'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '7213'
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999777'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_48665d653be046319c1a4f6de91b72fe
+    status:
+      code: 200
+      message: OK
+version: 1
