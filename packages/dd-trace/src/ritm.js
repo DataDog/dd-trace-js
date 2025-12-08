@@ -19,19 +19,44 @@ let patchedRequire = null
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
 
+function stripNodeProtocol (name) {
+  if (typeof name !== 'string') return name
+  return name.startsWith('node:') ? name.slice(5) : name
+}
+
+const builtinModules = new Set(Module.builtinModules.map(stripNodeProtocol))
+
+function isBuiltinModuleName (name) {
+  if (typeof name !== 'string') return false
+  return builtinModules.has(stripNodeProtocol(name))
+}
+
+function normalizeModuleName (name) {
+  if (typeof name !== 'string') return name
+  const stripped = stripNodeProtocol(name)
+  return builtinModules.has(stripped) ? stripped : name
+}
+
+/**
+ * @overload
+ * @param {string[]} modules list of modules to hook into
+ * @param {object} options hook options
+ * @param {Function} onrequire callback to be executed upon encountering module
+ */
+/**
+ * @overload
+ * @param {string[]} modules list of modules to hook into
+ * @param {Function} onrequire callback to be executed upon encountering module
+ */
 function Hook (modules, options, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, options, onrequire)
-  if (typeof modules === 'function') {
-    onrequire = modules
-    modules = null
-    options = {}
-  } else if (typeof options === 'function') {
+  if (typeof options === 'function') {
     onrequire = options
     options = {}
   }
 
-  modules = modules || []
-  options = options || {}
+  options ??= {}
+  modules ??= []
 
   this.modules = modules
   this.options = options
@@ -60,31 +85,35 @@ function Hook (modules, options, onrequire) {
     */
     let filename
     try {
+      // @ts-expect-error - Module._resolveFilename is not typed
       filename = Module._resolveFilename(request, this)
     } catch {
       return _origRequire.apply(this, arguments)
     }
 
-    const core = !filename.includes(path.sep)
+    const builtin = isBuiltinModuleName(filename)
+    const moduleId = builtin ? normalizeModuleName(filename) : filename
+
     let name, basedir, hooks
     // return known patched modules immediately
-    if (cache[filename]) {
+    if (cache[moduleId]) {
       // require.cache was potentially altered externally
-      if (require.cache[filename] && require.cache[filename].exports !== cache[filename].original) {
-        return require.cache[filename].exports
+      const cacheEntry = require.cache[filename]
+      if (cacheEntry && cacheEntry.exports !== cache[filename].original) {
+        return cacheEntry.exports
       }
 
-      return cache[filename].exports
+      return cache[moduleId].exports
     }
 
     // Check if this module has a patcher in-progress already.
     // Otherwise, mark this module as patching in-progress.
-    const patched = patching[filename]
+    const patched = patching[moduleId]
     if (patched) {
       // If it's already patched, just return it as-is.
       return origRequire.apply(this, arguments)
     }
-    patching[filename] = true
+    patching[moduleId] = true
 
     const payload = {
       filename,
@@ -103,12 +132,12 @@ function Hook (modules, options, onrequire) {
 
     // The module has already been loaded,
     // so the patching mark can be cleaned up.
-    delete patching[filename]
+    delete patching[moduleId]
 
-    if (core) {
-      hooks = moduleHooks[filename]
+    if (builtin) {
+      hooks = moduleHooks[moduleId]
       if (!hooks) return exports // abort if module name isn't on whitelist
-      name = filename
+      name = moduleId
     } else {
       const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
       const hasLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER') !== undefined
@@ -125,6 +154,7 @@ function Hook (modules, options, onrequire) {
       if (!hooks) return exports // abort if module name isn't on whitelist
 
       // figure out if this is the main module file, or a file inside the module
+      // @ts-expect-error - Module._resolveLookupPaths is meant to be internal and is not typed
       const paths = Module._resolveLookupPaths(name, this, true)
       if (!paths) {
         // abort if _resolveLookupPaths return null
@@ -133,6 +163,7 @@ function Hook (modules, options, onrequire) {
 
       let res
       try {
+        // @ts-expect-error - Module._findPath is meant to be internal and is not typed
         res = Module._findPath(name, [basedir, ...paths])
       } catch {
         // case where the file specified in package.json "main" doesn't exist
@@ -148,37 +179,25 @@ function Hook (modules, options, onrequire) {
 
     // ensure that the cache entry is assigned a value before calling
     // onrequire, in case calling onrequire requires the same module.
-    cache[filename] = { exports }
-    cache[filename].original = exports
+    cache[moduleId] = { exports }
+    cache[moduleId].original = exports
 
     for (const hook of hooks) {
-      cache[filename].exports = hook(cache[filename].exports, name, basedir)
+      cache[moduleId].exports = hook(cache[moduleId].exports, name, basedir)
     }
 
-    return cache[filename].exports
+    return cache[moduleId].exports
   }
 }
 
+/**
+ * Reset the Ritm hook. This is used to reset the hook after a test.
+ * TODO: Remove this and instead use proxyquire to reset the hook.
+ */
 Hook.reset = function () {
   Module.prototype.require = origRequire
   patchedRequire = null
   patching = Object.create(null)
   cache = Object.create(null)
   moduleHooks = Object.create(null)
-}
-
-Hook.prototype.unhook = function () {
-  for (const mod of this.modules) {
-    const hooks = (moduleHooks[mod] || []).filter(hook => hook !== this.onrequire)
-
-    if (hooks.length > 0) {
-      moduleHooks[mod] = hooks
-    } else {
-      delete moduleHooks[mod]
-    }
-  }
-
-  if (Object.keys(moduleHooks).length === 0) {
-    Hook.reset()
-  }
 }
