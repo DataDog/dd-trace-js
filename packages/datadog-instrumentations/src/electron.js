@@ -144,7 +144,7 @@ function wrapWebContents (proto) {
       const webContents = descriptor.get.apply(this)
 
       if (!wrapped.has(webContents)) {
-        shimmer.wrap(webContents, 'postMessage', wrapSend)
+        // shimmer.wrap(webContents, 'postMessage', wrapSend)
         shimmer.wrap(webContents, 'send', wrapSend)
         shimmer.wrap(webContents, 'sendToFrame', wrapSendToFrame)
 
@@ -187,9 +187,10 @@ addHook({ name: 'electron', versions: ['>=37.0.0'] }, electron => {
 
   if (ipcRenderer) {
     shimmer.wrap(ipcRenderer, 'invoke', createWrapSend(rendererSendCh, true))
-    shimmer.wrap(ipcRenderer, 'postMessage', createWrapSend(rendererSendCh))
+    // shimmer.wrap(ipcRenderer, 'postMessage', createWrapSend(rendererSendCh))
     shimmer.wrap(ipcRenderer, 'send', createWrapSend(rendererSendCh))
     shimmer.wrap(ipcRenderer, 'sendSync', createWrapSend(rendererSendCh))
+    shimmer.wrap(ipcRenderer, 'sendToHost', createWrapSend(rendererSendCh))
 
     shimmer.wrap(ipcRenderer, 'addListener', createWrapAddListener(rendererReceiveCh, listeners))
     shimmer.wrap(ipcRenderer, 'off', createWrapRemoveListener(listeners))
