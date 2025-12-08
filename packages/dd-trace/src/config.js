@@ -626,7 +626,7 @@ class Config {
     target.otelMaxExportBatchSize = nonNegInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE, 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE', false)
     target.otelMaxQueueSize = nonNegInt(OTEL_BSP_MAX_QUEUE_SIZE, 'OTEL_BSP_MAX_QUEUE_SIZE', false)
 
-    const otelMetricsExporter = !OTEL_METRICS_EXPORTER || OTEL_METRICS_EXPORTER.toLowerCase() !== 'none'
+    const otelMetricsExporter = OTEL_METRICS_EXPORTER?.toLowerCase() !== 'none'
     this.#setBoolean(
       target,
       'otelMetricsEnabled',
