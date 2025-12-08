@@ -76,13 +76,35 @@ function createWrappedHandler (handler) {
   }
 }
 
-function wrapListener (originalOn) {
-  return function (eventName, handler) {
-    if (eventName === 'message') {
-      return originalOn.call(this, eventName, createWrappedHandler(handler))
+function wrapListeners (wsPrototype) {
+  const callbackMap = new WeakMap()
+
+  function wrapListener (originalOn) {
+    return function (eventName, handler) {
+      if (eventName === 'message') {
+        // Prevent multiple wrapping of the same handler in case the user adds the listener multiple times
+        const wrappedHandler = callbackMap.get(handler) ?? createWrappedHandler(handler)
+        callbackMap.set(handler, wrappedHandler)
+        return originalOn.call(this, eventName, wrappedHandler)
+      }
+      return originalOn.apply(this, arguments)
     }
-    return originalOn.apply(this, arguments)
   }
+
+  function removeListener (originalOff) {
+    return function (eventName, handler) {
+      if (eventName === 'message') {
+        const wrappedHandler = callbackMap.get(handler)
+        return originalOff.call(this, eventName, wrappedHandler)
+      }
+      return originalOff.apply(this, arguments)
+    }
+  }
+
+  shimmer.wrap(wsPrototype, 'on', wrapListener)
+  shimmer.wrap(wsPrototype, 'addListener', wrapListener)
+  shimmer.wrap(wsPrototype, 'off', removeListener)
+  shimmer.wrap(wsPrototype, 'removeListener', removeListener)
 }
 
 function wrapClose (close) {
@@ -115,8 +137,10 @@ addHook({
   versions: ['>=8.0.0']
 }, ws => {
   shimmer.wrap(ws.prototype, 'send', wrapSend)
-  shimmer.wrap(ws.prototype, 'on', wrapListener)
   shimmer.wrap(ws.prototype, 'close', wrapClose)
+
+  wrapListeners(ws.prototype)
+
   return ws
 })
 
