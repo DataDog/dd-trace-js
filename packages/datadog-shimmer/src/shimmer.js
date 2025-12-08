@@ -13,6 +13,8 @@ const skipMethodSize = skipMethods.size
 
 const nonConfigurableModuleExports = new WeakMap()
 
+const safetyMap = new WeakMap()
+
 /**
  * Copies properties from the original function to the wrapped function.
  *
@@ -75,7 +77,16 @@ function copyObjectProperties (original, wrapped, skipKey) {
 function wrapFunction (original, wrapper) {
   if (typeof original !== 'function') return original
 
+  // Safe guard: If the wrapper is identical, we double wrap.
+  // This will not catch all types of double wrapping, just most.
+  const oldWrapper = safetyMap.get(original)
+  if (oldWrapper === wrapper) {
+    return original
+  }
+
   const wrapped = wrapper(original)
+
+  safetyMap.set(wrapped, wrapper)
 
   if (typeof original === 'function') {
     assertNotClass(original)
@@ -138,7 +149,15 @@ function wrap (target, name, wrapper, options) {
 
   assertMethod(target, name, original)
 
+  // Safe guard: If the wrapper is identical, we double wrap.
+  // This will not catch all types of double wrapping, just most.
+  const oldWrapper = safetyMap.get(original)
+  if (oldWrapper === wrapper) {
+    return
+  }
   const wrapped = wrapper(original)
+
+  safetyMap.set(wrapped, wrapper)
 
   copyProperties(original, wrapped)
 
