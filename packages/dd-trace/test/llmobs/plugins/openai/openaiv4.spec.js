@@ -81,7 +81,7 @@ describe('integrations', () => {
           outputMessages: [
             { content: MOCK_STRING, role: '' }
           ],
-          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER, reasoning_output_tokens: 0 },
           modelName: 'gpt-3.5-turbo-instruct:20230824-v2',
           modelProvider: 'openai',
           metadata: {
@@ -162,7 +162,7 @@ describe('integrations', () => {
             { text: 'hello world' }
           ],
           outputValue: '[1 embedding(s) returned]',
-          metrics: { input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER },
+          metrics: { input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER, reasoning_output_tokens: 0 },
           modelName: 'text-embedding-ada-002-v2',
           modelProvider: 'openai',
           metadata: { encoding_format: 'base64' },
@@ -270,7 +270,7 @@ describe('integrations', () => {
             outputMessages: [
               { content: '\n\nHello! How can I assist you?', role: '' }
             ],
-            metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+            metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER, reasoning_output_tokens: 0},
             modelName: 'gpt-3.5-turbo-instruct:20230824-v2',
             modelProvider: 'openai',
             metadata: {
@@ -968,7 +968,7 @@ describe('integrations', () => {
         if (semifies(realVersion, '<4.87.0')) {
           this.skip()
         }
-        
+
         await openai.responses.create({
           model: 'gpt-5-mini',
           input: 'Solve this step by step: What is 15 * 24?',
