@@ -31,3 +31,11 @@ test.describe('attempt to fix', () => {
     expect(true).toBe(true)
   })
 })
+
+if (process.env.SHOULD_INCLUDE_FLAKY_TEST) {
+  test('flaky test is retried without attempt to fix', async ({ page }, testInfo) => {
+    await expect(page.locator('.hello-world')).toHaveText([
+      testInfo.retry === 0 ? 'Hello Warld' : 'Hello World'
+    ])
+  })
+}
