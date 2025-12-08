@@ -117,15 +117,9 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
         }
       }
       // Reasoning tokens - Responses API returns `output_tokens_details`, `completion_tokens_details`
-      if (tokenUsage.output_tokens_details) {
-        const reasoningOutputTokens = tokenUsage.output_tokens_details.reasoning_tokens
-        if (reasoningOutputTokens !== undefined) metrics.reasoningOutputTokens = reasoningOutputTokens
-      } else if (tokenUsage.completion_tokens_details) {
-        const reasoningOutputTokens = tokenUsage.completion_tokens_details.reasoning_tokens
-        if (reasoningOutputTokens !== undefined) {
-          metrics.reasoningOutputTokens = reasoningOutputTokens
-        }
-      }
+      const reasoningOutputObject = tokenUsage.output_tokens_details ?? tokenUsage.completion_tokens_details
+	      const reasoningOutputTokens = reasoningOutputObject?.reasoning_tokens
+	      if (reasoningOutputTokens !== undefined) metrics.reasoningOutputTokens = reasoningOutputTokens
     }
 
     return metrics
