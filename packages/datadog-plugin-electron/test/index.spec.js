@@ -125,7 +125,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          child.send({ name: 'render' })
+          child.send({ name: 'receive' })
         })
 
         it('should do automatic instrumentation for main IPC when sending', done => {
@@ -145,7 +145,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          child.send({ name: 'render' })
+          child.send({ name: 'send' })
         })
 
         it('should do automatic instrumentation for renderer IPC when receiving', done => {
@@ -167,7 +167,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          child.send({ name: 'render' })
+          child.send({ name: 'send' })
         })
 
         it('should do automatic instrumentation for renderer IPC when sending', done => {
@@ -187,7 +187,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          child.send({ name: 'render' })
+          child.send({ name: 'receive' })
         })
       })
     })
