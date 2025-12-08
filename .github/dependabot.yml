@@ -33,6 +33,7 @@ updates:
   - package-ecosystem: "npm"
     directories:
       - "/"
+      - "/docs"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 100
@@ -153,6 +154,8 @@ updates:
   - package-ecosystem: "npm"
     directories:
       - "/integration-tests/esbuild"
+      - "/integration-tests/appsec/iast-esbuild-esm"
+      - "/integration-tests/appsec/iast-esbuild-cjs"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 1
