@@ -11,7 +11,7 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 const assert = require('node:assert')
 
-describe.only('recursion regression test', () => {
+describe('recursion regression test', () => {
   let agent
   let proc
 
