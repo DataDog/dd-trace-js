@@ -36,7 +36,6 @@ class NextPlugin extends ServerPlugin {
     analyticsSampler.sample(span, this.config.measured, true)
 
     // Store request by span ID to handle cases where child spans are activated
-    // before pageLoad runs (especially when OpenTelemetry TracerProvider is enabled)
     const spanId = span.context().toSpanId()
     this._requestsBySpanId.set(spanId, req)
 
@@ -101,9 +100,6 @@ class NextPlugin extends ServerPlugin {
     const spanId = span.context().toSpanId()
 
     // Convert parent ID from hex to decimal to match storage format.
-    // IMPORTANT: toSpanId() returns decimal string (e.g., "457018059221062340")
-    // but _parentId.toString() defaults to hex (e.g., "0657a780e3cf52c4").
-    // We must use toString(10) to get decimal format for Map lookup to work.
     let parentSpanId = null
     if (span.context()._parentId) {
       parentSpanId = span.context()._parentId.toString(10)
