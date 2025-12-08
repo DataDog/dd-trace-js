@@ -34,11 +34,11 @@ class ElectronRendererPlugin extends CompositePlugin {
   }
 }
 
-class ElectronMainReceivePlugin extends ConsumerPlugin {
-  static id = 'electron:ipc:main:receive'
+class ElectronRendererReceivePlugin extends ConsumerPlugin {
+  static id = 'electron:ipc:renderer:receive'
   static component = 'electron'
   static operation = 'receive'
-  static prefix = 'tracing:apm:electron:ipc:main:receive'
+  static prefix = 'tracing:apm:electron:ipc:renderer:receive'
 
   bindStart (ctx) {
     const { args, channel } = ctx
@@ -66,53 +66,6 @@ class ElectronMainReceivePlugin extends ConsumerPlugin {
   }
 }
 
-class ElectronMainSendPlugin extends ProducerPlugin {
-  static id = 'electron:ipc:main:send'
-  static component = 'electron'
-  static operation = 'send'
-  static prefix = 'tracing:apm:electron:ipc:main:send'
-
-  constructor (...args) {
-    super(...args)
-
-    this._senders = new WeakSet()
-
-    this.addSub('apm:electron:ipc:main:full', event => {
-      this._senders.add(event.sender)
-    })
-  }
-
-  bindStart (ctx) {
-    const { args, channel, self } = ctx
-
-    if (channel?.startsWith('datadog:')) return
-
-    const span = this.startSpan({
-      resource: channel,
-      meta: {}
-    }, ctx)
-
-    if (this._senders.has(self)) {
-      const carrier = {}
-
-      this._tracer.inject(span, 'text_map', carrier)
-
-      args.push(carrier)
-    }
-
-    return ctx.currentStore
-  }
-
-  end (ctx) {
-    this.finish(ctx)
-  }
-}
-
-class ElectronRendererReceivePlugin extends ElectronMainReceivePlugin {
-  static id = 'electron:ipc:renderer:receive'
-  static prefix = 'tracing:apm:electron:ipc:renderer:receive'
-}
-
 class ElectronRendererSendPlugin extends ProducerPlugin {
   static id = 'electron:ipc:renderer:send'
   static component = 'electron'
@@ -124,15 +77,18 @@ class ElectronRendererSendPlugin extends ProducerPlugin {
 
     if (channel?.startsWith('datadog:')) return
 
-    const carrier = {}
     const span = this.startSpan({
       resource: channel,
       meta: {}
     }, ctx)
 
-    this._tracer.inject(span, 'text_map', carrier)
+    if (this._shouldInject(ctx)) {
+      const carrier = {}
 
-    args.push(carrier)
+      this._tracer.inject(span, 'text_map', carrier)
+
+      args.push(carrier)
+    }
 
     return ctx.currentStore
   }
@@ -145,6 +101,36 @@ class ElectronRendererSendPlugin extends ProducerPlugin {
 
   asyncEnd (ctx) {
     this.finish(ctx)
+  }
+
+  // Renderer can always inject since main is guaranteed to be patched.
+  _shouldInject () {
+    return true
+  }
+}
+
+class ElectronMainReceivePlugin extends ElectronRendererReceivePlugin {
+  static id = 'electron:ipc:main:receive'
+  static prefix = 'tracing:apm:electron:ipc:main:receive'
+}
+
+class ElectronMainSendPlugin extends ElectronRendererSendPlugin {
+  static id = 'electron:ipc:main:send'
+  static prefix = 'tracing:apm:electron:ipc:main:send'
+
+  constructor (...args) {
+    super(...args)
+
+    this._renderers = new WeakSet()
+
+    this.addSub('apm:electron:ipc:renderer:patched', event => {
+      this._renderers.add(event.sender)
+    })
+  }
+
+  // Only inject when the renderer was patched.
+  _shouldInject ({ self }) {
+    return this._renderers.has(self)
   }
 }
 

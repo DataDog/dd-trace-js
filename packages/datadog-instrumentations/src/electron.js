@@ -4,10 +4,10 @@ const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 
 const requestCh = tracingChannel('apm:electron:net:request')
-const mainFullCh = channel('apm:electron:ipc:main:full')
 const mainReceiveCh = tracingChannel('apm:electron:ipc:main:receive')
 const mainHandleCh = tracingChannel('apm:electron:ipc:main:handle')
 const mainSendCh = tracingChannel('apm:electron:ipc:main:send')
+const rendererPatchedCh = channel('apm:electron:ipc:renderer:patched')
 const rendererReceiveCh = tracingChannel('apm:electron:ipc:renderer:receive')
 const rendererSendCh = tracingChannel('apm:electron:ipc:renderer:send')
 
@@ -178,7 +178,7 @@ addHook({ name: 'electron', versions: ['>=37.0.0'] }, electron => {
     shimmer.wrap(ipcMain, 'removeHandler', createWrapRemoveAllListeners(handlers))
     shimmer.wrap(ipcMain, 'removeListener', createWrapRemoveListener(listeners))
 
-    ipcMain.once('datadog:apm:full', event => mainFullCh.publish(event))
+    ipcMain.once('datadog:apm:renderer:patched', event => rendererPatchedCh.publish(event))
   }
 
   if (BrowserWindow) {
@@ -199,7 +199,7 @@ addHook({ name: 'electron', versions: ['>=37.0.0'] }, electron => {
     shimmer.wrap(ipcRenderer, 'removeListener', createWrapRemoveListener(listeners))
     shimmer.wrap(ipcRenderer, 'removeAllListeners', createWrapRemoveAllListeners(listeners))
 
-    ipcRenderer.send('datadog:apm:full')
+    ipcRenderer.send('datadog:apm:renderer:patched')
   }
 
   return electron
