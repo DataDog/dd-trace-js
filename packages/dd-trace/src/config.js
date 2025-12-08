@@ -627,8 +627,12 @@ class Config {
     target.otelMaxExportBatchSize = nonNegInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE, 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE', false)
     target.otelMaxQueueSize = nonNegInt(OTEL_BSP_MAX_QUEUE_SIZE, 'OTEL_BSP_MAX_QUEUE_SIZE', false)
 
-    const otelMetricsExporter = !OTEL_METRICS_EXPORTER || OTEL_METRICS_EXPORTER.toLowerCase() !== 'none'
-    this.#setBoolean(target, 'otelMetricsEnabled', DD_METRICS_OTEL_ENABLED && otelMetricsExporter)
+    const otelMetricsExporterEnabled = OTEL_METRICS_EXPORTER?.toLowerCase() !== 'none'
+    this.#setBoolean(
+      target,
+      'otelMetricsEnabled',
+      DD_METRICS_OTEL_ENABLED && isTrue(DD_METRICS_OTEL_ENABLED) && otelMetricsExporterEnabled
+    )
     // Set OpenTelemetry metrics configuration with specific _METRICS_ vars
     // taking precedence over generic _EXPORTERS_ vars
     if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) {
