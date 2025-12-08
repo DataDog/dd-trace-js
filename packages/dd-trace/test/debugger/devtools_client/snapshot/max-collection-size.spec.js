@@ -9,8 +9,11 @@ const { assertObjectContains } = require('../../../../../../integration-tests/he
 require('../../../setup/mocha')
 
 const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
+const {
+  LARGE_OBJECT_SKIP_THRESHOLD,
+  DEFAULT_MAX_COLLECTION_SIZE
+} = require('../../../../src/debugger/devtools_client/snapshot/constants')
 
-const DEFAULT_MAX_COLLECTION_SIZE = 100
 const target = getTargetCodePath(__filename)
 
 describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', function () {
@@ -48,11 +51,11 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           assertOnBreakpoint(done, config, (_state) => {
             state = _state
           })
-          setAndTriggerBreakpoint(target, 24)
+          setAndTriggerBreakpoint(target, 29)
         })
 
         it('should have expected number of elements in state', function () {
-          expect(state).to.have.keys(['arr', 'map', 'set', 'wmap', 'wset', 'typedArray'])
+          expect(state).to.have.keys(['LARGE_SIZE', 'arr', 'map', 'set', 'wmap', 'wset', 'typedArray'])
         })
 
         it('Array', function () {
@@ -60,7 +63,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             type: 'Array',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
           })
         })
 
@@ -69,7 +72,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             type: 'Map',
             entries: expectedEntries,
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
           })
         })
 
@@ -78,7 +81,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             type: 'Set',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
           })
         })
 
@@ -86,7 +89,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           assertObjectContains(state.wmap, {
             type: 'WeakMap',
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
           })
 
           assert.strictEqual(state.wmap.entries.length, maxCollectionSize)
@@ -108,7 +111,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           assertObjectContains(state.wset, {
             type: 'WeakSet',
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
           })
 
           assert.strictEqual(state.wset.elements.length, maxCollectionSize)
@@ -128,7 +131,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             type: 'Uint16Array',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
           })
         })
       })
