@@ -8,9 +8,10 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
 
-describe('recursion regression test', () => {
+const assert = require('node:assert')
+
+describe.only('recursion regression test', () => {
   let agent
   let proc
 
@@ -29,8 +30,8 @@ describe('recursion regression test', () => {
 
     it('does not cause a recursion error when many commands are sent', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
+        assert.equal(headers.host, `127.0.0.1:${agent.port}`)
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(checkSpansForServiceName(payload, 'aws.request'), true)
       })
 
