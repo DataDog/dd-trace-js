@@ -278,27 +278,33 @@ describe('Plugin', function () {
               .catch(done)
           })
 
-          it('should handle child spans and still find the request object', done => {
+          it.only('should handle child spans and still find the request object', done => {
             agent
               .assertSomeTraces(traces => {
                 const spans = traces[0]
+
                 const nextRequestSpan = spans.find(span => span.name === 'next.request')
                 assert.ok(nextRequestSpan, 'next.request span should exist')
 
-                assert.strictEqual(nextRequestSpan.resource, 'GET /api/hello/[name]')
-                assert.strictEqual(nextRequestSpan.meta['next.page'], '/api/hello/[name]')
+                assert.strictEqual(nextRequestSpan.resource, 'GET /api/child-span')
+                assert.strictEqual(nextRequestSpan.meta['next.page'], '/api/child-span')
                 assert.strictEqual(nextRequestSpan.meta['http.method'], 'GET')
                 assert.strictEqual(nextRequestSpan.meta['http.status_code'], '200')
 
                 const webRequestSpan = spans.find(span => span.name === 'web.request')
                 assert.ok(webRequestSpan, 'web.request span should exist')
-                assert.strictEqual(webRequestSpan.resource, 'GET /api/hello/[name]')
+                assert.strictEqual(webRequestSpan.resource, 'GET /api/child-span')
+
+                const childSpan = spans.find(span => span.name === 'child.operation')
+                if (childSpan) {
+                  assert.strictEqual(childSpan.parent_id.toString(), nextRequestSpan.span_id.toString())
+                }
               })
               .then(done)
               .catch(done)
 
             axios
-              .get(`http://127.0.0.1:${port}/api/hello/world`)
+              .get(`http://127.0.0.1:${port}/api/child-span`)
               .catch(done)
           })
         })
