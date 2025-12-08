@@ -995,7 +995,7 @@ describe('integrations', () => {
             cache_read_input_tokens: MOCK_NUMBER,
             reasoning_output_tokens: 128
           },
-          modelName: 'gpt-5-mini-2025-08-07', // update
+          modelName: 'gpt-5-mini-2025-08-07',
           modelProvider: 'openai',
           metadata: {
             max_output_tokens: 500,
