@@ -278,7 +278,7 @@ describe('Plugin', function () {
               .catch(done)
           })
 
-          it.only('should handle child spans and still find the request object', done => {
+          it('should handle child spans and still find the request object', done => {
             agent
               .assertSomeTraces(traces => {
                 const spans = traces[0]
