@@ -13,7 +13,8 @@ app.on('ready', () => {
         case 'quit': return app.quit()
         case 'fetch': return onFetch(msg)
         case 'request': return onRequest(msg)
-        case 'render': return onRender(msg)
+        case 'send': return onSend(msg)
+        case 'receive': return onReceive(msg)
       }
     } catch (e) {
       console.error(e)
@@ -41,14 +42,25 @@ function onRequest ({ options }) {
   req.end()
 }
 
-function onRender () {
-  const listener = event => {
+function onSend () {
+  loadWindow(win => {
+    win.webContents.send('update-counter', 1)
+  })
+}
+
+function onReceive () {
+  const listener = () => {
     ipcMain.off('set-title', listener)
-    event.returnValue = 'done'
   }
 
   ipcMain.on('set-title', listener)
 
+  loadWindow(win => {
+    win.webContents.send('datadog:test:send')
+  })
+}
+
+function loadWindow (onShow) {
   const mainWindow = new BrowserWindow({
     show: false,
     webPreferences: {
@@ -58,7 +70,5 @@ function onRender () {
   })
 
   mainWindow.loadFile('index.html')
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.webContents.send('update-counter', 1)
-  })
+  mainWindow.once('ready-to-show', () => onShow?.(mainWindow))
 }

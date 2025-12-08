@@ -1,6 +1,6 @@
 'use strict'
 
-const { contextBridge, ipcRenderer } = require('electron/renderer')
+const { ipcRenderer } = require('electron/renderer')
 
 if (globalThis.logger) {
   globalThis.logger.debug = (...args) => ipcRenderer.send('datadog:log', 'debug', ...args)
@@ -9,12 +9,12 @@ if (globalThis.logger) {
   globalThis.logger.error = (...args) => ipcRenderer.send('datadog:log', 'error', ...args)
 }
 
-contextBridge.exposeInMainWorld('electronAPI', {
-  setTitle: title => ipcRenderer.sendSync('set-title', title)
-})
-
-const listener = () => {
-  ipcRenderer.off('update-counter', listener)
+function updateCounter () {
+  ipcRenderer.off('update-counter', updateCounter)
 }
 
-ipcRenderer.on('update-counter', listener)
+ipcRenderer.on('update-counter', updateCounter)
+
+ipcRenderer.on('datadog:test:send', () => {
+  setImmediate(() => ipcRenderer.send('set-title', 'Test'))
+})

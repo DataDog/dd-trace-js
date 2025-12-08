@@ -1,3 +1,3 @@
 'use strict'
 
-window.electronAPI.setTitle('Test')
+// TODO: Test automatic injection of APM<->RUM bridge.
