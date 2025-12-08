@@ -834,11 +834,17 @@ describe('OpenTelemetry Meter Provider', () => {
   })
 
   describe('Initialization', () => {
-    it('does not initialize when OTEL metrics are disabled', () => {
+    it('does not initialize when OTEL metrics configuration is unset', () => {
       const { meterProvider } = setupTracer({ DD_METRICS_OTEL_ENABLED: undefined })
       const { MeterProvider } = require('../../src/opentelemetry/metrics')
 
-      // Should return no-op provider when disabled, not our custom MeterProvider
+      assert.strictEqual(meterProvider instanceof MeterProvider, false)
+    })
+
+    it('does not initialize when OTEL metrics are explicitly disabled', () => {
+      const { meterProvider } = setupTracer({ DD_METRICS_OTEL_ENABLED: 'false' })
+      const { MeterProvider } = require('../../src/opentelemetry/metrics')
+
       assert.strictEqual(meterProvider instanceof MeterProvider, false)
     })
 
