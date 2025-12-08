@@ -4,6 +4,7 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const log = require('../../dd-trace/src/log')
 const { storage } = require('../../datadog-core')
 const { channel } = require('../../datadog-instrumentations/src/helpers/instrument')
+const tracer = require('../../dd-trace')
 
 class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   static get id () { return 'google-cloud-pubsub-push-subscription' }
@@ -37,7 +38,6 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     const messageData = this._parseMessage(req)
     if (!messageData) return
 
-    const tracer = this.tracer || require('../../dd-trace')
     if (!tracer || !tracer._tracer) return
 
     const parentContext = tracer._tracer.extract('text_map', messageData.attrs) || undefined
@@ -66,8 +66,8 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       publishTime: req.headers['x-goog-pubsub-publish-time']
     }
 
-    const { projectId, topicName } = this._extractProjectTopic(req.headers, subscription)
-    return { message, subscription, attrs: req.headers, projectId, topicName }
+    const topicName = req.headers['pubsub.topic'] || 'push-subscription-topic'
+    return { message, subscription, attrs: req.headers, topicName }
   }
 
   _createDeliverySpan (messageData, parentContext, tracer) {
@@ -95,15 +95,6 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     span.setTag('resource.name', `Push Subscription ${subscriptionName}`)
 
     return span
-  }
-
-  _extractProjectTopic (attrs, subscription) {
-    const topicName = attrs['pubsub.topic']
-    const projectId = subscription.match(/projects\/([^\\/]+)\/subscriptions/)
-    return {
-      projectId,
-      topicName: topicName || 'push-subscription-topic'
-    }
   }
 }
 

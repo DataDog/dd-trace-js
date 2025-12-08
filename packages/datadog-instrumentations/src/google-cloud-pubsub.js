@@ -6,11 +6,16 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const tracer = require('../../dd-trace')
+const { enableServerlessPubsubSubscription } = require('../../dd-trace/src/serverless')
+const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
 
 // Auto-load push subscription plugin to enable pubsub.delivery spans for push subscriptions
 try {
-  const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
-  new PushSubscriptionPlugin(null, {}).configure({})
+  // User must set DD_SERVERLESS_PUBSUB_ENABLED to true to enable push subscription spans
+  if (enableServerlessPubsubSubscription()) {
+    new PushSubscriptionPlugin(null, {}).configure({})
+  }
 } catch (e) {
   // Push subscription plugin is optional
   log.debug(`PushSubscriptionPlugin not loaded: ${e.message}`)
@@ -164,7 +169,6 @@ function injectTraceContext (attributes, pubsub, topicName) {
   if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
 
   try {
-    const tracer = require('../../dd-trace')
     const activeSpan = tracer.scope().active()
     if (!activeSpan) return
 
@@ -172,8 +176,9 @@ function injectTraceContext (attributes, pubsub, topicName) {
 
     const traceIdUpperBits = activeSpan.context()._trace.tags['_dd.p.tid']
     if (traceIdUpperBits) attributes['_dd.p.tid'] = traceIdUpperBits
-  } catch {
+  } catch (err) {
     // Silently fail - trace context injection is best-effort
+    log.debug('Error injecting trace context: ', err)
   }
 
   if (pubsub) attributes['gcloud.project_id'] = pubsub.projectId
