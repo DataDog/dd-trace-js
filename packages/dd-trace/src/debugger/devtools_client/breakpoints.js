@@ -64,7 +64,7 @@ async function addBreakpoint (probe) {
   const snapshotsPerSecond = probe.sampling?.snapshotsPerSecond ?? (probe.captureSnapshot
     ? MAX_SNAPSHOTS_PER_SECOND_PER_PROBE
     : MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE)
-  probe.nsBetweenSampling = BigInt(1 / snapshotsPerSecond * 1e9)
+  probe.nsBetweenSampling = BigInt(Math.trunc(1 / snapshotsPerSecond * 1e9))
   // Initialize to a large negative value to ensure first probe hit is always captured
   probe.lastCaptureNs = BigInt(Number.MIN_SAFE_INTEGER)
 
