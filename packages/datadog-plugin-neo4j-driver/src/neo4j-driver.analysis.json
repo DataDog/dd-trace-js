@@ -1,0 +1,212 @@
+{
+  "package": {
+    "name": "neo4j-driver",
+    "version": "6.0.1"
+  },
+  "category": "database",
+  "analysis_metadata": {
+    "total_methods_analyzed": 6,
+    "methods_selected": 6,
+    "selection_threshold": 0,
+    "selection_reasoning": "Methods selected based on agent analysis and APM semantics"
+  },
+  "orchestrion_config": {
+    "instrumentations": [
+      {
+        "module_name": "neo4j-driver",
+        "version_range": "^6.0.1",
+        "function_query": {
+          "name": "run",
+          "type": "method",
+          "kind": "async",
+          "class": "Session"
+        },
+        "operator": "tracePromise",
+        "channel_name": "apm:neo4j-driver:session:run",
+        "operation": "query",
+        "span_kind": "client",
+        "priority": "critical",
+        "tags": {
+          "span.kind": "'client'",
+          "db.type": "'neo4j'",
+          "component": "'neo4j-driver'",
+          "db.statement": "__EXPECT_STRING_MATCHING__"
+        },
+        "context_capture": {
+          "span.kind": "'client'",
+          "db.type": "'neo4j'",
+          "component": "'neo4j-driver'",
+          "db.statement": null,
+          "db.name": null,
+          "db.user": null,
+          "db.pid": null,
+          "db.stream": null
+        },
+        "analysis_score": 100,
+        "selection_reasoning": "Primary method for executing Cypher queries - this is the core database I/O operation"
+      },
+      {
+        "module_name": "neo4j-driver",
+        "version_range": "^6.0.1",
+        "function_query": {
+          "name": "run",
+          "type": "method",
+          "kind": "async",
+          "class": "Transaction"
+        },
+        "operator": "tracePromise",
+        "channel_name": "apm:neo4j-driver:transaction:run",
+        "operation": "query",
+        "span_kind": "client",
+        "priority": "critical",
+        "tags": {
+          "span.kind": "'client'",
+          "db.type": "'neo4j'",
+          "component": "'neo4j-driver'",
+          "db.statement": "__EXPECT_STRING_MATCHING__"
+        },
+        "context_capture": {
+          "span.kind": "'client'",
+          "db.type": "'neo4j'",
+          "component": "'neo4j-driver'"
+        },
+        "analysis_score": 100,
+        "selection_reasoning": "Executes Cypher queries within an explicit transaction context"
+      },
+      {
+        "module_name": "neo4j-driver",
+        "version_range": "^6.0.1",
+        "function_query": {
+          "name": "executeRead",
+          "type": "method",
+          "kind": "async",
+          "class": "Session"
+        },
+        "operator": "tracePromise",
+        "channel_name": "apm:neo4j-driver:session:executeread",
+        "operation": "transaction",
+        "span_kind": "client",
+        "priority": "critical",
+        "tags": {
+          "span.kind": "'client'",
+          "db.type": "__EXPECT_STRING_MATCHING__",
+          "component": "'neo4j-driver'",
+          "db.statement": "__EXPECT_STRING_MATCHING__",
+          "db.name": null,
+          "db.user": null,
+          "db.pid": null,
+          "db.stream": null
+        },
+        "context_capture": {
+          "span.kind": "'client'",
+          "db.type": "args[0]?.dbType || args[0]?.type",
+          "component": "'neo4j-driver'",
+          "db.name": "args[0]?.database || args[0]?.dbName",
+          "db.user": "args[0]?.username || args[0]?.user",
+          "db.statement": "args[0]?.query || args[0]?.statement || args[0]?.cypher",
+          "db.pid": "args[0]?.pid || args[0]?.processId",
+          "db.stream": "args[0]?.stream || args[0]?.streamName"
+        },
+        "analysis_score": 100,
+        "selection_reasoning": "Managed read transaction with automatic retry logic - represents a transaction boundary"
+      },
+      {
+        "module_name": "neo4j-driver",
+        "version_range": "^6.0.1",
+        "function_query": {
+          "name": "executeWrite",
+          "type": "method",
+          "kind": "async",
+          "class": "Session"
+        },
+        "operator": "tracePromise",
+        "channel_name": "apm:neo4j-driver:session:executewrite",
+        "operation": "transaction",
+        "span_kind": "client",
+        "priority": "critical",
+        "tags": {
+          "span.kind": "'client'",
+          "db.type": "__EXPECT_STRING_MATCHING__",
+          "component": "'neo4j-driver'",
+          "db.statement": "__EXPECT_STRING_MATCHING__"
+        },
+        "context_capture": {
+          "span.kind": "'client'",
+          "db.type": null,
+          "component": "'neo4j-driver'",
+          "db.name": null,
+          "db.user": null,
+          "db.statement": null,
+          "db.pid": null,
+          "db.stream": null
+        },
+        "analysis_score": 100,
+        "selection_reasoning": "Managed write transaction with automatic retry logic - represents a transaction boundary"
+      },
+      {
+        "module_name": "neo4j-driver",
+        "version_range": "^6.0.1",
+        "function_query": {
+          "name": "commit",
+          "type": "method",
+          "kind": "async",
+          "class": "Transaction"
+        },
+        "operator": "tracePromise",
+        "channel_name": "apm:neo4j-driver:transaction:commit",
+        "operation": "commit",
+        "span_kind": "client",
+        "priority": "important",
+        "tags": {
+          "span.kind": "'client'",
+          "db.type": "'neo4j'",
+          "component": "'neo4j-driver'",
+          "db.name": null,
+          "db.user": null,
+          "db.statement": null,
+          "db.pid": null,
+          "db.stream": null
+        },
+        "context_capture": {
+          "span.kind": "'client'",
+          "db.type": "'neo4j'",
+          "component": "'neo4j-driver'"
+        },
+        "analysis_score": 50,
+        "selection_reasoning": "Commits an explicit transaction - important transaction boundary operation"
+      },
+      {
+        "module_name": "neo4j-driver",
+        "version_range": "^6.0.1",
+        "function_query": {
+          "name": "rollback",
+          "type": "method",
+          "kind": "async",
+          "class": "Transaction"
+        },
+        "operator": "tracePromise",
+        "channel_name": "apm:neo4j-driver:transaction:rollback",
+        "operation": "rollback",
+        "span_kind": "client",
+        "priority": "important",
+        "tags": {
+          "span.kind": "'client'",
+          "db.type": "'neo4j'",
+          "component": "'neo4j-driver'",
+          "db.name": null,
+          "db.user": null,
+          "db.statement": null,
+          "db.pid": null,
+          "db.stream": null
+        },
+        "context_capture": {
+          "span.kind": "'client'",
+          "db.type": "'neo4j'",
+          "component": "'neo4j-driver'"
+        },
+        "analysis_score": 50,
+        "selection_reasoning": "Rolls back an explicit transaction - important transaction boundary operation"
+      }
+    ]
+  }
+}

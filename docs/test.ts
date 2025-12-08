@@ -375,6 +375,7 @@ tracer.use('koa');
 tracer.use('koa', httpServerOptions);
 tracer.use('langchain');
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
+tracer.use('log4js');
 tracer.use('memcached');
 tracer.use('microgateway-core');
 tracer.use('microgateway-core', httpServerOptions);
@@ -387,6 +388,7 @@ tracer.use('mysql');
 tracer.use('mysql', { service: () => `my-custom-mysql` });
 tracer.use('mysql2');
 tracer.use('mysql2', { service: () => `my-custom-mysql2` });
+tracer.use('neo4j-driver');
 tracer.use('net');
 tracer.use('next');
 tracer.use('next', nextOptions);

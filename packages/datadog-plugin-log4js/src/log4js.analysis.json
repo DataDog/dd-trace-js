@@ -1,0 +1,16 @@
+{
+  "package": {
+    "name": "log4js",
+    "version": "6.9.1"
+  },
+  "category": "not_applicable",
+  "analysis_metadata": {
+    "total_methods_analyzed": 0,
+    "methods_selected": 0,
+    "selection_threshold": 0,
+    "selection_reasoning": "Methods selected based on agent analysis and APM semantics"
+  },
+  "orchestrion_config": {
+    "instrumentations": []
+  }
+}

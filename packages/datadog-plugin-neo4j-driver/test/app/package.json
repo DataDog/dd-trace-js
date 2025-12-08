@@ -1,0 +1,12 @@
+{
+  "name": "dd-trace-neo4j-driver-sample-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node sample-app.js"
+  },
+  "dependencies": {
+    "neo4j-driver": "latest",
+    "dd-trace": "file:../../../../"
+  }
+}

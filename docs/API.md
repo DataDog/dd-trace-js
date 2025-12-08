@@ -66,6 +66,7 @@ tracer.use('pg', {
 <h5 id="koa-tags"></h5>
 <h5 id="koa-config"></h5>
 <h5 id="ldapjs"></h5>
+<h5 id="log4js"></h5>
 <h5 id="mariadb"></h5>
 <h5 id="memcached"></h5>
 <h5 id="memcached-tags"></h5>
@@ -82,6 +83,7 @@ tracer.use('pg', {
 <h5 id="mysql2"></h5>
 <h5 id="mysql2-tags"></h5>
 <h5 id="mysql2-config"></h5>
+<h5 id="neo4j-driver"></h5>
 <h5 id="net"></h5>
 <h5 id="next"></h5>
 <h5 id="opensearch"></h5>
@@ -98,6 +100,7 @@ tracer.use('pg', {
 <h5 id="restify"></h5>
 <h5 id="restify-tags"></h5>
 <h5 id="restify-config"></h5>
+<h5 id="sharedb"></h5>
 <h5 id="tedious"></h5>
 <h5 id="undici"></h5>
 <h5 id="when"></h5>
@@ -136,12 +139,14 @@ tracer.use('pg', {
 * [knex](./interfaces/export_.plugins.knex.html)
 * [koa](./interfaces/export_.plugins.koa.html)
 * [ldapjs](./interfaces/export_.plugins.ldapjs.html)
+* [log4js](./interfaces/export_.plugins.log4js.html)
 * [mariadb](./interfaces/export_.plugins.mariadb.html)
 * [microgateway--core](./interfaces/export_.plugins.microgateway_core.html)
 * [mocha](./interfaces/export_.plugins.mocha.html)
 * [mongodb-core](./interfaces/export_.plugins.mongodb_core.html)
 * [mysql](./interfaces/export_.plugins.mysql.html)
 * [mysql2](./interfaces/export_.plugins.mysql2.html)
+* [neo4j-driver](./interfaces/export_.plugins.neo4j_driver.html)
 * [net](./interfaces/export_.plugins.net.html)
 * [next](./interfaces/export_.plugins.next.html)
 * [opensearch](./interfaces/export_.plugins.opensearch.html)
