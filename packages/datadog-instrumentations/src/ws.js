@@ -13,6 +13,8 @@ const receiverCh = tracingChannel('ws:receive')
 const closeCh = tracingChannel('ws:close')
 const emitCh = channel('tracing:ws:server:connect:emit')
 
+const eventHandlerMap = new WeakMap()
+
 function wrapHandleUpgrade (handleUpgrade) {
   return function () {
     const [req, socket, , cb] = arguments
@@ -67,44 +69,35 @@ function createWrapEmit (emit) {
 }
 
 function createWrappedHandler (handler) {
-  return function wrappedMessageHandler (data, binary) {
+  return shimmer.wrapFunction(handler, originalHandler => function (data, binary) {
     const byteLength = dataLength(data)
 
     const ctx = { data, binary, socket: this._sender?._socket, byteLength }
 
-    return receiverCh.traceSync(handler, ctx, this, data, binary)
+    return receiverCh.traceSync(originalHandler, ctx, this, data, binary)
+  })
+}
+
+function wrapListener (originalOn) {
+  return function (eventName, handler) {
+    if (eventName === 'message') {
+      // Prevent multiple wrapping of the same handler in case the user adds the listener multiple times
+      const wrappedHandler = eventHandlerMap.get(handler) ?? createWrappedHandler(handler)
+      eventHandlerMap.set(handler, wrappedHandler)
+      return originalOn.call(this, eventName, wrappedHandler)
+    }
+    return originalOn.apply(this, arguments)
   }
 }
 
-function wrapListeners (wsPrototype) {
-  const callbackMap = new WeakMap()
-
-  function wrapListener (originalOn) {
-    return function (eventName, handler) {
-      if (eventName === 'message') {
-        // Prevent multiple wrapping of the same handler in case the user adds the listener multiple times
-        const wrappedHandler = callbackMap.get(handler) ?? createWrappedHandler(handler)
-        callbackMap.set(handler, wrappedHandler)
-        return originalOn.call(this, eventName, wrappedHandler)
-      }
-      return originalOn.apply(this, arguments)
+function removeListener (originalOff) {
+  return function (eventName, handler) {
+    if (eventName === 'message') {
+      const wrappedHandler = eventHandlerMap.get(handler)
+      return originalOff.call(this, eventName, wrappedHandler)
     }
+    return originalOff.apply(this, arguments)
   }
-
-  function removeListener (originalOff) {
-    return function (eventName, handler) {
-      if (eventName === 'message') {
-        const wrappedHandler = callbackMap.get(handler)
-        return originalOff.call(this, eventName, wrappedHandler)
-      }
-      return originalOff.apply(this, arguments)
-    }
-  }
-
-  shimmer.wrap(wsPrototype, 'on', wrapListener)
-  shimmer.wrap(wsPrototype, 'addListener', wrapListener)
-  shimmer.wrap(wsPrototype, 'off', removeListener)
-  shimmer.wrap(wsPrototype, 'removeListener', removeListener)
 }
 
 function wrapClose (close) {
@@ -139,7 +132,10 @@ addHook({
   shimmer.wrap(ws.prototype, 'send', wrapSend)
   shimmer.wrap(ws.prototype, 'close', wrapClose)
 
-  wrapListeners(ws.prototype)
+  shimmer.wrap(ws.prototype, 'on', wrapListener)
+  shimmer.wrap(ws.prototype, 'addListener', wrapListener)
+  shimmer.wrap(ws.prototype, 'off', removeListener)
+  shimmer.wrap(ws.prototype, 'removeListener', removeListener)
 
   return ws
 })

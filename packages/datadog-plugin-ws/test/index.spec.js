@@ -119,7 +119,7 @@ describe('Plugin', () => {
           client.on('error', done)
         })
 
-        it('should instrument message sending', done => {
+        it('should instrument message sending and not double wrap the same handler', done => {
           wsServer.on('connection', ws => {
             connectionReceived = true
             ws.on('message', msg => {
@@ -136,14 +136,23 @@ describe('Plugin', () => {
             throw new Error('broken handler')
           }
 
-          client.addListener('message', brokenHandler)
+          client.on('message', brokenHandler)
 
-          client.on('message', (data) => {
+          const handler = (data) => {
             assert.strictEqual(data.toString(), 'test message')
             done()
-          })
+          }
+
+          client.addListener('message', handler)
+          client.on('message', handler)
+
+          const handlers = client.listeners('message')
+
+          assert.strictEqual(handlers[0].name, brokenHandler.name)
+          assert.strictEqual(handlers[1], handlers[2])
 
           client.removeListener('message', brokenHandler)
+          client.removeListener('message', handler)
 
           client.on('error', done)
         })
