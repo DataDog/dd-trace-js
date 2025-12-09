@@ -19,6 +19,7 @@ try {
   }
 } catch (e) {
   // Push subscription plugin is optional
+  log.debug(`PushSubscriptionPlugin not loaded: ${e.message}`)
 }
 
 const requestStartCh = channel('apm:google-cloud-pubsub:request:start')
@@ -29,7 +30,25 @@ const receiveStartCh = channel('apm:google-cloud-pubsub:receive:start')
 const receiveFinishCh = channel('apm:google-cloud-pubsub:receive:finish')
 const receiveErrorCh = channel('apm:google-cloud-pubsub:receive:error')
 
+// Bounded map to prevent memory leaks from acks that never complete
 const ackContextMap = new Map()
+const ACK_CONTEXT_MAX_SIZE = 10_000
+const ACK_CONTEXT_TTL_MS = 600_000 // 10 minutes - matches Cloud Run streaming pull default deadline
+
+// Cleanup old entries periodically
+const ackContextCleanupInterval = setInterval(() => {
+  const now = Date.now()
+  for (const [ackId, entry] of ackContextMap.entries()) {
+    if (now - entry.timestamp > ACK_CONTEXT_TTL_MS) {
+      ackContextMap.delete(ackId)
+    }
+  }
+}, 60_000) // Run cleanup every 60 seconds
+
+// Allow process to exit cleanly
+if (ackContextCleanupInterval.unref) {
+  ackContextCleanupInterval.unref()
+}
 
 const publisherMethods = [
   'createTopic',
@@ -87,18 +106,16 @@ function wrapMethod (method) {
     if (isAckOperation && request && request.ackIds && request.ackIds.length > 0) {
       // Try to find a stored context for any of these ack IDs
       for (const ackId of request.ackIds) {
-        const storedContext = ackContextMap.get(ackId)
-        if (storedContext) {
-          restoredStore = storedContext
+        const entry = ackContextMap.get(ackId)
+        if (entry) {
+          restoredStore = entry.context
           break
         }
       }
 
       if (api === 'acknowledge') {
         request.ackIds.forEach(ackId => {
-          if (ackContextMap.has(ackId)) {
-            ackContextMap.delete(ackId)
-          }
+          ackContextMap.delete(ackId)
         })
       }
     }
@@ -213,7 +230,19 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/su
         const storeWithSpanContext = { ...currentStore, span: activeSpan }
 
         if (this.ackId) {
-          ackContextMap.set(this.ackId, storeWithSpanContext)
+          // Enforce max size to prevent unbounded growth
+          if (ackContextMap.size >= ACK_CONTEXT_MAX_SIZE) {
+            // Remove oldest entry (first entry in Map iteration order)
+            const firstKey = ackContextMap.keys().next().value
+            if (firstKey !== undefined) {
+              ackContextMap.delete(firstKey)
+            }
+          }
+
+          ackContextMap.set(this.ackId, {
+            context: storeWithSpanContext,
+            timestamp: Date.now()
+          })
         }
       }
 

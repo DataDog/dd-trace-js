@@ -59,7 +59,8 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     }
 
     const topicName = topic ? topic.split('/').pop() : subscription.name.split('/').pop()
-    const serviceName = this.config.service || this.serviceName()
+    const baseService = this.tracer._service || 'unknown'
+    const serviceName = this.config.service || `${baseService}-pubsub`
     const meta = {
       'gcloud.project_id': subscription.pubsub.projectId,
       'pubsub.topic': topic,
