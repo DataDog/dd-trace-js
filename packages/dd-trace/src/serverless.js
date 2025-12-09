@@ -13,6 +13,11 @@ function getIsGCPFunction () {
   return isDeprecatedGCPFunction || isNewerGCPFunction
 }
 
+function enableServerlessPubsubSubscription () {
+  const serverlessPubsubSubscriptionEnabled = getEnvironmentVariable('DD_SERVERLESS_PUBSUB_ENABLED')
+  return serverlessPubsubSubscriptionEnabled === 'true'
+}
+
 function getIsAzureFunction () {
   const isAzureFunction =
     getEnvironmentVariable('FUNCTIONS_EXTENSION_VERSION') !== undefined &&
@@ -32,5 +37,6 @@ function isInServerlessEnvironment () {
 module.exports = {
   getIsGCPFunction,
   getIsAzureFunction,
+  enableServerlessPubsubSubscription,
   isInServerlessEnvironment
 }

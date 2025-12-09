@@ -14,7 +14,12 @@ const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOrigi
   require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
-const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
+const {
+  isInServerlessEnvironment,
+  getIsGCPFunction,
+  getIsAzureFunction,
+  enableServerlessPubsubSubscription
+} = require('./serverless')
 const { ORIGIN_KEY } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./config-helper')
@@ -545,6 +550,7 @@ class Config {
       DD_TRACE_RATE_LIMIT,
       DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,
       DD_TRACE_REPORT_HOSTNAME,
+      DD_TRACE_RESOURCE_RENAMING_ENABLED,
       DD_TRACE_SAMPLE_RATE,
       DD_TRACE_SAMPLING_RULES,
       DD_TRACE_SCOPE,
@@ -626,8 +632,12 @@ class Config {
     target.otelMaxExportBatchSize = nonNegInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE, 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE', false)
     target.otelMaxQueueSize = nonNegInt(OTEL_BSP_MAX_QUEUE_SIZE, 'OTEL_BSP_MAX_QUEUE_SIZE', false)
 
-    const otelMetricsExporter = !OTEL_METRICS_EXPORTER || OTEL_METRICS_EXPORTER.toLowerCase() !== 'none'
-    this.#setBoolean(target, 'otelMetricsEnabled', DD_METRICS_OTEL_ENABLED && otelMetricsExporter)
+    const otelMetricsExporterEnabled = OTEL_METRICS_EXPORTER?.toLowerCase() !== 'none'
+    this.#setBoolean(
+      target,
+      'otelMetricsEnabled',
+      DD_METRICS_OTEL_ENABLED && isTrue(DD_METRICS_OTEL_ENABLED) && otelMetricsExporterEnabled
+    )
     // Set OpenTelemetry metrics configuration with specific _METRICS_ vars
     // taking precedence over generic _EXPORTERS_ vars
     if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) {
@@ -794,6 +804,7 @@ class Config {
     this.#setBoolean(target, 'injectForce', DD_INJECT_FORCE)
     this.#setBoolean(target, 'isAzureFunction', getIsAzureFunction())
     this.#setBoolean(target, 'isGCPFunction', getIsGCPFunction())
+    this.#setBoolean(target, 'serverlessPubsubSubscriptionEnabled', enableServerlessPubsubSubscription())
     target['langchain.spanCharLimit'] = maybeInt(DD_LANGCHAIN_SPAN_CHAR_LIMIT)
     target['langchain.spanPromptCompletionSampleRate'] = maybeFloat(DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
     this.#setBoolean(target, 'legacyBaggageEnabled', DD_TRACE_LEGACY_BAGGAGE_ENABLED)
@@ -829,6 +840,9 @@ class Config {
     target['remoteConfig.pollInterval'] = maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)
     unprocessedTarget['remoteConfig.pollInterval'] = DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     this.#setBoolean(target, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
+    if (DD_TRACE_RESOURCE_RENAMING_ENABLED !== undefined) {
+      this.#setBoolean(target, 'resourceRenamingEnabled', DD_TRACE_RESOURCE_RENAMING_ENABLED)
+    }
     // only used to explicitly set runtimeMetrics to false
     const otelSetRuntimeMetrics = String(OTEL_METRICS_EXPORTER).toLowerCase() === 'none'
       ? false
@@ -1253,6 +1267,15 @@ class Config {
 
     this.#setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(getEnv('DD_CIVISIBILITY_GIT_UPLOAD_ENABLED')))
+
+    // Enable resourceRenamingEnabled when appsec is enabled and only
+    // if DD_TRACE_RESOURCE_RENAMING_ENABLED is not explicitly set
+    if (this.#env.resourceRenamingEnabled === undefined) {
+      const appsecEnabled = this.#options['appsec.enabled'] ?? this.#env['appsec.enabled']
+      if (appsecEnabled) {
+        this.#setBoolean(calc, 'resourceRenamingEnabled', true)
+      }
+    }
 
     this.#setBoolean(calc, 'spanComputePeerService', this.#getSpanComputePeerService())
     this.#setBoolean(calc, 'stats.enabled', this.#isTraceStatsComputationEnabled())
