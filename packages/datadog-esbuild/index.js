@@ -270,7 +270,10 @@ ${build.initialOptions.banner.js}`
           }
         }
       } catch {
-        // Skip vendored dependencies which never have a `package.json`.
+        // Skip vendored dependencies which never have a `package.json`. This
+        // will use the default resolve logic of ESBuild which is what we want
+        // since those files should be treated as regular files and not modules
+        // even though they are in a `node_modules` folder.
       }
     }
   })
