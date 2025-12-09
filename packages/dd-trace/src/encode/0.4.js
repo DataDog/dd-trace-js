@@ -9,15 +9,8 @@ const { getEnvironmentVariable } = require('../config-helper')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 
-function formatSpan (span, config, shouldAddProcessTags = false, processTags = false) {
+function formatSpan (span, config) {
   span = normalizeSpan(truncateSpan(span, false))
-  
-  // Add process tags to the first span of the first trace in a payload
-  if (shouldAddProcessTags && processTags && span.meta) {
-    const { TRACING_FIELD_NAME } = require('./process-tags')
-    span.meta[TRACING_FIELD_NAME] = processTags
-  }
-  
   if (span.span_events) {
     // ensure span events are encoded as tags if agent doesn't support native top level span events
     if (config?.trace?.nativeSpanEvents) {
@@ -40,8 +33,6 @@ class AgentEncoder {
     this._reset()
     this._debugEncoding = isTrue(getEnvironmentVariable('DD_TRACE_ENCODING_DEBUG'))
     this._config = this._writer?._config
-    this._processTags = writer._processTags || false
-    this._isFirstTraceInPayload = true
   }
 
   count () {
@@ -54,8 +45,7 @@ class AgentEncoder {
 
     this._traceCount++
 
-    this._encode(bytes, trace, this._isFirstTraceInPayload)
-    this._isFirstTraceInPayload = false
+    this._encode(bytes, trace)
 
     const end = bytes.length
 
@@ -89,13 +79,11 @@ class AgentEncoder {
     this._reset()
   }
 
-  _encode (bytes, trace, isFirstTraceInPayload = false) {
+  _encode (bytes, trace) {
     this._encodeArrayPrefix(bytes, trace)
 
-    let isFirstSpan = isFirstTraceInPayload
     for (let span of trace) {
-      span = formatSpan(span, this._config, isFirstSpan, this._processTags)
-      isFirstSpan = false
+      span = formatSpan(span, this._config)
       bytes.reserve(1)
 
       // this is the original size of the fixed map for span attributes that always exist
@@ -152,7 +140,6 @@ class AgentEncoder {
     this._stringCount = 0
     this._stringBytes.length = 0
     this._stringMap = {}
-    this._isFirstTraceInPayload = true
 
     this._cacheString('')
   }

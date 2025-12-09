@@ -29,11 +29,6 @@ class SpanProcessor {
     this._processTags = config.propagateProcessTags?.enabled
       ? getProcessTags().serialized
       : false
-    
-    // Pass process tags to exporter so it can add them to the first span of the first chunk
-    if (this._processTags) {
-      this._exporter._processTags = this._processTags
-    }
   }
 
   sample (span) {
@@ -59,11 +54,14 @@ class SpanProcessor {
       this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
+      let isFirstSpanInChunk = true
+
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
         } else {
-          const formattedSpan = spanFormat(span)
+          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+          isFirstSpanInChunk = false
           this._stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
         }

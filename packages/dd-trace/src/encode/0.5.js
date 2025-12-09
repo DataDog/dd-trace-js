@@ -6,15 +6,8 @@ const { AgentEncoder: BaseEncoder } = require('./0.4')
 const ARRAY_OF_TWO = 0x92
 const ARRAY_OF_TWELVE = 0x9C
 
-function formatSpan (span, shouldAddProcessTags = false, processTags = false) {
+function formatSpan (span) {
   span = normalizeSpan(truncateSpan(span, false))
-  
-  // Add process tags to the first span of the first trace in a payload
-  if (shouldAddProcessTags && processTags && span.meta) {
-    const { TRACING_FIELD_NAME } = require('./process-tags')
-    span.meta[TRACING_FIELD_NAME] = processTags
-  }
-  
   // ensure span events are encoded as tags
   if (span.span_events) {
     span.meta.events = JSON.stringify(span.span_events)
@@ -24,11 +17,6 @@ function formatSpan (span, shouldAddProcessTags = false, processTags = false) {
 }
 
 class AgentEncoder extends BaseEncoder {
-  constructor (writer, limit) {
-    super(writer, limit)
-    this._processTags = writer._processTags || false
-  }
-
   makePayload () {
     const prefixSize = 1
     const stringSize = this._stringBytes.length + 5
@@ -45,13 +33,11 @@ class AgentEncoder extends BaseEncoder {
     return buffer
   }
 
-  _encode (bytes, trace, isFirstTraceInPayload = false) {
+  _encode (bytes, trace) {
     this._encodeArrayPrefix(bytes, trace)
 
-    let isFirstSpan = isFirstTraceInPayload
     for (let span of trace) {
-      span = formatSpan(span, isFirstSpan, this._processTags)
-      isFirstSpan = false
+      span = formatSpan(span)
       this._encodeByte(bytes, ARRAY_OF_TWELVE)
       this._encodeString(bytes, span.service)
       this._encodeString(bytes, span.name)
