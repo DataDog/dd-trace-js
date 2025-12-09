@@ -4,6 +4,8 @@
 //       version with an instrumentation.
 // TODO: Stop depending on `@openfeature/server-sdk` and `@openfeature/core` and
 //       instead intercept the user version with an instrumentation.
+// TODO: Vendor `@datadog/openfeature-node-server` when the above has been
+//       addressed.
 // TODO: Fix `import-in-the-middle` so that it doesn't interfere with the global
 //       object or switch to our own internal loader and remove the dependency.
 // TODO: Vendor `dc-polyfill` and figure out why it fails the tests.
@@ -43,8 +45,6 @@ module.exports = {
   },
   // These are shared between dd-trace and users, so they need to be external.
   externals: {
-    '@openfeature/core': '@openfeature/core',
-    '@openfeature/server-sdk': '@openfeature/server-sdk',
     '@opentelemetry/api': '@opentelemetry/api'
   },
   plugins: [
