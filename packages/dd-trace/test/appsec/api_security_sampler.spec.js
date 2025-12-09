@@ -242,4 +242,103 @@ describe('API Security Sampler', () => {
       assert.isTrue(keepTraceStub.calledOnceWith(span, 'asm'))
     })
   })
+
+  describe('http.endpoint', () => {
+    beforeEach(() => {
+      apiSecuritySampler.configure({ appsec: { apiSecurity: { enabled: true, sampleDelay: 30 } } })
+    })
+
+    it('should use http.endpoint when http.route is not available', () => {
+      const spanWithEndpoint = {
+        context: sinon.stub().returns({
+          _sampling: { priority: AUTO_KEEP },
+          _tags: { 'http.endpoint': '/api/users' }
+        })
+      }
+      webStub.root.returns(spanWithEndpoint)
+      webStub.getContext.returns({ paths: [], span: spanWithEndpoint })
+
+      const key = apiSecuritySampler.computeKey(req, res)
+      assert.equal(key, 'GET/api/users200')
+    })
+
+    it('should not use http.endpoint for 404 status codes', () => {
+      const res404 = { statusCode: 404 }
+      const spanWithEndpoint = {
+        context: sinon.stub().returns({
+          _sampling: { priority: AUTO_KEEP },
+          _tags: { 'http.endpoint': '/api/users' }
+        })
+      }
+      webStub.root.returns(spanWithEndpoint)
+      webStub.getContext.returns({ paths: [], span: spanWithEndpoint })
+
+      const key = apiSecuritySampler.computeKey(req, res404)
+      assert.equal(key, 'GET404')
+    })
+
+    it('should prefer http.route over http.endpoint when both are available', () => {
+      const spanWithBoth = {
+        context: sinon.stub().returns({
+          _sampling: { priority: AUTO_KEEP },
+          _tags: { 'http.endpoint': '/api/users' }
+        })
+      }
+      webStub.root.returns(spanWithBoth)
+      webStub.getContext.returns({ paths: ['/users/:id'], span: spanWithBoth })
+
+      const key = apiSecuritySampler.computeKey(req, res)
+      assert.equal(key, 'GET/users/:id200')
+    })
+
+    it('should handle missing http.endpoint gracefully', () => {
+      const spanWithoutEndpoint = {
+        context: sinon.stub().returns({
+          _sampling: { priority: AUTO_KEEP },
+          _tags: {}
+        })
+      }
+      webStub.root.returns(spanWithoutEndpoint)
+      webStub.getContext.returns({ paths: [], span: spanWithoutEndpoint })
+
+      const key = apiSecuritySampler.computeKey(req, res)
+      assert.equal(key, 'GET200')
+    })
+
+    it('should handle missing span gracefully', () => {
+      webStub.getContext.returns({ paths: [], span: null })
+
+      const key = apiSecuritySampler.computeKey(req, res)
+      assert.equal(key, 'GET200')
+    })
+
+    it('should sample different endpoints separately', () => {
+      const span1 = {
+        context: sinon.stub().returns({
+          _sampling: { priority: AUTO_KEEP },
+          _tags: { 'http.endpoint': '/api/users' }
+        })
+      }
+      const span2 = {
+        context: sinon.stub().returns({
+          _sampling: { priority: AUTO_KEEP },
+          _tags: { 'http.endpoint': '/api/products' }
+        })
+      }
+
+      webStub.root.returns(span1)
+      webStub.getContext.returns({ paths: [], span: span1 })
+      assert.isTrue(apiSecuritySampler.sampleRequest(req, res, true))
+
+      webStub.root.returns(span2)
+      webStub.getContext.returns({ paths: [], span: span2 })
+      assert.isTrue(apiSecuritySampler.sampleRequest(req, res, true))
+
+      const key1 = apiSecuritySampler.computeKey(req, res)
+      webStub.getContext.returns({ paths: [], span: span1 })
+      const key2 = apiSecuritySampler.computeKey(req, res)
+
+      assert.notEqual(key1, key2)
+    })
+  })
 })
