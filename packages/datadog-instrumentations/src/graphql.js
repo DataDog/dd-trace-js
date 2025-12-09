@@ -6,6 +6,8 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
+const ddGlobal = globalThis[Symbol.for('dd-trace')] ??= {}
+
 /** cached objects */
 
 const contexts = new WeakMap()
@@ -365,16 +367,16 @@ addHook({ name: 'graphql', file: 'language/printer.js', versions: ['>=0.10'] }, 
   // HACK: It's possible `graphql` is loaded before `@apollo/gateway` so we
   //       can't use a channel as the latter plugin would load after the publish
   //       happened. Not sure how to handle this so for now use a global.
-  globalThis._dd_graphql_printer = printer
+  ddGlobal.graphql_printer = printer
   return printer
 })
 
 addHook({ name: 'graphql', file: 'language/visitor.js', versions: ['>=0.10'] }, visitor => {
-  globalThis._dd_graphql_visitor = visitor
+  ddGlobal.graphql_visitor = visitor
   return visitor
 })
 
 addHook({ name: 'graphql', file: 'utilities/index.js', versions: ['>=0.10'] }, utilities => {
-  globalThis._dd_graphql_utilities = utilities
+  ddGlobal.graphql_utilities = utilities
   return utilities
 })

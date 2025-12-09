@@ -5,9 +5,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const ddGlobal = globalThis[Symbol.for('dd-trace')];
+const visitor_1 = ddGlobal.graphql_visitor;
+const printer_1 = ddGlobal.graphql_printer;
+const utilities_1 = ddGlobal.graphql_utilities;
 const lodash_sortby_1 = __importDefault(require("lodash.sortby"));
 function hideLiterals(ast) {
-    return globalThis._dd_graphql_visitor.visit(ast, {
+    return visitor_1.visit(ast, {
         IntValue(node) {
             return Object.assign({}, node, { value: "0" });
         },
@@ -27,7 +31,7 @@ function hideLiterals(ast) {
 }
 exports.hideLiterals = hideLiterals;
 function hideStringAndNumericLiterals(ast) {
-    return globalThis._dd_graphql_visitor.visit(ast, {
+    return visitor_1.visit(ast, {
         IntValue(node) {
             return Object.assign({}, node, { value: "0" });
         },
@@ -41,7 +45,7 @@ function hideStringAndNumericLiterals(ast) {
 }
 exports.hideStringAndNumericLiterals = hideStringAndNumericLiterals;
 function dropUnusedDefinitions(ast, operationName) {
-    const separated = globalThis._dd_graphql_utilities.separateOperations(ast)[operationName];
+    const separated = utilities_1.separateOperations(ast)[operationName];
     if (!separated) {
         return ast;
     }
@@ -55,7 +59,7 @@ function sorted(items) {
     return undefined;
 }
 function sortAST(ast) {
-    return globalThis._dd_graphql_visitor.visit(ast, {
+    return visitor_1.visit(ast, {
         OperationDefinition(node) {
             return Object.assign({}, node, { variableDefinitions: sorted(node.variableDefinitions, "variable.name.value") });
         },
@@ -81,7 +85,7 @@ function sortAST(ast) {
 }
 exports.sortAST = sortAST;
 function removeAliases(ast) {
-    return globalThis._dd_graphql_visitor.visit(ast, {
+    return visitor_1.visit(ast, {
         Field(node) {
             return Object.assign({}, node, { alias: undefined });
         }
@@ -89,12 +93,12 @@ function removeAliases(ast) {
 }
 exports.removeAliases = removeAliases;
 function printWithReducedWhitespace(ast) {
-    const sanitizedAST = globalThis._dd_graphql_visitor.visit(ast, {
+    const sanitizedAST = visitor_1.visit(ast, {
         StringValue(node) {
             return Object.assign({}, node, { value: Buffer.from(node.value, "utf8").toString("hex"), block: false });
         }
     });
-    const withWhitespace = globalThis._dd_graphql_printer.print(sanitizedAST);
+    const withWhitespace = printer_1.print(sanitizedAST);
     const minimizedButStillHex = withWhitespace
         .replace(/\s+/g, " ")
         .replace(/([^_a-zA-Z0-9]) /g, (_, c) => c)
