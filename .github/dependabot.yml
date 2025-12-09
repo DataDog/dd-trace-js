@@ -105,8 +105,6 @@ updates:
     open-pull-requests-limit: 1
     cooldown:
       default-days: 5
-      exclude:
-        - "@datadog/*"
     # Widen range across major versions, if possible. Ignore / manually update otherwise.
     versioning-strategy: "widen"
     labels:
@@ -160,7 +158,7 @@ updates:
       interval: "daily"
     open-pull-requests-limit: 1
     cooldown:
-      default-days: 1
+      default-days: 3
       exclude:
         - "@datadog/*"
     labels:
