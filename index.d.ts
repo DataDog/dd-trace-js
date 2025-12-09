@@ -1320,6 +1320,10 @@ declare namespace tracer {
        * Human-readable explanation for why this action was chosen.
        */
       reason: string;
+      /**
+       * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
+       */
+      tags: string[];
     }
 
     /**
@@ -1331,6 +1335,10 @@ declare namespace tracer {
        * Human-readable explanation from AI Guard describing why the conversation was blocked.
        */
       reason: string;
+      /**
+       * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
+       */
+      tags: string[];
     }
 
     /**
@@ -1844,7 +1852,7 @@ declare namespace tracer {
      * [@google-cloud/pubsub](https://github.com/googleapis/nodejs-pubsub) module.
      */
     interface google_cloud_pubsub extends Integration {}
-    
+
     /**
      * This plugin automatically instruments the
      * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
