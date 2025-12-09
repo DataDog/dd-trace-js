@@ -205,7 +205,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber.js' }, (obj) => {
   const Message = obj.Message
 
-  if (Message && Message.prototype && Message.prototype.ack) {
+  if (Message?.prototype?.ack) {
     shimmer.wrap(Message.prototype, 'ack', originalAck => function () {
       const currentStore = storage('legacy').getStore()
       const activeSpan = currentStore && currentStore.span
