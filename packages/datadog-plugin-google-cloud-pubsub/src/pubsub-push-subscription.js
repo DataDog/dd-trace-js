@@ -88,11 +88,10 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
         'pubsub.topic': topicName,
         service: this.config.service || `${tracer._tracer._service}-pubsub`,
         '_dd.base_service': tracer._tracer._service,
-        '_dd.serviceoverride.type': 'integration'
+        '_dd.serviceoverride.type': 'integration',
+        'resource.name': `Push Subscription ${subscriptionName}`
       }
     })
-
-    span.setTag('resource.name', `Push Subscription ${subscriptionName}`)
 
     return span
   }
