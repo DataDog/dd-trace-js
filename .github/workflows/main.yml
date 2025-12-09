@@ -1,0 +1,370 @@
+name: Cache Forensics Extractor
+
+on:
+  workflow_dispatch:
+    inputs:
+      cache_entries:
+        description: 'Cache entries (JSON array format)'
+        required: true
+        type: string
+        default: '[ # from a `gh api` command
+  {
+    "key": "n71Gg/JormzoitmBpVjBCZCcL6Y=",
+    "version": "0c867ee6264758fbca938e6c6d38a3160cb478f2770da2f831e22e4c9e3720d8"
+  },
+  {
+    "key": "PFxRDTsQC2CBRTRk3TMxWNYXnd0=",
+    "version": "4793076103aa823b0a4c97942d7385d4346f77a3c30a0bad6e0f1d748becbab5"
+  },
+  {
+    "key": "yarn-cache-Profiling-windows-b4e1dc4e46ec063c714cab2e6a48b2f1c42c37b4546d1f2592a517159bbd52d8-v2",
+    "version": "dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"
+  },
+  {
+    "key": "Aktlxw4hnyBVd/vZJbkdxGmq8Tw=",
+    "version": "3dbcc4f8dfd5fbbab9759602b7adb19c466cf9edfc277687f97ba9efbdc86d90"
+  },
+  {
+    "key": "yarn-cache-APM Capabilities-tracing-windows-b4e1dc4e46ec063c714cab2e6a48b2f1c42c37b4546d1f2592a517159bbd52d8-v2",
+    "version": "dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"
+  },
+  {
+    "key": "yarn-cache-AppSec-windows-b4e1dc4e46ec063c714cab2e6a48b2f1c42c37b4546d1f2592a517159bbd52d8-v2",
+    "version": "dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"
+  },
+  {
+    "key": "playwright-browsers-oldest-dd6",
+    "version": "4f7514040e3a28a321a9658d8e3a51fd52c29410f6844d0d51bcb9b20ca5e3a6"
+  },
+  {
+    "key": "PFxRDTsQC2CBRTRk3TMxWNYXnd0=",
+    "version": "c95311a28e589c62f14651d2e6001da3e2afe6e855380a412a583dabc576b960"
+  },
+  {
+    "key": "cypress-binary-10.2.0",
+    "version": "09038f5f1eb279f921ac07849ccf00ea0cadd76685c868eab628a2e3f47ef0b7"
+  },
+  {
+    "key": "playwright-browsers-Linux-1.57.0",
+    "version": "b11b119dfd10565044882f81f06d3a75b1602bec6f8658ac905dd63583b2a885"
+  },
+  {
+    "key": "cypress-binary-14.5.4",
+    "version": "09038f5f1eb279f921ac07849ccf00ea0cadd76685c868eab628a2e3f47ef0b7"
+  },
+  {
+    "key": "yarn-cache-OpenFeature-windows-b4e1dc4e46ec063c714cab2e6a48b2f1c42c37b4546d1f2592a517159bbd52d8-v2",
+    "version": "dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"
+  },
+  {
+    "key": "runner_venv-Linux-/opt/hostedtoolcache/Python/3.12.12/x64-dbe133b0a76747625e6c8139943b9dc2dbf5814e9ccf9f4a8ed5b7fa66dd2976",
+    "version": "f488f6875b536eb746450004e6f18bf74d514ad2cad78c86d6d5147ddbf9f9b0"
+  },
+  {
+    "key": "yarn-cache-AI Guard-windows-b4e1dc4e46ec063c714cab2e6a48b2f1c42c37b4546d1f2592a517159bbd52d8-v2",
+    "version": "dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"
+  },
+  {
+    "key": "actionlint-1.7.9-Linux-X64",
+    "version": "2c5831b0ad32de99a644bc2cdd9a58421edce007c9b47f4c1c7d25220f9d6578"
+  },
+  {
+    "key": "codeql-trap-1-2.23.6-javascript-b95a717ca0b9997ce46ac31aa272f2f0a4217c86",
+    "version": "801c2033d34f5527515cf4db177503fe272d4179b9f27199bff1b2af3a149cfb"
+  },
+  {
+    "key": "codeql-trap-1-2.23.6-javascript-4b11d913758bf8d79a981bda34da3f344bc03a4d",
+    "version": "801c2033d34f5527515cf4db177503fe272d4179b9f27199bff1b2af3a149cfb"
+  },
+  {
+    "key": "yarn-cache-APM Capabilities-tracing-windows-fb549679c373d69609fa2a9cb9d91ea28340fb792c23402062a41ac1dd036060-v2",
+    "version": "dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"
+  },
+  {
+    "key": "codeql-trap-1-2.23.6-javascript-2ce287255420fbb23bccc718f5439d0491592d8c",
+    "version": "801c2033d34f5527515cf4db177503fe272d4179b9f27199bff1b2af3a149cfb"
+  },
+  {
+    "key": "codeql-trap-1-2.23.6-javascript-f62588731f9a65a8ea0b95af7a8646783b74cc1b",
+    "version": "801c2033d34f5527515cf4db177503fe272d4179b9f27199bff1b2af3a149cfb"
+  },
+  {
+    "key": "codeql-trap-1-2.23.6-javascript-490a6ffec2f836cafd4309bd83e881531490d4a9",
+    "version": "801c2033d34f5527515cf4db177503fe272d4179b9f27199bff1b2af3a149cfb"
+  },
+  {
+    "key": "codeql-trap-1-2.23.6-javascript-a408e505263e323f5c98a6b19800f4e076677728",
+    "version": "801c2033d34f5527515cf4db177503fe272d4179b9f27199bff1b2af3a149cfb"
+  },
+  {
+    "key": "playwright-browsers-oldest-dd5",
+    "version": "4f7514040e3a28a321a9658d8e3a51fd52c29410f6844d0d51bcb9b20ca5e3a6"
+  },
+  {
+    "key": "cypress-binary-6.7.0",
+    "version": "09038f5f1eb279f921ac07849ccf00ea0cadd76685c868eab628a2e3f47ef0b7"
+  },
+  {
+    "key": "[Release Proposal]-branch-diff-3.1.1",
+    "version": "c242501c19ada3dcced7a83b074ccb8e79f816602d4125493924624b38591de2"
+  },
+  {
+    "key": "yarn-cache-OpenFeature-windows-e46dd60b36a97e7796be9940bbfce4059ac6dd358edff7736633e32cd05c0eef-v2",
+    "version": "dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"
+  },
+  {
+    "key": "yarn-cache-APM Capabilities-tracing-windows-e46dd60b36a97e7796be9940bbfce4059ac6dd358edff7736633e32cd05c0eef-v2",
+    "version": "dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"
+  },
+  {
+    "key": "yarn-cache-AppSec-windows-e46dd60b36a97e7796be9940bbfce4059ac6dd358edff7736633e32cd05c0eef-v2",
+    "version": "dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"
+  },
+  {
+    "key": "yarn-cache-Profiling-windows-e46dd60b36a97e7796be9940bbfce4059ac6dd358edff7736633e32cd05c0eef-v2",
+    "version": "dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"
+  },
+  {
+    "key": "yarn-cache-AI Guard-windows-e46dd60b36a97e7796be9940bbfce4059ac6dd358edff7736633e32cd05c0eef-v2",
+    "version": "dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"
+  }
+]
+'
+
+jobs:
+  extract-cache:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout (minimal)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+          sparse-checkout-cone-mode: false
+      
+      - name: Parse cache entries
+        id: parse
+        run: |
+          echo 'entries<<EOF' >> $GITHUB_OUTPUT
+          echo '${{ inputs.cache_entries }}' | jq -c '.[]' >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
+      
+      - name: Extract caches
+        run: |
+          mkdir -p cache-artifacts
+          
+          # Parse JSON array
+          echo '${{ inputs.cache_entries }}' | jq -c '.[]' | while read -r entry; do
+            key=$(echo "$entry" | jq -r '.key')
+            version=$(echo "$entry" | jq -r '.version')
+            
+            echo "================================================"
+            echo "Attempting to restore: $key (version: $version)"
+            echo "================================================"
+            
+            # Create unique directory for this cache
+            safe_name=$(echo "$key-$version" | tr '/' '_' | tr ':' '_')
+            cache_dir="cache-artifacts/$safe_name"
+            mkdir -p "$cache_dir"
+            
+            # Try to restore cache (will fail if not found, but won't stop workflow)
+            echo "Restoring to: $cache_dir"
+            
+            # Save metadata
+            cat > "$cache_dir/metadata.json" <<EOF
+          {
+            "key": "$key",
+            "version": "$version",
+            "requested_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "runner_os": "$RUNNER_OS",
+            "runner_arch": "$RUNNER_ARCH"
+          }
+          EOF
+          done
+      
+      - name: Restore cache entries
+        id: restore
+        continue-on-error: true
+        run: |
+          echo '${{ inputs.cache_entries }}' | jq -c '.[]' | while read -r entry; do
+            key=$(echo "$entry" | jq -r '.key')
+            version=$(echo "$entry" | jq -r '.version')
+            safe_name=$(echo "$key-$version" | tr '/' '_' | tr ':' '_')
+            cache_dir="cache-artifacts/$safe_name"
+            
+            # Use actions/cache restore with specific key
+            echo "::group::Restoring $key"
+            
+            # Try direct cache restore using GitHub API
+            # Note: actions/cache doesn't support version parameter directly
+            # So we'll use the cache key pattern matching
+            
+            restored="false"
+            if gh cache restore "$cache_dir" --key "$key" 2>/dev/null; then
+              echo "✓ Successfully restored $key"
+              restored="true"
+            else
+              echo "✗ Failed to restore $key"
+            fi
+            
+            echo "$restored" > "$cache_dir/restore_status.txt"
+            echo "::endgroup::"
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
+      
+      - name: Analyze extracted caches
+        run: |
+          echo "# Cache Extraction Report" > cache-artifacts/REPORT.md
+          echo "" >> cache-artifacts/REPORT.md
+          echo "Extraction Time: $(date -u)" >> cache-artifacts/REPORT.md
+          echo "" >> cache-artifacts/REPORT.md
+          
+          for dir in cache-artifacts/*/; do
+            if [ -d "$dir" ]; then
+              echo "## $(basename "$dir")" >> cache-artifacts/REPORT.md
+              echo "" >> cache-artifacts/REPORT.md
+              
+              # Show metadata
+              if [ -f "$dir/metadata.json" ]; then
+                echo "### Metadata" >> cache-artifacts/REPORT.md
+                echo '```json' >> cache-artifacts/REPORT.md
+                cat "$dir/metadata.json" >> cache-artifacts/REPORT.md
+                echo '```' >> cache-artifacts/REPORT.md
+                echo "" >> cache-artifacts/REPORT.md
+              fi
+              
+              # Show restore status
+              if [ -f "$dir/restore_status.txt" ]; then
+                status=$(cat "$dir/restore_status.txt")
+                echo "**Restore Status:** $status" >> cache-artifacts/REPORT.md
+                echo "" >> cache-artifacts/REPORT.md
+              fi
+              
+              # List contents if restored
+              if [ "$(cat "$dir/restore_status.txt" 2>/dev/null)" = "true" ]; then
+                echo "### Contents" >> cache-artifacts/REPORT.md
+                echo '```' >> cache-artifacts/REPORT.md
+                find "$dir" -type f -exec ls -lh {} \; >> cache-artifacts/REPORT.md
+                echo '```' >> cache-artifacts/REPORT.md
+                echo "" >> cache-artifacts/REPORT.md
+                
+                # Search for suspicious patterns
+                echo "### Suspicious Pattern Scan" >> cache-artifacts/REPORT.md
+                echo '```' >> cache-artifacts/REPORT.md
+                
+                # Look for embedded JavaScript
+                if find "$dir" -type f -name "*.tar*" -o -name "*.tgz" -o -name "*.zip" 2>/dev/null | head -1 | xargs -I {} sh -c 'tar -tzf {} 2>/dev/null || unzip -l {} 2>/dev/null' | grep -E '\.(js|sh|py)$'; then
+                  echo "⚠️  Found executable files in archive" >> cache-artifacts/REPORT.md
+                fi
+                
+                # Look for malware signatures: should be the same script that's been injected
+                grep -r "discord.com/api/webhooks" "$dir" 2>/dev/null && echo "🚨 DISCORD WEBHOOK FOUND" >> cache-artifacts/REPORT.md || true
+                
+                                echo '```' >> cache-artifacts/REPORT.md
+                echo "" >> cache-artifacts/REPORT.md
+              fi
+              
+              echo "---" >> cache-artifacts/REPORT.md
+              echo "" >> cache-artifacts/REPORT.md
+            fi
+          done
+      
+      - name: Create file hashes
+        run: |
+          echo "# File Hashes (SHA256)" > cache-artifacts/HASHES.txt
+          find cache-artifacts -type f -not -name "HASHES.txt" -not -name "REPORT.md" -exec sha256sum {} \; >> cache-artifacts/HASHES.txt
+      
+      - name: Upload each cache as separate artifact
+        run: |
+          echo '${{ inputs.cache_entries }}' | jq -c '.[]' | while read -r entry; do
+            key=$(echo "$entry" | jq -r '.key')
+            version=$(echo "$entry" | jq -r '.version')
+            safe_name=$(echo "$key-$version" | tr '/' '_' | tr ':' '_')
+            cache_dir="cache-artifacts/$safe_name"
+            
+            # Create artifact name as key:version
+            artifact_name="${key}:${version}"
+            
+            echo "::group::Uploading artifact: $artifact_name"
+            
+            if [ -d "$cache_dir" ]; then
+              # Use GitHub CLI to upload artifact with exact name
+              # Note: artifact names have restrictions, so we'll encode problematic chars
+              # GitHub artifact names allow: alphanumeric, -, and _
+              safe_artifact_name=$(echo "$artifact_name" | sed 's/[^a-zA-Z0-9:_-]/_/g')
+              
+              # Create a temporary tarball for upload
+              tar -czf "${safe_name}.tar.gz" -C "cache-artifacts" "$(basename "$cache_dir")"
+              
+              echo "Artifact name: $safe_artifact_name"
+              echo "Archive: ${safe_name}.tar.gz"
+              
+              # Upload using actions/upload-artifact
+              # We'll do this in the next step since we can't dynamically call actions in a loop
+              echo "$safe_artifact_name|${safe_name}.tar.gz" >> artifact_list.txt
+            fi
+            
+            echo "::endgroup::"
+          done
+      
+      - name: Upload artifacts individually
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cache-forensics-batch-${{ github.run_number }}
+          path: |
+            *.tar.gz
+            cache-artifacts/REPORT.md
+            cache-artifacts/HASHES.txt
+          retention-days: 30
+          if-no-files-found: warn
+      
+      - name: Create artifact index
+        if: always()
+        run: |
+          echo "# Artifact Index" > ARTIFACT_INDEX.md
+          echo "" >> ARTIFACT_INDEX.md
+          echo "## Extracted Cache Entries" >> ARTIFACT_INDEX.md
+          echo "" >> ARTIFACT_INDEX.md
+          
+          if [ -f artifact_list.txt ]; then
+            while IFS='|' read -r artifact_name archive_file; do
+              echo "- **$artifact_name** → \`$archive_file\`" >> ARTIFACT_INDEX.md
+            done < artifact_list.txt
+          fi
+          
+          echo "" >> ARTIFACT_INDEX.md
+          echo "## Download Instructions" >> ARTIFACT_INDEX.md
+          echo "" >> ARTIFACT_INDEX.md
+          echo '```bash' >> ARTIFACT_INDEX.md
+          echo "# Download all artifacts" >> ARTIFACT_INDEX.md
+          echo "gh run download ${{ github.run_id }}" >> ARTIFACT_INDEX.md
+          echo "" >> ARTIFACT_INDEX.md
+          echo "# Extract individual cache" >> ARTIFACT_INDEX.md
+          echo "tar -xzf <archive-name>.tar.gz" >> ARTIFACT_INDEX.md
+          echo '```' >> ARTIFACT_INDEX.md
+          
+          cat ARTIFACT_INDEX.md >> cache-artifacts/REPORT.md
+      
+      - name: Display summary
+        if: always()
+        run: |
+          echo "## Cache Extraction Complete 🔍" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f artifact_list.txt ]; then
+            echo "### Extracted Artifacts" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Cache Key:Version | Archive File |" >> $GITHUB_STEP_SUMMARY
+            echo "|-------------------|--------------|" >> $GITHUB_STEP_SUMMARY
+            while IFS='|' read -r artifact_name archive_file; do
+              echo "| \`$artifact_name\` | \`$archive_file\` |" >> $GITHUB_STEP_SUMMARY
+            done < artifact_list.txt
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          cat cache-artifacts/REPORT.md >> $GITHUB_STEP_SUMMARY
