@@ -69,6 +69,10 @@ function loadWindow (onShow) {
     }
   })
 
+  ipcMain.on('datadog:test:log', (_event, ...args) => {
+    console.log(...args)
+  })
+
   mainWindow.loadFile('index.html')
   mainWindow.once('ready-to-show', () => onShow?.(mainWindow))
 }
