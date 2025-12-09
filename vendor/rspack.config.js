@@ -17,7 +17,7 @@ const include = new Set([
   ...Object.keys(dependencies),
   'mutexify/promise',
   'protobufjs/minimal', // peer dependency for `@datadog/sketches-js`
-  'source-map/lib/util'
+  'source-map/lib/util' // TODO: remove usage of dependency internals
 ])
 
 const exclude = new Set([
@@ -28,12 +28,20 @@ module.exports = {
   entry: Object.fromEntries(include.difference(exclude).entries()),
   target: 'node',
   mode: 'production',
+  // Using `hidden` removes the URL comment from source files since we don't
+  // publish the maps that the comments would be referencing. Since the maps
+  // have the same filename as the source files this doesn't matter anyway.
   devtool: 'hidden-source-map',
   context: join(__dirname, 'node_modules'),
   optimization: {
+    // Here we used `named` instead of the default of `deterministic` since the
+    // default is only deterministic with the same dependencies, but when a
+    // dependency is added it would change the IDs of other ones resulting in
+    // unnecessary noise.
     checkIds: 'named',
     moduleIds: 'named',
   },
+  // These are shared between dd-trace and users, so they need to be external.
   externals: {
     '@openfeature/core': '@openfeature/core',
     '@openfeature/server-sdk': '@openfeature/server-sdk',
@@ -50,11 +58,14 @@ module.exports = {
     }),
     new CopyRspackPlugin({
       patterns: [
+        // The OpenTracing types are exposed in the public API of dd-trace so
+        // they need to be available in the package.
         {
           from: '**/*.d.ts',
           context: join(__dirname, 'node_modules', 'opentracing', 'lib'),
           to: 'opentracing'
         },
+        // Binaries need to be copied manually.
         {
           from: 'source-map/lib/mappings.wasm',
           to: 'source-map'
