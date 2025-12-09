@@ -66,7 +66,7 @@ function addVariableTags (config, span, variableValues) {
   span.addTags(tags)
 }
 
-function getSignature (document, operationName, operationType, calculate, self) {
+function getSignature (document, operationName, operationType, calculate) {
   if (calculate !== false && tools !== false) {
     try {
       try {
