@@ -1,6 +1,8 @@
 'use strict'
 
-const shimmer = require('../../datadog-shimmer')
+const { mkdtempSync, readFileSync, writeFileSync } = require('fs')
+const { join } = require('path')
+const { wrap } = require('../../datadog-shimmer')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 
 const requestCh = tracingChannel('apm:electron:net:request')
@@ -134,6 +136,55 @@ function wrapSendToFrame (send) {
   }
 }
 
+function wrapBrowserWindow (electron) {
+  const moduleExports = {}
+
+  class DatadogBrowserWindow extends electron.BrowserWindow {
+    constructor (options = {}) {
+      const webPreferences = options.webPreferences ??= {}
+      const preload = options.webPreferences.preload
+      const ddPreload = join(__dirname, 'electron', 'preload.js')
+
+      if (preload) {
+        const userCode = readFileSync(preload, 'utf8')
+        const ddCode = ';(() => {' + readFileSync(ddPreload, 'utf8') + '})();'
+        const useStrict = userCode.match(/['"]use strict['"]/)?.[0] || ''
+        const tmp = electron.app.getPath('temp')
+        const dir = mkdtempSync(join(tmp, 'dd-electron-preload-'))
+        const filename = join(dir, 'preload.js')
+
+        // Preload doesn't support `require` of relative paths in sandboxed mode
+        // so we merge our preload with the user preload in a single file.
+        writeFileSync(filename, useStrict + '\n' + ddCode + '\n' + userCode)
+
+        webPreferences.preload = filename
+      } else {
+        webPreferences.preload = ddPreload
+      }
+
+      // BrowserWindow doesn't support subclassing because it's all native code
+      // so we return an instance of it instead of the subclass.
+      return super(options) // eslint-disable-line constructor-super
+    }
+  }
+
+  Object.defineProperty(moduleExports, 'BrowserWindow', {
+    enumerable: true,
+    get: () => DatadogBrowserWindow,
+    configurable: false
+  })
+
+  for (const key of Reflect.ownKeys(electron)) {
+    const descriptor = Reflect.getOwnPropertyDescriptor(electron, key)
+
+    if (key === 'BrowserWindow') continue
+
+    Object.defineProperty(moduleExports, key, descriptor)
+  }
+
+  return moduleExports
+}
+
 function wrapWebContents (proto) {
   const descriptor = Object.getOwnPropertyDescriptor(proto, 'webContents')
   const wrapped = new WeakSet()
@@ -144,9 +195,9 @@ function wrapWebContents (proto) {
       const webContents = descriptor.get.apply(this)
 
       if (!wrapped.has(webContents)) {
-        // shimmer.wrap(webContents, 'postMessage', wrapSend)
-        shimmer.wrap(webContents, 'send', wrapSend)
-        shimmer.wrap(webContents, 'sendToFrame', wrapSendToFrame)
+        // wrap(webContents, 'postMessage', wrapSend)
+        wrap(webContents, 'send', wrapSend)
+        wrap(webContents, 'sendToFrame', wrapSendToFrame)
 
         wrapped.add(webContents)
       }
@@ -164,42 +215,40 @@ addHook({ name: 'electron', versions: ['>=37.0.0'] }, electron => {
 
   if (net) {
     // This also covers `fetch` as it uses `request` under the hood.
-    shimmer.wrap(net, 'request', createWrapRequest(requestCh))
-  }
-
-  if (ipcMain) {
-    shimmer.wrap(ipcMain, 'addListener', createWrapAddListener(mainReceiveCh, listeners))
-    shimmer.wrap(ipcMain, 'handle', createWrapAddListener(mainHandleCh, handlers))
-    shimmer.wrap(ipcMain, 'handleOnce', createWrapAddListener(mainHandleCh, handlers))
-    shimmer.wrap(ipcMain, 'off', createWrapRemoveListener(listeners))
-    shimmer.wrap(ipcMain, 'on', createWrapAddListener(mainReceiveCh, listeners))
-    shimmer.wrap(ipcMain, 'once', createWrapAddListener(mainReceiveCh, listeners))
-    shimmer.wrap(ipcMain, 'removeAllListeners', createWrapRemoveAllListeners(listeners))
-    shimmer.wrap(ipcMain, 'removeHandler', createWrapRemoveAllListeners(handlers))
-    shimmer.wrap(ipcMain, 'removeListener', createWrapRemoveListener(listeners))
-
-    ipcMain.once('datadog:apm:renderer:patched', event => rendererPatchedCh.publish(event))
-  }
-
-  if (BrowserWindow) {
-    wrapWebContents(BrowserWindow.prototype)
+    wrap(net, 'request', createWrapRequest(requestCh))
   }
 
   if (ipcRenderer) {
-    shimmer.wrap(ipcRenderer, 'invoke', createWrapSend(rendererSendCh, true))
-    // shimmer.wrap(ipcRenderer, 'postMessage', createWrapSend(rendererSendCh))
-    shimmer.wrap(ipcRenderer, 'send', createWrapSend(rendererSendCh))
-    shimmer.wrap(ipcRenderer, 'sendSync', createWrapSend(rendererSendCh))
-    shimmer.wrap(ipcRenderer, 'sendToHost', createWrapSend(rendererSendCh))
+    wrap(ipcRenderer, 'invoke', createWrapSend(rendererSendCh, true))
+    // wrap(ipcRenderer, 'postMessage', createWrapSend(rendererSendCh))
+    wrap(ipcRenderer, 'send', createWrapSend(rendererSendCh))
+    wrap(ipcRenderer, 'sendSync', createWrapSend(rendererSendCh))
+    wrap(ipcRenderer, 'sendToHost', createWrapSend(rendererSendCh))
 
-    shimmer.wrap(ipcRenderer, 'addListener', createWrapAddListener(rendererReceiveCh, listeners))
-    shimmer.wrap(ipcRenderer, 'off', createWrapRemoveListener(listeners))
-    shimmer.wrap(ipcRenderer, 'on', createWrapAddListener(rendererReceiveCh, listeners))
-    shimmer.wrap(ipcRenderer, 'once', createWrapAddListener(rendererReceiveCh, listeners))
-    shimmer.wrap(ipcRenderer, 'removeListener', createWrapRemoveListener(listeners))
-    shimmer.wrap(ipcRenderer, 'removeAllListeners', createWrapRemoveAllListeners(listeners))
+    wrap(ipcRenderer, 'addListener', createWrapAddListener(rendererReceiveCh, listeners))
+    wrap(ipcRenderer, 'off', createWrapRemoveListener(listeners))
+    wrap(ipcRenderer, 'on', createWrapAddListener(rendererReceiveCh, listeners))
+    wrap(ipcRenderer, 'once', createWrapAddListener(rendererReceiveCh, listeners))
+    wrap(ipcRenderer, 'removeListener', createWrapRemoveListener(listeners))
+    wrap(ipcRenderer, 'removeAllListeners', createWrapRemoveAllListeners(listeners))
 
     ipcRenderer.send('datadog:apm:renderer:patched')
+  } else {
+    wrap(ipcMain, 'addListener', createWrapAddListener(mainReceiveCh, listeners))
+    wrap(ipcMain, 'handle', createWrapAddListener(mainHandleCh, handlers))
+    wrap(ipcMain, 'handleOnce', createWrapAddListener(mainHandleCh, handlers))
+    wrap(ipcMain, 'off', createWrapRemoveListener(listeners))
+    wrap(ipcMain, 'on', createWrapAddListener(mainReceiveCh, listeners))
+    wrap(ipcMain, 'once', createWrapAddListener(mainReceiveCh, listeners))
+    wrap(ipcMain, 'removeAllListeners', createWrapRemoveAllListeners(listeners))
+    wrap(ipcMain, 'removeHandler', createWrapRemoveAllListeners(handlers))
+    wrap(ipcMain, 'removeListener', createWrapRemoveListener(listeners))
+
+    ipcMain.once('datadog:apm:renderer:patched', event => rendererPatchedCh.publish(event))
+
+    wrapWebContents(BrowserWindow.prototype)
+
+    electron = wrapBrowserWindow(electron)
   }
 
   return electron
