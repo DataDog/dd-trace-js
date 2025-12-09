@@ -12,6 +12,7 @@ const producerCh = tracingChannel('ws:send')
 const receiverCh = tracingChannel('ws:receive')
 const closeCh = tracingChannel('ws:close')
 const emitCh = channel('tracing:ws:server:connect:emit')
+// TODO: Add a error channel / handle error events properly.
 
 const eventHandlerMap = new WeakMap()
 
@@ -132,6 +133,8 @@ addHook({
   shimmer.wrap(ws.prototype, 'send', wrapSend)
   shimmer.wrap(ws.prototype, 'close', wrapClose)
 
+  // TODO: Do not wrap these methods. Instead, add a listener to the websocket instance when one is created.
+  // That way it avoids producing too many spans for the same websocket instance and less user code is impacted.
   shimmer.wrap(ws.prototype, 'on', wrapListener)
   shimmer.wrap(ws.prototype, 'addListener', wrapListener)
   shimmer.wrap(ws.prototype, 'off', removeListener)
@@ -140,17 +143,12 @@ addHook({
   return ws
 })
 
-function detectType (data) {
-  if (typeof Blob !== 'undefined' && data instanceof Blob) return 'Blob'
-  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(data)) return 'Buffer'
-  if (typeof data === 'string') return 'string'
-  return 'Unknown'
-}
-
 function dataLength (data) {
-  const type = detectType(data)
-  if (type === 'Blob') return data.size
-  if (type === 'Buffer') return data.length
-  if (type === 'string') return Buffer.byteLength(data)
-  return 0
+  if (typeof data === 'string') {
+    return Buffer.byteLength(data)
+  }
+  if (data instanceof Blob) {
+    return data.size
+  }
+  return data?.length ?? 0
 }
