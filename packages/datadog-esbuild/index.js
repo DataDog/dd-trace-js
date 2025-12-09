@@ -114,6 +114,7 @@ ${build.initialOptions.banner.js}`
   }
 
   try {
+    // eslint-disable-next-line n/no-unpublished-require
     require.resolve('@openfeature/core')
   } catch (error) {
     build.initialOptions.external ??= []
