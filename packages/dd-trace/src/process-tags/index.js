@@ -30,7 +30,7 @@ module.exports.PROFILING_FIELD_NAME = PROFILING_FIELD_NAME
 module.exports = function getProcessTags () {
   // this list is sorted alphabetically for consistent serialization
   const tags = [
-    // the immediate parent directory name of the entrypoint script, e.g. /foo/bar/baz/banana.js -> baz
+    // the parent directory name of the entrypoint script, e.g. /foo/bar/baz/banana.js -> baz
     ['entrypoint.basedir', ENTRYPOINT_PATH === '' ? undefined : path.basename(path.dirname(ENTRYPOINT_PATH))],
 
     // the entrypoint script filename without the extension, e.g. /foo/bar/baz/banana.js -> banana
