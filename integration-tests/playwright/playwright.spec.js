@@ -297,8 +297,6 @@ versions.forEach((version) => {
           stdio: 'inherit'
         }
       )
-      childProcess.stdout.pipe(process.stdout)
-      childProcess.stderr.pipe(process.stderr)
       childProcess.stdout.on('data', chunk => {
         testOutput += chunk.toString()
       })
