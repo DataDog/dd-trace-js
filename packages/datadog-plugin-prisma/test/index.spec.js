@@ -7,6 +7,7 @@ const path = require('node:path')
 
 const { expect } = require('chai')
 const { after, before, beforeEach, describe, it } = require('mocha')
+const semifies = require('semifies')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -20,7 +21,10 @@ describe('Plugin', () => {
   let tracingHelper
 
   describe('prisma', () => {
-    withVersions('prisma', ['@prisma/client'], async (range, _moduleName_, version) => {
+    // Prisma 7.0.0+ is not supported in Node.js < 20.19.0
+    const supportedRange = semifies(process.version, '>=20.19.0') ? '*' : '>=7.0.0'
+
+    withVersions('prisma', ['@prisma/client'], supportedRange, async (range, _moduleName_, version) => {
       describe('without configuration', () => {
         before(async () => {
           const cwd = path.resolve(__dirname, `../../../versions/@prisma/client@${range}`)

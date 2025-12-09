@@ -114,6 +114,7 @@ module.exports = {
   isFlakyTestRetriesEnabled: false,
   flakyTestRetriesCount: 5,
   isGCPFunction: false,
+  serverlessPubsubSubscriptionEnabled: false,
   isGitUploadEnabled: false,
   isIntelligentTestRunnerEnabled: false,
   isManualApiEnabled: false,
@@ -169,6 +170,7 @@ module.exports = {
   'remoteConfig.enabled': true,
   'remoteConfig.pollInterval': 5, // seconds
   reportHostname: false,
+  resourceRenamingEnabled: false,
   'runtimeMetrics.enabled': false,
   'runtimeMetrics.eventLoop': true,
   'runtimeMetrics.gc': true,
