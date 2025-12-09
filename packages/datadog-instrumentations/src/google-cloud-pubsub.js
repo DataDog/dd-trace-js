@@ -276,6 +276,16 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   })
 
   shimmer.wrap(LeaseManager.prototype, 'clear', clear => function () {
+    // Finish spans for all messages still in the lease before clearing
+    if (this._messages) {
+      for (const message of this._messages.values()) {
+        const ctx = messageContexts.get(message)
+        if (ctx) {
+          receiveFinishCh.publish(ctx)
+          messageContexts.delete(message)
+        }
+      }
+    }
     return clear.apply(this, arguments)
   })
 
