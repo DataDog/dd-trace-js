@@ -633,6 +633,26 @@ describe('OpenTelemetry Meter Provider', () => {
 
       setTimeout(() => { validator(); done() }, 150)
     })
+
+    it('includes attributes in instrumentation scope', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const scopeMetrics = decoded.resourceMetrics[0].scopeMetrics[0]
+        assert.strictEqual(scopeMetrics.metrics.length, 2)
+        const scopeAttributes = scopeMetrics.scope.attributes
+        assert.strictEqual(scopeAttributes.length, 2)
+        const usernameAttr = scopeAttributes.find(a => a.key === 'username')
+        const idAttr = scopeAttributes.find(a => a.key === 'id')
+        assert.strictEqual(usernameAttr?.value.stringValue, 'test')
+        assert.strictEqual(idAttr?.value.intValue, 23)
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('app', '', { attributes: { username: 'test', id: 23 } })
+      meter.createCounter('num.monkies').add(1)
+      meter.createCounter('num.baboons').add(2)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
   })
 
   describe('Unimplemented Features', () => {
