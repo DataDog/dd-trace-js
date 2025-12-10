@@ -162,6 +162,7 @@ module.exports = {
   plugins: true,
   port: '8126',
   'profiling.enabled': undefined,
+  'propagateProcessTags.enabled': undefined,
   'profiling.exporters': 'agent',
   'profiling.sourceMap': true,
   'profiling.longLivedThreshold': undefined,
