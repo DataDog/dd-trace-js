@@ -68,8 +68,6 @@ jobs:
       # Running `yarn` also automatically runs `rspack` as a postinstall script.
       - run: yarn --frozen-lockfile
         working-directory: vendor
-      # Licenses are pulled from internet and not deterministic so revert them.
-      - run: git checkout packages/node_modules/**/*/LICENSE
       - run: git diff --exit-code
 
   core:
