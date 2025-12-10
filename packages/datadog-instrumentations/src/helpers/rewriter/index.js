@@ -29,6 +29,7 @@ const { readFileSync } = require('fs')
 const { join } = require('path')
 const semifies = require('semifies')
 const transforms = require('./transforms')
+const { generate, parse, traverse } = require('./compiler')
 const log = require('../../../../dd-trace/src/log')
 const instrumentations = require('./instrumentations.json')
 const { getEnvironmentVariable } = require('../../../../dd-trace/src/config-helper')
@@ -42,9 +43,6 @@ const disabled = new Set()
 const enableSourceMaps = NODE_OPTIONS?.includes('--enable-source-maps') ||
   process.execArgv?.some(arg => arg.includes('--enable-source-maps'))
 
-let parse
-let generate
-let esquery
 let SourceMapGenerator
 
 function rewrite (content, filename, format) {
@@ -66,21 +64,16 @@ function rewrite (content, filename, format) {
       if (!transform) continue
       if (!satisfies(filename, filePath, versionRange)) continue
 
-      parse ??= require('meriyah').parse
-      generate ??= require('astring').generate
-      esquery ??= require('esquery')
-
       ast ??= parse(content.toString(), { loc: true, ranges: true, module: format === 'module' })
 
       const query = astQuery || fromFunctionQuery(functionQuery)
-      const selector = esquery.parse(query)
       const state = { ...inst, format, operator }
 
-      esquery.traverse(ast, selector, (...args) => transform(state, ...args))
+      traverse(ast, query, (...args) => transform(state, ...args))
     }
 
     if (ast) {
-      if (!enableSourceMaps || SourceMapGenerator) return generate(ast)
+      if (!enableSourceMaps) return generate(ast)
 
       // TODO: Can we use the same version of `source-map` that DI uses?
       SourceMapGenerator ??= require('@datadog/source-map/lib/source-map-generator').SourceMapGenerator

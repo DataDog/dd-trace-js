@@ -1,5 +1,7 @@
 'use strict'
 
+const { parse } = require('./compiler')
+
 const tracingChannelPredicate = (node) => (
   node.specifiers?.[0]?.local?.name === 'tr_ch_apm_tracingChannel' ||
     node.declarations?.[0]?.id?.properties?.[0]?.value?.name === 'tr_ch_apm_tracingChannel'
@@ -10,54 +12,11 @@ const transforms = module.exports = {
     if (node.body.some(tracingChannelPredicate)) return
 
     const index = node.body.findIndex(child => child.directive === 'use strict')
+    const code = format === 'module'
+      ? 'import { tracingChannel as tr_ch_apm_tracingChannel } from "diagnostics_channel"'
+      : 'const {tracingChannel: tr_ch_apm_tracingChannel} = require("diagnostics_channel")'
 
-    if (format === 'module') {
-      node.body.splice(index + 1, 0, {
-        type: 'ImportDeclaration',
-        specifiers: [
-          {
-            type: 'ImportSpecifier',
-            local: { type: 'Identifier', name: 'tr_ch_apm_tracingChannel' },
-            imported: { type: 'Identifier', name: 'tracingChannel' }
-          }
-        ],
-        source: { type: 'Literal', value: 'diagnostics_channel' },
-        attributes: []
-      })
-    } else {
-      node.body.splice(index + 1, 0, {
-        type: 'VariableDeclaration',
-        kind: 'const',
-        declarations: [
-          {
-            type: 'VariableDeclarator',
-            id: {
-              type: 'ObjectPattern',
-              properties: [
-                {
-                  type: 'Property',
-                  key: { type: 'Identifier', name: 'tracingChannel' },
-                  value: {
-                    type: 'Identifier',
-                    name: 'tr_ch_apm_tracingChannel'
-                  },
-                  kind: 'init',
-                  computed: false,
-                  method: false,
-                  shorthand: false
-                }
-              ]
-            },
-            init: {
-              type: 'CallExpression',
-              callee: { type: 'Identifier', name: 'require' },
-              arguments: [{ type: 'Literal', value: 'diagnostics_channel' }],
-              optional: false
-            }
-          }
-        ]
-      })
-    }
+    node.body.splice(index + 1, 0, parse(code, { module: format === 'module' }).body[0])
   },
 
   tracingChannelDeclaration (state, node) {
@@ -69,28 +28,11 @@ const transforms = module.exports = {
     transforms.tracingChannelImport(state, node)
 
     const index = node.body.findIndex(tracingChannelPredicate)
+    const code = `
+      const ${channelVariable} = tr_ch_apm_tracingChannel("orchestrion:${name}:${channelName}")
+    `
 
-    node.body.splice(index + 1, 0, {
-      type: 'VariableDeclaration',
-      kind: 'const',
-      declarations: [
-        {
-          type: 'VariableDeclarator',
-          id: { type: 'Identifier', name: channelVariable },
-          init: {
-            type: 'CallExpression',
-            callee: { type: 'Identifier', name: 'tr_ch_apm_tracingChannel' },
-            arguments: [
-              {
-                type: 'Literal',
-                value: `orchestrion:${name}:${channelName}`
-              }
-            ],
-            optional: false
-          }
-        }
-      ]
-    })
+    node.body.splice(index + 1, 0, parse(code).body[0])
   },
 
   traceSync: traceAny,
@@ -140,240 +82,51 @@ function traceInstanceMethod (state, node, program) {
   transforms.tracingChannelDeclaration(state, program)
 
   if (!ctor) {
-    ctor = {
-      type: 'MethodDefinition',
-      kind: 'constructor',
-      static: false,
-      computed: false,
-      key: { type: 'Identifier', name: 'constructor' },
-      value: {
-        type: 'FunctionExpression',
-        params: [],
-        body: { type: 'BlockStatement', body: [] },
-        async: false,
-        generator: false,
-        id: null
-      }
-    }
-
-    if (node.superClass) {
-      ctor.value.body.params.push({
-        type: 'RestElement',
-        argument: { type: 'Identifier', name: 'args' }
-      })
-
-      ctor.value.body.body.push({
-        type: 'ExpressionStatement',
-        expression: {
-          type: 'CallExpression',
-          callee: { type: 'Super' },
-          arguments: [
-            {
-              type: 'SpreadElement',
-              argument: { type: 'Identifier', name: 'args' }
-            }
-          ],
-          optional: false
-        }
-      })
-    }
+    ctor = parse(
+      node.superClass
+        ? 'class A { constructor (...args) { super(...args) } }'
+        : 'class A { constructor () {} }'
+    ).body[0].body.body[0] // Extract constructor from dummy class body.
 
     classBody.body.unshift(ctor)
   }
 
-  ctor.value.body.body.push({
-    type: 'VariableDeclaration',
-    kind: 'const',
-    declarations: [
-      {
-        type: 'VariableDeclarator',
-        id: { type: 'Identifier', name: `__apm$${methodName}` },
-        init: {
-          type: 'MemberExpression',
-          object: { type: 'ThisExpression' },
-          computed: false,
-          property: { type: 'Identifier', name: methodName },
-          optional: false
-        }
-      }
-    ]
-  },
-  {
-    type: 'ExpressionStatement',
-    expression: {
-      type: 'AssignmentExpression',
-      left: {
-        type: 'MemberExpression',
-        object: { type: 'ThisExpression' },
-        computed: false,
-        property: { type: 'Identifier', name: methodName },
-        optional: false
-      },
-      operator: '=',
-      right: {
-        type: 'FunctionExpression',
-        id: null,
-        params: [],
-        body: wrap(state, { type: 'Identifier', name: `__apm$${methodName}` }),
-        async: operator === 'tracePromise',
-        generator: false
-      }
-    }
-  })
+  const ctorBody = parse(`
+    const __apm$${methodName} = this["${methodName}"]
+    this["${methodName}"] = function () {}
+  `).body
+
+  // Extract only right-hand side function of line 2.
+  const fn = ctorBody[1].expression.right
+
+  fn.async = operator === 'tracePromise'
+  fn.body = wrap(state, { type: 'Identifier', name: `__apm$${methodName}` })
+
+  ctor.value.body.body.push(...ctorBody)
 }
 
 function wrap (state, node) {
   const { channelName, operator } = state
+  const async = operator === 'tracePromise' ? 'async' : ''
   const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
+  const wrapper = parse(`
+    function wrapper () {
+      const __apm$original_args = arguments;
+      const __apm$traced = ${async} () => {
+        const __apm$wrapped = () => {};
+        return __apm$wrapped.apply(this, __apm$original_args);
+      };
+      if (!${channelVariable}.hasSubscribers) return __apm$traced();
+      return ${channelVariable}.tracePromise(__apm$traced, {
+        arguments,
+        self: this,
+        moduleVersion: "1.0.0"
+      });
+    }
+  `).body[0].body // Extract only block statement of function body.
 
-  return {
-    type: 'BlockStatement',
-    body: [
-      {
-        type: 'VariableDeclaration',
-        kind: 'const',
-        declarations: [
-          {
-            type: 'VariableDeclarator',
-            id: { type: 'Identifier', name: '__apm$original_args' },
-            init: { type: 'Identifier', name: 'arguments' }
-          }
-        ]
-      },
-      {
-        type: 'VariableDeclaration',
-        kind: 'const',
-        declarations: [
-          {
-            type: 'VariableDeclarator',
-            id: { type: 'Identifier', name: '__apm$traced' },
-            init: {
-              type: 'ArrowFunctionExpression',
-              params: [],
-              body: {
-                type: 'BlockStatement',
-                body: [
-                  {
-                    type: 'VariableDeclaration',
-                    kind: 'const',
-                    declarations: [
-                      {
-                        type: 'VariableDeclarator',
-                        id: {
-                          type: 'Identifier',
-                          name: '__apm$wrapped'
-                        },
-                        init: node
-                      }
-                    ]
-                  },
-                  {
-                    type: 'ReturnStatement',
-                    argument: {
-                      type: 'CallExpression',
-                      callee: {
-                        type: 'MemberExpression',
-                        object: {
-                          type: 'Identifier',
-                          name: '__apm$wrapped'
-                        },
-                        computed: false,
-                        property: { type: 'Identifier', name: 'apply' },
-                        optional: false
-                      },
-                      arguments: [
-                        { type: 'Identifier', name: 'this' },
-                        {
-                          type: 'Identifier',
-                          name: '__apm$original_args'
-                        }
-                      ],
-                      optional: false
-                    }
-                  }
-                ]
-              },
-              async: operator === 'tracePromise',
-              expression: false,
-              generator: false
-            }
-          }
-        ]
-      },
-      {
-        type: 'IfStatement',
-        test: {
-          type: 'UnaryExpression',
-          operator: '!',
-          argument: {
-            type: 'MemberExpression',
-            object: { type: 'Identifier', name: channelVariable },
-            computed: false,
-            property: { type: 'Identifier', name: 'hasSubscribers' },
-            optional: false
-          },
-          prefix: true
-        },
-        consequent: {
-          type: 'ReturnStatement',
-          argument: {
-            type: 'CallExpression',
-            callee: { type: 'Identifier', name: '__apm$traced' },
-            arguments: [],
-            optional: false
-          }
-        },
-        alternate: null
-      },
-      {
-        type: 'ReturnStatement',
-        argument: {
-          type: 'CallExpression',
-          callee: {
-            type: 'MemberExpression',
-            object: { type: 'Identifier', name: channelVariable },
-            computed: false,
-            property: { type: 'Identifier', name: operator },
-            optional: false
-          },
-          arguments: [
-            { type: 'Identifier', name: '__apm$traced' },
-            {
-              type: 'ObjectExpression',
-              properties: [
-                {
-                  type: 'Property',
-                  key: { type: 'Identifier', name: 'arguments' },
-                  value: { type: 'Identifier', name: 'arguments' },
-                  kind: 'init',
-                  computed: false,
-                  method: false,
-                  shorthand: true
-                },
-                {
-                  type: 'Property',
-                  key: { type: 'Identifier', name: 'self' },
-                  value: { type: 'ThisExpression' },
-                  kind: 'init',
-                  computed: false,
-                  method: false,
-                  shorthand: false
-                },
-                {
-                  type: 'Property',
-                  key: { type: 'Identifier', name: 'moduleVersion' },
-                  value: { type: 'Literal', value: '1.0.0' },
-                  kind: 'init',
-                  computed: false,
-                  method: false,
-                  shorthand: false
-                }
-              ]
-            }
-          ],
-          optional: false
-        }
-      }
-    ]
-  }
+  // Replace the right-hand side assignment of `const __apm$wrapped = () => {}`.
+  wrapper.body[1].declarations[0].init.body.body[0].declarations[0].init = node
+
+  return wrapper
 }
