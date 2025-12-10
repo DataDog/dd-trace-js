@@ -21,7 +21,7 @@ const {
   DD_PRISMA_OUTPUT
 } = envs
 
-const prismaOutput = DD_PRISMA_OUTPUT === 'auto' ? extractOutput() : (DD_PRISMA_OUTPUT || null)
+const prismaOutput = extractOutput()
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)

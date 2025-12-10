@@ -4,7 +4,6 @@ const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 const extractOutput = require('../../datadog-instrumentations/src/helpers/extract-prisma-client-path')
 const prismaEngineStart = channel('apm:prisma:engine:start')
 const tracingChannel = require('dc-polyfill').tracingChannel
@@ -73,8 +72,7 @@ class DatadogTracingHelper {
 }
 
 const prismaModuleNames = ['@prisma/client']
-const ddPrismaOutputEnv = (getEnvironmentVariable('DD_PRISMA_OUTPUT') || '').trim()
-const customPrismaOutput = ddPrismaOutputEnv === 'auto' ? extractOutput() : (ddPrismaOutputEnv || null)
+const customPrismaOutput = extractOutput()
 
 if (customPrismaOutput) {
   prismaModuleNames.push(customPrismaOutput)

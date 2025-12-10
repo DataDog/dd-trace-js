@@ -4,15 +4,12 @@ import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config-helper.js'
 import log from './packages/dd-trace/src/log/index.js'
 import path from 'path'
-import { pathToFileURL, fileURLToPath } from 'url'
+import { pathToFileURL } from 'url'
 import extractOutput from './packages/datadog-instrumentations/src/helpers/extract-prisma-client-path.js'
 // For some reason `getEnvironmentVariable` is not otherwise available to ESM.
 const env = configHelper.getEnvironmentVariable
-const ddPrismaOutputEnv = (env('DD_PRISMA_OUTPUT') || '').trim()
-// Only run extractOutput() if DD_PRISMA_OUTPUT is explicitly set to 'auto'
-// If it's set to an actual path, use that path directly
-// If it's not set, skip extraction entirely
-const prismaOutput = ddPrismaOutputEnv === 'auto' ? extractOutput() : (ddPrismaOutputEnv || null)
+
+const prismaOutput = extractOutput()
 
 function initialize (data = {}) {
   data.include ??= []
