@@ -19,8 +19,6 @@
 
 /packages/dd-trace/src/datastreams/ @DataDog/data-stream-monitoring
 /packages/dd-trace/test/datastreams/ @DataDog/data-stream-monitoring
-/packages/datadog-plugin-avsc/ @DataDog/data-stream-monitoring
-/packages/datadog-plugin-protobufjs/ @DataDog/data-stream-monitoring
 
 /packages/datadog-plugin-*/ @Datadog/dd-trace-js @Datadog/apm-idm-js
 /packages/datadog-instrumentations/ @Datadog/dd-trace-js @Datadog/apm-idm-js
