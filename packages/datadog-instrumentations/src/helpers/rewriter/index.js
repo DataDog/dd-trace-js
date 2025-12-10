@@ -31,7 +31,7 @@ const semifies = require('semifies')
 const transforms = require('./transforms')
 const { generate, parse, traverse } = require('./compiler')
 const log = require('../../../../dd-trace/src/log')
-const instrumentations = require('./instrumentations.json')
+const instrumentations = require('./instrumentations')
 const { getEnvironmentVariable } = require('../../../../dd-trace/src/config-helper')
 
 const NODE_OPTIONS = getEnvironmentVariable('NODE_OPTIONS')

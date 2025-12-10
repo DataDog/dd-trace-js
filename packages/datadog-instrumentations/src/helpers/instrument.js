@@ -2,7 +2,7 @@
 
 const dc = require('dc-polyfill')
 const instrumentations = require('./instrumentations')
-const rewriterInstrumentations = require('./rewriter/instrumentations.json')
+const rewriterInstrumentations = require('./rewriter/instrumentations')
 const { AsyncResource } = require('async_hooks')
 
 const channelMap = {}
