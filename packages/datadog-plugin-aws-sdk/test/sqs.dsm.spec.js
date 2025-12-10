@@ -7,12 +7,12 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
-const { computePathwayHash } = require('../../../../src/datastreams/pathway')
-const { ENTRY_PARENT_HASH } = require('../../../../src/datastreams/processor')
-const agent = require('../../../plugins/agent')
-const { withVersions } = require('../../../setup/mocha')
-const { setup } = require('../../../../../datadog-plugin-aws-sdk/test/spec_helpers')
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { setup } = require('./spec_helpers')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const getQueueParams = (queueName) => {
   return {
@@ -58,7 +58,7 @@ describe('Plugin', () => {
 
         before(() => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
-          tracer = require('../../../../')
+          tracer = require('../../dd-trace')
           tracer.use('aws-sdk', { sqs: { dsmEnabled: true } })
         })
 
@@ -72,7 +72,7 @@ describe('Plugin', () => {
         })
 
         before(() => {
-          AWS = require(`../../../../../../versions/${sqsClientName}@${version}`).get()
+          AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
           sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
         })
 

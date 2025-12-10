@@ -6,12 +6,12 @@ const { describe, it, beforeEach, afterEach, before } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
-const { withVersions } = require('../../setup/mocha')
-const agent = require('../../plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const agent = require('../../dd-trace/test/plugins/agent')
 
-const DataStreamsContext = require('../../../src/datastreams/context')
-const { computePathwayHash } = require('../../../src/datastreams/pathway')
-const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../../src/datastreams/processor')
+const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
 
@@ -53,9 +53,9 @@ describe('Plugin', () => {
 
         beforeEach(async () => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
-          tracer = require('../../../')
+          tracer = require('../../dd-trace')
           await agent.load('kafkajs')
-          const lib = require(`../../../../../versions/kafkajs@${version}`).get()
+          const lib = require(`../../../versions/kafkajs@${version}`).get()
           Kafka = lib.Kafka
           kafka = new Kafka({
             clientId: `kafkajs-test-${version}`,

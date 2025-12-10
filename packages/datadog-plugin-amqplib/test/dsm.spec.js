@@ -5,12 +5,12 @@ const { Buffer } = require('node:buffer')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
-const { computePathwayHash } = require('../../../src/datastreams/pathway')
-const { ENTRY_PARENT_HASH } = require('../../../src/datastreams/processor')
-const id = require('../../../src/id')
-const agent = require('../../plugins/agent')
-const { withVersions } = require('../../setup/mocha')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const id = require('../../dd-trace/src/id')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let tracer
@@ -22,7 +22,7 @@ describe('Plugin', () => {
     withVersions('amqplib', 'amqplib', version => {
       beforeEach(() => {
         process.env.DD_DATA_STREAMS_ENABLED = 'true'
-        tracer = require('../../../')
+        tracer = require('../../dd-trace')
         queue = `test-${id()}`
       })
 
@@ -39,7 +39,7 @@ describe('Plugin', () => {
 
         beforeEach(done => {
           agent.load('amqplib').then(() => {
-            require(`../../../../../versions/amqplib@${version}`).get('amqplib/callback_api')
+            require(`../../../versions/amqplib@${version}`).get('amqplib/callback_api')
               .connect((err, conn) => {
                 connection = conn
 

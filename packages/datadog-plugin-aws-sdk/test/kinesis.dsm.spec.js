@@ -5,14 +5,14 @@ const assert = require('node:assert/strict')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-const { withVersions } = require('../../../setup/mocha')
-const agent = require('../../../plugins/agent')
-const { setup } = require('../../../../../datadog-plugin-aws-sdk/test/spec_helpers')
-const helpers = require('../../../../../datadog-plugin-aws-sdk/test/kinesis_helpers')
-const id = require('../../../../src/id')
-const { computePathwayHash } = require('../../../../src/datastreams/pathway')
-const { ENTRY_PARENT_HASH } = require('../../../../src/datastreams/processor')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { setup } = require('./spec_helpers')
+const helpers = require('./kinesis_helpers')
+const id = require('../../dd-trace/src/id')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 
 describe('Kinesis', function () {
   this.timeout(10000)
@@ -26,7 +26,7 @@ describe('Kinesis', function () {
     const kinesisClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
 
     function createResources (streamName, cb) {
-      AWS = require(`../../../../../../versions/${kinesisClientName}@${version}`).get()
+      AWS = require(`../../../versions/${kinesisClientName}@${version}`).get()
 
       const params = {
         endpoint: 'http://127.0.0.1:4566',
@@ -34,7 +34,7 @@ describe('Kinesis', function () {
       }
 
       if (moduleName === '@aws-sdk/smithy-client') {
-        const { NodeHttpHandler } = require(`../../../../../../versions/@aws-sdk/node-http-handler@${version}`).get()
+        const { NodeHttpHandler } = require(`../../../versions/@aws-sdk/node-http-handler@${version}`).get()
 
         params.requestHandler = new NodeHttpHandler()
       }
@@ -62,7 +62,7 @@ describe('Kinesis', function () {
       })
 
       beforeEach(done => {
-        tracer = require('../../../../')
+        tracer = require('../../dd-trace')
         tracer.use('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
 
         streamNameDSM = `MyStreamDSM-${id()}`

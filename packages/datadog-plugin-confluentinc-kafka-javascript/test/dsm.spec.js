@@ -6,12 +6,12 @@ const sinon = require('sinon')
 
 const { randomUUID } = require('node:crypto')
 
-const agent = require('../../plugins/agent')
-const { withVersions } = require('../../setup/mocha')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
-const DataStreamsContext = require('../../../src/datastreams/context')
-const { computePathwayHash } = require('../../../src/datastreams/pathway')
-const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../../src/datastreams/processor')
+const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 
 const getDsmPathwayHash = (testTopic, isProducer, parentHash) => {
   let edgeTags
@@ -55,9 +55,9 @@ describe('Plugin', () => {
           messages = [{ key: 'key1', value: 'test2' }]
 
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
-          tracer = require('../../../')
+          tracer = require('../../dd-trace')
           await agent.load('confluentinc-kafka-javascript')
-          const lib = require(`../../../../../versions/${module}@${version}`).get()
+          const lib = require(`../../../versions/${module}@${version}`).get()
 
           // Store the module for later use
           nativeApi = lib

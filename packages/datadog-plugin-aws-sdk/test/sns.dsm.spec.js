@@ -6,10 +6,10 @@ const { after, afterEach, before, describe, it } = require('mocha')
 const sinon = require('sinon')
 const semver = require('semver')
 
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-const { withVersions } = require('../../../setup/mocha')
-const agent = require('../../../plugins/agent')
-const { setup } = require('../../../../../datadog-plugin-aws-sdk/test/spec_helpers')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { setup } = require('./spec_helpers')
 
 describe('Sns', function () {
   setup()
@@ -28,8 +28,8 @@ describe('Sns', function () {
     const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
 
     function createResources (queueName, topicName, cb) {
-      const { SNS } = require(`../../../../../../versions/${snsClientName}@${version}`).get()
-      const { SQS } = require(`../../../../../../versions/${sqsClientName}@${version}`).get()
+      const { SNS } = require(`../../../versions/${snsClientName}@${version}`).get()
+      const { SQS } = require(`../../../versions/${sqsClientName}@${version}`).get()
 
       sns = new SNS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
       sqs = new SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
@@ -80,7 +80,7 @@ describe('Sns', function () {
 
       before(done => {
         process.env.DD_DATA_STREAMS_ENABLED = 'true'
-        tracer = require('../../../../')
+        tracer = require('../../dd-trace')
         tracer.use('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } })
 
         createResources('TestQueueDSM', 'TestTopicDSM', done)

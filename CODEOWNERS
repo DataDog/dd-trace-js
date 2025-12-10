@@ -17,9 +17,6 @@
 /packages/dd-trace/src/lambda/ @DataDog/serverless-aws
 /packages/dd-trace/test/lambda/ @DataDog/serverless-aws
 
-/packages/dd-trace/src/datastreams/ @DataDog/data-stream-monitoring
-/packages/dd-trace/test/datastreams/ @DataDog/data-stream-monitoring
-
 /packages/datadog-plugin-*/ @Datadog/dd-trace-js @Datadog/apm-idm-js
 /packages/datadog-instrumentations/ @Datadog/dd-trace-js @Datadog/apm-idm-js
 /packages/ddtrace/src/plugins/ @DataDog/dd-trace-js @Datadog/apm-idm-js
@@ -79,6 +76,12 @@
 /packages/datadog-plugin-openai/ @DataDog/ml-observability
 /packages/dd-trace/src/llmobs/ @DataDog/ml-observability
 /packages/dd-trace/test/llmobs/ @DataDog/ml-observability
+
+# Data Streams Monitoring
+/packages/dd-trace/src/datastreams/ @DataDog/data-stream-monitoring
+/packages/dd-trace/test/datastreams/ @DataDog/data-stream-monitoring
+/packages/**/dsm.spec.js @DataDog/data-stream-monitoring
+/packages/**/*.dsm.spec.js @DataDog/data-stream-monitoring
 
 # API SDK
 /packages/dd-trace/src/telemetry/ @DataDog/apm-sdk-capabilities-js

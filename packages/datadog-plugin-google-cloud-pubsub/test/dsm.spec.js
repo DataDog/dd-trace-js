@@ -6,11 +6,11 @@ const { expect } = require('chai')
 const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const { computePathwayHash } = require('../../../src/datastreams/pathway')
-const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../../src/datastreams/processor')
-const id = require('../../../src/id')
-const agent = require('../../plugins/agent')
-const { withVersions } = require('../../setup/mocha')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const id = require('../../dd-trace/src/id')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const TIMEOUT = 30000
 const dsmTopicName = 'dsm-topic'
@@ -53,8 +53,8 @@ describe('Plugin', () => {
         })
 
         before(async () => {
-          const { PubSub } = require(`../../../../../versions/@google-cloud/pubsub@${version}`).get()
-          tracer = require('../../../')
+          const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
+          tracer = require('../../dd-trace')
           project = getProjectId()
           resource = `projects/${project}/topics/${dsmTopicName}`
           pubsub = new PubSub({ projectId: project })
