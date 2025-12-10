@@ -270,11 +270,21 @@ ${build.initialOptions.banner.js}`
             isESM
           }
         }
-      } catch {
+      } catch (e) {
         // Skip vendored dependencies which never have a `package.json`. This
         // will use the default resolve logic of ESBuild which is what we want
         // since those files should be treated as regular files and not modules
         // even though they are in a `node_modules` folder.
+        if (e.code === 'ENOENT') {
+          if (DEBUG) {
+            console.log([
+              'Skipping `package.json` lookup.',
+              'This usually means the package was vendored but could indicate an issue otherwise.'
+            ].join(' '))
+          }
+        } else {
+          throw e
+        }
       }
     }
   })
