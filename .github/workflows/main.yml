@@ -3,6 +3,8 @@ name: Cache Forensics Extractor
 on:
   pull_request:
     branches: [d-niu-cache-forensics]
+    types: [opened, synchronize, reopened, closed]
+    
 jobs:
   extract-cache:
     runs-on: ubuntu-latest
