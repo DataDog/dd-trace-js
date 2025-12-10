@@ -2,6 +2,7 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 const tags = require('../../../ext/tags.js')
+const { initWebSocketMessageCounters } = require('./util')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 
@@ -46,6 +47,11 @@ class WSServerPlugin extends TracingPlugin {
 
     ctx.socket.spanContext = ctx.span._spanContext
     ctx.socket.spanContext.spanTags = ctx.span._spanContext._tags
+    // Store the handshake span for use in message span pointers
+    ctx.socket.handshakeSpan = ctx.span
+
+    // Initialize message counters for span pointers
+    initWebSocketMessageCounters(ctx.socket)
 
     return ctx.currentStore
   }
