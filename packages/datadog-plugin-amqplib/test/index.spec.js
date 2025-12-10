@@ -6,13 +6,10 @@ const { Buffer } = require('node:buffer')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const id = require('../../dd-trace/src/id')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let tracer

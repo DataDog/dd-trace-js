@@ -266,4 +266,3 @@ describe('Sns', function () {
     })
   })
 })
-

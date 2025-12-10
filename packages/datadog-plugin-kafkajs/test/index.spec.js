@@ -3,7 +3,7 @@
 const { randomUUID } = require('crypto')
 const { expect } = require('chai')
 const dc = require('dc-polyfill')
-const { describe, it, beforeEach, afterEach, before } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
@@ -13,26 +13,8 @@ const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/he
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
-
-const getDsmPathwayHash = (testTopic, clusterIdAvailable, isProducer, parentHash) => {
-  let edgeTags
-  if (isProducer) {
-    edgeTags = ['direction:out', 'topic:' + testTopic, 'type:kafka']
-  } else {
-    edgeTags = ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka']
-  }
-
-  if (clusterIdAvailable) {
-    edgeTags.push(`kafka_cluster_id:${testKafkaClusterId}`)
-  }
-  edgeTags.sort()
-  return computePathwayHash('test', 'tester', edgeTags, parentHash)
-}
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
@@ -49,8 +31,6 @@ describe('Plugin', () => {
       let Kafka
       let Broker
       let clusterIdAvailable
-      let expectedProducerHash
-      let expectedConsumerHash
       let testTopic
 
       describe('without configuration', () => {
@@ -58,7 +38,6 @@ describe('Plugin', () => {
         const messages2 = [{ key: 'key2', value: 'test3' }]
 
         beforeEach(async () => {
-          process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
           await agent.load('kafkajs')
           const lib = require(`../../../versions/kafkajs@${version}`).get()
@@ -79,8 +58,6 @@ describe('Plugin', () => {
             }]
           })
           clusterIdAvailable = semver.intersects(version, '>=1.13')
-          expectedProducerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, true, ENTRY_PARENT_HASH)
-          expectedConsumerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, false, expectedProducerHash)
         })
 
         describe('producer', () => {
@@ -88,7 +65,6 @@ describe('Plugin', () => {
             const meta = {
               'span.kind': 'producer',
               component: 'kafkajs',
-              'pathway.hash': expectedProducerHash.readBigUInt64LE(0).toString(),
               'messaging.destination.name': testTopic,
               'messaging.kafka.bootstrap.servers': '127.0.0.1:9092'
             }
@@ -256,7 +232,6 @@ describe('Plugin', () => {
               meta: {
                 'span.kind': 'consumer',
                 component: 'kafkajs',
-                'pathway.hash': expectedConsumerHash.readBigUInt64LE(0).toString(),
                 'messaging.destination.name': testTopic
               },
               resource: testTopic,

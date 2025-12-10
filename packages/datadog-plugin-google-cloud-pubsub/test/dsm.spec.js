@@ -37,7 +37,6 @@ describe('Plugin', () => {
     withVersions('google-cloud-pubsub', '@google-cloud/pubsub', version => {
       let pubsub
       let project
-      let resource
       let expectedProducerHash
       let expectedConsumerHash
 
@@ -56,7 +55,6 @@ describe('Plugin', () => {
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           tracer = require('../../dd-trace')
           project = getProjectId()
-          resource = `projects/${project}/topics/${dsmTopicName}`
           pubsub = new PubSub({ projectId: project })
           tracer.use('google-cloud-pubsub', { dsmEnabled: true })
 
@@ -163,4 +161,3 @@ function publish (topic, options) {
     return topic.publish(options.data)
   }
 }
-

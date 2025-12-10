@@ -5,16 +5,11 @@ const { randomUUID } = require('node:crypto')
 
 const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
-const semver = require('semver')
-const sinon = require('sinon')
 
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sqs-naming')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const getQueueParams = (queueName) => {
   return {
@@ -34,14 +29,8 @@ describe('Plugin', () => {
       let AWS
       let sqs
       let queueName
-      let queueNameDSM
-      let queueNameDSMConsumerOnly
       let queueOptions
-      let queueOptionsDsm
-      let queueOptionsDsmConsumerOnly
       let QueueUrl
-      let QueueUrlDsm
-      let QueueUrlDsmConsumerOnly
       let tracer
 
       const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
@@ -50,21 +39,14 @@ describe('Plugin', () => {
         const id = randomUUID()
 
         queueName = `SQS_QUEUE_NAME-${id}`
-        queueNameDSM = `SQS_QUEUE_NAME_DSM-${id}`
-        queueNameDSMConsumerOnly = `SQS_QUEUE_NAME_DSM_CONSUMER_ONLY-${id}`
 
         queueOptions = getQueueParams(queueName)
-        queueOptionsDsm = getQueueParams(queueNameDSM)
-        queueOptionsDsmConsumerOnly = getQueueParams(queueNameDSMConsumerOnly)
 
         QueueUrl = `http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME-${id}`
-        QueueUrlDsm = `http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM-${id}`
-        QueueUrlDsmConsumerOnly = `http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM_CONSUMER_ONLY-${id}`
       })
 
       describe('without configuration', () => {
         before(() => {
-          process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
           tracer.use('aws-sdk', { sqs: { batchPropagationEnabled: true } })
 

@@ -2,7 +2,7 @@
 
 const { randomUUID } = require('crypto')
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
@@ -244,4 +244,3 @@ async function sendMessages (kafka, topic, messages) {
   })
   await producer.disconnect()
 }
-

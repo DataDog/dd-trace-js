@@ -2,7 +2,6 @@
 
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
 
 const { randomUUID } = require('node:crypto')
 
@@ -11,22 +10,6 @@ const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/he
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema } = require('./naming')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-
-const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
-
-const getDsmPathwayHash = (testTopic, isProducer, parentHash) => {
-  let edgeTags
-  if (isProducer) {
-    edgeTags = ['direction:out', 'topic:' + testTopic, 'type:kafka']
-  } else {
-    edgeTags = ['direction:in', 'group:test-group-confluent', 'topic:' + testTopic, 'type:kafka']
-  }
-
-  edgeTags.sort()
-  return computePathwayHash('test', 'tester', edgeTags, parentHash)
-}
 
 describe('Plugin', () => {
   const module = '@confluentinc/kafka-javascript'

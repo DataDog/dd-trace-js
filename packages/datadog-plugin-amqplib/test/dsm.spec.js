@@ -13,7 +13,6 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
-  let tracer
   let connection
   let channel
   let queue
@@ -22,7 +21,6 @@ describe('Plugin', () => {
     withVersions('amqplib', 'amqplib', version => {
       beforeEach(() => {
         process.env.DD_DATA_STREAMS_ENABLED = 'true'
-        tracer = require('../../dd-trace')
         queue = `test-${id()}`
       })
 
@@ -281,4 +279,3 @@ describe('Plugin', () => {
     })
   })
 })
-

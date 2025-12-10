@@ -2,20 +2,15 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
-const sinon = require('sinon')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const id = require('../../dd-trace/src/id')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const TIMEOUT = 30000
-const dsmTopicName = 'dsm-topic'
 
 describe('Plugin', () => {
   let tracer
@@ -25,7 +20,6 @@ describe('Plugin', () => {
 
     before(() => {
       process.env.PUBSUB_EMULATOR_HOST = 'localhost:8081'
-      process.env.DD_DATA_STREAMS_ENABLED = 'true'
     })
 
     after(() => {
@@ -42,8 +36,6 @@ describe('Plugin', () => {
       let resource
       let v1
       let gax
-      let expectedProducerHash
-      let expectedConsumerHash
 
       describe('without configuration', () => {
         beforeEach(() => {

@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
-const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -12,8 +11,6 @@ const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
 const id = require('../../dd-trace/src/id')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 
 describe('Kinesis', function () {
   this.timeout(10000)
@@ -22,7 +19,6 @@ describe('Kinesis', function () {
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let AWS
     let kinesis
-    let tracer
 
     const kinesisClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
 

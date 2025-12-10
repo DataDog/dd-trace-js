@@ -2,8 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { after, afterEach, before, describe, it } = require('mocha')
-const sinon = require('sinon')
+const { after, before, describe, it } = require('mocha')
 const semver = require('semver')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -338,7 +337,6 @@ describe('Sns', function () {
       })
 
       before(done => {
-        process.env.DD_DATA_STREAMS_ENABLED = 'true'
         tracer = require('../../dd-trace')
         tracer.use('aws-sdk', { sns: { dsmEnabled: false, batchPropagationEnabled: true } })
 
