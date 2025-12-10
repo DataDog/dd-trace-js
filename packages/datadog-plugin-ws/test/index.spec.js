@@ -65,18 +65,34 @@ describe('Plugin', () => {
           agent.close({ ritmReset: false, wipe: true })
         })
 
-        it('should do automatic instrumentation', () => {
+        it('should do automatic instrumentation and remove broken handler', () => {
           wsServer.on('connection', (ws) => {
             connectionReceived = true
             ws.send('test message')
           })
 
-          client.on('message', (msg) => {
+          const brokenHandler = () => {
+            throw new Error('broken handler')
+          }
+
+          client.on('message', brokenHandler)
+
+          client.addListener('message', (msg) => {
             assert.strictEqual(msg.toString(), 'test message')
           })
 
-          return agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].name, 'web.request')
+          client.off('message', brokenHandler)
+
+          return agent.assertFirstTraceSpan({
+            name: 'websocket.send',
+            type: 'websocket',
+            resource: `websocket /${route}`,
+            service: 'some',
+            parent_id: 0n,
+            error: 0,
+            meta: {
+              'span.kind': 'producer',
+            }
           })
         })
 
@@ -103,7 +119,7 @@ describe('Plugin', () => {
           client.on('error', done)
         })
 
-        it('should instrument message sending', done => {
+        it('should instrument message sending and not double wrap the same handler', done => {
           wsServer.on('connection', ws => {
             connectionReceived = true
             ws.on('message', msg => {
@@ -116,32 +132,49 @@ describe('Plugin', () => {
             client.send('test message')
           })
 
-          client.on('message', (data) => {
+          const brokenHandler = () => {
+            throw new Error('broken handler')
+          }
+
+          client.on('message', brokenHandler)
+
+          const handler = (data) => {
             assert.strictEqual(data.toString(), 'test message')
             done()
-          })
+          }
+
+          client.addListener('message', handler)
+          client.on('message', handler)
+
+          const handlers = client.listeners('message')
+
+          assert.strictEqual(handlers[0].name, brokenHandler.name)
+          assert.strictEqual(handlers[1], handlers[2])
+
+          client.removeListener('message', brokenHandler)
+          client.removeListener('message', handler)
 
           client.on('error', done)
         })
 
-        it('should instrument message receiving', done => {
+        it('should instrument message receiving', () => {
           wsServer.on('connection', (ws) => {
             ws.on('message', (data) => {
               assert.strictEqual(data.toString(), 'test message from client')
             })
           })
-          agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].name, 'websocket.receive')
-            assert.strictEqual(traces[0][0].resource, `websocket /${route}`)
-          })
-            .then(done)
-            .catch(done)
 
           client.on('open', () => {
             client.send('test message from client')
           })
 
-          client.on('error', done)
+          return Promise.race([
+            once(client, 'error'),
+            agent.assertFirstTraceSpan({
+              name: 'websocket.receive',
+              resource: `websocket /${route}`
+            })
+          ])
         })
 
         it('should instrument connection close', () => {
