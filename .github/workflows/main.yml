@@ -1,9 +1,7 @@
 name: Cache Forensics Extractor
 
 on:
-  pull_request:
-    branches: [d-niu-cache-forensics]
-    types: [opened, synchronize, reopened, closed]
+  workflow_dispatch
     
 jobs:
   extract-cache:
