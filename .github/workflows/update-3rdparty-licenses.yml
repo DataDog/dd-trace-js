@@ -17,10 +17,8 @@ jobs:
     env:
       REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
     steps:
-      - name: Check out PR branch
+      - name: Check out base branch
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Get GitHub token with appropriate permissions
         uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
@@ -72,15 +70,76 @@ jobs:
             --no-scancode-strategy \
             --no-github-sbom-strategy \
             --yarn-subdir vendor \
-            "${REPOSITORY_URL}" > LICENSE-3rdparty.csv
+            "${REPOSITORY_URL}" > LICENSE-3rdparty.csv.generated
 
-      - name: Append vendored dependencies
+      - name: Fetch files from PR branch
         run: |
-          cat .github/vendored-dependencies.csv >> LICENSE-3rdparty.csv
+          # Fetch the PR branch
+          git fetch origin ${{ github.event.pull_request.head.sha }}
+
+          # Fetch vendored-dependencies.csv from PR branch
+          git show ${{ github.event.pull_request.head.sha }}:.github/vendored-dependencies.csv > vendored-dependencies.csv.pr || touch vendored-dependencies.csv.pr
+
+          # Fetch LICENSE-3rdparty.csv from PR branch for comparison
+          git show ${{ github.event.pull_request.head.sha }}:LICENSE-3rdparty.csv > LICENSE-3rdparty.csv.pr || touch LICENSE-3rdparty.csv.pr
+
+      - name: Append vendored dependencies from PR
+        run: |
+          cat vendored-dependencies.csv.pr >> LICENSE-3rdparty.csv.generated
 
       - name: Run LICENSE-3rdparty.csv update check
         env:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_USER_TYPE: ${{ github.event.pull_request.user.type }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
-        run: ./.github/scripts/update-3rdparty-licenses.sh
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -e
+
+          if diff --ignore-space-at-eol LICENSE-3rdparty.csv.generated LICENSE-3rdparty.csv.pr > /dev/null; then
+            echo "✅ LICENSE-3rdparty.csv is already up to date"
+          else
+            echo "📝 LICENSE-3rdparty.csv was modified by license attribution command"
+
+            if [[ "$PR_USER_TYPE" == "Bot" ]] && [[ "${GITHUB_EVENT_NAME}" == "pull_request_target" ]]; then
+              echo "🤖 Bot-created PR detected. Auto-committing LICENSE-3rdparty.csv changes..."
+
+              # Checkout the PR branch for committing
+              git fetch origin ${PR_HEAD_SHA}
+              git checkout ${PR_HEAD_SHA}
+
+              # Move the generated file into place
+              mv LICENSE-3rdparty.csv.generated LICENSE-3rdparty.csv
+
+              git config --local user.email "action@github.com"
+              git config --local user.name "GitHub Action"
+
+              git add LICENSE-3rdparty.csv
+              git commit -m "Update LICENSE-3rdparty.csv"
+
+              git push origin HEAD:${GITHUB_HEAD_REF}
+
+              echo "✅ Successfully committed and pushed LICENSE-3rdparty.csv updates"
+            else
+              echo "❌ The LICENSE-3rdparty.csv file needs to be updated!"
+              echo ""
+              echo "The license attribution command has modified LICENSE-3rdparty.csv."
+              echo ""
+              echo "To fix this issue:"
+              echo "1. Set up dd-license-attribution locally by following the installation instructions in:"
+              echo "   https://github.com/DataDog/dd-license-attribution"
+              echo "2. Run the license CSV generation command locally:"
+              echo "   dd-license-attribution generate-sbom-csv \\"
+              echo "     --no-scancode-strategy \\"
+              echo "     --no-github-sbom-strategy \\"
+              echo "     https://github.com/datadog/dd-trace-js > LICENSE-3rdparty.csv"
+              echo "3. Append vendored dependencies:"
+              echo "   cat .github/vendored-dependencies.csv >> LICENSE-3rdparty.csv"
+              echo "4. Commit the updated LICENSE-3rdparty.csv file"
+              echo "5. Push your changes"
+              echo ""
+              echo "This helps keep the 3rd-party license information accurate."
+              exit 1
+            fi
+          fi
