@@ -84,7 +84,7 @@ class AIGuard extends NoopAIGuard {
    * - Clones each message so callers cannot mutate the data set in the meta struct.
    * - Truncates the list of messages and `content` fields emitting metrics accordingly.
    */
-  #messagesForMetaStruct (messages) {
+  #buildMessagesForMetaStruct (messages) {
     const size = Math.min(messages.length, this.#maxMessagesLength)
     if (messages.length > size) {
       appsecMetrics.count(AI_GUARD_TELEMETRY_TRUNCATED, { type: 'messages' }).inc(1)
@@ -156,7 +156,7 @@ class AIGuard extends NoopAIGuard {
         }
       }
       const metaStruct = {
-        messages: this.#messagesForMetaStruct(messages)
+        messages: this.#buildMessagesForMetaStruct(messages)
       }
       span.meta_struct = {
         [AI_GUARD_META_STRUCT_KEY]: metaStruct
