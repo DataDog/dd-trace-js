@@ -1,6 +1,7 @@
 'use strict'
+const extractOutput = require('./extract-prisma-client-path')
 
-module.exports = {
+const hooks = {
   '@anthropic-ai/sdk': { esmFirst: true, fn: () => require('../anthropic') },
   '@apollo/server': () => require('../apollo-server'),
   '@apollo/gateway': () => require('../apollo'),
@@ -144,3 +145,10 @@ module.exports = {
   workerpool: () => require('../mocha'),
   ws: () => require('../ws')
 }
+
+const customPrismaOutput = extractOutput()
+if (customPrismaOutput) {
+  hooks[customPrismaOutput] = () => require('../prisma')
+}
+
+module.exports = hooks
