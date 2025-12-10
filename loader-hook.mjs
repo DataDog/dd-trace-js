@@ -1,7 +1,9 @@
-import regexpEscape from './packages/node_modules/escape-string-regexp/index.js'
+import regexpEscapeModule from './packages/node_modules/escape-string-regexp/index.js'
 import * as iitm from 'import-in-the-middle/hook.mjs'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config-helper.js'
+
+const regexpEscape = regexpEscapeModule.default
 
 // For some reason `getEnvironmentVariable` is not otherwise available to ESM.
 const env = configHelper.getEnvironmentVariable
@@ -33,7 +35,7 @@ function addSecurityControls (data) {
     .map(sc => sc.trim())
 
   for (const subpath of securityControls) {
-    data.include.push(new RegExp(regexpEscape.default(subpath)))
+    data.include.push(new RegExp(regexpEscape(subpath)))
   }
 }
 
