@@ -101,10 +101,7 @@ class AIGuard extends NoopAIGuard {
         // deep copy
         message.tool_calls = message.tool_calls.map(call => ({
           id: call.id,
-          function: {
-            name: call.function.name,
-            arguments: call.function.arguments,
-          },
+          function: call.function ? { ...call.function } : null,
         }))
       }
       result.push(message)
