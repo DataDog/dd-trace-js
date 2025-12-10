@@ -77,9 +77,15 @@ updates:
       - dependency-name: "glob"
         # 11.0.0 onwards only supports Node.js 20 and above
         update-types: ["version-update:semver-major"]
-        # OTEL is handled separately due to the version increase here.
-        # The package.json range should only manually be adjusted for OTEL.
-      - dependency-name: "@opentelemetry/*"
+      - dependency-name: "@opentelemetry/core"
+        # 2.0.0 onwards only supports Node.js 18.19.0 and above
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@opentelemetry/resources"
+        # 2.0.0 onwards only supports Node.js 18.19.0 and above
+        update-types: ["version-update:semver-major"]
+        # @opentelemetry/api has to be widened, not increased.
+        # Thus, we ignore it and update it manually.
+      - dependency-name: "@opentelemetry/api"
     groups:
       dev-minor-and-patch-dependencies:
         dependency-type: "development"
@@ -95,37 +101,6 @@ updates:
         update-types:
           - "minor"
           - "patch"
-
-  # OTEL in our supported ranges
-  - package-ecosystem: "npm"
-    directories:
-      - "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 1
-    cooldown:
-      default-days: 5
-    # Widen range across major versions, if possible. Ignore / manually update otherwise.
-    versioning-strategy: "widen"
-    labels:
-      - dependabot
-      - dependencies
-      - javascript
-      - semver-patch
-      - OTEL
-    ignore:
-      - dependency-name: "@opentelemetry/core"
-        # 2.0.0 onwards only supports Node.js 18.19.0 and above
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@opentelemetry/resources"
-        # 2.0.0 onwards only supports Node.js 18.19.0 and above
-        update-types: ["version-update:semver-major"]
-    allow:
-      - dependency-name: "@opentelemetry/*"
-    groups:
-      otel-dependencies:
-        patterns:
-          - "*"
 
   # Instrumented library support range
   - package-ecosystem: "npm"
