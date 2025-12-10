@@ -21,7 +21,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     const span = this.startSpan(this.operationName(), {
       service: this.config.service || this.serviceName(),
-      resource: getSignature(document, name, type, this.config.signature, this),
+      resource: getSignature(document, name, type, this.config.signature),
       kind: this.constructor.kind,
       type: this.constructor.type,
       meta: {
