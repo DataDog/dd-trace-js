@@ -63,11 +63,14 @@ describe('Plugin', () => {
           nativeApi = lib
 
           // Setup for the KafkaJS wrapper tests
-          Kafka = lib.Kafka
-          ConfluentKafka = lib.ConfluentKafka
-          kafka = new Kafka(ConfluentKafka, {
-            clientId: `confluent-kafka-test-${version}`,
-            'bootstrap.servers': '127.0.0.1:9092'
+          ConfluentKafka = lib.KafkaJS
+          Kafka = ConfluentKafka.Kafka
+          kafka = new Kafka({
+            kafkaJS: {
+              clientId: `kafkajs-test-${version}`,
+              brokers: ['127.0.0.1:9092'],
+              logLevel: ConfluentKafka.logLevel.WARN
+            }
           })
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
@@ -81,9 +84,6 @@ describe('Plugin', () => {
           })
           await admin.disconnect()
 
-          tracer.init()
-          tracer.use('confluentinc-kafka-javascript', { dsmEnabled: true })
-          messages = [{ key: 'key1', value: 'test2' }]
           consumer = kafka.consumer({
             kafkaJS: { groupId, fromBeginning: true }
           })

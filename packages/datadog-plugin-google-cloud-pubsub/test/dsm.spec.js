@@ -151,7 +151,7 @@ describe('Plugin', () => {
 })
 
 function getProjectId () {
-  return `test-project-${id()}`
+  return `test-project-dsm-${id()}`
 }
 
 function publish (topic, options) {
