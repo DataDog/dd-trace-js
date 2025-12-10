@@ -45,18 +45,16 @@ describe('Plugin', () => {
         let sub
         let consume
 
-        beforeEach(() => {
-          return agent.load('google-cloud-pubsub', {
+        before(async () => {
+          tracer = require('../../dd-trace')
+          await agent.load('google-cloud-pubsub', {
             dsmEnabled: true
           })
-        })
+          tracer.use('google-cloud-pubsub', { dsmEnabled: true })
 
-        before(async () => {
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
-          tracer = require('../../dd-trace')
           project = getProjectId()
           pubsub = new PubSub({ projectId: project })
-          tracer.use('google-cloud-pubsub', { dsmEnabled: true })
 
           dsmTopic = await pubsub.createTopic(dsmTopicName)
           dsmTopic = dsmTopic[0]
@@ -80,6 +78,12 @@ describe('Plugin', () => {
             ['direction:in', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
             expectedProducerHash
           )
+        })
+
+        beforeEach(() => {
+          return agent.load('google-cloud-pubsub', {
+            dsmEnabled: true
+          })
         })
 
         describe('should set a DSM checkpoint', () => {
