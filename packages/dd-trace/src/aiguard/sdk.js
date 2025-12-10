@@ -1,5 +1,6 @@
 'use strict'
 
+const rfdc = require('rfdc')({ proto: false, circles: false })
 const NoopAIGuard = require('./noop')
 const executeRequest = require('./client')
 const {
@@ -92,17 +93,10 @@ class AIGuard extends NoopAIGuard {
     const result = []
     let contentTruncated = false
     for (let i = messages.length - size; i < messages.length; i++) {
-      const message = { ...messages[i] }
+      const message = rfdc(messages[i])
       if (message.content?.length > this.#maxContentSize) {
         contentTruncated = true
         message.content = message.content.slice(0, this.#maxContentSize)
-      }
-      if ('tool_calls' in message) {
-        // deep copy
-        message.tool_calls = message.tool_calls.map(call => ({
-          id: call.id,
-          function: call.function ? { ...call.function } : null,
-        }))
       }
       result.push(message)
     }
