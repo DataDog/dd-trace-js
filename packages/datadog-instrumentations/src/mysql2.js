@@ -108,10 +108,11 @@ function wrapConnection (Connection, version) {
     return shimmer.wrapFunction(execute, execute => function executeWithTrace (packet, connection) {
       const onResult = this.onResult
 
-      if (onResult) {
+      if (onResult && !onResult._ddWrapped) {
         this.onResult = function () {
           return commandFinishCh.runStores(ctx, onResult, this, ...arguments)
         }
+        this.onResult._ddWrapped = true
       }
 
       return commandStartCh.runStores(ctx, execute, this, ...arguments)
@@ -130,7 +131,7 @@ function wrapConnection (Connection, version) {
           cmd.sql = ctx.sql
         }
 
-        if (this.onResult) {
+        if (this.onResult && !this.onResult._ddWrapped) {
           const onResult = this.onResult
 
           this.onResult = shimmer.wrapFunction(onResult, onResult => function (error) {
@@ -140,7 +141,8 @@ function wrapConnection (Connection, version) {
             }
             finishCh.runStores(ctx, onResult, this, ...arguments)
           })
-        } else {
+          this.onResult._ddWrapped = true
+        } else if (!this.onResult) {
           this.on(errorMonitor, error => {
             ctx.error = error
             errorCh.publish(ctx)
