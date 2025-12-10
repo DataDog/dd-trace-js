@@ -2,12 +2,17 @@ import regexpEscapeModule from './vendor/dist/escape-string-regexp/index.js'
 import * as iitm from 'import-in-the-middle/hook.mjs'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config-helper.js'
-import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
+import log from './packages/dd-trace/src/log/index.js'
+import path from 'path'
+import { pathToFileURL } from 'url'
+import extractOutput from './packages/datadog-instrumentations/src/helpers/extract-prisma-client-path.js'import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
 
 const regexpEscape = regexpEscapeModule.default
 
 // For some reason `getEnvironmentVariable` is not otherwise available to ESM.
 const env = configHelper.getEnvironmentVariable
+
+const prismaOutput = extractOutput()
 
 function initialize (data = {}) {
   data.include ??= []
@@ -28,8 +33,36 @@ function addInstrumentations (data) {
   const instrumentations = Object.keys(hooks)
 
   for (const moduleName of instrumentations) {
-    data.include.push(new RegExp(`node_modules/${moduleName}/(?!node_modules).+`), moduleName)
+    if (isFilePath(moduleName)) {
+      const absolutePath = resolveFilePath(moduleName)
+      if (!absolutePath) {
+        continue
+      }
+      try {
+        const fileUrl = pathToFileURL(absolutePath).href
+        // Use a RegExp to match the directory and all files inside it
+        // This is similar to how node_modules packages are matched
+        const escapedUrl = regexpEscape(fileUrl)
+        data.include.push(new RegExp(`^${escapedUrl}(/.*)?$`))
+      } catch (e) {
+        log.warn('Failed to convert file path "%s" to URL: %s', absolutePath, e.message)
+      }
+    } else {
+      data.include.push(new RegExp(`node_modules/${moduleName}/(?!node_modules).+`), moduleName)
+    }
   }
+}
+
+function isFilePath (moduleName) {
+  if (moduleName.startsWith('./') || moduleName.startsWith('../') || moduleName.startsWith('/')) {
+    return true
+  }
+
+  if (moduleName.includes('/') && !moduleName.includes('node_modules/') && !moduleName.startsWith('@')) {
+    return true
+  }
+
+  return false
 }
 
 function addSecurityControls (data) {
@@ -57,3 +90,22 @@ function addExclusions (data) {
 
 export { initialize, load }
 export { getFormat, resolve, getSource } from 'import-in-the-middle/hook.mjs'
+
+function resolveFilePath (moduleName) {
+  let candidate
+
+  if (moduleName === prismaOutput) {
+    candidate = prismaOutput
+  }
+
+  // For now we only want to support path resolution for prisma
+  if (!candidate) {
+    return null
+  }
+
+  if (path.isAbsolute(candidate)) {
+    return candidate
+  }
+
+  return path.resolve(candidate)
+}
