@@ -1,6 +1,5 @@
 'use strict'
 
-const { mkdtempSync, readFileSync, writeFileSync } = require('fs')
 const { join } = require('path')
 const { wrap } = require('../../datadog-shimmer')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
@@ -141,30 +140,17 @@ function wrapBrowserWindow (electron) {
 
   class DatadogBrowserWindow extends electron.BrowserWindow {
     constructor (options = {}) {
-      const webPreferences = options.webPreferences ??= {}
-      const preload = options.webPreferences.preload
-      const ddPreload = join(__dirname, 'electron', 'preload.js')
+      const win = super(options)
 
-      if (preload) {
-        const userCode = readFileSync(preload, 'utf8')
-        const ddCode = ';(() => {' + readFileSync(ddPreload, 'utf8') + '})();'
-        const useStrict = userCode.match(/['"]use strict['"]/)?.[0] || ''
-        const tmp = electron.app.getPath('temp')
-        const dir = mkdtempSync(join(tmp, 'dd-electron-preload-'))
-        const filename = join(dir, 'preload.js')
-
-        // Preload doesn't support `require` of relative paths in sandboxed mode
-        // so we merge our preload with the user preload in a single file.
-        writeFileSync(filename, useStrict + '\n' + ddCode + '\n' + userCode)
-
-        webPreferences.preload = filename
-      } else {
-        webPreferences.preload = ddPreload
-      }
+      // TODO: Move this to plugin?
+      win.webContents.session.registerPreloadScript({
+        type: 'frame', // TODO: service-worker
+        filePath: join(__dirname, 'electron', 'preload.js')
+      })
 
       // BrowserWindow doesn't support subclassing because it's all native code
       // so we return an instance of it instead of the subclass.
-      return super(options) // eslint-disable-line constructor-super
+      return win
     }
   }
 
