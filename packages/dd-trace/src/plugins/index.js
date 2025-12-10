@@ -113,7 +113,6 @@ const plugins = {
   get ws () { return require('../../../datadog-plugin-ws/src') }
 }
 
-
 const prismaOutput = extractOutput()
 
 if (prismaOutput) {

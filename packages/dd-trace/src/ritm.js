@@ -118,8 +118,14 @@ function Hook (modules, options, onrequire) {
       const stat = inAWSLambda && hasLambdaHandler && !filenameFromNodeModule ? { name: filename } : parse(filename)
 
       let absolutePathModuleMatch = false
-      if (!stat) {
-        // Check if this is a direct file path that we want to hook
+      if (stat) {
+        name = stat.name
+        basedir = stat.basedir
+
+        hooks = moduleHooks[name]
+        if (!hooks) return exports // abort if module name isn't on whitelist
+      } else {
+        // check if the full filename if the filename was registered, if not then prefix matching will be done
         hooks = moduleHooks[filename]
 
         if (!hooks) {
@@ -128,7 +134,7 @@ function Hook (modules, options, onrequire) {
           for (const registeredModule of Object.keys(moduleHooks)) {
             if (registeredModule.startsWith('/') && filename.startsWith(registeredModule + path.sep)) {
               hooks = moduleHooks[registeredModule]
-              name = registeredModule
+              name = filename
               basedir = registeredModule
               absolutePathModuleMatch = true
               break
@@ -142,16 +148,6 @@ function Hook (modules, options, onrequire) {
           name = filename
           basedir = path.dirname(filename)
         }
-
-        if (absolutePathModuleMatch && name !== filename) {
-          name = name + path.sep + path.relative(basedir, filename)
-        }
-      } else {
-        name = stat.name
-        basedir = stat.basedir
-
-        hooks = moduleHooks[name]
-        if (!hooks) return exports // abort if module name isn't on whitelist
       }
 
       // figure out if this is the main module file, or a file inside the module

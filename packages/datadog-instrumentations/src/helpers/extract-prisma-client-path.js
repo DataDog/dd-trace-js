@@ -4,10 +4,10 @@ const path = require('path')
 const { existsSync, readFileSync } = require('fs')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config-helper')
 /**
-* This function aims to extract the output of the prisma client.
-* It tries to extract the output from locations where the schema.prisma is usually
-* located at. This is done starting from current working directory.
-*/
+ * This function aims to extract the output of the prisma client.
+ * It tries to extract the output from locations where the schema.prisma is
+ * usally located at.
+ */
 let extractedOutput
 module.exports = function extractOutput () {
   const prismaEnv = (getEnvironmentVariable('DD_PRISMA_OUTPUT') || '').trim()

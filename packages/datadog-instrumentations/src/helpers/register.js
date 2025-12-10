@@ -2,7 +2,6 @@
 
 const { channel } = require('dc-polyfill')
 const path = require('path')
-const { fileURLToPath } = require('url')
 const satisfies = require('semifies')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
@@ -17,8 +16,7 @@ const envs = getEnvironmentVariables()
 
 const {
   DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
-  DD_TRACE_DEBUG = '',
-  DD_PRISMA_OUTPUT
+  DD_TRACE_DEBUG = ''
 } = envs
 
 const prismaOutput = extractOutput()
