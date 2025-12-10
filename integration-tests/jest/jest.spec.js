@@ -5093,4 +5093,72 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     assert.notInclude(testOutput, 'Cannot find module')
     assert.include(testOutput, '6 passed')
   })
+
+  context('hook instrumentation', () => {
+    it('should properly parent beforeAll and afterAll hooks to suite span', async () => {
+      const hookTestPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', 5000)
+
+      childProcess = exec(
+        'node ./ci-visibility/jest-hooks/run-jest-hooks.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '-r dd-trace/ci/init'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      const [code] = await once(childProcess, 'exit')
+      assert.equal(code, 0, 'Jest hook tests should pass')
+
+      const payloads = await hookTestPromise
+      const events = payloads.flatMap(({ payload }) => payload.events)
+
+      // Find test suite events
+      const suiteEvents = events.filter(event => event.type === 'test_suite')
+      assert.isAbove(suiteEvents.length, 0, 'Should have test suite events')
+
+      // Find test events
+      const testEvents = events.filter(event => event.type === 'test')
+      assert.isAbove(testEvents.length, 0, 'Should have test events')
+
+      // Verify that hooks executed successfully
+      const passedTests = testEvents.filter(test => test.content.meta[TEST_STATUS] === 'pass')
+      assert.isAbove(passedTests.length, 0, 'Should have passing tests')
+
+      // Check that all test suites passed
+      const passedSuites = suiteEvents.filter(suite => suite.content.meta[TEST_STATUS] === 'pass')
+      assert.equal(passedSuites.length, suiteEvents.length, 'All test suites should pass')
+    })
+
+    it('should handle async hooks correctly', async () => {
+      const asyncHookTestPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', 5000)
+
+      childProcess = exec(
+        'node ./ci-visibility/jest-hooks/run-jest-hooks.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '-r dd-trace/ci/init',
+            TESTS_TO_RUN: 'Async Hook Test Suite'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      const [code] = await once(childProcess, 'exit')
+      assert.equal(code, 0, 'Async hook tests should pass')
+
+      const payloads = await asyncHookTestPromise
+      const events = payloads.flatMap(({ payload }) => payload.events)
+      const testEvents = events.filter(event => event.type === 'test')
+      const asyncTests = testEvents.filter(test => test.content.meta[TEST_NAME]?.includes('async hooks'))
+      
+      assert.isAbove(asyncTests.length, 0, 'Should have async hook tests')
+      assert.equal(asyncTests.every(test => test.content.meta[TEST_STATUS] === 'pass'), true, 'Async hook tests should pass')
+    })
+  })
 })
