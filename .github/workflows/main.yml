@@ -29,7 +29,7 @@ jobs:
           mkdir -p cache-artifacts
           
           # Parse JSON array
-          echo '${{ inputs.cache_entries }}' | jq -c '.[]' | while read -r entry; do
+          echo '[ {"key": "n71Gg/JormzoitmBpVjBCZCcL6Y=","version": "0c867ee6264758fbca938e6c6d38a3160cb478f2770da2f831e22e4c9e3720d8"}, {"key": "PFxRDTsQC2CBRTRk3TMxWNYXnd0=","version": "4793076103aa823b0a4c97942d7385d4346f77a3c30a0bad6e0f1d748becbab5"} ]' | jq -c '.[]' | while read -r entry; do
             key=$(echo "$entry" | jq -r '.key')
             version=$(echo "$entry" | jq -r '.version')
             
@@ -61,7 +61,7 @@ jobs:
         id: restore
         continue-on-error: true
         run: |
-          echo '${{ inputs.cache_entries }}' | jq -c '.[]' | while read -r entry; do
+          echo '[ {"key": "n71Gg/JormzoitmBpVjBCZCcL6Y=","version": "0c867ee6264758fbca938e6c6d38a3160cb478f2770da2f831e22e4c9e3720d8"}, {"key": "PFxRDTsQC2CBRTRk3TMxWNYXnd0=","version": "4793076103aa823b0a4c97942d7385d4346f77a3c30a0bad6e0f1d748becbab5"} ]' | jq -c '.[]' | while read -r entry; do
             key=$(echo "$entry" | jq -r '.key')
             version=$(echo "$entry" | jq -r '.version')
             safe_name=$(echo "$key-$version" | tr '/' '_' | tr ':' '_')
@@ -95,7 +95,7 @@ jobs:
       
       - name: Upload each cache as separate artifact
         run: |
-          echo '${{ inputs.cache_entries }}' | jq -c '.[]' | while read -r entry; do
+          echo '[ {"key": "n71Gg/JormzoitmBpVjBCZCcL6Y=","version": "0c867ee6264758fbca938e6c6d38a3160cb478f2770da2f831e22e4c9e3720d8"}, {"key": "PFxRDTsQC2CBRTRk3TMxWNYXnd0=","version": "4793076103aa823b0a4c97942d7385d4346f77a3c30a0bad6e0f1d748becbab5"} ]' | jq -c '.[]' | while read -r entry; do
             key=$(echo "$entry" | jq -r '.key')
             version=$(echo "$entry" | jq -r '.version')
             safe_name=$(echo "$key-$version" | tr '/' '_' | tr ':' '_')
