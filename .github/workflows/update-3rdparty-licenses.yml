@@ -1,9 +1,7 @@
 name: Update 3rd-party licenses
 
 on:
-  pull_request_target:
-    branches:
-      - master
+  pull_request:
     paths:
       - 'yarn.lock'
 
@@ -11,21 +9,12 @@ jobs:
   update-3rdparty-licenses:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: write
-      pull-requests: write
     env:
       REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
     steps:
-      - name: Check out base branch
+      - name: Check out PR branch
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-
-      - name: Get GitHub token with appropriate permissions
-        uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
-        id: octo-sts
-        with:
-          scope: DataDog
-          policy: dd-trace-js-license-attribution-read
 
       - name: Set up Python
         uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
@@ -62,55 +51,33 @@ jobs:
           EOF
 
       - name: Regenerate LICENSE-3rdparty.csv
-        env:
-          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
         run: |
           dd-license-attribution generate-sbom-csv \
             --use-mirrors=mirrors.json \
             --no-scancode-strategy \
             --no-github-sbom-strategy \
             --yarn-subdir vendor \
-            "${REPOSITORY_URL}" > LICENSE-3rdparty.csv.generated
-
-      - name: Fetch files from PR branch
-        run: |
-          # Fetch the PR branch
-          git fetch origin ${{ github.event.pull_request.head.sha }}
-
-          # Fetch vendored-dependencies.csv from PR branch
-          git show ${{ github.event.pull_request.head.sha }}:.github/vendored-dependencies.csv > vendored-dependencies.csv.pr || touch vendored-dependencies.csv.pr
-
-          # Fetch LICENSE-3rdparty.csv from PR branch for comparison
-          git show ${{ github.event.pull_request.head.sha }}:LICENSE-3rdparty.csv > LICENSE-3rdparty.csv.pr || touch LICENSE-3rdparty.csv.pr
+            "${REPOSITORY_URL}" > LICENSE-3rdparty.csv
 
       - name: Append vendored dependencies from PR
         run: |
-          cat vendored-dependencies.csv.pr >> LICENSE-3rdparty.csv.generated
+          cat .github/vendored-dependencies.csv >> LICENSE-3rdparty.csv
 
       - name: Run LICENSE-3rdparty.csv update check
         env:
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_USER_TYPE: ${{ github.event.pull_request.user.type }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_HEAD_REF: ${{ github.head_ref }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -e
 
-          if diff --ignore-space-at-eol LICENSE-3rdparty.csv.generated LICENSE-3rdparty.csv.pr > /dev/null; then
+          if git diff --ignore-space-at-eol --exit-code LICENSE-3rdparty.csv; then
             echo "✅ LICENSE-3rdparty.csv is already up to date"
           else
             echo "📝 LICENSE-3rdparty.csv was modified by license attribution command"
 
-            if [[ "$PR_USER_TYPE" == "Bot" ]] && [[ "${GITHUB_EVENT_NAME}" == "pull_request_target" ]]; then
+            if [[ "$PR_USER_TYPE" == "Bot" ]] && [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
               echo "🤖 Bot-created PR detected. Auto-committing LICENSE-3rdparty.csv changes..."
-
-              # Checkout the PR branch for committing
-              git fetch origin ${PR_HEAD_SHA}
-              git checkout ${PR_HEAD_SHA}
-
-              # Move the generated file into place
-              mv LICENSE-3rdparty.csv.generated LICENSE-3rdparty.csv
 
               git config --local user.email "action@github.com"
               git config --local user.name "GitHub Action"
