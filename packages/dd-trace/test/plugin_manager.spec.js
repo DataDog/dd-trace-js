@@ -81,6 +81,11 @@ describe('Plugin Manager', () => {
         getEnvironmentVariable (name) {
           return process.env[name]
         }
+      },
+      './config-env-sources': {
+        getResolvedEnv (name) {
+          return process.env[name]
+        }
       }
     })
     pm = new PluginManager(tracer)

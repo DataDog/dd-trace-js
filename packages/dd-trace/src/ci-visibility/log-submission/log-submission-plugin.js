@@ -2,7 +2,7 @@
 
 const Plugin = require('../../plugins/plugin')
 const log = require('../../log')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getResolvedEnv } = require('../../config-env-sources')
 
 function getWinstonLogSubmissionParameters (config) {
   const { site, service } = config
@@ -12,16 +12,16 @@ function getWinstonLogSubmissionParameters (config) {
     path: `/api/v2/logs?ddsource=winston&service=${service}`,
     ssl: true,
     headers: {
-      'DD-API-KEY': getEnvironmentVariable('DD_API_KEY')
+      'DD-API-KEY': getResolvedEnv('DD_API_KEY')
     }
   }
 
-  if (!getEnvironmentVariable('DD_AGENTLESS_LOG_SUBMISSION_URL')) {
+  if (!getResolvedEnv('DD_AGENTLESS_LOG_SUBMISSION_URL')) {
     return defaultParameters
   }
 
   try {
-    const url = new URL(getEnvironmentVariable('DD_AGENTLESS_LOG_SUBMISSION_URL'))
+    const url = new URL(getResolvedEnv('DD_AGENTLESS_LOG_SUBMISSION_URL'))
     return {
       host: url.hostname,
       port: url.port,
