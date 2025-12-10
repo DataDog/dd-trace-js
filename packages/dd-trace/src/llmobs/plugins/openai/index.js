@@ -118,8 +118,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       }
       // Reasoning tokens - Responses API returns `output_tokens_details`, `completion_tokens_details`
       const reasoningOutputObject = tokenUsage.output_tokens_details ?? tokenUsage.completion_tokens_details
-	      const reasoningOutputTokens = reasoningOutputObject?.reasoning_tokens ?? 0
-	      if (reasoningOutputTokens !== undefined) metrics.reasoningOutputTokens = reasoningOutputTokens
+      const reasoningOutputTokens = reasoningOutputObject?.reasoning_tokens ?? 0
+      if (reasoningOutputTokens !== undefined) metrics.reasoningOutputTokens = reasoningOutputTokens
     }
 
     return metrics
