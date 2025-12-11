@@ -1,20 +1,26 @@
 'use strict'
 
 /*
-This rewriter is basically a JavaScript version of Orchestrion. The goal is not
-to replace Orchestrion, but rather to make it easier and faster to write new
-integrations in the short-term, especially as many changes to the rewriter will
-be needed as all the patterns we need have not been identified yet. This will
-avoid the back and forth of having to make Rust changes to an external library
-for basically every integration change or addition.
+This rewriter is basically a JavaScript version of Orchestrion-JS. The goal is
+not to replace Orchestrion-JS, but rather to make it easier and faster to write
+new integrations in the short-term, especially as many changes to the rewriter
+will be needed as all the patterns we need have not been identified yet. This
+will avoid the back and forth of having to make Rust changes to an external
+library for every integration change or addition that requires something new.
 
-The long term goal is to backport any additional feature we add to the JS
-rewriter to Orchestrion once we're confident that the implementation is fairly
-complete and has all features we need. This should ideally happen by summer
-2026, but it will depend on how quickly we start using the rewriter more.
+In the meantime, we'll work concurrently on a change to Orchestrion-JS that
+adds an "arbitrary transform" or "plugin" system that can be used from
+JavaScript, in order to enable quick iteration while still using Orchestrion-JS.
+Once that's done we'll use that, so that we can remove this JS approach and
+return to using Orchestrion-JS.
+
+The long term goal is to backport any additional features we add to the JS
+rewriter (or using the plugin system in Orchestrion-JS once we're using that)
+to Orchestrion-JS  once we're confident that the implementation is fairly
+complete and has all features we need.
 
 Here is a list of the additions and changes in this rewriter compared to
-Orchestrion that will need to be backported:
+Orchestrion-JS that will need to be backported:
 
 (NOTE: Please keep this list up-to-date whenever new features are added)
 
