@@ -715,7 +715,7 @@ const aiguard = tracer.aiguard
 aiguard.evaluate([
   { role: 'user', content: 'What is 2 + 2' },
 ]).then(result => {
-  result.action && result.reason
+  result.action && result.reason && result.tags
 })
 
 aiguard.evaluate([
@@ -729,11 +729,11 @@ aiguard.evaluate([
     ],
   }
 ]).then(result => {
-  result.action && result.reason
+  result.action && result.reason && result.tags
 })
 
 aiguard.evaluate([
   { role: 'tool', tool_call_id: 'call_1', content: '5' },
 ]).then(result => {
-  result.action && result.reason
+  result.action && result.reason && result.tags
 })
