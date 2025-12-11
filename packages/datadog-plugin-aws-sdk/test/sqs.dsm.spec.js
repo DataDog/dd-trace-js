@@ -47,8 +47,8 @@ describe('Plugin', () => {
         queueNameDSMConsumerOnly = `SQS_QUEUE_NAME_DSM_CONSUMER_ONLY-${id}`
         queueOptionsDsm = getQueueParams(queueNameDSM)
         queueOptionsDsmConsumerOnly = getQueueParams(queueNameDSMConsumerOnly)
-        QueueUrlDsm = `http://127.0.0.1:4566/000000000000/${queueNameDSM}`
-        QueueUrlDsmConsumerOnly = `http://127.0.0.1:4566/000000000000/${queueNameDSMConsumerOnly}`
+        QueueUrlDsm = `http://127.0.0.1:4566/00000000000000000000/${queueNameDSM}`
+        QueueUrlDsmConsumerOnly = `http://127.0.0.1:4566/00000000000000000000/${queueNameDSMConsumerOnly}`
       })
 
       describe('data stream monitoring', () => {
