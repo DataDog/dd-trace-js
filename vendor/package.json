@@ -5,7 +5,7 @@
   },
   "dependencies": {
     "@datadog/sketches-js": "2.1.1",
-    "@datadog/source-map-support": "npm:source-map-support@^0.5.21",
+    "@datadog/source-map": "npm:source-map@^0.6.0",
     "@isaacs/ttlcache": "^2.0.1",
     "@opentelemetry/core": ">=1.14.0 <1.31.0",
     "@opentelemetry/resources": ">=1.0.0 <1.31.0",

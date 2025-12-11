@@ -18,7 +18,7 @@ module.exports = {
   },
 
   traverse: (ast, query, visitor) => {
-    esquery ??= require('esquery')
+    esquery ??= require('esquery').default
 
     const selector = esquery.parse(query)
 
