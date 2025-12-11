@@ -5,6 +5,7 @@ const tags = require('../../../ext/tags')
 const id = require('./id')
 const { isError } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')
+const { TRACING_FIELD_NAME } = require('./process-tags')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
@@ -32,13 +33,13 @@ const map = {
   'resource.name': 'resource'
 }
 
-function format (span, isChunkRoot) {
+function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = false) {
   const formatted = formatSpan(span)
 
   extractSpanLinks(formatted, span)
   extractSpanEvents(formatted, span)
   extractRootTags(formatted, span)
-  extractChunkTags(formatted, span, isChunkRoot)
+  extractChunkTags(formatted, span, isFirstSpanInChunk, tagForFirstSpanInChunk)
   extractTags(formatted, span)
 
   return formatted
@@ -192,10 +193,14 @@ function extractRootTags (formattedSpan, span) {
   addTag({}, formattedSpan.metrics, TOP_LEVEL_KEY, 1)
 }
 
-function extractChunkTags (formattedSpan, span, isChunkRoot) {
+function extractChunkTags (formattedSpan, span, isFirstSpanInChunk, tagForFirstSpanInChunk) {
   const context = span.context()
 
-  if (!isChunkRoot) return
+  if (!isFirstSpanInChunk) return
+
+  if (tagForFirstSpanInChunk) {
+    addTag(formattedSpan.meta, formattedSpan.metrics, TRACING_FIELD_NAME, tagForFirstSpanInChunk)
+  }
 
   for (const [key, value] of Object.entries(context._trace.tags)) {
     addTag(formattedSpan.meta, formattedSpan.metrics, key, value)

@@ -459,6 +459,7 @@ class Config {
       DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS,
       DD_ENV,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
+      DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED,
       DD_PROFILING_ENABLED,
       DD_GRPC_CLIENT_ERROR_STATUSES,
       DD_GRPC_SERVER_ERROR_STATUSES,
@@ -663,6 +664,7 @@ class Config {
       DD_APM_TRACING_ENABLED ??
         (DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED))
     )
+    this.#setBoolean(target, 'propagateProcessTags.enabled', DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED)
     this.#setString(target, 'appKey', DD_APP_KEY)
     this.#setBoolean(target, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
     target['appsec.apiSecurity.sampleDelay'] = maybeFloat(DD_API_SECURITY_SAMPLE_DELAY)

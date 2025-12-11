@@ -1,9 +1,7 @@
 name: Update 3rd-party licenses
 
 on:
-  pull_request_target:
-    branches:
-      - master
+  pull_request:
     paths:
       - 'yarn.lock'
 
@@ -11,23 +9,12 @@ jobs:
   update-3rdparty-licenses:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: write
-      pull-requests: write
     env:
       REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
     steps:
       - name: Check out PR branch
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: Get GitHub token with appropriate permissions
-        uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
-        id: octo-sts
-        with:
-          scope: DataDog
-          policy: dd-trace-js-license-attribution-read
 
       - name: Set up Python
         uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
@@ -64,8 +51,6 @@ jobs:
           EOF
 
       - name: Regenerate LICENSE-3rdparty.csv
-        env:
-          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
         run: |
           dd-license-attribution generate-sbom-csv \
             --use-mirrors=mirrors.json \
@@ -74,13 +59,12 @@ jobs:
             --yarn-subdir vendor \
             "${REPOSITORY_URL}" > LICENSE-3rdparty.csv
 
-      - name: Append vendored dependencies
+      - name: Append vendored dependencies from PR
         run: |
           cat .github/vendored-dependencies.csv >> LICENSE-3rdparty.csv
 
       - name: Run LICENSE-3rdparty.csv update check
         env:
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_USER_TYPE: ${{ github.event.pull_request.user.type }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_HEAD_REF: ${{ github.head_ref }}
