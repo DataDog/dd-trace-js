@@ -1081,9 +1081,19 @@ addHook({
 
     try {
       if (page) {
-        const isRumActive = await page.evaluate(() => {
-          return window.DD_RUM && window.DD_RUM.getInternalContext ? !!window.DD_RUM.getInternalContext() : false
+        const { isRumInstrumented, isRumActive, rumSamplingRate } = await page.evaluate(() => {
+          const isRumInstrumented = !!window.DD_RUM
+          const isRumActive = window.DD_RUM && window.DD_RUM.getInternalContext
+            ? !!window.DD_RUM.getInternalContext()
+            : false
+          const rumSamplingRate = window.DD_RUM && window.DD_RUM.getInitConfiguration
+            ? window.DD_RUM.getInitConfiguration().sessionSampleRate
+            : null
+          return { isRumInstrumented, isRumActive, rumSamplingRate }
         })
+        if (isRumInstrumented && rumSamplingRate < 100 && !isRumActive) {
+          log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
+        }
 
         if (isRumActive) {
           testPageGotoCh.publish({
@@ -1092,8 +1102,9 @@ addHook({
           })
         }
       }
-    } catch {
+    } catch (e) {
       // ignore errors such as redirects, context destroyed, etc
+      log.error('goto hook error', e)
     }
 
     return response
@@ -1185,8 +1196,9 @@ addHook({
                   }
                 }
               }
-            } catch {
+            } catch (e) {
               // ignore errors
+              log.error('afterEach hook error', e)
             }
           },
           title: 'afterEach hook',
