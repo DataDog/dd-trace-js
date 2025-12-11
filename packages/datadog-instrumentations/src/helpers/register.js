@@ -53,7 +53,9 @@ const allInstrumentations = {}
 // TODO: make this more efficient
 for (const packageName of names) {
   if (disabledInstrumentations.has(packageName)) continue
+
   const hookOptions = {}
+
   let hook = hooks[packageName]
 
   if (hook !== null && typeof hook === 'object') {
@@ -62,20 +64,24 @@ for (const packageName of names) {
     hookOptions.internals = hook.esmFirst
     hook = hook.fn
   }
+
   // get the instrumentation file name to save all hooked versions
   const instrumentationFileName = parseHookInstrumentationFileName(packageName)
 
-  const hookModules = new Set([packageName])
+  const hookModules = []
   if (isFilePath(packageName)) {
     const absolutePath = resolveFilePath(packageName)
     if (!absolutePath) continue
-    hookModules.add(absolutePath)
+    hookModules.push(absolutePath)
+  } else {
+    hookModules.push(packageName)
   }
 
-  Hook([...hookModules], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
+  Hook(hookModules, hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
     // This executes the integration file thus adding its entries to `instrumentations`
     hook()
+
     if (!instrumentations[packageName]) {
       return moduleExports
     }
@@ -93,6 +99,7 @@ for (const packageName of names) {
       if (fullFilePattern) {
         fullFilePattern = filename(name, fullFilePattern)
       }
+
       // Create a WeakSet associated with the hook function so that patches on the same moduleExport only happens once
       // for example by instrumenting both dns and node:dns double the spans would be created
       // since they both patch the same moduleExport, this WeakSet is used to mitigate that
@@ -101,7 +108,7 @@ for (const packageName of names) {
       // Maybe it is also not important to know what name was actually used?
       hook[HOOK_SYMBOL] ??= new WeakSet()
       let matchesFile = moduleName === fullFilename
-      // For file paths, also check if the absolute paths match
+
       if (!matchesFile && isFilePath(name)) {
         const absoluteName = resolveFilePath(name)
         if (absoluteName) {
@@ -116,6 +123,7 @@ for (const packageName of names) {
         // so our instrumentation has to include a '.*' to match them for more than a single version.
         matchesFile = matchesFile || new RegExp(fullFilePattern).test(moduleName)
       }
+
       if (matchesFile) {
         let version = moduleVersion
         try {
@@ -154,6 +162,7 @@ for (const packageName of names) {
             // picked up due to the unification. Check what modules actually use the name.
             // TODO(BridgeAR): Only replace moduleExports if the hook returns a new value.
             // This allows to reduce the instrumentation code (no return needed).
+
             moduleExports = hook(moduleExports, version, name, isIitm) ?? moduleExports
             // Set the moduleExports in the hooks WeakSet
             hook[HOOK_SYMBOL].add(moduleExports)
@@ -255,6 +264,7 @@ function isFilePath (moduleName) {
 function resolveFilePath (moduleName) {
   let candidate
 
+  // For know we want to only resolve the file path for prisma
   if (moduleName === prismaOutput) {
     candidate = prismaOutput
   }
