@@ -6,13 +6,20 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const { storage } = require('../../datadog-core')
+const log = require('../../dd-trace/src/log')
+const tracer = require('../../dd-trace')
+const { enableServerlessPubsubSubscription } = require('../../dd-trace/src/serverless')
+const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
 
 // Auto-load push subscription plugin to enable pubsub.delivery spans for push subscriptions
 try {
-  const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
-  new PushSubscriptionPlugin(null, {}).configure({})
-} catch {
+  // User must set DD_SERVERLESS_PUBSUB_ENABLED to true to enable push subscription spans
+  if (enableServerlessPubsubSubscription()) {
+    new PushSubscriptionPlugin(null, {}).configure({})
+  }
+} catch (e) {
   // Push subscription plugin is optional
+  log.debug(`PushSubscriptionPlugin not loaded: ${e.message}`)
 }
 
 const requestStartCh = channel('apm:google-cloud-pubsub:request:start')
@@ -23,7 +30,25 @@ const receiveStartCh = channel('apm:google-cloud-pubsub:receive:start')
 const receiveFinishCh = channel('apm:google-cloud-pubsub:receive:finish')
 const receiveErrorCh = channel('apm:google-cloud-pubsub:receive:error')
 
+// Bounded map to prevent memory leaks from acks that never complete
 const ackContextMap = new Map()
+const ACK_CONTEXT_MAX_SIZE = 10_000
+const ACK_CONTEXT_TTL_MS = 600_000 // 10 minutes - matches Cloud Run streaming pull default deadline
+
+// Cleanup old entries periodically
+const ackContextCleanupInterval = setInterval(() => {
+  const now = Date.now()
+  for (const [ackId, entry] of ackContextMap.entries()) {
+    if (now - entry.timestamp > ACK_CONTEXT_TTL_MS) {
+      ackContextMap.delete(ackId)
+    }
+  }
+}, 60_000) // Run cleanup every 60 seconds
+
+// Allow process to exit cleanly
+if (ackContextCleanupInterval.unref) {
+  ackContextCleanupInterval.unref()
+}
 
 const publisherMethods = [
   'createTopic',
@@ -79,19 +104,18 @@ function wrapMethod (method) {
     let restoredStore = null
     const isAckOperation = api === 'acknowledge' || api === 'modifyAckDeadline'
     if (isAckOperation && request && request.ackIds && request.ackIds.length > 0) {
+      // Try to find a stored context for any of these ack IDs
       for (const ackId of request.ackIds) {
-        const storedContext = ackContextMap.get(ackId)
-        if (storedContext) {
-          restoredStore = storedContext
+        const entry = ackContextMap.get(ackId)
+        if (entry) {
+          restoredStore = entry.context
           break
         }
       }
 
       if (api === 'acknowledge') {
         request.ackIds.forEach(ackId => {
-          if (ackContextMap.has(ackId)) {
-            ackContextMap.delete(ackId)
-          }
+          ackContextMap.delete(ackId)
         })
       }
     }
@@ -103,24 +127,22 @@ function wrapMethod (method) {
       if (parentSpan) {
         ctx.parentSpan = parentSpan
       }
-      const self = this
-      const args = arguments
       return storage('legacy').run(restoredStore, () => {
         return requestStartCh.runStores(ctx, () => {
-          const cb = args[args.length - 1]
+          const cb = arguments[arguments.length - 1]
 
           if (typeof cb === 'function') {
-            args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (error) {
+            arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function (error) {
               if (error) {
                 ctx.error = error
                 requestErrorCh.publish(ctx)
               }
               return requestFinishCh.runStores(ctx, cb, this, ...arguments)
             })
-            return method.apply(self, args)
+            return method.apply(this, arguments)
           }
 
-          return method.apply(self, args)
+          return method.apply(this, arguments)
             .then(
               response => {
                 requestFinishCh.publish(ctx)
@@ -199,7 +221,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber.js' }, (obj) => {
   const Message = obj.Message
 
-  if (Message && Message.prototype && Message.prototype.ack) {
+  if (Message?.prototype?.ack) {
     shimmer.wrap(Message.prototype, 'ack', originalAck => function () {
       const currentStore = storage('legacy').getStore()
       const activeSpan = currentStore && currentStore.span
@@ -208,7 +230,19 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/su
         const storeWithSpanContext = { ...currentStore, span: activeSpan }
 
         if (this.ackId) {
-          ackContextMap.set(this.ackId, storeWithSpanContext)
+          // Enforce max size to prevent unbounded growth
+          if (ackContextMap.size >= ACK_CONTEXT_MAX_SIZE) {
+            // Remove oldest entry (first entry in Map iteration order)
+            const firstKey = ackContextMap.keys().next().value
+            if (firstKey !== undefined) {
+              ackContextMap.delete(firstKey)
+            }
+          }
+
+          ackContextMap.set(this.ackId, {
+            context: storeWithSpanContext,
+            timestamp: Date.now()
+          })
         }
       }
 
@@ -242,6 +276,16 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   })
 
   shimmer.wrap(LeaseManager.prototype, 'clear', clear => function () {
+    // Finish spans for all messages still in the lease before clearing
+    if (this._messages) {
+      for (const message of this._messages.values()) {
+        const ctx = messageContexts.get(message)
+        if (ctx) {
+          receiveFinishCh.publish(ctx)
+          messageContexts.delete(message)
+        }
+      }
+    }
     return clear.apply(this, arguments)
   })
 
@@ -252,7 +296,6 @@ function injectTraceContext (attributes, pubsub, topicName) {
   if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
 
   try {
-    const tracer = require('../../dd-trace')
     const activeSpan = tracer.scope().active()
     if (!activeSpan) return
 
@@ -260,8 +303,9 @@ function injectTraceContext (attributes, pubsub, topicName) {
 
     const traceIdUpperBits = activeSpan.context()._trace.tags['_dd.p.tid']
     if (traceIdUpperBits) attributes['_dd.p.tid'] = traceIdUpperBits
-  } catch {
+  } catch (err) {
     // Silently fail - trace context injection is best-effort
+    log.debug('Error injecting trace context: ', err)
   }
 
   if (pubsub) attributes['gcloud.project_id'] = pubsub.projectId

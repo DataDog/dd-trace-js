@@ -1,18 +1,20 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+const { randomUUID } = require('node:crypto')
+
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
-const { randomUUID } = require('node:crypto')
-
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
-const { rawExpectedSchema } = require('./sqs-naming')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { setup } = require('./spec_helpers')
+const { rawExpectedSchema } = require('./sqs-naming')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const getQueueParams = (queueName) => {
   return {
@@ -149,7 +151,7 @@ describe('Plugin', () => {
           agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
-            expect(span.resource.startsWith('sendMessage')).to.equal(true)
+            assert.strictEqual(span.resource.startsWith('sendMessage'), true)
             expect(span.meta).to.include({
               queuename: queueName,
               'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`
@@ -162,9 +164,9 @@ describe('Plugin', () => {
           agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
-            expect(parentId).to.be.a('string')
-            expect(span.parent_id.toString()).to.equal(parentId)
-            expect(span.trace_id.toString()).to.equal(traceId)
+            assert.strictEqual(typeof parentId, 'string')
+            assert.strictEqual(span.parent_id.toString(), parentId)
+            assert.strictEqual(span.trace_id.toString(), traceId)
           }, { timeoutMs: 10000 }).then(done, done)
 
           sqs.sendMessage({
@@ -200,7 +202,7 @@ describe('Plugin', () => {
           const parentPromise = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
-            expect(span.resource.startsWith('sendMessageBatch')).to.equal(true)
+            assert.strictEqual(span.resource.startsWith('sendMessageBatch'), true)
             expect(span.meta).to.include({
               queuename: queueName,
               'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`
@@ -216,9 +218,9 @@ describe('Plugin', () => {
             const childPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(parentId).to.be.a('string')
-              expect(span.parent_id.toString()).to.equal(parentId)
-              expect(span.trace_id.toString()).to.equal(traceId)
+              assert.strictEqual(typeof parentId, 'string')
+              assert.strictEqual(span.parent_id.toString(), parentId)
+              assert.strictEqual(span.trace_id.toString(), traceId)
             })
 
             const receiveMessage = new Promise((resolve, reject) => {
@@ -231,9 +233,9 @@ describe('Plugin', () => {
                 try {
                   for (const message in data.Messages) {
                     const recordData = data.Messages[message].MessageAttributes
-                    expect(recordData).to.have.property('_datadog')
+                    assert.ok(Object.hasOwn(recordData, '_datadog'))
                     const traceContext = JSON.parse(recordData._datadog.StringValue)
-                    expect(traceContext).to.have.property('x-datadog-trace-id')
+                    assert.ok(Object.hasOwn(traceContext, 'x-datadog-trace-id'))
                   }
 
                   resolve()
@@ -267,8 +269,8 @@ describe('Plugin', () => {
               if (err) return done(err)
               const span = tracer.scope().active()
 
-              expect(span).to.not.equal(beforeSpan)
-              expect(span.context()._tags['aws.operation']).to.equal('receiveMessage')
+              assert.notStrictEqual(span, beforeSpan)
+              assert.strictEqual(span.context()._tags['aws.operation'], 'receiveMessage')
 
               done()
             })
@@ -292,9 +294,9 @@ describe('Plugin', () => {
 
               const span = tracer.scope().active()
 
-              expect(span).to.not.equal(beforeSpan)
+              assert.notStrictEqual(span, beforeSpan)
               return Promise.resolve().then(() => {
-                expect(tracer.scope().active()).to.equal(span)
+                assert.strictEqual(tracer.scope().active(), span)
                 done()
               })
             })
@@ -318,9 +320,9 @@ describe('Plugin', () => {
 
               const span = tracer.scope().active()
 
-              expect(span).to.not.equal(beforeSpan)
+              assert.notStrictEqual(span, beforeSpan)
               return Promise.resolve().then(() => {
-                expect(tracer.scope().active()).to.equal(span)
+                assert.strictEqual(tracer.scope().active(), span)
                 done()
               })
             })
@@ -406,7 +408,7 @@ describe('Plugin', () => {
 
           setTimeout(() => {
             try {
-              expect(total).to.equal(1)
+              assert.strictEqual(total, 1)
               done()
             } catch (e) {
               done(e)
@@ -501,7 +503,7 @@ describe('Plugin', () => {
                 produceSpanMeta = span.meta
               }
 
-              expect(produceSpanMeta).to.include({
+              assertObjectContains(produceSpanMeta, {
                 'pathway.hash': expectedProducerHash
               })
             }).then(done, done)
@@ -529,7 +531,7 @@ describe('Plugin', () => {
                   consumeSpanMeta = span.meta
                 }
 
-                expect(consumeSpanMeta).to.include({
+                assertObjectContains(consumeSpanMeta, {
                   'pathway.hash': expectedConsumerHash
                 })
               }).then(done, done)
@@ -548,7 +550,7 @@ describe('Plugin', () => {
                   consumeSpanMeta = span.meta
                 }
 
-                expect(consumeSpanMeta).to.include({
+                assertObjectContains(consumeSpanMeta, {
                   'pathway.hash': expectedConsumerHash
                 })
               })
@@ -571,8 +573,8 @@ describe('Plugin', () => {
                 })
               }
             })
-            expect(statsPointsReceived).to.be.at.least(1)
-            expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+            assert.ok(statsPointsReceived >= 1)
+            assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
           }).then(done, done)
 
           sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {})
@@ -589,8 +591,8 @@ describe('Plugin', () => {
                 })
               }
             })
-            expect(statsPointsReceived).to.be.at.least(2)
-            expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+            assert.ok(statsPointsReceived >= 2)
+            assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
           }, { timeoutMs: 5000 }).then(done, done)
 
           sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {
@@ -609,8 +611,8 @@ describe('Plugin', () => {
                 })
               }
             })
-            expect(statsPointsReceived).to.equal(1)
-            expect(agent.dsmStatsExistWithParentHash(agent, '0')).to.equal(true)
+            assert.strictEqual(statsPointsReceived, 1)
+            assert.strictEqual(agent.dsmStatsExistWithParentHash(agent, '0'), true)
           }).then(done, done)
 
           agent.reload('aws-sdk', { sqs: { dsmEnabled: false } }, { dsmEnabled: false })
@@ -640,8 +642,8 @@ describe('Plugin', () => {
                 })
               }
             })
-            expect(statsPointsReceived).to.be.at.least(3)
-            expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+            assert.ok(statsPointsReceived >= 3)
+            assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
           }).then(done, done)
 
           sqs.sendMessageBatch(

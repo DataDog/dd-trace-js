@@ -35,7 +35,7 @@ describe('Hardcoded Secret Analyzer', () => {
     suite.forEach((testCase) => {
       testCase.samples.forEach((sample, sampleIndex) => {
         // sample values are arrays containing the parts of the original token
-        it(`should match rule ${testCase.id} with #${sampleIndex + 1} value ${sample[0]}...`, () => {
+        it(`should match rule ${testCase.id} with #${sampleIndex + 1}`, () => {
           const value = sample.join('')
           const ident = testCase.type === NameAndValue ? value.split(' = ')[0] : undefined
 
@@ -52,7 +52,7 @@ describe('Hardcoded Secret Analyzer', () => {
           })
 
           expect([NameAndValue, ValueOnly]).to.be.include(testCase.type)
-          expect(report).to.have.been.calledOnceWithExactly({ file: relFile, line, column, ident, data: testCase.id })
+          sinon.assert.calledOnceWithExactly(report, { file: relFile, line, column, ident, data: testCase.id })
         })
       })
     })
@@ -71,7 +71,7 @@ describe('Hardcoded Secret Analyzer', () => {
         literals: [{ value: 'test', line: 0 }]
       })
 
-      expect(report).not.to.have.been.called
+      sinon.assert.notCalled(report)
     })
   })
 

@@ -26,11 +26,13 @@ describe('Plugin', () => {
     before(() => {
       process.env.PUBSUB_EMULATOR_HOST = 'localhost:8081'
       process.env.DD_DATA_STREAMS_ENABLED = 'true'
+      process.env.DD_SERVERLESS_PUBSUB_ENABLED = 'true'
     })
 
     after(() => {
       delete process.env.PUBSUB_EMULATOR_HOST
       delete process.env.DD_DATA_STREAMS_ENABLED
+      delete process.env.DD_SERVERLESS_PUBSUB_ENABLED
     })
 
     afterEach(() => {

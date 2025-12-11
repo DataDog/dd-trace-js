@@ -1,10 +1,11 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it } = require('mocha')
+const assert = require('node:assert/strict')
+const path = require('node:path')
+
+const { before, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
-const path = require('node:path')
 
 const weakHashAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-hash-analyzer')
 const { prepareTestServerForIast, testOutsideRequestHasVulnerability } = require('../utils')
@@ -16,27 +17,27 @@ describe('weak-hash-analyzer', () => {
   weakHashAnalyzer.configure(true)
 
   it('should subscribe to crypto hashing channel', () => {
-    expect(weakHashAnalyzer._subscriptions).to.have.lengthOf(1)
-    expect(weakHashAnalyzer._subscriptions[0]._channel.name).to.equals('datadog:crypto:hashing:start')
+    assert.strictEqual(weakHashAnalyzer._subscriptions.length, 1)
+    assert.strictEqual(weakHashAnalyzer._subscriptions[0]._channel.name, 'datadog:crypto:hashing:start')
   })
 
   it('should not detect vulnerability when no algorithm', () => {
     const isVulnerable = weakHashAnalyzer._isVulnerable()
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('should not detect vulnerability when no vulnerable algorithm', () => {
     const isVulnerable = weakHashAnalyzer._isVulnerable(NON_VULNERABLE_ALGORITHM)
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('should detect vulnerability with different casing in algorithm word', () => {
     const isVulnerable = weakHashAnalyzer._isVulnerable(VULNERABLE_ALGORITHM)
     const isVulnerableInLowerCase = weakHashAnalyzer._isVulnerable(VULNERABLE_ALGORITHM.toLowerCase())
     const isVulnerableInUpperCase = weakHashAnalyzer._isVulnerable(VULNERABLE_ALGORITHM.toUpperCase())
-    expect(isVulnerable).to.be.true
-    expect(isVulnerableInLowerCase).to.be.true
-    expect(isVulnerableInUpperCase).to.be.true
+    assert.strictEqual(isVulnerable, true)
+    assert.strictEqual(isVulnerableInLowerCase, true)
+    assert.strictEqual(isVulnerableInUpperCase, true)
   })
 
   it('should report "WEAK_HASH" vulnerability', () => {
@@ -64,8 +65,8 @@ describe('weak-hash-analyzer', () => {
         './vulnerability-analyzer': ProxyAnalyzer
       })
     proxiedWeakHashAnalyzer.analyze(VULNERABLE_ALGORITHM)
-    expect(addVulnerability).to.have.been.calledOnce
-    expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'WEAK_HASH' })
+    sinon.assert.calledOnce(addVulnerability)
+    sinon.assert.calledWithMatch(addVulnerability, {}, { type: 'WEAK_HASH' })
   })
 
   describe('some locations should be excluded', () => {
@@ -84,7 +85,7 @@ describe('weak-hash-analyzer', () => {
         path: path.join(locationPrefix, 'node_modules', 'redlock', 'dist', 'cjs'),
         line: 183
       }
-      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+      assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })
 
     it('etag', () => {
@@ -92,7 +93,7 @@ describe('weak-hash-analyzer', () => {
         path: path.join(locationPrefix, 'node_modules', 'etag', 'index.js'),
         line: 47
       }
-      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+      assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })
 
     it('websocket-server', () => {
@@ -100,7 +101,7 @@ describe('weak-hash-analyzer', () => {
         path: path.join(locationPrefix, 'node_modules', 'ws', 'lib', 'websocket-server.js'),
         line: 371
       }
-      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+      assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })
 
     it('mysql 41 authentication mechanism', () => {
@@ -108,7 +109,7 @@ describe('weak-hash-analyzer', () => {
         path: path.join(locationPrefix, 'node_modules', 'mysql2', 'lib', 'auth_41.js'),
         line: 30
       }
-      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+      assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })
 
     it('@micro-orm hash for keys', () => {
@@ -116,7 +117,7 @@ describe('weak-hash-analyzer', () => {
         path: path.join(locationPrefix, 'node_modules', '@mikro-orm', 'core', 'utils', 'Utils.js'),
         line: 30
       }
-      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+      assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })
 
     it('mongodb host address hash', () => {
@@ -124,7 +125,7 @@ describe('weak-hash-analyzer', () => {
         path: path.join(locationPrefix, 'node_modules', 'mongodb', 'lib', 'core', 'connection', 'connection.js'),
         line: 137
       }
-      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+      assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })
 
     it('sqreen package list fingerprint', () => {
@@ -132,7 +133,7 @@ describe('weak-hash-analyzer', () => {
         path: path.join(locationPrefix, 'node_modules', 'sqreen', 'lib', 'package-reader', 'index.js'),
         line: 135
       }
-      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+      assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })
 
     it('pusher request body fingerprint', () => {
@@ -140,12 +141,12 @@ describe('weak-hash-analyzer', () => {
         path: path.join(locationPrefix, 'node_modules', 'pusher', 'lib', 'utils.js'),
         line: 23
       }
-      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+      assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })
 
     it('undefined location', () => {
       const location = undefined
-      expect(weakHashAnalyzer._isExcluded(location)).to.be.false
+      assert.strictEqual(weakHashAnalyzer._isExcluded(location), false)
     })
   })
 

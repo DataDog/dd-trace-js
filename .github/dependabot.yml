@@ -4,7 +4,9 @@
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
 version: 2
+
 updates:
+  # Regular github actions
   - package-ecosystem: "github-actions"
     directories:
       - "/"
@@ -14,7 +16,7 @@ updates:
     schedule:
       interval: "weekly"
     cooldown:
-      default-days: 1
+      default-days: 5
       exclude:
         - "@datadog/*"
     groups:
@@ -26,16 +28,20 @@ updates:
       - dependencies
       - github_actions
       - semver-patch
+
+  # Regular npm packages that fall into our supported ranges besides OTEL
   - package-ecosystem: "npm"
     directories:
       - "/"
+      - "/docs"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 100
     cooldown:
-      default-days: 1
+      default-days: 5
       exclude:
         - "@datadog/*"
+    versioning-strategy: "increase"
     labels:
       - dependabot
       - dependencies
@@ -71,15 +77,9 @@ updates:
       - dependency-name: "glob"
         # 11.0.0 onwards only supports Node.js 20 and above
         update-types: ["version-update:semver-major"]
-      - dependency-name: "@opentelemetry/core"
-        # 2.0.0 onwards only supports Node.js 18.19.0 and above
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@opentelemetry/resources"
-        # 2.0.0 onwards only supports Node.js 18.19.0 and above
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "tap"
-        # Contain breaking changes that are incompatible with our test usage
-        update-types: ["version-update:semver-major"]
+        # OTEL is handled separately due to the version increase here.
+        # The package.json range should only manually be adjusted for OTEL.
+      - dependency-name: "@opentelemetry/*"
     groups:
       dev-minor-and-patch-dependencies:
         dependency-type: "development"
@@ -95,12 +95,49 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+  # OTEL in our supported ranges
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 1
+    cooldown:
+      default-days: 5
+    # Widen range across major versions, if possible. Ignore / manually update otherwise.
+    versioning-strategy: "widen"
+    labels:
+      - dependabot
+      - dependencies
+      - javascript
+      - semver-patch
+      - OTEL
+    ignore:
+      - dependency-name: "@opentelemetry/core"
+        # 2.0.0 onwards only supports Node.js 18.19.0 and above
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@opentelemetry/resources"
+        # 2.0.0 onwards only supports Node.js 18.19.0 and above
+        update-types: ["version-update:semver-major"]
+    allow:
+      - dependency-name: "@opentelemetry/*"
+    groups:
+      otel-dependencies:
+        patterns:
+          - "*"
+
+  # Instrumented library support range
   - package-ecosystem: "npm"
     directories:
       - "/packages/dd-trace/test/plugins/versions"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 1
+    cooldown:
+      default-days: 3
+      exclude:
+        - "@datadog/*"
     labels:
       - dependabot
       - dependencies
@@ -110,12 +147,20 @@ updates:
       test-versions:
         patterns:
           - "*"
+
+  # Esbuild integration test dependencies
   - package-ecosystem: "npm"
     directories:
       - "/integration-tests/esbuild"
+      - "/integration-tests/appsec/iast-esbuild-esm"
+      - "/integration-tests/appsec/iast-esbuild-cjs"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 1
+    cooldown:
+      default-days: 3
+      exclude:
+        - "@datadog/*"
     labels:
       - dependabot
       - dependencies

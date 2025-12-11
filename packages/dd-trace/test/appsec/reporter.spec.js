@@ -1,17 +1,18 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-const dc = require('dc-polyfill')
-const proxyquire = require('proxyquire')
+const assert = require('node:assert/strict')
 const zlib = require('node:zlib')
 
+const { expect } = require('chai')
+const dc = require('dc-polyfill')
+const { after, afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
+const { USER_KEEP } = require('../../../../ext/priority')
 const { storage } = require('../../../datadog-core')
 const { ASM } = require('../../src/standalone/product')
-const { USER_KEEP } = require('../../../../ext/priority')
 const { getConfigFresh } = require('../helpers/config')
-
 function getAppSecConfig (options) {
   return getConfigFresh({ appsec: options }).appsec
 }
@@ -82,7 +83,7 @@ describe('reporter', () => {
     it('should return empty object when providing no headers', () => {
       const result = Reporter.filterHeaders(null)
 
-      expect(result).to.be.an('object').that.is.empty
+      assert.ok(Object.keys(result).length === 0)
     })
 
     it('should filter and format headers from passlist', () => {
@@ -98,7 +99,7 @@ describe('reporter', () => {
         'x-client-ip'
       ], 'prefix.'))
 
-      expect(result).to.deep.equal({
+      assert.deepStrictEqual(result, {
         'prefix.host': 'localhost',
         'prefix.user-agent': '42',
         'prefix.x-forwarded-for': '10'
@@ -121,7 +122,7 @@ describe('reporter', () => {
         'x-client-ip'
       ]), 'prefix.', 3)
 
-      expect(result).to.deep.equal({
+      assert.deepStrictEqual(result, {
         'prefix.content-digest': 'foo',
         'prefix.content-length': '42',
         'prefix.content-security-policy': 'script-src self'
@@ -131,10 +132,10 @@ describe('reporter', () => {
 
   describe('formatHeaderName', () => {
     it('should format a string', () => {
-      expect(Reporter.formatHeaderName('Content-Type')).to.equal('content-type')
-      expect(Reporter.formatHeaderName(' Content-Type ')).to.equal('content-type')
-      expect(Reporter.formatHeaderName('C!!!ont_____ent----tYp!/!e')).to.equal('c___ont_____ent----typ_/_e')
-      expect(Reporter.formatHeaderName('Some.Header')).to.equal('some_header')
+      assert.strictEqual(Reporter.formatHeaderName('Content-Type'), 'content-type')
+      assert.strictEqual(Reporter.formatHeaderName(' Content-Type '), 'content-type')
+      assert.strictEqual(Reporter.formatHeaderName('C!!!ont_____ent----tYp!/!e'), 'c___ont_____ent----typ_/_e')
+      assert.strictEqual(Reporter.formatHeaderName('Some.Header'), 'some_header')
       expect(Reporter.formatHeaderName(''.padEnd(300, 'a'))).to.have.lengthOf(200)
     })
   })
@@ -157,13 +158,13 @@ describe('reporter', () => {
     it('should not add entries to metricsQueue with success false', () => {
       Reporter.reportWafInit(wafVersion, rulesVersion, false)
 
-      expect(Reporter.metricsQueue.get('_dd.appsec.waf.version')).to.be.undefined
+      assert.strictEqual(Reporter.metricsQueue.get('_dd.appsec.waf.version'), undefined)
     })
 
     it('should call incrementWafInitMetric', () => {
       Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
 
-      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion, true)
+      sinon.assert.calledOnceWithExactly(telemetry.incrementWafInitMetric, wafVersion, rulesVersion, true)
     })
 
     it('should not fail with undefined arguments', () => {
@@ -173,7 +174,7 @@ describe('reporter', () => {
 
       Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
 
-      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion, true)
+      sinon.assert.calledOnceWithExactly(telemetry.incrementWafInitMetric, wafVersion, rulesVersion, true)
     })
   })
 
@@ -194,7 +195,7 @@ describe('reporter', () => {
 
       Reporter.reportMetrics({})
 
-      expect(span.setTag).not.to.have.been.called
+      sinon.assert.notCalled(span.setTag)
     })
 
     it('should do nothing when rootSpan is not available', () => {
@@ -204,8 +205,8 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(telemetry.updateWafRequestsMetricTags).not.to.have.been.called
-      expect(telemetry.updateRaspRequestsMetricTags).not.to.have.been.called
+      sinon.assert.notCalled(telemetry.updateWafRequestsMetricTags)
+      sinon.assert.notCalled(telemetry.updateRaspRequestsMetricTags)
     })
 
     it('should set duration metric if set', () => {
@@ -213,9 +214,9 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
-      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(telemetry.updateWafRequestsMetricTags, metrics, req)
+      sinon.assert.notCalled(telemetry.updateRaspRequestsMetricTags)
     })
 
     it('should call updateWafRequestsMetricTags', () => {
@@ -224,17 +225,17 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req)
-      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(telemetry.updateWafRequestsMetricTags, metrics, store.req)
+      sinon.assert.notCalled(telemetry.updateRaspRequestsMetricTags)
     })
 
     it('should set ext duration metrics if set', () => {
       const metrics = { durationExt: 42 }
       Reporter.reportMetrics(metrics)
 
-      expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
-      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(telemetry.updateWafRequestsMetricTags, metrics, req)
+      sinon.assert.notCalled(telemetry.updateRaspRequestsMetricTags)
     })
 
     it('should set rulesVersion if set', () => {
@@ -242,9 +243,9 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.event_rules.version', '1.2.3')
-      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.setTag, '_dd.appsec.event_rules.version', '1.2.3')
+      sinon.assert.notCalled(telemetry.updateRaspRequestsMetricTags)
     })
 
     it('should set blockTriggered when provided', () => {
@@ -252,7 +253,7 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics, null)
 
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+      sinon.assert.calledOnceWithExactly(telemetry.updateWafRequestsMetricTags, metrics, req)
     })
 
     it('should set wafTimeout when result has timeout', () => {
@@ -260,7 +261,7 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+      sinon.assert.calledOnceWithExactly(telemetry.updateWafRequestsMetricTags, metrics, req)
     })
 
     it('should set max truncation string length metric if set', () => {
@@ -268,7 +269,7 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.truncated.string_length', 300)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.truncated.string_length', 300)
     })
 
     it('should set max truncation container size metric if set', () => {
@@ -276,7 +277,7 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.truncated.container_size', 200)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.truncated.container_size', 200)
     })
 
     it('should set max truncation container depth metric if set', () => {
@@ -284,7 +285,7 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.truncated.container_depth', 100)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.truncated.container_depth', 100)
     })
 
     it('should call updateRaspRequestsMetricTags when raspRule is provided', () => {
@@ -295,8 +296,8 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics, raspRule)
 
-      expect(telemetry.updateRaspRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req, raspRule)
-      expect(telemetry.updateWafRequestsMetricTags).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(telemetry.updateRaspRequestsMetricTags, metrics, store.req, raspRule)
+      sinon.assert.notCalled(telemetry.updateWafRequestsMetricTags)
     })
   })
 
@@ -340,7 +341,7 @@ describe('reporter', () => {
 
       Reporter.reportWafConfigUpdate(product, rcConfigId, diagnostics)
 
-      expect(telemetryLogHandlerAssert).to.have.been.calledThrice
+      sinon.assert.calledThrice(telemetryLogHandlerAssert)
       expect(telemetryLogHandlerAssert.getCall(0)).to.have.been.calledWithExactly({
         message: '"missing key operator": ["blk-001-001"]',
         level: 'ERROR',
@@ -361,7 +362,7 @@ describe('reporter', () => {
     it('should increment waf.config_errors metric', () => {
       Reporter.reportWafConfigUpdate(product, rcConfigId, diagnostics, '1.24.1')
 
-      expect(telemetry.incrementWafConfigErrorsMetric).to.have.been.calledTwice
+      sinon.assert.calledTwice(telemetry.incrementWafConfigErrorsMetric)
       expect(telemetry.incrementWafConfigErrorsMetric).to.always.have.been.calledWithExactly('1.24.1', '1.42.11')
     })
   })
@@ -398,8 +399,8 @@ describe('reporter', () => {
         ]
       })
 
-      expect(web.root).to.have.been.calledOnceWith(req)
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}'
@@ -416,8 +417,8 @@ describe('reporter', () => {
         ]
       })
 
-      expect(web.root).to.have.been.calledOnceWith(req)
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
@@ -430,8 +431,8 @@ describe('reporter', () => {
 
       Reporter.reportAttack({ events: [] })
 
-      expect(web.root).to.have.been.calledOnceWith(req)
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.appsec.json': '{"triggers":[]}',
         'network.client.ip': '8.8.8.8'
@@ -453,8 +454,8 @@ describe('reporter', () => {
         ]
       })
 
-      expect(web.root).to.have.been.calledOnceWith(req)
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
@@ -477,8 +478,8 @@ describe('reporter', () => {
         ]
       })
 
-      expect(web.root).to.have.been.calledOnceWith(req)
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
@@ -530,7 +531,7 @@ describe('reporter', () => {
           ]
         })
 
-        expect(span.meta_struct['http.request.body']).to.be.deep.equal(expectedBody)
+        assert.deepStrictEqual(span.meta_struct['http.request.body'], expectedBody)
       })
 
       it('should not report request body in meta struct on rasp event when disabled', () => {
@@ -560,7 +561,7 @@ describe('reporter', () => {
           ]
         })
 
-        expect(span.meta_struct?.['http.request.body']).to.be.undefined
+        assert.strictEqual(span.meta_struct?.['http.request.body'], undefined)
       })
 
       describe('Request body truncation', () => {
@@ -597,21 +598,21 @@ describe('reporter', () => {
         it('should truncate collected request body', () => {
           const { truncated, value: truncatedRequestBody } = Reporter.truncateRequestBody(requestBody)
 
-          expect(truncated).to.be.true
-          expect(truncatedRequestBody).to.have.property('str')
-          expect(truncatedRequestBody.str).to.have.length(4096)
-          expect(objectDepth(truncatedRequestBody.nestedObj)).to.be.equal(19)
-          expect(Object.keys(truncatedRequestBody.objectWithLotsOfNodes)).to.have.length(256)
-          expect(truncatedRequestBody.arr).to.have.length(256)
-          expect(truncatedRequestBody.specialValues.nullValue).to.be.null
-          expect(truncatedRequestBody.specialValues.undefinedValue).to.be.undefined
-          expect(truncatedRequestBody.specialValues.emptyObject).to.be.deep.equal({})
-          expect(Object.keys(truncatedRequestBody.specialValues.objectWithToJSON)).to.have.length(256)
-          expect(truncatedRequestBody.specialValues.objectWithToJSON.foo).to.be.undefined
-          expect(truncatedRequestBody.specialValues.objectWithToJSONRaisingException).to.be.undefined
-          expect(truncatedRequestBody.specialValues.emptyArray).to.be.deep.equal([])
-          expect(objectDepth(truncatedRequestBody.circularRef)).to.be.equal(19)
-          expect(truncatedRequestBody.specialValues.arrayWithToJSON).to.have.length(4096)
+          assert.strictEqual(truncated, true)
+          assert.ok(Object.hasOwn(truncatedRequestBody, 'str'))
+          assert.strictEqual(truncatedRequestBody.str.length, 4096)
+          assert.strictEqual(objectDepth(truncatedRequestBody.nestedObj), 19)
+          assert.strictEqual(Object.keys(truncatedRequestBody.objectWithLotsOfNodes).length, 256)
+          assert.strictEqual(truncatedRequestBody.arr.length, 256)
+          assert.strictEqual(truncatedRequestBody.specialValues.nullValue, null)
+          assert.strictEqual(truncatedRequestBody.specialValues.undefinedValue, undefined)
+          assert.deepStrictEqual(truncatedRequestBody.specialValues.emptyObject, {})
+          assert.strictEqual(Object.keys(truncatedRequestBody.specialValues.objectWithToJSON).length, 256)
+          assert.strictEqual(truncatedRequestBody.specialValues.objectWithToJSON.foo, undefined)
+          assert.strictEqual(truncatedRequestBody.specialValues.objectWithToJSONRaisingException, undefined)
+          assert.deepStrictEqual(truncatedRequestBody.specialValues.emptyArray, [])
+          assert.strictEqual(objectDepth(truncatedRequestBody.circularRef), 19)
+          assert.strictEqual(truncatedRequestBody.specialValues.arrayWithToJSON.length, 4096)
         })
 
         it('should set request body size exceeded when reporter request body has been truncated', () => {
@@ -643,7 +644,7 @@ describe('reporter', () => {
             ]
           })
 
-          expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.request_body_size.exceeded', 'true')
+          sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.request_body_size.exceeded', 'true')
         })
 
         it('should set request body size exceeded metric for old and new approaches when both events happen', () => {
@@ -680,13 +681,13 @@ describe('reporter', () => {
             }
           })
 
-          expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.request_body_size.exceeded', 'true')
+          sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.request_body_size.exceeded', 'true')
           span.context()._tags = { '_dd.appsec.rasp.request_body_size.exceeded': 'true' }
 
           const res = {}
           Reporter.finishRequest(req, res, {}, req.body)
 
-          expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.request_body_size.exceeded', 'true')
+          sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.request_body_size.exceeded', 'true')
         })
       })
     })
@@ -696,7 +697,7 @@ describe('reporter', () => {
     it('should call incrementWafUpdatesMetric', () => {
       Reporter.reportWafUpdate('0.0.1', '0.0.2', true)
 
-      expect(telemetry.incrementWafUpdatesMetric).to.have.been.calledOnceWithExactly('0.0.1', '0.0.2', true)
+      sinon.assert.calledOnceWithExactly(telemetry.incrementWafUpdatesMetric, '0.0.1', '0.0.2', true)
     })
   })
 
@@ -705,7 +706,7 @@ describe('reporter', () => {
       const raspRule = { type: 'rule-type' }
       Reporter.reportRaspRuleSkipped(raspRule, 'after-request')
 
-      expect(telemetry.updateRaspRuleSkippedMetricTags).to.have.been.calledOnceWithExactly(raspRule, 'after-request')
+      sinon.assert.calledOnceWithExactly(telemetry.updateRaspRuleSkippedMetricTags, raspRule, 'after-request')
     })
   })
 
@@ -802,7 +803,7 @@ describe('reporter', () => {
       web.root.withArgs({}).returns(span)
 
       Reporter.finishRequest(null, null)
-      expect(span.addTags).not.to.have.been.called
+      sinon.assert.notCalled(span.addTags)
     })
 
     it('should add metrics tags from metricsQueue', () => {
@@ -813,8 +814,8 @@ describe('reporter', () => {
 
       Reporter.finishRequest(req, wafContext, {})
 
-      expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.addTags).to.have.been.calledWithExactly({ a: 1, b: 2 })
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledWithExactly(span.addTags, { a: 1, b: 2 })
       expect(Reporter.metricsQueue).to.be.empty
     })
 
@@ -837,8 +838,8 @@ describe('reporter', () => {
       }
 
       Reporter.finishRequest(req)
-      expect(web.root).to.have.been.calledOnceWith(req)
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         'http.request.headers.x-amzn-trace-id': 'a',
         'http.request.headers.cloudfront-viewer-ja3-fingerprint': 'b',
         'http.request.headers.cf-ray': 'c',
@@ -875,13 +876,12 @@ describe('reporter', () => {
       span.context()._tags['appsec.event'] = 'true'
 
       Reporter.finishRequest(req, res)
-      expect(web.root).to.have.been.calledOnceWith(req)
+      sinon.assert.calledOnceWithExactly(web.root, req)
 
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         'http.request.headers.x-cloud-trace-context': 'd',
         'http.response.headers.content-type': 'application/json',
-        'http.response.headers.content-length': '42',
-        'http.endpoint': '/path/:param'
+        'http.response.headers.content-length': '42'
       })
     })
 
@@ -899,9 +899,9 @@ describe('reporter', () => {
       span.context()._tags['appsec.event'] = 'true'
 
       Reporter.finishRequest(req, res)
-      expect(web.root).to.have.been.calledOnceWith(req)
+      sinon.assert.calledOnceWithExactly(web.root, req)
 
-      expect(span.addTags).to.have.been.calledWithExactly({
+      sinon.assert.calledWithExactly(span.addTags, {
         'http.response.headers.content-type': 'application/json',
         'http.response.headers.content-length': '42'
       })
@@ -928,7 +928,7 @@ describe('reporter', () => {
         ...expectedRequestTagsToTrackOnEvent
       }
 
-      expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
+      sinon.assert.calledWithExactly(span.addTags, expectedTags)
     })
 
     it('should add http request data inside request span when user login success is tracked', () => {
@@ -954,7 +954,7 @@ describe('reporter', () => {
         ...expectedRequestTagsToTrackOnEvent
       }
 
-      expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
+      sinon.assert.calledWithExactly(span.addTags, expectedTags)
     })
 
     it('should add http request data inside request span when user login failure is tracked', () => {
@@ -980,7 +980,7 @@ describe('reporter', () => {
         ...expectedRequestTagsToTrackOnEvent
       }
 
-      expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
+      sinon.assert.calledWithExactly(span.addTags, expectedTags)
     })
 
     it('should add http request data inside request span when user custom event is tracked', () => {
@@ -1006,7 +1006,7 @@ describe('reporter', () => {
         ...expectedRequestTagsToTrackOnEvent
       }
 
-      expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
+      sinon.assert.calledWithExactly(span.addTags, expectedTags)
     })
 
     it('should call incrementWafRequestsMetric', () => {
@@ -1022,11 +1022,11 @@ describe('reporter', () => {
 
       Reporter.finishRequest({}, {})
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.duration', 1337)
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.duration_ext', 42)
-      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.rasp.duration')
-      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.rasp.duration_ext')
-      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.rasp.rule.eval')
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.waf.duration', 1337)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.waf.duration_ext', 42)
+      sinon.assert.neverCalledWith(span.setTag, '_dd.appsec.rasp.duration')
+      sinon.assert.neverCalledWith(span.setTag, '_dd.appsec.rasp.duration_ext')
+      sinon.assert.neverCalledWith(span.setTag, '_dd.appsec.rasp.rule.eval')
     })
 
     it('should set waf.timeouts tags if there are metrics stored', () => {
@@ -1034,7 +1034,7 @@ describe('reporter', () => {
 
       Reporter.finishRequest({}, {})
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.timeouts', true)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.waf.timeouts', true)
     })
 
     it('should set waf error code tags if there are metrics stored', () => {
@@ -1042,7 +1042,7 @@ describe('reporter', () => {
 
       Reporter.finishRequest({}, {})
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.error', -1)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.waf.error', -1)
     })
 
     it('should set rasp.duration tags if there are metrics stored', () => {
@@ -1050,11 +1050,11 @@ describe('reporter', () => {
 
       Reporter.finishRequest({}, {})
 
-      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.waf.duration')
-      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.waf.duration_ext')
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.duration', 123)
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.duration_ext', 321)
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.rule.eval', 3)
+      sinon.assert.neverCalledWith(span.setTag, '_dd.appsec.waf.duration')
+      sinon.assert.neverCalledWith(span.setTag, '_dd.appsec.waf.duration_ext')
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.duration', 123)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.duration_ext', 321)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.rule.eval', 3)
     })
 
     it('should set rasp.timeout tags if there are metrics stored', () => {
@@ -1062,7 +1062,7 @@ describe('reporter', () => {
 
       Reporter.finishRequest({}, {})
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.timeout', true)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.timeout', true)
     })
 
     it('should set rasp error code tags if there are metrics stored', () => {
@@ -1070,7 +1070,7 @@ describe('reporter', () => {
 
       Reporter.finishRequest({}, {})
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.error', -1)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.error', -1)
     })
 
     it('should keep span if there are metrics', () => {
@@ -1081,7 +1081,7 @@ describe('reporter', () => {
 
       Reporter.finishRequest(req, wafContext, {})
 
-      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, span, USER_KEEP, ASM)
     })
 
     describe('extended collection', () => {
@@ -1140,7 +1140,7 @@ describe('reporter', () => {
           ...extendedResponseHeadersTags
         }
 
-        expect(span.addTags).to.have.been.calledWith(expectedTags)
+        sinon.assert.calledWith(span.addTags, expectedTags)
       })
 
       it('should truncate collected extended headers and set discarded count tags on appsec event', () => {
@@ -1191,7 +1191,7 @@ describe('reporter', () => {
           '_dd.appsec.response.header_collection.discarded': discardedResHeadersCount
         }
 
-        expect(span.addTags).to.have.been.calledWith(expectedTags)
+        sinon.assert.calledWith(span.addTags, expectedTags)
       })
 
       it('should not collect extended headers on appsec event when redaction is enabled', () => {
@@ -1229,7 +1229,7 @@ describe('reporter', () => {
           ...expectedRequestTagsToTrackOnEvent
         }
 
-        expect(span.addTags).to.have.been.calledWith(expectedTags)
+        sinon.assert.calledWith(span.addTags, expectedTags)
       })
     })
   })

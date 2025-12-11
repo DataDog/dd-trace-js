@@ -8,6 +8,7 @@ const { withVersions } = require('../../../setup/mocha')
 const {
   useLlmObs,
   assertLlmObsSpanEvent,
+  assertPromptTracking,
   MOCK_STRING,
   MOCK_NUMBER
 } = require('../../util')
@@ -753,6 +754,207 @@ describe('integrations', () => {
             stream: true
           },
           tags: { ml_app: 'test', integration: 'openai' }
+        })
+      })
+
+      describe('prompts', function () {
+        beforeEach(function () {
+          if (semifies(realVersion, '<4.87.0')) {
+            this.skip()
+          }
+        })
+
+        it('submits a response span with prompt tracking - overlapping values', async function () {
+          await openai.responses.create({
+            prompt: {
+              id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+              version: '1',
+              variables: { phrase: 'cat in the hat', word: 'cat' }
+            }
+          })
+
+          const { llmobsSpans } = await getEvents()
+
+          assertPromptTracking(llmobsSpans[0], {
+            id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+            version: '1',
+            variables: { phrase: 'cat in the hat', word: 'cat' },
+            chat_template: [
+              { role: 'user', content: 'I saw a {{phrase}} and another {{word}}' }
+            ]
+          }, [
+            { role: 'user', content: 'I saw a cat in the hat and another cat' }
+          ])
+        })
+
+        it('submits a response span with prompt tracking - partial word match', async function () {
+          await openai.responses.create({
+            prompt: {
+              id: 'pmpt_6911a954c8988190a82b11560faa47cd0d6629899573dd8f',
+              version: '2',
+              variables: { word: 'test' }
+            }
+          })
+
+          const { llmobsSpans } = await getEvents()
+
+          assertPromptTracking(llmobsSpans[0], {
+            id: 'pmpt_6911a954c8988190a82b11560faa47cd0d6629899573dd8f',
+            version: '2',
+            variables: { word: 'test' },
+            chat_template: [
+              { role: 'developer', content: 'Reply with "OK".' },
+              { role: 'user', content: 'This is a {{word}} for {{word}}ing the {{word}}er' }
+            ]
+          }, [
+            { role: 'developer', content: 'Reply with "OK".' },
+            { role: 'user', content: 'This is a test for testing the tester' }
+          ])
+        })
+
+        it('submits a response span with prompt tracking - special characters', async function () {
+          await openai.responses.create({
+            prompt: {
+              id: 'pmpt_6911a99a3eec81959d5f2e408a2654380b2b15731a51f191',
+              version: '2',
+              variables: { price: '$99.99', item: 'groceries' }
+            }
+          })
+
+          const { llmobsSpans } = await getEvents()
+
+          assertPromptTracking(llmobsSpans[0], {
+            id: 'pmpt_6911a99a3eec81959d5f2e408a2654380b2b15731a51f191',
+            version: '2',
+            variables: { price: '$99.99', item: 'groceries' },
+            chat_template: [
+              { role: 'user', content: 'The price of {{item}} is {{price}}.' }
+            ]
+          }, [
+            { role: 'user', content: 'The price of groceries is $99.99.' }
+          ])
+        })
+
+        it('submits a response span with prompt tracking - empty values', async function () {
+          await openai.responses.create({
+            prompt: {
+              id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+              version: '1',
+              variables: { phrase: 'cat in the hat', word: '' }
+            }
+          })
+
+          const { llmobsSpans } = await getEvents()
+
+          assertPromptTracking(llmobsSpans[0], {
+            id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+            version: '1',
+            variables: { phrase: 'cat in the hat', word: '' },
+            chat_template: [
+              { role: 'user', content: 'I saw a {{phrase}} and another ' }
+            ]
+          }, [
+            { role: 'user', content: 'I saw a cat in the hat and another ' }
+          ])
+        })
+
+        it('submits a response span with prompt tracking - mixed input types (url stripped)', async function () {
+          await openai.responses.create({
+            prompt: {
+              id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
+              version: '2',
+              variables: {
+                user_message: { type: 'input_text', text: 'Analyze these images and document' },
+                user_image_1: { type: 'input_image', image_url: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png', detail: 'auto' },
+                user_file: { type: 'input_file', file_url: 'https://www.berkshirehathaway.com/letters/2024ltr.pdf' },
+                user_image_2: { type: 'input_image', file_id: 'file-BCuhT1HQ24kmtsuuzF1mh2', detail: 'auto' }
+              }
+            }
+          })
+
+          const { llmobsSpans } = await getEvents()
+
+          assertPromptTracking(llmobsSpans[0], {
+            id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
+            version: '2',
+            variables: {
+              user_message: 'Analyze these images and document',
+              user_image_1: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png',
+              user_file: 'https://www.berkshirehathaway.com/letters/2024ltr.pdf',
+              user_image_2: 'file-BCuhT1HQ24kmtsuuzF1mh2'
+            },
+            chat_template: [
+              {
+                role: 'user',
+                content: 'Analyze the following content from the user:\n\n' +
+                  'Text message: {{user_message}}\n' +
+                  'Image reference 1: [image]\n' +
+                  'Document reference: {{user_file}}\n' +
+                  'Image reference 2: {{user_image_2}}\n\n' +
+                  'Please provide a comprehensive analysis.'
+              }
+            ]
+          }, [
+            {
+              role: 'user',
+              content: 'Analyze the following content from the user:\n\n' +
+                'Text message: Analyze these images and document\n' +
+                'Image reference 1: [image]\n' +
+                'Document reference: https://www.berkshirehathaway.com/letters/2024ltr.pdf\n' +
+                'Image reference 2: file-BCuhT1HQ24kmtsuuzF1mh2\n\n' +
+                'Please provide a comprehensive analysis.'
+            }
+          ])
+        })
+
+        it('submits a response span with prompt tracking - mixed input types (url preserved)', async function () {
+          await openai.responses.create({
+            include: ['message.input_image.image_url'],
+            prompt: {
+              id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
+              version: '2',
+              variables: {
+                user_message: { type: 'input_text', text: 'Analyze these images and document' },
+                user_image_1: { type: 'input_image', image_url: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png', detail: 'auto' },
+                user_file: { type: 'input_file', file_url: 'https://www.berkshirehathaway.com/letters/2024ltr.pdf' },
+                user_image_2: { type: 'input_image', file_id: 'file-BCuhT1HQ24kmtsuuzF1mh2', detail: 'auto' }
+              }
+            }
+          })
+
+          const { llmobsSpans } = await getEvents()
+
+          assertPromptTracking(llmobsSpans[0], {
+            id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
+            version: '2',
+            variables: {
+              user_message: 'Analyze these images and document',
+              user_image_1: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png',
+              user_file: 'https://www.berkshirehathaway.com/letters/2024ltr.pdf',
+              user_image_2: 'file-BCuhT1HQ24kmtsuuzF1mh2'
+            },
+            chat_template: [
+              {
+                role: 'user',
+                content: 'Analyze the following content from the user:\n\n' +
+                  'Text message: {{user_message}}\n' +
+                  'Image reference 1: {{user_image_1}}\n' +
+                  'Document reference: {{user_file}}\n' +
+                  'Image reference 2: {{user_image_2}}\n\n' +
+                  'Please provide a comprehensive analysis.'
+              }
+            ]
+          }, [
+            {
+              role: 'user',
+              content: 'Analyze the following content from the user:\n\n' +
+                'Text message: Analyze these images and document\n' +
+                'Image reference 1: https://raw.githubusercontent.com/github/explore/main/topics/python/python.png\n' +
+                'Document reference: https://www.berkshirehathaway.com/letters/2024ltr.pdf\n' +
+                'Image reference 2: file-BCuhT1HQ24kmtsuuzF1mh2\n\n' +
+                'Please provide a comprehensive analysis.'
+            }
+          ])
         })
       })
     })

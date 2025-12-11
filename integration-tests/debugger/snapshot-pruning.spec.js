@@ -8,7 +8,7 @@ describe('Dynamic Instrumentation', function () {
 
   describe('input messages', function () {
     describe('with snapshot', function () {
-      beforeEach(t.triggerBreakpoint)
+      beforeEach(() => { t.triggerBreakpoint() })
 
       it('should prune snapshot if payload is too large', function (done) {
         t.agent.on('debugger-input', ({ payload: [payload] }) => {

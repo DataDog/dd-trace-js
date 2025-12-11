@@ -1,13 +1,12 @@
 'use strict'
 
-const { describe, it, afterEach, before, after } = require('mocha')
+const assert = require('node:assert')
+
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const { useLlmObs, assertLlmObsSpanEvent } = require('../util')
-
-const assert = require('node:assert')
 const agent = require('../../plugins/agent')
-
+const { useLlmObs, assertLlmObsSpanEvent } = require('../util')
 function getTag (llmobsSpan, tagName) {
   const tag = llmobsSpan.tags.find(tag => tag.split(':')[0] === tagName)
   return tag?.split(':')[1]
@@ -134,9 +133,9 @@ describe('end to end sdk integration tests', () => {
       })
 
       // const { spans, llmobsSpans, evaluationMetrics } = run(payloadGenerator)
-      // expect(spans).to.have.lengthOf(1)
-      // expect(llmobsSpans).to.have.lengthOf(1)
-      // expect(evaluationMetrics).to.have.lengthOf(1)
+      // assert.strictEqual(spans.length, 1)
+      // assert.strictEqual(llmobsSpans.length, 1)
+      // assert.strictEqual(evaluationMetrics.length, 1)
 
       // // check eval metrics content
       // const expected = [

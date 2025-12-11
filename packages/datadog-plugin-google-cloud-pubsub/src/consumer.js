@@ -59,7 +59,8 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     }
 
     const topicName = topic ? topic.split('/').pop() : subscription.name.split('/').pop()
-    const serviceName = this.config.service || this.serviceName()
+    const baseService = this.tracer._service || 'unknown'
+    const serviceName = this.config.service || `${baseService}-pubsub`
     const meta = {
       'gcloud.project_id': subscription.pubsub.projectId,
       'pubsub.topic': topic,
@@ -79,7 +80,12 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       meta['_dd.pubsub_request.trace_id'] = batchRequestTraceId
       meta['_dd.pubsub_request.span_id'] = batchRequestSpanId
       if (batchRequestTraceId && batchRequestSpanId) {
-        meta['_dd.span_links'] = `${batchRequestTraceId}:${batchRequestSpanId}`
+        // Use JSON format like producer for proper span link parsing
+        meta['_dd.span_links'] = JSON.stringify([{
+          trace_id: batchRequestTraceId,
+          span_id: batchRequestSpanId,
+          flags: 0
+        }])
       }
     }
 
@@ -133,7 +139,12 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       if (pubsubRequestTraceId && pubsubRequestSpanId) {
         span.setTag('_dd.pubsub_request.trace_id', pubsubRequestTraceId)
         span.setTag('_dd.pubsub_request.span_id', pubsubRequestSpanId)
-        span.setTag('_dd.span_links', `${pubsubRequestTraceId}:${pubsubRequestSpanId}`)
+        // Use JSON format like producer for proper span link parsing
+        span.setTag('_dd.span_links', JSON.stringify([{
+          trace_id: pubsubRequestTraceId,
+          span_id: pubsubRequestSpanId,
+          flags: 0
+        }]))
       }
 
       if (batchSize) {

@@ -53,7 +53,6 @@ tracer.init({
   experimental: {
     iast: true,
     b3: true,
-    runtimeId: true,
     exporter: 'log'
   },
   hostname: 'agent',
@@ -333,6 +332,7 @@ tracer.use('fetch', httpClientOptions);
 tracer.use('generic-pool');
 tracer.use('google-cloud-pubsub');
 tracer.use('google-cloud-vertexai');
+tracer.use('google-genai');
 tracer.use('graphql');
 tracer.use('graphql', graphqlOptions);
 tracer.use('graphql', { variables: ['foo', 'bar'] });

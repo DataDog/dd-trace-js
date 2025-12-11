@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach, context } = require('tap').mocha
 const sinon = require('sinon')
 const nock = require('nock')
@@ -25,7 +25,7 @@ describe('Test Visibility DI Writer', () => {
     it('can send logs to the logs intake', (done) => {
       const scope = nock('http://www.example.com')
         .post('/api/v2/logs', body => {
-          expect(body).to.deep.equal([{ message: 'test' }, { message: 'test2' }])
+          assert.deepStrictEqual(body, [{ message: 'test' }, { message: 'test2' }])
           return true
         })
         .reply(202)
@@ -54,7 +54,7 @@ describe('Test Visibility DI Writer', () => {
       logsWriter.append({ message: 'test6' })
 
       logsWriter.flush(() => {
-        expect(logErrorSpy.called).to.be.true
+        assert.strictEqual(logErrorSpy.called, true)
         scope.done()
         done()
       })
@@ -67,7 +67,7 @@ describe('Test Visibility DI Writer', () => {
 
       const scope = nock('http://www.example.com')
         .post('/debugger/v1/input', body => {
-          expect(body).to.deep.equal([{ message: 'test3' }, { message: 'test4' }])
+          assert.deepStrictEqual(body, [{ message: 'test3' }, { message: 'test4' }])
           return true
         })
         .reply(202)
@@ -98,7 +98,7 @@ describe('Test Visibility DI Writer', () => {
       logsWriter.append({ message: 'test6' })
 
       logsWriter.flush(() => {
-        expect(logErrorSpy.called).to.be.true
+        assert.strictEqual(logErrorSpy.called, true)
         scope.done()
         done()
       })
