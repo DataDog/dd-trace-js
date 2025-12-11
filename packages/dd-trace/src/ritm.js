@@ -13,6 +13,7 @@ const origRequire = Module.prototype.require
 module.exports = Hook
 
 let moduleHooks = Object.create(null)
+const pathModuleHooks = new Set()
 let cache = Object.create(null)
 let patching = Object.create(null)
 let patchedRequire = null
@@ -44,6 +45,7 @@ function Hook (modules, options, onrequire) {
       if (hooks) {
         hooks.push(onrequire)
       } else {
+        if (path.isAbsolute(mod)) pathModuleHooks.add(mod)
         moduleHooks[mod] = [onrequire]
       }
     }
@@ -128,11 +130,11 @@ function Hook (modules, options, onrequire) {
         // check if the full filename if the filename was registered, if not then prefix matching will be done
         hooks = moduleHooks[filename]
 
-        if (!hooks) {
+        if (!hooks && pathModuleHooks.size > 0) {
           // For absolute path modules, check if any registered module is a prefix of this filename,
           // since hooks can specify files that we don't have at register time
-          for (const registeredModule of Object.keys(moduleHooks)) {
-            if (registeredModule.startsWith('/') && filename.startsWith(registeredModule + path.sep)) {
+          for (const registeredModule of pathModuleHooks) {
+            if (filename.startsWith(registeredModule + path.sep)) {
               hooks = moduleHooks[registeredModule]
               name = filename
               basedir = registeredModule
