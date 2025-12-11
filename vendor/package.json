@@ -1,7 +1,7 @@
 {
   "license": "(Apache-2.0 OR BSD-3-Clause)",
   "scripts": {
-    "postinstall": "rspack"
+    "postinstall": "node rspack"
   },
   "dependencies": {
     "@datadog/sketches-js": "2.1.1",
@@ -32,7 +32,6 @@
     "ttl-set": "^1.0.0"
   },
   "devDependencies": {
-    "@rspack/cli": "^1.6.4",
     "@rspack/core": "^1.6.4",
     "license-webpack-plugin": "^4.0.2"
   }
