@@ -86,7 +86,7 @@ describe('check-require-cache', () => {
     ch = tracingChannel('orchestrion:test-trace-sync:test_invoke')
     ch.subscribe(subs)
 
-    test.exports.test()
+    test.test()
   })
 
   it('should auto instrument async functions', done => {
@@ -101,7 +101,7 @@ describe('check-require-cache', () => {
     ch = tracingChannel('orchestrion:test-trace-async:test_invoke')
     ch.subscribe(subs)
 
-    test.exports.test()
+    test.test()
   })
 
   it('should auto instrument callback functions', done => {
