@@ -92,7 +92,6 @@ async function processModule ({ path, internal, context, excludeDefault }) {
   } else {
     srcUrl = pathToFileURL(path)
     exportNames = await getExports(srcUrl, context, getSource)
-    process._rawDebug('This is getExports ', exportNames)
   }
 
   const starExports = new Set()
