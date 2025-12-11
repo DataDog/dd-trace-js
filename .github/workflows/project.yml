@@ -51,6 +51,10 @@ jobs:
       - uses: ./.github/actions/install
       - run: npm run lint
 
+  # The package size is especially useful in constrained environments, so the
+  # computation is done only on the package that would be installed there.
+  # In order to do that, the current folder is wiped and replaced with what
+  # would be installed is those environments before running the computation.
   package-size-report:
     runs-on: ubuntu-latest
     permissions:
@@ -58,7 +62,11 @@ jobs:
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
+      - run: FILENAME=$(npm pack --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
+      - run: rm -rf *
+      - run: tar -zxf /tmp/dd-trace.tgz -C $(pwd) --strip-components=1
+      - run: yarn --prod --ignore-optional
+      - run: ls -lisa
       - name: Compute module size tree and report
         uses: qard/heaviest-objects-in-the-universe@1e02edbdda803a45537a808ede97866db47756d3 # Unreleased
         with:
