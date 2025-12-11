@@ -151,8 +151,8 @@ function Hook (modules, options, onrequire) {
       }
 
       // figure out if this is the main module file, or a file inside the module
-      // Skip this for absolute path modules since _resolveLookupPaths returns null for them
-      // and we've already computed the internal file path above
+      // Skip this for absolute paths since it won't work as it's itended for node modules
+
       if (!absolutePathModuleMatch) {
         const paths = Module._resolveLookupPaths(name, this, true)
         if (!paths) {
