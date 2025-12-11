@@ -92,37 +92,6 @@ updates:
           - "minor"
           - "patch"
 
-  # OTEL in our supported ranges
-  - package-ecosystem: "npm"
-    directories:
-      - "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 1
-    cooldown:
-      default-days: 5
-    # Widen range across major versions, if possible. Ignore / manually update otherwise.
-    versioning-strategy: "widen"
-    labels:
-      - dependabot
-      - dependencies
-      - javascript
-      - semver-patch
-      - OTEL
-    ignore:
-      - dependency-name: "@opentelemetry/core"
-        # 2.0.0 onwards only supports Node.js 18.19.0 and above
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@opentelemetry/resources"
-        # 2.0.0 onwards only supports Node.js 18.19.0 and above
-        update-types: ["version-update:semver-major"]
-    allow:
-      - dependency-name: "@opentelemetry/*"
-    groups:
-      otel-dependencies:
-        patterns:
-          - "*"
-
   # Vendored dependencies
   - package-ecosystem: "npm"
     directories:
