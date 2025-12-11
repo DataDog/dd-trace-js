@@ -1,0 +1,123 @@
+on:
+  workflow_dispatch:
+    inputs:
+      cache_entries:
+        description: 'JSON array of cache entries, e.g., [{"key":"abc","version":"123"},{"key":"def","version":"456"}]'
+        required: true
+        type: string
+        default: '[{"key":"runner_venv-Linux-/opt/hostedtoolcache/Python/3.12.12/x64-dbe133b0a76747625e6c8139943b9dc2dbf5814e9ccf9f4a8ed5b7fa66dd2976","version":"f488f6875b536eb746450004e6f18bf74d514ad2cad78c86d6d5147ddbf9f9b0"},{"key":"PFxRDTsQC2CBRTRk3TMxWNYXnd0=","version":"4793076103aa823b0a4c97942d7385d4346f77a3c30a0bad6e0f1d748becbab5"},{"key":"playwright-browsers-oldest-dd6","version":"4f7514040e3a28a321a9658d8e3a51fd52c29410f6844d0d51bcb9b20ca5e3a6"},{"key":"PFxRDTsQC2CBRTRk3TMxWNYXnd0=","version":"c95311a28e589c62f14651d2e6001da3e2afe6e855380a412a583dabc576b960"},{"key":"yarn-cache-AI Guard-windows-b4e1dc4e46ec063c714cab2e6a48b2f1c42c37b4546d1f2592a517159bbd52d8-v2","version":"dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"},{"key":"Aktlxw4hnyBVd/vZJbkdxGmq8Tw=","version":"3dbcc4f8dfd5fbbab9759602b7adb19c466cf9edfc277687f97ba9efbdc86d90"},{"key":"yarn-cache-APM Capabilities-tracing-windows-b4e1dc4e46ec063c714cab2e6a48b2f1c42c37b4546d1f2592a517159bbd52d8-v2","version":"dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"},{"key":"yarn-cache-AppSec-windows-b4e1dc4e46ec063c714cab2e6a48b2f1c42c37b4546d1f2592a517159bbd52d8-v2","version":"dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"},{"key":"yarn-cache-OpenFeature-windows-b4e1dc4e46ec063c714cab2e6a48b2f1c42c37b4546d1f2592a517159bbd52d8-v2","version":"dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"},{"key":"cypress-binary-14.5.4","version":"09038f5f1eb279f921ac07849ccf00ea0cadd76685c868eab628a2e3f47ef0b7"},{"key":"n71Gg/JormzoitmBpVjBCZCcL6Y=","version":"0c867ee6264758fbca938e6c6d38a3160cb478f2770da2f831e22e4c9e3720d8"},{"key":"playwright-browsers-Linux-1.57.0","version":"b11b119dfd10565044882f81f06d3a75b1602bec6f8658ac905dd63583b2a885"},{"key":"cypress-binary-10.2.0","version":"09038f5f1eb279f921ac07849ccf00ea0cadd76685c868eab628a2e3f47ef0b7"},{"key":"yarn-cache-Profiling-windows-b4e1dc4e46ec063c714cab2e6a48b2f1c42c37b4546d1f2592a517159bbd52d8-v2","version":"dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"},{"key":"actionlint-1.7.9-Linux-X64","version":"2c5831b0ad32de99a644bc2cdd9a58421edce007c9b47f4c1c7d25220f9d6578"},{"key":"yarn-cache-AppSec-windows-b4e1dc4e46ec063c714cab2e6a48b2f1c42c37b4546d1f2592a517159bbd52d8-v2","version":"dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"},{"key":"PFxRDTsQC2CBRTRk3TMxWNYXnd0=","version":"c95311a28e589c62f14651d2e6001da3e2afe6e855380a412a583dabc576b960"},{"key":"playwright-browsers-oldest-dd6","version":"4f7514040e3a28a321a9658d8e3a51fd52c29410f6844d0d51bcb9b20ca5e3a6"},{"key":"yarn-cache-Profiling-windows-b4e1dc4e46ec063c714cab2e6a48b2f1c42c37b4546d1f2592a517159bbd52d8-v2","version":"dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"},{"key":"cypress-binary-14.5.4","version":"09038f5f1eb279f921ac07849ccf00ea0cadd76685c868eab628a2e3f47ef0b7"},{"key":"yarn-cache-APM Capabilities-tracing-windows-b4e1dc4e46ec063c714cab2e6a48b2f1c42c37b4546d1f2592a517159bbd52d8-v2","version":"dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"},{"key":"cypress-binary-10.2.0","version":"09038f5f1eb279f921ac07849ccf00ea0cadd76685c868eab628a2e3f47ef0b7"},{"key":"yarn-cache-AI Guard-windows-b4e1dc4e46ec063c714cab2e6a48b2f1c42c37b4546d1f2592a517159bbd52d8-v2","version":"dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"},{"key":"Aktlxw4hnyBVd/vZJbkdxGmq8Tw=","version":"3dbcc4f8dfd5fbbab9759602b7adb19c466cf9edfc277687f97ba9efbdc86d90"},{"key":"yarn-cache-OpenFeature-windows-b4e1dc4e46ec063c714cab2e6a48b2f1c42c37b4546d1f2592a517159bbd52d8-v2","version":"dfeaf94a5df020ad999e6dd827afacf94f5a2ddf5418288305ef5b91f639b181"},{"key":"playwright-browsers-Linux-1.57.0","version":"b11b119dfd10565044882f81f06d3a75b1602bec6f8658ac905dd63583b2a885"},{"key":"n71Gg/JormzoitmBpVjBCZCcL6Y=","version":"0c867ee6264758fbca938e6c6d38a3160cb478f2770da2f831e22e4c9e3720d8"},{"key":"actionlint-1.7.9-Linux-X64","version":"2c5831b0ad32de99a644bc2cdd9a58421edce007c9b47f4c1c7d25220f9d6578"},{"key":"PFxRDTsQC2CBRTRk3TMxWNYXnd0=","version":"c95311a28e589c62f14651d2e6001da3e2afe6e855380a412a583dabc576b960"},{"key":"playwright-browsers-oldest-dd6","version":"4f7514040e3a28a321a9658d8e3a51fd52c29410f6844d0d51bcb9b20ca5e3a6"}]'
+
+jobs:
+  extract-cache:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (minimal)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+          sparse-checkout-cone-mode: false
+
+      - name: Extract caches
+        run: |
+          mkdir -p cache-artifacts
+
+          echo '${{ inputs.cache_entries }}' | jq -c '.[]' | while read -r entry; do
+            key=$(echo "$entry" | jq -r '.key')
+            version=$(echo "$entry" | jq -r '.version')
+
+            echo "================================================"
+            echo "Attempting to restore: $key (version: $version)"
+            echo "================================================"
+
+            safe_name=$(echo "$key-$version" | tr '/' '_' | tr ':' '_')
+            cache_dir="cache-artifacts/$safe_name"
+            mkdir -p "$cache_dir"
+
+            echo "Restoring to: $cache_dir"
+
+            cat > "$cache_dir/metadata.json" <<EOF
+          {
+            "key": "$key",
+            "version": "$version",
+            "requested_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "runner_os": "$RUNNER_OS",
+            "runner_arch": "$RUNNER_ARCH"
+          }
+          EOF
+          done
+
+      - name: Restore cache entries
+        id: restore
+        continue-on-error: true
+        run: |
+          echo '${{ inputs.cache_entries }}' | jq -c '.[]' | while read -r entry; do
+            key=$(echo "$entry" | jq -r '.key')
+            version=$(echo "$entry" | jq -r '.version')
+            safe_name=$(echo "$key-$version" | tr '/' '_' | tr ':' '_')
+            cache_dir="cache-artifacts/$safe_name"
+
+            echo "::group::Restoring $key"
+
+            restored="false"
+            if gh cache restore "$cache_dir" --key "$key" 2>/dev/null; then
+              echo "✓ Successfully restored $key"
+              restored="true"
+            else
+              echo "✗ Failed to restore $key"
+            fi
+
+            echo "$restored" > "$cache_dir/restore_status.txt"
+            echo "::endgroup::"
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Create file hashes
+        run: |
+          echo "# File Hashes (SHA256)" > cache-artifacts/HASHES.txt
+          find cache-artifacts -type f -not -name "HASHES.txt" -exec sha256sum {} \; >> cache-artifacts/HASHES.txt
+
+      - name: Prepare artifacts for upload
+        run: |
+          echo '${{ inputs.cache_entries }}' | jq -c '.[]' | while read -r entry; do
+            key=$(echo "$entry" | jq -r '.key')
+            version=$(echo "$entry" | jq -r '.version')
+            safe_name=$(echo "$key-$version" | tr '/' '_' | tr ':' '_')
+            cache_dir="cache-artifacts/$safe_name"
+
+            if [ -d "$cache_dir" ]; then
+              tar -czf "${safe_name}.tar.gz" -C "cache-artifacts" "$(basename "$cache_dir")"
+              artifact_name="${key}:${version}"
+              safe_artifact_name=$(echo "$artifact_name" | sed 's/[^a-zA-Z0-9:_-]/_/g')
+              echo "$safe_artifact_name|${safe_name}.tar.gz" >> artifact_list.txt
+            fi
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cache-forensics-batch-${{ github.run_number }}
+          path: |
+            *.tar.gz
+            cache-artifacts/HASHES.txt
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Display summary
+        if: always()
+        run: |
+          echo "## Cache Extraction Complete 🔍" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f artifact_list.txt ]; then
+            echo "### Extracted Artifacts" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Cache Key:Version | Archive File |" >> $GITHUB_STEP_SUMMARY
+            echo "|-------------------|--------------|" >> $GITHUB_STEP_SUMMARY
+            while IFS='|' read -r artifact_name archive_file; do
+              echo "| \`$artifact_name\` | \`$archive_file\` |" >> $GITHUB_STEP_SUMMARY
+            done < artifact_list.txt
+          fi
