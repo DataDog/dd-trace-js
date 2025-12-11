@@ -11,6 +11,9 @@ const {
   getIsFaultyEarlyFlakeDetection
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
+const {
+  getEnvironmentVariable
+} = require('../../dd-trace/src/config-helper')
 const { DD_MAJOR } = require('../../../version')
 
 const testStartCh = channel('ci:playwright:test:start')
@@ -38,7 +41,7 @@ const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
 
-const RUM_FLUSH_WAIT_TIME = 1000
+const RUM_FLUSH_WAIT_TIME = Number(getEnvironmentVariable('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 1000
 
 let applyRepeatEachIndex = null
 
