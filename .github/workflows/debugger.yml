@@ -29,6 +29,8 @@ jobs:
       - uses: ./.github/actions/install
       - run: ls -la /home/runner/work/
       - run: ls -la /home/runner/work/_actions
+      - run: ls -laR /home/runner/work/_actions/oven-sh
+      - run: ls -laR /home/runner/work/_actions/actions
       - run: yarn test:debugger:ci
       - run: yarn test:integration:debugger
       - if: always()
