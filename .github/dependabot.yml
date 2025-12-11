@@ -83,9 +83,10 @@ updates:
       - dependency-name: "@opentelemetry/resources"
         # 2.0.0 onwards only supports Node.js 18.19.0 and above
         update-types: ["version-update:semver-major"]
-        # @opentelemetry/api has to be widened, not increased.
-        # Thus, we ignore it and update it manually.
+        # @opentelemetry/api and @opentelemetry/api-logs have to be widened, not increased.
+        # Thus, we ignore them and update them manually.
       - dependency-name: "@opentelemetry/api"
+      - dependency-name: "@opentelemetry/api-logs"
     groups:
       dev-minor-and-patch-dependencies:
         dependency-type: "development"
