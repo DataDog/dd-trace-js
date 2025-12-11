@@ -39,12 +39,12 @@ class MeterProvider {
    * @param {MeterOptions} [options] - Additional options
    * @returns {Meter} Meter instance
    */
-  getMeter (name, version = '', { schemaUrl = '' } = {}) {
+  getMeter (name, version = '', { schemaUrl = '', attributes = {} } = {}) {
     const normalizedName = name.toLowerCase()
     const key = `${normalizedName}@${version}@${schemaUrl}`
     let meter = this.#meters.get(key)
     if (!meter) {
-      meter = new Meter(this, { name: normalizedName, version, schemaUrl })
+      meter = new Meter(this, { name: normalizedName, version, schemaUrl, attributes })
       this.#meters.set(key, meter)
     }
     return meter
