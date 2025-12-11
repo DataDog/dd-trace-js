@@ -14,6 +14,19 @@ describe('check-require-cache', () => {
   let ch
   let subs
 
+  function compile (name, format = 'commonjs') {
+    const folder = resolve(__dirname, 'node_modules', name)
+    const filename = join(folder, 'index.js')
+    const mod = new Module(filename, module.parent)
+
+    content = readFileSync(filename, 'utf8')
+    content = rewriter.rewrite(content, filename, format)
+
+    mod._compile(content, filename, format)
+
+    return mod.exports
+  }
+
   beforeEach(() => {
     rewriter = proxyquire('../../../src/helpers/rewriter', {
       './instrumentations': [
@@ -62,15 +75,7 @@ describe('check-require-cache', () => {
   })
 
   it('should auto instrument sync functions', done => {
-    const folder = resolve(__dirname, 'node_modules', 'test-trace-sync')
-    const filename = join(folder, 'index.js')
-    const format = 'commonjs'
-    const test = new Module(filename, module.parent)
-
-    content = readFileSync(filename, 'utf8')
-    content = rewriter.rewrite(content, filename, format)
-
-    test._compile(content, filename, format)
+    const test = compile('test-trace-sync')
 
     subs = {
       start () {
@@ -85,15 +90,7 @@ describe('check-require-cache', () => {
   })
 
   it('should auto instrument async functions', done => {
-    const folder = resolve(__dirname, 'node_modules', 'test-trace-async')
-    const filename = join(folder, 'index.js')
-    const format = 'commonjs'
-    const test = new Module(filename, module.parent)
-
-    content = readFileSync(filename, 'utf8')
-    content = rewriter.rewrite(content, filename, format)
-
-    test._compile(content, filename, format)
+    const test = compile('test-trace-async')
 
     subs = {
       start () {
@@ -108,15 +105,7 @@ describe('check-require-cache', () => {
   })
 
   it('should auto instrument callback functions', done => {
-    const folder = resolve(__dirname, 'node_modules', 'test-trace-callback')
-    const filename = join(folder, 'index.js')
-    const format = 'commonjs'
-    const test = new Module(filename, module.parent)
-
-    content = readFileSync(filename, 'utf8')
-    content = rewriter.rewrite(content, filename, format)
-
-    test._compile(content, filename, format)
+    const test = compile('test-trace-callback')
 
     subs = {
       start () {
@@ -127,6 +116,6 @@ describe('check-require-cache', () => {
     ch = tracingChannel('orchestrion:test-trace-callback:test_invoke')
     ch.subscribe(subs)
 
-    test.exports.test(() => {})
+    test.test(() => {})
   })
 })
