@@ -56,7 +56,7 @@ function rewrite (content, filename, format) {
     for (const inst of instrumentations) {
       const { astQuery, functionQuery = {}, module: { name, versionRange, filePath } } = inst
       const { kind } = functionQuery
-      const operator = kind === 'Async' ? 'tracePromise' : 'traceSync' // TODO: traceCallback
+      const operator = kind === 'Async' ? 'tracePromise' : kind === 'Callback' ? 'traceCallback' : 'traceSync'
       const transform = transforms[operator]
 
       if (disabled.has(name)) continue
@@ -67,7 +67,7 @@ function rewrite (content, filename, format) {
       ast ??= parse(content.toString(), { loc: true, ranges: true, module: format === 'module' })
 
       const query = astQuery || fromFunctionQuery(functionQuery)
-      const state = { ...inst, format, operator }
+      const state = { ...inst, format, functionQuery, operator }
 
       traverse(ast, query, (...args) => transform(state, ...args))
     }

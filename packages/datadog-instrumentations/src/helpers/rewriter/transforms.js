@@ -35,9 +35,9 @@ const transforms = module.exports = {
     node.body.splice(index + 1, 0, parse(code).body[0])
   },
 
+  traceCallback: traceAny,
+  tracePromise: traceAny,
   traceSync: traceAny,
-
-  tracePromise: traceAny
 }
 
 function traceAny (state, node, _parent, ancestry) {
@@ -57,7 +57,7 @@ function traceFunction (state, node, program) {
 
   node.body = wrap(state, {
     type: 'ArrowFunctionExpression',
-    params: [],
+    params: node.params,
     body: node.body,
     async: operator === 'tracePromise',
     expression: false,
@@ -106,22 +106,29 @@ function traceInstanceMethod (state, node, program) {
 }
 
 function wrap (state, node) {
-  const { channelName, operator } = state
+  const { channelName, operator, functionQuery: { index = -1 } } = state
   const async = operator === 'tracePromise' ? 'async' : ''
   const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
+  const tracedArgs = operator === 'traceCallback'
+    ? `__apm$original_args.splice(${index}, 1, arguments[${index >= 0 ? index : `arguments.length + ${index}`}])`
+    : '__apm$original_args'
+  const traceParams = operator === 'traceCallback'
+    ? `__apm$traced, ${index}`
+    : '__apm$traced'
   const wrapper = parse(`
     function wrapper () {
       const __apm$original_args = arguments;
-      const __apm$traced = ${async} () => {
+      const __apm$traced = ${async} function () {
         const __apm$wrapped = () => {};
-        return __apm$wrapped.apply(this, __apm$original_args);
+        const __apm$traced_args = ${tracedArgs};
+        return __apm$wrapped.apply(this, __apm$traced_args);
       };
-      if (!${channelVariable}.hasSubscribers) return __apm$traced();
-      return ${channelVariable}.tracePromise(__apm$traced, {
+      if (!${channelVariable}.hasSubscribers) return __apm$traced.apply(this, arguments);
+      return ${channelVariable}.${operator}(${traceParams}, {
         arguments,
         self: this,
         moduleVersion: "1.0.0"
-      });
+      }, this, ...arguments);
     }
   `).body[0].body // Extract only block statement of function body.
 
