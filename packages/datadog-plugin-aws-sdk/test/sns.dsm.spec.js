@@ -60,7 +60,8 @@ describe('Sns', function () {
 
             receiveParams = {
               QueueUrl,
-              MessageAttributeNames: ['All']
+              MessageAttributeNames: ['.*'],
+              WaitTimeSeconds: 1
             }
 
             cb()
