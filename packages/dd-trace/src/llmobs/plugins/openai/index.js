@@ -116,6 +116,10 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           metrics.cacheReadTokens = cacheReadTokens
         }
       }
+      // Reasoning tokens - Responses API returns `output_tokens_details`, `completion_tokens_details`
+      const reasoningOutputObject = tokenUsage.output_tokens_details ?? tokenUsage.completion_tokens_details
+      const reasoningOutputTokens = reasoningOutputObject?.reasoning_tokens ?? 0
+      if (reasoningOutputTokens !== undefined) metrics.reasoningOutputTokens = reasoningOutputTokens
     }
 
     return metrics
@@ -429,9 +433,6 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     if (response.tool_choice !== undefined) outputMetadata.tool_choice = response.tool_choice
     if (response.truncation !== undefined) outputMetadata.truncation = response.truncation
     if (response.text !== undefined) outputMetadata.text = response.text
-    if (response.usage?.output_tokens_details?.reasoning_tokens !== undefined) {
-      outputMetadata.reasoning_tokens = response.usage.output_tokens_details.reasoning_tokens
-    }
 
     this._tagger.tagMetadata(span, outputMetadata) // update the metadata with the output metadata
   }
