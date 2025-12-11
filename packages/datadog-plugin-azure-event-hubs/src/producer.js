@@ -73,6 +73,10 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
   asyncEnd (ctx) {
     super.finish()
   }
+
+  end (ctx) {
+    super.finish()
+  }
 }
 
 function injectTraceContext (tracer, span, event) {
