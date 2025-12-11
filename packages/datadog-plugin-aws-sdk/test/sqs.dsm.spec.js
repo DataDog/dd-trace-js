@@ -43,8 +43,8 @@ describe('Plugin', () => {
 
       beforeEach(() => {
         const id = randomUUID()
-        queueNameDSM = `TestQueueDSM-${id}`
-        queueNameDSMConsumerOnly = `TestQueueDSMConsumerOnly-${id}`
+        queueNameDSM = `SQS_QUEUE_NAME_DSM-${id}`
+        queueNameDSMConsumerOnly = `SQS_QUEUE_NAME_DSM_CONSUMER_ONLY-${id}`
         queueOptionsDsm = getQueueParams(queueNameDSM)
         queueOptionsDsmConsumerOnly = getQueueParams(queueNameDSMConsumerOnly)
         QueueUrlDsm = `http://127.0.0.1:4566/000000000000/${queueNameDSM}`
