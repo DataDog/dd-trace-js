@@ -161,12 +161,15 @@ describe('AIGuard SDK', () => {
       if (shouldBlock) {
         await rejects(
           () => aiguard.evaluate(messages, { block: true }),
-          err => err.name === 'AIGuardAbortError' && err.reason === reason
+          err => err.name === 'AIGuardAbortError' && err.reason === reason && err.tags === tags
         )
       } else {
         const evaluation = await aiguard.evaluate(messages, { block: true })
         assert.strictEqual(evaluation.action, action)
         assert.strictEqual(evaluation.reason, reason)
+        if (tags) {
+          assert.strictEqual(evaluation.tags, tags)
+        }
       }
 
       assertTelemetry('ai_guard.requests', { error: false, action, block: shouldBlock })
@@ -300,6 +303,30 @@ describe('AIGuard SDK', () => {
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
       { messages: [{ role: 'user', content: content.slice(0, maxContent) }] }
     )
+  })
+
+  it('test message immutability', async () => {
+    const messages = [{
+      role: 'assistant',
+      tool_calls: [{ id: 'call_1', function: { name: 'shell', arguments: '{"cmd": "ls -lah"}' } }]
+    }]
+    mockFetch({
+      body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } }
+    })
+
+    await tracer.trace('test', async () => {
+      await aiguard.evaluate(messages)
+      // update messages before flushing
+      messages[0].tool_calls.push({ id: 'call_2', function: { name: 'shell', arguments: '{"cmd": "rm -rf"}' } })
+      messages.push({ role: 'tool', tool_call_id: 'call_1', content: 'dir1, dir2, dir3' })
+    })
+
+    await agent.assertSomeTraces(traces => {
+      const span = traces[0][1] // second span in the trace
+      const metaStruct = msgpack.decode(span.meta_struct.ai_guard)
+      assert.equal(metaStruct.messages.length, 1)
+      assert.equal(metaStruct.messages[0].tool_calls.length, 1)
+    })
   })
 
   it('test missing required fields uses noop as default', async () => {
