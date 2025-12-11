@@ -5,10 +5,11 @@ const http = require('http')
 const path = require('path')
 const util = require('util')
 
-const msgpack = require('@msgpack/msgpack')
 const bodyParser = require('body-parser')
 const express = require('express')
+const msgpack = require('@msgpack/msgpack')
 const proxyquire = require('proxyquire')
+const semifies = require('semifies')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
@@ -338,7 +339,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
         enumerable: true
       })
       // Hack for the information to be fully visible.
-      error.message = util.inspect(error)
+      error.message = util.inspect(error, { depth: null })
       reject(error)
     }
   }, options.timeoutMs || 1000)
@@ -583,8 +584,11 @@ module.exports = {
         try {
           assertObjectContains(traces[0][0], callbackOrExpected)
         } catch (error) {
-          // eslint-disable-next-line no-console
-          console.error('Expected span %o did not match traces:\n%o', callbackOrExpected, traces)
+          // Enrich error with actual and expected traces for Node.js < 22.17.0
+          if (semifies(process.version, '<22.17.0')) {
+            error.actualTraces = util.inspect(traces, { depth: null })
+            error.expectedTraces = util.inspect(callbackOrExpected, { depth: null })
+          }
           throw error
         }
       } else {
