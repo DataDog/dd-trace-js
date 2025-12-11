@@ -27,6 +27,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
+      - run: ls -la /home/runner/work/
       - run: yarn test:debugger:ci
       - run: yarn test:integration:debugger
       - if: always()
