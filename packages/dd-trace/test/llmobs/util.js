@@ -34,6 +34,8 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
  *   sessionId?: string,
  *   tags: { [key: string]: any },
  *   traceId?: string,
+ *   prompt?: { [key: string]: any },
+ *   dd?: { [key: string]: any },
  * }} ExpectedLLMObsSpanEvent
  */
 
@@ -115,6 +117,8 @@ function assertLlmObsSpanEvent (actual, expected) {
     traceId = MOCK_STRING, // used for future custom LLMObs trace IDs,
     metrics,
     metadata,
+    prompt,
+    dd,
     inputMessages,
     inputValue,
     inputDocuments,
@@ -181,18 +185,30 @@ function assertLlmObsSpanEvent (actual, expected) {
   // 1. assert arbitrary objects (mock values)
   const actualMetrics = actual.metrics
   const actualMetadata = actual.meta.metadata
+  const actualPrompt = actual.meta.input?.prompt
   const actualOutputMessages = actual.meta.output.messages
   const actualOutputValue = actual.meta.output.value
   const actualOutputDocuments = actual.meta.output.documents
   const actualTraceId = actual.trace_id
   const actualTags = actual.tags
+  const actualDd = actual._dd
 
   delete actual.metrics
   delete actual.meta.metadata
   delete actual.meta.output
   delete actual.trace_id
   delete actual.tags
-  delete actual._dd // we do not care about asserting on the private dd fields
+  delete actual._dd
+
+  if (prompt !== undefined) {
+    assertWithMockValues(actualPrompt, prompt, 'prompt')
+  } else if (actual.meta.input) {
+    delete actual.meta.input.prompt
+  }
+
+  if (dd !== undefined) {
+    assertObjectContains(actualDd, dd, '_dd')
+  }
 
   assertWithMockValues(actualTraceId, traceId, 'traceId')
   assertWithMockValues(actualMetrics, metrics ?? {}, 'metrics')
@@ -237,6 +253,10 @@ function assertLlmObsSpanEvent (actual, expected) {
   } else if (inputValue) {
     expectedMeta.input = { value: inputValue }
   }
+  if (prompt !== undefined) {
+    expectedMeta.input = expectedMeta.input || {}
+    expectedMeta.input.prompt = prompt
+  }
 
   const expectedSpanEvent = {
     span_id: fromBuffer(span.span_id),
@@ -249,6 +269,14 @@ function assertLlmObsSpanEvent (actual, expected) {
   }
 
   assert.deepStrictEqual(actual, expectedSpanEvent)
+}
+
+function assertObjectContains (actual, expected, key) {
+  assert.ok(actual && typeof actual === 'object', `${key} should be an object`)
+  for (const [k, v] of Object.entries(expected)) {
+    assert.ok(Object.hasOwn(actual, k), `${key} is missing key ${k}`)
+    assertWithMockValues(actual[k], v, `${key}.${k}`)
+  }
 }
 
 function expectedLLMObsTags ({
@@ -385,6 +413,9 @@ function assertPromptTracking (spanEvent, expectedPrompt, expectedInputMessages)
   assert.strictEqual(prompt.version, expectedPrompt.version)
   assert.deepStrictEqual(prompt.variables, expectedPrompt.variables)
   assert.deepStrictEqual(prompt.chat_template, expectedPrompt.chat_template)
+
+  assert(spanEvent._dd, 'Span event should include _dd metadata')
+  assert.strictEqual(spanEvent._dd.prompt_tracking_auto, 1)
 }
 
 module.exports = {

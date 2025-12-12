@@ -442,6 +442,16 @@ describe('integrations', () => {
                 'Human: Can you tell me about LangSmith?',
                 role: ''
               }],
+              prompt: {
+                id: 'langchain.prompt_template',
+                variables: { input: 'Can you tell me about LangSmith?' },
+                chat_template: [{
+                  role: '',
+                  content: 'System: You are a world class technical documentation writer\n' +
+                  'Human: {{input}}'
+                }]
+              },
+              dd: { prompt_tracking_auto: 1 },
               outputMessages: [{ content: expectedOutput, role: '' }],
               metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 21, output_tokens: 94, total_tokens: 115 },

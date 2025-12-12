@@ -422,6 +422,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           variables: normalizedVariables,
           chat_template: chatTemplate
         })
+        this._tagger._setTag(span, '_ml_obs._dd.prompt_tracking_auto', 1)
       }
     }
 

@@ -130,6 +130,7 @@ class LLMObsSpanProcessor {
     if (mlObsTags['_ml_obs.meta.input.prompt']) {
       input.prompt = mlObsTags['_ml_obs.meta.input.prompt']
     }
+    const promptTrackingAuto = mlObsTags['_ml_obs._dd.prompt_tracking_auto']
 
     if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
       llmObsSpan.output = mlObsTags[OUTPUT_MESSAGES]
@@ -198,6 +199,18 @@ class LLMObsSpanProcessor {
       }
     }
 
+    if (!input.prompt && spanKind === 'llm' && mlObsTags[INTEGRATION] === 'langchain') {
+      const ancestorVars = getLangChainPromptVariablesFromAncestors(span)
+      if (ancestorVars) {
+        const { prompt, didReplace } = buildPromptFromInputMessages(input.messages, ancestorVars)
+        if (didReplace) {
+          input.prompt = prompt
+          llmObsSpanEvent._dd.prompt_tracking_auto = 1
+        }
+      }
+    }
+
+    if (promptTrackingAuto) llmObsSpanEvent._dd.prompt_tracking_auto = 1
     if (sessionId) llmObsSpanEvent.session_id = sessionId
 
     return llmObsSpanEvent
@@ -299,6 +312,59 @@ class LLMObsSpanProcessor {
     } finally {
       telemetry.recordLLMObsUserProcessorCalled(error)
     }
+  }
+}
+
+function getLangChainPromptVariablesFromAncestors (span) {
+  let current = span._parent
+  while (current) {
+    const parentTags = LLMObsTagger.tagMap.get(current)
+    if (
+      parentTags?.[INTEGRATION] === 'langchain' &&
+      parentTags?.[SPAN_KIND] === 'workflow' &&
+      parentTags?.[INPUT_VALUE]
+    ) {
+      const raw = parentTags[INPUT_VALUE]
+      if (typeof raw === 'string') {
+        try {
+          const parsed = JSON.parse(raw)
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+        } catch {}
+      }
+    }
+    current = current._parent
+  }
+  return null
+}
+
+function buildPromptFromInputMessages (inputMessages, variables) {
+  if (!Array.isArray(inputMessages)) return { prompt: null, didReplace: false }
+
+  const normalized = {}
+  for (const [k, v] of Object.entries(variables)) {
+    if (v == null) continue
+    normalized[k] = typeof v === 'string' ? v : String(v)
+  }
+
+  const values = Object.entries(normalized)
+    .filter(([, v]) => v.length > 0)
+    .sort((a, b) => b[1].length - a[1].length)
+
+  let didReplace = false
+  const chatTemplate = inputMessages.map(m => {
+    const role = m?.role ?? ''
+    let content = m?.content ?? ''
+    for (const [name, val] of values) {
+      const next = content.split(val).join(`{{${name}}}`)
+      if (next !== content) didReplace = true
+      content = next
+    }
+    return { role, content }
+  })
+
+  return {
+    prompt: { id: 'langchain.prompt_template', variables: normalized, chat_template: chatTemplate },
+    didReplace
   }
 }
 
