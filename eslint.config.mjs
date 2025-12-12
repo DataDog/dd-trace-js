@@ -7,11 +7,14 @@ import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
 import eslintPluginPromise from 'eslint-plugin-promise'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
+import { readFileSync } from 'fs'
 import globals from 'globals'
 
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
+
+const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
 
 const SRC_FILES = [
   '*.js',
@@ -356,6 +359,12 @@ export default [
         dynamicImports: 'always-multiline'
       }],
       'import/no-extraneous-dependencies': 'error',
+      'n/no-extraneous-require': ['error', {
+        allowModules: Object.keys(dependencies)
+      }],
+      'n/no-unpublished-require': ['error', {
+        allowModules: Object.keys(dependencies)
+      }],
       'n/no-restricted-require': ['error', ['diagnostics_channel']],
       'n/hashbang': 'off', // TODO: Enable this rule once we have a plan to address it
       'n/no-process-exit': 'off', // TODO: Enable this rule once we have a plan to address it
@@ -583,6 +592,13 @@ export default [
       'mocha/no-sibling-hooks': 'off',
       'mocha/no-top-level-hooks': 'off',
       'n/handle-callback-err': 'off',
+      'n/no-extraneous-require': ['error', {
+        allowModules: [
+          ...Object.keys(dependencies),
+          'mocha',
+          'chai'
+        ]
+      }],
       'n/no-missing-require': 'off',
       'require-await': 'off'
     }

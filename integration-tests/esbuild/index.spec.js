@@ -9,8 +9,6 @@ const chproc = require('node:child_process')
 const pathModule = require('node:path')
 const fs = require('node:fs')
 
-// TODO: It shouldn't be necessary to disable n/no-extraneous-require - Research
-// eslint-disable-next-line n/no-extraneous-require
 const { describe, before, it } = require('mocha')
 
 // sub process must be executed inside TEST_DIR

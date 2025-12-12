@@ -161,6 +161,7 @@ module.exports = {
   plugins: true,
   port: '8126',
   'profiling.enabled': undefined,
+  'propagateProcessTags.enabled': undefined,
   'profiling.exporters': 'agent',
   'profiling.sourceMap': true,
   'profiling.longLivedThreshold': undefined,
@@ -169,6 +170,7 @@ module.exports = {
   'remoteConfig.enabled': true,
   'remoteConfig.pollInterval': 5, // seconds
   reportHostname: false,
+  resourceRenamingEnabled: false,
   'runtimeMetrics.enabled': false,
   'runtimeMetrics.eventLoop': true,
   'runtimeMetrics.gc': true,

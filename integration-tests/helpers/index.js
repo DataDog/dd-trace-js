@@ -583,7 +583,8 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
   env = { ...process.env, ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
-    env
+    env,
+    execArgv: additionalEnvArgs.execArgv
   }, stdioHandler)
 }
 
