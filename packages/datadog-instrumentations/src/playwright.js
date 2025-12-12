@@ -11,6 +11,9 @@ const {
   getIsFaultyEarlyFlakeDetection
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
+const {
+  getEnvironmentVariable
+} = require('../../dd-trace/src/config-helper')
 const { DD_MAJOR } = require('../../../version')
 
 const testStartCh = channel('ci:playwright:test:start')
@@ -38,7 +41,7 @@ const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
 
-const RUM_FLUSH_WAIT_TIME = 1000
+const RUM_FLUSH_WAIT_TIME = Number(getEnvironmentVariable('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 1000
 
 let applyRepeatEachIndex = null
 
@@ -68,6 +71,8 @@ let modifiedFiles = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
 let quarantinedButNotAttemptToFixFqns = new Set()
 let rootDir = ''
+let sessionProjects = []
+
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
 
 function isValidKnownTests (receivedKnownTests) {
@@ -479,6 +484,15 @@ function dispatcherRunWrapper (run) {
 
 function dispatcherRunWrapperNew (run) {
   return function (testGroups) {
+    // Filter out disabled tests from testGroups before they get scheduled
+    if (isTestManagementTestsEnabled) {
+      testGroups.forEach(group => {
+        group.tests = group.tests.filter(test => !test._ddIsDisabled)
+      })
+      // Remove empty groups
+      testGroups = testGroups.filter(group => group.tests.length > 0)
+    }
+
     if (!this._allTests) {
       // Removed in https://github.com/microsoft/playwright/commit/1e52c37b254a441cccf332520f60225a5acc14c7
       // Not available from >=1.44.0
@@ -495,13 +509,15 @@ function dispatcherHook (dispatcherExport) {
     const dispatcher = this
     const worker = createWorker.apply(this, arguments)
     const projects = getProjectsFromDispatcher(dispatcher)
+    sessionProjects = projects
 
+    // for older versions of playwright, `shouldCreateTestSpan` should always be true,
+    // since the `_runTest` function wrapper is not available for older versions
     worker.process.on('message', ({ method, params }) => {
       if (method === 'testBegin') {
         const { test } = dispatcher._testById.get(params.testId)
         const browser = getBrowserNameFromProjects(projects, test)
-        const shouldCreateTestSpan = test.expectedStatus === 'skipped'
-        testBeginHandler(test, browser, shouldCreateTestSpan)
+        testBeginHandler(test, browser, true)
       } else if (method === 'testEnd') {
         const { test } = dispatcher._testById.get(params.testId)
 
@@ -509,7 +525,6 @@ function dispatcherHook (dispatcherExport) {
         const testResult = results.at(-1)
 
         const isTimeout = testResult.status === 'timedOut'
-        const shouldCreateTestSpan = test.expectedStatus === 'skipped'
         testEndHandler(
           {
             test,
@@ -517,7 +532,7 @@ function dispatcherHook (dispatcherExport) {
             testStatus: STATUS_TO_TEST_STATUS[testResult.status],
             error: testResult.error,
             isTimeout,
-            shouldCreateTestSpan,
+            shouldCreateTestSpan: true,
             projects
           }
         )
@@ -535,6 +550,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
     const dispatcher = this
     const worker = createWorker.apply(this, arguments)
     const projects = getProjectsFromDispatcher(dispatcher)
+    sessionProjects = projects
 
     worker.on('testBegin', ({ testId }) => {
       const test = getTestByTestId(dispatcher, testId)
@@ -674,10 +690,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     const projects = getProjectsFromRunner(this, config)
 
-    const shouldSetRetries = isFlakyTestRetriesEnabled &&
-      flakyTestRetriesCount > 0 &&
-      !isTestManagementTestsEnabled
-    if (shouldSetRetries) {
+    // ATR and `--retries` are now compatible with Test Management.
+    // Test Management tests have their retries set to 0 at the test level,
+    // preventing them from being retried by ATR or `--retries`.
+    const shouldSetATRRetries = isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0
+    if (shouldSetATRRetries) {
       projects.forEach(project => {
         if (project.retries === 0) { // Only if it hasn't been set by the user
           project.retries = flakyTestRetriesCount
@@ -709,6 +726,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       })
     })
 
+    let preventedToFail = false
+
     const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
 
     if (isTestManagementTestsEnabled && sessionStatus === 'failed') {
@@ -717,23 +736,30 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       let totalPureQuarantinedFailedTestCount = 0
 
       for (const [fqn, testStatuses] of testsToTestStatuses.entries()) {
-        const failedCount = testStatuses.filter(status => status === 'fail').length
-        totalFailedTestCount += failedCount
-        if (quarantinedButNotAttemptToFixFqns.has(fqn)) {
-          totalPureQuarantinedFailedTestCount += failedCount
+        // Only count as failed if the final status (after retries) is 'fail'
+        const lastStatus = testStatuses[testStatuses.length - 1]
+        if (lastStatus === 'fail') {
+          totalFailedTestCount += 1
+          if (quarantinedButNotAttemptToFixFqns.has(fqn)) {
+            totalPureQuarantinedFailedTestCount += 1
+          }
         }
       }
 
       for (const test of quarantinedOrDisabledTestsAttemptToFix) {
         const testFqn = getTestFullyQualifiedName(test)
         const testStatuses = testsToTestStatuses.get(testFqn)
-        totalAttemptToFixFailedTestCount += testStatuses.filter(status => status === 'fail').length
+        // Only count as failed if the final status (after retries) is 'fail'
+        if (testStatuses && testStatuses[testStatuses.length - 1] === 'fail') {
+          totalAttemptToFixFailedTestCount += 1
+        }
       }
 
       const totalIgnorableFailures = totalAttemptToFixFailedTestCount + totalPureQuarantinedFailedTestCount
 
       if (totalFailedTestCount > 0 && totalFailedTestCount === totalIgnorableFailures) {
         runAllTestsReturn = 'passed'
+        preventedToFail = true
       }
     }
 
@@ -741,7 +767,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       onDone = resolve
     })
     testSessionFinishCh.publish({
-      status: STATUS_TO_TEST_STATUS[sessionStatus],
+      status: preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus],
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
@@ -889,6 +915,9 @@ addHook({
         if (testProperties.disabled) {
           test._ddIsDisabled = true
           test.expectedStatus = 'skipped'
+          // setting test.expectedStatus to 'skipped' does not work for every case,
+          // so we need to filter out disabled tests in dispatcherRunWrapperNew,
+          // so they don't get to the workers
           continue
         }
         if (testProperties.quarantined) {
@@ -901,6 +930,8 @@ addHook({
         }
         if (testProperties.attemptToFix) {
           test._ddIsAttemptToFix = true
+          // Prevent ATR or `--retries` from retrying attemptToFix tests
+          test.retries = 0
           const fileSuite = getSuiteType(test, 'file')
 
           if (!fileSuitesWithManagedTestsToProjects.has(fileSuite)) {
@@ -975,6 +1006,8 @@ addHook({
         newTests.forEach(newTest => {
           newTest._ddIsNew = true
           if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
+            // Prevent ATR or `--retries` from retrying new tests if EFD is enabled
+            newTest.retries = 0
             const fileSuite = getSuiteType(newTest, 'file')
             if (!fileSuitesWithNewTestsToProjects.has(fileSuite)) {
               fileSuitesWithNewTestsToProjects.set(fileSuite, getSuiteType(newTest, 'project'))
@@ -1048,9 +1081,19 @@ addHook({
 
     try {
       if (page) {
-        const isRumActive = await page.evaluate(() => {
-          return window.DD_RUM && window.DD_RUM.getInternalContext ? !!window.DD_RUM.getInternalContext() : false
+        const { isRumInstrumented, isRumActive, rumSamplingRate } = await page.evaluate(() => {
+          const isRumInstrumented = !!window.DD_RUM
+          const isRumActive = window.DD_RUM && window.DD_RUM.getInternalContext
+            ? !!window.DD_RUM.getInternalContext()
+            : false
+          const rumSamplingRate = window.DD_RUM && window.DD_RUM.getInitConfiguration
+            ? window.DD_RUM.getInitConfiguration().sessionSampleRate
+            : null
+          return { isRumInstrumented, isRumActive, rumSamplingRate }
         })
+        if (isRumInstrumented && rumSamplingRate < 100 && !isRumActive) {
+          log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
+        }
 
         if (isRumActive) {
           testPageGotoCh.publish({
@@ -1059,8 +1102,9 @@ addHook({
           })
         }
       }
-    } catch {
+    } catch (e) {
       // ignore errors such as redirects, context destroyed, etc
+      log.error('goto hook error', e)
     }
 
     return response
@@ -1152,8 +1196,9 @@ addHook({
                   }
                 }
               }
-            } catch {
+            } catch (e) {
               // ignore errors
+              log.error('afterEach hook error', e)
             }
           },
           title: 'afterEach hook',
@@ -1254,4 +1299,55 @@ addHook({
   })
 
   return workerPackage
+})
+
+function generateSummaryWrapper (generateSummary) {
+  return function () {
+    for (const test of this.suite.allTests()) {
+      // https://github.com/microsoft/playwright/blob/bf92ffecff6f30a292b53430dbaee0207e0c61ad/packages/playwright/src/reporters/base.ts#L279
+      const didNotRun = test.outcome() === 'skipped' &&
+        (!test.results.length || test.expectedStatus !== 'skipped')
+      if (didNotRun) {
+        const {
+          _requireFile: testSuiteAbsolutePath,
+          location: { line: testSourceLine },
+          _ddIsNew: isNew,
+          _ddIsDisabled: isDisabled,
+          _ddIsModified: isModified,
+          _ddIsQuarantined: isQuarantined
+        } = test
+        const browserName = getBrowserNameFromProjects(sessionProjects, test)
+
+        testSkipCh.publish({
+          testName: getTestFullname(test),
+          testSuiteAbsolutePath,
+          testSourceLine,
+          browserName,
+          isNew,
+          isDisabled,
+          isModified,
+          isQuarantined
+        })
+      }
+    }
+    return generateSummary.apply(this, arguments)
+  }
+}
+
+// If a playwright project B has a dependency on project A,
+// and project A fails, the tests in project B will not run.
+// This hook is used to report tests that did not run as skipped.
+// Note: this is different from tests skipped via test.skip() or test.fixme()
+addHook({
+  name: 'playwright',
+  file: 'lib/reporters/base.js',
+  versions: ['>=1.38.0']
+}, (reportersPackage) => {
+  // v1.50.0 changed the name of the base reporter from BaseReporter to TerminalReporter
+  if (reportersPackage.TerminalReporter) {
+    shimmer.wrap(reportersPackage.TerminalReporter.prototype, 'generateSummary', generateSummaryWrapper)
+  } else if (reportersPackage.BaseReporter) {
+    shimmer.wrap(reportersPackage.BaseReporter.prototype, 'generateSummary', generateSummaryWrapper)
+  }
+  return reportersPackage
 })

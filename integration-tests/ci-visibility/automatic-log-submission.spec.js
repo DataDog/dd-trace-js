@@ -6,7 +6,8 @@ const { once } = require('events')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -15,30 +16,31 @@ const webAppServer = require('./web-app-server')
 const { NODE_MAJOR } = require('../../version')
 
 describe('test optimization automatic log submission', () => {
-  let sandbox, cwd, receiver, childProcess, webAppPort
+  let cwd, receiver, childProcess, webAppPort
   let testOutput = ''
 
-  before(async () => {
-    sandbox = await createSandbox([
-      'mocha',
-      '@cucumber/cucumber',
-      'jest',
-      'winston',
-      'chai@4',
-      '@playwright/test'
-    ], true)
-    cwd = sandbox.folder
+  useSandbox([
+    'mocha',
+    '@cucumber/cucumber',
+    'jest',
+    'winston',
+    'chai@4',
+    '@playwright/test'
+  ], true)
+
+  before(done => {
+    cwd = sandboxCwd()
     const { NODE_OPTIONS, ...restOfEnv } = process.env
     // Install chromium (configured in integration-tests/playwright.config.js)
     // *Be advised*: this means that we'll only be using chromium for this test suite
-    execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
+    execSync('npx playwright install --with-deps chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
     webAppServer.listen(0, () => {
       webAppPort = webAppServer.address().port
+      done()
     })
   })
 
   after(async () => {
-    await sandbox.remove()
     await new Promise(resolve => webAppServer.close(resolve))
   })
 

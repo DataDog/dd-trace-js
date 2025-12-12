@@ -11,6 +11,7 @@ const urlFilter = require('./urlfilter')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const TracingPlugin = require('../tracing')
+const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
 
 let extractIp
 
@@ -25,15 +26,12 @@ const HTTP_METHOD = tags.HTTP_METHOD
 const HTTP_URL = tags.HTTP_URL
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
+const HTTP_ENDPOINT = tags.HTTP_ENDPOINT
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_USERAGENT = tags.HTTP_USERAGENT
 const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 const MANUAL_DROP = tags.MANUAL_DROP
-
-const HTTP2_HEADER_AUTHORITY = ':authority'
-const HTTP2_HEADER_SCHEME = ':scheme'
-const HTTP2_HEADER_PATH = ':path'
 
 const contexts = new WeakMap()
 const ends = new WeakMap()
@@ -363,24 +361,6 @@ const web = {
     finishInferredProxySpan(context)
   },
 
-  obfuscateQs (config, url) {
-    const { queryStringObfuscation } = config
-
-    if (queryStringObfuscation === false) return url
-
-    const i = url.indexOf('?')
-    if (i === -1) return url
-
-    const path = url.slice(0, i)
-    if (queryStringObfuscation === true) return path
-
-    let qs = url.slice(i + 1)
-
-    qs = qs.replace(queryStringObfuscation, '<redacted>')
-
-    return `${path}?${qs}`
-  },
-
   wrapWriteHead (context) {
     const { req, res } = context
     const writeHead = res.writeHead
@@ -475,7 +455,7 @@ function addRequestTags (context, spanType) {
   const url = extractURL(req)
 
   span.addTags({
-    [HTTP_URL]: web.obfuscateQs(config, url),
+    [HTTP_URL]: obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
     [SPAN_TYPE]: spanType,
@@ -496,11 +476,17 @@ function addRequestTags (context, spanType) {
 }
 
 function addResponseTags (context) {
-  const { req, res, paths, span, inferredProxySpan } = context
+  const { req, res, paths, span, inferredProxySpan, config } = context
 
   const route = paths.join('')
   if (route) {
+    // Use http.route from trusted framework instrumentation
     span.setTag(HTTP_ROUTE, route)
+  } else if (config.resourceRenamingEnabled) {
+    // Route is unavailable, compute http.endpoint instead
+    const url = span.context()._tags[HTTP_URL]
+    const endpoint = url ? calculateHttpEndpoint(url) : '/'
+    span.setTag(HTTP_ENDPOINT, endpoint)
   }
 
   span.addTags({
@@ -545,23 +531,6 @@ function addHeaders (context) {
   })
 }
 
-function extractURL (req) {
-  const headers = req.headers
-
-  if (req.stream) {
-    return `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
-  }
-  const protocol = getProtocol(req)
-  return `${protocol}://${req.headers.host}${req.originalUrl || req.url}`
-}
-
-function getProtocol (req) {
-  if (req.socket && req.socket.encrypted) return 'https'
-  if (req.connection && req.connection.encrypted) return 'https'
-
-  return 'http'
-}
-
 function getHeadersToRecord (config) {
   if (Array.isArray(config.headers)) {
     try {
@@ -577,13 +546,17 @@ function getHeadersToRecord (config) {
   return []
 }
 
+function isNot500ErrorCode (code) {
+  return code < 500
+}
+
 function getStatusValidator (config) {
   if (typeof config.validateStatus === 'function') {
     return config.validateStatus
   } else if (config.hasOwnProperty('validateStatus')) {
     log.error('Expected `validateStatus` to be a function.')
   }
-  return code => code < 500
+  return isNot500ErrorCode
 }
 
 const noop = () => {}

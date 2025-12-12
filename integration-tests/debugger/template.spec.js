@@ -1,14 +1,17 @@
 'use strict'
 
 const { assert } = require('chai')
+const semver = require('semver')
 const { setup } = require('./utils')
 const { NODE_MAJOR } = require('../../version')
+
+const NODE_24_11_1_OR_LATER = semver.gte(process.version, '24.11.1')
 
 describe('Dynamic Instrumentation', function () {
   describe('template evaluation', function () {
     const t = setup({ dependencies: ['fastify'] })
 
-    beforeEach(t.triggerBreakpoint)
+    beforeEach(() => { t.triggerBreakpoint() })
 
     it('should evaluate template if it requires evaluation', function (done) {
       t.agent.on('debugger-input', ({ payload: [payload] }) => {
@@ -97,7 +100,8 @@ describe('Dynamic Instrumentation', function () {
           messages.shift(),
           'ArrayBuffer { ' +
             '[Uint8Contents]: <00 00 00 ... 7 more bytes>, ' +
-            "byteLength: 10, '0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9 " +
+            (NODE_24_11_1_OR_LATER ? '[byteLength]' : 'byteLength') +
+              ": 10, '0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9 " +
           '}'
         )
         assert.strictEqual(messages.shift(), 'Uint8Array(10) [ 0, 0, 0, ... 7 more items ]')

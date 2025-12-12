@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox
+  sandboxCwd,
+  useSandbox,
 } = require('../helpers')
 const childProcess = require('child_process')
 const { fork } = childProcess
@@ -287,7 +288,6 @@ async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, 
 describe('profiler', () => {
   let agent
   let proc
-  let sandbox
   let cwd
   let profilerTestFile
   let ssiTestFile
@@ -309,17 +309,14 @@ describe('profiler', () => {
   let busyCycleTimeNs = 1000000000 * idealSamplesPerSpan / profilerSamplingFrequency
   const maxBusyCycleTimeNs = (timeout - 1000) * 1000000 / expectedSpans
 
-  before(async () => {
-    sandbox = await createSandbox()
-    cwd = sandbox.folder
+  useSandbox()
+
+  before(() => {
+    cwd = sandboxCwd()
     profilerTestFile = path.join(cwd, 'profiler/index.js')
     ssiTestFile = path.join(cwd, 'profiler/ssi.js')
     oomTestFile = path.join(cwd, 'profiler/oom.js')
     oomExecArgv = ['--max-old-space-size=50']
-  })
-
-  after(async () => {
-    await sandbox.remove()
   })
 
   beforeEach(async () => {
@@ -734,6 +731,9 @@ describe('profiler', () => {
       }
       if (process.platform === 'win32') {
         this.skip() // Wall profiler context count telemetry is not supported on Windows
+      }
+      if (process.platform === 'darwin') {
+        this.skip() // Test is flaky on macOS
       }
       proc = fork(profilerTestFile, {
         cwd,

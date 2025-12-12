@@ -1,18 +1,20 @@
 'use strict'
 
-const Axios = require('axios')
-const { assert } = require('chai')
-const semver = require('semver')
-const sinon = require('sinon')
 const path = require('node:path')
 const zlib = require('node:zlib')
 const fs = require('node:fs')
 
+const Axios = require('axios')
+const { assert } = require('chai')
+const semver = require('semver')
+const sinon = require('sinon')
+
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
+
+const { getConfigFresh } = require('../helpers/config')
 
 withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
   describe('Suspicious request blocking - query', () => {
@@ -33,7 +35,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       })
 
       app.listen({ port: 0 }, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -47,7 +49,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     beforeEach(async () => {
       requestBody = sinon.stub()
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json')
@@ -98,7 +100,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       })
 
       app.listen({ port: 0 }, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -112,7 +114,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     beforeEach(async () => {
       requestBody = sinon.stub()
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'body-parser-rules.json')
@@ -207,7 +209,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       })
 
       app.listen({ port: 0 }, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -220,7 +222,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     })
 
     beforeEach(async () => {
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'body-parser-rules.json')
@@ -296,7 +298,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       })
 
       app.listen({ port: 0 }, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -309,7 +311,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     })
 
     beforeEach(async () => {
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json')
@@ -478,7 +480,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
             })
 
             app.listen({ port: 0 }, () => {
-              const port = server.address().port
+              const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
               axios = Axios.create({ baseURL: `http://localhost:${port}` })
               done()
             })
@@ -488,7 +490,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           beforeEach(async () => {
             requestCookie = sinon.stub()
             appsec.enable(
-              new Config({
+              getConfigFresh({
                 appsec: {
                   enabled: true,
                   rules: path.join(__dirname, 'cookie-parser-rules.json')
@@ -572,7 +574,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         })
 
         app.listen({ port: 0 }, () => {
-          const port = server.address().port
+          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
           axios = Axios.create({ baseURL: `http://localhost:${port}` })
           done()
         })
@@ -581,7 +583,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
       beforeEach(() => {
         uploadSpy = sinon.stub()
-        appsec.enable(new Config({
+        appsec.enable(getConfigFresh({
           appsec: {
             enabled: true,
             rules: path.join(__dirname, 'body-parser-rules.json')
@@ -666,7 +668,7 @@ describe('Api Security - Fastify', () => {
       })
 
       app.listen({ port: 0 }, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -679,7 +681,7 @@ describe('Api Security - Fastify', () => {
     })
 
     beforeEach(() => {
-      config = new Config({
+      config = getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'api_security_rules.json'),

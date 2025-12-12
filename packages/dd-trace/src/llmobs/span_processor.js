@@ -72,7 +72,7 @@ class LLMObsSpanProcessor {
   }
 
   // TODO: instead of relying on the tagger's weakmap registry, can we use some namespaced storage correlation?
-  process ({ span }) {
+  process (span) {
     if (!this.#config.llmobs.enabled) return
     // if the span is not in our private tagger map, it is not an llmobs span
     if (!LLMObsTagger.tagMap.has(span)) return
@@ -126,6 +126,11 @@ class LLMObsSpanProcessor {
       inputType = 'value'
     }
 
+    // Handle prompt metadata for reusable prompts
+    if (mlObsTags['_ml_obs.meta.input.prompt']) {
+      input.prompt = mlObsTags['_ml_obs.meta.input.prompt']
+    }
+
     if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
       llmObsSpan.output = mlObsTags[OUTPUT_MESSAGES]
       outputType = 'messages'
@@ -155,7 +160,7 @@ class LLMObsSpanProcessor {
     llmObsSpan._tags = tags
 
     const processedSpan = this.#runProcessor(llmObsSpan)
-    if (processedSpan === null) return null
+    if (processedSpan === undefined) return null
 
     if (processedSpan.input) {
       if (inputType === 'messages') {
@@ -203,11 +208,11 @@ class LLMObsSpanProcessor {
   // This function can be reused for other fields if needed
   // Messages, Documents, and Metrics are safeguarded in `llmobs/tagger.js`
   #addObject (obj, carrier) {
-    const seenObjects = new WeakSet()
-    seenObjects.add(obj) // capture root object
+    // Capture root object by default
+    const seenObjects = new WeakSet([obj])
 
     const isCircular = value => {
-      if (typeof value !== 'object') return false
+      if (value == null || typeof value !== 'object') return false
       if (seenObjects.has(value)) return true
       seenObjects.add(value)
       return false
@@ -224,7 +229,8 @@ class LLMObsSpanProcessor {
           continue
         }
         if (value !== null && typeof value === 'object') {
-          add(value, carrier[key] = {})
+          carrier[key] = Array.isArray(value) ? [] : {}
+          add(value, carrier[key])
         } else {
           carrier[key] = value
         }
@@ -268,7 +274,7 @@ class LLMObsSpanProcessor {
   /**
    * Runs the user span processor, emitting telemetry and adding some guardrails against invalid return types
    * @param {LLMObservabilitySpan} span
-   * @returns {LLMObservabilitySpan | null}
+   * @returns {LLMObservabilitySpan | undefined}
    */
   #runProcessor (span) {
     const processor = this.#userSpanProcessor
@@ -278,12 +284,12 @@ class LLMObsSpanProcessor {
 
     try {
       const processedLLMObsSpan = processor(span)
-      if (processedLLMObsSpan === null) return null
+      if (processedLLMObsSpan === null) return
 
       if (!(processedLLMObsSpan instanceof LLMObservabilitySpan)) {
         error = true
         logger.warn('User span processor must return an instance of an LLMObservabilitySpan or null, dropping span.')
-        return null
+        return
       }
 
       return processedLLMObsSpan

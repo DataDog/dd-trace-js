@@ -1,10 +1,12 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const dc = require('dc-polyfill')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const taintTrackingOperations = require('../../../../src/appsec/iast/taint-tracking/operations')
@@ -15,7 +17,7 @@ const {
   HTTP_REQUEST_URI,
   SQL_ROW_VALUE
 } = require('../../../../src/appsec/iast/taint-tracking/source-types')
-const Config = require('../../../../src/config')
+const { getConfigFresh } = require('../../../helpers/config')
 
 const middlewareNextChannel = dc.channel('apm:express:middleware:next')
 const queryReadFinishChannel = dc.channel('datadog:query:read:finish')
@@ -43,7 +45,7 @@ describe('IAST Taint tracking plugin', () => {
       './operations': sinon.spy(taintTrackingOperations),
       '../../../../../datadog-core': datadogCore
     })
-    const config = new Config()
+    const config = getConfigFresh()
     taintTrackingPlugin.enable(config.iast)
   })
 
@@ -53,25 +55,25 @@ describe('IAST Taint tracking plugin', () => {
   })
 
   it('Should subscribe to body parser, qs, cookie and process_params channel', () => {
-    expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(17)
+    assert.strictEqual(taintTrackingPlugin._subscriptions.length, 17)
     let i = 0
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:body-parser:read:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:multer:read:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:fastify:body-parser:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('apm:express:middleware:next')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:query:read:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:fastify:query-params:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:express:query:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:cookie:parse:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:fastify-cookie:read:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:sequelize:query:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('apm:pg:query:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:express:process_params:start')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:router:param:start')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:fastify:path-params:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('apm:graphql:resolve:start')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:url:parse:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:url:getter:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:body-parser:read:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:multer:read:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:fastify:body-parser:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'apm:express:middleware:next')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:query:read:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:fastify:query-params:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:express:query:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:cookie:parse:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:fastify-cookie:read:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:sequelize:query:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'apm:pg:query:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:express:process_params:start')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:router:param:start')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:fastify:path-params:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'apm:graphql:resolve:start')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:url:parse:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:url:getter:finish')
   })
 
   describe('taint sources', () => {
@@ -292,7 +294,7 @@ describe('IAST Taint tracking plugin', () => {
     describe('taint database sources', () => {
       it('Should not taint if config is set to 0', () => {
         taintTrackingPlugin.disable()
-        const config = new Config()
+        const config = getConfigFresh()
         config.dbRowsToTaint = 0
         taintTrackingPlugin.enable(config)
 
@@ -307,7 +309,7 @@ describe('IAST Taint tracking plugin', () => {
           }]
         sequelizeFinish.publish({ result })
 
-        expect(taintTrackingOperations.newTaintedString).to.not.have.been.called
+        sinon.assert.notCalled(taintTrackingOperations.newTaintedString)
       })
 
       describe('with default config', () => {
@@ -395,7 +397,7 @@ describe('IAST Taint tracking plugin', () => {
       describe('with config set to 2', () => {
         beforeEach(() => {
           taintTrackingPlugin.disable()
-          const config = new Config()
+          const config = getConfigFresh()
           config.dbRowsToTaint = 2
           taintTrackingPlugin.enable(config)
         })

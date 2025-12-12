@@ -1,12 +1,13 @@
 'use strict'
 
+const path = require('node:path')
+
 const axios = require('axios')
 const { assert } = require('chai')
-const path = require('path')
 
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
+const { getConfigFresh } = require('../helpers/config')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 withVersions('express', 'express', expressVersion => {
@@ -29,7 +30,7 @@ withVersions('express', 'express', expressVersion => {
       })
 
       server = app.listen(port, () => {
-        port = server.address().port
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         done()
       })
     })
@@ -40,7 +41,7 @@ withVersions('express', 'express', expressVersion => {
     })
 
     beforeEach(() => {
-      appsec.enable(new Config(
+      appsec.enable(getConfigFresh(
         {
           appsec: {
             enabled: true,

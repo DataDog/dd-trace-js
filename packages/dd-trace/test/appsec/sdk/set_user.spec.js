@@ -1,16 +1,18 @@
 'use strict'
 
-const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('mocha')
-const proxyquire = require('proxyquire')
-const sinon = require('sinon')
+const assert = require('node:assert/strict')
 const path = require('node:path')
 
-const agent = require('../../plugins/agent')
+const axios = require('axios')
+const { expect } = require('chai')
+const { after, before, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 const tracer = require('../../../../../index')
 const appsec = require('../../../src/appsec')
-const Config = require('../../../src/config')
+const { getConfigFresh } = require('../../helpers/config')
+const agent = require('../../plugins/agent')
 
 describe('set_user', () => {
   describe('Internal API', () => {
@@ -44,17 +46,17 @@ describe('set_user', () => {
     describe('setUser', () => {
       it('should not call setTag when no user is passed', () => {
         setUser(tracer)
-        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Invalid user provided to setUser')
-        expect(rootSpan.setTag).to.not.have.been.called
-        expect(waf.run).to.not.have.been.called
+        sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Invalid user provided to setUser')
+        sinon.assert.notCalled(rootSpan.setTag)
+        sinon.assert.notCalled(waf.run)
       })
 
       it('should not call setTag when user is empty', () => {
         const user = {}
         setUser(tracer, user)
-        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Invalid user provided to setUser')
-        expect(rootSpan.setTag).to.not.have.been.called
-        expect(waf.run).to.not.have.been.called
+        sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Invalid user provided to setUser')
+        sinon.assert.notCalled(rootSpan.setTag)
+        sinon.assert.notCalled(waf.run)
       })
 
       it('should not call setTag when rootSpan is not available', () => {
@@ -62,9 +64,9 @@ describe('set_user', () => {
 
         setUser(tracer, { id: 'user' })
         expect(getRootSpan).to.be.calledOnceWithExactly(tracer)
-        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Root span not available in setUser')
-        expect(rootSpan.setTag).to.not.have.been.called
-        expect(waf.run).to.not.have.been.called
+        sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Root span not available in setUser')
+        sinon.assert.notCalled(rootSpan.setTag)
+        sinon.assert.notCalled(waf.run)
       })
 
       it('should call setTag with every attribute', () => {
@@ -76,14 +78,14 @@ describe('set_user', () => {
         }
 
         setUser(tracer, user)
-        expect(log.warn).to.not.have.been.called
-        expect(rootSpan.setTag.callCount).to.equal(5)
+        sinon.assert.notCalled(log.warn)
+        assert.strictEqual(rootSpan.setTag.callCount, 5)
         expect(rootSpan.setTag.getCall(0)).to.have.been.calledWithExactly('usr.id', '123')
         expect(rootSpan.setTag.getCall(1)).to.have.been.calledWithExactly('usr.email', 'a@b.c')
         expect(rootSpan.setTag.getCall(2)).to.have.been.calledWithExactly('usr.custom', 'hello')
         expect(rootSpan.setTag.getCall(3)).to.have.been.calledWithExactly('usr.session_id', '133769')
         expect(rootSpan.setTag.getCall(4)).to.have.been.calledWithExactly('_dd.appsec.user.collection_mode', 'sdk')
-        expect(waf.run).to.have.been.calledOnceWithExactly({
+        sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             'usr.id': '123',
             'usr.session_id': '133769'
@@ -94,7 +96,7 @@ describe('set_user', () => {
   })
 
   describe('Integration with the tracer', () => {
-    const config = new Config({
+    const config = getConfigFresh({
       appsec: {
         enabled: true,
         rules: path.join(__dirname, './user_blocking_rules.json')
@@ -147,14 +149,14 @@ describe('set_user', () => {
           res.end()
         }
         agent.assertSomeTraces(traces => {
-          expect(traces[0][0].meta).to.have.property('usr.id', 'blockedUser')
-          expect(traces[0][0].meta).to.have.property('usr.email', 'a@b.c')
-          expect(traces[0][0].meta).to.have.property('usr.custom', 'hello')
-          expect(traces[0][0].meta).to.have.property('usr.session_id', '133769')
-          expect(traces[0][0].meta).to.have.property('_dd.appsec.user.collection_mode', 'sdk')
-          expect(traces[0][0].meta).to.have.property('appsec.event', 'true')
-          expect(traces[0][0].meta).to.not.have.property('appsec.blocked')
-          expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+          assert.strictEqual(traces[0][0].meta['usr.id'], 'blockedUser')
+          assert.strictEqual(traces[0][0].meta['usr.email'], 'a@b.c')
+          assert.strictEqual(traces[0][0].meta['usr.custom'], 'hello')
+          assert.strictEqual(traces[0][0].meta['usr.session_id'], '133769')
+          assert.strictEqual(traces[0][0].meta['_dd.appsec.user.collection_mode'], 'sdk')
+          assert.strictEqual(traces[0][0].meta['appsec.event'], 'true')
+          assert.ok(!Object.hasOwn(traces[0][0].meta, 'appsec.blocked'))
+          assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -166,11 +168,11 @@ describe('set_user', () => {
           res.end()
         }
         agent.assertSomeTraces(traces => {
-          expect(traces[0][0].meta).to.have.property('usr.id', 'blockedUser')
-          expect(traces[0][0].meta).to.have.property('_dd.appsec.user.collection_mode', 'sdk')
-          expect(traces[0][0].meta).to.have.property('appsec.event', 'true')
-          expect(traces[0][0].meta).to.not.have.property('appsec.blocked')
-          expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+          assert.strictEqual(traces[0][0].meta['usr.id'], 'blockedUser')
+          assert.strictEqual(traces[0][0].meta['_dd.appsec.user.collection_mode'], 'sdk')
+          assert.strictEqual(traces[0][0].meta['appsec.event'], 'true')
+          assert.ok(!Object.hasOwn(traces[0][0].meta, 'appsec.blocked'))
+          assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })

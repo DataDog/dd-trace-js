@@ -2,7 +2,7 @@
 
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
-const Config = require('../../../src/config')
+const getConfig = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
 const path = require('path')
 const Axios = require('axios')
@@ -33,7 +33,7 @@ describe('RASP - sql_injection', () => {
             app(req, res)
           })
 
-          appsec.enable(new Config({
+          appsec.enable(getConfig({
             appsec: {
               enabled: true,
               rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
@@ -42,7 +42,7 @@ describe('RASP - sql_injection', () => {
           }))
 
           server = expressApp.listen(0, () => {
-            const port = server.address().port
+            const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
             axios = Axios.create({
               baseURL: `http://localhost:${port}`
             })

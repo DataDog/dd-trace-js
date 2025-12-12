@@ -1,28 +1,24 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, before, after, it, beforeEach, afterEach } = require('mocha')
-
+const assert = require('node:assert/strict')
 const path = require('node:path')
 
-const { createSandbox, FakeAgent, spawnProc, assertObjectContains } = require('./helpers')
+const { afterEach, before, beforeEach, describe, it } = require('mocha')
+
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, assertObjectContains } = require('./helpers')
 
 describe('telemetry', () => {
   describe('dependencies', () => {
-    let sandbox
     let cwd
     let startupTestFile
     let agent
     let proc
 
-    before(async () => {
-      sandbox = await createSandbox()
-      cwd = sandbox.folder
-      startupTestFile = path.join(cwd, 'startup/index.js')
-    })
+    useSandbox()
 
-    after(async () => {
-      await sandbox.remove()
+    before(() => {
+      cwd = sandboxCwd()
+      startupTestFile = path.join(cwd, 'startup/index.js')
     })
 
     beforeEach(async () => {
@@ -62,8 +58,8 @@ describe('telemetry', () => {
         }
       }, 'app-dependencies-loaded', 5_000, 1)
 
-      expect(ddTraceFound).to.be.true
-      expect(importInTheMiddleFound).to.be.true
+      assert.strictEqual(ddTraceFound, true)
+      assert.strictEqual(importInTheMiddleFound, true)
     })
 
     it('Assert configuration chaining data is sent', async () => {

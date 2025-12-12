@@ -8,7 +8,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+    - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
       with:
         node-version: ${{
           inputs.version == 'eol' && '16' ||
@@ -21,4 +21,4 @@ runs:
         registry-url: ${{ inputs.registry-url || 'https://registry.npmjs.org' }}
     - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
       with:
-        bun-version: "1.2.23"
+        bun-version: "1.3.1"

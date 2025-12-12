@@ -1,6 +1,7 @@
 'use strict'
 
-const { collectionSizeSym, fieldCountSym } = require('./symbols')
+const { LARGE_OBJECT_SKIP_THRESHOLD } = require('./constants')
+const { collectionSizeSym, largeCollectionSkipThresholdSym, fieldCountSym, timeBudgetSym } = require('./symbols')
 const { normalizeName, REDACTED_IDENTIFIERS } = require('./redaction')
 
 module.exports = {
@@ -38,7 +39,7 @@ function getPropertyValue (prop, maxLength) {
 
 function getPropertyValueRaw (prop, maxLength) {
   // Special case for getters and setters which does not have a value property
-  if (Object.hasOwn(prop, 'get')) {
+  if (prop.get) {
     const hasGet = prop.get.type !== 'undefined'
     const hasSet = prop.set.type !== 'undefined'
     if (hasGet) {
@@ -74,11 +75,13 @@ function getPropertyValueRaw (prop, maxLength) {
 }
 
 function getObjectValue (obj, maxLength) {
+  const timeBudgetReached = obj[timeBudgetSym] === true
+
   switch (obj.subtype) {
     case undefined:
-      return toObject(obj.className, obj.properties, maxLength)
+      return toObject(obj.className, obj.properties, maxLength, timeBudgetReached)
     case 'array':
-      return toArray(obj.className, obj.properties, maxLength)
+      return toArray(obj.className, obj.properties, maxLength, timeBudgetReached)
     case 'null':
       return { type: 'null', isNull: true }
     // case 'node': // TODO: What does this subtype represent?
@@ -89,28 +92,28 @@ function getObjectValue (obj, maxLength) {
       // in the `description` field. Unfortunately that's all we get from the Chrome DevTools Protocol.
       return { type: obj.className, value: `${new Date(obj.description).toISOString().slice(0, -5)}Z` }
     case 'map':
-      return toMap(obj.className, obj.properties, maxLength)
+      return toMap(obj.className, obj.properties, maxLength, timeBudgetReached)
     case 'set':
-      return toSet(obj.className, obj.properties, maxLength)
+      return toSet(obj.className, obj.properties, maxLength, timeBudgetReached)
     case 'error':
       // TODO: Convert stack trace to array to avoid string truncation or disable truncation in this case?
-      return toObject(obj.className, obj.properties, maxLength)
+      return toObject(obj.className, obj.properties, maxLength, timeBudgetReached)
     case 'proxy':
       // Use `description` instead of `className` as the `type` to get type of target object (`Proxy(Error)` vs `proxy`)
-      return toObject(obj.description, obj.properties, maxLength)
+      return toObject(obj.description, obj.properties, maxLength, timeBudgetReached)
     case 'promise':
-      return toObject(obj.className, obj.properties, maxLength)
+      return toObject(obj.className, obj.properties, maxLength, timeBudgetReached)
     case 'typedarray':
-      return toArray(obj.className, obj.properties, maxLength)
+      return toArray(obj.className, obj.properties, maxLength, timeBudgetReached)
     case 'generator':
       // Use `subtype` instead of `className` to make it obvious it's a generator
-      return toObject(obj.subtype, obj.properties, maxLength)
+      return toObject(obj.subtype, obj.properties, maxLength, timeBudgetReached)
     case 'arraybuffer':
-      return toArrayBuffer(obj.className, obj.properties, maxLength)
+      return toArrayBuffer(obj.className, obj.properties, maxLength, timeBudgetReached)
     case 'weakmap':
-      return toMap(obj.className, obj.properties, maxLength)
+      return toMap(obj.className, obj.properties, maxLength, timeBudgetReached)
     case 'weakset':
-      return toSet(obj.className, obj.properties, maxLength)
+      return toSet(obj.className, obj.properties, maxLength, timeBudgetReached)
     // case 'iterator': // TODO: I've not been able to trigger this subtype
     // case 'dataview': // TODO: Looks like the internal ArrayBuffer is only accessible via the `buffer` getter
     // case 'webassemblymemory': // TODO: Looks like the internal ArrayBuffer is only accessible via the `buffer` getter
@@ -127,8 +130,9 @@ function toFunctionOrClass (value, maxLength) {
 
   if (classMatch === null) {
     // This is a function
+    const timeBudgetReached = value[timeBudgetSym] === true
     // TODO: Would it make sense to detect if it's an arrow function or not?
-    return toObject(value.className, value.properties, maxLength)
+    return toObject(value.className, value.properties, maxLength, timeBudgetReached)
   }
   // This is a class
   const className = classMatch[1].trim()
@@ -150,7 +154,8 @@ function toString (str, maxLength) {
   }
 }
 
-function toObject (type, props, maxLength) {
+function toObject (type, props, maxLength, timeBudgetReached) {
+  if (timeBudgetReached === true) return notCapturedTimeBudget(type)
   if (props === undefined) return notCapturedDepth(type)
 
   const result = {
@@ -158,7 +163,7 @@ function toObject (type, props, maxLength) {
     fields: processProperties(props, maxLength)
   }
 
-  if (Object.hasOwn(props, fieldCountSym)) {
+  if (props[fieldCountSym] !== undefined) {
     result.notCapturedReason = 'fieldCount'
     result.size = props[fieldCountSym]
   }
@@ -166,7 +171,8 @@ function toObject (type, props, maxLength) {
   return result
 }
 
-function toArray (type, elements, maxLength) {
+function toArray (type, elements, maxLength, timeBudgetReached) {
+  if (timeBudgetReached === true) return notCapturedTimeBudget(type)
   if (elements === undefined) return notCapturedDepth(type)
 
   const result = {
@@ -177,12 +183,15 @@ function toArray (type, elements, maxLength) {
   }
 
   setNotCaptureReasonOnCollection(result, elements)
+  setNotCaptureReasonOnTooLargeCollection(result, elements)
 
   return result
 }
 
-function toMap (type, pairs, maxLength) {
+function toMap (type, pairs, maxLength, timeBudgetReached) {
+  if (timeBudgetReached === true) return notCapturedTimeBudget(type)
   if (pairs === undefined) return notCapturedDepth(type)
+  if (pairs.length > 0 && pairs.every(({ value }) => value[timeBudgetSym] === true)) return notCapturedTimeBudget(type)
 
   const result = {
     type,
@@ -195,6 +204,14 @@ function toMap (type, pairs, maxLength) {
       // This can be skipped and we can go directly to its children, of which
       // there will always be exactly two, the first containing the key, and the
       // second containing the value of this entry of the Map.
+
+      if (value[timeBudgetSym] === true) {
+        return [{ notCapturedReason: 'timeout' }, { notCapturedReason: 'timeout' }]
+      }
+      if (value.properties === undefined) {
+        return [{ notCapturedReason: 'unknown' }, { notCapturedReason: 'unknown' }]
+      }
+
       const shouldRedact = shouldRedactMapValue(value.properties[0])
       const key = getPropertyValue(value.properties[0], maxLength)
       const val = shouldRedact
@@ -205,12 +222,17 @@ function toMap (type, pairs, maxLength) {
   }
 
   setNotCaptureReasonOnCollection(result, pairs)
+  setNotCaptureReasonOnTooLargeCollection(result, pairs)
 
   return result
 }
 
-function toSet (type, values, maxLength) {
+function toSet (type, values, maxLength, timeBudgetReached) {
+  if (timeBudgetReached === true) return notCapturedTimeBudget(type)
   if (values === undefined) return notCapturedDepth(type)
+  if (values.length > 0 && values.every(({ value }) => value[timeBudgetSym] === true)) {
+    return notCapturedTimeBudget(type)
+  }
 
   const result = {
     type,
@@ -223,16 +245,22 @@ function toSet (type, values, maxLength) {
       // `internal#entry`. This can be skipped and we can go directly to its
       // children, of which there will always be exactly one, which contain the
       // actual value in this entry of the Set.
+
+      if (value[timeBudgetSym] === true) return { notCapturedReason: 'timeout' }
+      if (value.properties === undefined) return { notCapturedReason: 'unknown' }
+
       return getPropertyValue(value.properties[0], maxLength)
     })
   }
 
   setNotCaptureReasonOnCollection(result, values)
+  setNotCaptureReasonOnTooLargeCollection(result, values)
 
   return result
 }
 
-function toArrayBuffer (type, bytes, maxLength) {
+function toArrayBuffer (type, bytes, maxLength, timeBudgetReached) {
+  if (timeBudgetReached === true) return notCapturedTimeBudget(type)
   if (bytes === undefined) return notCapturedDepth(type)
 
   const size = bytes.length
@@ -271,13 +299,22 @@ function shouldRedactMapValue (key) {
 }
 
 function getNormalizedNameFromProp (prop) {
-  return normalizeName(prop.name, Object.hasOwn(prop, 'symbol'))
+  return normalizeName(prop.name, prop.symbol !== undefined)
 }
 
 function setNotCaptureReasonOnCollection (result, collection) {
-  if (Object.hasOwn(collection, collectionSizeSym)) {
+  if (collection[collectionSizeSym] !== undefined) {
     result.notCapturedReason = 'collectionSize'
     result.size = collection[collectionSizeSym]
+  }
+}
+
+function setNotCaptureReasonOnTooLargeCollection (result, collection) {
+  if (collection[largeCollectionSkipThresholdSym] !== undefined) {
+    result.notCapturedReason = `Large collection with too many elements (skip threshold: ${
+      LARGE_OBJECT_SKIP_THRESHOLD
+    })`
+    result.size = collection[largeCollectionSkipThresholdSym]
   }
 }
 
@@ -287,4 +324,8 @@ function notCapturedDepth (type) {
 
 function notCapturedRedacted (type) {
   return { type, notCapturedReason: 'redactedIdent' }
+}
+
+function notCapturedTimeBudget (type) {
+  return { type, notCapturedReason: 'timeout' }
 }

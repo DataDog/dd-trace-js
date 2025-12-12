@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
@@ -16,7 +18,7 @@ describe('SpanProcessor', () => {
   let trace
   let exporter
   let tracer
-  let format
+  let spanFormat
   let config
   let SpanSampler
   let sample
@@ -52,7 +54,7 @@ describe('SpanProcessor', () => {
         enabled: false
       }
     }
-    format = sinon.stub().returns({ formatted: true })
+    spanFormat = sinon.stub().returns({ formatted: true })
 
     sample = sinon.stub()
     SpanSampler = sinon.stub().returns({
@@ -60,7 +62,7 @@ describe('SpanProcessor', () => {
     })
 
     SpanProcessor = proxyquire('../src/span_processor', {
-      './format': format,
+      './span_format': spanFormat,
       './span_sampler': SpanSampler
     })
     processor = new SpanProcessor(exporter, prioritySampler, config)
@@ -68,6 +70,12 @@ describe('SpanProcessor', () => {
 
   it('should generate sampling priority', () => {
     processor.process(finishedSpan)
+
+    sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
+  })
+
+  it('should generate sampling priority when sampling manually', () => {
+    processor.sample(finishedSpan)
 
     expect(prioritySampler.sample).to.have.been.calledWith(finishedSpan.context())
   })
@@ -88,7 +96,7 @@ describe('SpanProcessor', () => {
     trace.finished = [finishedSpan]
     processor.process(finishedSpan)
 
-    expect(exporter.export).not.to.have.been.called
+    sinon.assert.notCalled(exporter.export)
   })
 
   it('should skip unrecorded traces', () => {
@@ -97,7 +105,7 @@ describe('SpanProcessor', () => {
     trace.finished = [finishedSpan]
     processor.process(activeSpan)
 
-    expect(exporter.export).not.to.have.been.called
+    sinon.assert.notCalled(exporter.export)
   })
 
   it('should export a partial trace with span count above configured threshold', () => {
@@ -105,7 +113,7 @@ describe('SpanProcessor', () => {
     trace.finished = [finishedSpan, finishedSpan, finishedSpan]
     processor.process(finishedSpan)
 
-    expect(exporter.export).to.have.been.calledWith([
+    sinon.assert.calledWith(exporter.export, [
       { formatted: true },
       { formatted: true },
       { formatted: true }
@@ -115,7 +123,7 @@ describe('SpanProcessor', () => {
     expect(trace).to.have.deep.property('finished', [])
   })
 
-  it('should configure span sampler conrrectly', () => {
+  it('should configure span sampler correctly', () => {
     const config = {
       stats: { enabled: false },
       sampler: {
@@ -134,7 +142,7 @@ describe('SpanProcessor', () => {
     const processor = new SpanProcessor(exporter, prioritySampler, config)
     processor.process(finishedSpan)
 
-    expect(SpanSampler).to.have.been.calledWith(config.sampler)
+    sinon.assert.calledWith(SpanSampler, config.sampler)
   })
 
   it('should erase the trace and stop execution when tracing=false', () => {
@@ -154,6 +162,45 @@ describe('SpanProcessor', () => {
     expect(trace).to.have.deep.property('started', [])
     expect(trace).to.have.deep.property('finished', [])
     expect(finishedSpan.context()).to.have.deep.property('_tags', {})
-    expect(exporter.export).not.to.have.been.called
+    sinon.assert.notCalled(exporter.export)
+  })
+
+  it('should call spanFormat every time a partial flush is triggered', () => {
+    config.flushMinSpans = 1
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    trace.started = [activeSpan, finishedSpan]
+    trace.finished = [finishedSpan]
+    processor.process(activeSpan)
+
+    expect(trace).to.have.deep.property('started', [activeSpan])
+    expect(trace).to.have.deep.property('finished', [])
+    assert.strictEqual(spanFormat.callCount, 1)
+    sinon.assert.calledWith(spanFormat, finishedSpan, true)
+  })
+
+  it('should add span tags to first span in a chunk', () => {
+    config.flushMinSpans = 2
+    config.propagateProcessTags = { enabled: true }
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan, finishedSpan]
+    trace.finished = [finishedSpan, finishedSpan, finishedSpan, finishedSpan]
+    processor.process(activeSpan)
+    const tags = processor._processTags
+
+    {
+      let foundATag = false
+      tags.split(',').forEach(tag => {
+        const [key, value] = tag.split(':')
+        if (key !== 'entrypoint.basedir') return
+        expect(value).to.equal('test')
+        foundATag = true
+      })
+      expect(foundATag).to.be.true
+    }
+
+    expect(spanFormat.getCall(0)).to.have.been.calledWith(finishedSpan, true, processor._processTags)
+    expect(spanFormat.getCall(1)).to.have.been.calledWith(finishedSpan, false, processor._processTags)
+    expect(spanFormat.getCall(2)).to.have.been.calledWith(finishedSpan, false, processor._processTags)
+    expect(spanFormat.getCall(3)).to.have.been.calledWith(finishedSpan, false, processor._processTags)
   })
 })

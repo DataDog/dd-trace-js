@@ -1,24 +1,19 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
 const { withVersions } = require('../../../setup/mocha')
 const {
-  expectedLLMObsLLMSpanEvent,
-  deepEqualWithMockValues,
+  assertLlmObsSpanEvent,
   useLlmObs
 } = require('../../util')
-const chai = require('chai')
 
 const fs = require('node:fs')
 const path = require('node:path')
 
-chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
-
 /**
- * @google-cloud/vertexai uses `fetch` to call against their API, which cannot
+ * `@google-cloud/vertexai` uses `fetch` to call against their API, which cannot
  * be stubbed with `nock`. This function allows us to stub the `fetch` function
  * to return a specific response for a given scenario.
  *
@@ -120,7 +115,7 @@ describe('integrations', () => {
           })
 
           const { apmSpans, llmobsSpans } = await getEvents()
-          const expected = expectedLLMObsLLMSpanEvent({
+          assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'llm',
             modelName: 'gemini-1.5-flash-002',
@@ -137,11 +132,9 @@ describe('integrations', () => {
               temperature: 1,
               max_output_tokens: 50
             },
-            tokenMetrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
-            tags: { ml_app: 'test', language: 'javascript', integration: 'vertexai' }
+            metrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
+            tags: { ml_app: 'test', integration: 'vertexai' }
           })
-
-          expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
         })
       })
 
@@ -154,7 +147,7 @@ describe('integrations', () => {
           })
 
           const { apmSpans, llmobsSpans } = await getEvents()
-          const expected = expectedLLMObsLLMSpanEvent({
+          assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'llm',
             modelName: 'gemini-1.5-flash-002',
@@ -180,11 +173,9 @@ describe('integrations', () => {
               temperature: 1,
               max_output_tokens: 50
             },
-            tokenMetrics: { input_tokens: 20, output_tokens: 3, total_tokens: 23 },
-            tags: { ml_app: 'test', language: 'javascript', integration: 'vertexai' }
+            metrics: { input_tokens: 20, output_tokens: 3, total_tokens: 23 },
+            tags: { ml_app: 'test', integration: 'vertexai' }
           })
-
-          expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
         })
       })
 
@@ -212,9 +203,9 @@ describe('integrations', () => {
 
             inputMessages.push({ role: 'user', content: 'Foobar?' })
             inputMessages.push({ role: 'model', content: 'Foobar!' })
-            inputMessages.push({ content: 'Hello, how are you?' })
+            inputMessages.push({ content: 'Hello, how are you?', role: '' })
 
-            const expected = expectedLLMObsLLMSpanEvent({
+            assertLlmObsSpanEvent(llmobsSpans[0], {
               span: apmSpans[0],
               spanKind: 'llm',
               modelName: 'gemini-1.5-flash-002',
@@ -231,11 +222,9 @@ describe('integrations', () => {
                 temperature: 1,
                 max_output_tokens: 50
               },
-              tokenMetrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
-              tags: { ml_app: 'test', language: 'javascript', integration: 'vertexai' }
+              metrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
+              tags: { ml_app: 'test', integration: 'vertexai' }
             })
-
-            expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
           })
         })
       })

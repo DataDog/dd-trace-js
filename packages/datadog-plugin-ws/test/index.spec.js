@@ -4,10 +4,10 @@ const assert = require('node:assert')
 const { once } = require('node:events')
 
 const { expect } = require('chai')
-const { describe, before, after, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   let WebSocket
@@ -65,18 +65,34 @@ describe('Plugin', () => {
           agent.close({ ritmReset: false, wipe: true })
         })
 
-        it('should do automatic instrumentation', () => {
+        it('should do automatic instrumentation and remove broken handler', () => {
           wsServer.on('connection', (ws) => {
             connectionReceived = true
             ws.send('test message')
           })
 
-          client.on('message', (msg) => {
-            expect(msg.toString()).to.equal('test message')
+          const brokenHandler = () => {
+            throw new Error('broken handler')
+          }
+
+          client.on('message', brokenHandler)
+
+          client.addListener('message', (msg) => {
+            assert.strictEqual(msg.toString(), 'test message')
           })
 
-          return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'web.request')
+          client.off('message', brokenHandler)
+
+          return agent.assertFirstTraceSpan({
+            name: 'websocket.send',
+            type: 'websocket',
+            resource: `websocket /${route}`,
+            service: 'some',
+            parent_id: 0n,
+            error: 0,
+            meta: {
+              'span.kind': 'producer',
+            }
           })
         })
 
@@ -90,12 +106,12 @@ describe('Plugin', () => {
 
           client.on('open', () => {
             setTimeout(() => {
-              expect(connectionReceived).to.be.true
+              assert.strictEqual(connectionReceived, true)
             }, 1000)
           })
 
           client.on('message', msg => {
-            expect(msg.toString()).to.equal('echo')
+            assert.strictEqual(msg.toString(), 'echo')
           })
           setTimeout(() => {
             done()
@@ -103,7 +119,7 @@ describe('Plugin', () => {
           client.on('error', done)
         })
 
-        it('should instrument message sending', done => {
+        it('should instrument message sending and not double wrap the same handler', done => {
           wsServer.on('connection', ws => {
             connectionReceived = true
             ws.on('message', msg => {
@@ -116,32 +132,49 @@ describe('Plugin', () => {
             client.send('test message')
           })
 
-          client.on('message', (data) => {
-            expect(data.toString()).to.equal('test message')
+          const brokenHandler = () => {
+            throw new Error('broken handler')
+          }
+
+          client.on('message', brokenHandler)
+
+          const handler = (data) => {
+            assert.strictEqual(data.toString(), 'test message')
             done()
-          })
+          }
+
+          client.addListener('message', handler)
+          client.on('message', handler)
+
+          const handlers = client.listeners('message')
+
+          assert.strictEqual(handlers[0].name, brokenHandler.name)
+          assert.strictEqual(handlers[1], handlers[2])
+
+          client.removeListener('message', brokenHandler)
+          client.removeListener('message', handler)
 
           client.on('error', done)
         })
 
-        it('should instrument message receiving', done => {
+        it('should instrument message receiving', () => {
           wsServer.on('connection', (ws) => {
             ws.on('message', (data) => {
-              expect(data.toString()).to.equal('test message from client')
+              assert.strictEqual(data.toString(), 'test message from client')
             })
           })
-          agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'websocket.receive')
-            expect(traces[0][0]).to.have.property('resource', `websocket /${route}`)
-          })
-            .then(done)
-            .catch(done)
 
           client.on('open', () => {
             client.send('test message from client')
           })
 
-          client.on('error', done)
+          return Promise.race([
+            once(client, 'error'),
+            agent.assertFirstTraceSpan({
+              name: 'websocket.receive',
+              resource: `websocket /${route}`
+            })
+          ])
         })
 
         it('should instrument connection close', () => {
@@ -151,7 +184,7 @@ describe('Plugin', () => {
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'websocket.close')
+            assert.strictEqual(traces[0][0].name, 'websocket.close')
           })
         })
       })
@@ -180,9 +213,9 @@ describe('Plugin', () => {
           messageReceived = false
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'web.request')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'web.request')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
 
@@ -192,14 +225,14 @@ describe('Plugin', () => {
           })
 
           client.on('message', (data) => {
-            expect(data.toString()).to.equal('test message')
+            assert.strictEqual(data.toString(), 'test message')
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('resource', `websocket /${route}`)
-            expect(traces[0][0]).to.have.property('name', 'websocket.send')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
-            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
+            assert.strictEqual(traces[0][0].resource, `websocket /${route}`)
+            assert.strictEqual(traces[0][0].name, 'websocket.send')
+            assert.strictEqual(traces[0][0].type, 'websocket')
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
           })
         })
 
@@ -209,20 +242,20 @@ describe('Plugin', () => {
             ws.send('test message')
           })
           wsServer.on('message', (data) => {
-            expect(data.toString()).to.equal('test message')
-            expect(messageReceived).to.equal(true)
+            assert.strictEqual(data.toString(), 'test message')
+            assert.strictEqual(messageReceived, true)
           })
 
           client.on('message', (data) => {
             client.send(data)
-            expect(data.toString()).to.equal('test message')
+            assert.strictEqual(data.toString(), 'test message')
             messageReceived = true
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'websocket.send')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'websocket.send')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
 
@@ -233,14 +266,14 @@ describe('Plugin', () => {
           })
           client.on('message', (data) => {
             client.send(data)
-            expect(data.toString()).to.equal('test message')
+            assert.strictEqual(data.toString(), 'test message')
             messageReceived = true
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'websocket.send')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'websocket.send')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
       })
@@ -269,14 +302,14 @@ describe('Plugin', () => {
           messageReceived = false
 
           client.on('message', (data) => {
-            expect(data.toString()).to.equal('test message')
+            assert.strictEqual(data.toString(), 'test message')
             messageReceived = true
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'web.request')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'web.request')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
 
@@ -286,9 +319,9 @@ describe('Plugin', () => {
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'web.request')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'web.request')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
       })
@@ -315,7 +348,7 @@ describe('Plugin', () => {
         it('should not inherit sampling decisions from root trace', () => {
           wsServer.on('connection', (ws) => {
             ws.on('message', (data) => {
-              expect(data.toString()).to.equal('test message from client')
+              assert.strictEqual(data.toString(), 'test message from client')
             })
           })
 
@@ -325,9 +358,9 @@ describe('Plugin', () => {
 
           return agent.assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.not.have.property('_dd.dm.inherited', 1)
-            expect(traces[0][0].meta).to.have.property('span.kind', 'consumer')
-            expect(traces[0][0]).to.have.property('name', 'websocket.receive')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
+            assert.strictEqual(traces[0][0].meta['span.kind'], 'consumer')
+            assert.strictEqual(traces[0][0].name, 'websocket.receive')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
 
@@ -335,7 +368,7 @@ describe('Plugin', () => {
           let firstTraceId
           wsServer.on('connection', (ws) => {
             ws.on('message', (data) => {
-              expect(data.toString()).to.equal('With a great big hug...')
+              assert.strictEqual(data.toString(), 'With a great big hug...')
             })
             ws.send('We are a happy family!')
           })
@@ -352,10 +385,10 @@ describe('Plugin', () => {
           return agent.assertSomeTraces(traces => {
             const metaData = JSON.parse(traces[0][0].meta['_dd.span_links'])
             const spanId = Number(BigInt('0x' + metaData[0].span_id))
-            expect(spanId).to.equal(firstTraceId)
-            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'websocket.send')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
+            assert.strictEqual(spanId, firstTraceId)
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'websocket.send')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
       })

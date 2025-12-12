@@ -17,13 +17,15 @@ const { BUN, withBun } = require('./bun')
 const sandboxRoot = path.join(os.tmpdir(), id().toString())
 const hookFile = 'dd-trace/loader-hook.mjs'
 
+const { DEBUG } = process.env
+
 // This is set by the setShouldKill function
 let shouldKill
 
 /**
  * @param {string} filename
  * @param {string} cwd
- * @param {string|function} expectedOut
+ * @param {string|((out: Promise<string>) => void)} expectedOut
  * @param {string} expectedSource
  */
 async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
@@ -67,7 +69,7 @@ let sandbox
  * This _must_ be used with the useSandbox function
  *
  * @param {string} filename
- * @param {string|function} expectedOut
+ * @param {string|((out: Promise<string>) => void)} expectedOut
  * @param {string[]} expectedTelemetryPoints
  * @param {string} expectedSource
  */
@@ -163,6 +165,10 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
 }
 
 /**
+ * @typedef {childProcess.ChildProcess & { url: string }} SpawnedProcess
+ */
+
+/**
  * Spawns a Node.js script in a child process and returns a promise that resolves when the process is ready.
  *
  * @param {string|URL} filename - The filename of the Node.js script to spawn in a child process.
@@ -171,14 +177,14 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
  *   standard output of the child process. If not provided, the output will be logged to the console.
  * @param {(data: Buffer) => void} [stderrHandler] - A function that's called with one data argument to handle the
  *   standard error of the child process. If not provided, the error will be logged to the console.
- * @returns {Promise<childProcess.ChildProcess & { url?: string }|void>} A promise that resolves when the process
- *   is either ready or terminated without an error. If the process is terminated without an error, the promise will
- *   resolve with `undefined`.The returned process will have a `url` property if the process didn't terminate.
+ * @returns {Promise<SpawnedProcess|void>} A promise that resolves when the process is either ready or terminated
+ *   without an error. If the process is terminated without an error, the promise will resolve with `undefined`. The
+ *   returned process will have a `url` property if the process didn't terminate.
  */
 function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   const proc = fork(filename, { ...options, stdio: 'pipe' })
 
-  return /** @type {Promise<childProcess.ChildProcess & { url?: string }|void>} */ (new Promise((resolve, reject) => {
+  return /** @type {Promise<SpawnedProcess|void>} */ (new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
         if (typeof port !== 'number' && typeof port !== 'string') {
@@ -213,28 +219,36 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   }))
 }
 
+function log (...args) {
+  DEBUG === 'true' && console.log(...args) // eslint-disable-line no-console
+}
+
+function error (...args) {
+  DEBUG === 'true' && console.error(...args) // eslint-disable-line no-console
+}
+
 function execHelper (command, options) {
-  /* eslint-disable no-console */
   try {
-    console.log('Exec START: ', command)
+    log('Exec START: ', command)
     execSync(command, options)
-    console.log('Exec SUCCESS: ', command)
-  } catch (error) {
-    console.error('Exec ERROR: ', command, error)
+    log('Exec SUCCESS: ', command)
+  } catch (execError) {
+    error('Exec ERROR: ', command, execError)
     if (command.startsWith(BUN)) {
       try {
-        console.log('Exec RETRY START: ', command)
+        log('Exec RETRY BACKOFF: 60 seconds')
+        execSync('sleep 60')
+        log('Exec RETRY START: ', command)
         execSync(command, options)
-        console.log('Exec RETRY SUCESS: ', command)
+        log('Exec RETRY SUCESS: ', command)
       } catch (retryError) {
-        console.error('Exec RETRY ERROR', command, retryError)
+        error('Exec RETRY ERROR', command, retryError)
         throw retryError
       }
     } else {
-      throw error
+      throw execError
     }
   }
-  /* eslint-enable no-console */
 }
 
 /**
@@ -279,7 +293,7 @@ async function createSandbox (
 
   await fs.mkdir(folder, { recursive: true })
   const addOptions = { cwd: folder, env: restOfEnv }
-  const addFlags = ['--linker=hoisted', '--trust']
+  const addFlags = ['--trust']
   if (!existsSync(out)) {
     execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${out}`, { env: restOfEnv })
   }
@@ -288,7 +302,14 @@ async function createSandbox (
     addFlags.push('--prefer-offline')
   }
 
-  execHelper(`${BUN} add ${deps.join(' ')} ${addFlags.join(' ')}`, addOptions)
+  if (DEBUG !== 'true') {
+    addFlags.push('--silent')
+  }
+
+  execHelper(`${BUN} add ${deps.join(' ')} ${addFlags.join(' ')}`, {
+    ...addOptions,
+    timeout: 90_000
+  })
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
@@ -346,7 +367,6 @@ async function createSandbox (
  */
 /**
  * @overload
- * @param {object} sandbox - A `sandbox` as returned from `createSandbox`
  * @param {string} filename - The file that will be copied and modified for each variant.
  * @param {string} bindingName - The binding name that will be use to bind to the packageName.
  * @param {string} [namedVariant] - The name of the named variant to use.
@@ -361,12 +381,11 @@ async function createSandbox (
  * in the file that's different in each variant. There must always be a "default" variant,
  * whose value is the original text within the file that will be replaced.
  *
- * @param {object} sandbox - A `sandbox` as returned from `createSandbox`
  * @param {string} filename - The file that will be copied and modified for each variant.
  * @param {Variants} variants - The variants.
  * @returns {Variants} A map from variant names to resulting filenames
  */
-function varySandbox (sandbox, filename, variants, namedVariant, packageName = variants) {
+function varySandbox (filename, variants, namedVariant, packageName = variants) {
   if (typeof variants === 'string') {
     const bindingName = namedVariant || variants
     variants = {
@@ -407,7 +426,7 @@ varySandbox.VARIANTS = ['default', 'star', 'destructure']
 function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   process.env.DD_TELEMETRY_FORWARDER_PATH =
     path.join(__dirname, '..', 'telemetry-forwarder.sh')
-  process.env.FORWARDER_OUT = path.join(__dirname, `forwarder-${Date.now()}.out`)
+  process.env.FORWARDER_OUT = path.join(__dirname, 'output', `forwarder-${Date.now()}.out`)
 
   let retries = 0
 
@@ -479,7 +498,7 @@ async function curl (url) {
 /**
  * @param {FakeAgent} agent
  * @param {string|{ then: (callback: () => Promise<string>) => Promise<string> }|URL} procOrUrl
- * @param {function} fn
+ * @param {(res: { headers: Record<string, string>, payload: unknown[] }) => void} fn
  * @param {number} [timeout]
  * @param {number} [expectedMessageCount]
  * @param {boolean} [resolveAtFirstSuccess]
@@ -542,7 +561,7 @@ function checkSpansForServiceName (spans, name) {
  * @param {string} cwd
  * @param {string} serverFile
  * @param {string|number} agentPort
- * @param {function} [stdioHandler]
+ * @param {(data: Buffer) => void} [stdioHandler]
  * @param {Record<string, string|undefined>} [additionalEnvArgs]
  */
 async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
@@ -559,7 +578,8 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
   env = { ...process.env, ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
-    env
+    env,
+    execArgv: additionalEnvArgs.execArgv
   }, stdioHandler)
 }
 
@@ -579,17 +599,17 @@ function useEnv (env) {
 }
 
 /**
- * @param {unknown[]} args
+ * @param {Parameters<createSandbox>} args
  */
 function useSandbox (...args) {
-  before(async () => {
+  before(async function () {
+    this.timeout(300_000)
     sandbox = await createSandbox(...args)
   })
 
-  after(() => {
-    const oldSandbox = sandbox
-    sandbox = undefined
-    return oldSandbox.remove()
+  after(function () {
+    this.timeout(30_000)
+    return sandbox.remove()
   })
 }
 
@@ -670,7 +690,6 @@ module.exports = {
   telemetryForwarder,
   assertTelemetryPoints,
   runAndCheckWithTelemetry,
-  createSandbox,
   curl,
   curlAndAssertMessage,
   getCiVisAgentlessConfig,
@@ -678,8 +697,8 @@ module.exports = {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   useEnv,
-  useSandbox,
-  sandboxCwd,
   setShouldKill,
+  sandboxCwd,
+  useSandbox,
   varySandbox
 }

@@ -1,14 +1,18 @@
 'use strict'
 
-const Config = require('../../../packages/dd-trace/src/config')
+const assert = require('node:assert')
+
+const getConfig = require('../../../packages/dd-trace/src/config')
 const { start } = require('../../../packages/dd-trace/src/debugger')
 const { generateProbeConfig } = require('../../../packages/dd-trace/test/debugger/devtools_client/utils')
 
-const breakpoint = {
-  file: process.env.BREAKPOINT_FILE,
-  line: process.env.BREAKPOINT_LINE
-}
-const config = new Config()
+const sourceFile = process.env.BREAKPOINT_FILE
+const line = Number(process.env.BREAKPOINT_LINE)
+assert(sourceFile, 'BREAKPOINT_FILE environment variable must be set')
+assert(!Number.isNaN(line), 'BREAKPOINT_LINE environment variable must be a number')
+
+const breakpoint = { sourceFile, line }
+const config = getConfig()
 const rc = {
   setProductHandler (product, cb) {
     const action = 'apply'

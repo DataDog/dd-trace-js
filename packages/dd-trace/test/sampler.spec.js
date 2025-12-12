@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
@@ -26,7 +28,7 @@ describe('Sampler', () => {
     it('should return the sample rate', () => {
       sampler = new Sampler(0.5)
 
-      expect(sampler.rate()).to.equal(0.5)
+      assert.strictEqual(sampler.rate(), 0.5)
     })
   })
 
@@ -44,7 +46,7 @@ describe('Sampler', () => {
 
       rates.forEach(([rate, expected]) => {
         sampler = new Sampler(rate)
-        expect(sampler.threshold).to.equal(expected)
+        assert.strictEqual(sampler.threshold, expected)
       })
     })
   })

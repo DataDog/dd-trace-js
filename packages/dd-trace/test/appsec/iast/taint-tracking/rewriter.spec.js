@@ -1,13 +1,14 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const dc = require('dc-polyfill')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const constants = require('../../../../src/appsec/iast/taint-tracking/constants')
-
 const iastEnabledConfig = {
   iast: {
     enabled: true
@@ -20,7 +21,7 @@ describe('IAST Rewriter', () => {
     expect(() => {
       rewriter = require('@datadog/wasm-js-rewriter')
     }).to.not.throw(Error)
-    expect(rewriter).to.not.be.null
+    assert.notStrictEqual(rewriter, null)
   })
 
   describe('Enabling rewriter', () => {
@@ -113,7 +114,7 @@ describe('IAST Rewriter', () => {
 
     it('Should wrap module compile method on taint tracking enable', () => {
       rewriter.enable(iastEnabledConfig)
-      expect(shimmer.wrap).to.be.calledOnce
+      sinon.assert.calledOnce(shimmer.wrap)
       expect(shimmer.wrap.getCall(0).args[1]).eq('_compile')
 
       rewriter.disable()
@@ -123,7 +124,7 @@ describe('IAST Rewriter', () => {
       globalThis.__DD_ESBUILD_IAST_WITH_SM = true
 
       rewriter.enable(iastEnabledConfig)
-      expect(shimmer.wrap).to.not.have.been.called
+      sinon.assert.notCalled(shimmer.wrap)
 
       rewriter.disable()
       delete globalThis.__DD_ESBUILD_IAST_WITH_SM
@@ -212,7 +213,7 @@ describe('IAST Rewriter', () => {
         rewriter.enable(iastEnabledConfig)
         delete Error.prepareStackTrace
 
-        expect(Module.register).to.be.calledOnce
+        sinon.assert.calledOnce(Module.register)
       })
 
       it('Should enable esm rewriter when ESM is configured with --experimental-loader exec arg', () => {
@@ -220,7 +221,7 @@ describe('IAST Rewriter', () => {
 
         rewriter.enable(iastEnabledConfig)
 
-        expect(Module.register).to.be.calledOnce
+        sinon.assert.calledOnce(Module.register)
       })
 
       it('Should enable esm rewriter when ESM is configured with --loader in NODE_OPTIONS', () => {
@@ -228,7 +229,7 @@ describe('IAST Rewriter', () => {
 
         rewriter.enable(iastEnabledConfig)
 
-        expect(Module.register).to.be.calledOnce
+        sinon.assert.calledOnce(Module.register)
       })
 
       it('Should enable esm rewriter when ESM is configured with --experimental-loader in NODE_OPTIONS', () => {
@@ -236,7 +237,7 @@ describe('IAST Rewriter', () => {
 
         rewriter.enable(iastEnabledConfig)
 
-        expect(Module.register).to.be.calledOnce
+        sinon.assert.calledOnce(Module.register)
       })
 
       describe('thread communication', () => {
@@ -317,7 +318,7 @@ describe('IAST Rewriter', () => {
           const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 
           function onHardcodedSecret (literals) {
-            expect(literals).to.deep.equal(literalsResult)
+            assert.deepStrictEqual(literals, literalsResult)
 
             hardcodedSecretCh.unsubscribe(onHardcodedSecret)
             done()

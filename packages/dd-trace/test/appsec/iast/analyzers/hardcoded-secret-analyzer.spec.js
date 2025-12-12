@@ -9,7 +9,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 
 const agent = require('../../../plugins/agent')
-const Config = require('../../../../src/config')
+const { getConfigFresh } = require('../../../helpers/config')
 
 const { NameAndValue, ValueOnly } = require('../../../../src/appsec/iast/analyzers/hardcoded-rule-type')
 const hardcodedSecretAnalyzer = require('../../../../src/appsec/iast/analyzers/hardcoded-secret-analyzer')
@@ -35,7 +35,7 @@ describe('Hardcoded Secret Analyzer', () => {
     suite.forEach((testCase) => {
       testCase.samples.forEach((sample, sampleIndex) => {
         // sample values are arrays containing the parts of the original token
-        it(`should match rule ${testCase.id} with #${sampleIndex + 1} value ${sample[0]}...`, () => {
+        it(`should match rule ${testCase.id} with #${sampleIndex + 1}`, () => {
           const value = sample.join('')
           const ident = testCase.type === NameAndValue ? value.split(' = ')[0] : undefined
 
@@ -52,7 +52,7 @@ describe('Hardcoded Secret Analyzer', () => {
           })
 
           expect([NameAndValue, ValueOnly]).to.be.include(testCase.type)
-          expect(report).to.have.been.calledOnceWithExactly({ file: relFile, line, column, ident, data: testCase.id })
+          sinon.assert.calledOnceWithExactly(report, { file: relFile, line, column, ident, data: testCase.id })
         })
       })
     })
@@ -71,7 +71,7 @@ describe('Hardcoded Secret Analyzer', () => {
         literals: [{ value: 'test', line: 0 }]
       })
 
-      expect(report).not.to.have.been.called
+      sinon.assert.notCalled(report)
     })
   })
 
@@ -95,7 +95,7 @@ describe('Hardcoded Secret Analyzer', () => {
 
       beforeEach(() => {
         const tracer = require('../../../../')
-        const config = new Config({
+        const config = getConfigFresh({
           experimental: {
             iast: {
               enabled: true,

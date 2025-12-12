@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 const { channel } = require('dc-polyfill')
@@ -8,7 +10,7 @@ require('../setup/core')
 
 const LogPlugin = require('../../src/plugins/log_plugin')
 const Tracer = require('../../src/tracer')
-const Config = require('../../src/config')
+const getConfig = require('../../src/config')
 
 const testLogChannel = channel('apm:test:log')
 
@@ -22,7 +24,7 @@ const config = {
   version: '1.2.3'
 }
 
-const tracer = new Tracer(new Config({
+const tracer = new Tracer(getConfig({
   logInjection: true,
   enabled: true,
   ...config
@@ -42,11 +44,11 @@ describe('LogPlugin', () => {
     testLogChannel.publish(data)
     const { message } = data
 
-    expect(message.dd).to.deep.equal(config)
+    assert.deepStrictEqual(message.dd, config)
 
     // Should not have trace/span data when none is active
-    expect(message.dd).to.not.have.property('trace_id')
-    expect(message.dd).to.not.have.property('span_id')
+    assert.ok(!Object.hasOwn(message.dd, 'trace_id'))
+    assert.ok(!Object.hasOwn(message.dd, 'span_id'))
   })
 
   it('should include trace_id and span_id when a span is active', () => {
@@ -60,8 +62,8 @@ describe('LogPlugin', () => {
       expect(message.dd).to.contain(config)
 
       // Should have trace/span data when none is active
-      expect(message.dd).to.have.property('trace_id', span.context().toTraceId(true))
-      expect(message.dd).to.have.property('span_id', span.context().toSpanId())
+      assert.strictEqual(message.dd.trace_id, span.context().toTraceId(true))
+      assert.strictEqual(message.dd.span_id, span.context().toSpanId())
     })
   })
 })

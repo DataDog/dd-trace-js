@@ -1,0 +1,623 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+
+const { expect } = require('chai')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+
+const { describe, it, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
+
+require('./setup/core')
+
+const constants = require('../src/constants')
+const tags = require('../../../ext/tags')
+const id = require('../src/id')
+const { getExtraServices } = require('../src/service-naming/extra-services')
+
+const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
+const MEASURED = tags.MEASURED
+const ORIGIN_KEY = constants.ORIGIN_KEY
+const HOSTNAME_KEY = constants.HOSTNAME_KEY
+const SAMPLING_AGENT_DECISION = constants.SAMPLING_AGENT_DECISION
+const SAMPLING_LIMIT_DECISION = constants.SAMPLING_LIMIT_DECISION
+const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
+const SPAN_SAMPLING_MECHANISM = constants.SPAN_SAMPLING_MECHANISM
+const SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE
+const SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND
+const SAMPLING_MECHANISM_SPAN = constants.SAMPLING_MECHANISM_SPAN
+const PROCESS_ID = constants.PROCESS_ID
+const ERROR_MESSAGE = constants.ERROR_MESSAGE
+const ERROR_STACK = constants.ERROR_STACK
+const ERROR_TYPE = constants.ERROR_TYPE
+
+const spanId = id('0234567812345678')
+const spanId2 = id('0254567812345678')
+const spanId3 = id('0264567812345678')
+
+describe('spanFormat', () => {
+  let spanFormat
+  let span
+  let trace
+  let spanContext
+  let spanContext2
+  let spanContext3
+  let TraceState
+
+  beforeEach(() => {
+    TraceState = require('../src/opentracing/propagation/tracestate')
+    spanContext = {
+      _traceId: spanId,
+      _spanId: spanId,
+      _parentId: spanId,
+      _tags: {},
+      _metrics: {},
+      _sampling: {},
+      _trace: {
+        started: [],
+        tags: {}
+      },
+      _name: 'operation',
+      toTraceId: sinon.stub().returns(spanId),
+      toSpanId: sinon.stub().returns(spanId)
+    }
+
+    span = {
+      context: sinon.stub().returns(spanContext),
+      tracer: sinon.stub().returns({
+        _service: 'test'
+      }),
+      setTag: sinon.stub(),
+      _startTime: 1500000000000.123,
+      _duration: 100
+    }
+
+    spanContext._trace.started.push(span)
+
+    spanContext2 = {
+      ...spanContext,
+      _traceId: spanId2,
+      _spanId: spanId2,
+      _parentId: spanId2,
+      toTraceId: sinon.stub().returns(spanId2.toString(16)),
+      toSpanId: sinon.stub().returns(spanId2.toString(16))
+    }
+    spanContext3 = {
+      ...spanContext,
+      _traceId: spanId3,
+      _spanId: spanId3,
+      _parentId: spanId3,
+      toTraceId: sinon.stub().returns(spanId3.toString(16)),
+      toSpanId: sinon.stub().returns(spanId3.toString(16))
+    }
+
+    spanFormat = require('../src/span_format')
+  })
+
+  describe('spanFormat', () => {
+    it('should format span events', () => {
+      span._events = [
+        { name: 'Something went so wrong', startTime: 1 },
+        {
+          name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
+          attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false },
+          startTime: 1633023102
+        }
+      ]
+
+      trace = spanFormat(span)
+      const spanEvents = trace.span_events
+      assert.deepStrictEqual(spanEvents, [{
+        name: 'Something went so wrong',
+        time_unix_nano: 1000000,
+        attributes: undefined
+      }, {
+        name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
+        time_unix_nano: 1633023102000000,
+        attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false }
+      }])
+    })
+
+    it('should convert a span to the correct trace format', () => {
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.trace_id.toString(), span.context()._traceId.toString())
+      assert.strictEqual(trace.span_id.toString(), span.context()._spanId.toString())
+      assert.strictEqual(trace.parent_id.toString(), span.context()._parentId.toString())
+      assert.strictEqual(trace.name, span.context()._name)
+      assert.strictEqual(trace.resource, span.context()._name)
+      assert.strictEqual(trace.error, 0)
+      assert.strictEqual(trace.start, span._startTime * 1e6)
+      assert.strictEqual(trace.duration, span._duration * 1e6)
+    })
+
+    it('should always set a parent ID', () => {
+      span.context()._parentId = null
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.trace_id.toString(), span.context()._traceId.toString())
+      assert.strictEqual(trace.span_id.toString(), span.context()._spanId.toString())
+      assert.strictEqual(trace.parent_id.toString(), '0000000000000000')
+      assert.strictEqual(trace.name, span.context()._name)
+      assert.strictEqual(trace.resource, span.context()._name)
+      assert.strictEqual(trace.error, 0)
+      assert.strictEqual(trace.start, span._startTime * 1e6)
+      assert.strictEqual(trace.duration, span._duration * 1e6)
+    })
+
+    describe('_dd.base_service', () => {
+      it('should infer the tag when span service changes', () => {
+        span.context()._tags['service.name'] = 'foo'
+
+        trace = spanFormat(span)
+
+        sinon.assert.calledWith(span.setTag, '_dd.base_service', 'test')
+      })
+
+      it('should infer the tag when no changes occur', () => {
+        span.context()._tags['service.name'] = 'test'
+
+        trace = spanFormat(span)
+
+        sinon.assert.notCalled(span.setTag)
+      })
+
+      it('should register extra service name', () => {
+        span.context()._tags['service.name'] = 'foo'
+
+        trace = spanFormat(span)
+
+        assert.deepStrictEqual(getExtraServices(), ['foo'])
+      })
+    })
+
+    it('should extract Datadog specific tags', () => {
+      spanContext._tags['service.name'] = 'service'
+      spanContext._tags['span.type'] = 'type'
+      spanContext._tags['resource.name'] = 'resource'
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.service, 'service')
+      assert.strictEqual(trace.type, 'type')
+      assert.strictEqual(trace.resource, 'resource')
+    })
+
+    it('should extract Datadog specific root tags', () => {
+      spanContext._parentId = null
+      spanContext._trace[SAMPLING_AGENT_DECISION] = 0.8
+      spanContext._trace[SAMPLING_LIMIT_DECISION] = 0.2
+      spanContext._trace[SAMPLING_RULE_DECISION] = 0.5
+
+      trace = spanFormat(span)
+
+      assertObjectContains(trace.metrics, {
+        [SAMPLING_AGENT_DECISION]: 0.8,
+        [SAMPLING_LIMIT_DECISION]: 0.2,
+        [SAMPLING_RULE_DECISION]: 0.5
+      })
+    })
+
+    it('should not extract Datadog specific root tags from non-root spans', () => {
+      spanContext._trace[SAMPLING_AGENT_DECISION] = 0.8
+      spanContext._trace[SAMPLING_LIMIT_DECISION] = 0.2
+      spanContext._trace[SAMPLING_RULE_DECISION] = 0.5
+
+      trace = spanFormat(span)
+
+      expect(trace.metrics).to.not.have.keys(
+        SAMPLING_AGENT_DECISION,
+        SAMPLING_LIMIT_DECISION,
+        SAMPLING_RULE_DECISION
+      )
+    })
+
+    it('should always add single span ingestion tags from options if present', () => {
+      spanContext._spanSampling = {
+        maxPerSecond: 5,
+        sampleRate: 1.0
+      }
+      trace = spanFormat(span)
+
+      assertObjectContains(trace.metrics, {
+        [SPAN_SAMPLING_MECHANISM]: SAMPLING_MECHANISM_SPAN,
+        [SPAN_SAMPLING_MAX_PER_SECOND]: 5,
+        [SPAN_SAMPLING_RULE_RATE]: 1.0
+      })
+    })
+
+    it('should not add single span ingestion tags if options not present', () => {
+      trace = spanFormat(span)
+
+      expect(trace.metrics).to.not.have.keys(
+        SPAN_SAMPLING_MECHANISM,
+        SPAN_SAMPLING_MAX_PER_SECOND,
+        SPAN_SAMPLING_RULE_RATE
+      )
+    })
+
+    it('should format span links', () => {
+      span._links = [
+        {
+          context: spanContext2
+        },
+        {
+          context: spanContext3
+        }
+      ]
+
+      trace = spanFormat(span)
+      const spanLinks = JSON.parse(trace.meta['_dd.span_links'])
+
+      assert.deepStrictEqual(spanLinks, [{
+        trace_id: spanId2.toString(16),
+        span_id: spanId2.toString(16)
+      }, {
+        trace_id: spanId3.toString(16),
+        span_id: spanId3.toString(16)
+      }])
+    })
+
+    it('creates a span link', () => {
+      const ts = TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
+      const traceIdHigh = '0000000000000010'
+      spanContext2._tracestate = ts
+      spanContext2._trace = {
+        started: [],
+        finished: [],
+        origin: 'synthetics',
+        tags: {
+          '_dd.p.tid': traceIdHigh
+        }
+      }
+
+      spanContext2._sampling.priority = 0
+      const link = {
+        context: spanContext2,
+        attributes: { foo: 'bar' }
+      }
+      span._links = [link]
+
+      trace = spanFormat(span)
+      const spanLinks = JSON.parse(trace.meta['_dd.span_links'])
+
+      assert.deepStrictEqual(spanLinks, [{
+        trace_id: spanId2.toString(16),
+        span_id: spanId2.toString(16),
+        attributes: { foo: 'bar' },
+        tracestate: ts.toString(),
+        flags: 0
+      }])
+    })
+
+    it('should extract trace chunk tags', () => {
+      spanContext._trace.tags = {
+        chunk: 'test',
+        count: 1
+      }
+
+      trace = spanFormat(span, true)
+
+      assertObjectContains(trace.meta, {
+        chunk: 'test'
+      })
+
+      assertObjectContains(trace.metrics, {
+        count: 1
+      })
+    })
+
+    it('should not extract trace chunk tags when not chunk root', () => {
+      spanContext._trace.tags = {
+        chunk: 'test',
+        count: 1
+      }
+
+      trace = spanFormat(span, false)
+      expect(trace.meta).to.not.include({
+        chunk: 'test'
+      })
+
+      expect(trace.metrics).to.not.include({
+        count: 1
+      })
+    })
+
+    it('should extract empty tags', () => {
+      spanContext._trace.tags = {
+        foo: '',
+        count: 1
+      }
+
+      trace = spanFormat(span, true)
+
+      assertObjectContains(trace.meta, {
+        foo: ''
+      })
+
+      assertObjectContains(trace.metrics, {
+        count: 1
+      })
+    })
+
+    it('should discard user-defined tags with name HOSTNAME_KEY by default', () => {
+      spanContext._tags[HOSTNAME_KEY] = 'some_hostname'
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta[HOSTNAME_KEY], undefined)
+    })
+
+    it('should include the real hostname of the system if reportHostname is true', () => {
+      spanContext._hostname = 'my_hostname'
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta[HOSTNAME_KEY], 'my_hostname')
+    })
+
+    it('should only extract tags that are not Datadog specific to meta', () => {
+      spanContext._tags['service.name'] = 'service'
+      spanContext._tags['span.type'] = 'type'
+      spanContext._tags['resource.name'] = 'resource'
+      spanContext._tags['foo.bar'] = 'foobar'
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta['service.name'], undefined)
+      assert.strictEqual(trace.meta['span.type'], undefined)
+      assert.strictEqual(trace.meta['resource.name'], undefined)
+      assert.strictEqual(trace.meta['foo.bar'], 'foobar')
+    })
+
+    it('should extract numeric tags as metrics', () => {
+      spanContext._tags = { metric: 50 }
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.metrics.metric, 50)
+    })
+
+    it('should extract boolean tags as metrics', () => {
+      spanContext._tags = { yes: true, no: false }
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.metrics.yes, 1)
+      assert.strictEqual(trace.metrics.no, 0)
+    })
+
+    it('should ignore metrics with invalid type', () => {
+      spanContext._metrics = { metric: 'test' }
+
+      trace = spanFormat(span)
+
+      assert.ok(!Object.hasOwn(trace.metrics, 'metric'))
+    })
+
+    it('should ignore metrics that are not a number', () => {
+      spanContext._metrics = { metric: NaN }
+
+      trace = spanFormat(span)
+
+      assert.ok(!Object.hasOwn(trace.metrics, 'metric'))
+    })
+
+    it('should extract errors', () => {
+      const error = new Error('boom')
+
+      spanContext._tags.error = error
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], error.message)
+      assert.strictEqual(trace.meta[ERROR_TYPE], error.name)
+      assert.strictEqual(trace.meta[ERROR_STACK], error.stack)
+    })
+
+    it('should skip error properties without a value', () => {
+      const error = new Error('boom')
+
+      error.name = null
+      error.stack = null
+      spanContext._tags.error = error
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], error.message)
+      assert.ok(!Object.hasOwn(trace.meta, ERROR_TYPE))
+      assert.ok(!Object.hasOwn(trace.meta, ERROR_STACK))
+    })
+
+    it('should extract the origin', () => {
+      spanContext._trace.origin = 'synthetics'
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta[ORIGIN_KEY], 'synthetics')
+    })
+
+    it('should add the language tag for a basic span', () => {
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta.language, 'javascript')
+    })
+
+    describe('when there is an `error` tag ', () => {
+      it('should set the error flag when error tag is true', () => {
+        spanContext._tags.error = true
+
+        trace = spanFormat(span)
+
+        assert.strictEqual(trace.error, 1)
+      })
+
+      it('should not set the error flag when error is false', () => {
+        spanContext._tags.error = false
+
+        trace = spanFormat(span)
+
+        assert.strictEqual(trace.error, 0)
+      })
+
+      it('should not extract error to meta', () => {
+        spanContext._tags.error = true
+
+        trace = spanFormat(span)
+
+        assert.strictEqual(trace.meta.error, undefined)
+      })
+    })
+
+    it('should set the error flag when there is an error-related tag without a set trace tag', () => {
+      spanContext._tags[ERROR_TYPE] = 'Error'
+      spanContext._tags[ERROR_MESSAGE] = 'boom'
+      spanContext._tags[ERROR_STACK] = ''
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.error, 1)
+    })
+
+    it('should set the error flag when there is an error-related tag with should setTrace', () => {
+      spanContext._tags[ERROR_TYPE] = 'Error'
+      spanContext._tags[ERROR_MESSAGE] = 'boom'
+      spanContext._tags[ERROR_STACK] = ''
+      spanContext._tags.setTraceError = 1
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.error, 1)
+
+      spanContext._tags[ERROR_TYPE] = 'foo'
+      spanContext._tags[ERROR_MESSAGE] = 'foo'
+      spanContext._tags[ERROR_STACK] = 'foo'
+
+      assert.strictEqual(trace.error, 1)
+    })
+
+    it('should not set the error flag for internal spans with error tags', () => {
+      spanContext._tags[ERROR_TYPE] = 'Error'
+      spanContext._tags[ERROR_MESSAGE] = 'boom'
+      spanContext._tags[ERROR_STACK] = ''
+      spanContext._name = 'fs.operation'
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.error, 0)
+    })
+
+    it('should not set the error flag for internal spans with error tag', () => {
+      spanContext._tags.error = new Error('boom')
+      spanContext._name = 'fs.operation'
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.error, 0)
+    })
+
+    it('should sanitize the input', () => {
+      spanContext._name = null
+      spanContext._tags = {
+        'foo.bar': null,
+        'baz.qux': undefined
+      }
+      span._startTime = NaN
+      span._duration = NaN
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.name, 'null')
+      assert.strictEqual(trace.resource, 'null')
+      assert.ok(!Object.hasOwn(trace.meta, 'foo.bar'))
+      assert.ok(!Object.hasOwn(trace.meta, 'baz.qux'))
+      assert.strictEqual(typeof trace.start, 'number')
+      assert.strictEqual(typeof trace.duration, 'number')
+    })
+
+    it('should include the sampling priority', () => {
+      spanContext._sampling.priority = 0
+      trace = spanFormat(span)
+      assert.strictEqual(trace.metrics[SAMPLING_PRIORITY_KEY], 0)
+    })
+
+    it('should support only the first level of depth for objects', () => {
+      const tag = {
+        A: {
+          B: {},
+          num: '2'
+        },
+        num: '1'
+      }
+
+      spanContext._tags.nested = tag
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta['nested.num'], '1')
+      assert.strictEqual(trace.meta['nested.A'], undefined)
+      assert.strictEqual(trace.meta['nested.A.B'], undefined)
+      assert.strictEqual(trace.meta['nested.A.num'], undefined)
+    })
+
+    it('should accept a boolean for measured', () => {
+      spanContext._tags[MEASURED] = true
+      trace = spanFormat(span)
+      assert.strictEqual(trace.metrics[MEASURED], 1)
+    })
+
+    it('should accept a numeric value for measured', () => {
+      spanContext._tags[MEASURED] = 0
+      trace = spanFormat(span)
+      assert.strictEqual(trace.metrics[MEASURED], 0)
+    })
+
+    it('should accept undefined for measured', () => {
+      spanContext._tags[MEASURED] = undefined
+      trace = spanFormat(span)
+      assert.strictEqual(trace.metrics[MEASURED], 1)
+    })
+
+    it('should not measure internal spans', () => {
+      spanContext._tags['span.kind'] = 'internal'
+      trace = spanFormat(span)
+      assert.ok(!Object.hasOwn(trace.metrics, MEASURED))
+    })
+
+    it('should not measure unknown spans', () => {
+      trace = spanFormat(span)
+      assert.ok(!Object.hasOwn(trace.metrics, MEASURED))
+    })
+
+    it('should measure non-internal spans', () => {
+      spanContext._tags['span.kind'] = 'server'
+      trace = spanFormat(span)
+      assert.strictEqual(trace.metrics[MEASURED], 1)
+    })
+
+    it('should not override explicit measure decision', () => {
+      spanContext._tags[MEASURED] = 0
+      spanContext._tags['span.kind'] = 'server'
+      trace = spanFormat(span)
+      assert.strictEqual(trace.metrics[MEASURED], 0)
+    })
+
+    it('should possess a process_id tag', () => {
+      trace = spanFormat(span)
+      assert.strictEqual(trace.metrics[PROCESS_ID], process.pid)
+    })
+
+    it('should not crash on prototype-free tags objects when nesting', () => {
+      const tags = Object.create(null)
+      tags.nested = { foo: 'bar' }
+      spanContext._tags.nested = tags
+
+      spanFormat(span)
+    })
+
+    it('should capture analytics.event', () => {
+      spanContext._tags['analytics.event'] = 1
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.metrics['_dd1.sr.eausr'], 1)
+    })
+  })
+})

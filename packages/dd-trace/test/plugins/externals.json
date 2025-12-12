@@ -201,6 +201,12 @@
       "versions": ["3.5.7"]
     }
   ],
+  "genai": [
+    {
+      "name": "@google/genai",
+      "versions": [">=1.19.0"]
+    }
+  ],
   "graphql": [
     {
       "name": "apollo-server-core",
@@ -287,28 +293,6 @@
     {
       "name": "@hono/node-server",
       "versions": ["1.15.0"]
-    }
-  ],
-  "jest": [
-    {
-      "name": "jest",
-      "versions": [">=24.8.0"]
-    },
-    {
-      "name": "jest-environment-jsdom",
-      "versions": [">=24.8.0"]
-    },
-    {
-      "name": "jest-environment-node",
-      "versions": [">=24.8.0"]
-    },
-    {
-      "name": "jest-circus",
-      "versions": [">=24.8.0"]
-    },
-    {
-      "name": "@jest/globals",
-      "versions": [">=26.5.0"]
     }
   ],
   "knex": [

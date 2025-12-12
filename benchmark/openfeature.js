@@ -4,12 +4,12 @@ const benchmark = require('./benchmark')
 const proxyquire = require('proxyquire')
 const { createSingleExposureEvent, createExposureEventArray } = require('./stubs/exposure-events')
 
-const Config = require('../packages/dd-trace/src/config')
+const getConfig = require('../packages/dd-trace/src/config')
 const ExposuresWriter = proxyquire('../packages/dd-trace/src/openfeature/writers/exposures', {
   '../../exporters/common/request': () => {}
 })
 
-const config = new Config({ service: 'benchmark', version: '1.0.0', env: 'test' })
+const config = getConfig({ service: 'benchmark', version: '1.0.0', env: 'test' })
 const suite = benchmark('openfeature')
 
 let writer

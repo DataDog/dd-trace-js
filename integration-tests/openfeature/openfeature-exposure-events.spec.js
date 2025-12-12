@@ -1,6 +1,6 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 const path = require('path')
 const { assert } = require('chai')
 const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../../packages/dd-trace/src/remote_config/apply_states')
@@ -26,31 +26,24 @@ function validateExposureEvent (event, expectedFlag, expectedUser, expectedAttri
 }
 
 describe('OpenFeature Remote Config and Exposure Events Integration', () => {
-  let sandbox, cwd, appFile
+  let cwd, appFile
 
-  before(async function () {
-    this.timeout(process.platform === 'win32' ? 90000 : 30000)
+  // Dependencies needed for OpenFeature integration tests
+  const dependencies = [
+    'express',
+    '@openfeature/server-sdk',
+    '@openfeature/core',
+  ]
 
-    // Dependencies needed for OpenFeature integration tests
-    const dependencies = [
-      'express',
-      '@openfeature/server-sdk',
-      '@openfeature/core',
-    ]
+  useSandbox(
+    dependencies,
+    false,
+    [path.join(__dirname, 'app')]
+  )
 
-    sandbox = await createSandbox(
-      dependencies,
-      false,
-      [path.join(__dirname, 'app')]
-    )
-
-    cwd = sandbox.folder
+  before(function () {
+    cwd = sandboxCwd()
     appFile = path.join(cwd, 'app', 'exposure-events.js')
-  })
-
-  after(async function () {
-    this.timeout(60000)
-    await sandbox.remove()
   })
 
   describe('FlaggingProvider evaluation generates exposures', () => {
@@ -77,12 +70,13 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       it('should generate exposure events with manual flush', (done) => {
         const configId = 'org-42-env-test'
         const exposureEvents = []
+        let receivedAckUpdate = false
 
         // Listen for exposure events
         agent.on('exposures', ({ payload, headers }) => {
           assert.property(payload, 'context')
           assert.property(payload, 'exposures')
-          assert.equal(payload.context.service_name, 'ffe-test-service')
+          assert.equal(payload.context.service, 'ffe-test-service')
           assert.equal(payload.context.version, '1.2.3')
           assert.equal(payload.context.env, 'test')
 
@@ -108,23 +102,22 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
               validateExposureEvent(stringEvent, 'test-string-flag', 'test-user-456',
                 { user: 'test-user-456', tier: 'enterprise' })
 
-              done()
+              endIfDone()
             } catch (error) {
               done(error)
             }
           }
         })
 
-        // Deliver UFC config via Remote Config
-        agent.addRemoteConfig({
-          product: RC_PRODUCT,
-          id: configId,
-          config: { flag_configuration: ufcPayloads.testBooleanAndStringFlags }
-        })
+        agent.on('remote-config-ack-update', async (id, _version, state) => {
+          if (state === UNACKNOWLEDGED) return
 
-        // Wait for RC delivery then evaluate flags
-        setTimeout(async () => {
+          if (id !== configId) return
+
           try {
+            assert.strictEqual(state, ACKNOWLEDGED)
+            receivedAckUpdate = true
+
             const response = await fetch(`${proc.url}/evaluate-flags`)
             assert.equal(response.status, 200)
             const data = await response.json()
@@ -135,7 +128,18 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           } catch (error) {
             done(error)
           }
-        }, 1000)
+        })
+
+        // Deliver UFC config via Remote Config
+        agent.addRemoteConfig({
+          product: RC_PRODUCT,
+          id: configId,
+          config: ufcPayloads.testBooleanAndStringFlags
+        })
+
+        function endIfDone () {
+          if (receivedAckUpdate && exposureEvents.length === 2) done()
+        }
       })
     })
 
@@ -166,7 +170,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         agent.on('exposures', ({ payload }) => {
           assert.property(payload, 'context')
           assert.property(payload, 'exposures')
-          assert.equal(payload.context.service_name, 'ffe-test-service')
+          assert.equal(payload.context.service, 'ffe-test-service')
           assert.equal(payload.context.version, '1.2.3')
           assert.equal(payload.context.env, 'test')
 
@@ -196,24 +200,28 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           }
         })
 
-        agent.addRemoteConfig({
-          product: RC_PRODUCT,
-          id: configId,
-          config: { flag_configuration: ufcPayloads.testBooleanAndStringFlags }
-        })
-
-        setTimeout(async () => {
+        agent.on('remote-config-ack-update', async (id, _version, state) => {
+          if (state === UNACKNOWLEDGED) return
+          if (id !== configId) return
           try {
+            assert.strictEqual(state, ACKNOWLEDGED)
+
             const response = await fetch(`${proc.url}/evaluate-multiple-flags`)
             assert.equal(response.status, 200)
             const data = await response.json()
             assert.equal(data.evaluationsCompleted, 6)
 
-          // No manual flush - let automatic flush handle it (default 1s interval)
+            // No manual flush - let automatic flush handle it (default 1s interval)
           } catch (error) {
             done(error)
           }
-        }, 1500)
+        })
+
+        agent.addRemoteConfig({
+          product: RC_PRODUCT,
+          id: configId,
+          config: ufcPayloads.testBooleanAndStringFlags
+        })
       })
     })
   })
@@ -264,14 +272,11 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       agent.addRemoteConfig({
         product: RC_PRODUCT,
         id: configId,
-        config: { flag_configuration: ufcPayloads.simpleStringFlagForAck }
+        config: ufcPayloads.simpleStringFlagForAck
       })
 
       // Trigger request to start remote config polling
-      fetch(`${proc.url}/`).then(() => {
-        // Wait for remote config processing
-        setTimeout(endIfDone, 200)
-      }).catch(done)
+      fetch(`${proc.url}/`).catch(done)
 
       let testCompleted = false
       function endIfDone () {

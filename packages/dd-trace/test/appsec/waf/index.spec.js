@@ -1,14 +1,16 @@
 'use strict'
 
 const assert = require('node:assert')
+
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
-const Config = require('../../../src/config')
+const sinon = require('sinon')
+const { match } = require('sinon')
+
 const rules = require('../../../src/appsec/recommended.json')
 const Reporter = require('../../../src/appsec/reporter')
-const { match } = require('sinon')
+const { getConfigFresh } = require('../../helpers/config')
 
 describe('WAF Manager', () => {
   const knownAddresses = new Set([
@@ -26,7 +28,7 @@ describe('WAF Manager', () => {
   let keepTrace, updateRateLimitedMetric, limiterStub
 
   beforeEach(() => {
-    config = new Config()
+    config = getConfigFresh()
 
     limiterStub = {
       isAllowed: sinon.stub().returns(true)
@@ -85,12 +87,12 @@ describe('WAF Manager', () => {
 
   describe('init', () => {
     it('should initialize the manager', () => {
-      expect(waf.wafManager).to.be.null
+      assert.strictEqual(waf.wafManager, null)
       waf.init(rules, config.appsec)
 
-      expect(waf.wafManager).not.to.be.null
-      expect(waf.wafManager.ddwaf).to.be.instanceof(DDWAF)
-      expect(Reporter.reportWafInit).to.have.been.calledWithExactly(
+      assert.notStrictEqual(waf.wafManager, null)
+      assert.ok(waf.wafManager.ddwaf instanceof DDWAF)
+      sinon.assert.calledWithExactly(Reporter.reportWafInit,
         '1.2.3',
         '1.0.0',
         { loaded: ['rule_1'], failed: [] },
@@ -107,15 +109,15 @@ describe('WAF Manager', () => {
         waf.init(rules, config.appsec)
         expect.fail('waf init should have thrown an error')
       } catch (err) {
-        expect(err).to.equal(error)
-        expect(Reporter.reportWafInit).to.have.been.calledWith('1.2.3', 'unknown')
+        assert.strictEqual(err, error)
+        sinon.assert.calledWith(Reporter.reportWafInit, '1.2.3', 'unknown')
       }
     })
 
     it('should set init metrics without error', () => {
       waf.init(rules, config.appsec)
 
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.waf.version', '1.2.3')
+      sinon.assert.calledWithExactly(Reporter.metricsQueue.set, '_dd.appsec.waf.version', '1.2.3')
     })
   })
 
@@ -162,8 +164,8 @@ describe('WAF Manager', () => {
         const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
         waf.run(payload, req)
 
-        expect(keepTrace).to.have.been.calledOnceWithExactly({ mock: 'rootSpan' }, 'ASM')
-        expect(updateRateLimitedMetric).not.to.have.been.called
+        sinon.assert.calledOnceWithExactly(keepTrace, { mock: 'rootSpan' }, 'ASM')
+        sinon.assert.notCalled(updateRateLimitedMetric)
       })
 
       it('should call updateRateLimitedMetric when result.keep is true but rate limiter denies', () => {
@@ -174,8 +176,8 @@ describe('WAF Manager', () => {
         const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
         waf.run(payload, req)
 
-        expect(updateRateLimitedMetric).to.have.been.calledOnceWithExactly(req)
-        expect(keepTrace).not.to.have.been.called
+        sinon.assert.calledOnceWithExactly(updateRateLimitedMetric, req)
+        sinon.assert.notCalled(keepTrace)
       })
 
       it('should not call keepTrace or updateRateLimitedMetric when result.keep is false', () => {
@@ -186,8 +188,8 @@ describe('WAF Manager', () => {
         const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
         waf.run(payload, req)
 
-        expect(keepTrace).not.to.have.been.called
-        expect(updateRateLimitedMetric).not.to.have.been.called
+        sinon.assert.notCalled(keepTrace)
+        sinon.assert.notCalled(updateRateLimitedMetric)
       })
 
       it('should not call keepTrace or updateRateLimitedMetric when result.keep is undefined', () => {
@@ -198,8 +200,8 @@ describe('WAF Manager', () => {
         const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
         waf.run(payload, req)
 
-        expect(keepTrace).not.to.have.been.called
-        expect(updateRateLimitedMetric).not.to.have.been.called
+        sinon.assert.notCalled(keepTrace)
+        sinon.assert.notCalled(updateRateLimitedMetric)
       })
 
       it('should not call keepTrace or updateRateLimitedMetric when result is null', () => {
@@ -209,8 +211,8 @@ describe('WAF Manager', () => {
         const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
         waf.run(payload, req)
 
-        expect(keepTrace).not.to.have.been.called
-        expect(updateRateLimitedMetric).not.to.have.been.called
+        sinon.assert.notCalled(keepTrace)
+        sinon.assert.notCalled(updateRateLimitedMetric)
       })
     })
   })
@@ -369,7 +371,7 @@ describe('WAF Manager', () => {
     it('should call ddwaf.createContext', () => {
       const req = {}
       waf.wafManager.getWAFContext(req)
-      expect(waf.wafManager.ddwaf.createContext).to.have.been.calledOnce
+      sinon.assert.calledOnce(waf.wafManager.ddwaf.createContext)
     })
 
     it('should pass waf version when invoking ddwaf.createContext', () => {
@@ -413,7 +415,7 @@ describe('WAF Manager', () => {
     describe('dispose', () => {
       it('should call ddwafContext.dispose', () => {
         waf.disposeContext(req)
-        expect(ddwafContext.dispose).to.be.calledOnce
+        sinon.assert.calledOnce(ddwafContext.dispose)
       })
     })
 
@@ -478,10 +480,10 @@ describe('WAF Manager', () => {
 
         wafContextWrapper.run(params)
 
-        expect(Reporter.reportMetrics).to.be.calledOnce
+        sinon.assert.calledOnce(Reporter.reportMetrics)
 
         const reportMetricsArg = Reporter.reportMetrics.firstCall.args[0]
-        expect(reportMetricsArg.ruleTriggered).to.be.true
+        assert.strictEqual(reportMetricsArg.ruleTriggered, true)
       })
 
       it('should report raspRuleType', () => {
@@ -499,8 +501,8 @@ describe('WAF Manager', () => {
 
         wafContextWrapper.run(params, 'rule_type')
 
-        expect(Reporter.reportMetrics).to.be.calledOnce
-        expect(Reporter.reportMetrics.firstCall.args[1]).to.be.equal('rule_type')
+        sinon.assert.calledOnce(Reporter.reportMetrics)
+        assert.strictEqual(Reporter.reportMetrics.firstCall.args[1], 'rule_type')
       })
 
       it('should not report raspRuleType when it is not provided', () => {
@@ -518,8 +520,8 @@ describe('WAF Manager', () => {
 
         wafContextWrapper.run(params)
 
-        expect(Reporter.reportMetrics).to.be.calledOnce
-        expect(Reporter.reportMetrics.firstCall.args[1]).to.be.equal(undefined)
+        sinon.assert.calledOnce(Reporter.reportMetrics)
+        assert.strictEqual(Reporter.reportMetrics.firstCall.args[1], undefined)
       })
 
       it('should not report attack when ddwafContext does not return events', () => {
@@ -562,7 +564,7 @@ describe('WAF Manager', () => {
 
         const wafResult = wafContextWrapper.run(params)
 
-        expect(wafResult).to.be.equals(result)
+        assert.strictEqual(wafResult, result)
       })
 
       it('should report schemas when ddwafContext returns schemas in the attributes', () => {

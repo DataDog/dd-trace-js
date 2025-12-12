@@ -11,7 +11,7 @@ const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const agent = require('../../plugins/agent')
 const rewriter = require('../../../src/appsec/iast/taint-tracking/rewriter')
 const iast = require('../../../src/appsec/iast')
-const Config = require('../../../src/config')
+const { getConfigFresh } = require('../../helpers/config')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
 const overheadController = require('../../../src/appsec/iast/overhead-controller')
 const { getWebSpan } = require('../utils')
@@ -74,7 +74,7 @@ function testOutsideRequestHasVulnerability (fnToTest, vulnerability, plugins, t
   })
   beforeEach(() => {
     const tracer = require('../../..')
-    const config = new Config({
+    const config = getConfigFresh({
       experimental: {
         iast: {
           enabled: true,
@@ -125,7 +125,7 @@ function beforeEachIastTest (iastConfig) {
   beforeEach(() => {
     overheadController.clearGlobalRouteMap()
     vulnerabilityReporter.clearCache()
-    const config = new Config({
+    const config = getConfigFresh({
       iast: iastConfig
     })
     iast.enable(config)
@@ -134,6 +134,8 @@ function beforeEachIastTest (iastConfig) {
 }
 
 function endResponse (res, appResult) {
+  if (appResult === true) return
+
   if (appResult && typeof appResult.then === 'function') {
     appResult.then(() => {
       if (!res.headersSent) {
@@ -356,7 +358,7 @@ function prepareTestServerForIastInExpress (
       expressApp.all('/', listener)
 
       server = expressApp.listen(0, () => {
-        config.port = server.address().port
+        config.port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         done()
       })
     })
@@ -466,7 +468,7 @@ function prepareTestServerForIastInFastify (description, fastifyVersion, tests, 
       await fastifyApp.listen({ port: 0 })
 
       server = fastifyApp.server
-      config.port = server.address().port
+      config.port = (/** @type {import('net').AddressInfo} */ (server.address())).port
     })
 
     beforeEachIastTest(iastConfig)

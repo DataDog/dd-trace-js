@@ -3,6 +3,26 @@
 // Playwright config file for integration tests
 const { devices } = require('@playwright/test')
 
+const projects = [
+  {
+    name: 'chromium',
+    use: {
+      ...devices['Desktop Chrome']
+    }
+  }
+]
+
+if (process.env.ADD_EXTRA_PLAYWRIGHT_PROJECT) {
+  projects.push({
+    name: 'extra-project',
+    use: {
+      ...devices['Desktop Chrome'],
+    },
+    dependencies: ['chromium'],
+    testMatch: 'did-not-run.js'
+  })
+}
+
 const config = {
   baseURL: process.env.PW_BASE_URL,
   testDir: process.env.TEST_DIR || './ci-visibility/playwright-tests',
@@ -11,14 +31,7 @@ const config = {
   workers: process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : undefined,
   reporter: 'line',
   /* Configure projects for major browsers */
-  projects: [
-    {
-      name: 'chromium',
-      use: {
-        ...devices['Desktop Chrome']
-      }
-    }
-  ],
+  projects,
   testMatch: '**/*-test.js'
 }
 

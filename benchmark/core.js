@@ -3,7 +3,7 @@
 const benchmark = require('./benchmark')
 const proxyquire = require('proxyquire')
 
-const Config = require('../packages/dd-trace/src/config')
+const getConfig = require('../packages/dd-trace/src/config')
 const DatadogTracer = require('../packages/dd-trace/src/tracer')
 const DatadogSpanContext = require('../packages/dd-trace/src/opentracing/span_context')
 const TextMapPropagator = require('../packages/dd-trace/src/opentracing/propagation/text_map')
@@ -19,15 +19,16 @@ const Writer = proxyquire('../packages/dd-trace/src/exporters/agent/writer', {
   }
 })
 const Sampler = require('../packages/dd-trace/src/sampler')
-const format = require('../packages/dd-trace/src/format')
+const spanFormat = require('../packages/dd-trace/src/span_format')
 const { AgentEncoder: Agent04Encoder } = require('../packages/dd-trace/src/encode/0.4')
 const { AgentEncoder: Agent05Encoder } = require('../packages/dd-trace/src/encode/0.5')
-const config = new Config({ service: 'benchmark' })
+const config = getConfig({ service: 'benchmark' })
 const id = require('../packages/dd-trace/src/id')
 const Histogram = require('../packages/dd-trace/src/histogram')
 const histogram = new Histogram()
 const runtimeMetrics = require('../packages/dd-trace/src/runtime_metrics')
 const log = require('../packages/dd-trace/src/log')
+const { calculateHttpEndpoint } = require('../packages/dd-trace/src/plugins/util/url')
 
 const encoder04 = new Agent04Encoder({ flush: () => encoder04.makePayload() })
 const encoder05 = new Agent05Encoder({ flush: () => encoder05.makePayload() })
@@ -42,7 +43,7 @@ let writer
 let sampler
 
 const spanStub = require('./stubs/span')
-const span = format(spanStub)
+const span = spanFormat(spanStub)
 
 suite
   .add('DatadogTracer#startSpan', {
@@ -96,9 +97,9 @@ suite
       sampler.isSampled(span)
     }
   })
-  .add('format', {
+  .add('spanFormat', {
     fn () {
-      format(spanStub)
+      spanFormat(spanStub)
     }
   })
   .add('encode (0.4)', {
@@ -200,6 +201,36 @@ suite
 
     fn () {
       log.debug(() => (new Error('boom')).message)
+    }
+  })
+  .add('calculateHttpEndpoint (simple)', {
+    fn () {
+      calculateHttpEndpoint('/api/users')
+    }
+  })
+  .add('calculateHttpEndpoint (with integers)', {
+    fn () {
+      calculateHttpEndpoint('/api/users/12345/posts/67890')
+    }
+  })
+  .add('calculateHttpEndpoint (with hex)', {
+    fn () {
+      calculateHttpEndpoint('/api/sessions/a1b2c3d4e5f6/data')
+    }
+  })
+  .add('calculateHttpEndpoint (mixed patterns)', {
+    fn () {
+      calculateHttpEndpoint('/v1/users/123/sessions/a1b2c3/orders/456-789')
+    }
+  })
+  .add('calculateHttpEndpoint (deep path)', {
+    fn () {
+      calculateHttpEndpoint('/a/b/c/d/e/f/g/h/i/j/k/l/m')
+    }
+  })
+  .add('calculateHttpEndpoint (full URL)', {
+    fn () {
+      calculateHttpEndpoint('https://api.example.com:8080/v2/products/98765/reviews')
     }
   })
 

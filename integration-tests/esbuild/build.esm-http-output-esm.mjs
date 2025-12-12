@@ -22,11 +22,6 @@ const external = [
   '@datadog/native-appsec',
   '@datadog/native-iast-taint-tracking',
   '@datadog/native-iast-rewriter',
-
-  // required if you encounter graphql errors during the build step
-  'graphql/language/visitor',
-  'graphql/language/printer',
-  'graphql/utilities',
 ]
 
 esbuild.build({

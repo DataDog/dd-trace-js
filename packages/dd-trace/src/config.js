@@ -4,6 +4,7 @@ const fs = require('fs')
 const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const { URL } = require('url')
+
 const log = require('./log')
 const tagger = require('./tagger')
 const set = require('../../datadog-core/src/utils/src/set')
@@ -445,6 +446,7 @@ class Config {
       DD_DBM_PROPAGATION_MODE,
       DD_DOGSTATSD_HOST,
       DD_DOGSTATSD_PORT,
+      DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS,
       DD_DYNAMIC_INSTRUMENTATION_ENABLED,
       DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE,
       DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS,
@@ -452,6 +454,7 @@ class Config {
       DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS,
       DD_ENV,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
+      DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED,
       DD_PROFILING_ENABLED,
       DD_GRPC_CLIENT_ERROR_STATUSES,
       DD_GRPC_SERVER_ERROR_STATUSES,
@@ -476,6 +479,7 @@ class Config {
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
       DD_LOGS_OTEL_ENABLED,
+      DD_METRICS_OTEL_ENABLED,
       DD_LANGCHAIN_SPAN_CHAR_LIMIT,
       DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
       DD_LLMOBS_AGENTLESS_ENABLED,
@@ -542,6 +546,7 @@ class Config {
       DD_TRACE_RATE_LIMIT,
       DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,
       DD_TRACE_REPORT_HOSTNAME,
+      DD_TRACE_RESOURCE_RENAMING_ENABLED,
       DD_TRACE_SAMPLE_RATE,
       DD_TRACE_SAMPLING_RULES,
       DD_TRACE_SCOPE,
@@ -570,12 +575,20 @@ class Config {
       OTEL_EXPORTER_OTLP_LOGS_HEADERS,
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
       OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS,
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,
+      OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE,
+      OTEL_METRIC_EXPORT_TIMEOUT,
       OTEL_EXPORTER_OTLP_PROTOCOL,
       OTEL_EXPORTER_OTLP_ENDPOINT,
       OTEL_EXPORTER_OTLP_HEADERS,
       OTEL_EXPORTER_OTLP_TIMEOUT,
       OTEL_BSP_SCHEDULE_DELAY,
-      OTEL_BSP_MAX_EXPORT_BATCH_SIZE
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE,
+      OTEL_BSP_MAX_QUEUE_SIZE,
+      OTEL_METRIC_EXPORT_INTERVAL
     } = source
 
     const tags = {}
@@ -602,16 +615,51 @@ class Config {
     this.#setString(target, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || target.otelHeaders)
     this.#setString(target, 'otelProtocol', OTEL_EXPORTER_OTLP_PROTOCOL)
     this.#setString(target, 'otelLogsProtocol', OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || target.otelProtocol)
-    target.otelTimeout = maybeInt(OTEL_EXPORTER_OTLP_TIMEOUT)
-    target.otelLogsTimeout = maybeInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT) || target.otelTimeout
-    target.otelLogsBatchTimeout = maybeInt(OTEL_BSP_SCHEDULE_DELAY)
-    target.otelLogsMaxExportBatchSize = maybeInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
+    const otelTimeout = nonNegInt(OTEL_EXPORTER_OTLP_TIMEOUT, 'OTEL_EXPORTER_OTLP_TIMEOUT')
+    if (otelTimeout !== undefined) {
+      target.otelTimeout = otelTimeout
+    }
+    const otelLogsTimeout = nonNegInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT, 'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT')
+    target.otelLogsTimeout = otelLogsTimeout === undefined ? target.otelTimeout : otelLogsTimeout
+    const otelBatchTimeout = nonNegInt(OTEL_BSP_SCHEDULE_DELAY, 'OTEL_BSP_SCHEDULE_DELAY', false)
+    if (otelBatchTimeout !== undefined) {
+      target.otelBatchTimeout = otelBatchTimeout
+    }
+    target.otelMaxExportBatchSize = nonNegInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE, 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE', false)
+    target.otelMaxQueueSize = nonNegInt(OTEL_BSP_MAX_QUEUE_SIZE, 'OTEL_BSP_MAX_QUEUE_SIZE', false)
+
+    const otelMetricsExporterEnabled = OTEL_METRICS_EXPORTER?.toLowerCase() !== 'none'
+    this.#setBoolean(
+      target,
+      'otelMetricsEnabled',
+      DD_METRICS_OTEL_ENABLED && isTrue(DD_METRICS_OTEL_ENABLED) && otelMetricsExporterEnabled
+    )
+    // Set OpenTelemetry metrics configuration with specific _METRICS_ vars
+    // taking precedence over generic _EXPORTERS_ vars
+    if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) {
+      this.#setString(target, 'otelMetricsUrl', OTEL_EXPORTER_OTLP_METRICS_ENDPOINT || target.otelUrl)
+    }
+    this.#setString(target, 'otelMetricsHeaders', OTEL_EXPORTER_OTLP_METRICS_HEADERS || target.otelHeaders)
+    this.#setString(target, 'otelMetricsProtocol', OTEL_EXPORTER_OTLP_METRICS_PROTOCOL || target.otelProtocol)
+    const otelMetricsTimeout = nonNegInt(OTEL_EXPORTER_OTLP_METRICS_TIMEOUT, 'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT')
+    target.otelMetricsTimeout = otelMetricsTimeout === undefined ? target.otelTimeout : otelMetricsTimeout
+    target.otelMetricsExportTimeout = nonNegInt(OTEL_METRIC_EXPORT_TIMEOUT, 'OTEL_METRIC_EXPORT_TIMEOUT')
+    target.otelMetricsExportInterval = nonNegInt(OTEL_METRIC_EXPORT_INTERVAL, 'OTEL_METRIC_EXPORT_INTERVAL', false)
+
+    // Parse temporality preference (default to DELTA for Datadog)
+    if (OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE) {
+      const temporalityPref = OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE.toUpperCase()
+      if (['DELTA', 'CUMULATIVE', 'LOWMEMORY'].includes(temporalityPref)) {
+        this.#setString(target, 'otelMetricsTemporalityPreference', temporalityPref)
+      }
+    }
     this.#setBoolean(
       target,
       'apmTracingEnabled',
       DD_APM_TRACING_ENABLED ??
         (DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED))
     )
+    this.#setBoolean(target, 'propagateProcessTags.enabled', DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED)
     this.#setString(target, 'appKey', DD_APP_KEY)
     this.#setBoolean(target, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
     target['appsec.apiSecurity.sampleDelay'] = maybeFloat(DD_API_SECURITY_SAMPLE_DELAY)
@@ -683,6 +731,8 @@ class Config {
     this.#setString(target, 'dogstatsd.hostname', DD_DOGSTATSD_HOST)
     this.#setString(target, 'dogstatsd.port', DD_DOGSTATSD_PORT)
     this.#setBoolean(target, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
+    target['dynamicInstrumentation.captureTimeoutMs'] = maybeInt(DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS)
+    unprocessedTarget['dynamicInstrumentation.captureTimeoutMs'] = DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS
     this.#setBoolean(target, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
     this.#setString(target, 'dynamicInstrumentation.probeFile', DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE)
     this.#setArray(target, 'dynamicInstrumentation.redactedIdentifiers',
@@ -786,6 +836,9 @@ class Config {
     target['remoteConfig.pollInterval'] = maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)
     unprocessedTarget['remoteConfig.pollInterval'] = DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     this.#setBoolean(target, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
+    if (DD_TRACE_RESOURCE_RENAMING_ENABLED !== undefined) {
+      this.#setBoolean(target, 'resourceRenamingEnabled', DD_TRACE_RESOURCE_RENAMING_ENABLED)
+    }
     // only used to explicitly set runtimeMetrics to false
     const otelSetRuntimeMetrics = String(OTEL_METRICS_EXPORTER).toLowerCase() === 'none'
       ? false
@@ -983,6 +1036,8 @@ class Config {
       this.#setString(opts, 'dogstatsd.port', options.dogstatsd.port)
     }
     this.#setBoolean(opts, 'dsmEnabled', options.dsmEnabled)
+    opts['dynamicInstrumentation.captureTimeoutMs'] = maybeInt(options.dynamicInstrumentation?.captureTimeoutMs)
+    this.#optsUnprocessed['dynamicInstrumentation.captureTimeoutMs'] = options.dynamicInstrumentation?.captureTimeoutMs
     this.#setBoolean(opts, 'dynamicInstrumentation.enabled', options.dynamicInstrumentation?.enabled)
     this.#setString(opts, 'dynamicInstrumentation.probeFile', options.dynamicInstrumentation?.probeFile)
     this.#setArray(
@@ -1200,13 +1255,23 @@ class Config {
 
     calc['dogstatsd.hostname'] = this.#getHostname()
 
-    // Compute OTLP logs URL to send payloads to the active Datadog Agent
+    // Compute OTLP logs and metrics URLs to send payloads to the active Datadog Agent
     const agentHostname = this.#getHostname()
     calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
+    calc.otelMetricsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`
     calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
 
     this.#setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(getEnv('DD_CIVISIBILITY_GIT_UPLOAD_ENABLED')))
+
+    // Enable resourceRenamingEnabled when appsec is enabled and only
+    // if DD_TRACE_RESOURCE_RENAMING_ENABLED is not explicitly set
+    if (this.#env.resourceRenamingEnabled === undefined) {
+      const appsecEnabled = this.#options['appsec.enabled'] ?? this.#env['appsec.enabled']
+      if (appsecEnabled) {
+        this.#setBoolean(calc, 'resourceRenamingEnabled', true)
+      }
+    }
 
     this.#setBoolean(calc, 'spanComputePeerService', this.#getSpanComputePeerService())
     this.#setBoolean(calc, 'stats.enabled', this.#isTraceStatsComputationEnabled())
@@ -1491,6 +1556,16 @@ function maybeFloat (number) {
   return Number.isNaN(parsed) ? undefined : parsed
 }
 
+function nonNegInt (value, envVarName, allowZero = true) {
+  if (value === undefined) return
+  const parsed = Number.parseInt(value)
+  if (Number.isNaN(parsed) || parsed < 0 || (parsed === 0 && !allowZero)) {
+    log.warn(`Invalid value ${parsed} for ${envVarName}. Using default value.`)
+    return
+  }
+  return parsed
+}
+
 function getAgentUrl (url, options) {
   if (url) return new URL(url)
 
@@ -1507,4 +1582,12 @@ function getAgentUrl (url, options) {
   }
 }
 
-module.exports = Config
+let configInstance = null
+function getConfig (options) {
+  if (!configInstance) {
+    configInstance = new Config(options)
+  }
+  return configInstance
+}
+
+module.exports = getConfig
