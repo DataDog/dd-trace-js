@@ -6,21 +6,6 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const { storage } = require('../../datadog-core')
-const log = require('../../dd-trace/src/log')
-const tracer = require('../../dd-trace')
-const { enableServerlessPubsubSubscription } = require('../../dd-trace/src/serverless')
-const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
-
-// Auto-load push subscription plugin to enable pubsub.delivery spans for push subscriptions
-try {
-  // User must set DD_SERVERLESS_PUBSUB_ENABLED to true to enable push subscription spans
-  if (enableServerlessPubsubSubscription()) {
-    new PushSubscriptionPlugin(null, {}).configure({})
-  }
-} catch (e) {
-  // Push subscription plugin is optional
-  log.debug(`PushSubscriptionPlugin not loaded: ${e.message}`)
-}
 
 const requestStartCh = channel('apm:google-cloud-pubsub:request:start')
 const requestFinishCh = channel('apm:google-cloud-pubsub:request:finish')
@@ -30,25 +15,17 @@ const receiveStartCh = channel('apm:google-cloud-pubsub:receive:start')
 const receiveFinishCh = channel('apm:google-cloud-pubsub:receive:finish')
 const receiveErrorCh = channel('apm:google-cloud-pubsub:receive:error')
 
-// Bounded map to prevent memory leaks from acks that never complete
-const ackContextMap = new Map()
-const ACK_CONTEXT_MAX_SIZE = 10_000
-const ACK_CONTEXT_TTL_MS = 600_000 // 10 minutes - matches Cloud Run streaming pull default deadline
-
-// Cleanup old entries periodically
-const ackContextCleanupInterval = setInterval(() => {
-  const now = Date.now()
-  for (const [ackId, entry] of ackContextMap.entries()) {
-    if (now - entry.timestamp > ACK_CONTEXT_TTL_MS) {
-      ackContextMap.delete(ackId)
-    }
-  }
-}, 60_000) // Run cleanup every 60 seconds
-
-// Allow process to exit cleanly
-if (ackContextCleanupInterval.unref) {
-  ackContextCleanupInterval.unref()
-}
+// Message-level channels for trace context injection
+const messagePublishCh = channel('apm:google-cloud-pubsub:message:publish')
+// Use WeakMap + WeakRef + FinalizationRegistry pattern for automatic GC cleanup
+// No TTL needed - GC handles cleanup naturally even if acknowledge() never called
+const messageToContext = new WeakMap() // WeakMap<Message, context> - auto-cleanup on GC
+const ackIdToMessage = new Map() // Map<ackId, WeakRef<Message>> - doesn't prevent GC
+// FinalizationRegistry cleans up Map entries when Messages are GC'd
+// This handles network failures, crashes, or any case where acknowledge() isn't called
+const ackMapCleanup = new FinalizationRegistry((ackId) => {
+  ackIdToMessage.delete(ackId)
+})
 
 const publisherMethods = [
   'createTopic',
@@ -100,22 +77,30 @@ function wrapMethod (method) {
   return function (request) {
     if (!requestStartCh.hasSubscribers) return method.apply(this, arguments)
 
-    // For acknowledge/modifyAckDeadline, try to restore span context from stored map
+    // For acknowledge/modifyAckDeadline, try to restore span context from stored maps
     let restoredStore = null
     const isAckOperation = api === 'acknowledge' || api === 'modifyAckDeadline'
-    if (isAckOperation && request && request.ackIds && request.ackIds.length > 0) {
+    if (isAckOperation && request?.ackIds?.length > 0) {
       // Try to find a stored context for any of these ack IDs
       for (const ackId of request.ackIds) {
-        const entry = ackContextMap.get(ackId)
-        if (entry) {
-          restoredStore = entry.context
-          break
+        const weakRef = ackIdToMessage.get(ackId)
+        if (weakRef) {
+          const message = weakRef.deref() // Get Message if still alive
+          if (message) {
+            const context = messageToContext.get(message)
+            if (context) {
+              restoredStore = context
+              break
+            }
+          }
         }
       }
 
+      // Clean up Map entries immediately after acknowledge (happy path)
+      // FinalizationRegistry handles cleanup if Message was already GC'd
       if (api === 'acknowledge') {
         request.ackIds.forEach(ackId => {
-          ackContextMap.delete(ackId)
+          ackIdToMessage.delete(ackId)
         })
       }
     }
@@ -204,6 +189,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   shimmer.wrap(Subscription.prototype, 'emit', emit => function (eventName, message) {
     if (eventName !== 'message' || !message) return emit.apply(this, arguments)
 
+    // For pull subscriptions, emit is called when message is received
     const store = storage('legacy').getStore()
     const ctx = { message, store }
     try {
@@ -226,24 +212,20 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/su
       const currentStore = storage('legacy').getStore()
       const activeSpan = currentStore && currentStore.span
 
-      if (activeSpan) {
+      if (activeSpan && this.ackId) {
         const storeWithSpanContext = { ...currentStore, span: activeSpan }
 
-        if (this.ackId) {
-          // Enforce max size to prevent unbounded growth
-          if (ackContextMap.size >= ACK_CONTEXT_MAX_SIZE) {
-            // Remove oldest entry (first entry in Map iteration order)
-            const firstKey = ackContextMap.keys().next().value
-            if (firstKey !== undefined) {
-              ackContextMap.delete(firstKey)
-            }
-          }
+        // Store context in WeakMap using Message object as key
+        messageToContext.set(this, storeWithSpanContext)
 
-          ackContextMap.set(this.ackId, {
-            context: storeWithSpanContext,
-            timestamp: Date.now()
-          })
-        }
+        // Store WeakRef (not hard reference) in Map
+        // This allows GC to collect Message even if acknowledge() never called
+        const weakRef = new WeakRef(this)
+        ackIdToMessage.set(this.ackId, weakRef)
+
+        // Register for cleanup when Message is GC'd
+        // This handles network failures, crashes, or missing acknowledge() calls
+        ackMapCleanup.register(this, this.ackId, this)
       }
 
       return originalAck.apply(this, arguments)
@@ -292,26 +274,6 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   return obj
 })
 
-function injectTraceContext (attributes, pubsub, topicName) {
-  if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
-
-  try {
-    const activeSpan = tracer.scope().active()
-    if (!activeSpan) return
-
-    tracer.inject(activeSpan, 'text_map', attributes)
-
-    const traceIdUpperBits = activeSpan.context()._trace.tags['_dd.p.tid']
-    if (traceIdUpperBits) attributes['_dd.p.tid'] = traceIdUpperBits
-  } catch (err) {
-    // Silently fail - trace context injection is best-effort
-    log.debug('Error injecting trace context: ', err)
-  }
-
-  if (pubsub) attributes['gcloud.project_id'] = pubsub.projectId
-  if (topicName) attributes['pubsub.topic'] = topicName
-}
-
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   if (!obj.Topic?.prototype) return obj
 
@@ -320,7 +282,12 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
       return function (data, attributesOrCallback, callback) {
         if (data && typeof data === 'object') {
           if (!data.attributes) data.attributes = {}
-          injectTraceContext(data.attributes, this.pubsub, this.name)
+          // Publish event for plugins to inject trace context
+          messagePublishCh.publish({
+            attributes: data.attributes,
+            pubsub: this.pubsub,
+            topicName: this.name
+          })
         }
         return publishMessage.apply(this, arguments)
       }
@@ -333,7 +300,15 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
         arguments[1] = {}
         arguments[2] = attributesOrCallback
       }
-      injectTraceContext(arguments[1], this.pubsub, this.name)
+
+      // Publish event for plugins to inject trace context
+      messagePublishCh.publish({
+        attributes: arguments[1],
+        pubsub: this.pubsub,
+        topicName: this.name,
+        buffer
+      })
+
       return publish.apply(this, arguments)
     })
   }

@@ -22,32 +22,30 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
   _handlePubSubRequest ({ req, res }) {
     const userAgent = req.headers['user-agent'] || ''
-    if (req.method !== 'POST' || !userAgent.includes('APIs-Google')) return
+    if (req.method !== 'POST' || !userAgent.includes('APIs-Google')) return false
 
     if (req.headers['x-goog-pubsub-message-id']) {
-      log.warn('[PubSub] Detected unwrapped Pub/Sub format (push subscription)')
-      log.warn(`[PubSub] message-id: ${req.headers['x-goog-pubsub-message-id']}`)
+      log.debug('[PubSub] Detected unwrapped Pub/Sub format (push subscription)')
       this._createDeliverySpanAndActivate({ req, res })
-      return
+      return true
     }
 
     log.warn(
       '[PubSub] No x-goog-pubsub-* headers detected. pubsub.delivery spans will not be created. ' +
       'Add --push-no-wrapper-write-metadata to your subscription.'
     )
+    return false
   }
 
   _createDeliverySpanAndActivate ({ req, res }) {
     const messageData = this._parseMessage(req)
     if (!messageData) return
 
-    if (!tracer || !tracer._tracer) return
-
     const originalContext = this._extractContext(messageData, tracer)
     const pubsubRequestContext = this._reconstructPubSubContext(messageData.attrs) || originalContext
 
-    const isSameTrace = originalContext && pubsubRequestContext &&
-      originalContext.toTraceId() === pubsubRequestContext.toTraceId()
+    const isSameTrace = pubsubRequestContext &&
+      originalContext?.toTraceId() === pubsubRequestContext.toTraceId()
 
     const deliverySpan = this._createDeliverySpan(
       messageData,
@@ -56,21 +54,26 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       tracer
     )
 
-    const finishDelivery = () => {
-      if (!deliverySpan.finished) {
-        deliverySpan.finish()
-      }
+    // Set pubsub.delivery as the active span
+    const store = storage('legacy').getStore() ?? {}
+    storage('legacy').enterWith({ ...store, span: deliverySpan, req, res })
+
+    // Finish span when HTTP response lifecycle completes
+    this._attachFinishHandlers(deliverySpan, res)
+  }
+
+  _attachFinishHandlers (span, res) {
+    let finished = false
+    const finishOnce = (error) => {
+      if (finished) return
+      finished = true
+      if (error) span.setTag('error', error)
+      span.finish()
     }
 
-    res.once('finish', finishDelivery)
-    res.once('close', finishDelivery)
-    res.once('error', (err) => {
-      deliverySpan.setTag('error', err)
-      finishDelivery()
-    })
-
-    const store = storage('legacy').getStore()
-    storage('legacy').enterWith({ ...store, span: deliverySpan, req, res })
+    res.once('finish', () => finishOnce())
+    res.once('close', () => finishOnce())
+    res.once('error', finishOnce)
   }
 
   _parseMessage (req) {
@@ -85,7 +88,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   }
 
   _extractContext (messageData, tracer) {
-    return tracer._tracer.extract('text_map', messageData.attrs) || undefined
+    return tracer._tracer.extract('text_map', messageData.attrs) ?? undefined
   }
 
   _reconstructPubSubContext (attrs) {
@@ -95,27 +98,23 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
     if (!traceIdLower || !spanId) return null
 
-    try {
-      const traceId128 = traceIdUpper ? traceIdUpper + traceIdLower : traceIdLower.padStart(32, '0')
-      const traceId = id(traceId128, 16)
-      const parentId = id(spanId, 16)
+    const traceId128 = traceIdUpper ? traceIdUpper + traceIdLower : traceIdLower.padStart(32, '0')
+    const traceId = id(traceId128, 16)
+    const parentId = id(spanId, 16)
 
-      const tags = {}
-      if (traceIdUpper) tags['_dd.p.tid'] = traceIdUpper
+    const tags = {}
+    if (traceIdUpper) tags['_dd.p.tid'] = traceIdUpper
 
-      return new SpanContext({
-        traceId,
-        spanId: parentId,
-        tags
-      })
-    } catch {
-      return null
-    }
+    return new SpanContext({
+      traceId,
+      spanId: parentId,
+      tags
+    })
   }
 
   _createDeliverySpan (messageData, parentContext, linkContext, tracer) {
     const { message, subscription, topicName, attrs } = messageData
-    const subscriptionName = subscription.split('/').pop() || subscription
+    const subscriptionName = subscription?.split('/').pop() ?? subscription
     const publishStartTime = attrs['x-dd-publish-start-time']
     const startTime = publishStartTime ? Number.parseInt(publishStartTime, 10) : undefined
 
@@ -132,7 +131,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
         'pubsub.message_id': message.messageId,
         'pubsub.delivery_method': 'push',
         'pubsub.topic': topicName,
-        service: this.config.service || `${tracer._tracer._service}-pubsub`,
+        service: this.config.service ?? `${tracer._tracer._service}-pubsub`,
         '_dd.base_service': tracer._tracer._service,
         '_dd.serviceoverride.type': 'integration',
         'resource.name': `Push Subscription ${subscriptionName}`
@@ -142,10 +141,10 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     this._addBatchMetadata(span, attrs)
 
     if (linkContext) {
-      if (typeof span.addLink === 'function') {
+      if (span.addLink) {
         span.addLink(linkContext, {})
       } else {
-        span._links = span._links || []
+        span._links ??= []
         span._links.push({ context: linkContext, attributes: {} })
       }
     }
@@ -157,23 +156,23 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     const batchSize = attrs['_dd.batch.size']
     const batchIndex = attrs['_dd.batch.index']
 
-    if (batchSize && batchIndex !== undefined) {
-      const size = Number.parseInt(batchSize, 10)
-      const index = Number.parseInt(batchIndex, 10)
+    if (!batchSize || batchIndex === undefined) return
 
-      span.setTag('pubsub.batch.message_count', size)
-      span.setTag('pubsub.batch.message_index', index)
-      span.setTag('pubsub.batch.description', `Message ${index + 1} of ${size}`)
+    const size = Number.parseInt(batchSize, 10)
+    const index = Number.parseInt(batchIndex, 10)
 
-      const requestTraceId = attrs['_dd.pubsub_request.trace_id']
-      const requestSpanId = attrs['_dd.pubsub_request.span_id']
+    span.setTag('pubsub.batch.message_count', size)
+    span.setTag('pubsub.batch.message_index', index)
+    span.setTag('pubsub.batch.description', `Message ${index + 1} of ${size}`)
 
-      if (requestTraceId) {
-        span.setTag('pubsub.batch.request_trace_id', requestTraceId)
-      }
-      if (requestSpanId) {
-        span.setTag('pubsub.batch.request_span_id', requestSpanId)
-      }
+    const requestTraceId = attrs['_dd.pubsub_request.trace_id']
+    if (requestTraceId) {
+      span.setTag('pubsub.batch.request_trace_id', requestTraceId)
+    }
+
+    const requestSpanId = attrs['_dd.pubsub_request.span_id']
+    if (requestSpanId) {
+      span.setTag('pubsub.batch.request_span_id', requestSpanId)
     }
   }
 }

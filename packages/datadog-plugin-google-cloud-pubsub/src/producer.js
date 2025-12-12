@@ -2,10 +2,42 @@
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec, getHeadersSize } = require('../../dd-trace/src/datastreams')
+const log = require('../../dd-trace/src/log')
 
 class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
   static id = 'google-cloud-pubsub'
   static operation = 'request'
+
+  constructor (...args) {
+    super(...args)
+
+    // Subscribe to message publish events for trace context injection
+    this.addSub('apm:google-cloud-pubsub:message:publish', this.handleMessagePublish.bind(this))
+  }
+
+  handleMessagePublish ({ attributes, pubsub, topicName }) {
+    // Don't inject if already has trace context
+    if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
+
+    try {
+      const activeSpan = this.tracer.scope().active()
+      if (!activeSpan) return
+
+      // Inject trace context into message attributes
+      this.tracer.inject(activeSpan, 'text_map', attributes)
+
+      // Add 128-bit trace ID upper bits if present
+      const traceIdUpperBits = activeSpan.context()._trace.tags['_dd.p.tid']
+      if (traceIdUpperBits) attributes['_dd.p.tid'] = traceIdUpperBits
+
+      // Add metadata
+      if (pubsub) attributes['gcloud.project_id'] = pubsub.projectId
+      if (topicName) attributes['pubsub.topic'] = topicName
+    } catch (err) {
+      // Silently fail - trace context injection is best-effort
+      log.warn(`Error injecting trace context into message attributes: ${err.message}`)
+    }
+  }
 
   bindStart (ctx) {
     const { request, api, projectId } = ctx

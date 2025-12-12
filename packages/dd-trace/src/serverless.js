@@ -15,7 +15,7 @@ function getIsGCPFunction () {
 
 function enableServerlessPubsubSubscription () {
   const serverlessPubsubSubscriptionEnabled = getEnvironmentVariable('DD_SERVERLESS_PUBSUB_ENABLED')
-  return serverlessPubsubSubscriptionEnabled === 'true'
+  return getEnvironmentVariable('K_SERVICE') !== undefined && serverlessPubsubSubscriptionEnabled === 'true'
 }
 
 function getIsAzureFunction () {
