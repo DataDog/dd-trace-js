@@ -78,7 +78,7 @@ describe('Payload tagger', () => {
       })
     })
   })
-  
+
   describe('escaping', () => {
     it('should escape `.` characters in individual keys', () => {
       const input = { 'foo.bar': { baz: 'quux' } }
@@ -182,6 +182,21 @@ describe('Tagging orchestration', () => {
     const tags = computeTags(config, input, { maxDepth: 10, prefix: PAYLOAD_TAG_REQUEST_PREFIX })
     assert.strictEqual(tags[`${PAYLOAD_TAG_REQUEST_PREFIX}.request`], 'redacted')
     assert.strictEqual(tags[`${PAYLOAD_TAG_REQUEST_PREFIX}.response`], 'bar')
+  })
+
+  it('should use the response config when given the response prefix', () => {
+    const config = {
+      request: ['$.request'],
+      response: ['$.response'],
+      expand: []
+    }
+    const input = {
+      request: 'foo',
+      response: 'bar'
+    }
+    const tags = computeTags(config, input, { maxDepth: 10, prefix: PAYLOAD_TAG_RESPONSE_PREFIX })
+    assert.strictEqual(tags[`${PAYLOAD_TAG_RESPONSE_PREFIX}.response`], 'redacted')
+    assert.strictEqual(tags[`${PAYLOAD_TAG_RESPONSE_PREFIX}.request`], 'foo')
   })
 
   it('should not fail if the response config contains invalid config', () => {
