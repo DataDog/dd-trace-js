@@ -282,20 +282,14 @@ describe('Plugin', () => {
             },
             rawExpectedSchema.receive,
             {
-              // Custom selectSpan: look through all traces for a consumer span
-              // (withNamingSchema will check the name matches expected opName)
               selectSpan: (traces) => {
-                // Flatten all spans from all traces
                 for (const trace of traces) {
                   for (const span of trace) {
-                    // Return the first worker-type span (consumer span)
                     if (span.type === 'worker') {
                       return span
                     }
                   }
                 }
-                // If no worker span found, return undefined to trigger retry
-                // (withNamingSchema's assertSomeTraces will keep waiting)
                 return undefined
               }
             }
@@ -431,7 +425,6 @@ describe('Plugin', () => {
             await consume(async () => {
               agent.expectPipelineStats(dsmStats => {
                 let statsPointsReceived = 0
-                // we should have 2 dsm stats points
                 dsmStats.forEach((timeStatsBucket) => {
                   if (timeStatsBucket && timeStatsBucket.Stats) {
                     timeStatsBucket.Stats.forEach((statsBuckets) => {
@@ -453,19 +446,15 @@ describe('Plugin', () => {
         const spanKind = expected.meta?.['span.kind']
 
         if (method === 'publish') {
-          // For publish operations, use the new format: "publish to Topic <topic-name>"
           prefixedResource = `${method} to Topic ${topicName}`
         } else if (spanKind === 'consumer') {
-          // For consumer operations, use the new format: "Message from <topic-name>"
           prefixedResource = `Message from ${topicName}`
         } else if (method) {
-          // For other operations, use the old format: "<method> <full-resource-path>"
           prefixedResource = `${method} ${resource}`
         } else {
           prefixedResource = resource
         }
 
-        // Determine the default operation name based on span kind
         let defaultOpName = 'pubsub.receive'
         if (spanKind === 'consumer') {
           defaultOpName = expectedSchema.receive.opName
