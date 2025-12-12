@@ -188,7 +188,7 @@ describe('Tagging orchestration', () => {
     const config = {
       request: ['$.'],
       response: ['$.response'],
-      expand: ['']
+      expand: []
     }
     const input = {
       response: 'bar'
