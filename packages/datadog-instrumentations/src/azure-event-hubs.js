@@ -6,14 +6,19 @@ const {
 const shimmer = require('../../datadog-shimmer')
 const dc = require('dc-polyfill')
 
+const isItDefault = new WeakSet()
 const producerCh = dc.tracingChannel('apm:azure-event-hubs:send')
 
 addHook({
   name: '@azure/event-hubs',
-  versions: ['>=6.0.0'],
-  patchDefault: false
+  versions: ['>=6.0.0']
 }, obj => {
   const EventHubProducerClient = obj.EventHubProducerClient
+
+  if (!isItDefault.has(EventHubProducerClient.prototype)) {
+    isItDefault.add(EventHubProducerClient.prototype)
+  }
+
   shimmer.wrap(EventHubProducerClient.prototype, 'createBatch',
     createBatch => async function () {
       const batch = await createBatch.apply(this, arguments)
