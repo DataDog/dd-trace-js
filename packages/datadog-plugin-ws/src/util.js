@@ -51,10 +51,10 @@ function buildWebSocketSpanPointerHash (handshakeTraceId, handshakeSpanId, count
   const prefix = (isServer && !isIncoming) || (!isServer && isIncoming) ? 'S' : 'C'
 
   // Pad trace ID to 32 hex chars (128 bits)
-  const traceIdHex = handshakeTraceId.toString().padStart(32, '0')
+  const traceIdHex = handshakeTraceId.toString(16).padStart(32, '0')
 
   // Pad span ID to 16 hex chars (64 bits)
-  const spanIdHex = handshakeSpanId.toString().padStart(16, '0')
+  const spanIdHex = handshakeSpanId.toString(16).padStart(16, '0')
 
   // Pad counter to 8 hex chars (32 bits)
   const counterHex = counter.toString(16).padStart(8, '0')
