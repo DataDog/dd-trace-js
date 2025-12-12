@@ -12,7 +12,8 @@ class GoogleCloudPubsubClientPlugin extends ClientPlugin {
 
     if (api === 'publish') return
 
-    this.startSpan(this.operationName(), {
+    const explicitParent = ctx.parentSpan
+    const spanOptions = {
       service: this.config.service || this.serviceName(),
       resource: [api, request.name].filter(Boolean).join(' '),
       kind: this.constructor.kind,
@@ -20,7 +21,13 @@ class GoogleCloudPubsubClientPlugin extends ClientPlugin {
         'pubsub.method': api,
         'gcloud.project_id': projectId
       }
-    }, ctx)
+    }
+
+    if (explicitParent) {
+      spanOptions.childOf = explicitParent.context()
+    }
+
+    this.startSpan(this.operationName(), spanOptions, ctx)
 
     return ctx.currentStore
   }
