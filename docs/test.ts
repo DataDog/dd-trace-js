@@ -25,7 +25,7 @@ import {
   SPAN_TYPE,
 } from '../ext/tags'
 import { HTTP, WEB } from '../ext/types'
-import * as opentracing from '../packages/node_modules/opentracing';
+import * as opentracing from 'opentracing';
 import { IncomingMessage, OutgoingMessage } from 'http';
 
 opentracing.initGlobalTracer(tracer);

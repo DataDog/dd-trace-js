@@ -1,6 +1,6 @@
 import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from "http";
 import { LookupFunction } from 'net';
-import * as opentracing from "./packages/node_modules/opentracing";
+import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
 
 /**

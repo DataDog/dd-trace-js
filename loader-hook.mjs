@@ -1,4 +1,4 @@
-import regexpEscapeModule from './packages/node_modules/escape-string-regexp/index.js'
+import regexpEscapeModule from 'escape-string-regexp'
 import * as iitm from 'import-in-the-middle/hook.mjs'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config-helper.js'
