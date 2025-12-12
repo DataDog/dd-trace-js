@@ -1,0 +1,180 @@
+'use strict'
+
+const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const SpanContext = require('../../dd-trace/src/opentracing/span_context')
+const id = require('../../dd-trace/src/id')
+const log = require('../../dd-trace/src/log')
+const { storage } = require('../../datadog-core')
+const { channel } = require('../../datadog-instrumentations/src/helpers/instrument')
+const tracer = require('../../dd-trace')
+
+class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
+  static get id () { return 'google-cloud-pubsub-push-subscription' }
+
+  constructor (...args) {
+    super(...args)
+
+    const startCh = channel('apm:http:server:request:start')
+    startCh.subscribe(({ req, res }) => {
+      this.#handlePubSubRequest({ req, res })
+    })
+  }
+
+  #handlePubSubRequest ({ req, res }) {
+    const userAgent = req.headers['user-agent'] || ''
+    if (req.method !== 'POST' || !userAgent.includes('APIs-Google')) return false
+
+    if (req.headers['x-goog-pubsub-message-id']) {
+      log.debug('[PubSub] Detected unwrapped Pub/Sub format (push subscription)')
+      this.#createDeliverySpanAndActivate({ req, res })
+      return true
+    }
+
+    log.warn(
+      '[PubSub] No x-goog-pubsub-* headers detected. pubsub.delivery spans will not be created. ' +
+      'Add --push-no-wrapper-write-metadata to your subscription.'
+    )
+    return false
+  }
+
+  #createDeliverySpanAndActivate ({ req, res }) {
+    const messageData = this.#parseMessage(req)
+    if (!messageData) return
+
+    const originalContext = this.#extractContext(messageData, tracer)
+    const pubsubRequestContext = this.#reconstructPubSubContext(messageData.attrs) || originalContext
+
+    const isSameTrace = pubsubRequestContext &&
+      originalContext?.toTraceId() === pubsubRequestContext.toTraceId()
+
+    const deliverySpan = this.#createDeliverySpan(
+      messageData,
+      isSameTrace ? pubsubRequestContext : originalContext,
+      isSameTrace ? null : pubsubRequestContext,
+      tracer
+    )
+
+    // Set pubsub.delivery as the active span
+    const store = storage('legacy').getStore() ?? {}
+    storage('legacy').enterWith({ ...store, span: deliverySpan, req, res })
+
+    // Finish span when HTTP response lifecycle completes
+    this.#attachFinishHandlers(deliverySpan, res)
+  }
+
+  #attachFinishHandlers (span, res) {
+    let finished = false
+    const finishOnce = (error) => {
+      if (finished) return
+      finished = true
+      if (error) span.setTag('error', error)
+      span.finish()
+    }
+
+    res.once('finish', () => finishOnce())
+    res.once('close', () => finishOnce())
+    res.once('error', finishOnce)
+  }
+
+  #parseMessage (req) {
+    const subscription = req.headers['x-goog-pubsub-subscription-name']
+    const message = {
+      messageId: req.headers['x-goog-pubsub-message-id'],
+      publishTime: req.headers['x-goog-pubsub-publish-time']
+    }
+
+    const topicName = req.headers['pubsub.topic'] || 'push-subscription-topic'
+    return { message, subscription, attrs: req.headers, topicName }
+  }
+
+  #extractContext (messageData, tracer) {
+    return tracer._tracer.extract('text_map', messageData.attrs) ?? undefined
+  }
+
+  #reconstructPubSubContext (attrs) {
+    const traceIdLower = attrs['_dd.pubsub_request.trace_id']
+    const spanId = attrs['_dd.pubsub_request.span_id']
+    const traceIdUpper = attrs['_dd.pubsub_request.p.tid']
+
+    if (!traceIdLower || !spanId) return null
+
+    const traceId128 = traceIdUpper ? traceIdUpper + traceIdLower : traceIdLower.padStart(32, '0')
+    const traceId = id(traceId128, 16)
+    const parentId = id(spanId, 16)
+
+    const tags = {}
+    if (traceIdUpper) tags['_dd.p.tid'] = traceIdUpper
+
+    return new SpanContext({
+      traceId,
+      spanId: parentId,
+      tags
+    })
+  }
+
+  #createDeliverySpan (messageData, parentContext, linkContext, tracer) {
+    const { message, subscription, topicName, attrs } = messageData
+    const subscriptionName = subscription?.split('/').pop() ?? subscription
+    const publishStartTime = attrs['x-dd-publish-start-time']
+    const startTime = publishStartTime ? Number.parseInt(publishStartTime, 10) : undefined
+
+    const span = tracer._tracer.startSpan('pubsub.delivery', {
+      childOf: parentContext,
+      startTime,
+      integrationName: 'google-cloud-pubsub',
+      tags: {
+        'span.kind': 'consumer',
+        component: 'google-cloud-pubsub',
+        '_dd.integration': 'google-cloud-pubsub',
+        'pubsub.method': 'delivery',
+        'pubsub.subscription': subscription,
+        'pubsub.message_id': message.messageId,
+        'pubsub.delivery_method': 'push',
+        'pubsub.topic': topicName,
+        service: this.config.service ?? `${tracer._tracer._service}-pubsub`,
+        '_dd.base_service': tracer._tracer._service,
+        '_dd.serviceoverride.type': 'integration',
+        'resource.name': `Push Subscription ${subscriptionName}`
+      }
+    })
+
+    this.#addBatchMetadata(span, attrs)
+
+    if (linkContext) {
+      if (span.addLink) {
+        span.addLink(linkContext, {})
+      } else {
+        span._links ??= []
+        span._links.push({ context: linkContext, attributes: {} })
+      }
+    }
+
+    return span
+  }
+
+  #addBatchMetadata (span, attrs) {
+    const batchSize = attrs['_dd.batch.size']
+    const batchIndex = attrs['_dd.batch.index']
+
+    if (!batchSize || batchIndex === undefined) return
+
+    const size = Number.parseInt(batchSize, 10)
+    const index = Number.parseInt(batchIndex, 10)
+
+    span.setTag('pubsub.batch.message_count', size)
+    span.setTag('pubsub.batch.message_index', index)
+    span.setTag('pubsub.batch.description', `Message ${index + 1} of ${size}`)
+
+    const requestTraceId = attrs['_dd.pubsub_request.trace_id']
+    if (requestTraceId) {
+      span.setTag('pubsub.batch.request_trace_id', requestTraceId)
+    }
+
+    const requestSpanId = attrs['_dd.pubsub_request.span_id']
+    if (requestSpanId) {
+      span.setTag('pubsub.batch.request_span_id', requestSpanId)
+    }
+  }
+}
+
+module.exports = GoogleCloudPubsubPushSubscriptionPlugin
