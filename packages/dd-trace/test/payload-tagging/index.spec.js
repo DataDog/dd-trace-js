@@ -78,6 +78,16 @@ describe('Payload tagger', () => {
       })
     })
   })
+  
+  describe('escaping', () => {
+    it('should escape `.` characters in individual keys', () => {
+      const input = { 'foo.bar': { baz: 'quux' } }
+      const tags = tagsFromObject(input, defaultOpts)
+      assert.deepStrictEqual(tags, {
+        'http.payload.foo\\.bar.baz': 'quux'
+      })
+    })
+  })
 
   describe('parsing', () => {
     it('should transform null values to "null" string', () => {
