@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const { storage } = require('../../../../../datadog-core')
@@ -67,7 +66,7 @@ describe('TaintTracking lodash', () => {
               assert.strictEqual(isTainted(iastContext, commandResult), true)
 
               const commandResultOrig = propFnOriginal(_, commandTainted)
-              expect(commandResult).eq(commandResultOrig)
+              assert.strictEqual(commandResult, commandResultOrig)
 
               try {
                 const childProcess = require('child_process')

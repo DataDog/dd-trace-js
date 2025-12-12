@@ -192,22 +192,22 @@ describe('metrics', () => {
 
     it('should get count metric', () => {
       const ns = new metrics.Namespace('name')
-      expect(ns.count('name')).to.be.instanceOf(metrics.CountMetric)
+      assert.ok(ns.count('name') instanceof metrics.CountMetric)
     })
 
     it('should get distribution metric', () => {
       const ns = new metrics.Namespace('name')
-      expect(ns.distribution('name')).to.be.instanceOf(metrics.DistributionMetric)
+      assert.ok(ns.distribution('name') instanceof metrics.DistributionMetric)
     })
 
     it('should get gauge metric', () => {
       const ns = new metrics.Namespace('name')
-      expect(ns.gauge('name')).to.be.instanceOf(metrics.GaugeMetric)
+      assert.ok(ns.gauge('name') instanceof metrics.GaugeMetric)
     })
 
     it('should get rate metric', () => {
       const ns = new metrics.Namespace('name')
-      expect(ns.rate('name')).to.be.instanceOf(metrics.RateMetric)
+      assert.ok(ns.rate('name') instanceof metrics.RateMetric)
     })
 
     it('should have unique metrics per unique tag set', () => {

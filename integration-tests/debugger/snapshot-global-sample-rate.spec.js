@@ -1,6 +1,6 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -61,14 +61,14 @@ describe('Dynamic Instrumentation', function () {
               const timeSincePrevTimestamp = timestamp - prevTimestamp
 
               // Allow for a time variance (time will tell if this is enough). Timeouts can vary.
-              assert.isAtLeast(duration, 925)
-              assert.isBelow(duration, 1050)
+              assert.ok(duration >= 925)
+              assert.ok(duration < 1050)
 
               // A sanity check to make sure we're not saturating the event loop. We expect a lot of snapshots to be
               // sampled in the beginning of the sample window and then once the threshold is hit, we expect a "quiet"
               // period until the end of the window. If there's no "quiet" period, then we're saturating the event loop
               // and this test isn't really testing anything.
-              assert.isAtLeast(timeSincePrevTimestamp, 250)
+              assert.ok(timeSincePrevTimestamp >= 250)
 
               clearTimeout(state[rcConfig1.config.id].timer)
               clearTimeout(state[rcConfig2.config.id].timer)

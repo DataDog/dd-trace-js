@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 const os = require('node:os')
 
@@ -107,6 +105,6 @@ describe('Azure metadata', () => {
       'aas.site.type': 'app',
       'aas.subscription.id': 'subscription_id'
     }
-    expect(getAzureTagsFromMetadata(getAzureAppMetadata())).to.deep.equal(expected)
+    assert.deepStrictEqual(getAzureTagsFromMetadata(getAzureAppMetadata()), expected)
   })
 })

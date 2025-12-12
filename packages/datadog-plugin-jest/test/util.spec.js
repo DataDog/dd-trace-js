@@ -3,11 +3,9 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 
-const { expect } = require('chai')
 const { describe, it } = require('mocha')
 
 const { getFormattedJestTestParameters, getJestSuitesToRun } = require('../src/util')
-
 describe('getFormattedJestTestParameters', () => {
   it('returns formatted parameters for arrays', () => {
     const result = getFormattedJestTestParameters([[[1, 2], [3, 4]]])
@@ -180,9 +178,13 @@ describe('getJestSuitesToRun', () => {
     const rootDir = __dirname
 
     getJestSuitesToRun(skippableSuites, tests, rootDir)
-    expect(globalConfig.testEnvironmentOptions._ddUnskippable)
-      .to.eql(JSON.stringify({ 'fixtures/test-unskippable.js': true }))
-    expect(globalConfig.testEnvironmentOptions._ddForcedToRun)
-      .to.eql(JSON.stringify({ 'fixtures/test-unskippable.js': true }))
+    assert.deepStrictEqual(
+      globalConfig.testEnvironmentOptions._ddUnskippable,
+      JSON.stringify({ 'fixtures/test-unskippable.js': true })
+    )
+    assert.deepStrictEqual(
+      globalConfig.testEnvironmentOptions._ddForcedToRun,
+      JSON.stringify({ 'fixtures/test-unskippable.js': true })
+    )
   })
 })

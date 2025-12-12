@@ -3,8 +3,8 @@
 const assert = require('node:assert/strict')
 
 const { expect } = require('chai')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -206,11 +206,9 @@ describe('spanFormat', () => {
 
       trace = spanFormat(span)
 
-      expect(trace.metrics).to.not.have.keys(
-        SAMPLING_AGENT_DECISION,
-        SAMPLING_LIMIT_DECISION,
-        SAMPLING_RULE_DECISION
-      )
+      assert.ok(
+        !([SAMPLING_AGENT_DECISION, SAMPLING_LIMIT_DECISION, SAMPLING_RULE_DECISION]
+          .some(k => Object.hasOwn(trace.metrics, k))))
     })
 
     it('should always add single span ingestion tags from options if present', () => {
@@ -230,11 +228,9 @@ describe('spanFormat', () => {
     it('should not add single span ingestion tags if options not present', () => {
       trace = spanFormat(span)
 
-      expect(trace.metrics).to.not.have.keys(
-        SPAN_SAMPLING_MECHANISM,
-        SPAN_SAMPLING_MAX_PER_SECOND,
-        SPAN_SAMPLING_RULE_RATE
-      )
+      assert.ok(
+        !([SPAN_SAMPLING_MECHANISM, SPAN_SAMPLING_MAX_PER_SECOND, SPAN_SAMPLING_RULE_RATE]
+          .some(k => Object.hasOwn(trace.metrics, k))))
     })
 
     it('should format span links', () => {
@@ -392,7 +388,7 @@ describe('spanFormat', () => {
 
       trace = spanFormat(span)
 
-      assert.ok(!Object.hasOwn(trace.metrics, 'metric'))
+      assert.ok(!('metric' in trace.metrics))
     })
 
     it('should ignore metrics that are not a number', () => {
@@ -400,7 +396,7 @@ describe('spanFormat', () => {
 
       trace = spanFormat(span)
 
-      assert.ok(!Object.hasOwn(trace.metrics, 'metric'))
+      assert.ok(!('metric' in trace.metrics))
     })
 
     it('should extract errors', () => {
@@ -423,8 +419,8 @@ describe('spanFormat', () => {
       trace = spanFormat(span)
 
       assert.strictEqual(trace.meta[ERROR_MESSAGE], error.message)
-      assert.ok(!Object.hasOwn(trace.meta, ERROR_TYPE))
-      assert.ok(!Object.hasOwn(trace.meta, ERROR_STACK))
+      assert.ok(!(ERROR_TYPE in trace.meta))
+      assert.ok(!(ERROR_STACK in trace.meta))
     })
 
     it('should extract the origin', () => {
@@ -527,8 +523,8 @@ describe('spanFormat', () => {
 
       assert.strictEqual(trace.name, 'null')
       assert.strictEqual(trace.resource, 'null')
-      assert.ok(!Object.hasOwn(trace.meta, 'foo.bar'))
-      assert.ok(!Object.hasOwn(trace.meta, 'baz.qux'))
+      assert.ok(!('foo.bar' in trace.meta))
+      assert.ok(!('baz.qux' in trace.meta))
       assert.strictEqual(typeof trace.start, 'number')
       assert.strictEqual(typeof trace.duration, 'number')
     })
@@ -578,12 +574,12 @@ describe('spanFormat', () => {
     it('should not measure internal spans', () => {
       spanContext._tags['span.kind'] = 'internal'
       trace = spanFormat(span)
-      assert.ok(!Object.hasOwn(trace.metrics, MEASURED))
+      assert.ok(!(MEASURED in trace.metrics))
     })
 
     it('should not measure unknown spans', () => {
       trace = spanFormat(span)
-      assert.ok(!Object.hasOwn(trace.metrics, MEASURED))
+      assert.ok(!(MEASURED in trace.metrics))
     })
 
     it('should measure non-internal spans', () => {

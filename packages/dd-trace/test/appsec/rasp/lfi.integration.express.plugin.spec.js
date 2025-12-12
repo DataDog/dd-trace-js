@@ -1,10 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 const path = require('path')
 const Axios = require('axios')
-const { assert } = require('chai')
-
 describe('RASP - lfi - integration - sync', () => {
   let axios, cwd, appFile, agent, proc
 
@@ -47,8 +47,8 @@ describe('RASP - lfi - integration - sync', () => {
 
       assert.strictEqual(e.response.status, 403)
       return await agent.assertMessageReceived(({ headers, payload }) => {
-        assert.property(payload[0][0].meta, '_dd.appsec.json')
-        assert.include(payload[0][0].meta['_dd.appsec.json'], '"rasp-lfi-rule-id-1"')
+        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
+        assert.match(payload[0][0].meta['_dd.appsec.json'], /"rasp-lfi-rule-id-1"/)
       })
     }
 
