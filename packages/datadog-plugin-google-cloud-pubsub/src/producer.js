@@ -50,7 +50,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
 
     // Collect span links from messages 2-N (skip first - it becomes parent)
     const spanLinkData = hasTraceContext
-      ? messages.slice(1).map(msg => this._extractSpanLink(msg.attributes)).filter(Boolean)
+      ? messages.slice(1).map(msg => this.#extractSpanLink(msg.attributes)).filter(Boolean)
       : []
 
     const firstAttrs = messages[0]?.attributes
@@ -65,7 +65,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
 
     const topicName = topic.split('/').pop() || topic
     const batchSpan = this.startSpan({
-      childOf: parentData ? this._extractParentContext(parentData) : undefined,
+      childOf: parentData ? this.#extractParentContext(parentData) : undefined,
       resource: `${api} to Topic ${topicName}`,
       meta: {
         'gcloud.project_id': projectId,
@@ -148,7 +148,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     return ctx.parentStore
   }
 
-  _extractSpanLink (attrs) {
+  #extractSpanLink (attrs) {
     if (!attrs?.['x-datadog-trace-id'] || !attrs['x-datadog-parent-id']) return null
 
     const lowerHex = BigInt(attrs['x-datadog-trace-id']).toString(16).padStart(16, '0')
@@ -166,7 +166,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     }
   }
 
-  _extractParentContext (data) {
+  #extractParentContext (data) {
     const carrier = {
       'x-datadog-trace-id': data.traceId,
       'x-datadog-parent-id': data.spanId

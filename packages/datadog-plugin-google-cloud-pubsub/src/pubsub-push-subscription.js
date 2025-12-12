@@ -16,17 +16,17 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
     const startCh = channel('apm:http:server:request:start')
     startCh.subscribe(({ req, res }) => {
-      this._handlePubSubRequest({ req, res })
+      this.#handlePubSubRequest({ req, res })
     })
   }
 
-  _handlePubSubRequest ({ req, res }) {
+  #handlePubSubRequest ({ req, res }) {
     const userAgent = req.headers['user-agent'] || ''
     if (req.method !== 'POST' || !userAgent.includes('APIs-Google')) return false
 
     if (req.headers['x-goog-pubsub-message-id']) {
       log.debug('[PubSub] Detected unwrapped Pub/Sub format (push subscription)')
-      this._createDeliverySpanAndActivate({ req, res })
+      this.#createDeliverySpanAndActivate({ req, res })
       return true
     }
 
@@ -37,17 +37,17 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     return false
   }
 
-  _createDeliverySpanAndActivate ({ req, res }) {
-    const messageData = this._parseMessage(req)
+  #createDeliverySpanAndActivate ({ req, res }) {
+    const messageData = this.#parseMessage(req)
     if (!messageData) return
 
-    const originalContext = this._extractContext(messageData, tracer)
-    const pubsubRequestContext = this._reconstructPubSubContext(messageData.attrs) || originalContext
+    const originalContext = this.#extractContext(messageData, tracer)
+    const pubsubRequestContext = this.#reconstructPubSubContext(messageData.attrs) || originalContext
 
     const isSameTrace = pubsubRequestContext &&
       originalContext?.toTraceId() === pubsubRequestContext.toTraceId()
 
-    const deliverySpan = this._createDeliverySpan(
+    const deliverySpan = this.#createDeliverySpan(
       messageData,
       isSameTrace ? pubsubRequestContext : originalContext,
       isSameTrace ? null : pubsubRequestContext,
@@ -59,10 +59,10 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     storage('legacy').enterWith({ ...store, span: deliverySpan, req, res })
 
     // Finish span when HTTP response lifecycle completes
-    this._attachFinishHandlers(deliverySpan, res)
+    this.#attachFinishHandlers(deliverySpan, res)
   }
 
-  _attachFinishHandlers (span, res) {
+  #attachFinishHandlers (span, res) {
     let finished = false
     const finishOnce = (error) => {
       if (finished) return
@@ -76,7 +76,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     res.once('error', finishOnce)
   }
 
-  _parseMessage (req) {
+  #parseMessage (req) {
     const subscription = req.headers['x-goog-pubsub-subscription-name']
     const message = {
       messageId: req.headers['x-goog-pubsub-message-id'],
@@ -87,11 +87,11 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     return { message, subscription, attrs: req.headers, topicName }
   }
 
-  _extractContext (messageData, tracer) {
+  #extractContext (messageData, tracer) {
     return tracer._tracer.extract('text_map', messageData.attrs) ?? undefined
   }
 
-  _reconstructPubSubContext (attrs) {
+  #reconstructPubSubContext (attrs) {
     const traceIdLower = attrs['_dd.pubsub_request.trace_id']
     const spanId = attrs['_dd.pubsub_request.span_id']
     const traceIdUpper = attrs['_dd.pubsub_request.p.tid']
@@ -112,7 +112,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     })
   }
 
-  _createDeliverySpan (messageData, parentContext, linkContext, tracer) {
+  #createDeliverySpan (messageData, parentContext, linkContext, tracer) {
     const { message, subscription, topicName, attrs } = messageData
     const subscriptionName = subscription?.split('/').pop() ?? subscription
     const publishStartTime = attrs['x-dd-publish-start-time']
@@ -138,7 +138,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       }
     })
 
-    this._addBatchMetadata(span, attrs)
+    this.#addBatchMetadata(span, attrs)
 
     if (linkContext) {
       if (span.addLink) {
@@ -152,7 +152,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     return span
   }
 
-  _addBatchMetadata (span, attrs) {
+  #addBatchMetadata (span, attrs) {
     const batchSize = attrs['_dd.batch.size']
     const batchIndex = attrs['_dd.batch.index']
 
