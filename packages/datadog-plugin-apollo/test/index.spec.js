@@ -10,26 +10,9 @@ const agent = require('../../dd-trace/test/plugins/agent.js')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const accounts = require('./fixtures.js')
 const { expectedSchema, rawExpectedSchema } = require('./naming.js')
-const graphqlTag = require('../../../versions/graphql-tag/index.js').get()
-const gql = graphqlTag.gql
-accounts.typeDefs = gql(accounts.typeDefs)
 
 const fixtures = [accounts]
-
-async function execute (executor, source, variables, operationName) {
-  const resp = await executor({
-    source,
-    document: gql(source),
-    request: {
-      variables
-    },
-    operationName,
-    queryHash: 'hashed',
-    context: null,
-    cache: {}
-  })
-  return resp
-}
+const typeDefs = accounts.typeDefs
 
 describe('Plugin', () => {
   let ApolloGateway
@@ -37,6 +20,22 @@ describe('Plugin', () => {
   let buildSubgraphSchema
   let ApolloServer
   let startStandaloneServer
+  let gql
+
+  function setupFixtures () {
+    const graphqlTag = require('../../../versions/graphql-tag/index.js').get()
+    gql = graphqlTag.gql
+    accounts.typeDefs = gql(typeDefs)
+  }
+
+  function setupApollo (version) {
+    require('../../dd-trace/index.js')
+    const apollo = require(`../../../versions/@apollo/gateway@${version}`).get()
+    const subgraph = require('../../../versions/@apollo/subgraph').get()
+    buildSubgraphSchema = subgraph.buildSubgraphSchema
+    ApolloGateway = apollo.ApolloGateway
+    LocalGraphQLDataSource = apollo.LocalGraphQLDataSource
+  }
 
   function setupGateway () {
     const localDataSources = Object.fromEntries(
@@ -55,20 +54,27 @@ describe('Plugin', () => {
     return gateway
   }
 
+  async function execute (executor, source, variables, operationName) {
+    const resp = await executor({
+      source,
+      document: gql(source),
+      request: {
+        variables
+      },
+      operationName,
+      queryHash: 'hashed',
+      context: null,
+      cache: {}
+    })
+    return resp
+  }
+
   function gateway () {
     return setupGateway().load().then((res) => res)
   }
 
   describe('@apollo/gateway', () => {
     withVersions('apollo', '@apollo/gateway', version => {
-      before(() => {
-        require('../../dd-trace/index.js')
-        const apollo = require(`../../../versions/@apollo/gateway@${version}`).get()
-        const subgraph = require('../../../versions/@apollo/subgraph').get()
-        buildSubgraphSchema = subgraph.buildSubgraphSchema
-        ApolloGateway = apollo.ApolloGateway
-        LocalGraphQLDataSource = apollo.LocalGraphQLDataSource
-      })
       after(() => {
         return agent.close({ ritmReset: false })
       })
@@ -76,6 +82,10 @@ describe('Plugin', () => {
       describe('@apollo/server', () => {
         let server
         let port
+
+        before(() => agent.load('apollo'))
+        before(() => setupFixtures())
+        before(() => setupApollo(version))
 
         before(() => {
           ApolloServer = require('../../../versions/@apollo/server/index.js').get().ApolloServer
@@ -93,10 +103,6 @@ describe('Plugin', () => {
           }).then(({ url }) => {
             port = new URL(url).port
           })
-        })
-
-        before(() => {
-          return agent.load('apollo')
         })
 
         after(() => {
@@ -132,9 +138,9 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => {
-          return agent.load('apollo')
-        })
+        before(() => agent.load('apollo'))
+        before(() => setupFixtures())
+        before(() => setupApollo(version))
 
         it('should instrument apollo/gateway', done => {
           const operationName = 'MyQuery'
@@ -462,9 +468,9 @@ describe('Plugin', () => {
         )
 
         describe('with configuration', () => {
-          before(() => {
-            return agent.load('apollo', { service: 'custom', source: true, signature: false })
-          })
+          before(() => agent.load('apollo', { service: 'custom', source: true, signature: false }))
+          before(() => setupFixtures())
+          before(() => setupApollo(version))
 
           it('should be configured with the correct values', done => {
             const operationName = 'MyQuery'
