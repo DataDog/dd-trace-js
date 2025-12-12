@@ -83,8 +83,8 @@ class WSReceiverPlugin extends TracingPlugin {
           const handshakeContext = handshakeSpan.context()
 
           const ptrHash = buildWebSocketSpanPointerHash(
-            handshakeContext._traceId.toString(16),
-            handshakeContext._spanId.toString(16),
+            handshakeContext._traceId,
+            handshakeContext._spanId,
             counter,
             true, // isServer
             true // isIncoming
