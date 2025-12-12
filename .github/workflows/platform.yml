@@ -24,6 +24,31 @@ env:
 # TODO: upstream jobs
 
 jobs:
+  package-manager:
+    strategy:
+      fail-fast: false
+      matrix:
+        manager:
+          - name: npm
+            install: npm install
+          - name: pnpm
+            install: pnpm add
+          - name: yarn
+            install: yarn add
+          - name: bun
+            install: bun add
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: ./.github/actions/node/active-lts
+      - run: FILENAME=$(npm pack --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
+      - run: mkdir -p /tmp/app
+      - run: npm i -g pnpm
+        if: matrix.manager.name == 'pnpm'
+      - run: cd /tmp/app && ${{ matrix.manager.install }} /tmp/dd-trace.tgz
+      - run: echo "require('dd-trace').init()" >> /tmp/app/index.js
+      - run: node /tmp/app
+
   bun-pack:
     runs-on: ubuntu-latest
     steps:
@@ -34,6 +59,16 @@ jobs:
       - run: FILENAME=$(npm pack) && tar -zxf $FILENAME -C npm
       - run: ./node_modules/.bin/bun pm pack --gzip-level 0 --filename bun.tgz && tar -zxf bun.tgz -C bun
       - run: diff -r npm bun
+
+  bundle-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: ./.github/actions/node/active-lts
+      # Running `yarn` also automatically runs Rspack as a postinstall script.
+      - run: yarn --frozen-lockfile
+        working-directory: vendor
+      - run: git diff --exit-code
 
   core:
     runs-on: ubuntu-latest
@@ -46,6 +81,7 @@ jobs:
       - run: yarn test:core:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -356,7 +392,7 @@ jobs:
         with:
           suffix: test-${{ github.job }}
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -382,7 +418,7 @@ jobs:
       - run: yarn test:integration
       - run: yarn test:integration:esbuild
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -396,7 +432,7 @@ jobs:
       - run: yarn test:trace:guardrails:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -417,7 +453,7 @@ jobs:
       - run: bun add --ignore-scripts express@4 # Use older express to support old Node.js versions
       - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -450,7 +486,7 @@ jobs:
       - run: yarn test:shimmer:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests

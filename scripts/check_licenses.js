@@ -41,24 +41,30 @@ function getProdDeps () {
   // Add root package (dd-trace) to the set of dependencies manually as it is not included in the yarn list output.
   const deps = new Set([rootPackageName])
 
-  // Use yarn to get full tree of production (non-dev) dependencies (format is ndjson)
-  const stdout = execSync('yarn list --production --json', {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit']
-  })
-
-  for (const line of stdout.split('\n')) {
-    if (!line) continue
-    const parsed = JSON.parse(line)
-    if (parsed.type === 'tree' && parsed.data && Array.isArray(parsed.data.trees)) {
-      collectFromTrees(parsed.data.trees, deps)
-    }
-  }
+  addProdDeps(deps, process.cwd())
+  addProdDeps(deps, join(process.cwd(), 'vendor'))
 
   // Add vendored dependencies
   addVendoredDeps(deps)
 
   return deps
+}
+
+function addProdDeps (deps, cwd) {
+  // Use yarn to get full tree of production (non-dev) dependencies (format is ndjson)
+  const stdout = execSync('yarn list --production --json', {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'inherit'],
+    cwd
+  })
+
+  for (const line of stdout.split('\n')) {
+    if (!line) continue
+    const parsed = JSON.parse(line)
+    if (parsed.type === 'tree' && Array.isArray(parsed.data?.trees)) {
+      collectFromTrees(parsed.data.trees, deps)
+    }
+  }
 }
 
 function collectFromTrees (trees, deps) {
