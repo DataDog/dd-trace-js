@@ -107,10 +107,10 @@ describe('Payload tagger', () => {
       })
     })
 
-    it('should handle incorrect input passed into the rules', () => {
-      const input = { }
+    it('should decode buffers as UTF-8', () => {
+      const input = { foo: Buffer.from('bar') }
       const tags = tagsFromObject(input, defaultOpts)
-      assert.deepStrictEqual(tags, { })
+      assert.deepStrictEqual(tags, { 'http.payload.foo': 'bar' })
     })
 
     it('should provide tags from simple JSON objects, casting to strings where necessary', () => {
