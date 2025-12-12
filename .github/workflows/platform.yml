@@ -49,6 +49,33 @@ jobs:
       - run: echo "require('dd-trace').init()" >> /tmp/app/index.js
       - run: node /tmp/app
 
+  yarn:
+    strategy:
+      fail-fast: false
+      matrix:
+        manager:
+          - name: npm
+            install: npm install
+          - name: pnpm
+            install: pnpm add
+          - name: yarn
+            install: yarn add
+          - name: yarn-berry
+            install: npm install -g corepack && yarn set version stable && yarn config set nodeLinker node-modules && yarn install
+          - name: bun
+            install: bun add
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: ./.github/actions/node/active-lts
+      - run: FILENAME=$(npm pack --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
+      - run: mkdir -p /tmp/app
+      - run: npm i -g pnpm
+        if: matrix.manager.name == 'pnpm'
+      - run: cd /tmp/app && ${{ matrix.manager.install }} /tmp/dd-trace.tgz
+      - run: echo "require('dd-trace').init()" >> /tmp/app/index.js
+      - run: node /tmp/app
+
   bun-pack:
     runs-on: ubuntu-latest
     steps:

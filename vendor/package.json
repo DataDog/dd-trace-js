@@ -1,7 +1,7 @@
 {
   "license": "(Apache-2.0 OR BSD-3-Clause)",
   "scripts": {
-    "postinstall": "node rspack"
+    "postinstall": "node rspack && node link"
   },
   "dependencies": {
     "@datadog/sketches-js": "2.1.1",

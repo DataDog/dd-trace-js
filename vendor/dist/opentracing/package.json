@@ -1,0 +1,5 @@
+{
+  "name": "opentracing",
+  "version": "0.0.0",
+  "main": "index.js"
+}
