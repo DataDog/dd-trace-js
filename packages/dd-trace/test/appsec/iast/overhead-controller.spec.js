@@ -230,14 +230,16 @@ describe('Overhead controller', () => {
           })
 
           it('should populate initial context with available tokens', () => {
-            expect(iastContext[oceContextKey])
-              .to.have.nested.property(`tokens.${OPERATION.name}`, OPERATION.initialTokenBucketSize())
+            assert.strictEqual(
+              iastContext[oceContextKey].tokens[OPERATION.name],
+              OPERATION.initialTokenBucketSize()
+            )
           })
 
           it('should allow when available tokens', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 2
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 1)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 1)
           })
 
           it('should detect the first vulnerability of the type ' +
@@ -246,7 +248,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // Ignoring the first SSRF in the next request
             iastContext = { req }
@@ -266,7 +268,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // Ignoring the first SSRF in the next request
             iastContext = { req }
@@ -284,7 +286,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // Detecting the first CODE_INJECTION in the next request
             iastContext = { req }
@@ -304,7 +306,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // Detecting the first CODE_INJECTION in the next request
             iastContext = { req }
@@ -319,7 +321,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // Detecting the first CODE_INJECTION in the next request
             req.method = 'POST'
@@ -335,7 +337,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 2
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 1)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 1)
 
             // Detecting the first CODE_INJECTION in the next request
             iastContext = { req }
@@ -349,7 +351,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // second request using the whole budget
             iastContext = { req }
@@ -357,7 +359,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), false)
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
             overheadController.consolidateVulnerabilities(iastContext)
 
             // third request detecting only the third SSRF
@@ -372,7 +374,7 @@ describe('Overhead controller', () => {
           it('should not allow when no available tokens', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 0
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext), false)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
           })
         })
 
@@ -459,11 +461,11 @@ describe('Overhead controller', () => {
                     const url = trace.meta['http.url']
                     if (url.includes(FIRST_REQUEST)) {
                       assert.notStrictEqual(trace.meta['_dd.iast.json'], undefined)
-                      expect(trace.metrics['_dd.iast.enabled']).eq(1)
+                      assert.strictEqual(trace.metrics['_dd.iast.enabled'], 1)
                       urlCounter++
                     } else if (url.includes(SECOND_REQUEST)) {
                       assert.strictEqual(trace.meta['_dd.iast.json'], undefined)
-                      expect(trace.metrics['_dd.iast.enabled']).eq(0)
+                      assert.strictEqual(trace.metrics['_dd.iast.enabled'], 0)
                       urlCounter++
                     }
                     if (urlCounter === 2) {
@@ -511,7 +513,7 @@ describe('Overhead controller', () => {
                   if (trace.type === 'web') {
                     urlCounter++
                     assert.notStrictEqual(trace.meta['_dd.iast.json'], undefined)
-                    expect(trace.metrics['_dd.iast.enabled']).eq(1)
+                    assert.strictEqual(trace.metrics['_dd.iast.enabled'], 1)
                     if (urlCounter === 2) {
                       done()
                     }
@@ -639,7 +641,7 @@ describe('Overhead controller', () => {
                     const url = trace.meta['http.url']
                     if (url.includes(SECURE_REQUEST)) {
                       assert.strictEqual(trace.meta['_dd.iast.json'], undefined)
-                      expect(trace.metrics['_dd.iast.enabled']).eq(1)
+                      assert.strictEqual(trace.metrics['_dd.iast.enabled'], 1)
                       done()
                     }
                   }

@@ -218,7 +218,7 @@ describe('blocking', () => {
     it('should do nothing if no blocking delegation exists', () => {
       const blocked = callBlockDelegation(res)
 
-      expect(blocked).to.not.be.ok
+      assert.ok(!(blocked))
       sinon.assert.notCalled(log.warn)
       sinon.assert.notCalled(rootSpan.setTag)
       sinon.assert.notCalled(res.writeHead)
@@ -241,7 +241,7 @@ describe('blocking', () => {
 
       const result = callBlockDelegation(res)
 
-      expect(result).to.not.be.ok
+      assert.ok(!(result))
       sinon.assert.calledOnce(rootSpan.setTag)
       sinon.assert.calledOnce(res.writeHead)
       sinon.assert.calledOnce(res.constructor.prototype.end)

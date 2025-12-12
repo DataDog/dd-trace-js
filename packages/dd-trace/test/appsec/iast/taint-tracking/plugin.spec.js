@@ -148,7 +148,7 @@ describe('IAST Taint tracking plugin', () => {
       }
 
       taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted)
-      expect(taintTrackingOperations.taintObject).not.to.be.called
+      sinon.assert.notCalled(taintTrackingOperations.taintObject)
     })
 
     it('Should taint request parameter when qs event is published', () => {
@@ -265,7 +265,7 @@ describe('IAST Taint tracking plugin', () => {
       const req = {}
 
       processParamsStartCh.publish({ req })
-      expect(taintTrackingOperations.taintObject).to.not.be.called
+      sinon.assert.notCalled(taintTrackingOperations.taintObject)
     })
 
     it('Should taint headers and uri from request', () => {

@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -55,20 +53,20 @@ describe('Sampler', () => {
     it('should always sample when rate is 1', () => {
       sampler = new Sampler(1)
 
-      expect(sampler.isSampled(new SpanContext({ traceId: id() }))).to.be.true
+      assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id() })), true)
     })
 
     it('should never sample when rate is 0', () => {
       sampler = new Sampler(0)
 
-      expect(sampler.isSampled(new SpanContext({ traceId: id() }))).to.be.false
+      assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id() })), false)
     })
 
     it('should sample according to the rate', () => {
       sampler = new Sampler(0.1234)
 
-      expect(sampler.isSampled(new SpanContext({ traceId: id('8135292307740797052', 10) }))).to.be.true
-      expect(sampler.isSampled(new SpanContext({ traceId: id('2263640730249415707', 10) }))).to.be.false
+      assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id('8135292307740797052', 10) })), true)
+      assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id('2263640730249415707', 10) })), false)
     })
 
     it('should sample according to different rates', () => {
@@ -106,7 +104,7 @@ describe('Sampler', () => {
 
       idsAndRates.forEach(([id, rate, expected]) => {
         const sampler = new Sampler(rate)
-        expect(sampler.isSampled(new SpanContext({ traceId: id }))).to.equal(expected)
+        assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id })), expected)
       })
     })
   })
