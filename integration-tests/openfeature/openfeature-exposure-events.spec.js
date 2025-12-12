@@ -70,6 +70,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       it('should generate exposure events with manual flush', (done) => {
         const configId = 'org-42-env-test'
         const exposureEvents = []
+        let receivedAckUpdate = false
 
         // Listen for exposure events
         agent.on('exposures', ({ payload, headers }) => {
@@ -101,23 +102,22 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
               validateExposureEvent(stringEvent, 'test-string-flag', 'test-user-456',
                 { user: 'test-user-456', tier: 'enterprise' })
 
-              done()
+              endIfDone()
             } catch (error) {
               done(error)
             }
           }
         })
 
-        // Deliver UFC config via Remote Config
-        agent.addRemoteConfig({
-          product: RC_PRODUCT,
-          id: configId,
-          config: ufcPayloads.testBooleanAndStringFlags
-        })
+        agent.on('remote-config-ack-update', async (id, _version, state) => {
+          if (state === UNACKNOWLEDGED) return
 
-        // Wait for RC delivery then evaluate flags
-        setTimeout(async () => {
+          if (id !== configId) return
+
           try {
+            assert.strictEqual(state, ACKNOWLEDGED)
+            receivedAckUpdate = true
+
             const response = await fetch(`${proc.url}/evaluate-flags`)
             assert.equal(response.status, 200)
             const data = await response.json()
@@ -128,7 +128,18 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           } catch (error) {
             done(error)
           }
-        }, 1000)
+        })
+
+        // Deliver UFC config via Remote Config
+        agent.addRemoteConfig({
+          product: RC_PRODUCT,
+          id: configId,
+          config: ufcPayloads.testBooleanAndStringFlags
+        })
+
+        function endIfDone () {
+          if (receivedAckUpdate && exposureEvents.length === 2) done()
+        }
       })
     })
 
@@ -189,24 +200,28 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           }
         })
 
-        agent.addRemoteConfig({
-          product: RC_PRODUCT,
-          id: configId,
-          config: ufcPayloads.testBooleanAndStringFlags
-        })
-
-        setTimeout(async () => {
+        agent.on('remote-config-ack-update', async (id, _version, state) => {
+          if (state === UNACKNOWLEDGED) return
+          if (id !== configId) return
           try {
+            assert.strictEqual(state, ACKNOWLEDGED)
+
             const response = await fetch(`${proc.url}/evaluate-multiple-flags`)
             assert.equal(response.status, 200)
             const data = await response.json()
             assert.equal(data.evaluationsCompleted, 6)
 
-          // No manual flush - let automatic flush handle it (default 1s interval)
+            // No manual flush - let automatic flush handle it (default 1s interval)
           } catch (error) {
             done(error)
           }
-        }, 1500)
+        })
+
+        agent.addRemoteConfig({
+          product: RC_PRODUCT,
+          id: configId,
+          config: ufcPayloads.testBooleanAndStringFlags
+        })
       })
     })
   })
@@ -261,10 +276,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       })
 
       // Trigger request to start remote config polling
-      fetch(`${proc.url}/`).then(() => {
-        // Wait for remote config processing
-        setTimeout(endIfDone, 200)
-      }).catch(done)
+      fetch(`${proc.url}/`).catch(done)
 
       let testCompleted = false
       function endIfDone () {
