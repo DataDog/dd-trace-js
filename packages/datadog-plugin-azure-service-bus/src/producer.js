@@ -75,6 +75,10 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
   asyncEnd (ctx) {
     super.finish(ctx)
   }
+
+  end (ctx) {
+    super.finish(ctx)
+  }
 }
 
 function injectTraceContext (tracer, span, msg) {
