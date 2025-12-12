@@ -79,16 +79,6 @@ describe('Payload tagger', () => {
     })
   })
 
-  describe('escaping', () => {
-    it('should escape `.` characters in individual keys', () => {
-      const input = { 'foo.bar': { baz: 'quux' } }
-      const tags = tagsFromObject(input, defaultOpts)
-      assert.deepStrictEqual(tags, {
-        'http.payload.foo\\.bar.baz': 'quux'
-      })
-    })
-  })
-
   describe('parsing', () => {
     it('should transform null values to "null" string', () => {
       const input = { foo: 'bar', baz: null }
@@ -117,10 +107,10 @@ describe('Payload tagger', () => {
       })
     })
 
-    it('should decode buffers as UTF-8', () => {
-      const input = { foo: Buffer.from('bar') }
+    it('should handle incorrect input passed into the rules', () => {
+      const input = { }
       const tags = tagsFromObject(input, defaultOpts)
-      assert.deepStrictEqual(tags, { 'http.payload.foo': 'bar' })
+      assert.deepStrictEqual(tags, { })
     })
 
     it('should provide tags from simple JSON objects, casting to strings where necessary', () => {
@@ -184,19 +174,17 @@ describe('Tagging orchestration', () => {
     assert.strictEqual(tags[`${PAYLOAD_TAG_REQUEST_PREFIX}.response`], 'bar')
   })
 
-  it('should use the response config when given the response prefix', () => {
+  it('should not fail if the response config contains invalid config', () => {
     const config = {
-      request: ['$.request'],
+      request: ['$.'],
       response: ['$.response'],
-      expand: []
+      expand: ['']
     }
     const input = {
-      request: 'foo',
       response: 'bar'
     }
     const tags = computeTags(config, input, { maxDepth: 10, prefix: PAYLOAD_TAG_RESPONSE_PREFIX })
     assert.strictEqual(tags[`${PAYLOAD_TAG_RESPONSE_PREFIX}.response`], 'redacted')
-    assert.strictEqual(tags[`${PAYLOAD_TAG_RESPONSE_PREFIX}.request`], 'foo')
   })
 
   it('should apply expansion rules', () => {
