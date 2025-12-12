@@ -10,7 +10,8 @@ const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
 const { getEnvironmentVariables } = require('../../../dd-trace/src/config-helper')
-
+const extractOutput = require('./extract-prisma-client-path')
+const Module = require('module')
 const envs = getEnvironmentVariables()
 
 const {
@@ -18,6 +19,7 @@ const {
   DD_TRACE_DEBUG = ''
 } = envs
 
+const prismaOutput = extractOutput()
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
@@ -66,9 +68,17 @@ for (const packageName of names) {
   // get the instrumentation file name to save all hooked versions
   const instrumentationFileName = parseHookInstrumentationFileName(packageName)
 
-  Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
-    moduleName = moduleName.replace(pathSepExpr, '/')
+  const hookModules = []
+  if (isFilePath(packageName)) {
+    const absolutePath = resolveFilePath(packageName)
+    if (!absolutePath) continue
+    hookModules.push(absolutePath)
+  } else {
+    hookModules.push(packageName)
+  }
 
+  Hook(hookModules, hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
+    moduleName = moduleName.replace(pathSepExpr, '/')
     // This executes the integration file thus adding its entries to `instrumentations`
     hook()
 
@@ -98,6 +108,15 @@ for (const packageName of names) {
       // Maybe it is also not important to know what name was actually used?
       hook[HOOK_SYMBOL] ??= new WeakSet()
       let matchesFile = moduleName === fullFilename
+
+      if (!matchesFile && isFilePath(name)) {
+        const absoluteName = resolveFilePath(name)
+        if (absoluteName) {
+          matchesFile = file
+            ? moduleName === filename(absoluteName, file)
+            : Module._resolveFilename(absoluteName) === moduleName
+        }
+      }
 
       if (fullFilePattern) {
         // Some libraries include a hash in their filenames when installed,
@@ -214,7 +233,6 @@ function parseHookInstrumentationFileName (packageName) {
     hook = hook.fn
   }
   const hookString = hook.toString()
-
   const regex = /require\('([^']*)'\)/
   const match = hookString.match(regex)
 
@@ -229,6 +247,37 @@ function parseHookInstrumentationFileName (packageName) {
   }
 
   return null
+}
+
+function isFilePath (moduleName) {
+  if (moduleName.startsWith('./') || moduleName.startsWith('../') || moduleName.startsWith('/')) {
+    return true
+  }
+
+  if (moduleName.includes('/') && !moduleName.includes('node_modules/') && !moduleName.startsWith('@')) {
+    return true
+  }
+
+  return false
+}
+
+function resolveFilePath (moduleName) {
+  let candidate
+
+  // For know we want to only resolve the file path for prisma
+  if (moduleName === prismaOutput) {
+    candidate = prismaOutput
+  }
+
+  if (!candidate) {
+    return null
+  }
+
+  if (path.isAbsolute(candidate)) {
+    return candidate
+  }
+
+  return path.resolve(candidate)
 }
 
 module.exports = {

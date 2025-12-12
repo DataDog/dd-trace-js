@@ -2,11 +2,15 @@ import regexpEscapeModule from './packages/node_modules/escape-string-regexp/ind
 import * as iitm from 'import-in-the-middle/hook.mjs'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config-helper.js'
-
+import path from 'path'
+import { pathToFileURL } from 'url'
+import extractOutput from './packages/datadog-instrumentations/src/helpers/extract-prisma-client-path.js'
 const regexpEscape = regexpEscapeModule.default
 
 // For some reason `getEnvironmentVariable` is not otherwise available to ESM.
 const env = configHelper.getEnvironmentVariable
+
+const prismaOutput = extractOutput()
 
 function initialize (data = {}) {
   data.include ??= []
@@ -23,8 +27,29 @@ function addInstrumentations (data) {
   const instrumentations = Object.keys(hooks)
 
   for (const moduleName of instrumentations) {
-    data.include.push(new RegExp(`node_modules/${moduleName}/(?!node_modules).+`), moduleName)
+    if (isFilePath(moduleName)) {
+      const absolutePath = resolveFilePath(moduleName)
+
+      if (!absolutePath) continue
+      const fileUrl = pathToFileURL(absolutePath).href
+      const escapedUrl = regexpEscape(fileUrl)
+      data.include.push(new RegExp(`^${escapedUrl}(/.*)?$`))
+    } else {
+      data.include.push(new RegExp(`node_modules/${moduleName}/(?!node_modules).+`), moduleName)
+    }
   }
+}
+
+function isFilePath (moduleName) {
+  if (moduleName.startsWith('./') || moduleName.startsWith('../') || moduleName.startsWith('/')) {
+    return true
+  }
+
+  if (moduleName.includes('/') && !moduleName.includes('node_modules/') && !moduleName.startsWith('@')) {
+    return true
+  }
+
+  return false
 }
 
 function addSecurityControls (data) {
@@ -52,3 +77,22 @@ function addExclusions (data) {
 
 export { initialize }
 export { load, getFormat, resolve, getSource } from 'import-in-the-middle/hook.mjs'
+
+function resolveFilePath (moduleName) {
+  let candidate
+
+  // For now we only want to support path resolution for prisma
+  if (moduleName === prismaOutput) {
+    candidate = prismaOutput
+  }
+
+  if (!candidate) {
+    return null
+  }
+
+  if (path.isAbsolute(candidate)) {
+    return candidate
+  }
+
+  return path.resolve(candidate)
+}

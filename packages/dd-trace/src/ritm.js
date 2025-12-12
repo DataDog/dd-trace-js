@@ -13,6 +13,7 @@ const origRequire = Module.prototype.require
 module.exports = Hook
 
 let moduleHooks = Object.create(null)
+const pathModuleHooks = new Set()
 let cache = Object.create(null)
 let patching = Object.create(null)
 let patchedRequire = null
@@ -44,6 +45,7 @@ function Hook (modules, options, onrequire) {
       if (hooks) {
         hooks.push(onrequire)
       } else {
+        if (path.isAbsolute(mod)) pathModuleHooks.add(mod)
         moduleHooks[mod] = [onrequire]
       }
     }
@@ -64,7 +66,6 @@ function Hook (modules, options, onrequire) {
     } catch {
       return _origRequire.apply(this, arguments)
     }
-
     const core = !filename.includes(path.sep)
     let name, basedir, hooks
     // return known patched modules immediately
@@ -117,32 +118,63 @@ function Hook (modules, options, onrequire) {
       // decide how to assign the stat
       // first case will only happen when patching an AWS Lambda Handler
       const stat = inAWSLambda && hasLambdaHandler && !filenameFromNodeModule ? { name: filename } : parse(filename)
-      if (!stat) return exports // abort if filename could not be parsed
-      name = stat.name
-      basedir = stat.basedir
 
-      hooks = moduleHooks[name]
-      if (!hooks) return exports // abort if module name isn't on whitelist
+      let absolutePathModuleMatch = false
+      if (stat) {
+        name = stat.name
+        basedir = stat.basedir
+
+        hooks = moduleHooks[name]
+        if (!hooks) return exports // abort if module name isn't on whitelist
+      } else {
+        // check if the full filename if the filename was registered, if not then prefix matching will be done
+        hooks = moduleHooks[filename]
+
+        if (!hooks && pathModuleHooks.size > 0) {
+          // For absolute path modules, check if any registered module is a prefix of this filename,
+          // since hooks can specify files that we don't have at register time
+          for (const registeredModule of pathModuleHooks) {
+            if (filename.startsWith(registeredModule + path.sep)) {
+              hooks = moduleHooks[registeredModule]
+              name = filename
+              basedir = registeredModule
+              absolutePathModuleMatch = true
+              break
+            }
+          }
+        }
+
+        if (!hooks) return exports // abort if filename isn't on whitelist
+
+        if (!name) {
+          name = filename
+          basedir = path.dirname(filename)
+        }
+      }
 
       // figure out if this is the main module file, or a file inside the module
-      const paths = Module._resolveLookupPaths(name, this, true)
-      if (!paths) {
-        // abort if _resolveLookupPaths return null
-        return exports
-      }
+      // Skip this for absolute paths since it won't work as it's itended for node modules
 
-      let res
-      try {
-        res = Module._findPath(name, [basedir, ...paths])
-      } catch {
-        // case where the file specified in package.json "main" doesn't exist
-        // in this case, the file is treated as module-internal
-      }
+      if (!absolutePathModuleMatch) {
+        const paths = Module._resolveLookupPaths(name, this, true)
+        if (!paths) {
+          // abort if _resolveLookupPaths return null
+          return exports
+        }
 
-      if (!res || res !== filename) {
-        // this is a module-internal file
-        // use the module-relative path to the file, prefixed by original module name
-        name = name + path.sep + path.relative(basedir, filename)
+        let res
+        try {
+          res = Module._findPath(name, [basedir, ...paths])
+        } catch {
+          // case where the file specified in package.json "main" doesn't exist
+          // in this case, the file is treated as module-internal
+        }
+
+        if (!res || res !== filename) {
+          // this is a module-internal file
+          // use the module-relative path to the file, prefixed by original module name
+          name = name + path.sep + path.relative(basedir, filename)
+        }
       }
     }
 
