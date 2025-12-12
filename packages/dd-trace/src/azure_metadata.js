@@ -38,6 +38,7 @@ function buildMetadata () {
   const {
     COMPUTERNAME,
     DD_AAS_DOTNET_EXTENSION_VERSION,
+    DD_AZURE_RESOURCE_GROUP,
     FUNCTIONS_EXTENSION_VERSION,
     FUNCTIONS_WORKER_RUNTIME,
     FUNCTIONS_WORKER_RUNTIME_VERSION,
@@ -45,7 +46,8 @@ function buildMetadata () {
     WEBSITE_OWNER_NAME,
     WEBSITE_OS,
     WEBSITE_RESOURCE_GROUP,
-    WEBSITE_SITE_NAME
+    WEBSITE_SITE_NAME,
+    WEBSITE_SKU
   } = getEnvironmentVariables()
 
   const subscriptionID = extractSubscriptionID(WEBSITE_OWNER_NAME)
@@ -56,7 +58,12 @@ function buildMetadata () {
     ? ['functionapp', 'function']
     : ['app', 'app']
 
-  const resourceGroup = WEBSITE_RESOURCE_GROUP ?? extractResourceGroup(WEBSITE_OWNER_NAME)
+  // Azure Functions on Flex Consumption plans need the `DD_AZURE_RESOURCE_GROUP` env var.
+  // If this logic ever changes, update the logic in `serverless-components/src/datadog-trace-agent`
+  // and the serverless compat layers accordingly.
+  const resourceGroup = (getIsAzureFunction() && WEBSITE_SKU === 'FlexConsumption')
+    ? DD_AZURE_RESOURCE_GROUP
+    : WEBSITE_RESOURCE_GROUP ?? extractResourceGroup(WEBSITE_OWNER_NAME)
 
   return trimObject({
     extensionVersion: DD_AAS_DOTNET_EXTENSION_VERSION,
