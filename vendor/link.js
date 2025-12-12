@@ -20,7 +20,11 @@ function addPackageJson (root) {
 
     if (!existsSync(join(folder, 'index.js'))) continue
 
-    const pkg = { name, version: '0.0.0' }
+    const pkg = {
+      name,
+      version: '0.0.0',
+      main: "index.js"
+    }
 
     writeFileSync(filename, JSON.stringify(pkg, null, 2) + '\n')
   }
