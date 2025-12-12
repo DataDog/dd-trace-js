@@ -4,13 +4,14 @@ const assert = require('node:assert/strict')
 const { rejects } = require('node:assert/strict')
 
 const msgpack = require('@msgpack/msgpack')
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const NoopAIGuard = require('../../src/aiguard/noop')
 const AIGuard = require('../../src/aiguard/sdk')
 const agent = require('../plugins/agent')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+
 const tracerVersion = require('../../../../package.json').version
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
@@ -129,7 +130,7 @@ describe('AIGuard SDK', () => {
     await agent.assertFirstTraceSpan(span => {
       assert.strictEqual(span.name, 'ai_guard')
       assert.strictEqual(span.resource, 'ai_guard')
-      expect(span.meta).to.deep.include(meta)
+      assertObjectContains(span.meta, meta)
       if (metaStruct) {
         assert.deepStrictEqual(msgpack.decode(span.meta_struct.ai_guard), metaStruct)
       }

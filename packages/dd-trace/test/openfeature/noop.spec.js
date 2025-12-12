@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 
 require('../setup/core')
@@ -138,10 +136,10 @@ describe('NoopFlaggingProvider', () => {
       const numberResult = noopProvider.resolveNumberEvaluation('test', 42, {}, {})
       const objectResult = noopProvider.resolveObjectEvaluation('test', {}, {}, {})
 
-      expect(booleanResult).to.be.a('promise')
-      expect(stringResult).to.be.a('promise')
-      expect(numberResult).to.be.a('promise')
-      expect(objectResult).to.be.a('promise')
+      assert.ok(booleanResult && typeof booleanResult.then === 'function')
+      assert.ok(stringResult && typeof stringResult.then === 'function')
+      assert.ok(numberResult && typeof numberResult.then === 'function')
+      assert.ok(objectResult && typeof objectResult.then === 'function')
     })
 
     it('should resolve promises immediately', async () => {

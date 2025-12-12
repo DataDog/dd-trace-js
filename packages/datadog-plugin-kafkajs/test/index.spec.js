@@ -1,6 +1,8 @@
 'use strict'
 
-const { randomUUID } = require('crypto')
+const assert = require('node:assert/strict')
+const { randomUUID } = require('node:crypto')
+
 const { expect } = require('chai')
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before } = require('mocha')
@@ -16,6 +18,7 @@ const { expectedSchema, rawExpectedSchema } = require('./naming')
 const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
 
@@ -128,18 +131,17 @@ describe('Plugin', () => {
             const expectedSpanPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(span).to.include({
+              assertObjectContains(span, {
                 name: resourceName,
                 service: expectedSchema.send.serviceName,
                 resource: resourceName,
-                error: 1
-              })
-
-              expect(span.meta).to.include({
-                [ERROR_TYPE]: error.name,
-                [ERROR_MESSAGE]: error.message,
-                [ERROR_STACK]: error.stack,
-                component: 'kafkajs'
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'kafkajs'
+                }
               })
             })
 
@@ -213,20 +215,16 @@ describe('Plugin', () => {
             })
 
             it('should hit an error for the first send and not inject headers in later sends', async () => {
-              try {
-                await producer.send({ topic: testTopic, messages })
-                expect(true).to.be.false('First producer.send() should have thrown an error')
-              } catch (e) {
-                expect(e).to.equal(error)
-              }
+              await assert.rejects(producer.send({ topic: testTopic, messages }), error)
+
               expect(messages[0].headers).to.have.property('x-datadog-trace-id')
 
               // restore the stub to allow the next send to succeed
               sendRequestStub.restore()
 
               const result2 = await producer.send({ topic: testTopic, messages: messages2 })
-              expect(messages2[0].headers).to.be.undefined
-              expect(result2[0].errorCode).to.equal(0)
+              assert.strictEqual(messages2[0].headers, undefined)
+              assert.strictEqual(result2[0].errorCode, 0)
             })
           })
 
@@ -278,8 +276,8 @@ describe('Plugin', () => {
               const currentSpan = tracer.scope().active()
 
               try {
-                expect(currentSpan).to.not.equal(firstSpan)
-                expect(currentSpan.context()._name).to.equal(expectedSchema.receive.opName)
+                assert.notDeepStrictEqual(currentSpan, firstSpan)
+                assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
                 done()
               } catch (e) {
                 done(e)
@@ -297,13 +295,13 @@ describe('Plugin', () => {
             const expectedSpanPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(span).to.include({
+              assertObjectContains(span, {
                 name: 'kafka.consume',
                 service: 'test-kafka',
                 resource: testTopic
               })
 
-              expect(parseInt(span.parent_id.toString())).to.be.gt(0)
+              assert.ok(parseInt(span.parent_id.toString()) > 0)
             })
 
             await consumer.run({ eachMessage: () => {} })
@@ -342,7 +340,7 @@ describe('Plugin', () => {
           it('should run constructor even if no eachMessage supplied', (done) => {
             let eachBatch = async ({ batch }) => {
               try {
-                expect(batch.isEmpty()).to.be.false
+                assert.strictEqual(batch.isEmpty(), false)
                 done()
               } catch (e) {
                 done(e)
@@ -366,25 +364,25 @@ describe('Plugin', () => {
             const afterStart = dc.channel('dd-trace:kafkajs:consumer:afterStart')
 
             const spy = sinon.spy((ctx) => {
-              expect(ctx.currentStore.span).to.not.be.null
+              assert.ok(ctx.currentStore.span)
               afterStart.unsubscribe(spy)
             })
             afterStart.subscribe(spy)
 
             let eachMessage = async ({ topic, partition, message }) => {
               try {
-                expect(spy).to.have.been.calledOnce
+                assert.strictEqual(spy.callCount, 1)
 
                 const channelMsg = spy.firstCall.args[0]
-                expect(channelMsg).to.not.undefined
-                expect(channelMsg.topic).to.eq(testTopic)
-                expect(channelMsg.message.key).to.not.undefined
-                expect(channelMsg.message.key.toString()).to.eq(messages[0].key)
-                expect(channelMsg.message.value).to.not.undefined
-                expect(channelMsg.message.value.toString()).to.eq(messages[0].value)
+                assert.ok(channelMsg)
+                assert.strictEqual(channelMsg.topic, testTopic)
+                assert.ok(channelMsg.message.key)
+                assert.strictEqual(channelMsg.message.key.toString(), messages[0].key)
+                assert.ok(channelMsg.message.value)
+                assert.strictEqual(channelMsg.message.value.toString(), messages[0].value)
 
                 const name = spy.firstCall.args[1]
-                expect(name).to.eq(afterStart.name)
+                assert.strictEqual(name, afterStart.name)
 
                 done()
               } catch (e) {
@@ -402,7 +400,7 @@ describe('Plugin', () => {
             const beforeFinish = dc.channel('dd-trace:kafkajs:consumer:beforeFinish')
 
             const spy = sinon.spy(() => {
-              expect(tracer.scope().active()).to.not.be.null
+              assert.ok(tracer.scope().active())
               beforeFinish.unsubscribe(spy)
             })
             beforeFinish.subscribe(spy)
@@ -469,7 +467,7 @@ describe('Plugin', () => {
             it('Should set a checkpoint on produce', async () => {
               const messages = [{ key: 'consumerDSM1', value: 'test2' }]
               await sendMessages(kafka, testTopic, messages)
-              expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
+              assert.strictEqual(setDataStreamsContextSpy.args[0][0].hash, expectedProducerHash)
             })
 
             it('Should set a checkpoint on consume (eachMessage)', async () => {
@@ -482,7 +480,7 @@ describe('Plugin', () => {
               await sendMessages(kafka, testTopic, messages)
               await consumer.disconnect()
               for (const runArg of runArgs) {
-                expect(runArg.hash).to.equal(expectedConsumerHash)
+                assert.strictEqual(runArg.hash, expectedConsumerHash)
               }
             })
 
@@ -496,7 +494,7 @@ describe('Plugin', () => {
               await sendMessages(kafka, testTopic, messages)
               await consumer.disconnect()
               for (const runArg of runArgs) {
-                expect(runArg.hash).to.equal(expectedConsumerHash)
+                assert.strictEqual(runArg.hash, expectedConsumerHash)
               }
             })
 
@@ -507,7 +505,7 @@ describe('Plugin', () => {
               }
               const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
               await sendMessages(kafka, testTopic, messages)
-              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+              assert.ok(Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'))
               recordCheckpointSpy.restore()
             })
 
@@ -520,7 +518,7 @@ describe('Plugin', () => {
               await sendMessages(kafka, testTopic, messages)
               await consumer.run({
                 eachMessage: async () => {
-                  expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+                  assert.ok(Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'))
                   recordCheckpointSpy.restore()
                 }
               })
@@ -592,7 +590,7 @@ describe('Plugin', () => {
               await sendMessages(kafka, testTopic, messages)
               expect(setOffsetSpy).to.be.calledOnce
               const { topic } = setOffsetSpy.lastCall.args[0]
-              expect(topic).to.equal(testTopic)
+              assert.strictEqual(topic, testTopic)
             })
           })
         })

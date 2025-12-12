@@ -2516,10 +2516,10 @@ describe('Config', () => {
     })
     it('does not crash if git.properties is not available', () => {
       process.env.DD_GIT_PROPERTIES_FILE = '/does/not/exist'
-      expect(() => {
-        const config = getConfig({})
-        expect(config).to.be.an('object')
-      }).to.not.throw()
+
+      // Should not throw
+      const config = getConfig({})
+      expect(config).to.be.an('object')
     })
     it('does not read git.properties if env vars are passed', () => {
       process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
@@ -2556,10 +2556,10 @@ describe('Config', () => {
     })
     it('does not crash if .git/ folder is not available', () => {
       process.env.DD_GIT_FOLDER_PATH = '/does/not/exist/'
-      expect(() => {
-        const config = getConfig({})
-        expect(config).to.be.an('object')
-      }).to.not.throw()
+
+      // Should not throw
+      const config = getConfig({})
+      expect(config).to.be.an('object')
     })
     it('does not read .git/ folder if env vars are passed', () => {
       process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH

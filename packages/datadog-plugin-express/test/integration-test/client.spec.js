@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const {
   FakeAgent,
   curlAndAssertMessage,
@@ -9,7 +11,6 @@ const {
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
 const semver = require('semver')
 
 describe('esm', () => {
@@ -43,13 +44,13 @@ describe('esm', () => {
             : 'router'
 
           return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-            assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-            assert.isArray(payload)
+            assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+            assert.ok(Array.isArray(payload))
             assert.strictEqual(payload.length, 1)
-            assert.isArray(payload[0])
+            assert.ok(Array.isArray(payload[0]))
             assert.strictEqual(payload[0].length, numberOfSpans)
-            assert.propertyVal(payload[0][0], 'name', 'express.request')
-            assert.propertyVal(payload[0][1], 'name', `${whichMiddleware}.middleware`)
+            assert.strictEqual(payload[0][0].name, 'express.request')
+            assert.strictEqual(payload[0][1].name, `${whichMiddleware}.middleware`)
           })
         }).timeout(50000)
       })
@@ -68,12 +69,12 @@ describe('esm', () => {
           const numberOfSpans = 1
 
           return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-            assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-            assert.isArray(payload)
+            assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+            assert.ok(Array.isArray(payload))
             assert.strictEqual(payload.length, 1)
-            assert.isArray(payload[0])
+            assert.ok(Array.isArray(payload[0]))
             assert.strictEqual(payload[0].length, numberOfSpans)
-            assert.propertyVal(payload[0][0], 'name', 'express.request')
+            assert.strictEqual(payload[0][0].name, 'express.request')
           })
         }).timeout(50000)
       })

@@ -3,12 +3,10 @@
 const assert = require('node:assert')
 const { once } = require('node:events')
 
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-
 describe('Plugin', () => {
   let WebSocket
   let wsServer
@@ -357,7 +355,7 @@ describe('Plugin', () => {
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0].meta).to.not.have.property('_dd.dm.inherited', 1)
+            assert.ok(!('_dd.dm.inherited' in traces[0][0].meta) || traces[0][0].meta['_dd.dm.inherited'] !== 1)
             assert.strictEqual(traces[0][0].meta['span.kind'], 'consumer')
             assert.strictEqual(traces[0][0].name, 'websocket.receive')
             assert.strictEqual(traces[0][0].type, 'websocket')

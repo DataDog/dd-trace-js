@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it } = require('mocha')
 require('../../setup/mocha')
 
@@ -15,7 +14,7 @@ describe('JSONBuffer', () => {
     const onFlush = (json) => {
       const diff = Date.now() - start
       assert.strictEqual(json, '[{"message":1},{"message":2},{"message":3}]')
-      expect(diff).to.be.within(95, 110)
+      assert.ok(((diff) >= (95) && (diff) <= (110)))
       done()
     }
 

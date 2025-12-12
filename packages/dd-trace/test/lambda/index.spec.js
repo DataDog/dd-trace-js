@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../plugins/agent')
@@ -94,7 +93,7 @@ describe('lambda', () => {
       // Expect traces to be correct.
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
           assert.strictEqual(trace.error, 0)
         })
@@ -131,7 +130,7 @@ describe('lambda', () => {
       // Expect traces to be correct.
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
           assert.strictEqual(trace.error, 0)
         })
@@ -165,7 +164,7 @@ describe('lambda', () => {
       // Expect traces to be correct.
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
           assert.strictEqual(trace.error, 1)
         })
@@ -196,7 +195,7 @@ describe('lambda', () => {
 
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
           assert.strictEqual(trace.error, 0)
         })
