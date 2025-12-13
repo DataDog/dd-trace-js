@@ -212,8 +212,8 @@ let enableEsmRewriter = function (telemetryVerbosity) {
       }
     })
 
-    port1.unref()
-    port2.unref()
+    port1.unref?.()
+    port2.unref?.()
 
     try {
       Module.register('./rewriter-esm.mjs', {
