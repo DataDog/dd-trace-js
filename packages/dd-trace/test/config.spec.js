@@ -281,6 +281,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 30)
     expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionEnabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionMessageLimit', 300)
+    expect(config).to.have.nested.property('appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate', 0.5)
+    expect(config).to.have.nested.property('appsec.apiSecurity.maxDownstreamRequestBodyAnalysis', 1)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', undefined)
@@ -380,6 +382,8 @@ describe('Config', () => {
       { name: 'appsec.apiSecurity.sampleDelay', value: 30, origin: 'default' },
       { name: 'appsec.apiSecurity.endpointCollectionEnabled', value: true, origin: 'default' },
       { name: 'appsec.apiSecurity.endpointCollectionMessageLimit', value: 300, origin: 'default' },
+      { name: 'appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate', value: 0.5, origin: 'default' },
+      { name: 'appsec.apiSecurity.maxDownstreamRequestBodyAnalysis', value: 1, origin: 'default' },
       { name: 'appsec.blockedTemplateHtml', value: undefined, origin: 'default' },
       { name: 'appsec.blockedTemplateJson', value: undefined, origin: 'default' },
       { name: 'appsec.enabled', value: undefined, origin: 'default' },
@@ -569,6 +573,8 @@ describe('Config', () => {
     process.env.DD_API_SECURITY_SAMPLE_DELAY = '25'
     process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED = 'false'
     process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT = '500'
+    process.env.DD_API_SECURITY_DOWNSTREAM_REQUEST_BODY_ANALYSIS_SAMPLE_RATE = '0.75'
+    process.env.DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS = '2'
     process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_APP_KEY = 'myAppKey'
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
@@ -690,6 +696,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 25)
     expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionEnabled', false)
     expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionMessageLimit', 500)
+    expect(config).to.have.nested.property('appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate', 0.75)
+    expect(config).to.have.nested.property('appsec.apiSecurity.maxDownstreamRequestBodyAnalysis', 2)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
@@ -806,6 +814,8 @@ describe('Config', () => {
       { name: 'appsec.apiSecurity.sampleDelay', value: 25, origin: 'env_var' },
       { name: 'appsec.apiSecurity.endpointCollectionEnabled', value: false, origin: 'env_var' },
       { name: 'appsec.apiSecurity.endpointCollectionMessageLimit', value: 500, origin: 'env_var' },
+      { name: 'appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate', value: 0.75, origin: 'env_var' },
+      { name: 'appsec.apiSecurity.maxDownstreamRequestBodyAnalysis', value: 2, origin: 'env_var' },
       { name: 'appsec.blockedTemplateHtml', value: BLOCKED_TEMPLATE_HTML_PATH, origin: 'env_var' },
       { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON_PATH, origin: 'env_var' },
       { name: 'appsec.enabled', value: true, origin: 'env_var' },
@@ -1823,7 +1833,9 @@ describe('Config', () => {
         enabled: true,
         sampleDelay: 30,
         endpointCollectionEnabled: true,
-        endpointCollectionMessageLimit: 500
+        endpointCollectionMessageLimit: 500,
+        downstreamRequestBodyAnalysisSampleRate: 0.5,
+        maxDownstreamRequestBodyAnalysis: 1
       },
       blockedTemplateGraphql: undefined,
       blockedTemplateHtml: undefined,
