@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout (minimal)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           sparse-checkout: |
             .github
@@ -96,7 +96,7 @@ jobs:
           done
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: cache-forensics-batch-${{ github.run_number }}
