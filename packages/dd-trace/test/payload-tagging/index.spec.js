@@ -199,6 +199,19 @@ describe('Tagging orchestration', () => {
     assert.strictEqual(tags[`${PAYLOAD_TAG_RESPONSE_PREFIX}.request`], 'foo')
   })
 
+  it('should not fail if the response config contains invalid config', () => {
+    const config = {
+      request: ['$.'],
+      response: ['$.response'],
+      expand: []
+    }
+    const input = {
+      response: 'bar'
+    }
+    const tags = computeTags(config, input, { maxDepth: 10, prefix: PAYLOAD_TAG_RESPONSE_PREFIX })
+    assert.strictEqual(tags[`${PAYLOAD_TAG_RESPONSE_PREFIX}.response`], 'redacted')
+  })
+
   it('should apply expansion rules', () => {
     const config = {
       request: [],
