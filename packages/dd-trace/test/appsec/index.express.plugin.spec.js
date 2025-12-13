@@ -61,7 +61,7 @@ withVersions('express', 'express', version => {
       app.param('callbackedParameter', paramCallbackSpy)
 
       server = app.listen(0, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -210,7 +210,7 @@ withVersions('express', 'express', version => {
       })
 
       server = app.listen(0, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -287,7 +287,7 @@ withVersions('express', 'express', version => {
       })
 
       server = app.listen(0, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -332,7 +332,7 @@ withVersions('express', 'express', version => {
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.ok(Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
-          assert.ok(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'))
+          assert.ok(!('_dd.appsec.s.res.body' in span.meta))
           assert.equal(span.meta['_dd.appsec.s.req.body'], expectedRequestBodySchema)
         })
 

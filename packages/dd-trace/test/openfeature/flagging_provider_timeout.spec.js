@@ -1,10 +1,11 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
+const assert = require('node:assert/strict')
+
 const { ProviderEvents } = require('@openfeature/server-sdk')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 require('../setup/mocha')
 
@@ -75,8 +76,8 @@ describe('FlaggingProvider Initialization Timeout', () => {
     })
 
     // Verify initialization is in progress
-    expect(provider.initController).to.exist
-    expect(provider.initController.isInitializing()).to.be.true
+    assert.ok(provider.initController != null)
+    assert.strictEqual(provider.initController.isInitializing(), true)
 
     // Advance time by 30 seconds (default timeout) and run pending promises
     await clock.tickAsync(30000)
@@ -85,7 +86,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
     await initPromise.catch(() => {})
 
     // Verify initialization is no longer in progress
-    expect(provider.initController.isInitializing()).to.be.false
+    assert.strictEqual(provider.initController.isInitializing(), false)
   })
 
   it('should not timeout if configuration is set before 30 seconds', async () => {
@@ -95,7 +96,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
     const initPromise = provider.initialize()
 
     // Verify initialization is in progress
-    expect(provider.initController.isInitializing()).to.be.true
+    assert.strictEqual(provider.initController.isInitializing(), true)
 
     // Advance time by 20 seconds (before timeout)
     await clock.tickAsync(20000)
@@ -118,8 +119,8 @@ describe('FlaggingProvider Initialization Timeout', () => {
     await initPromise
 
     // Verify initialization completed successfully
-    expect(provider.initController.isInitializing()).to.be.false
-    expect(provider.getConfiguration()).to.equal(ufc)
+    assert.strictEqual(provider.initController.isInitializing(), false)
+    assert.strictEqual(provider.getConfiguration(), ufc)
   })
 
   it('should call setError with timeout message after 30 seconds', async () => {
@@ -141,11 +142,10 @@ describe('FlaggingProvider Initialization Timeout', () => {
     await initPromise.catch(() => {})
 
     // Verify setError was called with timeout error
-    expect(setErrorSpy).to.have.been.calledOnce
+    sinon.assert.calledOnce(setErrorSpy)
     const errorArg = setErrorSpy.firstCall.args[0]
-    expect(errorArg).to.be.instanceOf(Error)
-    expect(errorArg.message).to.include('Initialization timeout')
-    expect(errorArg.message).to.include('30000ms')
+    assert.ok(errorArg instanceof Error)
+    assert.strictEqual(errorArg.message, 'Initialization timeout after 30000ms')
   })
 
   it('should allow recovery if configuration is set after timeout', async () => {
@@ -169,15 +169,15 @@ describe('FlaggingProvider Initialization Timeout', () => {
     await initPromise.catch(() => {})
 
     // Configuration is still not set
-    expect(provider.getConfiguration()).to.be.undefined
+    assert.strictEqual(provider.getConfiguration(), undefined)
 
     // Now set configuration after timeout
     const ufc = { flags: { 'recovery-flag': {} } }
     provider._setConfiguration(ufc)
 
     // Should emit READY event to signal recovery
-    expect(readyEventSpy).to.have.been.calledOnce
-    expect(provider.getConfiguration()).to.equal(ufc)
+    sinon.assert.calledOnce(readyEventSpy)
+    assert.strictEqual(provider.getConfiguration(), ufc)
   })
 
   describe('custom timeout configuration', () => {
@@ -202,13 +202,13 @@ describe('FlaggingProvider Initialization Timeout', () => {
       })
 
       // Verify initialization is in progress
-      expect(provider.initController.isInitializing()).to.be.true
+      assert.strictEqual(provider.initController.isInitializing(), true)
 
       // Advance time by 4.9 seconds (before custom timeout)
       await clock.tickAsync(4900)
 
       // Should still be initializing
-      expect(provider.initController.isInitializing()).to.be.true
+      assert.strictEqual(provider.initController.isInitializing(), true)
 
       // Advance by another 200ms to trigger the 5-second timeout
       await clock.tickAsync(200)
@@ -217,7 +217,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
       await initPromise.catch(() => {})
 
       // Should now be timed out
-      expect(provider.initController.isInitializing()).to.be.false
+      assert.strictEqual(provider.initController.isInitializing(), false)
     })
 
     it('should call setError with custom timeout value in message', async () => {
@@ -249,11 +249,10 @@ describe('FlaggingProvider Initialization Timeout', () => {
       await initPromise.catch(() => {})
 
       // Verify setError was called with custom timeout error
-      expect(setErrorSpy).to.have.been.calledOnce
+      sinon.assert.calledOnce(setErrorSpy)
       const errorArg = setErrorSpy.firstCall.args[0]
-      expect(errorArg).to.be.instanceOf(Error)
-      expect(errorArg.message).to.include('Initialization timeout')
-      expect(errorArg.message).to.include('10000ms')
+      assert.ok(errorArg instanceof Error)
+      assert.strictEqual(errorArg.message, 'Initialization timeout after 10000ms')
     })
   })
 })

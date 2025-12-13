@@ -7,7 +7,7 @@ const { getLocalStateForCallFrame } = require('./snapshot')
 const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
 const { ackEmitting } = require('./status')
-const { parentThreadId } = require('./config')
+const config = require('./config')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
 const log = require('./log')
 const { version } = require('../../../../../package.json')
@@ -33,8 +33,8 @@ const getDDTagsExpression = `(() => {
 
 // There doesn't seem to be an official standard for the content of these fields, so we're just populating them with
 // something that should be useful to a Node.js developer.
-const threadId = parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${parentThreadId}`
-const threadName = parentThreadId === 0 ? 'MainThread' : `WorkerThread:${parentThreadId}`
+const threadId = config.parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${config.parentThreadId}`
+const threadName = config.parentThreadId === 0 ? 'MainThread' : `WorkerThread:${config.parentThreadId}`
 
 const SUPPORT_ARRAY_BUFFER_RESIZE = NODE_MAJOR >= 20
 const oneSecondNs = 1_000_000_000n
@@ -46,6 +46,7 @@ let snapshotProbeIndexBuffer, snapshotProbeIndex
 
 if (SUPPORT_ARRAY_BUFFER_RESIZE) {
   // TODO: Is a limit of 256 snapshots ever going to be a problem?
+  // @ts-ignore - ArrayBuffer constructor with maxByteLength is available in Node.js 20+ but not in @types/node@18
   // eslint-disable-next-line n/no-unsupported-features/es-syntax
   snapshotProbeIndexBuffer = new ArrayBuffer(1, { maxByteLength: 256 })
   // TODO: Is a limit of 256 probes ever going to be a problem?
@@ -165,13 +166,20 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
-  const processLocalState = numberOfProbesWithSnapshots !== 0 && await getLocalStateForCallFrame(
-    params.callFrames[0],
-    { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength }
-  )
+  let processLocalState, captureErrors
+  if (numberOfProbesWithSnapshots !== 0) {
+    const opts = {
+      maxReferenceDepth,
+      maxCollectionSize,
+      maxFieldCount,
+      maxLength,
+      deadlineNs: start + config.dynamicInstrumentation.captureTimeoutNs
+    }
+    ;({ processLocalState, captureErrors } = await getLocalStateForCallFrame(params.callFrames[0], opts))
+  }
 
   await session.post('Debugger.resume')
-  const diff = process.hrtime.bigint() - start // TODO: Recored as telemetry (DEBUG-2858)
+  const diff = process.hrtime.bigint() - start // TODO: Recorded as telemetry (DEBUG-2858)
 
   // This doesn't measure the overhead of the CDP protocol. The actual pause time is slightly larger.
   // On my machine I'm seeing around 1.7ms of overhead.
@@ -208,14 +216,21 @@ session.on('Debugger.paused', async ({ params }) => {
     }
 
     if (probe.captureSnapshot) {
-      const state = processLocalState()
-      if (state instanceof Error) {
-        snapshot.captureError = state.message
-      } else if (state) {
-        snapshot.captures = {
-          lines: { [probe.location.lines[0]]: { locals: state } }
-        }
+      if (captureErrors?.length > 0) {
+        // There was an error collecting the snapshot for this probe, let's not try again
+        probe.captureSnapshot = false
+        probe.permanentEvaluationErrors = captureErrors.map(error => ({
+          expr: '',
+          message: error.message
+        }))
       }
+      snapshot.captures = {
+        lines: { [probe.location.lines[0]]: { locals: processLocalState() } }
+      }
+    }
+
+    if (probe.permanentEvaluationErrors !== undefined) {
+      snapshot.evaluationErrors = [...probe.permanentEvaluationErrors]
     }
 
     let message = ''

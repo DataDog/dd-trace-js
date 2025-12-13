@@ -12,13 +12,13 @@ function run () {
     [nonNormalizedSecretToken]: 'shh!',
     nested: { secret: 'shh!' },
     arr: [{ secret: 'shh!' }],
-    map: new Map([
+    map: new Map(/** @type {Array<[string | symbol, string]>} */ ([
       ['foo', 'bar'],
       ['secret', 'shh!'],
       [nonNormalizedSecretToken, 'shh!'],
       [Symbol('secret'), 'shh!'],
       [Symbol(nonNormalizedSecretToken), 'shh!']
-    ]),
+    ])),
     weakmap: new WeakMap([[weakMapKey, 42]]),
     [Symbol('secret')]: 'shh!',
     [Symbol(nonNormalizedSecretToken)]: 'shh!'

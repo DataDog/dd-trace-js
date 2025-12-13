@@ -119,11 +119,11 @@ addHook({ name: 'bluebird', versions: ['*'] }, Promise => {
       it('should not instrument the package', () =>
         runTest(
           log => {
-            assert.ok(log.includes(`
-Error during ddtrace instrumentation of application, aborting.
-ReferenceError: this is a test error
-    at `))
-            assert.ok(log.includes('\nfalse\n'))
+            assert.match(
+              log,
+              /\nError during ddtrace instrumentation of application, aborting.\nReferenceError: this is a test error\n {4}at /m
+            )
+            assert.match(log, /\nfalse\n/)
           }, []))
     })
   })

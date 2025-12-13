@@ -1,21 +1,21 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   describe('source map support', function () {
-    describe('Different file extention (TypeScript)', function () {
+    describe('Different file extension (TypeScript)', function () {
       const t = setup({
         testApp: 'target-app/source-map-support/typescript.js',
         testAppSource: 'target-app/source-map-support/typescript.ts'
       })
 
-      beforeEach(t.triggerBreakpoint)
+      beforeEach(() => { t.triggerBreakpoint() })
 
       it('should support source maps', function (done) {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
-          assert.deepEqual(location, {
+          assert.deepStrictEqual(location, {
             file: 'target-app/source-map-support/typescript.ts',
             lines: ['11']
           })
@@ -32,13 +32,13 @@ describe('Dynamic Instrumentation', function () {
         testAppSource: 'target-app/source-map-support/minify.js'
       })
 
-      beforeEach(t.triggerBreakpoint)
+      beforeEach(() => { t.triggerBreakpoint() })
 
       it('should support source maps', function (done) {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
-          assert.deepEqual(location, {
+          assert.deepStrictEqual(location, {
             file: 'target-app/source-map-support/minify.js',
-            lines: ['8']
+            lines: ['9']
           })
           done()
         })
@@ -56,11 +56,11 @@ describe('Dynamic Instrumentation', function () {
         dependencies: []
       })
 
-      beforeEach(t.triggerBreakpoint)
+      beforeEach(() => { t.triggerBreakpoint() })
 
       it('should support relative source paths in source maps', function (done) {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
-          assert.deepEqual(location, {
+          assert.deepStrictEqual(location, {
             file: 'target-app/source-map-support/hello/world.ts',
             lines: ['2']
           })

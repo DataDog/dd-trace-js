@@ -1,15 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-const sinon = require('sinon')
-
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-
 /**
  * `@google-cloud/vertexai` uses `fetch` to call against their API, which cannot
  * be stubbed with `nock`. This function allows us to stub the `fetch` function
@@ -102,29 +101,29 @@ describe('Plugin', () => {
           const checkTraces = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
-            expect(span).to.have.property('name', 'vertexai.request')
-            expect(span).to.have.property('resource', 'GenerativeModel.generateContent')
-            expect(span.meta).to.have.property('span.kind', 'client')
+            assert.strictEqual(span.name, 'vertexai.request')
+            assert.strictEqual(span.resource, 'GenerativeModel.generateContent')
+            assert.strictEqual(span.meta['span.kind'], 'client')
 
-            expect(span.meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
+            assert.strictEqual(span.meta['vertexai.request.model'], 'gemini-1.5-flash-002')
           })
 
           const { response } = await model.generateContent({
             contents: [{ role: 'user', parts: [{ text: 'Hello, how are you?' }] }]
           })
-          expect(response).to.have.property('candidates')
+          assert.ok(Object.hasOwn(response, 'candidates'))
 
           await checkTraces
         })
 
         it('makes a successful call with a string argument', async () => {
           const checkTraces = agent.assertSomeTraces(traces => {
-            expect(traces[0][0].meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
+            assert.strictEqual(traces[0][0].meta['vertexai.request.model'], 'gemini-1.5-flash-002')
           })
 
           const { response } = await model.generateContent('Hello, how are you?')
 
-          expect(response).to.have.property('candidates')
+          assert.ok(Object.hasOwn(response, 'candidates'))
 
           await checkTraces
         })
@@ -136,7 +135,7 @@ describe('Plugin', () => {
             const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(span.meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
+              assert.strictEqual(span.meta['vertexai.request.model'], 'gemini-1.5-flash-002')
             })
 
             await model.generateContent('what is 2 + 2?')
@@ -153,27 +152,27 @@ describe('Plugin', () => {
           const checkTraces = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
-            expect(span).to.have.property('name', 'vertexai.request')
-            expect(span).to.have.property('resource', 'GenerativeModel.generateContentStream')
-            expect(span.meta).to.have.property('span.kind', 'client')
+            assert.strictEqual(span.name, 'vertexai.request')
+            assert.strictEqual(span.resource, 'GenerativeModel.generateContentStream')
+            assert.strictEqual(span.meta['span.kind'], 'client')
 
-            expect(span.meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
+            assert.strictEqual(span.meta['vertexai.request.model'], 'gemini-1.5-flash-002')
           })
 
           const { stream, response } = await model.generateContentStream('Hello, how are you?')
 
           // check that response is a promise
-          expect(response).to.be.a('promise')
+          assert.ok(response && typeof response.then === 'function')
 
           const promState = await promiseState(response)
-          expect(promState).to.equal('pending') // we shouldn't have consumed the promise
+          assert.strictEqual(promState, 'pending') // we shouldn't have consumed the promise
 
           for await (const chunk of stream) {
-            expect(chunk).to.have.property('candidates')
+            assert.ok(Object.hasOwn(chunk, 'candidates'))
           }
 
           const result = await response
-          expect(result).to.have.property('candidates')
+          assert.ok(Object.hasOwn(result, 'candidates'))
 
           await checkTraces
         })
@@ -187,11 +186,11 @@ describe('Plugin', () => {
             const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(span).to.have.property('name', 'vertexai.request')
-              expect(span).to.have.property('resource', 'ChatSession.sendMessage')
-              expect(span.meta).to.have.property('span.kind', 'client')
+              assert.strictEqual(span.name, 'vertexai.request')
+              assert.strictEqual(span.resource, 'ChatSession.sendMessage')
+              assert.strictEqual(span.meta['span.kind'], 'client')
 
-              expect(span.meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
+              assert.strictEqual(span.meta['vertexai.request.model'], 'gemini-1.5-flash-002')
             })
 
             const chat = model.startChat({
@@ -202,33 +201,33 @@ describe('Plugin', () => {
             })
             const { response } = await chat.sendMessage([{ text: 'Hello, how are you?' }])
 
-            expect(response).to.have.property('candidates')
+            assert.ok(Object.hasOwn(response, 'candidates'))
 
             await checkTraces
           })
 
           it('tags a string input', async () => {
             const checkTraces = agent.assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
+              assert.strictEqual(traces[0][0].meta['vertexai.request.model'], 'gemini-1.5-flash-002')
             })
 
             const chat = model.startChat({})
             const { response } = await chat.sendMessage('Hello, how are you?')
 
-            expect(response).to.have.property('candidates')
+            assert.ok(Object.hasOwn(response, 'candidates'))
 
             await checkTraces
           })
 
           it('tags an array of string inputs', async () => {
             const checkTraces = agent.assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
+              assert.strictEqual(traces[0][0].meta['vertexai.request.model'], 'gemini-1.5-flash-002')
             })
 
             const chat = model.startChat({})
             const { response } = await chat.sendMessage(['Hello, how are you?', 'What should I do today?'])
 
-            expect(response).to.have.property('candidates')
+            assert.ok(Object.hasOwn(response, 'candidates'))
 
             await checkTraces
           })
@@ -241,28 +240,28 @@ describe('Plugin', () => {
             const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(span).to.have.property('name', 'vertexai.request')
-              expect(span).to.have.property('resource', 'ChatSession.sendMessageStream')
-              expect(span.meta).to.have.property('span.kind', 'client')
+              assert.strictEqual(span.name, 'vertexai.request')
+              assert.strictEqual(span.resource, 'ChatSession.sendMessageStream')
+              assert.strictEqual(span.meta['span.kind'], 'client')
 
-              expect(span.meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
+              assert.strictEqual(span.meta['vertexai.request.model'], 'gemini-1.5-flash-002')
             })
 
             const chat = model.startChat({})
             const { stream, response } = await chat.sendMessageStream('Hello, how are you?')
 
             // check that response is a promise
-            expect(response).to.be.a('promise')
+            assert.ok(response && typeof response.then === 'function')
 
             const promState = await promiseState(response)
-            expect(promState).to.equal('pending') // we shouldn't have consumed the promise
+            assert.strictEqual(promState, 'pending') // we shouldn't have consumed the promise
 
             for await (const chunk of stream) {
-              expect(chunk).to.have.property('candidates')
+              assert.ok(Object.hasOwn(chunk, 'candidates'))
             }
 
             const result = await response
-            expect(result).to.have.property('candidates')
+            assert.ok(Object.hasOwn(result, 'candidates'))
 
             await checkTraces
           })
@@ -275,7 +274,7 @@ describe('Plugin', () => {
 
           it('tags the error', async () => {
             const checkTraces = agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('error', 1)
+              assert.strictEqual(traces[0][0].error, 1)
             })
 
             let errorPropagated = false
@@ -284,7 +283,7 @@ describe('Plugin', () => {
               await model.generateContent('Hello, how are you?')
             } catch { errorPropagated = true }
 
-            expect(errorPropagated).to.be.true
+            assert.strictEqual(errorPropagated, true)
 
             await checkTraces
           })
@@ -295,7 +294,7 @@ describe('Plugin', () => {
 
           it('tags the error', async () => {
             const checkTraces = agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('error', 1)
+              assert.strictEqual(traces[0][0].error, 1)
             })
 
             let errorPropagated = false
@@ -306,7 +305,7 @@ describe('Plugin', () => {
               for await (const _ of stream) { /* pass */ }
             } catch { errorPropagated = true }
 
-            expect(errorPropagated).to.be.true
+            assert.strictEqual(errorPropagated, true)
 
             await checkTraces
           })

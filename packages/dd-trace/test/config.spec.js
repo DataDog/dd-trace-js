@@ -2516,10 +2516,10 @@ describe('Config', () => {
     })
     it('does not crash if git.properties is not available', () => {
       process.env.DD_GIT_PROPERTIES_FILE = '/does/not/exist'
-      expect(() => {
-        const config = getConfig({})
-        expect(config).to.be.an('object')
-      }).to.not.throw()
+
+      // Should not throw
+      const config = getConfig({})
+      expect(config).to.be.an('object')
     })
     it('does not read git.properties if env vars are passed', () => {
       process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
@@ -2556,10 +2556,10 @@ describe('Config', () => {
     })
     it('does not crash if .git/ folder is not available', () => {
       process.env.DD_GIT_FOLDER_PATH = '/does/not/exist/'
-      expect(() => {
-        const config = getConfig({})
-        expect(config).to.be.an('object')
-      }).to.not.throw()
+
+      // Should not throw
+      const config = getConfig({})
+      expect(config).to.be.an('object')
     })
     it('does not read .git/ folder if env vars are passed', () => {
       process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
@@ -3089,6 +3089,89 @@ rules:
       expect(config).to.have.nested.property('cloudPayloadTagging.requestsEnabled', false)
       expect(config).to.have.nested.property('cloudPayloadTagging.responsesEnabled', true)
       expect(config).to.have.nested.property('cloudPayloadTagging.maxDepth', 15)
+    })
+  })
+
+  context('resourceRenamingEnabled', () => {
+    let originalResourceRenamingEnabled
+    let originalAppsecEnabled
+
+    beforeEach(() => {
+      originalResourceRenamingEnabled = process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED
+      originalAppsecEnabled = process.env.DD_APPSEC_ENABLED
+      delete process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED
+      delete process.env.DD_APPSEC_ENABLED
+    })
+
+    afterEach(() => {
+      if (originalResourceRenamingEnabled !== undefined) {
+        process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = originalResourceRenamingEnabled
+      } else {
+        delete process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED
+      }
+      if (originalAppsecEnabled !== undefined) {
+        process.env.DD_APPSEC_ENABLED = originalAppsecEnabled
+      } else {
+        delete process.env.DD_APPSEC_ENABLED
+      }
+    })
+
+    it('should be false by default', () => {
+      const config = getConfig()
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+
+    it('should be enabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is true', () => {
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'true'
+      const config = getConfig()
+      expect(config).to.have.property('resourceRenamingEnabled', true)
+    })
+
+    it('should be disabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is false', () => {
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
+      const config = getConfig()
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+
+    it('should be enabled when appsec is enabled via env var', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = getConfig()
+      expect(config).to.have.property('resourceRenamingEnabled', true)
+    })
+
+    it('should be enabled when appsec is enabled via options', () => {
+      const config = getConfig({ appsec: { enabled: true } })
+      expect(config).to.have.property('resourceRenamingEnabled', true)
+    })
+
+    it('should prioritize DD_TRACE_RESOURCE_RENAMING_ENABLED over appsec setting', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
+      const config = getConfig()
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+
+    it('should prioritize DD_TRACE_RESOURCE_RENAMING_ENABLED over appsec option', () => {
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
+      const config = getConfig({ appsec: { enabled: true } })
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+
+    it('should enable when appsec is enabled via both env and options', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = getConfig({ appsec: { enabled: true } })
+      expect(config).to.have.property('resourceRenamingEnabled', true)
+    })
+
+    it('should remain false when appsec is disabled', () => {
+      process.env.DD_APPSEC_ENABLED = 'false'
+      const config = getConfig()
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+
+    it('should remain false when appsec is disabled via options', () => {
+      const config = getConfig({ appsec: { enabled: false } })
+      expect(config).to.have.property('resourceRenamingEnabled', false)
     })
   })
 

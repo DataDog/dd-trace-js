@@ -1,7 +1,6 @@
 'use strict'
 
-const { assert } = require('chai')
-
+const assert = require('node:assert/strict')
 const { getRootSpan } = require('../../../src/appsec/sdk/utils')
 const DatadogTracer = require('../../../src/tracer')
 const { getConfigFresh } = require('../../helpers/config')
@@ -21,7 +20,7 @@ describe('Appsec SDK utils', () => {
       tracer.trace('parent', { }, parent => {
         const root = getRootSpan(tracer)
 
-        assert.equal(root, parent)
+        assert.strictEqual(root, parent)
       })
     })
 
@@ -31,7 +30,7 @@ describe('Appsec SDK utils', () => {
       tracer.trace('child1', { childOf }, child1 => {
         const root = getRootSpan(tracer)
 
-        assert.equal(root, childOf)
+        assert.strictEqual(root, childOf)
       })
     })
 
@@ -42,7 +41,7 @@ describe('Appsec SDK utils', () => {
       tracer.trace('child1', { childOf }, child1 => {
         const root = getRootSpan(tracer)
 
-        assert.equal(root, childOf)
+        assert.strictEqual(root, childOf)
       })
     })
 
@@ -55,7 +54,7 @@ describe('Appsec SDK utils', () => {
       tracer.trace('child1.2', { childOf }, child12 => {
         const root = getRootSpan(tracer)
 
-        assert.equal(root, childOf)
+        assert.strictEqual(root, childOf)
       })
     })
 
@@ -66,7 +65,7 @@ describe('Appsec SDK utils', () => {
       tracer.trace('child1', { childOf }, child1 => {
         const root = getRootSpan(tracer)
 
-        assert.equal(root, child1)
+        assert.strictEqual(root, child1)
       })
     })
 
@@ -78,7 +77,7 @@ describe('Appsec SDK utils', () => {
 
         const root = getRootSpan(tracer)
 
-        assert.equal(root, childOf)
+        assert.strictEqual(root, childOf)
       })
     })
 
@@ -91,7 +90,7 @@ describe('Appsec SDK utils', () => {
 
         const root = getRootSpan(tracer)
 
-        assert.equal(root, child1)
+        assert.strictEqual(root, child1)
       })
     })
 
@@ -104,7 +103,7 @@ describe('Appsec SDK utils', () => {
         tracer.trace('child1.2.1', { childOf: child12 }, child121 => {
           const root = getRootSpan(tracer)
 
-          assert.equal(root, child12)
+          assert.strictEqual(root, child12)
         })
       })
     })
@@ -119,7 +118,7 @@ describe('Appsec SDK utils', () => {
         tracer.trace('child1.2.1', { childOf: child12 }, child121 => {
           const root = getRootSpan(tracer)
 
-          assert.equal(root, childOf)
+          assert.strictEqual(root, childOf)
         })
       })
     })
@@ -137,7 +136,7 @@ describe('Appsec SDK utils', () => {
           tracer.trace('child1.2.1.1', { childOf: child121 }, child1211 => {
             const root = getRootSpan(tracer)
 
-            assert.equal(root, childOf)
+            assert.strictEqual(root, childOf)
           })
         })
       })
@@ -157,7 +156,7 @@ describe('Appsec SDK utils', () => {
           tracer.trace('child1.2.1.1', { childOf: child121 }, child1211 => {
             const root = getRootSpan(tracer)
 
-            assert.equal(root, child1211)
+            assert.strictEqual(root, child1211)
           })
         })
       })

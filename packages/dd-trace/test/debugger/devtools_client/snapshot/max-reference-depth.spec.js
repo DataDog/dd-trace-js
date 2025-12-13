@@ -1,8 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
 
+const { afterEach, beforeEach, describe, it } = require('mocha')
 require('../../../setup/mocha')
 
 const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
@@ -17,18 +17,20 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
 
     it('should return expected object for nested objects with maxReferenceDepth: 1', function (done) {
       assertOnBreakpoint(done, { maxReferenceDepth: 1 }, (state) => {
-        expect(Object.keys(state).length).to.equal(1)
+        assert.strictEqual(Object.keys(state).length, 1)
 
-        expect(state).to.have.property('myNestedObj')
-        expect(state.myNestedObj).to.have.property('type', 'Object')
-        expect(state.myNestedObj).to.have.property('fields')
-        expect(Object.keys(state.myNestedObj).length).to.equal(2)
+        assert.ok(Object.hasOwn(state, 'myNestedObj'))
+        assert.strictEqual(state.myNestedObj.type, 'Object')
+        assert.ok(Object.hasOwn(state.myNestedObj, 'fields'))
+        assert.strictEqual(Object.keys(state.myNestedObj).length, 2)
 
-        expect(state.myNestedObj.fields).to.have.deep.property('deepObj', {
+        assert.ok('deepObj' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepObj, {
           type: 'Object', notCapturedReason: 'depth'
         })
 
-        expect(state.myNestedObj.fields).to.have.deep.property('deepArr', {
+        assert.ok('deepArr' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepArr, {
           type: 'Array', notCapturedReason: 'depth'
         })
       })
@@ -38,14 +40,15 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
 
     it('should return expected object for nested objects with maxReferenceDepth: 5', function (done) {
       assertOnBreakpoint(done, { maxReferenceDepth: 5 }, (state) => {
-        expect(Object.entries(state).length).to.equal(1)
+        assert.strictEqual(Object.entries(state).length, 1)
 
-        expect(state).to.have.property('myNestedObj')
-        expect(state.myNestedObj).to.have.property('type', 'Object')
-        expect(state.myNestedObj).to.have.property('fields')
-        expect(Object.entries(state.myNestedObj).length).to.equal(2)
+        assert.ok(Object.hasOwn(state, 'myNestedObj'))
+        assert.strictEqual(state.myNestedObj.type, 'Object')
+        assert.ok(Object.hasOwn(state.myNestedObj, 'fields'))
+        assert.strictEqual(Object.entries(state.myNestedObj).length, 2)
 
-        expect(state.myNestedObj.fields).to.have.deep.property('deepObj', {
+        assert.ok('deepObj' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepObj, {
           type: 'Object',
           fields: {
             foo: {
@@ -67,7 +70,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           }
         })
 
-        expect(state.myNestedObj.fields).to.have.deep.property('deepArr', {
+        assert.ok('deepArr' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepArr, {
           type: 'Array',
           elements: [{
             type: 'Array',
@@ -87,14 +91,15 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
 
     it('should return expected object for nested objects if maxReferenceDepth is missing', function (done) {
       assertOnBreakpoint(done, (state) => {
-        expect(Object.entries(state).length).to.equal(1)
+        assert.strictEqual(Object.entries(state).length, 1)
 
-        expect(state).to.have.property('myNestedObj')
-        expect(state.myNestedObj).to.have.property('type', 'Object')
-        expect(state.myNestedObj).to.have.property('fields')
-        expect(Object.entries(state.myNestedObj).length).to.equal(2)
+        assert.ok(Object.hasOwn(state, 'myNestedObj'))
+        assert.strictEqual(state.myNestedObj.type, 'Object')
+        assert.ok(Object.hasOwn(state.myNestedObj, 'fields'))
+        assert.strictEqual(Object.entries(state.myNestedObj).length, 2)
 
-        expect(state.myNestedObj.fields).to.have.deep.property('deepObj', {
+        assert.ok('deepObj' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepObj, {
           type: 'Object',
           fields: {
             foo: {
@@ -109,7 +114,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           }
         })
 
-        expect(state.myNestedObj.fields).to.have.deep.property('deepArr', {
+        assert.ok('deepArr' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepArr, {
           type: 'Array',
           elements: [{
             type: 'Array',

@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const { executionAsyncResource } = require('async_hooks')
 
@@ -28,7 +28,7 @@ describe('storage', () => {
     testStorage.enterWith(store)
 
     setImmediate(() => {
-      expect(testStorage.getStore()).to.equal(store)
+      assert.strictEqual(testStorage.getStore(), store)
       done()
     })
   })
@@ -41,14 +41,14 @@ describe('storage', () => {
     testStorage2.enterWith(store2)
 
     setImmediate(() => {
-      expect(testStorage.getStore()).to.equal(store)
-      expect(testStorage2.getStore()).to.equal(store2)
+      assert.strictEqual(testStorage.getStore(), store)
+      assert.strictEqual(testStorage2.getStore(), store2)
       done()
     })
   })
 
   it('should return the same storage for a namespace', () => {
-    expect(storage('test')).to.equal(testStorage)
+    assert.strictEqual(storage('test'), testStorage)
   })
 
   it('should not have its store referenced by the underlying async resource', () => {
@@ -58,7 +58,7 @@ describe('storage', () => {
 
     for (const sym of Object.getOwnPropertySymbols(resource)) {
       if (sym.toString() === 'Symbol(kResourceStore)' && resource[sym]) {
-        expect(resource[sym]).to.not.have.property('internal')
+        assert.ok(!('internal' in resource[sym]))
       }
     }
   })

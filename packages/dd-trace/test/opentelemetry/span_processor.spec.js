@@ -1,6 +1,5 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -33,7 +32,7 @@ describe('OTel MultiSpanProcessor', () => {
     processor.onStart(1, 2)
 
     for (const processor of processors) {
-      expect(processor.onStart).to.have.been.calledWith(1, 2)
+      sinon.assert.calledWith(processor.onStart, 1, 2)
     }
   })
 
@@ -47,7 +46,7 @@ describe('OTel MultiSpanProcessor', () => {
     processor.onEnd(3)
 
     for (const processor of processors) {
-      expect(processor.onEnd).to.have.been.calledWith(3)
+      sinon.assert.calledWith(processor.onEnd, 3)
     }
   })
 
@@ -61,7 +60,7 @@ describe('OTel MultiSpanProcessor', () => {
     processor.forceFlush()
 
     for (const processor of processors) {
-      expect(processor.forceFlush).to.have.been.calledOnce
+      sinon.assert.calledOnce(processor.forceFlush)
     }
   })
 
@@ -75,7 +74,7 @@ describe('OTel MultiSpanProcessor', () => {
     processor.shutdown()
 
     for (const processor of processors) {
-      expect(processor.shutdown).to.have.been.calledOnce
+      sinon.assert.calledOnce(processor.shutdown)
     }
   })
 })

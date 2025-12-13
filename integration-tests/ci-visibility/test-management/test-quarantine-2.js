@@ -1,13 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('assert')
 describe('quarantine tests 2', () => {
   it('can quarantine a test', () => {
-    expect(1 + 2).to.equal(3)
+    assert.strictEqual(1 + 2, 3)
   })
 
   it('can pass normally', () => {
-    expect(1 + 2).to.equal(3)
+    assert.strictEqual(1 + 2, 3)
   })
 })

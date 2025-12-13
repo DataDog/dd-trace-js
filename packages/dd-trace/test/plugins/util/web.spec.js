@@ -1,6 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -27,6 +29,7 @@ const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_USERAGENT = tags.HTTP_USERAGENT
 const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
+const HTTP_ENDPOINT = tags.HTTP_ENDPOINT
 
 describe('plugins/util/web', () => {
   let web
@@ -72,17 +75,17 @@ describe('plugins/util/web', () => {
     it('should set the correct defaults', () => {
       const config = web.normalizeConfig({})
 
-      expect(config).to.have.property('headers')
-      expect(config.headers).to.be.an('array')
-      expect(config).to.have.property('validateStatus')
-      expect(config.validateStatus).to.be.a('function')
-      expect(config.validateStatus(200)).to.equal(true)
-      expect(config.validateStatus(500)).to.equal(false)
-      expect(config).to.have.property('hooks')
-      expect(config.hooks).to.be.an('object')
-      expect(config.hooks).to.have.property('request')
-      expect(config.hooks.request).to.be.a('function')
-      expect(config).to.have.property('queryStringObfuscation', true)
+      assert.ok(Object.hasOwn(config, 'headers'))
+      assert.ok(Array.isArray(config.headers))
+      assert.ok(Object.hasOwn(config, 'validateStatus'))
+      assert.strictEqual(typeof config.validateStatus, 'function')
+      assert.strictEqual(config.validateStatus(200), true)
+      assert.strictEqual(config.validateStatus(500), false)
+      assert.ok(Object.hasOwn(config, 'hooks'))
+      assert.ok(typeof config.hooks === 'object' && config.hooks !== null)
+      assert.ok(Object.hasOwn(config.hooks, 'request'))
+      assert.strictEqual(typeof config.hooks.request, 'function')
+      assert.strictEqual(config.queryStringObfuscation, true)
     })
 
     it('should use the shared config if set', () => {
@@ -94,10 +97,10 @@ describe('plugins/util/web', () => {
         }
       })
 
-      expect(config.headers).to.deep.equal([['test', undefined]])
-      expect(config.validateStatus(200)).to.equal(false)
-      expect(config).to.have.property('hooks')
-      expect(config.hooks.request()).to.equal('test')
+      assert.deepStrictEqual(config.headers, [['test', undefined]])
+      assert.strictEqual(config.validateStatus(200), false)
+      assert.ok(Object.hasOwn(config, 'hooks'))
+      assert.strictEqual(config.hooks.request(), 'test')
     })
 
     describe('queryStringObfuscation', () => {
@@ -106,7 +109,7 @@ describe('plugins/util/web', () => {
           queryStringObfuscation: false
         })
 
-        expect(config).to.have.property('queryStringObfuscation', false)
+        assert.strictEqual(config.queryStringObfuscation, false)
       })
 
       it('should change to false when passed empty string', () => {
@@ -114,7 +117,7 @@ describe('plugins/util/web', () => {
           queryStringObfuscation: ''
         })
 
-        expect(config).to.have.property('queryStringObfuscation', false)
+        assert.strictEqual(config.queryStringObfuscation, false)
       })
 
       it('should change to true when passed ".*"', () => {
@@ -122,7 +125,7 @@ describe('plugins/util/web', () => {
           queryStringObfuscation: '.*'
         })
 
-        expect(config).to.have.property('queryStringObfuscation', true)
+        assert.strictEqual(config.queryStringObfuscation, true)
       })
 
       it('should convert to regex when passed valid string', () => {
@@ -130,7 +133,8 @@ describe('plugins/util/web', () => {
           queryStringObfuscation: 'a*'
         })
 
-        expect(config).to.have.deep.property('queryStringObfuscation', /a*/gi)
+        assert.ok('queryStringObfuscation' in config)
+        assert.deepStrictEqual(config.queryStringObfuscation, /a*/gi)
       })
 
       it('should default to true when passed a bad regex', () => {
@@ -138,7 +142,7 @@ describe('plugins/util/web', () => {
           queryStringObfuscation: '(?)'
         })
 
-        expect(config).to.have.property('queryStringObfuscation', true)
+        assert.strictEqual(config.queryStringObfuscation, true)
       })
     })
   })
@@ -152,8 +156,8 @@ describe('plugins/util/web', () => {
         }
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          expect(span.context()._traceId.toString(10)).to.equal('123')
-          expect(span.context()._parentId.toString(10)).to.equal('456')
+          assert.strictEqual(span.context()._traceId.toString(10), '123')
+          assert.strictEqual(span.context()._parentId.toString(10), '456')
         })
       })
 
@@ -161,13 +165,13 @@ describe('plugins/util/web', () => {
         config.service = 'custom'
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          expect(span.context()._tags).to.have.property(SERVICE_NAME, 'custom')
+          assert.strictEqual(span.context()._tags[SERVICE_NAME], 'custom')
         })
       })
 
       it('should activate a scope with the span', () => {
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          expect(tracer.scope().active()).to.equal(span)
+          assert.strictEqual(tracer.scope().active(), span)
         })
       })
 
@@ -183,7 +187,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          expect(tags).to.include({
+          assertObjectContains(tags, {
             [SPAN_TYPE]: WEB,
             [HTTP_URL]: 'http://localhost/user/123',
             [HTTP_METHOD]: 'GET',
@@ -204,7 +208,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          expect(tags).to.include({
+          assertObjectContains(tags, {
             [HTTP_CLIENT_IP]: '8.8.8.8'
           })
         })
@@ -222,7 +226,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          expect(tags).to.include({
+          assertObjectContains(tags, {
             [HTTP_CLIENT_IP]: '8.8.8.8'
           })
         })
@@ -239,7 +243,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          expect(tags).to.not.have.property(HTTP_CLIENT_IP)
+          assert.ok(!(HTTP_CLIENT_IP in tags))
         })
       })
 
@@ -254,7 +258,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          expect(tags).to.not.have.property(HTTP_CLIENT_IP)
+          assert.ok(!(HTTP_CLIENT_IP in tags))
         })
       })
 
@@ -270,7 +274,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          expect(tags).to.include({
+          assertObjectContains(tags, {
             [HTTP_CLIENT_IP]: '1.1.1.1'
           })
         })
@@ -284,7 +288,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          expect(tags).to.not.have.property(HTTP_CLIENT_IP)
+          assert.ok(!(HTTP_CLIENT_IP in tags))
         })
       })
 
@@ -299,7 +303,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          expect(tags).to.include({
+          assertObjectContains(tags, {
             [`${HTTP_REQUEST_HEADERS}.host`]: 'localhost',
             'http.req': 'incoming',
             [`${HTTP_RESPONSE_HEADERS}.server`]: 'test',
@@ -311,7 +315,7 @@ describe('plugins/util/web', () => {
       it('should only start one span for the entire request', () => {
         web.instrument(tracer, config, req, res, 'test.request', span1 => {
           web.instrument(tracer, config, req, res, 'test.request', span2 => {
-            expect(span1).to.equal(span2)
+            assert.strictEqual(span1, span2)
           })
         })
       })
@@ -319,7 +323,7 @@ describe('plugins/util/web', () => {
       it('should allow overriding the span name', () => {
         web.instrument(tracer, config, req, res, 'test.request', () => {
           web.instrument(tracer, config, req, res, 'test2.request', span => {
-            expect(span.context()._name).to.equal('test2.request')
+            assert.strictEqual(span.context()._name, 'test2.request')
           })
         })
       })
@@ -329,7 +333,8 @@ describe('plugins/util/web', () => {
           config.service = 'test2'
           web.instrument(tracer, config, req, res, 'test.request')
 
-          expect(span.context()._tags).to.have.property('service.name', 'test2')
+          assert.ok('service.name' in span.context()._tags)
+          assert.strictEqual(span.context()._tags['service.name'], 'test2')
         })
       })
 
@@ -338,7 +343,7 @@ describe('plugins/util/web', () => {
         const end = res.end
         web.instrument(tracer, config, req, res, 'test.request')
 
-        expect(end).to.equal(res.end)
+        assert.strictEqual(end, res.end)
       })
 
       it('should use the config from the last call', () => {
@@ -354,7 +359,7 @@ describe('plugins/util/web', () => {
 
             res.end()
 
-            expect(tags).to.include({
+            assertObjectContains(tags, {
               [`${HTTP_REQUEST_HEADERS}.date`]: 'now'
             })
           })
@@ -375,7 +380,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          expect(tags).to.include({
+          assertObjectContains(tags, {
             [HTTP_URL]: 'http://localhost/user/123?<redacted>foo=bar'
           })
         })
@@ -403,7 +408,7 @@ describe('plugins/util/web', () => {
 
         res.writeHead()
 
-        expect(res.setHeader).to.have.been.calledWith('access-control-allow-headers', headers)
+        sinon.assert.calledWith(res.setHeader, 'access-control-allow-headers', headers)
       })
 
       it('should handle CORS preflight with partial headers', () => {
@@ -424,7 +429,7 @@ describe('plugins/util/web', () => {
 
         res.writeHead()
 
-        expect(res.setHeader).to.have.been.calledWith('access-control-allow-headers', headers)
+        sinon.assert.calledWith(res.setHeader, 'access-control-allow-headers', headers)
       })
 
       it('should handle CORS preflight when the origin does not match', () => {
@@ -438,7 +443,7 @@ describe('plugins/util/web', () => {
 
         res.writeHead()
 
-        expect(res.setHeader).to.not.have.been.called
+        sinon.assert.notCalled(res.setHeader)
       })
 
       it('should handle CORS preflight when no header was requested', () => {
@@ -453,7 +458,7 @@ describe('plugins/util/web', () => {
 
         res.writeHead()
 
-        expect(res.setHeader).to.not.have.been.called
+        sinon.assert.notCalled(res.setHeader)
       })
 
       it('should support https', () => {
@@ -467,7 +472,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          expect(tags).to.include({
+          assertObjectContains(tags, {
             [SPAN_TYPE]: WEB,
             [HTTP_URL]: 'https://localhost/user/123',
             [HTTP_METHOD]: 'GET',
@@ -495,7 +500,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          expect(tags).to.include({
+          assertObjectContains(tags, {
             [SPAN_TYPE]: WEB,
             [HTTP_URL]: 'https://localhost/user/123',
             [HTTP_METHOD]: 'GET',
@@ -513,7 +518,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          expect(sampling).to.have.property('priority', USER_REJECT)
+          assert.strictEqual(sampling.priority, USER_REJECT)
         })
       })
     })
@@ -531,7 +536,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.finish).to.have.been.called
+        sinon.assert.called(span.finish)
       })
 
       it('should should only finish once', () => {
@@ -540,7 +545,7 @@ describe('plugins/util/web', () => {
         res.end()
         res.end()
 
-        expect(span.finish).to.have.been.calledOnce
+        sinon.assert.calledOnce(span.finish)
       })
 
       it('should finish middleware spans', () => {
@@ -551,7 +556,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          expect(span.finish).to.have.been.called
+          sinon.assert.called(span.finish)
         })
       })
 
@@ -564,14 +569,14 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(spy1).to.have.been.called
-        expect(spy2).to.have.been.called
+        sinon.assert.called(spy1)
+        sinon.assert.called(spy2)
       })
 
       it('should call the original end', () => {
         res.end()
 
-        expect(end).to.have.been.called
+        sinon.assert.called(end)
       })
 
       it('should add response tags to the span', () => {
@@ -581,7 +586,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(tags).to.include({
+        assertObjectContains(tags, {
           [RESOURCE_NAME]: 'GET',
           [HTTP_STATUS_CODE]: 200
         })
@@ -592,7 +597,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(tags).to.include({
+        assertObjectContains(tags, {
           [ERROR]: true
         })
       })
@@ -602,7 +607,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(tags).to.include({
+        assertObjectContains(tags, {
           [ERROR]: true
         })
       })
@@ -612,7 +617,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(tags).to.include({
+        assertObjectContains(tags, {
           [HTTP_ROUTE]: '/custom/route'
         })
       })
@@ -622,7 +627,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(config.hooks.request).to.have.been.calledWith(span, req, res)
+        sinon.assert.calledWith(config.hooks.request, span, req, res)
       })
 
       it('should execute multiple end hooks', () => {
@@ -633,7 +638,7 @@ describe('plugins/util/web', () => {
         web.instrument(tracer, config, req, res, 'test.request', span => {
           res.end()
 
-          expect(config.hooks.request).to.have.been.calledWith(span, req, res)
+          sinon.assert.calledWith(config.hooks.request, span, req, res)
         })
       })
 
@@ -645,7 +650,7 @@ describe('plugins/util/web', () => {
         web.instrument(tracer, config, req, res, 'test.request', span => {
           res.end()
 
-          expect(tags).to.have.property('resource.name', 'GET /custom/route')
+          assert.strictEqual(tags['resource.name'], 'GET /custom/route')
         })
       })
     })
@@ -667,8 +672,8 @@ describe('plugins/util/web', () => {
       web.enterRoute(req, '/bar')
       res.end()
 
-      expect(tags).to.have.property(RESOURCE_NAME, 'GET /foo/bar')
-      expect(tags).to.have.property(HTTP_ROUTE, '/foo/bar')
+      assert.strictEqual(tags[RESOURCE_NAME], 'GET /foo/bar')
+      assert.strictEqual(tags[HTTP_ROUTE], '/foo/bar')
     })
 
     it('should only add valid route segments to the span resource name', () => {
@@ -678,8 +683,8 @@ describe('plugins/util/web', () => {
       web.enterRoute(req, 1337)
       res.end()
 
-      expect(tags).to.have.property(RESOURCE_NAME, 'GET')
-      expect(tags).to.not.have.property(HTTP_ROUTE)
+      assert.strictEqual(tags[RESOURCE_NAME], 'GET')
+      assert.ok(!(HTTP_ROUTE in tags))
     })
   })
 
@@ -700,7 +705,7 @@ describe('plugins/util/web', () => {
       web.exitRoute(req)
       res.end()
 
-      expect(tags).to.have.property(RESOURCE_NAME, 'GET /foo')
+      assert.strictEqual(tags[RESOURCE_NAME], 'GET /foo')
     })
   })
 
@@ -715,7 +720,7 @@ describe('plugins/util/web', () => {
 
     it('should activate a scope with the span', (done) => {
       const fn = function test () {
-        expect(tracer.scope().active()).to.not.equal(span)
+        assert.notStrictEqual(tracer.scope().active(), span)
         done()
       }
 
@@ -739,7 +744,7 @@ describe('plugins/util/web', () => {
         sinon.spy(span, 'finish')
         web.finish(req, fn, 'middleware')
 
-        expect(span.finish).to.have.been.called
+        sinon.assert.called(span.finish)
 
         done()
       }
@@ -756,9 +761,9 @@ describe('plugins/util/web', () => {
         sinon.spy(span, 'finish')
         web.finish(req, error)
 
-        expect(tags[ERROR_TYPE]).to.equal(error.name)
-        expect(tags[ERROR_MESSAGE]).to.equal(error.message)
-        expect(tags[ERROR_STACK]).to.equal(error.stack)
+        assert.strictEqual(tags[ERROR_TYPE], error.name)
+        assert.strictEqual(tags[ERROR_MESSAGE], error.message)
+        assert.strictEqual(tags[ERROR_STACK], error.stack)
 
         done()
       }
@@ -773,20 +778,20 @@ describe('plugins/util/web', () => {
         const span = tracer.scope().active()
 
         web.wrapMiddleware(req, () => {}, 'express.middleware', () => {
-          expect(web.root(req)).to.equal(span)
+          assert.strictEqual(web.root(req), span)
         })
       })
     })
 
     it('should return null when not yet instrumented', () => {
-      expect(web.root(req)).to.be.null
+      assert.strictEqual(web.root(req), null)
     })
   })
 
   describe('active', () => {
     it('should return the request span by default', () => {
       web.instrument(tracer, config, req, res, 'test.request', () => {
-        expect(web.active(req)).to.equal(tracer.scope().active())
+        assert.strictEqual(web.active(req), tracer.scope().active())
       })
     })
 
@@ -795,14 +800,14 @@ describe('plugins/util/web', () => {
         const span = tracer.scope().active()
 
         web.wrapMiddleware(req, () => {}, 'express.middleware', () => {
-          expect(web.active(req)).to.not.be.null
-          expect(web.active(req)).to.not.equal(span)
+          assert.notStrictEqual(web.active(req), null)
+          assert.notStrictEqual(web.active(req), span)
         })
       })
     })
 
     it('should return null when not yet instrumented', () => {
-      expect(web.active(req)).to.be.null
+      assert.strictEqual(web.active(req), null)
     })
   })
 
@@ -821,7 +826,7 @@ describe('plugins/util/web', () => {
       web.addError(req, error)
       web.addStatusError(req, 500)
 
-      expect(tags).to.include({
+      assertObjectContains(tags, {
         [ERROR]: error
       })
     })
@@ -833,7 +838,7 @@ describe('plugins/util/web', () => {
       web.addError(req, error)
       web.addStatusError(req, 500)
 
-      expect(tags).to.include({
+      assertObjectContains(tags, {
         [ERROR]: error
       })
     })
@@ -851,7 +856,7 @@ describe('plugins/util/web', () => {
     it('should flag the request as an error', () => {
       web.addStatusError(req, 500)
 
-      expect(tags).to.include({
+      assertObjectContains(tags, {
         [ERROR]: true
       })
     })
@@ -861,7 +866,7 @@ describe('plugins/util/web', () => {
 
       web.addStatusError(req, 500)
 
-      expect(tags).to.not.have.property(ERROR)
+      assert.ok(!(ERROR in tags))
     })
   })
 
@@ -873,12 +878,12 @@ describe('plugins/util/web', () => {
 
     it('should not filter the url', () => {
       const filtered = config.filter('/_okay')
-      expect(filtered).to.equal(true)
+      assert.strictEqual(filtered, true)
     })
 
     it('should filter the url', () => {
       const filtered = config.filter('/_notokay')
-      expect(filtered).to.equal(false)
+      assert.strictEqual(filtered, false)
     })
   })
 
@@ -890,12 +895,12 @@ describe('plugins/util/web', () => {
 
     it('should not filter the url', () => {
       const filtered = config.filter('/_okay')
-      expect(filtered).to.equal(true)
+      assert.strictEqual(filtered, true)
     })
 
     it('should filter the url', () => {
       const filtered = config.filter('/_notokay')
-      expect(filtered).to.equal(false)
+      assert.strictEqual(filtered, false)
     })
   })
 
@@ -907,12 +912,12 @@ describe('plugins/util/web', () => {
 
     it('should not filter the url', () => {
       const filtered = config.filter('/_okay')
-      expect(filtered).to.equal(true)
+      assert.strictEqual(filtered, true)
     })
 
     it('should filter the url', () => {
       const filtered = config.filter('/_notokay')
-      expect(filtered).to.equal(false)
+      assert.strictEqual(filtered, false)
     })
   })
 
@@ -924,53 +929,49 @@ describe('plugins/util/web', () => {
 
     it('should not filter the url', () => {
       const filtered = config.filter('/_okay')
-      expect(filtered).to.equal(true)
+      assert.strictEqual(filtered, true)
     })
 
     it('should filter the url', () => {
       const filtered = config.filter('/_notokay')
-      expect(filtered).to.equal(false)
+      assert.strictEqual(filtered, false)
     })
   })
 
-  describe('obfuscateQs', () => {
-    const url = 'http://perdu.com/path/'
-    const qs = '?data=secret'
+  describe('http.endpoint tagging', () => {
+    it('should derive http.endpoint when no framework route is available', () => {
+      config = web.normalizeConfig({ resourceRenamingEnabled: true })
+      req.method = 'GET'
+      req.url = '/api/orders/12345/items?foo=bar'
 
-    let config
+      web.instrument(tracer, config, req, res, 'test.request', () => {
+        span = tracer.scope().active()
+        tags = span.context()._tags
+      })
 
-    beforeEach(() => {
-      config = {
-        queryStringObfuscation: /secret/gi
-      }
+      res.statusCode = 200
+      res.end()
+
+      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
+      assert.strictEqual(tags[HTTP_ENDPOINT], '/api/orders/{param:int}/items')
     })
 
-    it('should not obfuscate when passed false', () => {
-      config.queryStringObfuscation = false
+    it('should not set http.endpoint when resource renaming is disabled', () => {
+      config = web.normalizeConfig({ resourceRenamingEnabled: false })
+      req.method = 'GET'
+      req.url = '/api/orders/12345/items'
 
-      const result = web.obfuscateQs(config, url + qs)
+      web.instrument(tracer, config, req, res, 'test.request', () => {
+        span = tracer.scope().active()
+        tags = span.context()._tags
+      })
 
-      expect(result).to.equal(url + qs)
-    })
+      res.statusCode = 200
+      res.end()
 
-    it('should not obfuscate when no querystring is found', () => {
-      const result = web.obfuscateQs(config, url)
-
-      expect(result).to.equal(url)
-    })
-
-    it('should remove the querystring if passed true', () => {
-      config.queryStringObfuscation = true
-
-      const result = web.obfuscateQs(config, url + qs)
-
-      expect(result).to.equal(url)
-    })
-
-    it('should obfuscate only the querystring part of the url', () => {
-      const result = web.obfuscateQs(config, url + 'secret/' + qs)
-
-      expect(result).to.equal(url + 'secret/?data=<redacted>')
+      assert.ok(!Object.hasOwn(tags, HTTP_ENDPOINT))
+      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
+      assert.strictEqual(tags[RESOURCE_NAME], 'GET')
     })
   })
 })

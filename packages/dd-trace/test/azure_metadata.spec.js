@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it } = require('tap').mocha
 const os = require('node:os')
 
@@ -12,13 +12,13 @@ describe('Azure metadata', () => {
   describe('for apps is', () => {
     it('not provided without WEBSITE_SITE_NAME', () => {
       delete process.env.WEBSITE_SITE_NAME
-      expect(getAzureAppMetadata()).to.be.undefined
+      assert.strictEqual(getAzureAppMetadata(), undefined)
     })
 
     it('provided with WEBSITE_SITE_NAME', () => {
       delete process.env.COMPUTERNAME // actually defined on Windows
       process.env.WEBSITE_SITE_NAME = 'website_name'
-      expect(getAzureAppMetadata()).to.deep.equal({
+      assert.deepStrictEqual(getAzureAppMetadata(), {
         operatingSystem: os.platform(), siteKind: 'app', siteName: 'website_name', siteType: 'app'
       })
     })
@@ -48,7 +48,7 @@ describe('Azure metadata', () => {
       siteType: 'app',
       subscriptionID: 'subscription_id'
     }
-    expect(getAzureAppMetadata()).to.deep.equal(expected)
+    assert.deepStrictEqual(getAzureAppMetadata(), expected)
   })
 
   it('provided completely with complete vars', () => {
@@ -78,7 +78,7 @@ describe('Azure metadata', () => {
       siteType: 'function',
       subscriptionID: 'subscription_id'
     }
-    expect(getAzureAppMetadata()).to.deep.equal(expected)
+    assert.deepStrictEqual(getAzureAppMetadata(), expected)
   })
 
   it('tags are correctly generated from vars', () => {
@@ -105,6 +105,6 @@ describe('Azure metadata', () => {
       'aas.site.type': 'app',
       'aas.subscription.id': 'subscription_id'
     }
-    expect(getAzureTagsFromMetadata(getAzureAppMetadata())).to.deep.equal(expected)
+    assert.deepStrictEqual(getAzureTagsFromMetadata(getAzureAppMetadata()), expected)
   })
 })

@@ -1,6 +1,7 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+
 const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -16,7 +17,10 @@ const pkg = require('../../../package.json')
 const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('../src/constants')
 const {
   MEASURED,
-  HTTP_STATUS_CODE
+  HTTP_STATUS_CODE,
+  HTTP_ENDPOINT,
+  HTTP_ROUTE,
+  HTTP_METHOD
 } = require('../../../ext/tags')
 const {
   DEFAULT_SPAN_NAME,
@@ -91,22 +95,63 @@ const {
 describe('SpanAggKey', () => {
   it('should make aggregation key for a basic span', () => {
     const key = new SpanAggKey(basicSpan)
-    expect(key.toString()).to.equal('basic-span,service-name,resource-name,span-type,200,false')
+    assert.strictEqual(key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,')
   })
 
   it('should make aggregation key for a synthetic span', () => {
     const key = new SpanAggKey(syntheticSpan)
-    expect(key.toString()).to.equal('synthetic-span,service-name,resource-name,span-type,200,true')
+    assert.strictEqual(key.toString(), 'synthetic-span,service-name,resource-name,span-type,200,true,,')
   })
 
   it('should make aggregation key for an error span', () => {
     const key = new SpanAggKey(errorSpan)
-    expect(key.toString()).to.equal('error-span,service-name,resource-name,span-type,500,false')
+    assert.strictEqual(key.toString(), 'error-span,service-name,resource-name,span-type,500,false,,')
   })
 
   it('should use sensible defaults', () => {
     const key = new SpanAggKey({ meta: {}, metrics: {} })
-    expect(key.toString()).to.equal(`${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false`)
+    assert.strictEqual(key.toString(), `${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false,,`)
+  })
+
+  it('should include HTTP method and route in aggregation key', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [HTTP_METHOD]: 'GET',
+        [HTTP_ROUTE]: '/users/:id'
+      }
+    }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id')
+  })
+
+  it('should include HTTP method and endpoint in aggregation key', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [HTTP_METHOD]: 'POST',
+        [HTTP_ENDPOINT]: '/users/{param:int}'
+      }
+    }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,POST,/users/{param:int}')
+  })
+
+  it('should prioritize http.route over http.endpoint', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [HTTP_METHOD]: 'GET',
+        [HTTP_ROUTE]: '/users/:id',
+        [HTTP_ENDPOINT]: '/users/{param:int}'
+      }
+    }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id')
   })
 })
 
@@ -120,13 +165,15 @@ describe('SpanAggStats', () => {
     const errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     okDistribution.accept(basicSpan.duration)
 
-    expect(aggStats.toJSON()).to.deep.equal({
+    assert.deepStrictEqual(aggStats.toJSON(), {
       Name: aggKey.name,
       Type: aggKey.type,
       Resource: aggKey.resource,
       Service: aggKey.service,
       HTTPStatusCode: aggKey.statusCode,
       Synthetics: aggKey.synthetics,
+      HTTPMethod: aggKey.method,
+      HTTPEndpoint: aggKey.endpoint,
       Hits: 1,
       TopLevelHits: 0,
       Errors: 0,
@@ -145,13 +192,15 @@ describe('SpanAggStats', () => {
     const errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     okDistribution.accept(topLevelSpan.duration)
 
-    expect(aggStats.toJSON()).to.deep.equal({
+    assert.deepStrictEqual(aggStats.toJSON(), {
       Name: aggKey.name,
       Type: aggKey.type,
       Resource: aggKey.resource,
       Service: aggKey.service,
       HTTPStatusCode: aggKey.statusCode,
       Synthetics: aggKey.synthetics,
+      HTTPMethod: aggKey.method,
+      HTTPEndpoint: aggKey.endpoint,
       Hits: 1,
       TopLevelHits: 1,
       Errors: 0,
@@ -170,13 +219,15 @@ describe('SpanAggStats', () => {
     const errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     errorDistribution.accept(errorSpan.duration)
 
-    expect(aggStats.toJSON()).to.deep.equal({
+    assert.deepStrictEqual(aggStats.toJSON(), {
       Name: aggKey.name,
       Type: aggKey.type,
       Resource: aggKey.resource,
       Service: aggKey.service,
       HTTPStatusCode: aggKey.statusCode,
       Synthetics: aggKey.synthetics,
+      HTTPMethod: aggKey.method,
+      HTTPEndpoint: aggKey.endpoint,
       Hits: 1,
       TopLevelHits: 0,
       Errors: 1,
@@ -191,36 +242,36 @@ describe('SpanBuckets', () => {
   const buckets = new SpanBuckets()
 
   it('should start empty', () => {
-    expect(buckets.size).to.equal(0)
+    assert.strictEqual(buckets.size, 0)
   })
 
   it('should add a new entry when no matching span agg key is found', () => {
     const bucket = buckets.forSpan(basicSpan)
-    expect(bucket).to.be.an.instanceOf(SpanAggStats)
-    expect(buckets.size).to.equal(1)
+    assert.ok(bucket instanceof SpanAggStats)
+    assert.strictEqual(buckets.size, 1)
     const [key, value] = Array.from(buckets.entries())[0]
-    expect(key).to.equal((new SpanAggKey(basicSpan)).toString())
-    expect(value).to.be.instanceOf(SpanAggStats)
+    assert.strictEqual(key, (new SpanAggKey(basicSpan)).toString())
+    assert.ok(value instanceof SpanAggStats)
   })
 
   it('should not add a new entry if matching span agg key is found', () => {
     buckets.forSpan(basicSpan)
-    expect(buckets.size).to.equal(1)
+    assert.strictEqual(buckets.size, 1)
   })
 
   it('should add a new entry when new span does not match existing agg keys', () => {
     buckets.forSpan(errorSpan)
-    expect(buckets.size).to.equal(2)
+    assert.strictEqual(buckets.size, 2)
   })
 })
 
 describe('TimeBuckets', () => {
   it('should acquire a span agg bucket for the given time', () => {
     const buckets = new TimeBuckets()
-    expect(buckets.size).to.equal(0)
+    assert.strictEqual(buckets.size, 0)
     const bucket = buckets.forTime(12345)
-    expect(buckets.size).to.equal(1)
-    expect(bucket).to.be.an.instanceOf(SpanBuckets)
+    assert.strictEqual(buckets.size, 1)
+    assert.ok(bucket instanceof SpanBuckets)
   })
 })
 
@@ -247,43 +298,43 @@ describe('SpanStatsProcessor', () => {
     processor = new SpanStatsProcessor(config)
     clearTimeout(processor.timer)
 
-    expect(SpanStatsExporter).to.be.calledWith({
+    assert.ok(SpanStatsExporter.calledWith({
       hostname: config.hostname,
       port: config.port,
       url: config.url,
       tags: config.tags
-    })
-    expect(processor.interval).to.equal(config.stats.interval)
-    expect(processor.buckets).to.be.instanceOf(TimeBuckets)
-    expect(processor.hostname).to.equal(hostname())
-    expect(processor.enabled).to.equal(config.stats.enabled)
-    expect(processor.env).to.equal(config.env)
-    expect(processor.tags).to.deep.equal(config.tags)
-    expect(processor.version).to.equal(config.version)
+    }))
+    assert.strictEqual(processor.interval, config.stats.interval)
+    assert.ok(processor.buckets instanceof TimeBuckets)
+    assert.strictEqual(processor.hostname, hostname())
+    assert.strictEqual(processor.enabled, config.stats.enabled)
+    assert.strictEqual(processor.env, config.env)
+    assert.deepStrictEqual(processor.tags, config.tags)
+    assert.strictEqual(processor.version, config.version)
   })
 
   it('should construct a disabled instance', () => {
     const disabledConfig = { ...config, stats: { enabled: false, interval: 10 } }
     const processor = new SpanStatsProcessor(disabledConfig)
 
-    expect(processor.enabled).to.be.false
-    expect(processor.timer).to.be.undefined
+    assert.strictEqual(processor.enabled, false)
+    assert.strictEqual(processor.timer, undefined)
   })
 
   it('should track span stats', () => {
-    expect(processor.buckets.size).to.equal(0)
+    assert.strictEqual(processor.buckets.size, 0)
     for (let i = 0; i < n; i++) {
       processor.onSpanFinished(topLevelSpan)
     }
-    expect(processor.buckets.size).to.equal(1)
+    assert.strictEqual(processor.buckets.size, 1)
 
     const timeBucket = processor.buckets.values().next().value
-    expect(timeBucket).to.be.instanceOf(SpanBuckets)
-    expect(timeBucket.size).to.equal(1)
+    assert.ok(timeBucket instanceof SpanBuckets)
+    assert.strictEqual(timeBucket.size, 1)
 
     const spanBucket = timeBucket.forSpan(topLevelSpan)
-    expect(timeBucket.size).to.equal(1)
-    expect(spanBucket).to.be.instanceOf(SpanAggStats)
+    assert.strictEqual(timeBucket.size, 1)
+    assert.ok(spanBucket instanceof SpanAggStats)
 
     okDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
@@ -291,13 +342,15 @@ describe('SpanStatsProcessor', () => {
       okDistribution.accept(topLevelSpan.duration)
     }
 
-    expect(spanBucket.toJSON()).to.deep.equal({
+    assert.deepStrictEqual(spanBucket.toJSON(), {
       Name: 'top-level-span',
       Service: 'service-name',
       Resource: 'resource-name',
       Type: 'span-type',
       HTTPStatusCode: 200,
       Synthetics: false,
+      HTTPMethod: '',
+      HTTPEndpoint: '',
       Hits: n,
       TopLevelHits: n,
       Errors: 0,
@@ -310,7 +363,7 @@ describe('SpanStatsProcessor', () => {
   it('should export on interval', () => {
     processor.onInterval()
 
-    expect(exporter.export).to.be.calledWith({
+    assert.ok(exporter.export.calledWith({
       Hostname: hostname(),
       Env: config.env,
       Version: config.version,
@@ -324,6 +377,8 @@ describe('SpanStatsProcessor', () => {
           Type: 'span-type',
           HTTPStatusCode: 200,
           Synthetics: false,
+          HTTPMethod: '',
+          HTTPEndpoint: '',
           Hits: n,
           TopLevelHits: n,
           Errors: 0,
@@ -336,7 +391,7 @@ describe('SpanStatsProcessor', () => {
       TracerVersion: pkg.version,
       RuntimeID: processor.tags['runtime-id'],
       Sequence: processor.sequence
-    })
+    }))
   })
 
   it('should export on interval with default version', () => {
@@ -345,7 +400,7 @@ describe('SpanStatsProcessor', () => {
     const processor = new SpanStatsProcessor(versionlessConfig)
     processor.onInterval()
 
-    expect(exporter.export).to.be.calledWith({
+    assert.ok(exporter.export.calledWith({
       Hostname: hostname(),
       Env: config.env,
       Version: version,
@@ -354,6 +409,6 @@ describe('SpanStatsProcessor', () => {
       TracerVersion: pkg.version,
       RuntimeID: processor.tags['runtime-id'],
       Sequence: processor.sequence
-    })
+    }))
   })
 })

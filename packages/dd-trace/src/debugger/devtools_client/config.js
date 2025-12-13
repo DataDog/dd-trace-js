@@ -24,4 +24,6 @@ function updateUrl (updates) {
     hostname: updates.hostname || defaults.hostname,
     port: updates.port
   })
+
+  config.dynamicInstrumentation.captureTimeoutNs = BigInt(updates.dynamicInstrumentation.captureTimeoutMs) * 1_000_000n
 }

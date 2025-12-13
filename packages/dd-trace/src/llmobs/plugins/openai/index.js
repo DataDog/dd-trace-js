@@ -1,6 +1,7 @@
 'use strict'
 
-const LLMObsPlugin = require('./base')
+const LLMObsPlugin = require('../base')
+const { extractChatTemplateFromInstructions, normalizePromptVariables, extractTextFromContentItem } = require('./utils')
 
 const allowedParamKeys = new Set([
   'max_output_tokens',
@@ -115,6 +116,10 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           metrics.cacheReadTokens = cacheReadTokens
         }
       }
+      // Reasoning tokens - Responses API returns `output_tokens_details`, `completion_tokens_details`
+      const reasoningOutputObject = tokenUsage.output_tokens_details ?? tokenUsage.completion_tokens_details
+      const reasoningOutputTokens = reasoningOutputObject?.reasoning_tokens ?? 0
+      if (reasoningOutputTokens !== undefined) metrics.reasoningOutputTokens = reasoningOutputTokens
     }
 
     return metrics
@@ -221,7 +226,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   #tagResponse (span, inputs, response, error) {
     // Tag metadata - use allowlist approach for request parameters
 
-    const { input, model, ...parameters } = inputs
+    const { model, ...parameters } = inputs
+    let input = inputs.input
 
     // Create input messages
     const inputMessages = []
@@ -231,10 +237,33 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       inputMessages.push({ role: 'system', content: inputs.instructions })
     }
 
+    // For reusable prompts, use response.instructions if no explicit input is provided
+    if (!input && inputs.prompt && response?.instructions) {
+      input = response.instructions
+    }
+
     // Handle input - can be string or array of mixed messages
     if (Array.isArray(input)) {
       for (const item of input) {
-        if (item.type === 'function_call') {
+        if (item.type === 'message') {
+          // Handle instruction messages (from response.instructions for reusable prompts)
+          const role = item.role
+          if (!role) continue
+
+          let content = ''
+          if (Array.isArray(item.content)) {
+            const textParts = item.content
+              .map(extractTextFromContentItem)
+              .filter(Boolean)
+            content = textParts.join('')
+          } else if (typeof item.content === 'string') {
+            content = item.content
+          }
+
+          if (content) {
+            inputMessages.push({ role, content })
+          }
+        } else if (item.type === 'function_call') {
           // Function call: convert to message with tool_calls
           // Parse arguments if it's a JSON string
           let parsedArgs = item.arguments
@@ -380,6 +409,22 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     this._tagger.tagLLMIO(span, inputMessages, outputMessages)
 
+    // Handle prompt tracking for reusable prompts
+    if (inputs.prompt && response?.prompt) {
+      const { id, version } = response.prompt // ResponsePrompt
+      // TODO: Add proper tagger API for prompt metadata
+      if (id && version) {
+        const normalizedVariables = normalizePromptVariables(inputs.prompt.variables)
+        const chatTemplate = extractChatTemplateFromInstructions(response.instructions, normalizedVariables)
+        this._tagger._setTag(span, '_ml_obs.meta.input.prompt', {
+          id,
+          version,
+          variables: normalizedVariables,
+          chat_template: chatTemplate
+        })
+      }
+    }
+
     const outputMetadata = {}
 
     // Add fields from response object (convert numbers to floats)
@@ -388,9 +433,6 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     if (response.tool_choice !== undefined) outputMetadata.tool_choice = response.tool_choice
     if (response.truncation !== undefined) outputMetadata.truncation = response.truncation
     if (response.text !== undefined) outputMetadata.text = response.text
-    if (response.usage?.output_tokens_details?.reasoning_tokens !== undefined) {
-      outputMetadata.reasoning_tokens = response.usage.output_tokens_details.reasoning_tokens
-    }
 
     this._tagger.tagMetadata(span, outputMetadata) // update the metadata with the output metadata
   }

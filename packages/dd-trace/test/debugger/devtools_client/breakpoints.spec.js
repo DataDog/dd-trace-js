@@ -1,15 +1,33 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('mocha')
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
+const assert = require('node:assert/strict')
 
+const { beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 require('../../setup/mocha')
 
 describe('breakpoints', function () {
+  /** @type {typeof import('../../../src/debugger/devtools_client/breakpoints')} */
   let breakpoints
+  /**
+   * @type {{
+   *   post: sinon.SinonStub;
+   *   on: Function;
+   *   '@noCallThru': boolean;
+   * }}
+   */
   let sessionMock
+  /**
+   * @type {{
+   *   findScriptFromPartialPath: sinon.SinonStub;
+   *   clearState: sinon.SinonStub;
+   *   locationToBreakpoint: Map<any, any>;
+   *   breakpointToProbes: Map<any, any>;
+   *   probeToLocation: Map<any, any>;
+   *   '@noCallThru': boolean;
+   * }}
+   */
   let stateMock
 
   beforeEach(function () {
@@ -52,8 +70,8 @@ describe('breakpoints', function () {
     it('should enable debugger for the first breakpoint', async function () {
       await addProbe()
 
-      expect(sessionMock.post.firstCall).to.have.been.calledWith('Debugger.enable')
-      expect(sessionMock.post.secondCall).to.have.been.calledWith('Debugger.setBreakpoint', {
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.enable')
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
         location: {
           scriptId: 'script-1',
           lineNumber: 9,
@@ -61,7 +79,7 @@ describe('breakpoints', function () {
         },
         condition: undefined
       })
-      expect(sessionMock.post).to.have.been.calledTwice
+      sinon.assert.calledTwice(sessionMock.post)
     })
 
     it('should not enable debugger for subsequent breakpoints', async function () {
@@ -70,7 +88,7 @@ describe('breakpoints', function () {
 
       await addProbe({ id: 'probe-2', where: { sourceFile: 'test2.js', lines: ['20'] } })
 
-      expect(sessionMock.post).to.have.been.calledOnceWith('Debugger.setBreakpoint')
+      sinon.assert.calledOnceWithMatch(sessionMock.post, 'Debugger.setBreakpoint')
     })
 
     it('2nd probe should wait until the debugger has finished enabling before being applied', async function () {
@@ -83,14 +101,37 @@ describe('breakpoints', function () {
         addProbe({ id: 'probe-2', where: { sourceFile: 'test2.js', lines: ['20'] } })
       ])
 
-      expect(sessionMock.post.firstCall).to.have.been.calledWith('Debugger.enable')
-      expect(sessionMock.post.secondCall).to.have.been.calledWith('Debugger.setBreakpoint')
-      expect(sessionMock.post.thirdCall).to.have.been.calledWith('Debugger.setBreakpoint')
-      expect(sessionMock.post).to.have.been.calledThrice
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.enable')
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint')
+      sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint')
+      sinon.assert.calledThrice(sessionMock.post)
 
-      expect(stateMock.findScriptFromPartialPath.firstCall).to.have.been.calledWith('test.js')
-      expect(stateMock.findScriptFromPartialPath.secondCall).to.have.been.calledWith('test2.js')
-      expect(stateMock.findScriptFromPartialPath).to.have.been.calledTwice
+      sinon.assert.calledWith(stateMock.findScriptFromPartialPath.firstCall, 'test.js')
+      sinon.assert.calledWith(stateMock.findScriptFromPartialPath.secondCall, 'test2.js')
+      sinon.assert.calledTwice(stateMock.findScriptFromPartialPath)
+    })
+
+    it('should initialize lastCaptureNs to ensure first probe hit is always captured', async function () {
+      await addProbe({ sampling: { snapshotsPerSecond: 0.5 } })
+
+      // Verify the probe was stored in the breakpointToProbes map
+      const breakpointId = 'bp-script-1:9:0'
+      const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
+      assert(probesAtLocation, 'Probes should be stored at breakpoint location')
+
+      const probe = probesAtLocation.get('probe-1')
+      assert(probe, 'Probe should be stored in map')
+
+      // Verify lastCaptureNs is initialized to -(2^53 - 1) to ensure first hit is always captured
+      assert.strictEqual(probe.lastCaptureNs, BigInt(Number.MIN_SAFE_INTEGER),
+        'lastCaptureNs should be initialized to -(2^53 - 1) to ensure first probe hit is always captured')
+
+      // Verify nsBetweenSampling is calculated correctly
+      assert.strictEqual(
+        probe.nsBetweenSampling,
+        2000000000n,
+        'nsBetweenSampling should be 2 seconds for 0.5 samples/second'
+      )
     })
 
     describe('add multiple probes to the same location', function () {
@@ -102,7 +143,7 @@ describe('breakpoints', function () {
         // Add second probe to same location
         await addProbe({ id: 'probe-2' })
 
-        expect(sessionMock.post).to.not.have.been.called
+        sinon.assert.notCalled(sessionMock.post)
       })
 
       it('mixed: 2nd probe no condition', async function () {
@@ -118,10 +159,10 @@ describe('breakpoints', function () {
         await addProbe({ id: 'probe-2' })
 
         // Should remove previous breakpoint and create a new one with both conditions
-        expect(sessionMock.post.firstCall).to.have.been.calledWith('Debugger.removeBreakpoint', {
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', {
           breakpointId: 'bp-script-1:9:0'
         })
-        expect(sessionMock.post.secondCall).to.have.been.calledWith('Debugger.setBreakpoint', {
+        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
           location: {
             scriptId: 'script-1',
             lineNumber: 9,
@@ -129,7 +170,7 @@ describe('breakpoints', function () {
           },
           condition: undefined
         })
-        expect(sessionMock.post).to.have.been.calledTwice
+        sinon.assert.calledTwice(sessionMock.post)
       })
 
       it('mixed: 1st probe no condition', async function () {
@@ -145,7 +186,7 @@ describe('breakpoints', function () {
           }
         })
 
-        expect(sessionMock.post).to.not.have.been.called
+        sinon.assert.notCalled(sessionMock.post)
       })
 
       it('all conditions', async function () {
@@ -167,10 +208,10 @@ describe('breakpoints', function () {
         })
 
         // Should remove previous breakpoint and create a new one with both conditions
-        expect(sessionMock.post.firstCall).to.have.been.calledWith('Debugger.removeBreakpoint', {
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', {
           breakpointId: 'bp-script-1:9:0'
         })
-        expect(sessionMock.post.secondCall).to.have.been.calledWith('Debugger.setBreakpoint', {
+        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
           location: {
             scriptId: 'script-1',
             lineNumber: 9,
@@ -180,7 +221,7 @@ describe('breakpoints', function () {
             '(() => { try { return (foo) === (42) } catch { return false } })() || ' +
             '(() => { try { return (foo) === (43) } catch { return false } })()'
         })
-        expect(sessionMock.post).to.have.been.calledTwice
+        sinon.assert.calledTwice(sessionMock.post)
       })
 
       it('should allow adding multiple probes at the same location synchronously', async function () {
@@ -189,9 +230,9 @@ describe('breakpoints', function () {
           addProbe(),
           addProbe({ id: 'probe-2' })
         ])
-        expect(sessionMock.post.firstCall).to.have.been.calledWith('Debugger.enable')
-        expect(sessionMock.post.secondCall).to.have.been.calledWith('Debugger.setBreakpoint')
-        expect(sessionMock.post).to.have.been.calledTwice
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.enable')
+        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint')
+        sinon.assert.calledTwice(sessionMock.post)
       })
     })
 
@@ -203,8 +244,8 @@ describe('breakpoints', function () {
           throw new Error('Should not resolve')
         })
         .catch((err) => {
-          expect(err).to.be.instanceOf(Error)
-          expect(err.message).to.equal('No loaded script found for test.js (probe: probe-1, version: 1)')
+          assert.ok(err instanceof Error)
+          assert.strictEqual(err.message, 'No loaded script found for test.js (probe: probe-1, version: 1)')
         })
     })
 
@@ -221,8 +262,8 @@ describe('breakpoints', function () {
           throw new Error('Should not resolve')
         })
         .catch((err) => {
-          expect(err).to.be.instanceOf(Error)
-          expect(err.message).to.equal(
+          assert.ok(err instanceof Error)
+          assert.strictEqual(err.message,
             'Cannot compile expression: this is an invalid condition (probe: probe-1, version: 1)'
           )
         })
@@ -236,8 +277,8 @@ describe('breakpoints', function () {
 
       await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-      expect(sessionMock.post).to.have.been.calledOnceWith('Debugger.disable')
-      expect(stateMock.clearState).to.have.been.calledOnce
+      sinon.assert.calledOnceWithExactly(sessionMock.post, 'Debugger.disable')
+      sinon.assert.calledOnce(stateMock.clearState)
     })
 
     it('should not disable debugger when there are other breakpoints', async function () {
@@ -247,11 +288,11 @@ describe('breakpoints', function () {
 
       await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-      expect(sessionMock.post).to.have.been.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(sessionMock.post,
         'Debugger.removeBreakpoint',
         { breakpointId: 'bp-script-1:9:0' }
       )
-      expect(stateMock.clearState).to.not.have.been.called
+      sinon.assert.notCalled(stateMock.clearState)
     })
 
     it('should wait re-enabling the debugger if it is in the middle of being disabled', async function () {
@@ -263,10 +304,10 @@ describe('breakpoints', function () {
         addProbe({ id: 'probe-2', where: { sourceFile: 'test2.js', lines: ['20'] } })
       ])
 
-      expect(sessionMock.post.firstCall).to.have.been.calledWith('Debugger.disable')
-      expect(sessionMock.post.secondCall).to.have.been.calledWith('Debugger.enable')
-      expect(sessionMock.post.thirdCall).to.have.been.calledWith('Debugger.setBreakpoint')
-      expect(sessionMock.post).to.have.been.calledThrice
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.disable')
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.enable')
+      sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint')
+      sinon.assert.calledThrice(sessionMock.post)
     })
 
     it('should not disable the debugger if a new probe is in the process of being added', async function () {
@@ -279,9 +320,9 @@ describe('breakpoints', function () {
         breakpoints.removeBreakpoint({ id: 'probe-1' })
       ])
 
-      expect(sessionMock.post.firstCall).to.have.been.calledWith('Debugger.setBreakpoint')
-      expect(sessionMock.post.secondCall).to.have.been.calledWith('Debugger.removeBreakpoint')
-      expect(sessionMock.post).to.have.been.calledTwice
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.setBreakpoint')
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.removeBreakpoint')
+      sinon.assert.calledTwice(sessionMock.post)
     })
 
     describe('update breakpoint when removing one of multiple probes at the same location', function () {
@@ -292,7 +333,7 @@ describe('breakpoints', function () {
 
         await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-        expect(sessionMock.post).to.not.have.been.called
+        sinon.assert.notCalled(sessionMock.post)
       })
 
       it('mixed: removed probe with no condition', async function () {
@@ -308,10 +349,10 @@ describe('breakpoints', function () {
 
         await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-        expect(sessionMock.post.firstCall).to.have.been.calledWith('Debugger.removeBreakpoint', {
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', {
           breakpointId: 'bp-script-1:9:0'
         })
-        expect(sessionMock.post.secondCall).to.have.been.calledWith('Debugger.setBreakpoint', {
+        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
           location: {
             scriptId: 'script-1',
             lineNumber: 9,
@@ -319,10 +360,10 @@ describe('breakpoints', function () {
           },
           condition: '(foo) === (42)'
         })
-        expect(sessionMock.post).to.have.been.calledTwice
+        sinon.assert.calledTwice(sessionMock.post)
       })
 
-      it('mixed: removed probe with condtion', async function () {
+      it('mixed: removed probe with condition', async function () {
         await addProbe({
           when: {
             json: { eq: [{ ref: 'foo' }, 42] },
@@ -334,7 +375,7 @@ describe('breakpoints', function () {
 
         await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-        expect(sessionMock.post).to.not.have.been.called
+        sinon.assert.notCalled(sessionMock.post)
       })
 
       it('all conditions', async function () {
@@ -355,10 +396,10 @@ describe('breakpoints', function () {
 
         await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-        expect(sessionMock.post.firstCall).to.have.been.calledWith('Debugger.removeBreakpoint', {
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', {
           breakpointId: 'bp-script-1:9:0'
         })
-        expect(sessionMock.post.secondCall).to.have.been.calledWith('Debugger.setBreakpoint', {
+        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
           location: {
             scriptId: 'script-1',
             lineNumber: 9,
@@ -366,7 +407,7 @@ describe('breakpoints', function () {
           },
           condition: '(foo) === (43)'
         })
-        expect(sessionMock.post).to.have.been.calledTwice
+        sinon.assert.calledTwice(sessionMock.post)
       })
     })
 
@@ -376,8 +417,8 @@ describe('breakpoints', function () {
           throw new Error('Should not resolve')
         })
         .catch((err) => {
-          expect(err).to.be.instanceOf(Error)
-          expect(err.message).to.equal('Cannot remove probe probe-1: Debugger not started')
+          assert.ok(err instanceof Error)
+          assert.strictEqual(err.message, 'Cannot remove probe probe-1: Debugger not started')
         })
     })
 
@@ -388,8 +429,8 @@ describe('breakpoints', function () {
           throw new Error('Should not resolve')
         })
         .catch((err) => {
-          expect(err).to.be.instanceOf(Error)
-          expect(err.message).to.equal('Unknown probe id: unknown-probe')
+          assert.ok(err instanceof Error)
+          assert.strictEqual(err.message, 'Unknown probe id: unknown-probe')
         })
     })
   })
@@ -409,9 +450,9 @@ describe('breakpoints', function () {
       })
       await breakpoints.modifyBreakpoint(probe)
 
-      expect(sessionMock.post.firstCall).to.have.been.calledWith('Debugger.disable')
-      expect(sessionMock.post.secondCall).to.have.been.calledWith('Debugger.enable')
-      expect(sessionMock.post.thirdCall).to.have.been.calledWith('Debugger.setBreakpoint', {
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.disable')
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.enable')
+      sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint', {
         location: {
           scriptId: 'script-1',
           lineNumber: 9,
@@ -419,7 +460,7 @@ describe('breakpoints', function () {
         },
         condition: '(foo) === (42)'
       })
-      expect(sessionMock.post).to.have.been.calledThrice
+      sinon.assert.calledThrice(sessionMock.post)
     })
 
     it('should re-add the probe when there are other active probes', async function () {
@@ -437,10 +478,10 @@ describe('breakpoints', function () {
       })
       await breakpoints.modifyBreakpoint(probe)
 
-      expect(sessionMock.post.firstCall).to.have.been.calledWith('Debugger.removeBreakpoint', {
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', {
         breakpointId: 'bp-script-1:9:0'
       })
-      expect(sessionMock.post.secondCall).to.have.been.calledWith('Debugger.setBreakpoint', {
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
         location: {
           scriptId: 'script-1',
           lineNumber: 9,
@@ -448,7 +489,7 @@ describe('breakpoints', function () {
         },
         condition: '(foo) === (42)'
       })
-      expect(sessionMock.post).to.have.been.calledTwice
+      sinon.assert.calledTwice(sessionMock.post)
     })
   })
 
@@ -468,11 +509,12 @@ describe('breakpoints', function () {
  *   { json: { eq: [{ ref: 'foo' }, 42] }, dsl: 'foo = 42' } by default.
  * @returns {{ id: string; version: number; where: object; when: object; }}
  */
-function genProbeConfig ({ id, version, where, when } = {}) {
+function genProbeConfig ({ id, version, where, when, ...rest } = {}) {
   return {
     id: id || 'probe-1',
     version: version || 1,
     where: where || { sourceFile: 'test.js', lines: ['10'] },
-    when
+    when,
+    ...rest
   }
 }

@@ -1,13 +1,17 @@
 'use strict'
 
-const msgpack = require('@msgpack/msgpack')
+const assert = require('node:assert/strict')
 const { rejects } = require('node:assert/strict')
-const { expect } = require('chai')
-const { describe, it } = require('mocha')
+
+const msgpack = require('@msgpack/msgpack')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
-const agent = require('../plugins/agent')
+
 const NoopAIGuard = require('../../src/aiguard/noop')
 const AIGuard = require('../../src/aiguard/sdk')
+const agent = require('../plugins/agent')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+
 const tracerVersion = require('../../../../package.json').version
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
@@ -124,11 +128,11 @@ describe('AIGuard SDK', () => {
 
   const assertAIGuardSpan = async (meta, metaStruct = null) => {
     await agent.assertFirstTraceSpan(span => {
-      expect(span.name).to.equal('ai_guard')
-      expect(span.resource).to.equal('ai_guard')
-      expect(span.meta).to.deep.include(meta)
+      assert.strictEqual(span.name, 'ai_guard')
+      assert.strictEqual(span.resource, 'ai_guard')
+      assertObjectContains(span.meta, meta)
       if (metaStruct) {
-        expect(msgpack.decode(span.meta_struct.ai_guard)).to.deep.equal(metaStruct)
+        assert.deepStrictEqual(msgpack.decode(span.meta_struct.ai_guard), metaStruct)
       }
     }, { rejectFirst: true })
   }
@@ -158,12 +162,15 @@ describe('AIGuard SDK', () => {
       if (shouldBlock) {
         await rejects(
           () => aiguard.evaluate(messages, { block: true }),
-          err => err.name === 'AIGuardAbortError' && err.reason === reason
+          err => err.name === 'AIGuardAbortError' && err.reason === reason && err.tags === tags
         )
       } else {
         const evaluation = await aiguard.evaluate(messages, { block: true })
-        expect(evaluation.action).to.equal(action)
-        expect(evaluation.reason).to.equal(reason)
+        assert.strictEqual(evaluation.action, action)
+        assert.strictEqual(evaluation.reason, reason)
+        if (tags) {
+          assert.strictEqual(evaluation.tags, tags)
+        }
       }
 
       assertTelemetry('ai_guard.requests', { error: false, action, block: shouldBlock })
@@ -299,11 +306,35 @@ describe('AIGuard SDK', () => {
     )
   })
 
+  it('test message immutability', async () => {
+    const messages = [{
+      role: 'assistant',
+      tool_calls: [{ id: 'call_1', function: { name: 'shell', arguments: '{"cmd": "ls -lah"}' } }]
+    }]
+    mockFetch({
+      body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } }
+    })
+
+    await tracer.trace('test', async () => {
+      await aiguard.evaluate(messages)
+      // update messages before flushing
+      messages[0].tool_calls.push({ id: 'call_2', function: { name: 'shell', arguments: '{"cmd": "rm -rf"}' } })
+      messages.push({ role: 'tool', tool_call_id: 'call_1', content: 'dir1, dir2, dir3' })
+    })
+
+    await agent.assertSomeTraces(traces => {
+      const span = traces[0][1] // second span in the trace
+      const metaStruct = msgpack.decode(span.meta_struct.ai_guard)
+      assert.equal(metaStruct.messages.length, 1)
+      assert.equal(metaStruct.messages[0].tool_calls.length, 1)
+    })
+  })
+
   it('test missing required fields uses noop as default', async () => {
     const client = new AIGuard(tracer, { aiguard: { endpoint: 'http://aiguard' } })
     const result = await client.evaluate(toolCall)
-    expect(result.action).to.equal('ALLOW')
-    expect(result.reason).to.equal('AI Guard is not enabled')
+    assert.strictEqual(result.action, 'ALLOW')
+    assert.strictEqual(result.reason, 'AI Guard is not enabled')
   })
 
   const sites = [

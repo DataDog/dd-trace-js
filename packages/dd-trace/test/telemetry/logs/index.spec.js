@@ -46,7 +46,7 @@ describe('telemetry logs', () => {
 
       logs.start(defaultConfig)
 
-      expect(telemetryLog.subscribe).to.have.been.calledTwice
+      sinon.assert.calledTwice(telemetryLog.subscribe)
     })
 
     it('should be subscribe only once', () => {
@@ -58,7 +58,7 @@ describe('telemetry logs', () => {
       logs.start(defaultConfig)
       logs.start(defaultConfig)
 
-      expect(telemetryLog.subscribe).to.have.been.calledTwice
+      sinon.assert.calledTwice(telemetryLog.subscribe)
     })
 
     it('should be disabled and not subscribe if DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
@@ -82,7 +82,7 @@ describe('telemetry logs', () => {
 
       logs.stop()
 
-      expect(telemetryLog.unsubscribe).to.have.been.calledTwice
+      sinon.assert.calledTwice(telemetryLog.unsubscribe)
     })
   })
 
@@ -108,7 +108,7 @@ describe('telemetry logs', () => {
     it('should be not called with DEBUG level', () => {
       telemetryLog.publish({ message: 'message', level: 'DEBUG' })
 
-      expect(logCollectorAdd).to.not.be.called
+      sinon.assert.notCalled(logCollectorAdd)
     })
 
     it('should be called with WARN level', () => {
@@ -134,13 +134,13 @@ describe('telemetry logs', () => {
     it('should not be called with no defined level', () => {
       telemetryLog.publish({ message: 'message' })
 
-      expect(logCollectorAdd).to.not.be.called
+      sinon.assert.notCalled(logCollectorAdd)
     })
 
     it('should not be called with incorrect level', () => {
       telemetryLog.publish({ message: 'message', level: 'INFO' })
 
-      expect(logCollectorAdd).to.not.be.called
+      sinon.assert.notCalled(logCollectorAdd)
     })
 
     describe('datadog:log:error', () => {
@@ -171,19 +171,19 @@ describe('telemetry logs', () => {
       it('should not be called when an invalid object is published to datadog:log:error', () => {
         errorLog.publish({ invalid: 'field', sendViaTelemetry: true })
 
-        expect(logCollectorAdd).not.to.be.called
+        sinon.assert.notCalled(logCollectorAdd)
       })
 
       it('should not be called when an object without message and stack is published to datadog:log:error', () => {
         errorLog.publish(Log.parse(() => new Error('error')))
 
-        expect(logCollectorAdd).not.to.be.called
+        sinon.assert.notCalled(logCollectorAdd)
       })
 
       it('should not be called when an error contains sendViaTelemetry:false', () => {
         errorLog.publish({ message: 'custom error message', sendViaTelemetry: false })
 
-        expect(logCollectorAdd).not.to.be.called
+        sinon.assert.notCalled(logCollectorAdd)
       })
     })
   })
@@ -227,8 +227,8 @@ describe('telemetry logs', () => {
 
       logs.send(defaultConfig, application, host)
 
-      expect(logCollectorDrain).to.not.be.called
-      expect(sendData).to.not.be.called
+      sinon.assert.notCalled(logCollectorDrain)
+      sinon.assert.notCalled(sendData)
     })
   })
 })

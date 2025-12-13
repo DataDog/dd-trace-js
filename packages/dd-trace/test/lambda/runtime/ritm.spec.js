@@ -1,6 +1,7 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+
 const { _extractModuleRootAndHandler, _extractModuleNameAndHandlerPath } = require('../../../src/lambda/runtime/ritm')
 
 describe('runtime', () => {
@@ -13,8 +14,8 @@ describe('runtime', () => {
         const expectedModuleRoot = './api/src/'
         const expectedHandler = 'index.nested.handler'
 
-        expect(moduleRoot).to.equal(expectedModuleRoot)
-        expect(handlerString).to.equal(expectedHandler)
+        assert.strictEqual(moduleRoot, expectedModuleRoot)
+        assert.strictEqual(handlerString, expectedHandler)
       })
 
       it('breaks module and handler correctly', () => {
@@ -24,8 +25,8 @@ describe('runtime', () => {
         const expectedModuleRoot = './src/'
         const expectedHandler = 'handler.handler'
 
-        expect(moduleRoot).to.equal(expectedModuleRoot)
-        expect(handlerString).to.equal(expectedHandler)
+        assert.strictEqual(moduleRoot, expectedModuleRoot)
+        assert.strictEqual(handlerString, expectedHandler)
       })
     })
 
@@ -37,8 +38,8 @@ describe('runtime', () => {
         const expectedModuleName = 'index'
         const expectedHandlerPath = 'nested.handler'
 
-        expect(moduleName).to.equal(expectedModuleName)
-        expect(handlerPath).to.equal(expectedHandlerPath)
+        assert.strictEqual(moduleName, expectedModuleName)
+        assert.strictEqual(handlerPath, expectedHandlerPath)
       })
 
       it('breaks module name and handler path correctly', () => {
@@ -48,13 +49,13 @@ describe('runtime', () => {
         const expectedModuleName = 'handler'
         const expectedHandlerPath = 'handler'
 
-        expect(moduleName).to.equal(expectedModuleName)
-        expect(handlerPath).to.equal(expectedHandlerPath)
+        assert.strictEqual(moduleName, expectedModuleName)
+        assert.strictEqual(handlerPath, expectedHandlerPath)
       })
 
       it('throws an error if the handler is malformed', () => {
         const handler = 'handler'
-        expect(() => _extractModuleNameAndHandlerPath(handler)).to.throw(Error, `Malformed handler name: ${handler}`)
+        assert.throws(() => _extractModuleNameAndHandlerPath(handler), Error, `Malformed handler name: ${handler}`)
       })
     })
   })

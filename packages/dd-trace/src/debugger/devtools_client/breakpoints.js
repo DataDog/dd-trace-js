@@ -64,8 +64,9 @@ async function addBreakpoint (probe) {
   const snapshotsPerSecond = probe.sampling?.snapshotsPerSecond ?? (probe.captureSnapshot
     ? MAX_SNAPSHOTS_PER_SECOND_PER_PROBE
     : MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE)
-  probe.nsBetweenSampling = BigInt(1 / snapshotsPerSecond * 1e9)
-  probe.lastCaptureNs = 0n
+  probe.nsBetweenSampling = BigInt(Math.trunc(1 / snapshotsPerSecond * 1e9))
+  // Initialize to a large negative value to ensure first probe hit is always captured
+  probe.lastCaptureNs = BigInt(Number.MIN_SAFE_INTEGER)
 
   // Warning: The code below relies on undocumented behavior of the inspector!
   // It expects that `await session.post('Debugger.enable')` will wait for all loaded scripts to be emitted as
@@ -80,8 +81,17 @@ async function addBreakpoint (probe) {
     log.debug(
       '[debugger:devtools_client] Translating location using source map for %s:%d:%d (probe: %s, version: %d)',
       file, lineNumber, columnNumber, probe.id, probe.version
-    );
-    ({ line: lineNumber, column: columnNumber } = await getGeneratedPosition(url, source, lineNumber, sourceMapURL))
+    )
+    const position = await getGeneratedPosition(url, source, lineNumber, sourceMapURL)
+    if (position.line !== null && position.column !== null) {
+      lineNumber = position.line
+      columnNumber = position.column
+    } else {
+      throw new Error(
+        // eslint-disable-next-line @stylistic/max-len
+        `Could not find generated position for ${url}:${lineNumber}:${columnNumber} (probe: ${probe.id}, version: ${probe.version})`
+      )
+    }
   }
 
   try {

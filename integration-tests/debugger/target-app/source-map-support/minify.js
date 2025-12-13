@@ -1,5 +1,6 @@
 'use strict'
 
+// @ts-expect-error This code is running in a sandbox where dd-trace is available
 require('dd-trace/init')
 
 const { createServer } = require('node:http')
@@ -9,5 +10,5 @@ const server = createServer((req, res) => {
 })
 
 server.listen(process.env.APP_PORT || 0, () => {
-  process.send?.({ port: server.address().port })
+  process.send?.({ port: (/** @type {import('net').AddressInfo} */ (server.address())).port })
 })

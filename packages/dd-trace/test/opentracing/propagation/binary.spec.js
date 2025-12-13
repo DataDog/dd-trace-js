@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('tap').mocha
 
 require('../../setup/core')
@@ -27,13 +27,13 @@ describe('BinaryPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      expect(carrier).to.deep.equal(carrier)
+      assert.deepStrictEqual(carrier, carrier)
     })
   })
 
   describe('extract', () => {
     it('should not be supported', () => {
-      expect(propagator.extract({})).to.equal(null)
+      assert.strictEqual(propagator.extract({}), null)
     })
   })
 })

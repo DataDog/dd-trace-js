@@ -1,6 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+
 const { describe, it, afterEach, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -78,23 +80,21 @@ describe('git', () => {
     }
     const metadata = getGitMetadata(ciMetadata)
 
-    expect(metadata).to.contain(
-      {
-        [GIT_COMMIT_SHA]: 'ciSHA',
-        [GIT_BRANCH]: 'myBranch',
-        [GIT_COMMIT_MESSAGE]: 'myCommitMessage',
-        [GIT_COMMIT_AUTHOR_NAME]: 'ciAuthorName',
-        [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
-      }
-    )
-    expect(metadata[GIT_REPOSITORY_URL]).not.to.equal('ciRepositoryUrl')
-    expect(cachedExecStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
-    expect(cachedExecStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
-    expect(cachedExecStub).not.to.have.been.calledWith('git', ['show', '-s', '--format=%B'])
-    expect(cachedExecStub).not.to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
-    expect(cachedExecStub).not.to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
-    expect(cachedExecStub).not.to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
-    expect(cachedExecStub).to.have.been.calledWith(
+    assertObjectContains(metadata, {
+      [GIT_COMMIT_SHA]: 'ciSHA',
+      [GIT_BRANCH]: 'myBranch',
+      [GIT_COMMIT_MESSAGE]: 'myCommitMessage',
+      [GIT_COMMIT_AUTHOR_NAME]: 'ciAuthorName',
+      [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
+    })
+    assert.notStrictEqual(metadata[GIT_REPOSITORY_URL], 'ciRepositoryUrl')
+    sinon.assert.calledWith(cachedExecStub, 'git', ['ls-remote', '--get-url'])
+    sinon.assert.calledWith(cachedExecStub, 'git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
+    sinon.assert.neverCalledWith(cachedExecStub, 'git', ['show', '-s', '--format=%B'])
+    sinon.assert.neverCalledWith(cachedExecStub, 'git', ['rev-parse', 'HEAD'])
+    sinon.assert.neverCalledWith(cachedExecStub, 'git', ['rev-parse', '--abbrev-ref', 'HEAD'])
+    sinon.assert.neverCalledWith(cachedExecStub, 'git', ['rev-parse', '--show-toplevel'])
+    sinon.assert.calledWith(cachedExecStub,
       'git',
       ['show', '-s', '--format=\'%H","%aI","%an","%ae","%cI","%cn","%ce","%B\'', ciMetadata.headCommitSha]
     )
@@ -105,7 +105,7 @@ describe('git', () => {
     const ciMetadata = { repositoryUrl: 'https://github.com/datadog/safe-repository.git' }
     const metadata = getGitMetadata(ciMetadata)
 
-    expect(metadata).to.eql({
+    assert.deepStrictEqual(metadata, {
       [GIT_BRANCH]: '',
       [GIT_COMMIT_MESSAGE]: '',
       [GIT_COMMIT_SHA]: '',
@@ -140,7 +140,7 @@ describe('git', () => {
 
     const metadata = getGitMetadata({ tag: 'ciTag', headCommitSha: 'headCommitSha' })
 
-    expect(metadata).to.eql({
+    assert.deepStrictEqual(metadata, {
       [GIT_BRANCH]: 'gitBranch',
       [GIT_TAG]: 'ciTag',
       [GIT_COMMIT_MESSAGE]: commitMessage,
@@ -162,12 +162,12 @@ describe('git', () => {
       [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
     })
 
-    expect(cachedExecStub).to.have.been.calledWith('git', ['show', '-s', '--format=%B'])
-    expect(cachedExecStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
-    expect(cachedExecStub).to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
-    expect(cachedExecStub).to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
-    expect(cachedExecStub).to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
-    expect(cachedExecStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
+    sinon.assert.calledWith(cachedExecStub, 'git', ['show', '-s', '--format=%B'])
+    sinon.assert.calledWith(cachedExecStub, 'git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
+    sinon.assert.calledWith(cachedExecStub, 'git', ['rev-parse', 'HEAD'])
+    sinon.assert.calledWith(cachedExecStub, 'git', ['rev-parse', '--abbrev-ref', 'HEAD'])
+    sinon.assert.calledWith(cachedExecStub, 'git', ['rev-parse', '--show-toplevel'])
+    sinon.assert.calledWith(cachedExecStub, 'git', ['ls-remote', '--get-url'])
   })
 })
 
@@ -187,7 +187,7 @@ describe('getCommitsRevList', () => {
       }
     )
     getCommitsRevList([], [])
-    expect(logErrorSpy).not.to.have.been.called
+    sinon.assert.notCalled(logErrorSpy)
   })
 
   it('does not crash and logs the error if the repository is bigger than the limit', () => {
@@ -205,7 +205,7 @@ describe('getCommitsRevList', () => {
       }
     )
     getCommitsRevList([], [])
-    expect(logErrorSpy).to.have.been.called
+    sinon.assert.called(logErrorSpy)
   })
 
   it('returns null if the repository is bigger than the limit', () => {
@@ -218,7 +218,7 @@ describe('getCommitsRevList', () => {
       }
     )
     const commitsToUpload = getCommitsRevList([], [])
-    expect(commitsToUpload).to.be.null
+    assert.strictEqual(commitsToUpload, null)
   })
 
   it('returns null if execFileSync fails for whatever reason', () => {
@@ -230,7 +230,7 @@ describe('getCommitsRevList', () => {
       }
     )
     const commitsToUpload = getCommitsRevList([], [])
-    expect(commitsToUpload).to.be.null
+    assert.strictEqual(commitsToUpload, null)
   })
 })
 
@@ -267,7 +267,7 @@ describe('generatePackFilesForCommits', () => {
 
     const temporaryPath = path.join(fakeDirectory, '1234')
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
-    expect(packFilesToUpload).to.eql([`${temporaryPath}-commitSHA.pack`])
+    assert.deepStrictEqual(packFilesToUpload, [`${temporaryPath}-commitSHA.pack`])
   })
 
   it('creates pack files in cwd if the temporary path fails', () => {
@@ -284,7 +284,7 @@ describe('generatePackFilesForCommits', () => {
     )
 
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
-    expect(packFilesToUpload).to.eql([`${cwdPath}-commitSHA.pack`])
+    assert.deepStrictEqual(packFilesToUpload, [`${cwdPath}-commitSHA.pack`])
   })
 
   it('does not work if tmpdir does not return a folder', () => {
@@ -301,7 +301,7 @@ describe('generatePackFilesForCommits', () => {
       }
     )
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
-    expect(packFilesToUpload).to.eql([])
+    assert.deepStrictEqual(packFilesToUpload, [])
   })
 })
 
@@ -329,7 +329,7 @@ describe('unshallowRepository', () => {
     ]
 
     unshallowRepository(false)
-    expect(cachedExecStub).to.have.been.calledWith('git', options)
+    sinon.assert.calledWith(cachedExecStub, 'git', options)
   })
 
   it('works for the usual case with parentOnly', () => {
@@ -351,7 +351,7 @@ describe('unshallowRepository', () => {
     ]
 
     unshallowRepository(true)
-    expect(cachedExecStub).to.have.been.calledWith('git', options)
+    sinon.assert.calledWith(cachedExecStub, 'git', options)
   })
 
   it('works if the local HEAD is a commit that has not been pushed to the remote', () => {
@@ -375,7 +375,7 @@ describe('unshallowRepository', () => {
     ]
 
     unshallowRepository(false)
-    expect(cachedExecStub).to.have.been.calledWith('git', options)
+    sinon.assert.calledWith(cachedExecStub, 'git', options)
   })
 
   it('works if the CI is working on a detached HEAD or branch tracking hasn’t been set up', () => {
@@ -399,7 +399,7 @@ describe('unshallowRepository', () => {
     ]
 
     unshallowRepository(false)
-    expect(cachedExecStub).to.have.been.calledWith('git', options)
+    sinon.assert.calledWith(cachedExecStub, 'git', options)
   })
 })
 
@@ -418,8 +418,7 @@ describe('user credentials', () => {
       .onCall(5).returns('https://x-oauth-basic:ghp_safe_characters@github.com/datadog/safe-repository.git')
 
     const metadata = getGitMetadata({})
-    expect(metadata[GIT_REPOSITORY_URL])
-      .to.equal('https://github.com/datadog/safe-repository.git')
+    assert.strictEqual(metadata[GIT_REPOSITORY_URL], 'https://github.com/datadog/safe-repository.git')
   })
 
   it('scrubs ssh user credentials', () => {
@@ -431,8 +430,7 @@ describe('user credentials', () => {
       .onCall(5).returns('ssh://username@host.xz:port/path/to/repo.git/')
 
     const metadata = getGitMetadata({})
-    expect(metadata[GIT_REPOSITORY_URL])
-      .to.equal('ssh://host.xz:port/path/to/repo.git/')
+    assert.strictEqual(metadata[GIT_REPOSITORY_URL], 'ssh://host.xz:port/path/to/repo.git/')
   })
 })
 
@@ -448,13 +446,13 @@ describe('isGitAvailable', () => {
   })
 
   it('returns true if git is available', () => {
-    expect(isGitAvailable()).to.be.true
+    assert.strictEqual(isGitAvailable(), true)
   })
 
   it('returns false if git is not available', () => {
     process.env.PATH = ''
 
-    expect(isGitAvailable()).to.be.false
+    assert.strictEqual(isGitAvailable(), false)
   })
 })
 
@@ -469,8 +467,8 @@ describe('getGitDiff', () => {
 
     const diff = getGitDiff('base-commit', 'target-commit')
 
-    expect(diff).to.equal(expectedDiff)
-    expect(cachedExecStub).to.have.been.calledWith('git', [
+    assert.strictEqual(diff, expectedDiff)
+    sinon.assert.calledWith(cachedExecStub, 'git', [
       'diff',
       '-U0',
       '--word-diff=porcelain',
@@ -483,8 +481,8 @@ describe('getGitDiff', () => {
     const expectedDiff = 'diff --git a/file.js b/file.js'
     cachedExecStub.returns(expectedDiff)
     const diff = getGitDiff('base-commit')
-    expect(diff).to.equal(expectedDiff)
-    expect(cachedExecStub).to.have.been.calledWith('git', ['diff', '-U0', '--word-diff=porcelain', 'base-commit'])
+    assert.strictEqual(diff, expectedDiff)
+    sinon.assert.calledWith(cachedExecStub, 'git', ['diff', '-U0', '--word-diff=porcelain', 'base-commit'])
   })
 
   it('returns an empty string when git command fails because SHAs could not be found', () => {
@@ -504,8 +502,8 @@ describe('getGitDiff', () => {
 
     const diff = getGitDiff('base-commit', 'target-commit')
 
-    expect(logErrorSpy).to.have.been.called
-    expect(diff).to.equal('')
+    sinon.assert.called(logErrorSpy)
+    assert.strictEqual(diff, '')
   })
 })
 
@@ -526,8 +524,8 @@ describe('getGitRemoteName', () => {
     )
 
     const remoteName = getGitRemoteName()
-    expect(remoteName).to.equal('origin')
-    expect(cachedExecStub).to.have.been.calledWith('git',
+    assert.strictEqual(remoteName, 'origin')
+    sinon.assert.calledWith(cachedExecStub, 'git',
       ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
   })
 
@@ -545,8 +543,8 @@ describe('getGitRemoteName', () => {
     )
 
     const remoteName = getGitRemoteName()
-    expect(remoteName).to.equal('upstream')
-    expect(cachedExecStub).to.have.been.calledWith('git', ['remote'])
+    assert.strictEqual(remoteName, 'upstream')
+    sinon.assert.calledWith(cachedExecStub, 'git', ['remote'])
   })
 
   it('returns origin when no remotes are available', () => {
@@ -563,7 +561,7 @@ describe('getGitRemoteName', () => {
     )
 
     const remoteName = getGitRemoteName()
-    expect(remoteName).to.equal('origin')
+    assert.strictEqual(remoteName, 'origin')
   })
 })
 
@@ -584,8 +582,8 @@ describe('getSourceBranch', () => {
     )
 
     const branch = getSourceBranch()
-    expect(branch).to.equal('feature/my-branch')
-    expect(cachedExecStub).to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
+    assert.strictEqual(branch, 'feature/my-branch')
+    sinon.assert.calledWith(cachedExecStub, 'git', ['rev-parse', '--abbrev-ref', 'HEAD'])
   })
 
   it('returns empty string when git command fails', () => {
@@ -600,7 +598,7 @@ describe('getSourceBranch', () => {
     )
 
     const branch = getSourceBranch()
-    expect(branch).to.equal('')
+    assert.strictEqual(branch, '')
   })
 })
 
@@ -615,17 +613,17 @@ describe('checkAndFetchBranch', () => {
       './git-cache': { cachedExec: cachedExecStub }
     })
     checkAndFetchBranch('my-branch', 'origin')
-    expect(cachedExecStub).to.have.been.calledWith(
+    sinon.assert.calledWith(cachedExecStub,
       'git',
       ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
     )
-    expect(cachedExecStub).not.to.have.been.calledWith(
+    sinon.assert.neverCalledWith(cachedExecStub,
       'git',
       ['ls-remote', '--heads', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 2000 }
     )
     // Should not call fetch
-    expect(cachedExecStub).not.to.have.been.calledWith(
+    sinon.assert.neverCalledWith(cachedExecStub,
       'git',
       ['fetch', '--depth', '1', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 5000 }
@@ -641,16 +639,16 @@ describe('checkAndFetchBranch', () => {
       './git-cache': { cachedExec: cachedExecStub }
     })
     checkAndFetchBranch('my-branch', 'origin')
-    expect(cachedExecStub).to.have.been.calledWith(
+    sinon.assert.calledWith(cachedExecStub,
       'git',
       ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
     )
-    expect(cachedExecStub).to.have.been.calledWith(
+    sinon.assert.calledWith(cachedExecStub,
       'git',
       ['ls-remote', '--heads', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 2000 }
     )
-    expect(cachedExecStub).to.have.been.calledWith('git', ['fetch', '--depth', '1', 'origin', 'my-branch'])
+    sinon.assert.calledWith(cachedExecStub, 'git', ['fetch', '--depth', '1', 'origin', 'my-branch'])
   })
 
   it('does nothing if the branch does not exist locally or on remote', () => {
@@ -661,16 +659,16 @@ describe('checkAndFetchBranch', () => {
       './git-cache': { cachedExec: cachedExecStub }
     })
     checkAndFetchBranch('my-branch', 'origin')
-    expect(cachedExecStub).to.have.been.calledWith(
+    sinon.assert.calledWith(cachedExecStub,
       'git',
       ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
     )
-    expect(cachedExecStub).to.have.been.calledWith(
+    sinon.assert.calledWith(cachedExecStub,
       'git',
       ['ls-remote', '--heads', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 2000 }
     )
-    expect(cachedExecStub).not.to.have.been.calledWith(
+    sinon.assert.neverCalledWith(cachedExecStub,
       'git',
       ['fetch', '--depth', '1', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 5000 }
@@ -685,16 +683,16 @@ describe('checkAndFetchBranch', () => {
       './git-cache': { cachedExec: cachedExecStub }
     })
     checkAndFetchBranch('my-branch', 'origin')
-    expect(cachedExecStub).to.have.been.calledWith(
+    sinon.assert.calledWith(cachedExecStub,
       'git',
       ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
     )
-    expect(cachedExecStub).to.have.been.calledWith(
+    sinon.assert.calledWith(cachedExecStub,
       'git',
       ['ls-remote', '--heads', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 2000 }
     )
-    expect(cachedExecStub).not.to.have.been.calledWith(
+    sinon.assert.neverCalledWith(cachedExecStub,
       'git',
       ['fetch', '--depth', '1', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 5000 }
@@ -709,7 +707,7 @@ describe('checkAndFetchBranch', () => {
       '../../log': { debug: logDebugSpy }
     })
     checkAndFetchBranch('my-branch', 'origin')
-    expect(logDebugSpy).to.have.been.called
+    sinon.assert.called(logDebugSpy)
   })
 })
 
@@ -724,8 +722,8 @@ describe('getLocalBranches', () => {
       './git-cache': { cachedExec: cachedExecStub }
     })
     const branches = getLocalBranches('my-origin')
-    expect(branches).to.deep.equal(['branch1', 'branch2', 'branch3'])
-    expect(cachedExecStub).to.have.been.calledWith(
+    assert.deepStrictEqual(branches, ['branch1', 'branch2', 'branch3'])
+    sinon.assert.calledWith(cachedExecStub,
       'git',
       [
         'for-each-ref',
@@ -743,8 +741,8 @@ describe('getLocalBranches', () => {
       '../../log': { error: logErrorSpy }
     })
     const branches = getLocalBranches('origin')
-    expect(branches).to.deep.equal([])
-    expect(logErrorSpy).to.have.been.called
+    assert.deepStrictEqual(branches, [])
+    sinon.assert.called(logErrorSpy)
   })
 })
 
@@ -759,8 +757,8 @@ describe('getMergeBase', () => {
       './git-cache': { cachedExec: cachedExecStub }
     })
     const mergeBase = getMergeBase('main', 'feature')
-    expect(mergeBase).to.equal('abc123')
-    expect(cachedExecStub).to.have.been.calledWith('git', ['merge-base', 'main', 'feature'])
+    assert.strictEqual(mergeBase, 'abc123')
+    sinon.assert.calledWith(cachedExecStub, 'git', ['merge-base', 'main', 'feature'])
   })
 
   it('returns empty string if command throws', () => {
@@ -771,8 +769,8 @@ describe('getMergeBase', () => {
       '../../log': { error: logErrorSpy }
     })
     const mergeBase = getMergeBase('main', 'feature')
-    expect(mergeBase).to.equal('')
-    expect(logErrorSpy).to.have.been.called
+    assert.strictEqual(mergeBase, '')
+    sinon.assert.called(logErrorSpy)
   })
 })
 
@@ -787,8 +785,8 @@ describe('getCounts', () => {
       './git-cache': { cachedExec: cachedExecStub }
     })
     const counts = getCounts('feature', 'main')
-    expect(counts).to.deep.equal({ behind: 38, ahead: 3 })
-    expect(cachedExecStub).to.have.been.calledWith('git', ['rev-list', '--left-right', '--count', 'main...feature'])
+    assert.deepStrictEqual(counts, { behind: 38, ahead: 3 })
+    sinon.assert.calledWith(cachedExecStub, 'git', ['rev-list', '--left-right', '--count', 'main...feature'])
   })
 
   it('returns object with empty values if command throws', () => {
@@ -799,8 +797,8 @@ describe('getCounts', () => {
       '../../log': { error: logErrorSpy }
     })
     const counts = getCounts('feature', 'main')
-    expect(counts).to.deep.equal({ behind: null, ahead: null })
-    expect(logErrorSpy).to.have.been.called
+    assert.deepStrictEqual(counts, { behind: null, ahead: null })
+    sinon.assert.called(logErrorSpy)
   })
 })
 
@@ -820,13 +818,13 @@ describe('getGitInformationDiscrepancy', () => {
 
     const result = getGitInformationDiscrepancy()
 
-    expect(result).to.eql({
+    assert.deepStrictEqual(result, {
       gitRepositoryUrl: 'https://github.com/datadog/safe-repository.git',
       gitCommitSHA: 'abc123'
     })
 
-    expect(cachedExecStub).to.have.been.calledWith('git', ['config', '--get', 'remote.origin.url'], { stdio: 'pipe' })
-    expect(cachedExecStub).to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
+    sinon.assert.calledWith(cachedExecStub, 'git', ['config', '--get', 'remote.origin.url'], { stdio: 'pipe' })
+    sinon.assert.calledWith(cachedExecStub, 'git', ['rev-parse', 'HEAD'])
   })
 
   it('returns empty strings when git commands fail', () => {
@@ -834,7 +832,7 @@ describe('getGitInformationDiscrepancy', () => {
 
     const result = getGitInformationDiscrepancy()
 
-    expect(result).to.eql({
+    assert.deepStrictEqual(result, {
       gitRepositoryUrl: '',
       gitCommitSHA: ''
     })
@@ -861,7 +859,7 @@ describe('fetchHeadCommitSha', () => {
 
     fetchHeadCommitSha(headSha)
 
-    expect(cachedExecStub).to.have.been.calledWith(
+    sinon.assert.calledWith(cachedExecStub,
       'git',
       [
         'fetch',

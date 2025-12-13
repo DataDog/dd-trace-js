@@ -11,6 +11,9 @@ const {
   getIsFaultyEarlyFlakeDetection
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
+const {
+  getEnvironmentVariable
+} = require('../../dd-trace/src/config-helper')
 const { DD_MAJOR } = require('../../../version')
 
 const testStartCh = channel('ci:playwright:test:start')
@@ -38,7 +41,7 @@ const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
 
-const RUM_FLUSH_WAIT_TIME = 1000
+const RUM_FLUSH_WAIT_TIME = Number(getEnvironmentVariable('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 1000
 
 let applyRepeatEachIndex = null
 
@@ -687,10 +690,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     const projects = getProjectsFromRunner(this, config)
 
-    const shouldSetRetries = isFlakyTestRetriesEnabled &&
-      flakyTestRetriesCount > 0 &&
-      !isTestManagementTestsEnabled
-    if (shouldSetRetries) {
+    // ATR and `--retries` are now compatible with Test Management.
+    // Test Management tests have their retries set to 0 at the test level,
+    // preventing them from being retried by ATR or `--retries`.
+    const shouldSetATRRetries = isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0
+    if (shouldSetATRRetries) {
       projects.forEach(project => {
         if (project.retries === 0) { // Only if it hasn't been set by the user
           project.retries = flakyTestRetriesCount
@@ -722,6 +726,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       })
     })
 
+    let preventedToFail = false
+
     const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
 
     if (isTestManagementTestsEnabled && sessionStatus === 'failed') {
@@ -730,23 +736,30 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       let totalPureQuarantinedFailedTestCount = 0
 
       for (const [fqn, testStatuses] of testsToTestStatuses.entries()) {
-        const failedCount = testStatuses.filter(status => status === 'fail').length
-        totalFailedTestCount += failedCount
-        if (quarantinedButNotAttemptToFixFqns.has(fqn)) {
-          totalPureQuarantinedFailedTestCount += failedCount
+        // Only count as failed if the final status (after retries) is 'fail'
+        const lastStatus = testStatuses[testStatuses.length - 1]
+        if (lastStatus === 'fail') {
+          totalFailedTestCount += 1
+          if (quarantinedButNotAttemptToFixFqns.has(fqn)) {
+            totalPureQuarantinedFailedTestCount += 1
+          }
         }
       }
 
       for (const test of quarantinedOrDisabledTestsAttemptToFix) {
         const testFqn = getTestFullyQualifiedName(test)
         const testStatuses = testsToTestStatuses.get(testFqn)
-        totalAttemptToFixFailedTestCount += testStatuses.filter(status => status === 'fail').length
+        // Only count as failed if the final status (after retries) is 'fail'
+        if (testStatuses && testStatuses[testStatuses.length - 1] === 'fail') {
+          totalAttemptToFixFailedTestCount += 1
+        }
       }
 
       const totalIgnorableFailures = totalAttemptToFixFailedTestCount + totalPureQuarantinedFailedTestCount
 
       if (totalFailedTestCount > 0 && totalFailedTestCount === totalIgnorableFailures) {
         runAllTestsReturn = 'passed'
+        preventedToFail = true
       }
     }
 
@@ -754,7 +767,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       onDone = resolve
     })
     testSessionFinishCh.publish({
-      status: STATUS_TO_TEST_STATUS[sessionStatus],
+      status: preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus],
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
@@ -917,6 +930,8 @@ addHook({
         }
         if (testProperties.attemptToFix) {
           test._ddIsAttemptToFix = true
+          // Prevent ATR or `--retries` from retrying attemptToFix tests
+          test.retries = 0
           const fileSuite = getSuiteType(test, 'file')
 
           if (!fileSuitesWithManagedTestsToProjects.has(fileSuite)) {
@@ -991,6 +1006,8 @@ addHook({
         newTests.forEach(newTest => {
           newTest._ddIsNew = true
           if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
+            // Prevent ATR or `--retries` from retrying new tests if EFD is enabled
+            newTest.retries = 0
             const fileSuite = getSuiteType(newTest, 'file')
             if (!fileSuitesWithNewTestsToProjects.has(fileSuite)) {
               fileSuitesWithNewTestsToProjects.set(fileSuite, getSuiteType(newTest, 'project'))
@@ -1064,9 +1081,19 @@ addHook({
 
     try {
       if (page) {
-        const isRumActive = await page.evaluate(() => {
-          return window.DD_RUM && window.DD_RUM.getInternalContext ? !!window.DD_RUM.getInternalContext() : false
+        const { isRumInstrumented, isRumActive, rumSamplingRate } = await page.evaluate(() => {
+          const isRumInstrumented = !!window.DD_RUM
+          const isRumActive = window.DD_RUM && window.DD_RUM.getInternalContext
+            ? !!window.DD_RUM.getInternalContext()
+            : false
+          const rumSamplingRate = window.DD_RUM && window.DD_RUM.getInitConfiguration
+            ? window.DD_RUM.getInitConfiguration().sessionSampleRate
+            : null
+          return { isRumInstrumented, isRumActive, rumSamplingRate }
         })
+        if (isRumInstrumented && rumSamplingRate < 100 && !isRumActive) {
+          log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
+        }
 
         if (isRumActive) {
           testPageGotoCh.publish({
@@ -1075,8 +1102,9 @@ addHook({
           })
         }
       }
-    } catch {
+    } catch (e) {
       // ignore errors such as redirects, context destroyed, etc
+      log.error('goto hook error', e)
     }
 
     return response
@@ -1168,8 +1196,9 @@ addHook({
                   }
                 }
               }
-            } catch {
+            } catch (e) {
               // ignore errors
+              log.error('afterEach hook error', e)
             }
           },
           title: 'afterEach hook',

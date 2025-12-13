@@ -1,8 +1,8 @@
 'use strict'
 
-const { assert, expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
 
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const {
   FakeAgent,
   sandboxCwd,
@@ -35,8 +35,8 @@ describe.skip('esm', () => {
 
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(checkSpansForServiceName(payload, 'azure.eventhubs.send'), true)
       })
 
@@ -49,38 +49,38 @@ describe.skip('esm', () => {
         // list of EventData
         assert.strictEqual(payload.length, 5)
         assert.strictEqual(payload[0][0].name, 'azure.eventhubs.send')
-        assert.propertyVal(payload[0][0].meta, 'messaging.system', 'eventhubs')
-        assert.propertyVal(payload[0][0].meta, 'messaging.destination.name', 'eh1')
-        assert.propertyVal(payload[0][0].meta, 'messaging.operation', 'send')
-        assert.propertyVal(payload[0][0].meta, 'network.destination.name', '127.0.0.1:5673')
-        assert.propertyVal(payload[0][0].metrics, 'messaging.batch.message_count', 2)
+        assert.strictEqual(payload[0][0].meta['messaging.system'], 'eventhubs')
+        assert.strictEqual(payload[0][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[0][0].meta['messaging.operation'], 'send')
+        assert.strictEqual(payload[0][0].meta['network.destination.name'], '127.0.0.1:5673')
+        assert.strictEqual(payload[0][0].metrics['messaging.batch.message_count'], 2)
         // list of AMPQ messages
         assert.strictEqual(payload[1][0].name, 'azure.eventhubs.send')
-        assert.propertyVal(payload[1][0].meta, 'messaging.system', 'eventhubs')
-        assert.propertyVal(payload[1][0].meta, 'messaging.destination.name', 'eh1')
-        assert.propertyVal(payload[1][0].meta, 'messaging.operation', 'send')
-        assert.propertyVal(payload[1][0].meta, 'network.destination.name', '127.0.0.1:5673')
-        assert.propertyVal(payload[1][0].metrics, 'messaging.batch.message_count', 2)
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhubs')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'send')
+        assert.strictEqual(payload[1][0].meta['network.destination.name'], '127.0.0.1:5673')
+        assert.strictEqual(payload[1][0].metrics['messaging.batch.message_count'], 2)
         // Batch -> EventDataBatchImpl
         assert.strictEqual(payload[2][0].name, 'azure.eventhubs.create')
-        assert.propertyVal(payload[2][0].meta, 'messaging.system', 'eventhubs')
-        assert.propertyVal(payload[2][0].meta, 'messaging.destination.name', 'eh1')
-        assert.propertyVal(payload[2][0].meta, 'messaging.operation', 'create')
-        assert.propertyVal(payload[2][0].meta, 'messaging.system', 'eventhubs')
-        assert.propertyVal(payload[2][0].meta, 'network.destination.name', '127.0.0.1:5673')
+        assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhubs')
+        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'create')
+        assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhubs')
+        assert.strictEqual(payload[2][0].meta['network.destination.name'], '127.0.0.1:5673')
         assert.strictEqual(payload[3][0].name, 'azure.eventhubs.create')
-        assert.propertyVal(payload[3][0].meta, 'messaging.system', 'eventhubs')
-        assert.propertyVal(payload[3][0].meta, 'messaging.destination.name', 'eh1')
-        assert.propertyVal(payload[3][0].meta, 'messaging.operation', 'create')
-        assert.propertyVal(payload[3][0].meta, 'messaging.system', 'eventhubs')
-        assert.propertyVal(payload[3][0].meta, 'network.destination.name', '127.0.0.1:5673')
+        assert.strictEqual(payload[3][0].meta['messaging.system'], 'eventhubs')
+        assert.strictEqual(payload[3][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[3][0].meta['messaging.operation'], 'create')
+        assert.strictEqual(payload[3][0].meta['messaging.system'], 'eventhubs')
+        assert.strictEqual(payload[3][0].meta['network.destination.name'], '127.0.0.1:5673')
         assert.strictEqual(payload[4][0].name, 'azure.eventhubs.send')
-        assert.propertyVal(payload[4][0].meta, 'messaging.system', 'eventhubs')
-        assert.propertyVal(payload[4][0].meta, 'messaging.destination.name', 'eh1')
-        assert.propertyVal(payload[4][0].meta, 'messaging.operation', 'send')
-        assert.propertyVal(payload[4][0].meta, 'messaging.system', 'eventhubs')
-        assert.propertyVal(payload[4][0].meta, 'network.destination.name', '127.0.0.1:5673')
-        assert.propertyVal(payload[4][0].metrics, 'messaging.batch.message_count', 4)
+        assert.strictEqual(payload[4][0].meta['messaging.system'], 'eventhubs')
+        assert.strictEqual(payload[4][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[4][0].meta['messaging.operation'], 'send')
+        assert.strictEqual(payload[4][0].meta['messaging.system'], 'eventhubs')
+        assert.strictEqual(payload[4][0].meta['network.destination.name'], '127.0.0.1:5673')
+        assert.strictEqual(payload[4][0].metrics['messaging.batch.message_count'], 4)
         assert.strictEqual(parseLinks(payload[4][0]).length, 2)
       })
 
@@ -90,7 +90,7 @@ describe.skip('esm', () => {
 
     it('does not add span links when they are disabled', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        expect(payload[2][0]).to.not.have.property('_dd.span_links')
+        assert.ok(!('_dd.span_links' in payload[2][0]))
       })
       const envVar = { DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: false, ...spawnEnv }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, undefined, envVar)

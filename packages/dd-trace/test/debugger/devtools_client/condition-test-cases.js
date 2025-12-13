@@ -103,7 +103,7 @@ const references = [
   [{ ref: 'this' }, {}, global], // Unless bound, `this` defaults to the global object
   { ast: { ref: 'super' }, expected: 'super', execute: false },
 
-  // Litterals, but we allow them as they can be useful
+  // Literals, but we allow them as they can be useful
   [{ ref: 'undefined' }, {}, undefined],
   [{ ref: 'Infinity' }, {}, Infinity],
 

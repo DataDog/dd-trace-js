@@ -1,10 +1,11 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
+const assert = require('node:assert/strict')
 
+const { expect } = require('chai')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 const {
   getExecutedMetric,
   getInstrumentedMetric,
@@ -86,35 +87,35 @@ describe('Metrics', () => {
     metric.formatTags('tag1', 'tag2').forEach(tag => metric.inc(context, tag, 42))
 
     expect(reqNamespace.count).to.be.calledTwice
-    expect(reqNamespace.count.firstCall.args).to.be.deep.equals([metric.name, ['tagKey:tag1']])
-    expect(reqNamespace.count.secondCall.args).to.be.deep.equals([metric.name, ['tagKey:tag2']])
+    assert.deepStrictEqual(reqNamespace.count.firstCall.args, [metric.name, ['tagKey:tag1']])
+    assert.deepStrictEqual(reqNamespace.count.secondCall.args, [metric.name, ['tagKey:tag2']])
   })
 
   it('getExecutedMetric should return a metric depending on tag', () => {
     let metric = getExecutedMetric(TagKey.VULNERABILITY_TYPE)
 
-    expect(metric).to.be.equal(EXECUTED_SINK)
+    assert.strictEqual(metric, EXECUTED_SINK)
 
     metric = getExecutedMetric(TagKey.SOURCE_TYPE)
-    expect(metric).to.be.equal(EXECUTED_SOURCE)
+    assert.strictEqual(metric, EXECUTED_SOURCE)
   })
 
   it('getInstrumentedMetric should return a metric depending on tag', () => {
     let metric = getInstrumentedMetric(TagKey.VULNERABILITY_TYPE)
 
-    expect(metric).to.be.equal(INSTRUMENTED_SINK)
+    assert.strictEqual(metric, INSTRUMENTED_SINK)
 
     metric = getInstrumentedMetric(TagKey.SOURCE_TYPE)
-    expect(metric).to.be.equal(INSTRUMENTED_SOURCE)
+    assert.strictEqual(metric, INSTRUMENTED_SOURCE)
   })
 
   describe('NoTaggedIastMetric', () => {
     it('should define an empty array as its tags', () => {
       const noTagged = new NoTaggedIastMetric('notagged', 'scope')
 
-      expect(noTagged.name).to.be.eq('notagged')
-      expect(noTagged.scope).to.be.eq('scope')
-      expect(noTagged.tags).to.be.deep.eq([])
+      assert.strictEqual(noTagged.name, 'notagged')
+      assert.strictEqual(noTagged.scope, 'scope')
+      assert.deepStrictEqual(noTagged.tags, [])
     })
 
     it('should increment in 1 the metric', () => {

@@ -35,7 +35,7 @@ describe('rewriter telemetry', () => {
       }
       incrementTelemetryIfNeeded(metrics)
 
-      expect(instrumentedPropagationInc).not.to.be.called
+      sinon.assert.notCalled(instrumentedPropagationInc)
     })
 
     it('should increment telemetry when verbosity is not OFF', () => {

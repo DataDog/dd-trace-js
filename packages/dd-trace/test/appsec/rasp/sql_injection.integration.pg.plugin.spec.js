@@ -1,10 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 const path = require('path')
 const Axios = require('axios')
-const { assert } = require('chai')
-
 // These test are here and not in the integration tests
 // because they require postgres instance
 describe('RASP - sql_injection - integration', () => {
@@ -49,8 +49,8 @@ describe('RASP - sql_injection - integration', () => {
 
       assert.strictEqual(e.response.status, 403)
       return await agent.assertMessageReceived(({ headers, payload }) => {
-        assert.property(payload[0][0].meta, '_dd.appsec.json')
-        assert.include(payload[0][0].meta['_dd.appsec.json'], '"rasp-sqli-rule-id-2"')
+        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
+        assert.match(payload[0][0].meta['_dd.appsec.json'], /"rasp-sqli-rule-id-2"/)
       })
     }
 
@@ -67,8 +67,8 @@ describe('RASP - sql_injection - integration', () => {
 
       assert.strictEqual(e.response.status, 403)
       return await agent.assertMessageReceived(({ headers, payload }) => {
-        assert.property(payload[0][0].meta, '_dd.appsec.json')
-        assert.include(payload[0][0].meta['_dd.appsec.json'], '"rasp-sqli-rule-id-2"')
+        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
+        assert.match(payload[0][0].meta['_dd.appsec.json'], /"rasp-sqli-rule-id-2"/)
       })
     }
 
@@ -85,8 +85,8 @@ describe('RASP - sql_injection - integration', () => {
 
       assert.strictEqual(e.response.status, 403)
       return await agent.assertMessageReceived(({ headers, payload }) => {
-        assert.property(payload[0][0].meta, '_dd.appsec.json')
-        assert.include(payload[0][0].meta['_dd.appsec.json'], '"rasp-sqli-rule-id-2"')
+        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
+        assert.match(payload[0][0].meta['_dd.appsec.json'], /"rasp-sqli-rule-id-2"/)
       })
     }
 
