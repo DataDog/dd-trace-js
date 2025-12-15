@@ -204,11 +204,11 @@ function isBinary (val) {
 }
 
 function isHeartbeat(ops, config) {
-  // Check if it's a heartbeat command hello: 1, helloOk: 1, or ismaster: 1
+  // Check if it's a heartbeat command https://github.com/mongodb/specifications/blob/master/source/mongodb-handshake/handshake.md
   return (
     ops &&
     typeof ops === "object" &&
-    (ops.hello === 1 || ops.helloOk === true || ops.ismaster === 1)
+    (ops.hello === 1 || ops.helloOk === true || ops.ismaster === 1 || ops.isMaster === 1)
   );
 }
 
