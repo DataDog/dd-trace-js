@@ -26,6 +26,7 @@ module.exports = {
   '@jest/transform': () => require('../jest'),
   '@koa/router': () => require('../koa'),
   '@langchain/core': { esmFirst: true, fn: () => require('../langchain') },
+  '@nats-io/nats-core': () => require('../nats-io-nats-core'),
   '@node-redis/client': () => require('../redis'),
   '@opensearch-project/opensearch': () => require('../opensearch'),
   '@opentelemetry/sdk-trace-node': () => require('../otel-sdk-trace'),

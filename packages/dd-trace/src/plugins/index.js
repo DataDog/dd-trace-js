@@ -23,6 +23,7 @@ module.exports = {
   get '@koa/router' () { return require('../../../datadog-plugin-koa/src') },
   get '@langchain/core' () { return require('../../../datadog-plugin-langchain/src') },
   get '@langchain/openai' () { return require('../../../datadog-plugin-langchain/src') },
+  get '@nats-io/nats-core' () { return require('../../../datadog-plugin-nats-io-nats-core/src') },
   get '@node-redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@opensearch-project/opensearch' () { return require('../../../datadog-plugin-opensearch/src') },
   get '@prisma/client' () { return require('../../../datadog-plugin-prisma/src') },

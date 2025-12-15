@@ -36,6 +36,10 @@ const messaging = {
       opName: () => 'kafka.send',
       serviceName: identityService
     },
+    '@nats-io/nats-core': {
+      opName: () => 'nats.send',
+      serviceName: identityService
+    },
     rhea: amqpOutbound,
     sqs: {
       opName: () => 'aws.sqs.send',
@@ -61,6 +65,10 @@ const messaging = {
       opName: () => 'kafka.process',
       serviceName: identityService
     },
+    '@nats-io/nats-core': {
+      opName: () => 'nats.process',
+      serviceName: identityService
+    },
     rhea: amqpInbound,
     sqs: {
       opName: () => 'aws.sqs.process',
@@ -74,6 +82,10 @@ const messaging = {
     },
     'google-cloud-pubsub': {
       opName: () => 'gcp.pubsub.request',
+      serviceName: identityService
+    },
+    '@nats-io/nats-core': {
+      opName: () => 'nats.request',
       serviceName: identityService
     }
   }

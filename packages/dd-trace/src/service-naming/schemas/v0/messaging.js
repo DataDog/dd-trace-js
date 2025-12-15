@@ -36,6 +36,10 @@ const messaging = {
       opName: () => 'kafka.produce',
       serviceName: ({ tracerService }) => `${tracerService}-kafka`
     },
+    '@nats-io/nats-core': {
+      opName: () => 'nats.publish',
+      serviceName: ({ tracerService }) => `${tracerService}-nats`
+    },
     rhea: {
       opName: () => 'amqp.send',
       serviceName: ({ tracerService }) => `${tracerService}-amqp-producer`
@@ -70,6 +74,10 @@ const messaging = {
       opName: () => 'kafka.consume',
       serviceName: ({ tracerService }) => `${tracerService}-kafka`
     },
+    '@nats-io/nats-core': {
+      opName: () => 'nats.process',
+      serviceName: ({ tracerService }) => `${tracerService}-nats`
+    },
     rhea: {
       opName: () => 'amqp.receive',
       serviceName: identityService
@@ -87,6 +95,10 @@ const messaging = {
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',
       serviceName: ({ tracerService }) => `${tracerService}-pubsub`
+    },
+    '@nats-io/nats-core': {
+      opName: () => 'nats.request',
+      serviceName: ({ tracerService }) => `${tracerService}-nats`
     }
   }
 }

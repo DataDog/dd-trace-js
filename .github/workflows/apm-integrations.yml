@@ -830,6 +830,23 @@ jobs:
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
+  nats-io-nats-core:
+    runs-on: ubuntu-latest
+    services:
+      nats:
+        image: nats:2.10-alpine
+        ports:
+          - 4222:4222
+          - 8222:8222
+    env:
+      PLUGINS: nats-io-nats-core
+      SERVICES: nats
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{{{ secrets.DD_API_KEY }}}}
+
   net:
     runs-on: ubuntu-latest
     env:
