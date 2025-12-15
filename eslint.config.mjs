@@ -599,6 +599,12 @@ export default [
         ]
       }],
       'n/no-missing-require': 'off',
+      'n/no-restricted-require': ['error', [
+        {
+          name: '**/vendor/dist/**',
+          message: 'Please use the module from devDependencies instead of the vendored version in tests.'
+        }
+      ]],
       'require-await': 'off'
     }
   },
