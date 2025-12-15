@@ -1258,6 +1258,38 @@ describe('sdk', () => {
         value: 'it is super toxic!'
       }), { message: 'value must be a boolean for a boolean metric' })
     })
+
+    it('adds source:otel tag when DD_TRACE_OTEL_ENABLED is set', () => {
+      process.env.DD_TRACE_OTEL_ENABLED = 'true'
+
+      llmobs.submitEvaluation(spanCtx, {
+        mlApp: 'test',
+        timestampMs: 1234,
+        label: 'test',
+        metricType: 'score',
+        value: 0.6
+      })
+
+      const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
+      assert.ok(evalMetric.tags.includes('source:otel'), 'Expected source:otel tag to be present')
+
+      delete process.env.DD_TRACE_OTEL_ENABLED
+    })
+
+    it('does not add source:otel tag when DD_TRACE_OTEL_ENABLED is not set', () => {
+      delete process.env.DD_TRACE_OTEL_ENABLED
+
+      llmobs.submitEvaluation(spanCtx, {
+        mlApp: 'test',
+        timestampMs: 1234,
+        label: 'test',
+        metricType: 'score',
+        value: 0.6
+      })
+
+      const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
+      assert.ok(!evalMetric.tags.includes('source:otel'), 'Expected source:otel tag to NOT be present')
+    })
   })
 
   describe('flush', () => {
