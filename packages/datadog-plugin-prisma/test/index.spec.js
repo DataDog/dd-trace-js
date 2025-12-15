@@ -202,6 +202,51 @@ describe('Plugin', () => {
             tracingPromise
           ])
         })
+
+        it('should return real traceparent from active span context', async () => {
+          let capturedTraceparent
+          const tracingPromise = agent.assertSomeTraces(traces => {
+            // Get the trace ID and span ID from the created span
+            const clientSpan = traces[0].find(span => span.meta['prisma.type'] === 'client')
+            assert.ok(clientSpan != null)
+
+            // Verify the traceparent is not the hardcoded fallback
+            assert.notEqual(capturedTraceparent, '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01')
+
+            // Verify it matches W3C traceparent format
+            const traceparentRegex = /^00-[a-f0-9]{32}-[a-f0-9]{16}-[0-9]{2}$/
+            assert.ok(traceparentRegex.test(capturedTraceparent),
+              `Invalid traceparent format: ${capturedTraceparent}`)
+
+            // Extract trace ID from traceparent (format: version-traceid-spanid-flags)
+            const [, traceparentTraceId] = capturedTraceparent.split('-')
+
+            // Convert the span's trace_id to hex for comparison
+            const spanTraceIdHex = clientSpan.trace_id.toString(16).padStart(32, '0')
+
+            // The last 16 characters of the traceparent trace ID should match
+            // the span's trace ID (dd-trace uses 64-bit trace IDs by default)
+            assert.ok(traceparentTraceId.endsWith(spanTraceIdHex.slice(-16)),
+              `Traceparent trace ID ${traceparentTraceId} should contain span trace ID ${spanTraceIdHex}`)
+          })
+
+          // Capture the traceparent during the query
+          await prismaClient.$queryRaw`SELECT 1`.then(() => {
+            // Get traceparent while span is still active
+            capturedTraceparent = tracingHelper.getTraceParent()
+          })
+
+          await tracingPromise
+        })
+
+        it('should return fallback traceparent when no active span', () => {
+          // Get traceparent outside of a traced operation
+          // This should return the fallback value since there's no active span
+          const result = tracingHelper.getTraceParent()
+
+          // Should be the valid sampled fallback traceparent
+          assert.strictEqual(result, '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01')
+        })
       })
 
       describe('with configuration', () => {
