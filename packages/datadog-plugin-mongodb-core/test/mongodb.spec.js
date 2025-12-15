@@ -51,6 +51,7 @@ describe('Plugin', () => {
   let db
   let BSON
   let startSpy
+  let injectCommentSpy
   let usesDelete
 
   describe('mongodb-core', () => {
@@ -564,9 +565,7 @@ describe('Plugin', () => {
 
       describe('with dbmPropagationMode full', () => {
         before(() => {
-          return agent.load('mongodb-core', {
-            dbmPropagationMode: 'full'
-          })
+          return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
         })
 
         after(() => {
@@ -579,21 +578,25 @@ describe('Plugin', () => {
           collection = db.collection(collectionName)
 
           startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+          injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
           startSpy?.restore()
+          injectCommentSpy?.restore()
         })
 
         it('DBM propagation should inject full mode with traceparent as comment', done => {
           agent
-            .assertSomeTraces(traces => {
-              const span = traces[0][0]
+            .assertFirstTraceSpan(span => {
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
+              const samplingPriotrity = span.metrics._sampling_priority_v1 > 0 ? '01' : '00'
 
               assert.strictEqual(startSpy.called, true)
-              const { comment } = startSpy.getCall(0).args[0].ops
+              assert.strictEqual(injectCommentSpy.called, true)
+
+              const comment = injectCommentSpy.getCall(0).returnValue
               assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
@@ -602,7 +605,7 @@ describe('Plugin', () => {
                 `ddps='${encodeURIComponent(span.meta.service)}',` +
                 `ddpv='${ddpv}',` +
                 `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
-                `traceparent='00-${traceId}-${spanId}-01'`
+                `traceparent='00-${traceId}-${spanId}-${samplingPriotrity}'`
               )
             })
             .then(done)
