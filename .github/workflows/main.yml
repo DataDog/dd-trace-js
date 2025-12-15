@@ -1,4 +1,7 @@
+name: Cache Forensics
+
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       cache_entries:
