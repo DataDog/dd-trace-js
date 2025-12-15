@@ -70,6 +70,29 @@ We follow an all-green policy which means that for any PR to be merged _all_ tes
 
 Eventually we plan to look into putting these permission-required tests behind a label which team members can add to their PRs at creation to run the full CI and can add to outside contributor PRs to trigger the CI from their own user credentials. If the label is not present there will be another action which checks the label is present. Rather than showing a bunch of confusing failures to new contributors it would just show a single job failure which indicates an additional label is required, and we can name it in a way that makes it clear that it's not the responsibility of the outside contributor to add it. Something like `approve-full-ci` is one possible choice there.
 
+## Sign your commits
+
+All commits in a pull request must be signed. We require commit signing to ensure the authenticity and integrity of contributions to the project.
+
+To sign your commits, you need to configure Git with your GPG key. Follow these steps:
+
+1. [Generate a GPG key](https://docs.github.com/en/authentication/managing-commit-signature-verification/generating-a-new-gpg-key) if you don't already have one
+2. [Add the GPG key to your GitHub account](https://docs.github.com/en/authentication/managing-commit-signature-verification/adding-a-gpg-key-to-your-github-account)
+3. [Configure Git to use your GPG key](https://docs.github.com/en/authentication/managing-commit-signature-verification/telling-git-about-your-signing-key)
+4. Sign commits by using the `-S` flag: `git commit -S -m "Your commit message"`
+
+To automatically sign all commits, you can configure Git globally:
+
+```sh
+$ git config --global commit.gpgsign true
+```
+
+If you have already created commits without signing them, you can sign them retroactively by using an interactive rebase:
+
+```sh
+$ git rebase --exec 'git commit --amend --no-edit -n -S' -i <base-branch>
+```
+
 ## Development Requirements
 
 Since this project supports multiple Node.js versions, using a version manager
