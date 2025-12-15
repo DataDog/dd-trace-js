@@ -6,6 +6,7 @@
 - **Never run `yarn test` or `npm test` directly** - use individual test files with mocha/tap
 - **Use Node.js 18.0.0 APIs only** - guard newer APIs with version checks using [`version.js`](./version.js)
 - **No async/await in production code** - keep it in tests and worker threads only
+- **Prefer `for-of` loops over `map`/`forEach`** - avoid functional array methods in production code to minimize closure overhead
 - **Follow testing workflow**: individual test file → unit tests → integration tests
 - **Don't reduce coverage** - cover important paths, avoid redundant unit tests when integration tests exist
 - **Make changes backport-friendly** - guard breaking changes with `DD_MAJOR` version checks
@@ -305,6 +306,48 @@ const { join } = require('node:path')
 - Reuse objects and buffers where possible
 - Be conscious of garbage collection pressure
 - Benchmark performance-critical changes (see `benchmark/sirun/`)
+
+#### Array Iteration
+
+**Prefer `for-of`, `for`, and `while` loops over functional array methods like `map()`, `forEach()`, `filter()`, etc.**
+
+Functional array methods create function closures on each invocation, which adds overhead and garbage collection pressure. Use imperative loops instead:
+
+```js
+// ❌ Avoid - creates closure and temporary array
+items.forEach(item => {
+  process(item)
+})
+
+// ✅ Prefer - no closure overhead
+for (const item of items) {
+  process(item)
+}
+
+// ❌ Avoid - creates closures and multiple intermediate arrays
+const result = items
+  .filter(item => item.active)
+  .map(item => item.value)
+
+// ✅ Prefer - single loop, no intermediate arrays
+const result = []
+for (const item of items) {
+  if (item.active) {
+    result.push(item.value)
+  }
+}
+```
+
+**When functional methods are acceptable:**
+- Test files (performance is less critical)
+- Non-hot-path code where readability significantly benefits
+- One-time initialization code
+
+**Loop selection guide:**
+- `for-of` - Most readable for simple iteration over arrays/iterables
+- `for` with index - When you need the index or better performance in very hot paths
+- `while` - When you need custom iteration logic
+- `Array.from()`, `[...spread]` - Acceptable for converting iterables, but be mindful of allocations
 
 ### Debugging and Logging
 
