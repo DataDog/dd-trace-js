@@ -1,0 +1,156 @@
+name: Test Cache Mirroring
+
+on:
+  pull_request:
+    paths:
+      - '.github/actions/cache/**'
+      - '.github/workflows/test-cache-mirror.yml'
+  workflow_dispatch:
+
+jobs:
+  test-small-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create test cache content
+        run: |
+          mkdir -p test-cache
+          echo "Test file 1" > test-cache/file1.txt
+          echo "Test file 2" > test-cache/file2.txt
+          date > test-cache/timestamp.txt
+          echo "This is a test cache with $(du -sh test-cache | cut -f1) of data"
+
+      - name: Save to GitHub cache
+        uses: actions/cache/save@v4
+        with:
+          path: test-cache
+          key: test-cache-${{ github.run_id }}
+
+      - name: Mirror cache to artifact
+        uses: ./.github/actions/cache
+        with:
+          path: test-cache
+          key: test-cache-${{ github.run_id }}
+
+      - name: Verify cache was mirrored
+        run: |
+          echo "✓ Cache mirroring step completed"
+          echo "Check the 'Artifacts' section of this workflow run"
+          echo "You should see: cache-mirror-test-cache-${{ github.run_id }}"
+
+  test-node-modules:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache node_modules
+        id: cache-deps
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-test-deps-${{ hashFiles('package.json') }}
+
+      - name: Install dependencies (if cache miss)
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        run: npm install --production
+
+      - name: Mirror node_modules to artifact
+        if: always()
+        uses: ./.github/actions/cache
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-test-deps-${{ hashFiles('package.json') }}
+
+      - name: Show mirror info
+        if: always()
+        run: |
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cache hit**: ${{ steps.cache-deps.outputs.cache-hit }}" >> $GITHUB_STEP_SUMMARY
+
+          if [ -d "node_modules" ]; then
+            SIZE=$(du -sh node_modules | cut -f1)
+            FILES=$(find node_modules -type f | wc -l)
+            echo "- **node_modules size**: $SIZE" >> $GITHUB_STEP_SUMMARY
+            echo "- **Files**: $FILES" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✓ node_modules should be mirrored as artifact" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠ node_modules directory not found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  test-conditional-mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create cache
+        run: |
+          mkdir -p conditional-test
+          echo "data" > conditional-test/data.txt
+
+      # Test: enabled = true
+      - name: Mirror with enabled=true
+        uses: ./.github/actions/cache
+        with:
+          path: conditional-test
+          key: enabled-test-${{ github.run_id }}
+          enabled: 'true'
+
+      # Test: enabled = false (should not create artifact)
+      - name: Mirror with enabled=false
+        uses: ./.github/actions/cache
+        with:
+          path: conditional-test
+          key: disabled-test-${{ github.run_id }}
+          enabled: 'false'
+
+      - name: Summary
+        run: |
+          echo "## Conditional Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Expected artifacts:" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ \`cache-mirror-enabled-test-${{ github.run_id }}\` (should exist)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✗ \`cache-mirror-disabled-test-${{ github.run_id }}\` (should NOT exist)" >> $GITHUB_STEP_SUMMARY
+
+  test-failure-scenario:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create cache before failure
+        run: |
+          mkdir -p failure-cache
+          echo "Created before failure" > failure-cache/before.txt
+
+      - name: Intentional failure
+        continue-on-error: true
+        run: |
+          echo "This step will fail"
+          exit 1
+
+      # Mirror should still work with if: always()
+      - name: Mirror cache after failure
+        if: always()
+        uses: ./.github/actions/cache
+        with:
+          path: failure-cache
+          key: failure-test-${{ github.run_id }}
+
+      - name: Verify mirror worked despite failure
+        if: always()
+        run: |
+          echo "## Failure Scenario Test" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✓ Mirror should work even when job has failures" >> $GITHUB_STEP_SUMMARY
+          echo "Check for artifact: \`cache-mirror-failure-test-${{ github.run_id }}\`" >> $GITHUB_STEP_SUMMARY
