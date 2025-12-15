@@ -98,6 +98,7 @@
     "node": ">=18"
   },
   "files": [
+    "/package.json",
     "ci/**/*",
     "cypress/**/*",
     "esbuild.js",
@@ -111,7 +112,6 @@
     "LICENSE.Apache",
     "LICENSE.BSD3",
     "loader-hook.mjs",
-    "package.json",
     "packages/*/index.js",
     "packages/*/lib/**/*",
     "packages/*/src/**/*",
