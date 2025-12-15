@@ -2,7 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 const path = require('path')
-const satisfies = require('semifies')
+const satisfies = require('../../../../vendor/dist/semifies')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
