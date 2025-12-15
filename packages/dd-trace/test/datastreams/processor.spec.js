@@ -10,7 +10,7 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
-const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
+const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 

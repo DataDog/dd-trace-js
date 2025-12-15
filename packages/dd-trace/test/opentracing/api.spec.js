@@ -3,7 +3,7 @@
 require('tap').mochaGlobals()
 require('../setup/core')
 
-const apiCompatibilityChecks = require('opentracing/lib/test/api_compatibility').default
+const apiCompatibilityChecks = require('../../../../vendor/dist/opentracing/lib/test/api_compatibility').default
 const tracer = require('../..')
 
 apiCompatibilityChecks(() => {
