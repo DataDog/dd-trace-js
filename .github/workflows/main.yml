@@ -37,6 +37,12 @@ jobs:
       max-parallel: 10
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Always checkout master/main to ensure cache scope access
+          ref: master
+
       - name: Setup cache directory
         run: |
           key="${{ matrix.key }}"
@@ -65,11 +71,14 @@ jobs:
 
       - name: List available caches for debugging
         run: |
-          echo "Searching for caches matching key: ${{ matrix.key }}"
-          gh cache list --limit 100 | grep -F "${{ matrix.key }}" || echo "No exact matches found"
+          echo "Current ref: $(git rev-parse --abbrev-ref HEAD)"
+          echo "Current commit: $(git rev-parse HEAD)"
           echo "---"
-          echo "First 10 characters of key: ${CACHE_KEY:0:10}"
-          gh cache list --limit 100 | grep "${CACHE_KEY:0:10}" || echo "No prefix matches found"
+          echo "Searching for caches matching key: ${{ matrix.key }}"
+          gh cache list --limit 100 | grep -F "${{ matrix.key }}" || echo "No exact matches found in gh cache list"
+          echo "---"
+          echo "Checking API for detailed cache info:"
+          gh api /repos/${{ github.repository }}/actions/caches --jq ".actions_caches[] | select(.key == \"${{ matrix.key }}\") | {id, key, ref, size_in_bytes}" || echo "No caches found via API"
         env:
           GH_TOKEN: ${{ github.token }}
         continue-on-error: true
@@ -83,6 +92,7 @@ jobs:
           key: ${{ matrix.key }}
           lookup-only: false
           fail-on-cache-miss: false
+          enableCrossOsArchive: true
 
       - name: Restore cache (attempt 2 - with restore-keys)
         if: steps.cache-restore.outputs.cache-hit != 'true'
@@ -95,6 +105,7 @@ jobs:
           restore-keys: |
             ${{ matrix.key }}
           fail-on-cache-miss: false
+          enableCrossOsArchive: true
 
       - name: Check cache status
         run: |
