@@ -41,41 +41,92 @@ jobs:
         run: |
           key="${{ matrix.key }}"
           version="${{ matrix.version }}"
-          safe_name=$(echo "$key-$version" | tr '/' '_' | tr ':' '_')
+          # Add strategy.job-index to ensure unique names for duplicate keys
+          safe_name=$(echo "$key-$version" | tr '/' '_' | tr ':' '_' | tr ' ' '_' | tr '[' '_' | tr ']' '_')
+          # Add a short hash of key+version+index to ensure uniqueness
+          unique_suffix=$(echo "$key-$version-${{ strategy.job-index }}" | sha256sum | cut -c1-8)
+          safe_name="${safe_name}-${unique_suffix}"
 
           mkdir -p "cache-restore"
           echo "CACHE_DIR=cache-restore" >> $GITHUB_ENV
           echo "SAFE_NAME=$safe_name" >> $GITHUB_ENV
+          echo "CACHE_KEY=$key" >> $GITHUB_ENV
 
           cat > "metadata.json" <<EOF
           {
             "key": "$key",
             "version": "$version",
+            "job_index": "${{ strategy.job-index }}",
             "requested_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "runner_os": "$RUNNER_OS",
             "runner_arch": "$RUNNER_ARCH"
           }
           EOF
 
-      - name: Restore cache
+      - name: List available caches for debugging
+        run: |
+          echo "Searching for caches matching key: ${{ matrix.key }}"
+          gh cache list --limit 100 | grep -F "${{ matrix.key }}" || echo "No exact matches found"
+          echo "---"
+          echo "First 10 characters of key: ${CACHE_KEY:0:10}"
+          gh cache list --limit 100 | grep "${CACHE_KEY:0:10}" || echo "No prefix matches found"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        continue-on-error: true
+
+      - name: Restore cache (attempt 1 - exact key)
         id: cache-restore
         uses: actions/cache/restore@v4
         continue-on-error: true
         with:
           path: cache-restore
           key: ${{ matrix.key }}
+          lookup-only: false
+          fail-on-cache-miss: false
+
+      - name: Restore cache (attempt 2 - with restore-keys)
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        id: cache-restore-prefix
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: cache-restore
+          key: ${{ matrix.key }}-not-exists-ignore
+          restore-keys: |
+            ${{ matrix.key }}
           fail-on-cache-miss: false
 
       - name: Check cache status
         run: |
+          restored="false"
+          restore_method="none"
+
           if [ "${{ steps.cache-restore.outputs.cache-hit }}" == "true" ]; then
             echo "✓ Successfully restored cache: ${{ matrix.key }}"
-            echo "true" > restore_status.txt
+            restored="true"
+            restore_method="exact-key"
+          elif [ "${{ steps.cache-restore-prefix.outputs.cache-hit }}" == "true" ]; then
+            echo "✓ Successfully restored cache via prefix: ${{ matrix.key }}"
+            restored="true"
+            restore_method="restore-keys"
           else
             echo "✗ Cache not found: ${{ matrix.key }}"
-            echo "false" > restore_status.txt
             # Create empty directory to still upload metadata
             mkdir -p cache-restore
+          fi
+
+          echo "$restored" > restore_status.txt
+          echo "Restore method: $restore_method" >> restore_status.txt
+
+          # Log cache directory contents
+          echo "Cache directory contents:"
+          if [ -d "cache-restore" ]; then
+            du -sh cache-restore
+            find cache-restore -type f | head -20 || echo "No files found"
+            file_count=$(find cache-restore -type f | wc -l)
+            echo "Total files in cache: $file_count"
+          else
+            echo "cache-restore directory does not exist"
           fi
 
       - name: Package cache contents
@@ -103,10 +154,41 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: \`${{ matrix.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Archive**: \`${SAFE_NAME}.tar.gz\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Restored**: ${{ steps.cache-restore.outputs.cache-hit }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Job Index**: ${{ strategy.job-index }}" >> $GITHUB_STEP_SUMMARY
+
+          # Check which restore succeeded
+          if [ "${{ steps.cache-restore.outputs.cache-hit }}" == "true" ]; then
+            echo "- **Restored**: ✓ Yes (exact key)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Matched Key**: \`${{ steps.cache-restore.outputs.cache-matched-key }}\`" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.cache-restore-prefix.outputs.cache-hit }}" == "true" ]; then
+            echo "- **Restored**: ✓ Yes (via restore-keys)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Matched Key**: \`${{ steps.cache-restore-prefix.outputs.cache-matched-key }}\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Restored**: ✗ No" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Show cache contents
+          if [ -d "cache-restore" ]; then
+            file_count=$(find cache-restore -type f 2>/dev/null | wc -l)
+            cache_size=$(du -sh cache-restore 2>/dev/null | cut -f1)
+            echo "### Cache Contents" >> $GITHUB_STEP_SUMMARY
+            echo "- **Files**: $file_count" >> $GITHUB_STEP_SUMMARY
+            echo "- **Size**: $cache_size" >> $GITHUB_STEP_SUMMARY
+
+            if [ "$file_count" -gt 0 ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Sample files** (first 10):" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              find cache-restore -type f | head -10 >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ -f "${SAFE_NAME}.sha256" ]; then
-            echo "### SHA256" >> $GITHUB_STEP_SUMMARY
+            echo "### Archive SHA256" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             cat "${SAFE_NAME}.sha256" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
