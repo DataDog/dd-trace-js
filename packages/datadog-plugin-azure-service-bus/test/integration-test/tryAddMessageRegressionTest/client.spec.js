@@ -31,7 +31,7 @@ describe('esm', () => {
 
     it('tryAddMessage returns a boolean, not a Promise', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.isArray(payload)
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(payload.length, 3)
         // Verify we got the expected spans from the test
         assert.strictEqual(payload[0][0].name, 'azure.servicebus.create')
