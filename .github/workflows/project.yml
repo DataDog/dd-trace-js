@@ -94,8 +94,8 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: npm run type:test
-      - run: npm run type:doc
+      - run: npm run type:doc:test
+      - run: npm run type:doc:build
 
   # TODO: Remove need for `npm show` before re-enabling to avoid rate limit errors.
   # verify-yaml:
