@@ -542,30 +542,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         const ctx = testContexts.get(event.test)
 
-        // Compute whether this is the last execution for final_status purposes.
-        const efdEnabled = this.isEarlyFlakeDetectionEnabled
-        const isNewTest = !!ctx?.isNew
-        const isModified = !!ctx?.isModified
-        const efdApplies = efdEnabled && (isNewTest || isModified)
-        // After `test_start` we incremented retriedTestsToNumAttempts for EFD/ATF; read current count safely.
-        const efdExecCount = retriedTestsToNumAttempts.has(testName) ? retriedTestsToNumAttempts.get(testName) : 0
-        const isLastEfd =
-          efdEnabled
-            ? (efdApplies ? (isEfdRetry && efdExecCount >= (earlyFlakeDetectionNumRetries + 1)) : true)
-            : false
-        const isLastAtr =
-          this.isFlakyTestRetriesEnabled &&
-          !isEfdRetry &&
-          !isAttemptToFix &&
-          Number.isFinite(numRetries) &&
-          (status === 'pass' || numTestExecutions >= (Number(numRetries) + 1))
-        const isLastAtf =
-          this.isTestManagementTestsEnabled &&
-          isAttemptToFix &&
-          Number.isFinite(testManagementAttemptToFixRetries) &&
-          efdExecCount >= (testManagementAttemptToFixRetries + 1)
-        const isLastTestExecution = Boolean(isLastEfd || isLastAtr || isLastAtf)
-        const finalStatus = isLastTestExecution ? status : undefined
+        const finalStatus = this.getFinalStatus(testName,
+          status,
+          !!ctx?.isNew,
+          !!ctx?.isModified,
+          isEfdRetry,
+          isAttemptToFix,
+          numTestExecutions)
 
         if (status === 'fail') {
           const shouldSetProbe = this.isDiEnabled && willBeRetriedByFailedTestReplay && numTestExecutions === 1
@@ -622,6 +605,38 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(testName),
         })
       }
+    }
+
+    getFinalStatus (testName, status, isNewTest, isModifiedTest, isEfdRetry, isAttemptToFix, numberOfTestInvocations) {
+      const numberOfExecutedRetries = retriedTestsToNumAttempts.get(testName) ?? 0
+
+      const isEfdEnabled = this.isEarlyFlakeDetectionEnabled
+      const isEfdActive = isEfdEnabled && (isNewTest || isModifiedTest)
+      const isLastEfdRetry = isEfdRetry && numberOfExecutedRetries >= (earlyFlakeDetectionNumRetries + 1)
+      const isFinalEfdTestExecution = isEfdEnabled && (!isEfdActive || isLastEfdRetry)
+      console.error({ isFinalEfdTestExecution, isEfdEnabled, isEfdActive, isLastEfdRetry, numberOfExecutedRetries, earlyFlakeDetectionNumRetries })
+
+      const isAtrEnabled =
+        this.isFlakyTestRetriesEnabled &&
+        !isEfdRetry &&
+        !isAttemptToFix &&
+        Number.isFinite(this.global[RETRY_TIMES])
+      const isLastAtrRetry =
+        status === 'pass' || numberOfTestInvocations >= (Number(this.global[RETRY_TIMES]) + 1)
+      const isFinalAtrTestExecution = isAtrEnabled && isLastAtrRetry
+
+      const isAttemptToFixEnabled =
+        this.isTestManagementTestsEnabled &&
+        isAttemptToFix &&
+        Number.isFinite(testManagementAttemptToFixRetries)
+      const isFinalAttemptToFixExecution = isAttemptToFixEnabled &&
+      numberOfExecutedRetries >= (testManagementAttemptToFixRetries + 1)
+
+      const isFinalTestExecution = isFinalEfdTestExecution || isFinalAtrTestExecution || isFinalAttemptToFixExecution
+      console.error({ isFinalTestExecution, isFinalEfdTestExecution, isFinalAtrTestExecution, isFinalAttemptToFixExecution })
+      const finalStatus = isFinalTestExecution ? status : undefined
+
+      return finalStatus
     }
 
     teardown () {
