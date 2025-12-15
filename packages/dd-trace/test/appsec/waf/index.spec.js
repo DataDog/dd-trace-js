@@ -377,7 +377,7 @@ describe('WAF Manager', () => {
     it('should pass waf version when invoking ddwaf.createContext', () => {
       const req = {}
       const context = waf.wafManager.getWAFContext(req)
-      expect(context.wafVersion).to.be.eq('4.5.6')
+      assert.strictEqual(context.wafVersion, '4.5.6')
     })
   })
 
@@ -422,7 +422,7 @@ describe('WAF Manager', () => {
     describe('run', () => {
       it('should not call ddwafContext.run without params', () => {
         waf.run()
-        expect(ddwafContext.run).not.to.be.called
+        sinon.assert.notCalled(ddwafContext.run)
       })
 
       it('should call ddwafContext.run with params', () => {
@@ -534,7 +534,7 @@ describe('WAF Manager', () => {
 
         wafContextWrapper.run(params)
 
-        expect(Reporter.reportAttack).not.to.be.called
+        sinon.assert.notCalled(Reporter.reportAttack)
       })
 
       it('should not report attack when ddwafContext returns empty data', () => {
@@ -547,7 +547,7 @@ describe('WAF Manager', () => {
 
         wafContextWrapper.run(params)
 
-        expect(Reporter.reportAttack).not.to.be.called
+        sinon.assert.notCalled(Reporter.reportAttack)
       })
 
       it('should return waf result', () => {

@@ -34,7 +34,7 @@ jobs:
           suffix: openfeature-${{ github.job }}-${{ matrix.version }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -47,7 +47,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:integration:openfeature
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -66,7 +66,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:integration:openfeature
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -81,7 +81,7 @@ jobs:
           cache: 'true'
       - run: yarn test:integration:openfeature
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests

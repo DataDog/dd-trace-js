@@ -332,7 +332,7 @@ withVersions('express', 'express', version => {
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.ok(Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
-          assert.ok(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'))
+          assert.ok(!('_dd.appsec.s.res.body' in span.meta))
           assert.equal(span.meta['_dd.appsec.s.req.body'], expectedRequestBodySchema)
         })
 

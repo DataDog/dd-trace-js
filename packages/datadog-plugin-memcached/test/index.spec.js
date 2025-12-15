@@ -238,7 +238,7 @@ describe('Plugin', () => {
           it('trace should not contain memcached.command', done => {
             agent
               .assertSomeTraces(traces => {
-                assert.ok(!Object.hasOwn(traces[0][0].meta, 'memcached.command'))
+                assert.ok(!('memcached.command' in traces[0][0].meta))
               })
               .then(done)
               .catch(done)

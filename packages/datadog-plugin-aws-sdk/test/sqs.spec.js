@@ -2,8 +2,6 @@
 
 const assert = require('node:assert/strict')
 const { randomUUID } = require('node:crypto')
-
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -134,7 +132,7 @@ describe('Plugin', () => {
             const span = traces[0][0]
 
             assert.strictEqual(span.resource.startsWith('sendMessage'), true)
-            expect(span.meta).to.include({
+            assertObjectContains(span.meta, {
               queuename: queueName,
               'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`
             })
@@ -185,7 +183,7 @@ describe('Plugin', () => {
             const span = traces[0][0]
 
             assert.strictEqual(span.resource.startsWith('sendMessageBatch'), true)
-            expect(span.meta).to.include({
+            assertObjectContains(span.meta, {
               queuename: queueName,
               'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`
             })
@@ -353,12 +351,12 @@ describe('Plugin', () => {
           agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
-            expect(span).to.include({
+            assertObjectContains(span, {
               name: 'aws.request',
               resource: `sendMessage ${QueueUrl}`
             })
 
-            expect(span.meta).to.include({
+            assertObjectContains(span.meta, {
               queuename: queueName,
               'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`,
               aws_service: 'SQS',
@@ -370,7 +368,7 @@ describe('Plugin', () => {
           agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
-            expect(span).to.include({
+            assertObjectContains(span, {
               name: 'aws.request',
               resource: `receiveMessage ${QueueUrl}`
             })

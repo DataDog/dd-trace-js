@@ -87,8 +87,8 @@ describe('Metrics', () => {
     metric.formatTags('tag1', 'tag2').forEach(tag => metric.inc(context, tag, 42))
 
     expect(reqNamespace.count).to.be.calledTwice
-    expect(reqNamespace.count.firstCall.args).to.be.deep.equals([metric.name, ['tagKey:tag1']])
-    expect(reqNamespace.count.secondCall.args).to.be.deep.equals([metric.name, ['tagKey:tag2']])
+    assert.deepStrictEqual(reqNamespace.count.firstCall.args, [metric.name, ['tagKey:tag1']])
+    assert.deepStrictEqual(reqNamespace.count.secondCall.args, [metric.name, ['tagKey:tag2']])
   })
 
   it('getExecutedMetric should return a metric depending on tag', () => {
@@ -113,9 +113,9 @@ describe('Metrics', () => {
     it('should define an empty array as its tags', () => {
       const noTagged = new NoTaggedIastMetric('notagged', 'scope')
 
-      expect(noTagged.name).to.be.eq('notagged')
-      expect(noTagged.scope).to.be.eq('scope')
-      expect(noTagged.tags).to.be.deep.eq([])
+      assert.strictEqual(noTagged.name, 'notagged')
+      assert.strictEqual(noTagged.scope, 'scope')
+      assert.deepStrictEqual(noTagged.tags, [])
     })
 
     it('should increment in 1 the metric', () => {

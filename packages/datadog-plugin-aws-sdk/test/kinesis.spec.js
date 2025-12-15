@@ -144,7 +144,7 @@ describe('Kinesis', function () {
           helpers.getTestData(kinesis, streamName, data, (err, data) => {
             if (err) return done(err)
 
-            assert.ok(!Object.hasOwn(data, '_datadog'))
+            assert.ok(!('_datadog' in data))
 
             done()
           })
@@ -182,7 +182,7 @@ describe('Kinesis', function () {
             helpers.getTestData(kinesis, streamName, data, (err, data) => {
               if (err) return done(err)
 
-              assert.ok(!Object.hasOwn(data, '_datadog'))
+              assert.ok(!('_datadog' in data))
 
               done()
             })

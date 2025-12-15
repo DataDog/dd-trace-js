@@ -1,6 +1,6 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -12,8 +12,8 @@ describe('Dynamic Instrumentation', function () {
 
       it('should capture a snapshot', function (done) {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
-          assert.deepEqual(Object.keys(captures), ['lines'])
-          assert.deepEqual(Object.keys(captures.lines), [String(t.breakpoint.line)])
+          assert.deepStrictEqual(Object.keys(captures), ['lines'])
+          assert.deepStrictEqual(Object.keys(captures.lines), [String(t.breakpoint.line)])
 
           const { locals } = captures.lines[t.breakpoint.line]
           const { request, fastify, getUndefined } = locals
@@ -22,7 +22,7 @@ describe('Dynamic Instrumentation', function () {
           delete locals.getUndefined
 
           // from block scope
-          assert.deepEqual(locals, {
+          assert.deepStrictEqual(locals, {
             nil: { type: 'null', isNull: true },
             undef: { type: 'undefined' },
             bool: { type: 'boolean', value: 'true' },
@@ -85,22 +85,22 @@ describe('Dynamic Instrumentation', function () {
 
           // from local scope
           // There's no reason to test the `request` object 100%, instead just check its fingerprint
-          assert.deepEqual(Object.keys(request), ['type', 'fields'])
-          assert.equal(request.type, 'Request')
-          assert.equal(request.fields.id.type, 'string')
+          assert.deepStrictEqual(Object.keys(request), ['type', 'fields'])
+          assert.strictEqual(request.type, 'Request')
+          assert.strictEqual(request.fields.id.type, 'string')
           assert.match(request.fields.id.value, /^req-\d+$/)
-          assert.deepEqual(request.fields.params, {
+          assert.deepStrictEqual(request.fields.params, {
             type: 'NullObject', fields: { name: { type: 'string', value: 'foo' } }
           })
-          assert.deepEqual(request.fields.query, { type: 'Object', fields: {} })
-          assert.deepEqual(request.fields.body, { type: 'undefined' })
+          assert.deepStrictEqual(request.fields.query, { type: 'Object', fields: {} })
+          assert.deepStrictEqual(request.fields.body, { type: 'undefined' })
 
           // from closure scope
           // There's no reason to test the `fastify` object 100%, instead just check its fingerprint
-          assert.equal(fastify.type, 'Object')
-          assert.typeOf(fastify.fields, 'Object')
+          assert.strictEqual(fastify.type, 'Object')
+          assert.strictEqual(typeof fastify.fields, 'object')
 
-          assert.deepEqual(getUndefined, {
+          assert.deepStrictEqual(getUndefined, {
             type: 'Function',
             fields: {
               length: { type: 'number', value: '0' },
@@ -121,7 +121,7 @@ describe('Dynamic Instrumentation', function () {
           delete locals.fastify
           delete locals.getUndefined
 
-          assert.deepEqual(locals, {
+          assert.deepStrictEqual(locals, {
             nil: { type: 'null', isNull: true },
             undef: { type: 'undefined' },
             bool: { type: 'boolean', value: 'true' },
@@ -154,7 +154,7 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
           const { locals } = captures.lines[t.breakpoint.line]
 
-          assert.deepEqual(locals.lstr, {
+          assert.deepStrictEqual(locals.lstr, {
             type: 'string',
             value: 'Lorem ipsu',
             truncated: true,
@@ -171,7 +171,7 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
           const { locals } = captures.lines[t.breakpoint.line]
 
-          assert.deepEqual(locals.arr, {
+          assert.deepStrictEqual(locals.arr, {
             type: 'Array',
             elements: [
               { type: 'number', value: '1' },
@@ -195,9 +195,9 @@ describe('Dynamic Instrumentation', function () {
           if ('fields' in prop) {
             if (prop.notCapturedReason === 'fieldCount') {
               assert.strictEqual(Object.keys(prop.fields).length, maxFieldCount)
-              assert.isAbove(prop.size, maxFieldCount)
+              assert.ok(prop.size > maxFieldCount)
             } else {
-              assert.isBelow(Object.keys(prop.fields).length, maxFieldCount)
+              assert.ok(Object.keys(prop.fields).length < maxFieldCount)
             }
           }
 
@@ -219,12 +219,12 @@ describe('Dynamic Instrumentation', function () {
           assert.strictEqual(locals.request.type, 'Request')
           assert.strictEqual(Object.keys(locals.request.fields).length, maxFieldCount)
           assert.strictEqual(locals.request.notCapturedReason, 'fieldCount')
-          assert.isAbove(locals.request.size, maxFieldCount)
+          assert.ok(locals.request.size > maxFieldCount)
 
           assert.strictEqual(locals.fastify.type, 'Object')
           assert.strictEqual(Object.keys(locals.fastify.fields).length, maxFieldCount)
           assert.strictEqual(locals.fastify.notCapturedReason, 'fieldCount')
-          assert.isAbove(locals.fastify.size, maxFieldCount)
+          assert.ok(locals.fastify.size > maxFieldCount)
 
           for (const value of Object.values(locals)) {
             assertMaxFieldCount(value)

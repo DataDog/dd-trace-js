@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
@@ -101,7 +100,7 @@ describe('Plugin', () => {
                 }
               })
               assert.ok(statsPointsReceived >= 1)
-              expect(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64BE(0).toString())).to.equal(true)
+              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64BE(0).toString()), true)
             }, { timeoutMs: TIMEOUT })
           })
 
@@ -119,7 +118,7 @@ describe('Plugin', () => {
                   }
                 })
                 assert.ok(statsPointsReceived >= 2)
-                expect(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64BE(0).toString())).to.equal(true)
+                assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64BE(0).toString()), true)
               }, { timeoutMs: TIMEOUT })
             })
           })

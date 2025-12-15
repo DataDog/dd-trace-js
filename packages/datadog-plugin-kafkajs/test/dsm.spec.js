@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const { randomUUID } = require('crypto')
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
@@ -97,7 +98,7 @@ describe('Plugin', () => {
           it('Should set a checkpoint on produce', async () => {
             const messages = [{ key: 'consumerDSM1', value: 'test2' }]
             await sendMessages(kafka, testTopic, messages)
-            expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
+            assert.strictEqual(setDataStreamsContextSpy.args[0][0].hash, expectedProducerHash)
           })
 
           it('Should set a checkpoint on consume (eachMessage)', async () => {
@@ -110,7 +111,7 @@ describe('Plugin', () => {
             await sendMessages(kafka, testTopic, messages)
             await consumer.disconnect()
             for (const runArg of runArgs) {
-              expect(runArg.hash).to.equal(expectedConsumerHash)
+              assert.strictEqual(runArg.hash, expectedConsumerHash)
             }
           })
 
@@ -124,7 +125,7 @@ describe('Plugin', () => {
             await sendMessages(kafka, testTopic, messages)
             await consumer.disconnect()
             for (const runArg of runArgs) {
-              expect(runArg.hash).to.equal(expectedConsumerHash)
+              assert.strictEqual(runArg.hash, expectedConsumerHash)
             }
           })
 
@@ -135,7 +136,7 @@ describe('Plugin', () => {
             }
             const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
             await sendMessages(kafka, testTopic, messages)
-            expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            assert.ok(Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'))
             recordCheckpointSpy.restore()
           })
 
@@ -148,7 +149,7 @@ describe('Plugin', () => {
             await sendMessages(kafka, testTopic, messages)
             await consumer.run({
               eachMessage: async () => {
-                expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+                assert.ok(Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'))
                 recordCheckpointSpy.restore()
               }
             })
@@ -227,7 +228,7 @@ describe('Plugin', () => {
             await sendMessages(kafka, testTopic, messages)
             expect(setOffsetSpy).to.be.calledOnce
             const { topic } = setOffsetSpy.lastCall.args[0]
-            expect(topic).to.equal(testTopic)
+            assert.strictEqual(topic, testTopic)
           })
         })
       })

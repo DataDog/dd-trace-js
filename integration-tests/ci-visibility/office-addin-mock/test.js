@@ -1,8 +1,8 @@
 'use strict'
 
-const sum = require('./dependency')
-const { expect } = require('chai')
+const assert = require('assert')
 
+const sum = require('./dependency')
 test('can sum', () => {
-  expect(sum(1, 2)).to.equal(3)
+  assert.strictEqual(sum(1, 2), 3)
 })

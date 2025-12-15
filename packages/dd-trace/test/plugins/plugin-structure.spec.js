@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, before } = require('tap').mocha
 const fs = require('node:fs')
 const path = require('node:path')
@@ -98,7 +96,7 @@ describe('Plugin Structure Validation', () => {
       }
     })
 
-    expect(missingInstrumentations).to.be.empty
+    assert.strictEqual(missingInstrumentations.length, 0)
   })
 
   it('should have all plugins accounted for with a hook', () => {
