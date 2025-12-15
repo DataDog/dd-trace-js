@@ -107,8 +107,16 @@ function normalizePromptVariables (variables) {
   )
 }
 
+function hasMultimodalInputs (variables) {
+  if (!variables) return false
+  return Object.values(variables).some(value =>
+    value?.type === 'input_image' || value?.type === 'input_file'
+  )
+}
+
 module.exports = {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
-  extractTextFromContentItem
+  extractTextFromContentItem,
+  hasMultimodalInputs
 }

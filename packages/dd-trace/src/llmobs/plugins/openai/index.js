@@ -1,7 +1,12 @@
 'use strict'
 
 const LLMObsPlugin = require('../base')
-const { extractChatTemplateFromInstructions, normalizePromptVariables, extractTextFromContentItem } = require('./utils')
+const {
+  extractChatTemplateFromInstructions,
+  normalizePromptVariables,
+  extractTextFromContentItem,
+  hasMultimodalInputs
+} = require('./utils')
 
 const allowedParamKeys = new Set([
   'max_output_tokens',
@@ -422,6 +427,11 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           variables: normalizedVariables,
           chat_template: chatTemplate
         })
+        const tags = { prompt_tracking_source: 'auto' }
+        if (hasMultimodalInputs(inputs.prompt.variables)) {
+          tags.prompt_multimodal = 'true'
+        }
+        this._tagger.tagSpanTags(span, tags)
       }
     }
 
