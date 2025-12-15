@@ -401,23 +401,7 @@ Available log levels: `trace`, `debug`, `info`, `warn`, `error`
 
 ### Error Handling
 
-The tracer should not crash user applications, but should fail fast during initialization.
-
-1. Initialization Code (Constructors, enable/disable, config loading): **Be defensive** - catch non-critical errors, throw only for truly broken state.
-2. Runtime Instrumentation (Plugins, span creation, data processing): **Catch and log** - don't crash the user's app.
-
-**General principle:** Ask yourself: "If this fails, should it crash the user's application?" 
-
-- Critical initialization errors (missing required config)? **Yes, throw**
-- Non-critical initialization errors (missing optional deps)? **No, catch and warn**
-- Runtime instrumentation errors? **No, catch and log**
-- Security blocking? **Throw (intentionally)**
-
-**Important:** Before writing try/catch, check where your code will be called. Many call sites already have error handling:
-
-- Plugin handlers added via `addSub()` are automatically wrapped with try/catch
-- Some framework integrations have their own error boundaries
-- Look at the call chain to avoid redundant error handling
+The tracer should never crash user applications. Instead catch errors and log with `log.error()` (or `log.warn()` if applicable). Resume normal operation if possible, or disable the plugin/sub-system if not.
 
 **Performance note:** Avoid try/catch in hot paths unless necessary - it has overhead. Validate inputs early instead.
 
