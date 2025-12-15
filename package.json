@@ -115,14 +115,14 @@
     "packages/*/index.js",
     "packages/*/lib/**/*",
     "packages/*/src/**/*",
-    "packages/node_modules/**/*.js",
-    "packages/node_modules/**/*.d.ts",
-    "packages/node_modules/**/*.wasm",
-    "packages/node_modules/**/LICENSE",
     "packages/datadog-instrumentations/orchestrion.yml",
     "README.md",
     "register.js",
     "scripts/preinstall.js",
+    "vendor/dist/**/*.d.ts",
+    "vendor/dist/**/*.js",
+    "vendor/dist/**/*.wasm",
+    "vendor/dist/**/LICENSE",
     "version.js"
   ],
   "dependencies": {
