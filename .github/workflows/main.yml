@@ -2,16 +2,17 @@ name: Cache Forensics
 
 on:
   pull_request:
-    inputs:
-      cache_key:
-        description: 'Cache key'
-        required: true
-        type: string
-        default: 'Aktlxw4hnyBVd/vZJbkdxGmq8Tw='
 
 jobs:
   cache-upload:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cache_key:
+          - 'Aktlxw4hnyBVd/vZJbkdxGmq8Tw='
+          - 'n71Gg/JormzoitmBpVjBCZCcL6Y='
+          - 'PFxRDTsQC2CBRTRk3TMxWNYXnd0='
+      fail-fast: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,10 +21,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./cache-folder
-          key: ${{ github.event.inputs.cache_key }}
+          key: ${{ matrix.cache_key }}
 
       - name: Upload cached folder as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cache-artifact
+          name: cache-artifact-${{ strategy.job-index }}
           path: ./cache-folder
