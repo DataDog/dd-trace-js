@@ -29,14 +29,14 @@ class NatsIoNatsCoreClientPlugin extends ClientPlugin {
       resource: 'request',
       type: 'messaging',
       meta: {
-        'component': '@nats-io/nats-core',
+        component: '@nats-io/nats-core',
         'span.kind': 'client',
         'messaging.system': '@nats-io/nats-core',
         'messaging.destination.name': subject
       }
     }, ctx)
   }
-  
+
   // asyncEnd and end delegate to finish() which has the required guard
   asyncEnd (ctx) {
     this.finish(ctx)

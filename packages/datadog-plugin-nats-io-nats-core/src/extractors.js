@@ -9,7 +9,7 @@ function natsconnectionimplPublishProducer (ctx) {
     operation: 'nats.publish',
     resource: 'publish',
     meta: {
-      'component': '@nats-io/nats-core',
+      component: '@nats-io/nats-core',
       'span.kind': 'producer'
     }
   }
@@ -20,7 +20,7 @@ function protocolhandlerProcessmsgConsumer (ctx) {
     operation: 'nats.process',
     resource: 'processMsg',
     meta: {
-      'component': '@nats-io/nats-core',
+      component: '@nats-io/nats-core',
       'span.kind': 'consumer'
     }
   }
@@ -31,7 +31,7 @@ function natsconnectionimplRequestClient (ctx) {
     operation: 'nats.request',
     resource: 'request',
     meta: {
-      'component': '@nats-io/nats-core',
+      component: '@nats-io/nats-core',
       'span.kind': 'client'
     }
   }

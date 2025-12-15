@@ -30,7 +30,7 @@ class NatsIoNatsCoreProducerPlugin extends ProducerPlugin {
       resource: 'publish',
       type: 'messaging',
       meta: {
-        'component': '@nats-io/nats-core',
+        component: '@nats-io/nats-core',
         'span.kind': 'producer',
         'messaging.system': '@nats-io/nats-core',
         'messaging.destination.name': subject
@@ -78,7 +78,7 @@ class NatsIoNatsCoreProducerPlugin extends ProducerPlugin {
       }
     })
   }
-  
+
   // asyncEnd and end delegate to finish() which has the required guard
   asyncEnd (ctx) {
     this.finish(ctx)

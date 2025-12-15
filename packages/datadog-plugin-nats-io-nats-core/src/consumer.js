@@ -39,7 +39,7 @@ class NatsIoNatsCoreConsumerPlugin extends ConsumerPlugin {
       resource: 'processMsg',
       type: 'messaging',
       meta: {
-        'component': '@nats-io/nats-core',
+        component: '@nats-io/nats-core',
         'span.kind': 'consumer',
         'messaging.system': '@nats-io/nats-core',
         'messaging.destination.name': subject
@@ -70,9 +70,9 @@ class NatsIoNatsCoreConsumerPlugin extends ConsumerPlugin {
         if (natsHeaders && typeof natsHeaders.get === 'function') {
           try {
             return natsHeaders.get(String(prop))
-          } catch (e) {
+          } catch {
             // If header doesn't exist, NATS might throw
-            return undefined
+            return
           }
         }
         return target[prop]
@@ -85,7 +85,7 @@ class NatsIoNatsCoreConsumerPlugin extends ConsumerPlugin {
       }
     })
   }
-  
+
   // asyncEnd and end delegate to finish() which has the required guard
   asyncEnd (ctx) {
     this.finish(ctx)

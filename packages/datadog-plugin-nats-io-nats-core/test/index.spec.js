@@ -65,7 +65,7 @@ describe('Plugin', () => {
                 expect(span).to.have.property('resource', 'publish')
                 expect(span).to.have.property('error', 0)
                 expect(span.meta).to.include({
-                  'component': '@nats-io/nats-core',
+                  component: '@nats-io/nats-core',
                   'span.kind': 'producer'
                 })
               })
@@ -85,7 +85,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.include({
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
-                  'component': '@nats-io/nats-core'
+                  component: '@nats-io/nats-core'
                 })
                 expect(span.meta).to.have.property(ERROR_STACK)
               })
@@ -114,7 +114,7 @@ describe('Plugin', () => {
                 expect(consumerSpan).to.have.property('resource', 'processMsg')
                 expect(consumerSpan).to.have.property('error', 0)
                 expect(consumerSpan.meta).to.include({
-                  'component': '@nats-io/nats-core',
+                  component: '@nats-io/nats-core',
                   'span.kind': 'consumer'
                 })
                 return messageReceived
@@ -148,7 +148,7 @@ describe('Plugin', () => {
                 expect(requestSpan).to.have.property('resource', 'request')
                 expect(requestSpan).to.have.property('error', 0)
                 expect(requestSpan.meta).to.include({
-                  'component': '@nats-io/nats-core',
+                  component: '@nats-io/nats-core',
                   'span.kind': 'client'
                 })
                 return true
@@ -276,79 +276,79 @@ describe('Plugin', () => {
         })
 
         it('should set peer.service from messaging.destination.name for producer', (done) => {
-            agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                if (span.meta['span.kind'] !== 'producer') return false
+          agent
+            .assertSomeTraces(traces => {
+              const span = traces[0][0]
+              if (span.meta['span.kind'] !== 'producer') return false
 
-                expect(span.meta['peer.service']).to.equal(testSubject)
-                expect(span.meta['_dd.peer.service.source']).to.equal('messaging.destination.name')
-                return true
-              })
-              .then(() => done())
-              .catch(done)
-
-            nc.publish(testSubject, 'Peer service test')
-          })
-
-          it('should set peer.service from messaging.destination.name for consumer', (done) => {
-            let messageReceived = false
-
-            agent
-              .assertSomeTraces(traces => {
-                const consumerSpan = traces.find(t => t[0].meta['span.kind'] === 'consumer')?.[0]
-                if (!consumerSpan) return false
-
-                expect(consumerSpan.meta['peer.service']).to.equal(testSubject)
-                expect(consumerSpan.meta['_dd.peer.service.source']).to.equal('messaging.destination.name')
-                return messageReceived
-              })
-              .then(done)
-              .catch(done)
-
-            const sub = nc.subscribe(testSubject, {
-              callback: (err, msg) => {
-                if (!err) {
-                  messageReceived = true
-                }
-              }
+              expect(span.meta['peer.service']).to.equal(testSubject)
+              expect(span.meta['_dd.peer.service.source']).to.equal('messaging.destination.name')
+              return true
             })
+            .then(() => done())
+            .catch(done)
 
-            setTimeout(() => {
-              nc.publish(testSubject, 'Peer service consumer test')
-            }, 100)
-          })
+          nc.publish(testSubject, 'Peer service test')
+        })
 
-          it('should set peer.service from messaging.destination.name for client', (done) => {
-            agent
-              .assertSomeTraces(traces => {
-                const requestSpan = traces.find(t => t[0].meta['span.kind'] === 'client')?.[0]
-                if (!requestSpan) return false
+        it('should set peer.service from messaging.destination.name for consumer', (done) => {
+          let messageReceived = false
 
-                expect(requestSpan.meta['peer.service']).to.equal(testSubject)
-                expect(requestSpan.meta['_dd.peer.service.source']).to.equal('messaging.destination.name')
-                return true
-              })
-              .then(done)
-              .catch(done)
+          agent
+            .assertSomeTraces(traces => {
+              const consumerSpan = traces.find(t => t[0].meta['span.kind'] === 'consumer')?.[0]
+              if (!consumerSpan) return false
 
-            // Set up a simple responder
-            nc.subscribe(testSubject, {
-              callback: (err, msg) => {
-                if (!err && msg.reply) {
-                  nc.publish(msg.reply, 'Response')
-                }
-              }
+              expect(consumerSpan.meta['peer.service']).to.equal(testSubject)
+              expect(consumerSpan.meta['_dd.peer.service.source']).to.equal('messaging.destination.name')
+              return messageReceived
             })
+            .then(done)
+            .catch(done)
 
-            setTimeout(async () => {
-              try {
-                await nc.request(testSubject, 'Request data', { timeout: 1000 })
-              } catch (err) {
-                // Timeout is okay for this test
+          const sub = nc.subscribe(testSubject, {
+            callback: (err, msg) => {
+              if (!err) {
+                messageReceived = true
               }
-            }, 100)
+            }
           })
+
+          setTimeout(() => {
+            nc.publish(testSubject, 'Peer service consumer test')
+          }, 100)
+        })
+
+        it('should set peer.service from messaging.destination.name for client', (done) => {
+          agent
+            .assertSomeTraces(traces => {
+              const requestSpan = traces.find(t => t[0].meta['span.kind'] === 'client')?.[0]
+              if (!requestSpan) return false
+
+              expect(requestSpan.meta['peer.service']).to.equal(testSubject)
+              expect(requestSpan.meta['_dd.peer.service.source']).to.equal('messaging.destination.name')
+              return true
+            })
+            .then(done)
+            .catch(done)
+
+          // Set up a simple responder
+          nc.subscribe(testSubject, {
+            callback: (err, msg) => {
+              if (!err && msg.reply) {
+                nc.publish(msg.reply, 'Response')
+              }
+            }
+          })
+
+          setTimeout(async () => {
+            try {
+              await nc.request(testSubject, 'Request data', { timeout: 1000 })
+            } catch (err) {
+              // Timeout is okay for this test
+            }
+          }, 100)
+        })
       })
 
       describe('DSM', () => {
@@ -382,55 +382,55 @@ describe('Plugin', () => {
           await agent.close({ ritmReset: false })
         })
 
-          it('should set DSM checkpoint on produce', (done) => {
-            const expectedProducerHash = getDsmPathwayHash(testSubject, true, ENTRY_PARENT_HASH)
+        it('should set DSM checkpoint on produce', (done) => {
+          const expectedProducerHash = getDsmPathwayHash(testSubject, true, ENTRY_PARENT_HASH)
 
-            agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                if (span.meta['span.kind'] !== 'producer') return false
+          agent
+            .assertSomeTraces(traces => {
+              const span = traces[0][0]
+              if (span.meta['span.kind'] !== 'producer') return false
 
-                // Verify setDataStreamsContext was called with correct hash
-                expect(setDataStreamsContextSpy.called).to.be.true
-                expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
-                return true
-              })
-              .then(done)
-              .catch(done)
-
-            nc.publish(testSubject, 'DSM test message')
-          })
-
-          it('should set DSM checkpoint on consume', (done) => {
-            const expectedProducerHash = getDsmPathwayHash(testSubject, true, ENTRY_PARENT_HASH)
-            const expectedConsumerHash = getDsmPathwayHash(testSubject, false, expectedProducerHash)
-            let messageReceived = false
-
-            agent
-              .assertSomeTraces(traces => {
-                const consumerSpan = traces.find(t => t[0].meta['span.kind'] === 'consumer')?.[0]
-                if (!consumerSpan) return false
-
-                // Verify consumer checkpoint was set with correct hash
-                expect(setDataStreamsContextSpy.lastCall.args[0].hash).to.equal(expectedConsumerHash)
-                return messageReceived
-              })
-              .then(done)
-              .catch(done)
-
-            const sub = nc.subscribe(testSubject, {
-              callback: (err, msg) => {
-                if (!err) {
-                  messageReceived = true
-                }
-              }
+              // Verify setDataStreamsContext was called with correct hash
+              expect(setDataStreamsContextSpy.called).to.be.true
+              expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
+              return true
             })
+            .then(done)
+            .catch(done)
 
-            setTimeout(() => {
-              nc.publish(testSubject, 'DSM test message')
-            }, 100)
-          })
+          nc.publish(testSubject, 'DSM test message')
         })
+
+        it('should set DSM checkpoint on consume', (done) => {
+          const expectedProducerHash = getDsmPathwayHash(testSubject, true, ENTRY_PARENT_HASH)
+          const expectedConsumerHash = getDsmPathwayHash(testSubject, false, expectedProducerHash)
+          let messageReceived = false
+
+          agent
+            .assertSomeTraces(traces => {
+              const consumerSpan = traces.find(t => t[0].meta['span.kind'] === 'consumer')?.[0]
+              if (!consumerSpan) return false
+
+              // Verify consumer checkpoint was set with correct hash
+              expect(setDataStreamsContextSpy.lastCall.args[0].hash).to.equal(expectedConsumerHash)
+              return messageReceived
+            })
+            .then(done)
+            .catch(done)
+
+          const sub = nc.subscribe(testSubject, {
+            callback: (err, msg) => {
+              if (!err) {
+                messageReceived = true
+              }
+            }
+          })
+
+          setTimeout(() => {
+            nc.publish(testSubject, 'DSM test message')
+          }, 100)
+        })
+      })
     })
   })
 })
