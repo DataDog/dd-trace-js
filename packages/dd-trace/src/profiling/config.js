@@ -12,9 +12,10 @@ const SpaceProfiler = require('./profilers/space')
 const EventsProfiler = require('./profilers/events')
 const { oomExportStrategies, snapshotKinds } = require('./constants')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
+const { getIsAzureFunction } = require('../serverless')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
-const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
+const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
 const { getEnvironmentVariables } = require('../config-helper')
 const defaults = require('../config_defaults')
 
@@ -73,7 +74,7 @@ class Config {
       tagger.parse(DD_TAGS),
       tagger.parse(options.tags),
       tagger.parse({ env, host, service, version, functionname }),
-      getAzureTagsFromMetadata(getAzureAppMetadata())
+      getAzureTagsFromMetadata(getIsAzureFunction() ? getAzureFunctionMetadata() : getAzureAppMetadata())
     )
 
     // Add source code integration tags if available
