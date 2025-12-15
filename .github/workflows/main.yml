@@ -17,14 +17,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache dependencies
-        uses: actions/cache@v4
+      - name: Try cache restore
+        id: cache
+        uses: actions/cache/restore@v4
         with:
-          path: ./cache-folder
+          path: |
+            ./cache-folder
+            ./node_modules
+            ./node_modules.tar
+            ~/.npm
+            ~/.cache
           key: ${{ matrix.cache_key }}
 
+      - name: Check what was restored
+        run: |
+          echo "Cache hit: ${{ steps.cache.outputs.cache-hit }}"
+          echo "Checking restored files:"
+          find . -maxdepth 3 -type f -newer /tmp 2>/dev/null || echo "No new files"
+          ls -la ./cache-folder 2>/dev/null || echo "No cache-folder"
+          ls -la ./node_modules 2>/dev/null | head -20 || echo "No node_modules"
+
       - name: Upload cached folder as artifact
+        if: steps.cache.outputs.cache-hit == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: cache-artifact-${{ strategy.job-index }}
-          path: ./cache-folder
+          path: |
+            ./cache-folder
+            ./node_modules
+            ./node_modules.tar
+            ~/.npm
+            ~/.cache
+          if-no-files-found: ignore
