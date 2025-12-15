@@ -521,8 +521,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         let isEfdRetry = false
         // We'll store the test statuses of the retries
+        const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
         if (this.isKnownTestsEnabled) {
-          const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
           const isNewTest = retriedTestsToNumAttempts.has(testName)
           if (isNewTest) {
             if (newTestsTestStatuses.has(testName)) {
@@ -537,18 +537,44 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const promises = {}
         const numRetries = this.global[RETRY_TIMES]
         const numTestExecutions = event.test?.invocations
-        const willBeRetried = numRetries > 0 && numTestExecutions - 1 < numRetries
+        const willBeRetriedByFailedTestReplay = numRetries > 0 && numTestExecutions - 1 < numRetries
         const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 2
 
         const ctx = testContexts.get(event.test)
 
+        // Compute whether this is the last execution for final_status purposes.
+        const efdEnabled = this.isEarlyFlakeDetectionEnabled
+        const isNewTest = !!ctx?.isNew
+        const isModified = !!ctx?.isModified
+        const efdApplies = efdEnabled && (isNewTest || isModified)
+        // After `test_start` we incremented retriedTestsToNumAttempts for EFD/ATF; read current count safely.
+        const efdExecCount = retriedTestsToNumAttempts.has(testName) ? retriedTestsToNumAttempts.get(testName) : 0
+        const isLastEfd =
+          efdEnabled
+            ? (efdApplies ? (isEfdRetry && efdExecCount >= (earlyFlakeDetectionNumRetries + 1)) : true)
+            : false
+        const isLastAtr =
+          this.isFlakyTestRetriesEnabled &&
+          !isEfdRetry &&
+          !isAttemptToFix &&
+          Number.isFinite(numRetries) &&
+          (status === 'pass' || numTestExecutions >= (Number(numRetries) + 1))
+        const isLastAtf =
+          this.isTestManagementTestsEnabled &&
+          isAttemptToFix &&
+          Number.isFinite(testManagementAttemptToFixRetries) &&
+          efdExecCount >= (testManagementAttemptToFixRetries + 1)
+        const isLastTestExecution = Boolean(isLastEfd || isLastAtr || isLastAtf)
+        const finalStatus = isLastTestExecution ? status : undefined
+
         if (status === 'fail') {
-          const shouldSetProbe = this.isDiEnabled && willBeRetried && numTestExecutions === 1
+          const shouldSetProbe = this.isDiEnabled && willBeRetriedByFailedTestReplay && numTestExecutions === 1
           testErrCh.publish({
             ...ctx.currentStore,
             error: formatJestError(event.test.errors[0]),
             shouldSetProbe,
-            promises
+            promises,
+            finalStatus
           })
         }
 
@@ -574,7 +600,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           attemptToFixPassed,
           failedAllTests,
           attemptToFixFailed,
-          isAtrRetry
+          isAtrRetry,
+          finalStatus
         })
 
         if (promises.isProbeReady) {
@@ -590,9 +617,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             testSourceFile: this.testSourceFile,
             displayName: this.displayName,
             frameworkVersion: jestVersion,
-            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
+            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
           },
-          isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(testName)
+          isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(testName),
         })
       }
     }

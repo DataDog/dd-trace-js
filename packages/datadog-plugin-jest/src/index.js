@@ -6,6 +6,7 @@ const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   JEST_TEST_RUNNER,
   finishAllTraceSpans,
   getTestSuiteCommonTags,
@@ -367,9 +368,14 @@ class JestPlugin extends CiPlugin {
       attemptToFixPassed,
       failedAllTests,
       attemptToFixFailed,
-      isAtrRetry
+      isAtrRetry,
+      finalStatus,
+      ...args
     }) => {
       span.setTag(TEST_STATUS, status)
+      if (finalStatus) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
       }
@@ -419,11 +425,11 @@ class JestPlugin extends CiPlugin {
 
     this.addSub('ci:jest:test:skip', ({
       test,
-      isDisabled
+      isDisabled,
     }) => {
       const span = this.startTestSpan(test)
       span.setTag(TEST_STATUS, 'skip')
-
+      span.setTag(TEST_FINAL_STATUS, 'skip')
       if (isDisabled) {
         span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
       }
