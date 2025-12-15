@@ -4,7 +4,8 @@ import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config-helper.js'
 import path from 'path'
 import { pathToFileURL } from 'url'
-import extractOutput from './packages/datadog-instrumentations/src/helpers/extract-prisma-client-path.js'import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
+import extractOutput from './packages/datadog-instrumentations/src/helpers/extract-prisma-client-path.js'
+import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
 
 const regexpEscape = regexpEscapeModule.default
 

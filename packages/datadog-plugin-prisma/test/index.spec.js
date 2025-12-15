@@ -227,9 +227,7 @@ describe('Plugin', () => {
             ])
           })
         })
-      })
 
-      prismaClients.forEach(config => {
         describe(`with configuration ${config.schema}`, () => {
           describe('with custom service name', () => {
             before(async () => {
@@ -299,11 +297,11 @@ describe('Plugin', () => {
               prismaClient = new prisma.PrismaClient()
             })
 
-          it('should disable prisma client', async () => {
-            const tracingPromise = agent.assertSomeTraces(traces => {
-              const clientSpans = traces[0].find(span => span.meta['prisma.type'] === 'client')
-              assert.ok(clientSpans == null)
-            })
+            it('should disable prisma client', async () => {
+              const tracingPromise = agent.assertSomeTraces(traces => {
+                const clientSpans = traces[0].find(span => span.meta['prisma.type'] === 'client')
+                assert.ok(clientSpans == null)
+              })
 
               await Promise.all([
                 prismaClient.$queryRaw`SELECT 1`,
@@ -344,11 +342,11 @@ describe('Plugin', () => {
               prismaClient = new prisma.PrismaClient()
             })
 
-          it('should disable prisma engine', async () => {
-            const tracingPromise = agent.assertSomeTraces(traces => {
-              const engineSpans = traces[0].find(span => span.meta['prisma.type'] === 'engine')
-              assert.ok(engineSpans == null)
-            })
+            it('should disable prisma engine', async () => {
+              const tracingPromise = agent.assertSomeTraces(traces => {
+                const engineSpans = traces[0].find(span => span.meta['prisma.type'] === 'engine')
+                assert.ok(engineSpans == null)
+              })
 
               await Promise.all([
                 prismaClient.$queryRaw`SELECT 1`,
