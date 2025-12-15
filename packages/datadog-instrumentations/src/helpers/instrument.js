@@ -56,7 +56,7 @@ exports.addHook = function addHook ({ name, versions, file, filePattern, patchDe
     instrumentations[name] = []
   }
 
-  instrumentations[name].push({ name, versions, file, filePattern, hook, patchDefault })
+  instrumentations[name].push({ versions, file, filePattern, hook, patchDefault })
 }
 
 exports.AsyncResource = AsyncResource

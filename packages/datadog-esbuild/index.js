@@ -42,9 +42,9 @@ function addModuleOfInterest (name, file) {
 
 const modulesOfInterest = new Set()
 
-for (const instrumentation of Object.values(instrumentations)) {
+for (const [name, instrumentation] of Object.entries(instrumentations)) {
   for (const entry of instrumentation) {
-    addModuleOfInterest(entry.name, entry.file)
+    addModuleOfInterest(name, entry.file)
   }
 }
 
