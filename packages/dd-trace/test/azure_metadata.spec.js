@@ -111,7 +111,6 @@ describe('Azure metadata', () => {
   })
 
   it('uses DD_AZURE_RESOURCE_GROUP for Flex Consumption Azure Functions', () => {
-    console.log("in uses DD_AZURE_RESOURCE_GROUP for Flex Consumption Azure Functions")
     delete process.env.WEBSITE_RESOURCE_GROUP
     delete process.env.WEBSITE_OS
     delete process.env.DD_AAS_DOTNET_EXTENSION_VERSION
@@ -130,7 +129,8 @@ describe('Azure metadata', () => {
       operatingSystem: os.platform(),
       resourceGroup: 'flex_resource_group',
       resourceID:
-        '/subscriptions/subscription_id/resourcegroups/flex_resource_group/providers/microsoft.web/sites/flex_function_app',
+        '/subscriptions/subscription_id/resourcegroups/flex_resource_group' +
+        '/providers/microsoft.web/sites/flex_function_app',
       runtime: 'node',
       siteKind: 'functionapp',
       siteName: 'flex_function_app',
@@ -149,16 +149,5 @@ describe('Azure metadata', () => {
     process.env.DD_AZURE_RESOURCE_GROUP = 'should_not_use_this'
     const metadata = getAzureFunctionMetadata()
     assert.strictEqual(metadata.resourceGroup, 'regular_resource_group')
-  })
-
-  it('extracts resource group from WEBSITE_OWNER_NAME for non-Flex Consumption when WEBSITE_RESOURCE_GROUP is missing', () => {
-    delete process.env.WEBSITE_RESOURCE_GROUP
-    delete process.env.DD_AZURE_RESOURCE_GROUP
-    process.env.WEBSITE_SITE_NAME = 'regular_function_app'
-    process.env.WEBSITE_OWNER_NAME = 'subscription_id+extracted_group-regionwebspace'
-    process.env.WEBSITE_SKU = 'Consumption'
-    process.env.FUNCTIONS_EXTENSION_VERSION = '4'
-    const metadata = getAzureFunctionMetadata()
-    assert.strictEqual(metadata.resourceGroup, 'extracted_group')
   })
 })

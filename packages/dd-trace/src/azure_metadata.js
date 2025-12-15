@@ -3,7 +3,7 @@
 // Modeled after https://github.com/DataDog/libdatadog/blob/f3994857a59bb5679a65967138c5a3aec418a65f/ddcommon/src/azure_app_services.rs
 
 const os = require('os')
-const { getIsAzureFunction } = require('./serverless')
+const { getIsAzureFunction, getIsFlexConsumptionAzureFunction } = require('./serverless')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../../dd-trace/src/config-helper')
 
 function extractSubscriptionID (ownerName) {
@@ -47,7 +47,6 @@ function buildMetadata () {
     WEBSITE_OS,
     WEBSITE_RESOURCE_GROUP,
     WEBSITE_SITE_NAME,
-    WEBSITE_SKU
   } = getEnvironmentVariables()
 
   const subscriptionID = extractSubscriptionID(WEBSITE_OWNER_NAME)
@@ -58,11 +57,11 @@ function buildMetadata () {
     ? ['functionapp', 'function']
     : ['app', 'app']
 
-  // Azure Functions on Flex Consumption plans prefer the `DD_AZURE_RESOURCE_GROUP` env var.
-  // If this logic ever changes, update the logic in `serverless-components/src/datadog-trace-agent`
+  // Azure Functions on Flex Consumption plans require the `DD_AZURE_RESOURCE_GROUP` env var.
+  // If this logic ever changes, update the logic in `libdatadog`, `serverless-components/src/datadog-trace-agent`,
   // and the serverless compat layers accordingly.
-  const resourceGroup = (getIsAzureFunction() && WEBSITE_SKU === 'FlexConsumption')
-    ? (DD_AZURE_RESOURCE_GROUP ?? WEBSITE_RESOURCE_GROUP)
+  const resourceGroup = getIsFlexConsumptionAzureFunction()
+    ? (DD_AZURE_RESOURCE_GROUP ?? WEBSITE_RESOURCE_GROUP ?? extractResourceGroup(WEBSITE_OWNER_NAME))
     : (WEBSITE_RESOURCE_GROUP ?? extractResourceGroup(WEBSITE_OWNER_NAME))
 
   return trimObject({
