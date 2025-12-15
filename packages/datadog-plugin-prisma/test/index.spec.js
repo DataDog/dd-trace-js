@@ -13,6 +13,32 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+
+function execPrismaGenerate (config, cwd) {
+  if (config.ts) {
+    execSync('./node_modules/.bin/prisma generate && ' +
+      './node_modules/.bin/tsc ../generated/**/*.ts --outDir ../dist ' +
+      '--target esnext --module commonjs --allowJs true --moduleResolution node', {
+      cwd, // Ensure the current working directory is where the schema is located
+      stdio: 'inherit'
+    })
+  } else {
+    execSync('./node_modules/.bin/prisma generate', {
+      cwd, // Ensure the current working directory is where the schema is located
+      stdio: 'inherit'
+    })
+  }
+}
+
+function loadPrismaModule (config) {
+  if (config.file.includes('generated')) {
+    return require(config.file)
+  }
+
+  const module = require(config.file)
+  return config.ts ? module : module.get()
+}
+
 describe('Plugin', () => {
   let prisma
   let prismaClient
@@ -31,12 +57,19 @@ describe('Plugin', () => {
       {
         schema: './provider-prisma-client-js/schema.prisma',
         file: `../../../versions/@prisma/client@${range}`
+      },
+      {
+        schema: './provider-prisma-client-ts/schema.prisma',
+        file: '../../../versions/@prisma/dist/client.js',
+        env: true,
+        ts: true
       }]
 
       process.env.PRISMA_CLIENT_OUTPUT = '../generated/prisma'
 
       prismaClients.forEach(config => {
         describe(`without configuration ${config.schema}`, () => {
+          if (config.ts && version === '6.1.0') return
           before(async () => {
             if (!config.env) {
               process.env.DD_PRISMA_OUTPUT = null
@@ -47,14 +80,11 @@ describe('Plugin', () => {
               path.resolve(__dirname, config.schema),
               cwd + '/schema.prisma',
             )
-
             await agent.load('prisma')
-            execSync('./node_modules/.bin/prisma generate', {
-              cwd, // Ensure the current working directory is where the schema is located
-              stdio: 'inherit'
-            })
 
-            prisma = config.file.includes('generated') ? require(config.file) : require(config.file).get()
+            execPrismaGenerate(config, cwd)
+
+            prisma = loadPrismaModule(config)
             prismaClient = new prisma.PrismaClient()
 
             tracingHelper = prismaClient._tracingHelper
@@ -228,6 +258,7 @@ describe('Plugin', () => {
         })
 
         describe(`with configuration ${config.schema}`, () => {
+          if (config.ts && version === '6.1.0') return
           describe('with custom service name', () => {
             before(async () => {
               if (!config.env) {
@@ -240,10 +271,7 @@ describe('Plugin', () => {
                 cwd + '/schema.prisma',
               )
 
-              execSync('./node_modules/.bin/prisma generate', {
-                cwd,
-                stdio: 'inherit'
-              })
+              execPrismaGenerate(config, cwd)
 
               const pluginConfig = {
                 service: 'custom'
@@ -254,7 +282,7 @@ describe('Plugin', () => {
             after(() => { return agent.close({ ritmReset: false }) })
 
             beforeEach(() => {
-              prisma = config.file.includes('generated') ? require(config.file) : require(config.file).get()
+              prisma = loadPrismaModule(config)
               prismaClient = new prisma.PrismaClient()
             })
 
@@ -278,10 +306,7 @@ describe('Plugin', () => {
                 cwd + '/schema.prisma',
               )
 
-              execSync('./node_modules/.bin/prisma generate', {
-                cwd,
-                stdio: 'inherit'
-              })
+              execPrismaGenerate(config, cwd)
 
               const pluginConfig = {
                 client: false
@@ -292,7 +317,7 @@ describe('Plugin', () => {
             after(() => { return agent.close({ ritmReset: false }) })
 
             beforeEach(() => {
-              prisma = config.file.includes('generated') ? require(config.file) : require(config.file).get()
+              prisma = loadPrismaModule(config)
               prismaClient = new prisma.PrismaClient()
             })
 
@@ -323,10 +348,7 @@ describe('Plugin', () => {
                 cwd + '/schema.prisma',
               )
 
-              execSync('./node_modules/.bin/prisma generate', {
-                cwd,
-                stdio: 'inherit'
-              })
+              execPrismaGenerate(config, cwd)
 
               const pluginConfig = {
                 engine: false
@@ -337,7 +359,7 @@ describe('Plugin', () => {
             after(() => { return agent.close({ ritmReset: false }) })
 
             beforeEach(() => {
-              prisma = config.file.includes('generated') ? require(config.file) : require(config.file).get()
+              prisma = loadPrismaModule(config)
               prismaClient = new prisma.PrismaClient()
             })
 

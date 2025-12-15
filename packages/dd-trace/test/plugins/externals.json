@@ -482,6 +482,11 @@
     {
       "name": "prisma",
       "dep": "@prisma/client"
+    },
+    {
+      "name": "typescript",
+      "dep": true,
+      "versions": [">=5.0.0"]
     }
   ],
   "q": [

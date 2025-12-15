@@ -15,21 +15,27 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
-const prismaClientConfigs = [
-  {
-    name: 'default @prisma/client',
-    schema: './packages/datadog-plugin-prisma/test/provider-prisma-client-js/schema.prisma',
-    serverFile: 'server.mjs',
-    importPath: '@prisma/client'
-  },
-  {
-    name: 'custom output path',
-    serverFile: 'server-custom-output.mjs',
-    importPath: './generated/prisma/index.js',
-    schema: './packages/datadog-plugin-prisma/test/provider-prisma-client-output-js/schema.prisma',
-    env: { PRISMA_CLIENT_OUTPUT: './generated/prisma' }
-  }
-]
+const prismaClientConfigs = [{
+  name: 'default @prisma/client',
+  schema: './packages/datadog-plugin-prisma/test/provider-prisma-client-js/schema.prisma',
+  serverFile: 'server.mjs',
+  importPath: '@prisma/client'
+},
+{
+  name: 'custom output path',
+  serverFile: 'server-custom-output.mjs',
+  importPath: './generated/prisma/index.js',
+  schema: './packages/datadog-plugin-prisma/test/provider-prisma-client-output-js/schema.prisma',
+  env: { PRISMA_CLIENT_OUTPUT: './generated/prisma' }
+},
+{
+  name: 'non JS client generator',
+  serverFile: 'server-non-js-generator.js',
+  importPath: './dist/client.js',
+  schema: './packages/datadog-plugin-prisma/test/provider-prisma-client-ts/schema.prisma',
+  env: { PRISMA_CLIENT_OUTPUT: './generated/prisma' },
+  ts: true
+}]
 
 describe('esm', () => {
   let agent
@@ -38,8 +44,9 @@ describe('esm', () => {
   prismaClientConfigs.forEach(config => {
     describe(config.name, () => {
       withVersions('prisma', '@prisma/client', version => {
+        if (config.ts && version === '6.1.0') return
         let variants
-        useSandbox([`'prisma@${version}'`, `'@prisma/client@${version}'`], false, [
+        useSandbox([`prisma@${version}`, `@prisma/client@${version}`, 'typescript'], false, [
           './packages/datadog-plugin-prisma/test/integration-test/*',
           config.schema
         ])
@@ -53,19 +60,36 @@ describe('esm', () => {
           agent = await new FakeAgent().start()
 
           const cwd = sandboxCwd()
-          execSync(
-            './node_modules/.bin/prisma migrate reset --force &&' +
-            './node_modules/.bin/prisma db push --accept-data-loss &&' +
-            './node_modules/.bin/prisma generate',
-            {
-              cwd,
-              stdio: 'inherit',
-              env: {
-                ...process.env,
-                ...config.env
+          if (config.ts) {
+            execSync(
+              './node_modules/.bin/prisma migrate reset --force &&' +
+              './node_modules/.bin/prisma db push --accept-data-loss &&' +
+              './node_modules/.bin/prisma generate &&' +
+              './node_modules/.bin/tsc ./generated/**/*.ts --outDir ./dist --target esnext --module commonjs --allowJs true --moduleResolution node',
+              {
+                cwd,
+                stdio: 'inherit',
+                env: {
+                  ...process.env,
+                  ...config.env
+                }
               }
-            }
-          )
+            )
+          } else {
+            execSync(
+              './node_modules/.bin/prisma migrate reset --force &&' +
+              './node_modules/.bin/prisma db push --accept-data-loss &&' +
+              './node_modules/.bin/prisma generate',
+              {
+                cwd,
+                stdio: 'inherit',
+                env: {
+                  ...process.env,
+                  ...config.env
+                }
+              }
+            )
+          }
         })
 
         afterEach(async () => {
