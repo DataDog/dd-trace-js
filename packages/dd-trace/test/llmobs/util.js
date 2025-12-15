@@ -367,8 +367,8 @@ function getLlmObsSpansFromRequests (llmobsSpanEventsRequests) {
  * @param {object} expectedPrompt - Expected prompt metadata (id, version, variables, chat_template)
  * @param {Array<{role: string, content: string}>} expectedInputMessages - Expected input messages
  * @param {object} options - Optional configuration
- * @param {string} options.promptTrackingSource - Expected prompt tracking source ('auto' or 'manual'),
- *   defaults to 'auto'
+ * @param {string} options.promptTrackingInstrumentationMethod - Expected prompt tracking instrumentation method
+ * ('auto' or 'manual'), defaults to 'auto'
  * @param {boolean} options.promptMultimodal - Whether prompt contains multimodal inputs,
  *   defaults to false
  */
@@ -376,7 +376,7 @@ function assertPromptTracking (
   spanEvent,
   expectedPrompt,
   expectedInputMessages,
-  { promptTrackingSource = 'auto', promptMultimodal = false } = {}
+  { promptTrackingInstrumentationMethod = 'auto', promptMultimodal = false } = {}
 ) {
   // Verify input messages are captured from instructions
   assert(spanEvent.meta.input.messages, 'Input messages should be present')
@@ -398,7 +398,7 @@ function assertPromptTracking (
 
   // Verify tags
   assert(spanEvent.tags, 'Span event should include tags')
-  assert(spanEvent.tags.includes(`prompt_tracking_source:${promptTrackingSource}`))
+  assert(spanEvent.tags.includes(`prompt_tracking_instrumentation_method:${promptTrackingInstrumentationMethod}`))
   if (promptMultimodal) {
     assert(spanEvent.tags.includes('prompt_multimodal:true'))
   }

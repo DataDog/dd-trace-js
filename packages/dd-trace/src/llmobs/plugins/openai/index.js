@@ -427,7 +427,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           variables: normalizedVariables,
           chat_template: chatTemplate
         })
-        const tags = { prompt_tracking_source: 'auto' }
+        const tags = { prompt_tracking_instrumentation_method: 'auto' }
         if (hasMultimodalInputs(inputs.prompt.variables)) {
           tags.prompt_multimodal = 'true'
         }
