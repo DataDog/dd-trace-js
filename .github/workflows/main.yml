@@ -22,30 +22,21 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: |
-            ./cache-folder
-            ./node_modules
-            ./node_modules.tar
-            ~/.npm
-            ~/.cache
+            ~/.bun/install/cache
+            /home/runner/.bun/install/cache
           key: ${{ matrix.cache_key }}
 
       - name: Check what was restored
         run: |
           echo "Cache hit: ${{ steps.cache.outputs.cache-hit }}"
           echo "Checking restored files:"
-          find . -maxdepth 3 -type f -newer /tmp 2>/dev/null || echo "No new files"
-          ls -la ./cache-folder 2>/dev/null || echo "No cache-folder"
-          ls -la ./node_modules 2>/dev/null | head -20 || echo "No node_modules"
+          ls -lah ~/.bun/install/cache 2>/dev/null || echo "No ~/.bun/install/cache"
+          du -sh ~/.bun/install/cache 2>/dev/null || echo "No size info"
 
       - name: Upload cached folder as artifact
         if: steps.cache.outputs.cache-hit == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: cache-artifact-${{ strategy.job-index }}
-          path: |
-            ./cache-folder
-            ./node_modules
-            ./node_modules.tar
-            ~/.npm
-            ~/.cache
-          if-no-files-found: ignore
+          path: ~/.bun/install/cache
+          if-no-files-found: warn
