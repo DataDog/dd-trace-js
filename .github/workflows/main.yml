@@ -69,73 +69,155 @@ jobs:
           }
           EOF
 
-      - name: List available caches for debugging
+      - name: Gather cache forensics
+        id: download-cache
         run: |
-          echo "Current ref: $(git rev-parse --abbrev-ref HEAD)"
-          echo "Current commit: $(git rev-parse HEAD)"
-          echo "---"
-          echo "Searching for caches matching key: ${{ matrix.key }}"
-          gh cache list --limit 100 | grep -F "${{ matrix.key }}" || echo "No exact matches found in gh cache list"
-          echo "---"
-          echo "Checking API for detailed cache info:"
-          gh api /repos/${{ github.repository }}/actions/caches --jq ".actions_caches[] | select(.key == \"${{ matrix.key }}\") | {id, key, ref, size_in_bytes}" || echo "No caches found via API"
+          set +e
+
+          echo "=== CACHE FORENSICS REPORT ==="
+          echo ""
+
+          # Get comprehensive cache info from API
+          echo "Fetching cache details from API..."
+          CACHE_JSON=$(gh api /repos/${{ github.repository }}/actions/caches \
+            --jq ".actions_caches[] | select(.key == \"${{ matrix.key }}\")" \
+            | head -1)
+
+          mkdir -p cache-restore
+
+          if [ -n "$CACHE_JSON" ]; then
+            echo "✓ Cache found in API"
+            echo "$CACHE_JSON" | jq . | tee cache-restore/cache-api-response.json
+
+            # Extract key fields
+            CACHE_ID=$(echo "$CACHE_JSON" | jq -r '.id')
+            CACHE_REF=$(echo "$CACHE_JSON" | jq -r '.ref')
+            CACHE_SIZE=$(echo "$CACHE_JSON" | jq -r '.size_in_bytes')
+            CACHE_VERSION=$(echo "$CACHE_JSON" | jq -r '.version')
+            CREATED_AT=$(echo "$CACHE_JSON" | jq -r '.created_at')
+            LAST_ACCESSED=$(echo "$CACHE_JSON" | jq -r '.last_accessed_at')
+
+            # Find workflows that created/accessed this cache
+            echo ""
+            echo "Finding workflows that may have created this cache..."
+            gh run list --branch master --limit 50 --json databaseId,name,createdAt,conclusion > cache-restore/recent-workflows.json
+
+            # Create forensics report
+            cat > cache-restore/FORENSICS-REPORT.md <<EOF
+          # Cache Forensics Report
+
+          ## Cache Details
+          - **ID**: $CACHE_ID
+          - **Key**: ${{ matrix.key }}
+          - **Ref**: $CACHE_REF
+          - **Size**: $(numfmt --to=iec $CACHE_SIZE 2>/dev/null || echo "$CACHE_SIZE bytes")
+          - **Version Hash**: $CACHE_VERSION
+          - **Created**: $CREATED_AT
+          - **Last Accessed**: $LAST_ACCESSED
+
+          ## Analysis
+
+          ### Key Pattern Analysis
+          EOF
+
+            # Analyze the cache key to determine likely source
+            KEY="${{ matrix.key }}"
+
+            if [[ "$KEY" == *"yarn-cache"* ]]; then
+              echo "- **Type**: Yarn dependency cache" >> cache-restore/FORENSICS-REPORT.md
+              echo "- **Likely Source**: \`actions/setup-node\` with yarn caching" >> cache-restore/FORENSICS-REPORT.md
+            elif [[ "$KEY" == *"node_modules"* ]] || [[ "$KEY" == *"npm"* ]]; then
+              echo "- **Type**: NPM dependency cache" >> cache-restore/FORENSICS-REPORT.md
+              echo "- **Likely Source**: \`actions/setup-node\` or \`actions/cache\`" >> cache-restore/FORENSICS-REPORT.md
+            elif [[ "$KEY" == *"runner_venv"* ]] || [[ "$KEY" == *"Python"* ]]; then
+              echo "- **Type**: Python virtual environment cache" >> cache-restore/FORENSICS-REPORT.md
+              echo "- **Likely Source**: \`actions/setup-python\`" >> cache-restore/FORENSICS-REPORT.md
+            elif [[ "$KEY" == *"playwright"* ]]; then
+              echo "- **Type**: Playwright browser binaries" >> cache-restore/FORENSICS-REPORT.md
+              echo "- **Likely Source**: Playwright installation step" >> cache-restore/FORENSICS-REPORT.md
+            elif [[ "$KEY" == *"cypress"* ]]; then
+              echo "- **Type**: Cypress binary cache" >> cache-restore/FORENSICS-REPORT.md
+              echo "- **Likely Source**: Cypress installation step" >> cache-restore/FORENSICS-REPORT.md
+            elif [[ "$KEY" == *"codeql"* ]]; then
+              echo "- **Type**: CodeQL analysis cache" >> cache-restore/FORENSICS-REPORT.md
+              echo "- **Likely Source**: CodeQL analysis workflow" >> cache-restore/FORENSICS-REPORT.md
+            else
+              # Check if key looks like base64
+              if [[ "$KEY" =~ ^[A-Za-z0-9+/=]+$ ]] && [[ "${#KEY}" -ge 20 ]]; then
+                echo "- **Type**: Unknown (base64-encoded key)" >> cache-restore/FORENSICS-REPORT.md
+                echo "- **Encoded Key**: This appears to be a base64-encoded cache key" >> cache-restore/FORENSICS-REPORT.md
+
+                # Try to decode
+                DECODED=$(echo "$KEY" | base64 -d 2>/dev/null || echo "")
+                if [ -n "$DECODED" ]; then
+                  echo "- **Decoded**: \`$DECODED\`" >> cache-restore/FORENSICS-REPORT.md
+                fi
+              else
+                echo "- **Type**: Unknown" >> cache-restore/FORENSICS-REPORT.md
+              fi
+            fi
+
+            cat >> cache-restore/FORENSICS-REPORT.md <<EOF
+
+          ### Version Hash
+          The version hash \`$CACHE_VERSION\` is computed by GitHub Actions based on:
+          - The file paths being cached
+          - The runner OS and architecture
+          - Other cache configuration
+
+          ## Limitation
+
+          ⚠️ **GitHub Actions caches cannot be downloaded without knowing the exact original path configuration.**
+
+          The cache service requires the exact paths that were used when creating the cache. Since this cache
+          was likely created by a different workflow/action, we cannot restore its actual contents.
+
+          ## Recommended Actions
+
+          1. **Delete the cache** if it's suspicious:
+             \`\`\`bash
+             gh cache delete $CACHE_ID --repo ${{ github.repository }}
+             \`\`\`
+
+          2. **Investigate the workflow** that created it by checking workflows around $CREATED_AT
+
+          3. **Search for the cache key** in your workflow files to find where it's defined
+          EOF
+
+            echo ""
+            cat cache-restore/FORENSICS-REPORT.md
+
+            echo "cache-hit=metadata-only" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Cache not found in API"
+            echo "cache-hit=false" >> $GITHUB_OUTPUT
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
         continue-on-error: true
 
-      - name: Restore cache (attempt 1 - exact key)
-        id: cache-restore
-        uses: actions/cache/restore@v4
-        continue-on-error: true
-        with:
-          path: cache-restore
-          key: ${{ matrix.key }}
-          lookup-only: false
-          fail-on-cache-miss: false
-          enableCrossOsArchive: true
-
-      - name: Restore cache (attempt 2 - with restore-keys)
-        if: steps.cache-restore.outputs.cache-hit != 'true'
-        id: cache-restore-prefix
-        uses: actions/cache/restore@v4
-        continue-on-error: true
-        with:
-          path: cache-restore
-          key: ${{ matrix.key }}-not-exists-ignore
-          restore-keys: |
-            ${{ matrix.key }}
-          fail-on-cache-miss: false
-          enableCrossOsArchive: true
-
       - name: Check cache status
         run: |
-          restored="false"
-          restore_method="none"
-
-          if [ "${{ steps.cache-restore.outputs.cache-hit }}" == "true" ]; then
-            echo "✓ Successfully restored cache: ${{ matrix.key }}"
-            restored="true"
-            restore_method="exact-key"
-          elif [ "${{ steps.cache-restore-prefix.outputs.cache-hit }}" == "true" ]; then
-            echo "✓ Successfully restored cache via prefix: ${{ matrix.key }}"
-            restored="true"
-            restore_method="restore-keys"
-          else
+          if [ "${{ steps.download-cache.outputs.cache-hit }}" == "metadata-only" ]; then
+            echo "✓ Cache metadata gathered: ${{ matrix.key }}"
+            echo "metadata-only" > restore_status.txt
+          elif [ "${{ steps.download-cache.outputs.cache-hit }}" == "false" ]; then
             echo "✗ Cache not found: ${{ matrix.key }}"
-            # Create empty directory to still upload metadata
             mkdir -p cache-restore
+            echo "not-found" > restore_status.txt
           fi
 
-          echo "$restored" > restore_status.txt
-          echo "Restore method: $restore_method" >> restore_status.txt
-
           # Log cache directory contents
-          echo "Cache directory contents:"
+          echo ""
+          echo "=== Cache Directory Contents ==="
           if [ -d "cache-restore" ]; then
-            du -sh cache-restore
-            find cache-restore -type f | head -20 || echo "No files found"
-            file_count=$(find cache-restore -type f | wc -l)
-            echo "Total files in cache: $file_count"
+            du -sh cache-restore 2>/dev/null || echo "Empty"
+            echo ""
+            echo "Files:"
+            find cache-restore -type f -exec ls -lh {} \; 2>/dev/null | head -20
+            file_count=$(find cache-restore -type f 2>/dev/null | wc -l)
+            echo ""
+            echo "Total files: $file_count"
           else
             echo "cache-restore directory does not exist"
           fi
@@ -167,40 +249,29 @@ jobs:
           echo "- **Archive**: \`${SAFE_NAME}.tar.gz\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Job Index**: ${{ strategy.job-index }}" >> $GITHUB_STEP_SUMMARY
 
-          # Check which restore succeeded
-          if [ "${{ steps.cache-restore.outputs.cache-hit }}" == "true" ]; then
-            echo "- **Restored**: ✓ Yes (exact key)" >> $GITHUB_STEP_SUMMARY
-            echo "- **Matched Key**: \`${{ steps.cache-restore.outputs.cache-matched-key }}\`" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ steps.cache-restore-prefix.outputs.cache-hit }}" == "true" ]; then
-            echo "- **Restored**: ✓ Yes (via restore-keys)" >> $GITHUB_STEP_SUMMARY
-            echo "- **Matched Key**: \`${{ steps.cache-restore-prefix.outputs.cache-matched-key }}\`" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- **Restored**: ✗ No" >> $GITHUB_STEP_SUMMARY
+          # Check status
+          if [ "${{ steps.download-cache.outputs.cache-hit }}" == "metadata-only" ]; then
+            echo "- **Status**: ⚠️ Metadata collected (actual cache contents cannot be downloaded)" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.download-cache.outputs.cache-hit }}" == "false" ]; then
+            echo "- **Status**: ✗ Cache not found in repository" >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Show cache contents
+          # Show forensics report if it exists
+          if [ -f "cache-restore/FORENSICS-REPORT.md" ]; then
+            echo "### Forensics Report" >> $GITHUB_STEP_SUMMARY
+            cat cache-restore/FORENSICS-REPORT.md >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Show available files
           if [ -d "cache-restore" ]; then
             file_count=$(find cache-restore -type f 2>/dev/null | wc -l)
-            cache_size=$(du -sh cache-restore 2>/dev/null | cut -f1)
-            echo "### Cache Contents" >> $GITHUB_STEP_SUMMARY
-            echo "- **Files**: $file_count" >> $GITHUB_STEP_SUMMARY
-            echo "- **Size**: $cache_size" >> $GITHUB_STEP_SUMMARY
-
             if [ "$file_count" -gt 0 ]; then
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "**Sample files** (first 10):" >> $GITHUB_STEP_SUMMARY
+              echo "### Available Files in Archive" >> $GITHUB_STEP_SUMMARY
               echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-              find cache-restore -type f | head -10 >> $GITHUB_STEP_SUMMARY
+              find cache-restore -type f >> $GITHUB_STEP_SUMMARY
               echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             fi
-          fi
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -f "${SAFE_NAME}.sha256" ]; then
-            echo "### Archive SHA256" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            cat "${SAFE_NAME}.sha256" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi
