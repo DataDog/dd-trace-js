@@ -14,8 +14,10 @@ jobs:
           - 'PFxRDTsQC2CBRTRk3TMxWNYXnd0='
       fail-fast: false
     steps:
-      - name: Checkout
+      - name: Checkout master
         uses: actions/checkout@v4
+        with:
+          ref: master
 
       - name: Try cache restore
         id: cache
