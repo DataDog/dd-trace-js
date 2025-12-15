@@ -33,7 +33,6 @@ yarn lint
 - **Third-party instrumentation** → `packages/datadog-instrumentations/`
 - **Plugin code** → `packages/datadog-plugin-*/`
 - **Integration tests** → `integration-tests/`
-- **Performance benchmarks** → `benchmark/sirun/`
 
 ---
 
@@ -181,13 +180,41 @@ Coverage is measured with nyc. To check coverage for your changes:
 
 **Use the Node.js core `assert` library for assertions in tests.**
 
-Example:
-```javascript
-const assert = require('node:assert')
+Import from `node:assert/strict` to ensure all assertions use strict equality (`===`) without type coercion. This allows you to use simpler method names like `assert.equal()` and `assert.deepEqual()` while getting strict comparison behavior automatically.
 
-assert.strictEqual(actual, expected)
-assert.deepStrictEqual(actualObject, expectedObject)
+Example:
+```js
+const assert = require('node:assert/strict')
+
+assert.equal(actual, expected)
+assert.deepEqual(actualObject, expectedObject)
 ```
+
+#### Partial Deep Object Assertions
+
+**For asserting that an object contains certain properties (deeply), use `assertObjectContains` from `integration-tests/helpers/index.js`.**
+
+This helper performs partial deep equality checking - it verifies that the actual object contains all the properties specified in the expected object, but the actual object may have additional properties. This is particularly useful when you only care about certain fields in a large object.
+
+The helper uses Node.js's native `assert.partialDeepStrictEqual` when available (Node.js 22+), and provides a polyfill for older versions.
+
+**Why use `assertObjectContains`?** It's preferred over individual `assert` calls for each property because it provides better error messages when tests fail, showing exactly which nested properties doesn't match in a clear, structured way.
+
+Example:
+```js
+const { assertObjectContains } = require('../helpers')
+
+// Assert an object contains specific properties (actual object can have more)
+assertObjectContains(response, {
+  status: 200,
+  body: { user: { name: 'Alice' } }
+})
+
+// Works with arrays - checks that actual array contains expected items in order
+assertObjectContains(testNames, ['test1', 'test2'])
+```
+
+**Important:** This helper is intended for both integration and unit tests.
 
 ## Code Style & Linting
 
@@ -287,7 +314,7 @@ The log module is located at `packages/dd-trace/src/log/index.js`. Import it rel
 
 To add debug logs in your code:
 
-```javascript
+```js
 const log = require('../log')
 
 log.debug('Debug message with value: %s', someValue)
@@ -301,14 +328,14 @@ log.error('Error reading file %s', filepath, err)
 
 For expensive computations in the log message itself, use a callback function:
 
-```javascript
+```js
 // Callback is only executed if debug logging is enabled
 log.debug(() => `Processed data: ${expensive.computation()}`)
 ```
 
 When logging errors, pass the error object as the last argument after the format string:
 
-```javascript
+```js
 log.error('Error processing request', err)
 // or with additional context:
 log.error('Error reading file %s', filename, err)
@@ -414,7 +441,7 @@ The tracer should not crash user applications, but should fail fast during initi
 To add a new configuration option:
 
 1. **Add the default value** in `packages/dd-trace/src/config_defaults.js`:
-   ```javascript
+   ```js
    module.exports = {
      // ...
      'myFeature.enabled': false,
