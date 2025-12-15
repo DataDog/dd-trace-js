@@ -7,7 +7,7 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
+const assert = require('assert')
 
 const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000' }
 
