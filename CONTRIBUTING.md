@@ -36,7 +36,18 @@ Observability products tend to have quite a bit of their behaviour running in ap
 
 ## Always consider backportability
 
-To reduce delta between release lines and make it easier for us to support older versions we try as much as possible to backport every change we can. We should be diligent about keeping breaking changes to a minimum and ensuring we don't use language or runtime features which are too new. This way we can generally be confident that a change can be backported.
+We always backport changes from `master` to older versions to avoid release lines drifting apart and to prevent merge conflicts. We should be diligent about keeping breaking changes to a minimum and ensuring we don't use language or runtime features which are too new. This way we can generally be confident that a change can be backported.
+
+**Breaking changes must be guarded by version checks** so they can land in `master` and be safely backported to older versions. Check the major version of the dd-trace package using the `version.js` module in the root of the project:
+
+```js
+const { DD_MAJOR } = require('./version')
+if (DD_MAJOR >= 6) {
+  // New behavior for v6+
+} else {
+  // Old behavior for v5 and earlier
+}
+```
 
 To reduce the surface area of a breaking change, the breaking aspects could be placed behind a flag which is disabled by default or isolated to a function. In the next major the change would then be just to change the default of the flag or to start or stop calling the isolated function. By isolating the breaking logic it also becomes easier to delete later when it's no longer relevant on any release line.
 
@@ -70,6 +81,10 @@ We follow an all-green policy which means that for any PR to be merged _all_ tes
 
 Eventually we plan to look into putting these permission-required tests behind a label which team members can add to their PRs at creation to run the full CI and can add to outside contributor PRs to trigger the CI from their own user credentials. If the label is not present there will be another action which checks the label is present. Rather than showing a bunch of confusing failures to new contributors it would just show a single job failure which indicates an additional label is required, and we can name it in a way that makes it clear that it's not the responsibility of the outside contributor to add it. Something like `approve-full-ci` is one possible choice there.
 
+## Search before creating
+
+Always search the codebase first before creating new code to avoid duplicates. Check for existing utilities, helpers, or patterns that solve similar problems. Reuse existing code when possible rather than reinventing solutions.
+
 ## Development Requirements
 
 Since this project supports multiple Node.js versions, using a version manager
@@ -89,13 +104,151 @@ To install dependencies once you have Node and yarn installed, run this in the p
 $ yarn
 ```
 
+## Coding Standards
+
+### File Naming and Import Conventions
+
+Use **kebab-case** for file names (e.g., `my-module.js`, not `myModule.js`).
+
+Organize imports in the following order (each group separated by an empty line):
+
+1. Node.js core modules first (sorted alphabetically) - always prefix with `node:`
+2. Third-party modules (sorted alphabetically)
+3. Internal imports (sorted by path proximity first - closest first - then alphabetically)
+
+Example:
+
+```js
+const fs = require('node:fs')
+const path = require('node:path')
+
+const express = require('express')
+const lodash = require('lodash')
+
+const { myConf } = require('./config')
+const { foo } = require('./helper')
+const log = require('../log')
+```
+
+### Node.js Version Compatibility
+
+Follow the ECMAScript standard and Node.js APIs supported by **Node.js 18.0.0**. Never use features or APIs only supported in newer versions unless explicitly required. If newer APIs are needed, guard them with version checks using the `version.js` module located in the root of the project:
+
+```js
+const { NODE_MAJOR } = require('./version')
+if (NODE_MAJOR >= 20) {
+  // Use Node.js 20+ API
+}
+```
+
+### Performance Considerations
+
+This tracer runs in application hot paths, so performance is critical:
+
+- **Avoid `async/await` and promises** in production code (they add overhead). Use callbacks or synchronous patterns instead. Async/await is acceptable in test files and worker threads.
+- **Minimize memory allocations** in frequently-called code paths
+- **Prefer imperative loops over functional array methods** (`for-of`, `for`, `while` instead of `map()`, `forEach()`, `filter()`) to avoid closure overhead and intermediate arrays
+- Avoid creating unnecessary objects, closures, or arrays
+- Reuse objects and buffers where possible
+
+Example of preferred loop style:
+
+```js
+// ❌ Avoid - creates closure overhead
+items.forEach(item => {
+  process(item)
+})
+
+// ✅ Prefer - no closure overhead
+for (const item of items) {
+  process(item)
+}
+
+// ❌ Avoid - loops over data multiple times, creates intermediate array, adds closure overhead
+const result = items
+  .filter(item => item.active)
+  .map(item => item.value)
+
+// ✅ Prefer - single loop, no intermediate array
+const result = []
+for (const item of items) {
+  if (item.active) {
+    result.push(item.value)
+  }
+}
+```
+
+### Error Handling
+
+The tracer should never crash user applications. Catch errors and log them with `log.error()` or `log.warn()` as appropriate. Resume normal operation if possible, or disable the plugin/subsystem if not.
+
+### Logging and Debugging
+
+Use the `log` module (located at `packages/dd-trace/src/log/index.js`) for all logging:
+
+```js
+const log = require('../log')
+
+log.debug('Debug message with value: %s', someValue)
+log.info('Info message')
+log.warn('Warning with data: %o', objectValue)
+log.error('Error reading file %s', filepath, err)
+```
+
+**Important:** Use printf-style formatting (`%s`, `%d`, `%o`) instead of template strings to avoid unnecessary string concatenation when logging is disabled.
+
+For expensive computations in the log message itself, use a callback function:
+
+```js
+// Callback is only executed if debug logging is enabled
+log.debug(() => `Processed data: ${expensive.computation()}`)
+```
+
+When logging errors, pass the error object as the last argument after the format string:
+
+```js
+log.error('Error processing request', err)
+// or with additional context:
+log.error('Error reading file %s', filename, err)
+```
+
+To enable debug logging when running tests or applications:
+
+```sh
+# Run application with debug logging
+DD_TRACE_DEBUG=true node your-app.js
+
+# Run a specific test suite with debug logging
+DD_TRACE_DEBUG=true yarn test:debugger
+```
+
+### Documentation
+
+Document all APIs with TypeScript-compatible JSDoc to ensure proper types without using TypeScript. This enables type checking and IDE autocompletion while maintaining the JavaScript codebase. Use TypeScript type syntax in JSDoc annotations (e.g., `@param {string}`, `@returns {Promise<void>}`).
+
+## Adding New Configuration Options
+
+To add a new configuration option:
+
+1. **Add the default value** in `packages/dd-trace/src/config_defaults.js`
+2. **Map the environment variable** in `packages/dd-trace/src/config.js` (add to destructuring in `#applyEnvironment()` method)
+3. **Add TypeScript definitions** in `index.d.ts`
+4. **Add to telemetry name mapping** (if applicable) in `packages/dd-trace/src/telemetry/telemetry.js`
+5. **Update supported configurations** in `packages/dd-trace/src/supported-configurations.json`
+6. **Document the option** in `docs/API.md` (for non-internal/experimental options)
+7. **Add tests** in `packages/dd-trace/test/config.spec.js`
+
+**Naming Convention:** Size/time-based config options should have unit suffixes (e.g., `timeoutMs`, `maxBytes`, `intervalSeconds`).
+
 ## Adding a Plugin
+
+Plugins are modular code components in `packages/datadog-plugin-*/` directories that integrate with specific third-party libraries and frameworks. They subscribe to diagnostic channels to receive instrumentation events and handle APM tracing logic, feature-specific logic, and more.
 
 To create a new plugin for a third-party package, follow these steps:
 
 1. `mkdir -p packages/datadog-plugin-<pluginname>/src`
 2. Copy an `index.js` file from another plugin to use as a starting point: `cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<pluginname>/src`
-3. Edit index.js as appropriate for your new plugin
+3. Edit index.js as appropriate for your plugin
 4. `mkdir -p packages/datadog-plugin-<pluginname>/test`
 5. Create an packages/datadog-plugin-<pluginname>/test/index.spec.js file and add the necessary tests. See other plugin tests for inspiration to file structure.
 6. Edit index.spec.js as appropriate for your new plugin
@@ -113,6 +266,58 @@ requires adding a new job to the Github Actions config. The file containing thes
 You can copypaste and modify an existing plugin job configuration in this file to create a new job config.
 
 ## Testing
+
+### Running Individual Tests
+
+When developing, it's often faster to run individual test files rather than entire test suites. **Never run `yarn test` directly** as it requires too much setup and takes too long.
+
+To target specific tests, use the `--grep` flag with mocha or tap to match test names:
+
+```sh
+yarn test:debugger --grep "test name pattern"
+yarn test:appsec --grep "specific test"
+```
+
+**Note:** This project uses a mix of tap and mocha for testing. However, new tests should be written using mocha, not tap.
+
+### Test Assertions
+
+Use the Node.js core `assert` library for assertions in tests. Import from `node:assert/strict` to ensure all assertions use strict equality without type coercion:
+
+```js
+const assert = require('node:assert/strict')
+
+assert.equal(actual, expected)
+assert.deepEqual(actualObject, expectedObject)
+```
+
+For asserting that an object contains certain properties (deeply), use `assertObjectContains` from `integration-tests/helpers/index.js`:
+
+```js
+const { assertObjectContains } = require('../helpers')
+
+// Assert an object contains specific properties (actual object can have more)
+assertObjectContains(response, {
+  status: 200,
+  body: { user: { name: 'Alice' } }
+})
+```
+
+This helper performs partial deep equality checking and provides better error messages than individual assertions.
+
+### Test Coverage
+
+Coverage is measured with nyc. To check coverage for your changes, use the `:ci` variant of the test scripts:
+
+```sh
+# Run tests with coverage for specific components
+yarn test:debugger:ci
+yarn test:appsec:ci
+yarn test:llmobs:sdk:ci
+yarn test:lambda:ci
+```
+
+**Coverage Philosophy:** Given the nature of this library (instrumenting third-party code, hooking into runtime internals), unit tests can become overly complex when everything needs to be mocked. Integration tests that run in sandboxes don't count towards nyc's coverage metrics, so coverage numbers may look low even when code is well-tested. **Don't add redundant unit tests solely to improve coverage numbers.**
 
 ### Prerequisites
 
