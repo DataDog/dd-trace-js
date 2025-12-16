@@ -16,11 +16,13 @@
 
 dd-trace is the Datadog client library for Node.js.
 
-**Directory structure:**
-- `packages/dd-trace/` - Main library (APM tracing, profiling, debugger, appsec, llmobs, CI visibility)
-- `packages/datadog-core/` - Async context storage and shared utilities
+**Key Directories:**
+- `packages/dd-trace/` - Main library (APM, profiling, debugger, appsec, llmobs, CI visibility)
+- `packages/datadog-core/` - Async context storage, shared utilities
 - `packages/datadog-instrumentations/` - Instrumentation implementations
-- `packages/datadog-plugin-*/` - 100+ plugin directories for third-party integrations
+- `packages/datadog-plugin-*/` - 100+ plugins for third-party integrations
+- `integration-tests/` - E2E integration tests
+- `benchmark/` - Performance benchmarks
 
 ## Testing Instructions
 
@@ -61,88 +63,62 @@ When developing a feature or fixing a bug:
 
 ### Plugin Tests
 
-**Test specific plugins using `PLUGINS` environment variable:**
+**Use `PLUGINS` env var:**
 ```bash
-export PLUGINS="amqplib"
-yarn test:plugins
-
-# Multiple plugins (pipe-delimited)
-PLUGINS="amqplib|bluebird" yarn test:plugins
-
-# Single plugin test file
+PLUGINS="amqplib" yarn test:plugins
+PLUGINS="amqplib|bluebird" yarn test:plugins  # pipe-delimited for multiple
 ./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" packages/datadog-plugin-amqplib/test/index.spec.js
 ```
 
-**Plugins requiring external services:**
-Check `.github/workflows/apm-integrations.yml` for `SERVICES` requirements.
-
+**With external services** (check `.github/workflows/apm-integrations.yml` for `SERVICES`):
 ```bash
-export SERVICES="rabbitmq"
-export PLUGINS="amqplib"
+export SERVICES="rabbitmq" PLUGINS="amqplib"
 docker compose up -d $SERVICES
-yarn services
-yarn test:plugins
+yarn services && yarn test:plugins
 ```
 
-**Platform Limitations:** Some native modules don't compile on ARM64 (Apple silicon): `aerospike`, `couchbase`, `grpc`, `oracledb`.
+**ARM64 incompatible:** `aerospike`, `couchbase`, `grpc`, `oracledb`
 
 ### Test Coverage
 
-Run tests with nyc for coverage:
 ```bash
 ./node_modules/.bin/nyc --include "packages/dd-trace/src/debugger/**/*.js" \
   ./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" \
   "packages/dd-trace/test/debugger/**/*.spec.js"
 ```
 
-**Coverage Philosophy:**
+**Philosophy:**
 - Integration tests (running in sandboxes) don't count towards nyc coverage metrics
 - Don't add redundant unit tests solely to improve coverage numbers
 - Focus on covering important production code paths with whichever test type makes sense
 
 ### Test Assertions
 
-**Use Node.js core `assert` library:**
+Use `node:assert/strict` for standard assertions. For partial deep object checks, use `assertObjectContains` from `integration-tests/helpers/index.js`:
+
 ```js
 const assert = require('node:assert/strict')
-assert.equal(actual, expected)
-assert.deepEqual(actualObject, expectedObject)
-```
-
-**For partial deep object assertions, use `assertObjectContains` from `integration-tests/helpers/index.js`:**
-```js
 const { assertObjectContains } = require('../helpers')
-assertObjectContains(response, {
-  status: 200,
-  body: { user: { name: 'Alice' } }
-})
-```
 
-Provides better error messages than individual `assert` calls. Works for both integration and unit tests.
+assert.equal(actual, expected)
+assertObjectContains(response, { status: 200, body: { user: { name: 'Alice' } } })
+```
 
 ## Code Style & Linting
 
-### Linting
-- Lint: `yarn lint`
-- Lint + autofix: `yarn lint:fix`
-
-### Documentation and Types
-
-**Use TypeScript-compatible JSDoc for all APIs:**
-- Enables type checking and IDE autocompletion without TypeScript
-- Use TypeScript type syntax in JSDoc annotations: `@param {string}`, `@returns {Promise<void>}`, `@typedef`, etc.
-
-### File Naming Conventions
-
-**Use kebab-case for file names.**
+### Linting & Naming
+- Lint: `yarn lint` / `yarn lint:fix`
+- Files: kebab-case
+- JSDoc: TypeScript-compatible syntax (`@param {string}`, `@returns {Promise<void>}`, `@typedef`)
 
 ### Import Ordering
 
-1. Node.js core modules (sort: alpha)
-2. Third-party modules (sort: alpha)
-3. Internal imports (sort: 1; path proximity, 2; alpha)
+Separate groups with empty line, sort alphabetically within each:
+1. Node.js core modules (with `node:` prefix)
+2. Third-party modules
+3. Internal imports (by path proximity, then alpha)
 
-**Note:** Each group separated by an empty line.
+Use destructuring for utility modules when appropriate.
 
 ```js
 const fs = require('node:fs')
@@ -153,8 +129,6 @@ const express = require('express')
 const { myConf } = require('./config')
 const log = require('../log')
 ```
-
-Use object destructuring for utility modules when appropriate.
 
 ### ECMAScript and Node.js API Standards
 
@@ -167,26 +141,20 @@ Use object destructuring for utility modules when appropriate.
   ```
 - **Prefix Node.js core modules with `node:`** (e.g., `require('node:assert')`)
 
-### Async/Await and Promises
-
-**Avoid promises and async/await in production code to minimize overhead.**
-
-- Do NOT use `async/await` or promises in code that's included in the published npm package
-- This is critical for performance as the tracer runs in application hot paths
-- Async/await IS allowed in:
-  - Test files
-  - Worker threads (e.g., debugger code in `packages/dd-trace/src/debugger/devtools_client/`)
-- Use callbacks or synchronous patterns in production code instead
-
 ### Performance and Memory
 
-**Production code must be optimized for performance and minimal memory allocations:**
-- This tracer runs in application hot paths - every operation counts
-- Minimize memory allocations in frequently-called code paths
-- Avoid creating unnecessary objects, closures, or arrays
-- Reuse objects and buffers where possible
-- Be conscious of garbage collection pressure
-- Benchmark performance-critical changes (see `benchmark/sirun/`)
+**CRITICAL: Tracer runs in application hot paths - every operation counts.**
+
+**Async/Await:**
+- Do NOT use `async/await` or promises in production code (npm package)
+- Allowed ONLY in: test files, worker threads (e.g., `packages/dd-trace/src/debugger/devtools_client/`)
+- Use callbacks or synchronous patterns instead
+
+**Memory:**
+- Minimize allocations in frequently-called paths
+- Avoid unnecessary objects, closures, arrays
+- Reuse objects and buffers
+- Minimize GC pressure
 
 #### Array Iteration
 
@@ -207,64 +175,32 @@ Use object destructuring for utility modules when appropriate.
 
 ### Debugging and Logging
 
-**Use the `log` module (`packages/dd-trace/src/log/index.js`) for all logging in production code:**
+Use `log` module (`packages/dd-trace/src/log/index.js`) with printf-style formatting (not template strings):
 
 ```js
 const log = require('../log')
-log.debug('Debug message with value: %s', someValue)
+log.debug('Value: %s', someValue)  // printf-style
+log.debug(() => `Expensive: ${expensive()}`)  // callback for expensive ops
+log.error('Error: %s', msg, err)  // error as last arg
 ```
 
-**Important:**
-- Use printf-style formatting (`%s`, `%d`, `%o`), never template strings (avoids string concatenation when logging is disabled)
-- Use callback for expensive computations: `log.debug(() => \`Processed: ${expensive()}\`)`
-- Pass error object as last argument: `log.error('Error: %s', msg, err)`
-
-**Enable debug logging:**
-```bash
-DD_TRACE_DEBUG=true node your-app.js
-DD_TRACE_LOG_LEVEL=info DD_TRACE_DEBUG=true node your-app.js
-```
-
-Log levels: `trace`, `debug`, `info`, `warn`, `error`
+Enable: `DD_TRACE_DEBUG=true DD_TRACE_LOG_LEVEL=info node app.js`
+Levels: `trace`, `debug`, `info`, `warn`, `error`
 
 ### Error Handling
 
-**Tracer should never crash user applications:**
-- Catch errors and log with `log.error()` or `log.warn()`
-- Resume normal operation if possible, or disable the plugin/sub-system
-- Avoid try/catch in hot paths (has overhead) - validate inputs early instead
+**Never crash user apps:** Catch/log errors (`log.error()`/`log.warn()`), resume or disable plugin/subsystem
+Avoid try/catch in hot paths - validate inputs early
 
 ## Development Workflow
 
-### Search Before Creating
-- Always search codebase before creating new code
-- Check for existing utilities, helpers, or patterns
-- Reuse existing code rather than reinventing solutions
-
-### Keep Changes Small and Incremental
-- Break large efforts into many PRs for better reviewability
-- Land partial changes if they work in isolation
-- Fewer places changed = less risk of merge conflicts
-
-### Be Descriptive
-- Write self-documenting code
-- Leave comments where self-description fails
-- Use verbs for function names to communicate intent
-
-### Give Your Code Space
-- Use empty lines to separate logical groupings
-- Split long lines and complex objects/arrays
-- Assign variables before using them in calls if it improves clarity
-
-### Avoid Large Refactors
-- Favor iterative approaches over wholesale rewrites
-- Introduce new patterns gradually
-- Don't change dozens of files to add one feature
-
-### Test Everything
-- Ensure unit tests test logic, not mocks
-- Test failure handling, heavy load scenarios, and usability
-- Add or update tests for code you change, even if not asked
+### Core Principles
+- **Search first**: Check for existing utilities/patterns before creating new code
+- **Small PRs**: Break large efforts into incremental, reviewable changes
+- **Descriptive code**: Self-documenting with verbs in function names; comment when needed
+- **Readable formatting**: Empty lines for grouping, split complex objects, extract variables
+- **Avoid large refactors**: Iterative changes, gradual pattern introduction
+- **Test changes**: Test logic (not mocks), failure cases, edge cases - always update tests
 
 ### Always Consider Backportability
 
@@ -323,63 +259,28 @@ Plugins are modular code components in `packages/datadog-plugin-*/` directories 
 ### Creating a New Plugin
 
 ```bash
-mkdir -p packages/datadog-plugin-<plugin-name>/src
-mkdir -p packages/datadog-plugin-<plugin-name>/test
-cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<plugin-name>/src/
+mkdir -p packages/datadog-plugin-<name>/{src,test}
+cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<name>/src/
 ```
 
-Edit `index.js` and create tests in `test/index.spec.js`. Add entries to:
-- `packages/dd-trace/src/plugins/index.js`
-- `index.d.ts`
-- `docs/test.ts`
-- `docs/API.md`
-- `.github/workflows/apm-integrations.yml`
-
-## Project Structure
-
-- `packages/dd-trace/` - Main library implementation
-- `packages/datadog-core/` - Shared utilities
-- `packages/datadog-instrumentations/` - Instrumentation implementations
-- `packages/datadog-plugin-*/` - Plugin implementations for third-party library integrations
-- `integration-tests/` - End-to-end integration tests
-- `benchmark/` - Performance benchmarks
-- `.github/workflows/` - CI configuration
-- `vendor/` - Vendored dependencies
+Edit `src/index.js`, create `test/index.spec.js`, then register in:
+`packages/dd-trace/src/plugins/index.js`, `index.d.ts`, `docs/test.ts`, `docs/API.md`, `.github/workflows/apm-integrations.yml`
 
 ## Pull Requests and CI
 
 ### Commit Messages
 
-Use semantic commit messages (conventional commit format):
-- `feat:` - New features
-- `fix:` - Bug fixes
-- `docs:` - Documentation changes
-- `refactor:` - Code refactoring
-- `test:` - Adding or updating tests
-- `chore:` - Maintenance tasks
-- `ci:` - CI/CD changes
+Conventional format: `type(scope): description`
+Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`
+Example: `feat(appsec): add new WAF rule`
 
-Use parentheses for component: `feat(appsec): add new WAF rule`
+### PR Requirements
 
-### PR Description
-
-Check for templates in `.github/pull_request_template.md`.
-
-### Semantic Versioning
-
-Label all PRs:
-- `semver-patch` - Bug fixes and security fixes only, no behavior changes
-- `semver-minor` - New functionality, new config options, new instrumentation
-- `semver-major` - Breaking changes to existing functionality
-
-### CI Requirements
-
-**All tests must pass before merging.** All-green policy - no exceptions.
+- Use template from `.github/pull_request_template.md`
+- Label: `semver-patch` (fixes only), `semver-minor` (new features), `semver-major` (breaking)
+- **All tests must pass - all-green policy, no exceptions**
 
 ## Vendoring Dependencies
 
-Dependencies are vendored using rspack:
-- `vendor/` directory contains `package.json` with dependencies to be vendored
-- Run `yarn` in vendor directory to install and bundle
-- Vendored packages output to `packages/node_modules/`
-- Some dependencies excluded (e.g., `@opentelemetry/api`)
+Using rspack: Run `yarn` in `vendor/` to install/bundle dependencies → `packages/node_modules/`
+(Some deps excluded, e.g., `@opentelemetry/api`)
