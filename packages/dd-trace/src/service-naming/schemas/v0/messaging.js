@@ -47,6 +47,10 @@ const messaging = {
     sns: {
       opName: () => 'aws.request',
       serviceName: awsServiceV0
+    },
+    bullmq: {
+      opName: () => 'bullmq.send',
+      serviceName: ({ tracerService }) => `${tracerService}-bullmq`
     }
   },
   consumer: {
@@ -77,6 +81,10 @@ const messaging = {
     sqs: {
       opName: () => 'aws.request',
       serviceName: awsServiceV0
+    },
+    bullmq: {
+      opName: () => 'bullmq.receive',
+      serviceName: ({ tracerService }) => `${tracerService}-bullmq`
     }
   },
   client: {
