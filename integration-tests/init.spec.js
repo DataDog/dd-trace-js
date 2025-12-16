@@ -202,38 +202,40 @@ true
       })
     })
 
-    context('when node version is in range of the engines field', () => {
-      useEnv({ NODE_OPTIONS })
+    if (currentVersionIsSupported) {
+      context('when node version is in range of the engines field', () => {
+        useEnv({ NODE_OPTIONS })
 
-      before(() => {
-        const pkg = JSON.parse(pkgStr)
-        pkg.engines.node = '>=0 <1000'
-        fs.writeFileSync(pkgPath, JSON.stringify(pkg))
-      })
-
-      it('should initialize the tracer, if no DD_INJECTION_ENABLED', () => doTest('true\n', [], 'manual'))
-
-      context('with DD_INJECTION_ENABLED', () => {
-        useEnv({ DD_INJECTION_ENABLED })
-
-        context('without debug', () => {
-          it('should initialize the tracer', () => doTest('true\n', telemetryGood, 'ssi'))
-
-          it('should initialize the tracer, if DD_INJECT_FORCE', () =>
-            doTestForced('true\n', telemetryGood, 'ssi'))
+        before(() => {
+          const pkg = JSON.parse(pkgStr)
+          pkg.engines.node = '>=0 <1000'
+          fs.writeFileSync(pkgPath, JSON.stringify(pkg))
         })
 
-        context('with debug', () => {
-          useEnv({ DD_TRACE_DEBUG })
+        it('should initialize the tracer, if no DD_INJECTION_ENABLED', () => doTest('true\n', [], 'manual'))
 
-          it('should initialize the tracer', () =>
-            doTest('Application instrumentation bootstrapping complete\ntrue\n', telemetryGood, 'ssi'))
+        context('with DD_INJECTION_ENABLED', () => {
+          useEnv({ DD_INJECTION_ENABLED })
 
-          it('should initialize the tracer, if DD_INJECT_FORCE', () =>
-            doTestForced('Application instrumentation bootstrapping complete\ntrue\n', telemetryGood, 'ssi'))
+          context('without debug', () => {
+            it('should initialize the tracer', () => doTest('true\n', telemetryGood, 'ssi'))
+
+            it('should initialize the tracer, if DD_INJECT_FORCE', () =>
+              doTestForced('true\n', telemetryGood, 'ssi'))
+          })
+
+          context('with debug', () => {
+            useEnv({ DD_TRACE_DEBUG })
+
+            it('should initialize the tracer', () =>
+              doTest('Application instrumentation bootstrapping complete\ntrue\n', telemetryGood, 'ssi'))
+
+            it('should initialize the tracer, if DD_INJECT_FORCE', () =>
+              doTestForced('Application instrumentation bootstrapping complete\ntrue\n', telemetryGood, 'ssi'))
+          })
         })
       })
-    })
+    }
   })
 }
 

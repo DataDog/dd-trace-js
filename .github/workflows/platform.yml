@@ -461,6 +461,7 @@ jobs:
 
   integration-guardrails-unsupported:
     strategy:
+      fail-fast: false
       matrix:
         version: ['0.8', '0.10', '0.12', '4', '6', '8', '10', '12']
     runs-on: ubuntu-latest
