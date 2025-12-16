@@ -14,7 +14,7 @@ const fs = require('fs/promises')
 const fsync = require('fs')
 const net = require('net')
 const zlib = require('zlib')
-const { Profile } = require('pprof-format')
+const { Profile } = require('../../vendor/dist/pprof-format')
 const satisfies = require('semifies')
 
 const DEFAULT_PROFILE_TYPES = ['wall', 'space']

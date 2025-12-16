@@ -78,7 +78,7 @@ module.exports = {
     library: {
       type: 'commonjs2'
     },
-    path: join(__dirname, '..', 'packages', 'node_modules'),
+    path: join(__dirname, 'dist'),
     clean: true
   },
 }

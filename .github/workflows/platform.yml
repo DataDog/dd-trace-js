@@ -35,6 +35,8 @@ jobs:
             install: pnpm add
           - name: yarn
             install: yarn add
+          - name: yarn-berry
+            install: npm install -g corepack && yarn set version stable && yarn config set nodeLinker node-modules && yarn add
           - name: bun
             install: bun add
     runs-on: ubuntu-latest
