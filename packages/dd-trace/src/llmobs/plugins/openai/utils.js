@@ -1,13 +1,13 @@
 'use strict'
 
-const IMAGE_FALLBACK = '[image]'
-const FILE_FALLBACK = '[file]'
+const {
+  INPUT_TYPE_IMAGE,
+  INPUT_TYPE_FILE,
+  IMAGE_FALLBACK,
+  FILE_FALLBACK
+} = require('../../constants')
 
 const REGEX_SPECIAL_CHARS = /[.*+?^${}()|[\]\\]/g
-
-const PROMPT_TRACKING_INSTRUMENTATION_METHOD = 'prompt_tracking_instrumentation_method'
-const PROMPT_MULTIMODAL = 'prompt_multimodal'
-const INSTRUMENTATION_METHOD_AUTO = 'auto'
 
 /**
  * Extracts chat templates from OpenAI response instructions by replacing variable values with placeholders.
@@ -81,11 +81,11 @@ function extractTextFromContentItem (contentItem) {
   }
 
   // For image/file items, extract the actual reference value
-  if (contentItem.type === 'input_image') {
+  if (contentItem.type === INPUT_TYPE_IMAGE) {
     return contentItem.image_url || contentItem.file_id || IMAGE_FALLBACK
   }
 
-  if (contentItem.type === 'input_file') {
+  if (contentItem.type === INPUT_TYPE_FILE) {
     return contentItem.file_id || contentItem.file_url || contentItem.filename || FILE_FALLBACK
   }
 
@@ -114,7 +114,7 @@ function normalizePromptVariables (variables) {
 function hasMultimodalInputs (variables) {
   if (!variables) return false
   return Object.values(variables).some(value =>
-    value?.type === 'input_image' || value?.type === 'input_file'
+    value?.type === INPUT_TYPE_IMAGE || value?.type === INPUT_TYPE_FILE
   )
 }
 
@@ -122,8 +122,5 @@ module.exports = {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractTextFromContentItem,
-  hasMultimodalInputs,
-  PROMPT_TRACKING_INSTRUMENTATION_METHOD,
-  PROMPT_MULTIMODAL,
-  INSTRUMENTATION_METHOD_AUTO
+  hasMultimodalInputs
 }

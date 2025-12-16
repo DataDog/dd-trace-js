@@ -5,11 +5,13 @@ const {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractTextFromContentItem,
-  hasMultimodalInputs,
+  hasMultimodalInputs
+} = require('./utils')
+const {
   PROMPT_TRACKING_INSTRUMENTATION_METHOD,
   PROMPT_MULTIMODAL,
   INSTRUMENTATION_METHOD_AUTO
-} = require('./utils')
+} = require('../../constants')
 
 const allowedParamKeys = new Set([
   'max_output_tokens',
