@@ -1,48 +1,11 @@
 # AGENTS.md
 
-## Agent Quick Start
-
-### Key Rules
-- **Never run `yarn test` or `npm test` directly** - use individual test files with mocha/tap
-- **Use Node.js 18.0.0 APIs only** - guard newer APIs with version checks using [`version.js`](./version.js)
-- **No async/await in production code** - keep it in tests and worker threads only
-- **Prefer `for-of` loops over `map`/`forEach`** - avoid functional array methods in production code to minimize closure overhead
-- **Follow testing workflow**: individual test file → unit tests → integration tests
-- **Don't reduce coverage** - cover important paths, avoid redundant unit tests when integration tests exist
-- **Make changes backport-friendly** - guard breaking changes with `DD_MAJOR` version checks
-- **Prefix Node.js core modules with `node:`** - e.g., `require('node:assert')`
-- **Write new tests using mocha** - not tap
-- **Use `node:assert` for test assertions**
-- **Use kebab-case for file names**
-- **Document APIs with JSDoc** - ensure proper types without TypeScript
-
-### Common Commands
-
-```bash
-# Lint code
-yarn lint
-
-# Run single unit test
-./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" path/to/test.spec.js
-
-# Run single integration test
-./node_modules/.bin/mocha --timeout 60000 -r "packages/dd-trace/test/setup/core.js" integration-tests/path/to/test.spec.js
-```
-
-### Task → Directory Mappings
-- **Core library features** (APM, profiling, security) → `packages/dd-trace/`
-- **Third-party instrumentation** → `packages/datadog-instrumentations/`
-- **Plugin code** → `packages/datadog-plugin-*/`
-- **Integration tests** → `integration-tests/`
-
----
-
 ## Project Overview
 
 This is `dd-trace`, the Datadog client library for Node.js. It's a single npm package with an internal directory structure organized into package-like directories:
 
 - `packages/dd-trace` - Main library containing APM tracing, profiling, dynamic instrumentation, application security, LLM observability, CI visibility, and more
-- `packages/datadog-core` - Core utilities
+- `packages/datadog-core` - Async context storage system (custom AsyncLocalStorage implementation) and shared utilities
 - `packages/datadog-instrumentations` - Instrumentation implementations
 - `packages/datadog-plugin-*` - 100+ plugin directories for third-party library integrations (Express, GraphQL, PostgreSQL, Redis, etc.)
 
@@ -109,10 +72,30 @@ DD_TRACE_DEBUG=true ./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/m
 
 ### Plugin Tests
 
-Plugin tests require external services running in Docker:
+Plugin tests are run using the `PLUGINS` environment variable to specify which plugin(s) to test:
 
 ```bash
-# Example for testing the amqplib plugin
+# Test a single plugin
+export PLUGINS="amqplib"
+yarn test:plugins
+
+# Test multiple plugins using pipe delimiters
+PLUGINS="amqplib|bluebird" yarn test:plugins
+```
+
+To run a single plugin test file:
+
+```bash
+# Run a specific plugin test file
+./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" packages/datadog-plugin-amqplib/test/index.spec.js
+```
+
+**Check `.github/workflows/apm-integrations.yml` to determine if a plugin requires external services.** Not all plugins need external services to run their tests.
+
+For plugins that do require external services, they must be running in Docker using the `SERVICES` environment variable:
+
+```bash
+# Example for testing the amqplib plugin which requires RabbitMQ
 export SERVICES="rabbitmq"
 export PLUGINS="amqplib"
 
@@ -126,20 +109,7 @@ yarn services
 yarn test:plugins
 ```
 
-To run a single plugin test file:
-
-```bash
-# Run a specific plugin test file
-./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" packages/datadog-plugin-amqplib/test/index.spec.js
-```
-
-Check `.github/workflows/apm-integrations.yml` for the correct `SERVICES` and `PLUGINS` values for each plugin.
-
-You can test multiple plugins at once using pipe delimiters:
-
-```bash
-PLUGINS="amqplib|bluebird" yarn test:plugins
-```
+The `.github/workflows/apm-integrations.yml` file contains the correct `SERVICES` and `PLUGINS` values for each plugin.
 
 **Platform Limitations:** Some native modules don't compile on ARM64 devices (Apple silicon): `aerospike`, `couchbase`, `grpc`, `oracledb`. These plugin tests cannot be run locally on ARM64 devices.
 
@@ -173,9 +143,11 @@ Coverage is measured with nyc. To check coverage for your changes:
 
 #### Coverage Philosophy
 
-- Don't reduce coverage with new PRs
-- Cover important production code paths unless tests become overly complex
-- Integration tests in sandboxes don't count toward metrics, so don't add redundant unit tests just for coverage numbers
+Given the nature of this library (instrumenting third-party code, hooking into runtime internals), unit tests can become overly complex to write meaningfully. When everything needs to be mocked, unit tests often don't add much value. In such cases, this codebase relies on integration tests instead.
+
+However, integration tests that run in sandboxes (which is most of them) don't count towards nyc's coverage metrics. This means you may encounter situations where coverage numbers look low for a given file, but the code is actually well-tested - just by integration tests rather than unit tests.
+
+**Don't add redundant unit tests solely to improve coverage numbers.** Focus on covering important production code paths with whichever test type makes sense, even if that means lower reported coverage percentages.
 
 ### Test Assertions
 
@@ -231,9 +203,9 @@ yarn lint:fix
 
 ### Documentation and Types
 
-**Document all APIs with JSDoc to ensure proper types without using TypeScript.**
+**Document all APIs with TypeScript-compatible JSDoc to ensure proper types without using TypeScript.**
 
-Since this is a JavaScript codebase, use JSDoc comments to provide type information for functions, parameters, and return values. This enables type checking and IDE autocompletion while maintaining the JavaScript codebase.
+Since this is a JavaScript codebase, use TypeScript-compatible JSDoc comments to provide type information for functions, parameters, and return values. This enables type checking and IDE autocompletion while maintaining the JavaScript codebase. Use TypeScript type syntax in JSDoc annotations (e.g., `@param {string}`, `@returns {Promise<void>}`, `@typedef`, etc.).
 
 ### File Naming Conventions
 
@@ -442,7 +414,6 @@ The tracer should never crash user applications. Instead catch errors and log wi
 
 ### Test Everything
 
-- Favor integration tests over unit tests
 - Ensure unit tests test logic, not mocks
 - Test failure handling, heavy load scenarios, and usability
 - Add or update tests for code you change, even if not asked
