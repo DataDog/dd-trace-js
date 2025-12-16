@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 require('../../../setup/mocha')
 
 const session = require('./stub-session')
@@ -10,11 +11,10 @@ const { timeBudgetSym } = require('../../../../src/debugger/devtools_client/snap
 
 describe('debugger -> devtools client -> snapshot collector deadline', function () {
   let collectObjectProperties
-  let originalHrtime
+  let clock
 
   beforeEach(async function () {
-    // Save original hrtime
-    originalHrtime = process.hrtime
+    clock = sinon.useFakeTimers()
 
     // Stub the collector with the stubbed session
     const collectorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/collector', {
@@ -26,17 +26,13 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
   })
 
   afterEach(async function () {
-    // Restore original hrtime
-    process.hrtime = originalHrtime
-
     session.removeAllListeners('Debugger.scriptParsed')
     session.removeAllListeners('Debugger.paused')
     await session.post('Debugger.disable')
+    clock.restore()
   })
 
   it('should not mark properties with timeout when deadline is not exceeded', async function () {
-    process.hrtime = /** @type {any} */ ({ bigint: () => 0n })
-
     const ctx = {
       deadlineReached: false,
       captureErrors: []
@@ -65,16 +61,14 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
   })
 
   it('should mark properties with timeout when deadline is exceeded', async function () {
-    let currentTime = 0n
-
-    // Mock hrtime to return controlled time
-    process.hrtime = /** @type {any} */ ({
-      bigint: () => {
-        // Simulate time advancing past the deadline on subsequent calls
-        const time = currentTime
-        currentTime += 50_000_000n // Advance by 50ms each call
-        return time
-      }
+    // Override the hrtime stub to advance time on each call
+    // This simulates time passing during collection
+    sinon.restore()
+    clock = sinon.useFakeTimers()
+    sinon.stub(process.hrtime, 'bigint').callsFake(() => {
+      const time = BigInt(clock.now) * 1_000_000n
+      clock.tick(50) // Advance by 50ms after each call
+      return time
     })
 
     const ctx = {
@@ -113,13 +107,14 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
   it('should cache deadline reached state in ctx', async function () {
     let hrtimeCallCount = 0
 
-    // Mock hrtime to track calls and advance time
-    process.hrtime = /** @type {any} */ ({
-      bigint: () => {
-        hrtimeCallCount++
-        // Advance time with each call, eventually exceeding deadline
-        return (BigInt(hrtimeCallCount) * 30_000_000n) // +30ms per call
-      }
+    // Override the hrtime stub to track calls and advance time
+    sinon.restore()
+    clock = sinon.useFakeTimers()
+    sinon.stub(process.hrtime, 'bigint').callsFake(() => {
+      const time = BigInt(clock.now) * 1_000_000n
+      hrtimeCallCount++
+      clock.tick(30) // Advance by 30ms after each call
+      return time
     })
 
     const ctx = {
@@ -155,8 +150,8 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
   })
 
   it('should immediately return true for overBudget when deadline already reached', async function () {
-    // Mock hrtime to always return time past deadline
-    process.hrtime = /** @type {any} */ ({ bigint: () => 200_000_000n })
+    // Advance time past deadline
+    clock.tick(200)
 
     const ctx = {
       deadlineReached: true, // Already marked as reached
