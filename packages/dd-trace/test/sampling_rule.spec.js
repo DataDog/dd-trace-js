@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -358,7 +356,7 @@ describe('sampling rule', () => {
         maxPerSecond: 1
       })
 
-      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
+      assert.strictEqual(rule.sample(new SpanContext({ traceId: id() })), true)
     })
 
     it('should not sample on non-allowed sample rate', () => {
@@ -369,7 +367,7 @@ describe('sampling rule', () => {
         maxPerSecond: 1
       })
 
-      expect(rule.sample(new SpanContext({ traceId: id('6148299799767393280', 10) }))).to.equal(false)
+      assert.strictEqual(rule.sample(new SpanContext({ traceId: id('6148299799767393280', 10) })), false)
     })
   })
 
@@ -419,7 +417,7 @@ describe('sampling rule', () => {
       })
 
       for (let i = 0; i < 1e3; i++) {
-        expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
+        assert.strictEqual(rule.sample(new SpanContext({ traceId: id() })), true)
       }
     })
 
@@ -435,10 +433,10 @@ describe('sampling rule', () => {
         now: new Date(),
         toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'hrtime']
       })
-      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
-      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(false)
+      assert.strictEqual(rule.sample(new SpanContext({ traceId: id() })), true)
+      assert.strictEqual(rule.sample(new SpanContext({ traceId: id() })), false)
       clock.tick(1000)
-      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
+      assert.strictEqual(rule.sample(new SpanContext({ traceId: id() })), true)
     })
   })
 })

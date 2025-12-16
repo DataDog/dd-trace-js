@@ -1,6 +1,6 @@
 'use strict'
 
-const retry = require('retry')
+const retry = require('../../../../../vendor/dist/retry')
 const { request: httpRequest } = require('http')
 const { request: httpsRequest } = require('https')
 const { EventSerializer } = require('./event_serializer')

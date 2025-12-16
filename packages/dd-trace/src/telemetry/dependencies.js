@@ -1,7 +1,7 @@
 'use strict'
 
 const path = require('path')
-const parse = require('module-details-from-path')
+const parse = require('../../../../vendor/dist/module-details-from-path')
 const requirePackageJson = require('../require-package-json')
 const { sendData } = require('./send-data')
 const dc = require('dc-polyfill')

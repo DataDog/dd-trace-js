@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
 const { trace } = require('@opentelemetry/api')
@@ -28,7 +26,7 @@ describe('OTel TracerProvider', () => {
     const provider = new TracerProvider()
     const tracer = provider.getTracer()
 
-    expect(tracer).to.be.an.instanceOf(Tracer)
+    assert.ok(tracer instanceof Tracer)
     assert.strictEqual(tracer, provider.getTracer())
   })
 
@@ -46,7 +44,7 @@ describe('OTel TracerProvider', () => {
 
     // Initially is a NoopSpanProcessor
     assert.strictEqual(provider._processors.length, 0)
-    expect(provider.getActiveSpanProcessor()).to.be.an.instanceOf(NoopSpanProcessor)
+    assert.ok(provider.getActiveSpanProcessor() instanceof NoopSpanProcessor)
 
     // Swap out shutdown function to check if it's called
     const shutdown = sinon.stub()
@@ -56,7 +54,7 @@ describe('OTel TracerProvider', () => {
     provider.addSpanProcessor(new NoopSpanProcessor())
     sinon.assert.calledOnce(shutdown)
     assert.strictEqual(provider._processors.length, 1)
-    expect(provider.getActiveSpanProcessor()).to.be.an.instanceOf(MultiSpanProcessor)
+    assert.ok(provider.getActiveSpanProcessor() instanceof MultiSpanProcessor)
   })
 
   it('should delegate shutdown to active span processor', () => {

@@ -114,7 +114,7 @@ withVersions('passport-local', 'passport-local', version => {
       const res = await axios.post(`http://localhost:${port}/`, { username: 'error', password: '1234' })
 
       assert.strictEqual(res.status, 500)
-      expect(subscriberStub).to.not.be.called
+      sinon.assert.notCalled(subscriberStub)
     })
 
     it('should call subscriber with proper arguments on success', async () => {

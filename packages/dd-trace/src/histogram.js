@@ -1,6 +1,6 @@
 'use strict'
 
-const { DDSketch } = require('@datadog/sketches-js')
+const { DDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
 
 class Histogram {
   constructor () {

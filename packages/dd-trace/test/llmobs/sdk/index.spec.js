@@ -2,7 +2,6 @@
 
 const assert = require('node:assert')
 
-const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -193,7 +192,7 @@ describe('sdk', () => {
         })
 
         it('throws if the kind is invalid', () => {
-          expect(() => llmobs.trace({ kind: 'invalid' }, () => {})).to.throw()
+          assert.throws(() => llmobs.trace({ kind: 'invalid' }, () => {}))
 
           sinon.assert.notCalled(llmobs._tracer._processor.process)
           sinon.assert.notCalled(LLMObsSpanProcessor.prototype.format)
@@ -201,7 +200,7 @@ describe('sdk', () => {
 
         // TODO: need span kind optional for this
         it.skip('throws if no name is provided', () => {
-          expect(() => llmobs.trace({ kind: 'workflow' }, () => {})).to.throw()
+          assert.throws(() => llmobs.trace({ kind: 'workflow' }, () => {}))
 
           sinon.assert.notCalled(llmobs._tracer._processor.process)
           sinon.assert.notCalled(LLMObsSpanProcessor.prototype.format)
@@ -375,7 +374,7 @@ describe('sdk', () => {
 
           const fn = llmobs.wrap({ kind: 'workflow' }, (a) => {
             assert.strictEqual(a, 1)
-            expect(LLMObsTagger.tagMap.get(llmobs._active())).to.not.exist
+            assert.ok(LLMObsTagger.tagMap.get(llmobs._active()) == null)
           })
 
           assert.doesNotThrow(() => fn(1))
@@ -387,7 +386,7 @@ describe('sdk', () => {
         })
 
         it('throws if the kind is invalid', () => {
-          expect(() => llmobs.wrap({ kind: 'invalid' }, () => {})).to.throw()
+          assert.throws(() => llmobs.wrap({ kind: 'invalid' }, () => {}))
         })
 
         it('wraps a function', () => {
@@ -1212,7 +1211,8 @@ describe('sdk', () => {
         }
       })
 
-      expect(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]).to.have.property('categorical_value', 'foo')
+      assert.ok('categorical_value' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0])
+      assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].categorical_value, 'foo')
     })
 
     it('defaults to the current time if no timestamp is provided', () => {
@@ -1224,7 +1224,8 @@ describe('sdk', () => {
         value: 0.6
       })
 
-      expect(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]).to.have.property('timestamp_ms', 1234)
+      assert.ok('timestamp_ms' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0])
+      assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].timestamp_ms, 1234)
       Date.now.restore()
     })
 
@@ -1238,7 +1239,7 @@ describe('sdk', () => {
 
       const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
 
-      assert.deepEqual(evalMetric, {
+      assert.deepStrictEqual(evalMetric, {
         span_id: '5678',
         trace_id: '1234',
         label: 'has_toxicity',
@@ -1256,6 +1257,29 @@ describe('sdk', () => {
         metricType: 'boolean',
         value: 'it is super toxic!'
       }), { message: 'value must be a boolean for a boolean metric' })
+    })
+
+    describe('with DD_TRACE_OTEL_ENABLED set', () => {
+      before(() => {
+        process.env.DD_TRACE_OTEL_ENABLED = 'true'
+      })
+
+      after(() => {
+        delete process.env.DD_TRACE_OTEL_ENABLED
+      })
+
+      it('adds source:otel tag', () => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          timestampMs: 1234,
+          label: 'test',
+          metricType: 'score',
+          value: 0.6
+        })
+
+        const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
+        assert.ok(evalMetric.tags.includes('source:otel'), 'Expected source:otel tag to be present')
+      })
     })
   })
 

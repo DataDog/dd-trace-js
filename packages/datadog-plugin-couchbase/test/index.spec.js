@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const semver = require('semver')
@@ -261,12 +260,12 @@ describe('Plugin', () => {
 
           it('should skip instrumentation for invalid arguments', (done) => {
             const checkError = (e) => {
-              expect(e.message).to.be.oneOf([
+              assert.ok([
                 // depending on version of node
                 'Cannot read property \'toString\' of undefined',
                 'Cannot read properties of undefined (reading \'toString\')',
                 'parsing failure' // sdk 4
-              ])
+              ].includes(e.message))
               done()
             }
             try {

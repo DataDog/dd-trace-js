@@ -5,18 +5,17 @@ const http = require('node:http')
 const { performance } = require('perf_hooks')
 
 const axios = require('axios')
-const { expect } = require('chai')
 const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const plugin = require('../src')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let tracer
@@ -289,7 +288,7 @@ describe('Plugin', () => {
                 assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
                 assert.strictEqual(spans[0].type, 'graphql')
                 assert.strictEqual(spans[0].error, 0)
-                assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+                assert.ok(!('graphql.source' in spans[0].meta))
                 assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
                 assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
                 assert.strictEqual(spans[0].meta.component, 'graphql')
@@ -352,7 +351,7 @@ describe('Plugin', () => {
               assert.strictEqual(span.resource, 'graphql.parse')
               assert.strictEqual(span.type, 'graphql')
               assert.strictEqual(span.error, 0)
-              assert.ok(!Object.hasOwn(span.meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in span.meta))
               assert.strictEqual(span.meta.component, 'graphql')
             })
             .then(done)
@@ -374,7 +373,7 @@ describe('Plugin', () => {
               assert.strictEqual(span.resource, 'graphql.validate')
               assert.strictEqual(span.type, 'graphql')
               assert.strictEqual(span.error, 0)
-              assert.ok(!Object.hasOwn(span.meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in span.meta))
               assert.strictEqual(span.meta.component, 'graphql')
             })
             .then(done)
@@ -396,7 +395,7 @@ describe('Plugin', () => {
               assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
               assert.strictEqual(spans[0].type, 'graphql')
               assert.strictEqual(spans[0].error, 0)
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in spans[0].meta))
               assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
               assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
               assert.strictEqual(spans[0].meta.component, 'graphql')
@@ -413,7 +412,7 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.variables'))
+              assert.ok(!('graphql.variables' in spans[0].meta))
             })
             .then(done)
             .catch(done)
@@ -438,7 +437,7 @@ describe('Plugin', () => {
               assert.strictEqual(spans[1].meta['graphql.field.name'], 'hello')
               assert.strictEqual(spans[1].meta['graphql.field.path'], 'hello')
               assert.strictEqual(spans[1].meta['graphql.field.type'], 'String')
-              assert.ok(!Object.hasOwn(spans[1].meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in spans[1].meta))
               assert.strictEqual(spans[1].meta.component, 'graphql')
             })
             .then(done)
@@ -821,7 +820,7 @@ describe('Plugin', () => {
           return tracer.scope().activate(span, () => {
             return graphql.graphql({ schema, source, rootValue })
               .then(value => {
-                expect(value).to.have.nested.property('data.hello', 'test')
+                assert.strictEqual(value?.data?.hello, 'test')
                 assert.strictEqual(tracer.scope().active(), span)
               })
           })
@@ -834,7 +833,7 @@ describe('Plugin', () => {
           return graphql.graphql({ schema, source })
             .then(() => graphql.graphql({ schema, source: subscription }))
             .then(result => {
-              assert.ok(!Object.hasOwn(result, 'errors'))
+              assert.ok(!('errors' in result))
             })
         })
 
@@ -870,7 +869,7 @@ describe('Plugin', () => {
           const source = '{ human { oneTime } }'
 
           const result = await graphql.graphql({ schema, source })
-          assert.ok(!Object.hasOwn(result, 'errors'))
+          assert.ok(!('errors' in result))
           assert.strictEqual(result.data.human.oneTime, 'one-time result')
         })
 
@@ -886,7 +885,7 @@ describe('Plugin', () => {
               assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
               assert.strictEqual(spans[0].name, expectedSchema.server.opName)
               assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in spans[0].meta))
               assert.strictEqual(spans[0].meta.component, 'graphql')
             })
             .then(done)
@@ -967,10 +966,10 @@ describe('Plugin', () => {
               const spanEvents = agent.unformatSpanEvents(spans[0])
 
               assert.strictEqual(spanEvents.length, 1)
-              assert.ok(Object.hasOwn(spanEvents[0], 'startTime'))
+              assert.ok(('startTime' in spanEvents[0]))
               assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
               assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
-              assert.ok(Object.hasOwn(spanEvents[0].attributes, 'stacktrace'))
+              assert.ok(('stacktrace' in spanEvents[0].attributes))
               assert.strictEqual(spanEvents[0].attributes.message, 'Field "address" of ' +
                 'type "Address" must have a selection of subfields. Did you mean "address { ... }"?')
               assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
@@ -1207,7 +1206,7 @@ describe('Plugin', () => {
               assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
               assert.strictEqual(spans[0].name, expectedSchema.server.opName)
               assert.strictEqual(spans[0].resource, 'query SecondQuery{hello(name:"")}')
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in spans[0].meta))
               assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
               assert.strictEqual(spans[0].meta['graphql.operation.name'], 'SecondQuery')
               assert.strictEqual(spans[0].meta.component, 'graphql')
@@ -1239,7 +1238,7 @@ describe('Plugin', () => {
               assert.strictEqual(spans[0].service, 'test')
               assert.strictEqual(spans[0].name, expectedSchema.server.opName)
               assert.strictEqual(spans[0].resource, resource)
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in spans[0].meta))
               assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
               assert.strictEqual(spans[0].meta['graphql.operation.name'], 'WithFragments')
               assert.strictEqual(spans[0].meta.component, 'graphql')
@@ -1264,9 +1263,9 @@ describe('Plugin', () => {
               assert.strictEqual(spans[0].service, 'test')
               assert.strictEqual(spans[0].name, 'graphql.parse')
               assert.strictEqual(spans[0].resource, 'graphql.parse')
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.operation.type'))
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.operation.name'))
+              assert.ok(!('graphql.source' in spans[0].meta))
+              assert.ok(!('graphql.operation.type' in spans[0].meta))
+              assert.ok(!('graphql.operation.name' in spans[0].meta))
               assert.strictEqual(spans[0].meta.component, 'graphql')
             })
             .then(done)
@@ -1289,7 +1288,7 @@ describe('Plugin', () => {
                 assert.strictEqual(spans[0].name, expectedSchema.server.opName)
                 assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
                 assert.strictEqual(spans[0].type, 'graphql')
-                assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+                assert.ok(!('graphql.source' in spans[0].meta))
                 assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
                 assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
                 assert.strictEqual(spans[0].meta.component, 'graphql')
@@ -1320,7 +1319,7 @@ describe('Plugin', () => {
         //       assert.strictEqual(spans[0].service, 'test')
         //       assert.strictEqual(spans[0].name, expectedSchema.server.opName)
         //       assert.strictEqual(spans[0].resource, resource)
-        //       assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+        //       assert.ok(!('graphql.source' in spans[0].meta))
         //       assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
         //       assert.strictEqual(spans[0].meta['graphql.operation.name'], 'WithFragments')
         //     })
@@ -1443,7 +1442,7 @@ describe('Plugin', () => {
               const spans = sort(traces[0])
 
               assert.strictEqual(spans[0].meta['graphql.variables.title'], 'planet')
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.variables.who'))
+              assert.ok(!('graphql.variables.who' in spans[0].meta))
             })
             .then(done)
             .catch(done)
@@ -1509,7 +1508,8 @@ describe('Plugin', () => {
 
               try {
                 assert.notStrictEqual(span, null)
-                expect(span.context()).to.have.property('_name', expectedSchema.server.opName)
+                assert.ok('_name' in span.context())
+                assert.strictEqual(span.context()._name, expectedSchema.server.opName)
                 done()
               } catch (e) {
                 done(e)
@@ -1847,13 +1847,13 @@ describe('Plugin', () => {
 
                 assert.strictEqual(spans[0].name, expectedSchema.server.opName)
                 assert.strictEqual(spans[0].resource, 'query MyQuery{hello}')
-                assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+                assert.ok(!('graphql.source' in spans[0].meta))
 
                 assert.strictEqual(spans[1].name, 'graphql.resolve')
                 assert.strictEqual(spans[1].resource, 'hello:String')
 
                 assert.strictEqual(spans[2].name, 'graphql.validate')
-                assert.ok(!Object.hasOwn(spans[2].meta, 'graphql.source'))
+                assert.ok(!('graphql.source' in spans[2].meta))
               })
               .then(done)
               .catch(done)

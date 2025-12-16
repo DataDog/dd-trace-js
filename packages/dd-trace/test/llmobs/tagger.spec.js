@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -512,7 +511,7 @@ describe('tagger', () => {
           tagger.tagLLMIO(span, messages, undefined)
 
           const messageTags = Tagger.tagMap.get(span)['_ml_obs.meta.input.messages']
-          assert.ok(!Object.hasOwn(messageTags[0], 'tool_id'))
+          assert.ok(!('tool_id' in messageTags[0]))
 
           sinon.assert.calledOnce(logger.warn)
         })
@@ -774,7 +773,7 @@ describe('tagger', () => {
 
         tagger._register(span)
         tagger.tagLLMIO(span, messages, undefined)
-        expect(Tagger.tagMap.get(span)).to.not.have.property('_ml_obs.meta.input.messages')
+        assert.ok(!('_ml_obs.meta.input.messages' in Tagger.tagMap.get(span)))
         sinon.assert.calledOnce(logger.warn)
       })
     })
