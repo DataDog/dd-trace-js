@@ -529,18 +529,18 @@ To create a new plugin:
 
 1. Create directory structure:
    ```bash
-   mkdir -p packages/datadog-plugin-<pluginname>/src
-   mkdir -p packages/datadog-plugin-<pluginname>/test
+   mkdir -p packages/datadog-plugin-<plugin-name>/src
+   mkdir -p packages/datadog-plugin-<plugin-name>/test
    ```
 
 2. Copy a starting point:
    ```bash
-   cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<pluginname>/src/
+   cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<plugin-name>/src/
    ```
 
 3. Edit `index.js` for your plugin
 
-4. Create tests in `packages/datadog-plugin-<pluginname>/test/index.spec.js`
+4. Create tests in `packages/datadog-plugin-<plugin-name>/test/index.spec.js`
 
 5. Add entries to these files:
    - `packages/dd-trace/src/plugins/index.js`

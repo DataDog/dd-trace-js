@@ -28,11 +28,11 @@ Sometimes new patterns or new ideas emerge which would be a substantial improvem
 
 ## Test everything
 
-It's very difficult to know if a change is valid unless there are tests to prove it. As an extension of that, it's also difficult to know the _use_ of that code is valid if the way it is integrated is not propertly tested. For this reason we generally favour integration tests over unit tests. If an API is expected to be used in different places or in different ways then it should generally include unit tests too for each unique scenario, however great care should be taken to ensure unit tests are actually testing the _logic_ and not just testing the _mocks_. It's a very common mistake to write a unit test that abstracts away the actual use of the interface so much that it doesn't actually test how that interface works in real-world scenarios. Remember to test how it handles failures, how it operates under heavy load, and how it impacts usability of what its purpose is.
+It's very difficult to know if a change is valid unless there are tests to prove it. As an extension of that, it's also difficult to know the _use_ of that code is valid if the way it is integrated is not properly tested. For this reason we generally favour integration tests over unit tests. If an API is expected to be used in different places or in different ways then it should generally include unit tests too for each unique scenario, however great care should be taken to ensure unit tests are actually testing the _logic_ and not just testing the _mocks_. It's a very common mistake to write a unit test that abstracts away the actual use of the interface so much that it doesn't actually test how that interface works in real-world scenarios. Remember to test how it handles failures, how it operates under heavy load, and how it impacts usability of what its purpose is.
 
 ## Don't forget benchmarks
 
-Observability products tend to have quite a bit of their behaviour running in app code hot paths. It's important we extensively benchmark anything we expect to have heavy use to ensure it performs well and we don't cause any significant regressions through future changes. Measuring once at the time of writing is insufficient--a graph with just one data point is not going to tell you much of anything.
+Observability products tend to have quite a bit of their behavior running in app code hot paths. It's important we extensively benchmark anything we expect to have heavy use to ensure it performs well and we don't cause any significant regressions through future changes. Measuring once at the time of writing is insufficient--a graph with just one data point is not going to tell you much of anything.
 
 ## Always consider backportability
 
@@ -59,11 +59,11 @@ This library follows the semantic versioning standard, but there are some subtle
 
 ### semver-patch
 
-If the change is a bug or security fix, it should be labelled as semver-patch. These changes should generally not alter existing behaviour in any way other than to correct the specific issue.
+If the change is a bug or security fix, it should be labelled as semver-patch. These changes should generally not alter existing behavior in any way other than to correct the specific issue.
 
 ### semver-minor
 
-Any addition of new functionality should be labelled as semver-minor and should not change any existing behaviour either in how any existing API works or in changing the contents or value of any existing data being reported except in purely additive cases where all existing data retains its prior state. Such changes may include new configuration options which when used will change behaviour, or may include the addition of new data being captured such as a new instrumentation, but should not impact the current operating design of any existing features.
+Any addition of new functionality should be labelled as semver-minor and should not change any existing behavior either in how any existing API works or in changing the contents or value of any existing data being reported except in purely additive cases where all existing data retains its prior state. Such changes may include new configuration options which when used will change behavior, or may include the addition of new data being captured such as a new instrumentation, but should not impact the current operating design of any existing features.
 
 ### semver-major
 
@@ -92,7 +92,7 @@ such as [nvm](https://github.com/creationix/nvm) is recommended. If you're
 unsure which version of Node.js to use, just use the latest version, which
 should always work.
 
-We use [yarn](https://yarnpkg.com/) 1.x for its workspace functionality, so make sure to install that as well. The easist way to install yarn 1.x with with npm:
+We use [yarn](https://yarnpkg.com/) 1.x for its workspace functionality, so make sure to install that as well. The easiest way to install yarn 1.x with with npm:
 
 ```sh
 $ npm install -g yarn
@@ -246,11 +246,11 @@ Plugins are modular code components in `packages/datadog-plugin-*/` directories 
 
 To create a new plugin for a third-party package, follow these steps:
 
-1. `mkdir -p packages/datadog-plugin-<pluginname>/src`
-2. Copy an `index.js` file from another plugin to use as a starting point: `cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<pluginname>/src`
+1. `mkdir -p packages/datadog-plugin-<plugin-name>/src`
+2. Copy an `index.js` file from another plugin to use as a starting point: `cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<plugin-name>/src`
 3. Edit index.js as appropriate for your plugin
-4. `mkdir -p packages/datadog-plugin-<pluginname>/test`
-5. Create an packages/datadog-plugin-<pluginname>/test/index.spec.js file and add the necessary tests. See other plugin tests for inspiration to file structure.
+4. `mkdir -p packages/datadog-plugin-<plugin-name>/test`
+5. Create an packages/datadog-plugin-<plugin-name>/test/index.spec.js file and add the necessary tests. See other plugin tests for inspiration to file structure.
 6. Edit index.spec.js as appropriate for your new plugin
 7. Add entries to the following files for your new plugin:
   - `packages/dd-trace/src/plugins/index.js`
@@ -381,7 +381,7 @@ details.
 When running integration tests, some packages are installed from npm into temporary sandboxes.
 If running locally without an internet connection,
 it's possible to use the environment variable `OFFLINE=true` to make `yarn` use the `--prefer-offline` flag,
-which will use the local yarn cache instead of fecthing packages from npm.
+which will use the local yarn cache instead of fetching packages from npm.
 
 ### Adding a Plugin Test to CI
 
