@@ -47,6 +47,10 @@ const messaging = {
     sns: {
       opName: () => 'aws.request',
       serviceName: awsServiceV0
+    },
+    nats: {
+      opName: () => 'nats.send',
+      serviceName: ({ tracerService }) => `${tracerService}-nats`
     }
   },
   consumer: {
@@ -77,6 +81,10 @@ const messaging = {
     sqs: {
       opName: () => 'aws.request',
       serviceName: awsServiceV0
+    },
+    nats: {
+      opName: () => 'nats.receive',
+      serviceName: identityService
     }
   },
   client: {
@@ -87,6 +95,10 @@ const messaging = {
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',
       serviceName: ({ tracerService }) => `${tracerService}-pubsub`
+    },
+    nats: {
+      opName: () => 'nats.request',
+      serviceName: ({ tracerService }) => `${tracerService}-nats`
     }
   }
 }

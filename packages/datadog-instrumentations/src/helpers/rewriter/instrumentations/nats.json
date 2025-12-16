@@ -1,0 +1,28 @@
+[
+  {
+    "module": {
+      "name": "nats",
+      "versionRange": ">=2.29.3",
+      "filePath": "lib/nats-base-client/nats.js"
+    },
+    "functionQuery": {
+      "methodName": "publish",
+      "className": "NatsConnectionImpl",
+      "kind": "Sync"
+    },
+    "channelName": "NatsConnectionImpl_publish"
+  },
+  {
+    "module": {
+      "name": "nats",
+      "versionRange": ">=2.29.3",
+      "filePath": "lib/nats-base-client/protocol.js"
+    },
+    "functionQuery": {
+      "methodName": "processMsg",
+      "className": "ProtocolHandler",
+      "kind": "Sync"
+    },
+    "channelName": "ProtocolHandler_processMsg"
+  }
+]

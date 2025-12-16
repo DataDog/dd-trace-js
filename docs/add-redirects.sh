@@ -61,6 +61,7 @@ declare -a plugins=(
   "mongoose"
   "mysql"
   "mysql2"
+  "nats"
   "net"
   "next"
   "openai"

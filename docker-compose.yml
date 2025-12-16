@@ -92,6 +92,10 @@ services:
     image: rabbitmq:3.6-alpine
     ports:
       - "127.0.0.1:5672:5672"
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "127.0.0.1:4222:4222"
   qpid:
     image: scholzj/qpid-cpp:1.38.0
     command: -p 5673

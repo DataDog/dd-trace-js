@@ -97,6 +97,7 @@ module.exports = {
   multer: () => require('../multer'),
   mysql: () => require('../mysql'),
   mysql2: () => require('../mysql2'),
+  nats: () => require('../nats'),
   net: () => require('../net'),
   next: () => require('../next'),
   'node-serialize': () => require('../node-serialize'),

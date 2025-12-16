@@ -44,6 +44,10 @@ const messaging = {
     sns: {
       opName: () => 'aws.sns.send',
       serviceName: identityService
+    },
+    nats: {
+      opName: () => 'nats.send',
+      serviceName: identityService
     }
   },
   consumer: {
@@ -65,6 +69,10 @@ const messaging = {
     sqs: {
       opName: () => 'aws.sqs.process',
       serviceName: identityService
+    },
+    nats: {
+      opName: () => 'nats.process',
+      serviceName: identityService
     }
   },
   client: {
@@ -74,6 +82,10 @@ const messaging = {
     },
     'google-cloud-pubsub': {
       opName: () => 'gcp.pubsub.request',
+      serviceName: identityService
+    },
+    nats: {
+      opName: () => 'nats.request',
       serviceName: identityService
     }
   }

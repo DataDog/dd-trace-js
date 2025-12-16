@@ -229,6 +229,7 @@ interface Plugins {
   "mongoose": tracer.plugins.mongoose;
   "mysql": tracer.plugins.mysql;
   "mysql2": tracer.plugins.mysql2;
+  "nats": tracer.plugins.nats;
   "net": tracer.plugins.net;
   "next": tracer.plugins.next;
   "openai": tracer.plugins.openai;
@@ -2240,6 +2241,12 @@ declare namespace tracer {
      * [net](https://nodejs.org/api/net.html) module.
      */
     interface net extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [nats](https://github.com/npmjs/package/nats) message queue library.
+     */
+    interface nats extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
