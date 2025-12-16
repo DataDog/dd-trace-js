@@ -8,7 +8,7 @@
 
 ## Setup
 
-- Install npm dependencies: `yarn`
+- Install dependencies: `yarn install`
 
 **Note:** This project uses yarn, not npm. Always use `yarn` commands instead of `npm` commands.
 
