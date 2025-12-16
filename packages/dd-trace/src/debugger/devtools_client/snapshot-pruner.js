@@ -28,6 +28,8 @@ class TreeNode {
   notCaptured = false
   /** @type {number} Cached byte size */
   #sizeCache = -1
+  /** @type {[number, number, number, number]|null} Cached priority key */
+  #priorityKeyCache = null
 
   /**
    * @param {number} start - Start position in JSON string
@@ -63,27 +65,31 @@ class TreeNode {
   /**
    * Priority key for sorting in queue (higher values = higher priority for pruning). Checks ancestors for
    * `notCapturedReason` flags to prioritize children of partially captured objects (where the flag is on the parent).
+   * Cached to avoid repeated ancestor chain walks during heap operations.
    *
    * @returns {[number, number, number, number]} Priority key tuple: [not_captured_depth, level, not_captured, size]
    */
   get priorityKey () {
-    let hasNotCapturedDepth = this.notCapturedDepth
-    let hasNotCaptured = this.notCaptured
+    if (this.#priorityKeyCache === null) {
+      let hasNotCapturedDepth = this.notCapturedDepth
+      let hasNotCaptured = this.notCaptured
 
-    // Check ancestors for notCapturedReason flags
-    let ancestor = this.parent
-    while (ancestor) {
-      if (ancestor.notCapturedDepth) hasNotCaptured = hasNotCapturedDepth = true
-      else if (ancestor.notCaptured) hasNotCaptured = true
-      ancestor = ancestor.parent
+      // Check ancestors for notCapturedReason flags
+      let ancestor = this.parent
+      while (ancestor) {
+        if (ancestor.notCapturedDepth) hasNotCaptured = hasNotCapturedDepth = true
+        else if (ancestor.notCaptured) hasNotCaptured = true
+        ancestor = ancestor.parent
+      }
+
+      this.#priorityKeyCache = [
+        hasNotCapturedDepth ? 1 : 0,
+        this.level,
+        hasNotCaptured ? 1 : 0,
+        this.size
+      ]
     }
-
-    return [
-      hasNotCapturedDepth ? 1 : 0,
-      this.level,
-      hasNotCaptured ? 1 : 0,
-      this.size
-    ]
+    return this.#priorityKeyCache
   }
 }
 
@@ -179,10 +185,42 @@ function parseJsonToTree (json) {
 
   for (let index = 0; index < json.length; index++) {
     switch (json.charCodeAt(index)) {
-      case 34: // 34: double quote
-        // Skip strings to avoid false positives
+      case 34: { // 34: double quote
+        const stringStart = index + 1
         index = skipString(json, index)
+        const stringLength = index - stringStart
+
+        // Check if this is "notCapturedReason" property (check length first for performance)
+        if (stringLength === 17 && json.startsWith('notCapturedReason', stringStart)) {
+          // Look ahead for colon and value
+          let ahead = index + 1
+
+          // Skip whitespace and colon
+          while (ahead < json.length) {
+            const code = json.charCodeAt(ahead)
+            // 32: space, 9: tab, 10: newline, 13: carriage return, 58: colon
+            if (code === 32 || code === 9 || code === 10 || code === 13 || code === 58) {
+              ahead++
+            } else {
+              break
+            }
+          }
+
+          // Check if value is a string (34: double quote)
+          if (ahead < json.length && json.charCodeAt(ahead) === 34) {
+            const valueStart = ahead + 1
+            ahead = skipString(json, ahead)
+            const reason = json.slice(valueStart, ahead)
+
+            const currentNode = /** @type {TreeNode} */ (stack.at(-1))
+            currentNode.notCaptured = true
+            if (reason === 'depth') {
+              currentNode.notCapturedDepth = true
+            }
+          }
+        }
         break
+      }
       case 123: { // 123: opening brace
         const parentNode = stack.at(-1)
         const level = depth
@@ -202,14 +240,6 @@ function parseJsonToTree (json) {
         const node = stack.pop()
         if (node === undefined) throw new SyntaxError('Invalid JSON: unexpected closing brace')
         node.end = index
-
-        const notCapturedReason = findNotCapturedReason(node)
-        if (notCapturedReason) {
-          node.notCaptured = true
-          if (notCapturedReason === 'depth') {
-            node.notCapturedDepth = true
-          }
-        }
         depth--
         break
       }
@@ -247,93 +277,6 @@ function skipString (json, startIndex) {
   }
 
   return index
-}
-
-/**
- * Find notCapturedReason value in a JSON object string.
- *
- * @param {TreeNode} node - The node to search in
- * @returns {string|undefined} The reason value or undefined if not found
- */
-function findNotCapturedReason (node) {
-  let { json, start: index, end, children } = node
-  let childIndex = 0
-
-  while (true) {
-    // Skip children logic: if current position overlaps with next child, jump over it
-    if (childIndex < children.length) {
-      const child = children[childIndex]
-      // If we are at or past the start of the current child
-      if (index >= child.start) {
-        // Skip to the end of the child
-        index = child.end + 1
-        childIndex++
-        continue
-      }
-    }
-
-    // Find the next string
-    const nextQuote = json.indexOf('"', index)
-    // If no more strings, stop
-    if (nextQuote === -1 || nextQuote >= end) return
-
-    // Skip over any children that come before or contain the found quote
-    let quoteIsInsideChild = false
-    while (childIndex < children.length) {
-      const child = children[childIndex]
-      if (nextQuote > child.end) {
-        // Quote is after this child, skip it
-        childIndex++
-        continue
-      }
-      if (nextQuote >= child.start && nextQuote <= child.end) {
-        // Quote is inside this child, skip to end of child and restart outer loop
-        index = child.end + 1
-        childIndex++
-        quoteIsInsideChild = true
-        break
-      }
-      // Quote is before this child, so it's valid at current level
-      break
-    }
-
-    // If the quote was inside a child, restart the outer loop
-    if (quoteIsInsideChild) continue
-
-    // Valid quote at current level
-    index = nextQuote
-
-    const stringStart = index + 1 // Skip opening quote
-    index = skipString(json, index)
-
-    if (json.slice(stringStart, index) === 'notCapturedReason') {
-      // Found the potential property name, now see if it has a value and if so, return it
-      index++ // Skip closing quote
-
-      let code
-
-      // Skip whitespace and colon
-      while (true) {
-        if (index >= end) return
-        code = json.charCodeAt(index)
-        // 32: space, 9: tab, 10: newline, 13: carriage return, 58: colon
-        if (code === 32 || code === 9 || code === 10 || code === 13 || code === 58) {
-          index++
-        } else {
-          break
-        }
-      }
-
-      // If next character is a quote, `notCapturedReason` must have been a property name, and now we're at the value
-      if (code === 34) { // 34: double quote
-        const valueStart = index + 1 // Skip opening quote
-        index = skipString(json, index)
-        return json.slice(valueStart, index)
-      }
-    }
-
-    index++
-  }
 }
 
 /**
