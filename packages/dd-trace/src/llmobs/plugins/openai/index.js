@@ -5,7 +5,10 @@ const {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractTextFromContentItem,
-  hasMultimodalInputs
+  hasMultimodalInputs,
+  PROMPT_TRACKING_INSTRUMENTATION_METHOD,
+  PROMPT_MULTIMODAL,
+  INSTRUMENTATION_METHOD_AUTO
 } = require('./utils')
 
 const allowedParamKeys = new Set([
@@ -427,9 +430,9 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           variables: normalizedVariables,
           chat_template: chatTemplate
         })
-        const tags = { prompt_tracking_instrumentation_method: 'auto' }
+        const tags = { [PROMPT_TRACKING_INSTRUMENTATION_METHOD]: INSTRUMENTATION_METHOD_AUTO }
         if (hasMultimodalInputs(inputs.prompt.variables)) {
-          tags.prompt_multimodal = 'true'
+          tags[PROMPT_MULTIMODAL] = 'true'
         }
         this._tagger.tagSpanTags(span, tags)
       }

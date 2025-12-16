@@ -5,6 +5,10 @@ const FILE_FALLBACK = '[file]'
 
 const REGEX_SPECIAL_CHARS = /[.*+?^${}()|[\]\\]/g
 
+const PROMPT_TRACKING_INSTRUMENTATION_METHOD = 'prompt_tracking_instrumentation_method'
+const PROMPT_MULTIMODAL = 'prompt_multimodal'
+const INSTRUMENTATION_METHOD_AUTO = 'auto'
+
 /**
  * Extracts chat templates from OpenAI response instructions by replacing variable values with placeholders.
  *
@@ -118,5 +122,8 @@ module.exports = {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractTextFromContentItem,
-  hasMultimodalInputs
+  hasMultimodalInputs,
+  PROMPT_TRACKING_INSTRUMENTATION_METHOD,
+  PROMPT_MULTIMODAL,
+  INSTRUMENTATION_METHOD_AUTO
 }
