@@ -641,7 +641,7 @@ function setShouldKill (value) {
 }
 
 // we use our own assertObjectContains, to account for any types
-const assertObjectContains = function assertObjectContains (actual, expected) {
+const assertObjectContains = function assertObjectContains (actual, expected, msg) {
   if (Array.isArray(expected)) {
     assert.ok(Array.isArray(actual), `${msg ?? ''}Expected array but got ${inspect(actual)}`)
     let startIndex = 0
@@ -668,7 +668,7 @@ const assertObjectContains = function assertObjectContains (actual, expected) {
   }
 
   for (const [key, val] of Object.entries(expected)) {
-    assert.ok(Object.hasOwn(actual, key), `Expected object to have key ${key}`)
+    assert.ok(Object.hasOwn(actual, key), msg)
     if (val === ANY_STRING) {
       assert.strictEqual(typeof actual[key], 'string', `Expected ${key} to be a string but got ${typeof actual[key]}`)
     } else if (val === ANY_NUMBER) {
