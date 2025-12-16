@@ -50,4 +50,4 @@ jobs:
       excluded_scenarios: APM_TRACING_E2E_OTEL,APM_TRACING_E2E_SINGLE_SPAN  # require AWS and datadog credentials
       parametric_job_count: 8
       skip_empty_scenarios: true
-      push_to_test_optimization: true
+      push_to_test_optimization: ${{ github.actor != 'dependabot[bot]' }}
