@@ -1,5 +1,15 @@
 # AGENTS.md
 
+## Prerequisites
+
+- Node.js >= 18
+- yarn 1.x
+- Docker + docker-compose (for running service dependencies in tests)
+
+## Setup
+
+- Install dependencies: `yarn`
+
 ## Project Overview
 
 This is `dd-trace`, the Datadog client library for Node.js. It's a single npm package with an internal directory structure organized into package-like directories:
@@ -602,36 +612,7 @@ Label all PRs with semver labels:
 
 **All tests must pass before merging.** We follow an all-green policy - no exceptions.
 
----
-
-## Appendix
-
-### Setup Commands
-
-Install dependencies:
-
-```bash
-yarn
-```
-
-Requirements:
-- Node.js >= 18 (use nvm or similar version manager)
-- yarn 1.x (install with `npm install -g yarn`)
-- Docker and docker-compose (for running service dependencies in tests)
-
-### Benchmarks
-
-**Note: Agents should NOT run benchmarks unless explicitly instructed to in the prompt.**
-
-Observability products run in hot paths. Benchmarks are typically run in CI but can be executed locally:
-
-```bash
-yarn bench
-```
-
-Microbenchmarks live in `benchmark/sirun/`. Each directory tracks regressions and improvements over time.
-
-### Vendoring Dependencies
+## Vendoring Dependencies
 
 Dependencies are vendored using rspack to maintain control and reduce external dependencies:
 
