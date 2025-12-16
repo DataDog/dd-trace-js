@@ -267,6 +267,11 @@ You can copypaste and modify an existing plugin job configuration in this file t
 
 ## Testing
 
+### Prerequisites
+
+The `pg-native` package requires `pg_config` to be in your `$PATH` to be able to install.
+Please refer to [the "Install" section](https://github.com/brianc/node-postgres/tree/master/packages/pg-native#install) of the `pg-native` documentation for how to ensure your environment is configured correctly.
+
 ### Running Individual Tests
 
 When developing, it's often faster to run individual test files rather than entire test suites. **Never run `yarn test` directly** as it requires too much setup and takes too long.
@@ -318,11 +323,6 @@ yarn test:lambda:ci
 ```
 
 **Coverage Philosophy:** Given the nature of this library (instrumenting third-party code, hooking into runtime internals), unit tests can become overly complex when everything needs to be mocked. Integration tests that run in sandboxes don't count towards nyc's coverage metrics, so coverage numbers may look low even when code is well-tested. **Don't add redundant unit tests solely to improve coverage numbers.**
-
-### Prerequisites
-
-The `pg-native` package requires `pg_config` to be in your `$PATH` to be able to install.
-Please refer to [the "Install" section](https://github.com/brianc/node-postgres/tree/master/packages/pg-native#install) of the `pg-native` documentation for how to ensure your environment is configured correctly.
 
 ### Plugin Tests
 
