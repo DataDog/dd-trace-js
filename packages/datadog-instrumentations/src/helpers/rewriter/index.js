@@ -33,7 +33,7 @@ Orchestrion-JS that will need to be backported:
 
 const { readFileSync } = require('fs')
 const { join } = require('path')
-const semifies = require('semifies')
+const semifies = require('../../../../../vendor/dist/semifies')
 const transforms = require('./transforms')
 const { generate, parse, traverse } = require('./compiler')
 const log = require('../../../../dd-trace/src/log')
@@ -82,7 +82,7 @@ function rewrite (content, filename, format) {
       if (!enableSourceMaps) return generate(ast)
 
       // TODO: Can we use the same version of `source-map` that DI uses?
-      SourceMapGenerator ??= require('@datadog/source-map').SourceMapGenerator
+      SourceMapGenerator ??= require('../../../../../vendor/dist/@datadog/source-map').SourceMapGenerator
 
       const sourceMap = new SourceMapGenerator({ file: filename })
       const code = generate(ast, { sourceMap })

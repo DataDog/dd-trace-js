@@ -5,7 +5,7 @@ const api = require('@opentelemetry/api')
 const { performance } = require('perf_hooks')
 const { timeOrigin } = performance
 
-const { timeInputToHrTime } = require('@opentelemetry/core')
+const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const tracer = require('../../')
 const DatadogSpan = require('../opentracing/span')

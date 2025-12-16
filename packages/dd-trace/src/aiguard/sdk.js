@@ -1,6 +1,6 @@
 'use strict'
 
-const rfdc = require('rfdc')({ proto: false, circles: false })
+const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const NoopAIGuard = require('./noop')
 const executeRequest = require('./client')
 const {

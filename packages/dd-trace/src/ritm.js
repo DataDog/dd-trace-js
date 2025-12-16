@@ -2,7 +2,7 @@
 
 const path = require('path')
 const Module = require('module')
-const parse = require('module-details-from-path')
+const parse = require('../../../vendor/dist/module-details-from-path')
 const dc = require('dc-polyfill')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
