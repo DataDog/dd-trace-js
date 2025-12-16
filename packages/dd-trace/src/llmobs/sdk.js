@@ -411,7 +411,7 @@ class LLMObs extends NoopLLMObs {
       }
 
       // When OTel tracing is enabled, add source:otel tag to allow backend to wait for OTel span conversion
-      if (getEnvironmentVariable('DD_TRACE_OTEL_ENABLED')) {
+      if (isTrue(getEnvironmentVariable('DD_TRACE_OTEL_ENABLED'))) {
         evaluationTags.source = 'otel'
       }
 

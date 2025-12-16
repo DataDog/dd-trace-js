@@ -1259,36 +1259,27 @@ describe('sdk', () => {
       }), { message: 'value must be a boolean for a boolean metric' })
     })
 
-    it('adds source:otel tag when DD_TRACE_OTEL_ENABLED is set', () => {
-      process.env.DD_TRACE_OTEL_ENABLED = 'true'
-
-      llmobs.submitEvaluation(spanCtx, {
-        mlApp: 'test',
-        timestampMs: 1234,
-        label: 'test',
-        metricType: 'score',
-        value: 0.6
+    describe('with DD_TRACE_OTEL_ENABLED set', () => {
+      before(() => {
+        process.env.DD_TRACE_OTEL_ENABLED = 'true'
       })
 
-      const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
-      assert.ok(evalMetric.tags.includes('source:otel'), 'Expected source:otel tag to be present')
-
-      delete process.env.DD_TRACE_OTEL_ENABLED
-    })
-
-    it('does not add source:otel tag when DD_TRACE_OTEL_ENABLED is not set', () => {
-      delete process.env.DD_TRACE_OTEL_ENABLED
-
-      llmobs.submitEvaluation(spanCtx, {
-        mlApp: 'test',
-        timestampMs: 1234,
-        label: 'test',
-        metricType: 'score',
-        value: 0.6
+      after(() => {
+        delete process.env.DD_TRACE_OTEL_ENABLED
       })
 
-      const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
-      assert.ok(!evalMetric.tags.includes('source:otel'), 'Expected source:otel tag to NOT be present')
+      it('adds source:otel tag', () => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          timestampMs: 1234,
+          label: 'test',
+          metricType: 'score',
+          value: 0.6
+        })
+
+        const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
+        assert.ok(evalMetric.tags.includes('source:otel'), 'Expected source:otel tag to be present')
+      })
     })
   })
 
