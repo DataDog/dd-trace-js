@@ -71,15 +71,9 @@ class DatadogTracingHelper {
   }
 }
 
-const prismaModuleNames = ['@prisma/client']
-const customPrismaOutput = extractOutput()
-
-if (customPrismaOutput) {
-  prismaModuleNames.push(customPrismaOutput)
-}
-
 const prismaHook = (runtime, versions) => {
   const originalGetPrismaClient = runtime.getPrismaClient
+  if (!originalGetPrismaClient) return runtime
   const datadogTracingHelper = new DatadogTracingHelper()
   const runtime2 = new Proxy(runtime, {
     get (target, prop) {
@@ -110,14 +104,9 @@ const prismaHook = (runtime, versions) => {
 }
 
 const prismaConfigs = [
-  { name: '@prisma/client', versions: ['>=6.1.0'], file: 'runtime/library.js' }
+  { name: '@prisma/client', versions: ['>=6.1.0'], file: 'runtime/library.js' },
+  { name: './runtime/library.js', versions: ['>=6.1.0'], file: 'runtime/library.js' }
 ]
-
-if (customPrismaOutput) {
-  prismaConfigs.push(
-    { name: customPrismaOutput, versions: ['>=6.1.0'], file: 'runtime/library.js' }
-  )
-}
 
 prismaConfigs.forEach(config => {
   addHook(config, prismaHook)

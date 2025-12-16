@@ -33,7 +33,6 @@ describe('Plugin', () => {
         file: `../../../versions/@prisma/client@${range}`
       }]
 
-      process.env.DD_PRISMA_OUTPUT = 'versions/@prisma/generated/prisma'
       process.env.PRISMA_CLIENT_OUTPUT = '../generated/prisma'
 
       prismaClients.forEach(config => {

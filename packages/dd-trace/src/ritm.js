@@ -5,7 +5,7 @@ const Module = require('module')
 const parse = require('../../../vendor/dist/module-details-from-path')
 const dc = require('dc-polyfill')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
-
+const fs = require('fs')
 const origRequire = Module.prototype.require
 
 // derived from require-in-the-middle@3 with tweaks
@@ -105,7 +105,7 @@ function Hook (modules, options, onrequire) {
     // The module has already been loaded,
     // so the patching mark can be cleaned up.
     delete patching[filename]
-
+    const isRelativeHook = isFilePath(request) && moduleHooks[request]
     if (core) {
       hooks = moduleHooks[filename]
       if (!hooks) return exports // abort if module name isn't on whitelist
@@ -119,7 +119,6 @@ function Hook (modules, options, onrequire) {
       // first case will only happen when patching an AWS Lambda Handler
       const stat = inAWSLambda && hasLambdaHandler && !filenameFromNodeModule ? { name: filename } : parse(filename)
 
-      let absolutePathModuleMatch = false
       if (stat) {
         name = stat.name
         basedir = stat.basedir
@@ -130,18 +129,10 @@ function Hook (modules, options, onrequire) {
         // check if the full filename if the filename was registered, if not then prefix matching will be done
         hooks = moduleHooks[filename]
 
-        if (!hooks && pathModuleHooks.size > 0) {
-          // For absolute path modules, check if any registered module is a prefix of this filename,
-          // since hooks can specify files that we don't have at register time
-          for (const registeredModule of pathModuleHooks) {
-            if (filename.startsWith(registeredModule + path.sep)) {
-              hooks = moduleHooks[registeredModule]
-              name = filename
-              basedir = registeredModule
-              absolutePathModuleMatch = true
-              break
-            }
-          }
+        if (!hooks && isRelativeHook) {
+          hooks = moduleHooks[request]
+          name = request
+          basedir = findProjectRoot(filename)
         }
 
         if (!hooks) return exports // abort if filename isn't on whitelist
@@ -153,9 +144,9 @@ function Hook (modules, options, onrequire) {
       }
 
       // figure out if this is the main module file, or a file inside the module
-      // Skip this for absolute paths since it won't work as it's itended for node modules
+      // Skip this for paths since it's intended for node_modules paths
 
-      if (!absolutePathModuleMatch) {
+      if (!isRelativeHook) {
         const paths = Module._resolveLookupPaths(name, this, true)
         if (!paths) {
           // abort if _resolveLookupPaths return null
@@ -197,6 +188,30 @@ Hook.reset = function () {
   patching = Object.create(null)
   cache = Object.create(null)
   moduleHooks = Object.create(null)
+}
+
+function isFilePath (moduleName) {
+  if (moduleName.startsWith('./') || moduleName.startsWith('../') || moduleName.startsWith('/')) {
+    return true
+  }
+
+  if (moduleName.includes('/') && !moduleName.includes('node_modules/') && !moduleName.startsWith('@')) {
+    return true
+  }
+
+  return false
+}
+
+function findProjectRoot(startDir) {
+  let dir = startDir;
+
+  while (!fs.existsSync(path.join(dir, 'package.json'))) {
+    const parent = path.dirname(dir);
+    if (parent === dir) break; // reached filesystem root
+    dir = parent;
+  }
+
+  return dir;
 }
 
 Hook.prototype.unhook = function () {

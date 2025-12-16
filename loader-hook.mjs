@@ -6,6 +6,7 @@ import path from 'path'
 import { pathToFileURL } from 'url'
 import extractOutput from './packages/datadog-instrumentations/src/helpers/extract-prisma-client-path.js'
 import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
+import { isFilePath } from './packages/datadog-instrumentations/src/helpers/shared-utils.js'
 
 const regexpEscape = regexpEscapeModule.default
 
@@ -34,28 +35,13 @@ function addInstrumentations (data) {
 
   for (const moduleName of instrumentations) {
     if (isFilePath(moduleName)) {
-      const absolutePath = resolveFilePath(moduleName)
-
-      if (!absolutePath) continue
-      const fileUrl = pathToFileURL(absolutePath).href
-      const escapedUrl = regexpEscape(fileUrl)
-      data.include.push(new RegExp(`^${escapedUrl}(/.*)?$`))
+      const normalizedPath = moduleName.replace(/^\.\//, '')
+      const escapedPath = regexpEscape(normalizedPath)
+      data.include.push(new RegExp(`${escapedPath}$`))
     } else {
       data.include.push(new RegExp(`node_modules/${moduleName}/(?!node_modules).+`), moduleName)
     }
   }
-}
-
-function isFilePath (moduleName) {
-  if (moduleName.startsWith('./') || moduleName.startsWith('../') || moduleName.startsWith('/')) {
-    return true
-  }
-
-  if (moduleName.includes('/') && !moduleName.includes('node_modules/') && !moduleName.startsWith('@')) {
-    return true
-  }
-
-  return false
 }
 
 function addSecurityControls (data) {

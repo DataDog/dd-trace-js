@@ -10,8 +10,7 @@ const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
 const { getEnvironmentVariables } = require('../../../dd-trace/src/config-helper')
-const extractOutput = require('./extract-prisma-client-path')
-const Module = require('module')
+const { isFilePath } = require('./shared-utils')
 const rewriter = require('./rewriter')
 
 const envs = getEnvironmentVariables()
@@ -21,7 +20,6 @@ const {
   DD_TRACE_DEBUG = ''
 } = envs
 
-const prismaOutput = extractOutput()
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
@@ -74,26 +72,17 @@ for (const packageName of names) {
   // get the instrumentation file name to save all hooked versions
   const instrumentationFileName = parseHookInstrumentationFileName(packageName)
 
-  const hookModules = []
-  if (isFilePath(packageName)) {
-    const absolutePath = resolveFilePath(packageName)
-    if (!absolutePath) continue
-    hookModules.push(absolutePath)
-  } else {
-    hookModules.push(packageName)
-  }
-
-  Hook(hookModules, hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
+  Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
     // This executes the integration file thus adding its entries to `instrumentations`
     hook()
-
     if (!instrumentations[packageName]) {
       return moduleExports
     }
 
     const namesAndSuccesses = {}
     for (const { name, file, versions, hook, filePattern, patchDefault } of instrumentations[packageName]) {
+
       if (patchDefault === false && !moduleExports.default && isIitm) {
         return moduleExports
       } else if (patchDefault === true && moduleExports.default && isIitm) {
@@ -115,14 +104,8 @@ for (const packageName of names) {
       hook[HOOK_SYMBOL] ??= new WeakSet()
       let matchesFile = moduleName === fullFilename
 
-      if (!matchesFile && isFilePath(name)) {
-        const absoluteName = resolveFilePath(name)
-        if (absoluteName) {
-          matchesFile = file
-            ? moduleName === filename(absoluteName, file)
-            : Module._resolveFilename(absoluteName) === moduleName
-        }
-      }
+      // Default matchesFile to true when isFilePath returns true, since file paths don't need file matching
+      if (!matchesFile && isFilePath(name)) matchesFile = true
 
       if (fullFilePattern) {
         // Some libraries include a hash in their filenames when installed,
@@ -253,18 +236,6 @@ function parseHookInstrumentationFileName (packageName) {
   }
 
   return null
-}
-
-function isFilePath (moduleName) {
-  if (moduleName.startsWith('./') || moduleName.startsWith('../') || moduleName.startsWith('/')) {
-    return true
-  }
-
-  if (moduleName.includes('/') && !moduleName.includes('node_modules/') && !moduleName.startsWith('@')) {
-    return true
-  }
-
-  return false
 }
 
 function resolveFilePath (moduleName) {

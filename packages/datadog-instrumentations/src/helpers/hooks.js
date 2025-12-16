@@ -31,6 +31,7 @@ const hooks = {
   '@opensearch-project/opensearch': () => require('../opensearch'),
   '@opentelemetry/sdk-trace-node': () => require('../otel-sdk-trace'),
   '@prisma/client': () => require('../prisma'),
+  './runtime/library.js': () => require('../prisma'),
   '@redis/client': () => require('../redis'),
   '@smithy/smithy-client': () => require('../aws-sdk'),
   '@vitest/runner': { esmFirst: true, fn: () => require('../vitest') },
@@ -144,11 +145,6 @@ const hooks = {
   winston: () => require('../winston'),
   workerpool: () => require('../mocha'),
   ws: () => require('../ws')
-}
-
-const customPrismaOutput = extractOutput()
-if (customPrismaOutput) {
-  hooks[customPrismaOutput] = () => require('../prisma')
 }
 
 module.exports = hooks

@@ -28,6 +28,7 @@ const plugins = {
   get '@node-redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@opensearch-project/opensearch' () { return require('../../../datadog-plugin-opensearch/src') },
   get '@prisma/client' () { return require('../../../datadog-plugin-prisma/src') },
+  get './runtime/library.js' () { return require('../../../datadog-plugin-prisma/src') },
   get '@redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@smithy/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@vitest/runner' () { return require('../../../datadog-plugin-vitest/src') },
@@ -111,12 +112,6 @@ const plugins = {
   get undici () { return require('../../../datadog-plugin-undici/src') },
   get winston () { return require('../../../datadog-plugin-winston/src') },
   get ws () { return require('../../../datadog-plugin-ws/src') }
-}
-
-const prismaOutput = extractOutput()
-
-if (prismaOutput) {
-  Object.defineProperty(plugins, prismaOutput, { get () { return require('../../../datadog-plugin-prisma/src') } })
 }
 
 module.exports = plugins

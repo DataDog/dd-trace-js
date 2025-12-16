@@ -27,7 +27,7 @@ const prismaClientConfigs = [
     serverFile: 'server-custom-output.mjs',
     importPath: './generated/prisma/index.js',
     schema: './packages/datadog-plugin-prisma/test/provider-prisma-client-output-js/schema.prisma',
-    env: { DD_PRISMA_OUTPUT: 'generated/prisma', PRISMA_CLIENT_OUTPUT: './generated/prisma' }
+    env: { PRISMA_CLIENT_OUTPUT: './generated/prisma' }
   }
 ]
 
