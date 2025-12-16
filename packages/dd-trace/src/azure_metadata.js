@@ -46,7 +46,7 @@ function buildMetadata () {
     WEBSITE_OWNER_NAME,
     WEBSITE_OS,
     WEBSITE_RESOURCE_GROUP,
-    WEBSITE_SITE_NAME,
+    WEBSITE_SITE_NAME
   } = getEnvironmentVariables()
 
   const subscriptionID = extractSubscriptionID(WEBSITE_OWNER_NAME)
