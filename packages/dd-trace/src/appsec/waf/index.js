@@ -19,7 +19,13 @@ class WafUpdateError extends Error {
 
 let limiter = new Limiter(100)
 
+/** @typedef {import('./waf_manager')} WAFManager */
+
+/** @type {typeof import('./waf_manager') | null} */
+let WAFManager = null
+
 const waf = {
+  /** @type {WAFManager | null} */
   wafManager: null,
   init,
   destroy,
@@ -37,7 +43,7 @@ function init (rules, config) {
   limiter = new Limiter(config.rateLimit)
 
   // dirty require to make startup faster for serverless
-  const WAFManager = require('./waf_manager')
+  WAFManager = require('./waf_manager')
 
   waf.wafManager = new WAFManager(rules, config)
 
@@ -50,6 +56,7 @@ function destroy () {
     waf.wafManager.destroy()
     waf.wafManager = null
   }
+  WAFManager = null
 
   waf.run = noop
   waf.disposeContext = noop
@@ -70,7 +77,7 @@ function updateConfig (product, configId, configPath, config) {
 
   try {
     if (product === 'ASM_DD') {
-      waf.wafManager.removeConfig(waf.wafManager.constructor.defaultWafConfigPath)
+      waf.wafManager.removeConfig((/** @type {NonNullable<typeof WAFManager>} */ (WAFManager)).defaultWafConfigPath)
     }
 
     const updateSucceeded = waf.wafManager.updateConfig(configPath, config)
@@ -97,6 +104,7 @@ function removeConfig (configPath) {
 }
 
 function run (data, req, raspRule) {
+  if (!waf.wafManager) return
   if (!req) {
     const store = storage('legacy').getStore()
     if (!store || !store.req) {
@@ -123,6 +131,7 @@ function run (data, req, raspRule) {
 }
 
 function disposeContext (req) {
+  if (!waf.wafManager) return
   const wafContext = waf.wafManager.getWAFContext(req)
 
   if (wafContext && !wafContext.ddwafContext.disposed) {

@@ -11,7 +11,7 @@ const blocking = require('../../src/appsec/blocking')
 const rules = require('../../src/appsec/recommended.json')
 const { loadRules, clearAllRules } = require('../../src/appsec/rule_manager')
 const waf = require('../../src/appsec/waf')
-const { ACKNOWLEDGED, UNACKNOWLEDGED, ERROR } = require('../../src/remote_config/apply_states')
+const { UNACKNOWLEDGED } = require('../../src/remote_config/apply_states')
 const { getConfigFresh } = require('../helpers/config')
 
 describe('AppSec Rule Manager', () => {
@@ -75,6 +75,16 @@ describe('AppSec Rule Manager', () => {
   })
 
   describe('updateWafFromRC', () => {
+    function createTx (changes) {
+      return {
+        ...changes,
+        changes,
+        ack: sinon.spy(),
+        error: sinon.spy(),
+        markHandled: sinon.spy()
+      }
+    }
+
     function getRcConfigs () {
       return {
         toUnapply: [{
@@ -170,7 +180,7 @@ describe('AppSec Rule Manager', () => {
     })
 
     it('should not apply configs from non ASM products', () => {
-      const rcConfigsForNonAsmProducts = {
+      const changes = {
         toUnapply: [{
           id: 'test.toUnapply',
           product: 'NON_ASM_PRODUCT',
@@ -194,14 +204,12 @@ describe('AppSec Rule Manager', () => {
         }]
       }
 
-      RuleManager.updateWafFromRC(rcConfigsForNonAsmProducts)
+      const tx = createTx(changes)
+      RuleManager.updateWafFromRC(tx)
 
-      assert.strictEqual(rcConfigsForNonAsmProducts.toUnapply[0].apply_state, UNACKNOWLEDGED)
-      assert.ok(!('apply_error' in rcConfigsForNonAsmProducts.toUnapply[0]))
-      assert.strictEqual(rcConfigsForNonAsmProducts.toModify[0].apply_state, UNACKNOWLEDGED)
-      assert.ok(!('apply_error' in rcConfigsForNonAsmProducts.toModify[0]))
-      assert.strictEqual(rcConfigsForNonAsmProducts.toApply[0].apply_state, UNACKNOWLEDGED)
-      assert.ok(!('apply_error' in rcConfigsForNonAsmProducts.toApply[0]))
+      sinon.assert.notCalled(tx.ack)
+      sinon.assert.notCalled(tx.error)
+      sinon.assert.notCalled(tx.markHandled)
 
       sinon.assert.notCalled(waf.updateConfig)
       sinon.assert.notCalled(waf.removeConfig)
@@ -213,64 +221,77 @@ describe('AppSec Rule Manager', () => {
       waf.updateConfig.callThrough()
       waf.removeConfig.callThrough()
 
-      const rcConfigs = getRcConfigs()
+      const changes = getRcConfigs()
+      const tx = createTx(changes)
 
-      RuleManager.updateWafFromRC(rcConfigs)
+      RuleManager.updateWafFromRC(tx)
 
-      sinon.assert.calledOnceWithExactly(waf.removeConfig, rcConfigs.toUnapply[0].path)
+      sinon.assert.calledOnceWithExactly(waf.removeConfig, changes.toUnapply[0].path)
       sinon.assert.calledTwice(waf.updateConfig)
       sinon.assert.calledWith(
         waf.updateConfig,
-        rcConfigs.toApply[0].product,
-        rcConfigs.toApply[0].id,
-        rcConfigs.toApply[0].path,
-        rcConfigs.toApply[0].file
+        changes.toApply[0].product,
+        changes.toApply[0].id,
+        changes.toApply[0].path,
+        changes.toApply[0].file
       )
       sinon.assert.calledWith(
         waf.updateConfig,
-        rcConfigs.toModify[0].product,
-        rcConfigs.toModify[0].id,
-        rcConfigs.toModify[0].path,
-        rcConfigs.toModify[0].file
+        changes.toModify[0].product,
+        changes.toModify[0].id,
+        changes.toModify[0].path,
+        changes.toModify[0].file
       )
 
       assert.strictEqual(waf.wafManager.ddwaf.configPaths.length, 3)
       assert.deepStrictEqual(waf.wafManager.ddwaf.configPaths.sort(), [
         waf.wafManager.constructor.defaultWafConfigPath,
-        rcConfigs.toApply[0].path,
-        rcConfigs.toModify[0].path
+        changes.toApply[0].path,
+        changes.toModify[0].path
       ].sort())
+
+      // Should ack and markHandled for each ASM product config.
+      sinon.assert.calledWithExactly(tx.ack, changes.toUnapply[0].path)
+      sinon.assert.calledWithExactly(tx.ack, changes.toApply[0].path)
+      sinon.assert.calledWithExactly(tx.ack, changes.toModify[0].path)
+      sinon.assert.calledWithExactly(tx.markHandled, changes.toUnapply[0].path)
+      sinon.assert.calledWithExactly(tx.markHandled, changes.toApply[0].path)
+      sinon.assert.calledWithExactly(tx.markHandled, changes.toModify[0].path)
+      sinon.assert.notCalled(tx.error)
     })
 
-    it('should update apply_state and apply_error on successful apply', () => {
+    it('should ack and markHandled on successful apply', () => {
       waf.updateConfig.callThrough()
       waf.removeConfig.callThrough()
 
-      const rcConfigs = getRcConfigs()
+      const changes = getRcConfigs()
+      const tx = createTx(changes)
 
-      RuleManager.updateWafFromRC(rcConfigs)
+      RuleManager.updateWafFromRC(tx)
 
-      assert.strictEqual(rcConfigs.toUnapply[0].apply_state, ACKNOWLEDGED)
-      assert.ok(!('apply_error' in rcConfigs.toUnapply[0]))
-      assert.strictEqual(rcConfigs.toModify[0].apply_state, ACKNOWLEDGED)
-      assert.ok(!('apply_error' in rcConfigs.toModify[0]))
-      assert.strictEqual(rcConfigs.toApply[0].apply_state, ACKNOWLEDGED)
-      assert.ok(!('apply_error' in rcConfigs.toApply[0]))
+      sinon.assert.calledWithExactly(tx.ack, changes.toUnapply[0].path)
+      sinon.assert.calledWithExactly(tx.ack, changes.toApply[0].path)
+      sinon.assert.calledWithExactly(tx.ack, changes.toModify[0].path)
+      sinon.assert.calledWithExactly(tx.markHandled, changes.toUnapply[0].path)
+      sinon.assert.calledWithExactly(tx.markHandled, changes.toApply[0].path)
+      sinon.assert.calledWithExactly(tx.markHandled, changes.toModify[0].path)
+      sinon.assert.notCalled(tx.error)
     })
 
-    it('should update apply_state and apply_error on failed config remove', () => {
+    it('should call tx.error on failed config remove', () => {
       const removeConfigError = new Error('Error remove config')
       waf.removeConfig.throws(removeConfigError)
 
-      const { toUnapply } = getRcConfigs()
+      const changes = { toUnapply: getRcConfigs().toUnapply, toApply: [], toModify: [] }
+      const tx = createTx(changes)
 
-      RuleManager.updateWafFromRC({ toUnapply, toApply: [], toModify: [] })
+      RuleManager.updateWafFromRC(tx)
 
-      assert.strictEqual(toUnapply[0].apply_state, ERROR)
-      assert.strictEqual(toUnapply[0].apply_error, removeConfigError.toString())
+      sinon.assert.calledWithMatch(tx.error, changes.toUnapply[0].path, removeConfigError)
+      sinon.assert.calledWithExactly(tx.markHandled, changes.toUnapply[0].path)
     })
 
-    it('should update apply_state and apply_error on failed config update', () => {
+    it('should call tx.error on failed config update', () => {
       const diagnostics = {
         rules: {
           loaded: [],
@@ -322,19 +343,21 @@ describe('AppSec Rule Manager', () => {
       waf.updateConfig.throws(new waf.WafUpdateError(diagnostics))
 
       const { toModify, toApply } = getRcConfigs()
+      const changes = { toUnapply: [], toApply, toModify }
+      const tx = createTx(changes)
 
-      RuleManager.updateWafFromRC({ toUnapply: [], toApply, toModify })
+      RuleManager.updateWafFromRC(tx)
 
-      assert.strictEqual(toApply[0].apply_state, ERROR)
-      assert.strictEqual(toApply[0].apply_error, JSON.stringify(expectedApplyError))
-      assert.strictEqual(toModify[0].apply_state, ERROR)
-      assert.strictEqual(toModify[0].apply_error, JSON.stringify(expectedApplyError))
+      sinon.assert.calledWithExactly(tx.error, toApply[0].path, JSON.stringify(expectedApplyError))
+      sinon.assert.calledWithExactly(tx.error, toModify[0].path, JSON.stringify(expectedApplyError))
+      sinon.assert.calledWithExactly(tx.markHandled, toApply[0].path)
+      sinon.assert.calledWithExactly(tx.markHandled, toModify[0].path)
     })
 
     it('should report successful waf update', () => {
-      const rcConfigs = getRcConfigs()
+      const tx = createTx(getRcConfigs())
 
-      RuleManager.updateWafFromRC(rcConfigs)
+      RuleManager.updateWafFromRC(tx)
 
       sinon.assert.calledOnceWithExactly(
         reportWafUpdate,
@@ -347,9 +370,9 @@ describe('AppSec Rule Manager', () => {
     it('should report failed waf update', () => {
       waf.updateConfig.throws(new waf.WafUpdateError({ error: 'Update failed' }))
 
-      const rcConfigs = getRcConfigs()
+      const tx = createTx(getRcConfigs())
 
-      RuleManager.updateWafFromRC(rcConfigs)
+      RuleManager.updateWafFromRC(tx)
 
       sinon.assert.calledOnceWithExactly(
         reportWafUpdate,
@@ -364,7 +387,7 @@ describe('AppSec Rule Manager', () => {
         waf.updateConfig.callThrough()
         waf.removeConfig.callThrough()
 
-        const rcConfigs = {
+        const changes = {
           toApply: [
             {
               id: 'asm_dd.test.failed',
@@ -377,9 +400,10 @@ describe('AppSec Rule Manager', () => {
           toUnapply: []
         }
 
-        RuleManager.updateWafFromRC(rcConfigs)
+        const tx = createTx(changes)
+        RuleManager.updateWafFromRC(tx)
 
-        assert.strictEqual(rcConfigs.toApply[0].apply_state, ERROR)
+        sinon.assert.called(tx.error)
 
         assert.deepStrictEqual(waf.wafManager.ddwaf.configPaths, [waf.wafManager.constructor.defaultWafConfigPath])
       })
@@ -422,7 +446,7 @@ describe('AppSec Rule Manager', () => {
           }
         ]
 
-        RuleManager.updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
+        RuleManager.updateWafFromRC(createTx({ toUnapply: [], toApply, toModify: [] }))
 
         const expectedActions = [
           {
@@ -467,7 +491,7 @@ describe('AppSec Rule Manager', () => {
           }
         ]
 
-        RuleManager.updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
+        RuleManager.updateWafFromRC(createTx({ toUnapply: [], toApply, toModify: [] }))
 
         sinon.assert.calledOnceWithExactly(setDefaultBlockingActionParameters, asm.actions)
         sinon.resetHistory()
@@ -479,7 +503,7 @@ describe('AppSec Rule Manager', () => {
           }
         ]
 
-        RuleManager.updateWafFromRC({ toUnapply, toApply: [], toModify: [] })
+        RuleManager.updateWafFromRC(createTx({ toUnapply, toApply: [], toModify: [] }))
 
         sinon.assert.calledOnceWithExactly(setDefaultBlockingActionParameters, [])
       })
