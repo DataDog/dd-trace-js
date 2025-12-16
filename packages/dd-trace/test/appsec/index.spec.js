@@ -1329,6 +1329,16 @@ describe('IP blocking', function () {
 
   let http, appListener, port
 
+  function createTx (changes) {
+    return {
+      ...changes,
+      changes,
+      ack: sinon.spy(),
+      error: sinon.spy(),
+      markHandled: sinon.spy()
+    }
+  }
+
   before(() => {
     return agent.load('http')
       .then(() => {
@@ -1358,7 +1368,7 @@ describe('IP blocking', function () {
       }
     }))
 
-    RuleManager.updateWafFromRC({ toUnapply: [], toApply: [], toModify })
+    RuleManager.updateWafFromRC(createTx({ toUnapply: [], toApply: [], toModify }))
   })
 
   afterEach(() => {
@@ -1460,11 +1470,11 @@ describe('IP blocking', function () {
       }]
 
       beforeEach(() => {
-        RuleManager.updateWafFromRC({
+        RuleManager.updateWafFromRC(createTx({
           toUnapply: [],
           toApply: [],
           toModify: [...toModify, ...toModifyCustomActions]
-        })
+        }))
       })
 
       afterEach(() => {
@@ -1521,11 +1531,11 @@ describe('IP blocking', function () {
       }]
 
       beforeEach(() => {
-        RuleManager.updateWafFromRC({
+        RuleManager.updateWafFromRC(createTx({
           toUnapply: [],
           toApply: [],
           toModify: [...toModify, ...toModifyCustomActions]
-        })
+        }))
       })
 
       afterEach(() => {
