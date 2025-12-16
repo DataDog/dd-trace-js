@@ -214,4 +214,19 @@ $ yarn bench
 ```
 
 
+### Checklist
+Here is a simple checklist to help write a more complete PR:
+- [ ] Unit tests.
+- [ ] Integration tests.
+- [ ] Benchmarks.
+- [ ] TypeScript [definitions][2].
+- [ ] TypeScript [tests][3].
+- [ ] API [documentation][4].
+- [ ] CI [jobs/workflows][5].
+
+
 [1]: https://docs.datadoghq.com/help
+[2]: https://github.com/DataDog/dd-trace-js/blob/master/index.d.ts
+[3]: https://github.com/DataDog/dd-trace-js/blob/master/docs/test.ts
+[4]: https://github.com/DataDog/documentation/blob/master/content/en/tracing/trace_collection/library_config/nodejs.md
+[5]: https://github.com/DataDog/dd-trace-js/blob/master/.github/workflows/plugins.yml
