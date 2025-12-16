@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 
 const axios = require('axios')
-const { expect } = require('chai')
 const { after, before, describe, it } = require('mocha')
 
 const { S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
@@ -217,7 +216,7 @@ describe('Plugin', () => {
 
           agent.assertSomeTraces(traces => {
             const span = traces[0][0]
-            expect(span).to.include({
+            assertObjectContains(span, {
               name: 'aws.request',
               resource: `putObject ${bucketName}`
             })

@@ -122,7 +122,7 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
           `Plugin "${testFramework}" is not initialized because Test Optimization mode is not enabled.`
         )
       )
-      assert.ok(processOutput.includes(expectedOutput))
+      assert.match(processOutput, new RegExp(expectedOutput))
     })
   })
 })

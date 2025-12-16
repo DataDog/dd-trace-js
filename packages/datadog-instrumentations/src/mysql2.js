@@ -4,7 +4,7 @@ const { errorMonitor } = require('node:events')
 
 const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const satisfies = require('semifies')
+const satisfies = require('../../../vendor/dist/semifies')
 
 function wrapConnection (Connection, version) {
   const startCh = channel('apm:mysql2:query:start')

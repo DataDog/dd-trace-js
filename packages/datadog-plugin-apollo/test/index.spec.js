@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 
 const axios = require('axios')
-const { expect } = require('chai')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants.js')
 const agent = require('../../dd-trace/test/plugins/agent.js')
@@ -155,7 +154,7 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].type, 'web')
               assert.strictEqual(traces[0][0].error, 0)
               assert.strictEqual(traces[0][0].meta['graphql.operation.name'], operationName)
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in traces[0][0].meta))
               assert.strictEqual(traces[0][0].meta['graphql.operation.type'], 'query')
               assert.strictEqual(traces[0][0].meta.component, 'apollo.gateway')
               assert.strictEqual(traces[0][0].meta['_dd.integration'], 'apollo.gateway')
@@ -209,7 +208,7 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].resource, '{hello(name:"")}')
               assert.strictEqual(traces[0][0].type, 'web')
               assert.strictEqual(traces[0][0].error, 0)
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in traces[0][0].meta))
               assert.strictEqual(traces[0][0].meta['graphql.operation.type'], 'query')
               assert.strictEqual(traces[0][0].meta.component, 'apollo.gateway')
             })
@@ -241,7 +240,7 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].resource, '{human{address{civicNumber street}name}}')
               assert.strictEqual(traces[0][0].type, 'web')
               assert.strictEqual(traces[0][0].error, 0)
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in traces[0][0].meta))
               assert.strictEqual(traces[0][0].meta['graphql.operation.type'], 'query')
               assert.strictEqual(traces[0][0].meta.component, 'apollo.gateway')
             })
@@ -294,7 +293,7 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
           agent
             .assertSomeTraces((traces) => {
-              expect(traces[0].length).equal(2)
+              assert.strictEqual(traces[0].length, 2)
               assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
               assert.strictEqual(traces[0][0].service, expectedSchema.server.serviceName)
               assert.strictEqual(traces[0][0].error, 1)
@@ -329,7 +328,7 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
           agent
             .assertSomeTraces((traces) => {
-              expect(traces[0].length).equal(3)
+              assert.strictEqual(traces[0].length, 3)
               assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
               assert.strictEqual(traces[0][0].service, expectedSchema.server.serviceName)
               assert.strictEqual(traces[0][0].error, 1)

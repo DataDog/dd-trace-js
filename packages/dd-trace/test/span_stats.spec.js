@@ -10,7 +10,7 @@ require('./setup/core')
 
 const { hostname } = require('os')
 
-const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
+const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
 
 const { version } = require('../src/pkg')
 const pkg = require('../../../package.json')

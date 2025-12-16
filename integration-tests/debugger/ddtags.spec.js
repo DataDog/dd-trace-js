@@ -2,7 +2,7 @@
 
 const os = require('os')
 
-const { assert } = require('chai')
+const assert = require('assert')
 const { setup } = require('./utils')
 const { version } = require('../../package.json')
 
@@ -24,18 +24,18 @@ describe('Dynamic Instrumentation', function () {
         t.triggerBreakpoint()
 
         t.agent.on('debugger-input', ({ query }) => {
-          assert.property(query, 'ddtags')
+          assert.ok(Object.hasOwn(query, 'ddtags'))
 
           const ddtags = extractDDTagsFromQuery(query)
 
-          assert.hasAllKeys(ddtags, [
-            'env',
-            'version',
+          assert.deepStrictEqual([
             'debugger_version',
-            'host_name',
+            'env',
             'git.commit.sha',
-            'git.repository_url'
-          ])
+            'git.repository_url',
+            'host_name',
+            'version',
+          ], Object.keys(ddtags).sort())
 
           assert.strictEqual(ddtags.env, 'test-env')
           assert.strictEqual(ddtags.version, 'test-version')
@@ -58,14 +58,11 @@ describe('Dynamic Instrumentation', function () {
         t.triggerBreakpoint()
 
         t.agent.on('debugger-input', ({ query }) => {
-          assert.property(query, 'ddtags')
+          assert.ok(Object.hasOwn(query, 'ddtags'))
 
           const ddtags = extractDDTagsFromQuery(query)
 
-          assert.hasAllKeys(ddtags, [
-            'debugger_version',
-            'host_name'
-          ])
+          assert.deepStrictEqual(['debugger_version', 'host_name'], Object.keys(ddtags).sort())
 
           done()
         })

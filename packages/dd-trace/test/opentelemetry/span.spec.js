@@ -7,7 +7,7 @@ const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
 const { performance } = require('perf_hooks')
 const { timeOrigin } = performance
-const { timeInputToHrTime } = require('@opentelemetry/core')
+const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
 require('../setup/core')
 
@@ -248,7 +248,7 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
 
     const spanContext = span.spanContext()
-    expect(spanContext).to.be.an.instanceOf(SpanContext)
+    assert.ok(spanContext instanceof SpanContext)
     assert.strictEqual(spanContext._ddContext, span._ddSpan.context())
   })
 
@@ -367,13 +367,13 @@ describe('OTel Span', () => {
     const unset = makeSpan('name')
     const unsetCtx = unset._ddSpan.context()
     unset.setStatus({ code: 0, message: 'unset' })
-    assert.ok(!Object.hasOwn(unsetCtx._tags, ERROR_MESSAGE))
+    assert.ok(!(ERROR_MESSAGE in unsetCtx._tags))
 
     const ok = makeSpan('name')
     const okCtx = ok._ddSpan.context()
     ok.setStatus({ code: 1, message: 'ok' })
-    assert.ok(!Object.hasOwn(okCtx._tags, ERROR_MESSAGE))
-    assert.ok(!Object.hasOwn(okCtx._tags, IGNORE_OTEL_ERROR))
+    assert.ok(!(ERROR_MESSAGE in okCtx._tags))
+    assert.ok(!(IGNORE_OTEL_ERROR in okCtx._tags))
 
     const error = makeSpan('name')
     const errorCtx = error._ddSpan.context()
@@ -410,7 +410,7 @@ describe('OTel Span', () => {
 
     let formatted = spanFormat(span._ddSpan)
     assert.strictEqual(formatted.error, 0)
-    assert.ok(!Object.hasOwn(formatted.meta, 'doNotSetTraceError'))
+    assert.ok(!('doNotSetTraceError' in formatted.meta))
 
     // Set error code
     span.setStatus({ code: 2, message: 'error' })
@@ -468,7 +468,7 @@ describe('OTel Span', () => {
     const { _tags } = span._ddSpan.context()
 
     span.setStatus({ code: 2, message: 'error' })
-    expect(_tags).to.not.have.property(ERROR_MESSAGE, 'error')
+    assert.ok(!(ERROR_MESSAGE in _tags) || _tags[ERROR_MESSAGE] !== 'error')
   })
 
   it('should mark ended and expose recording state', () => {

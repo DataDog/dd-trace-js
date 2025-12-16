@@ -1,8 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 
 require('../../setup/core')
@@ -52,7 +52,7 @@ describe('LogPropagator', () => {
 
       propagator.inject(null, carrier)
 
-      expect(carrier).to.deep.include({
+      assertObjectContains(carrier, {
         dd: {
           service: 'test',
           env: 'dev',

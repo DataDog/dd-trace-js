@@ -1,8 +1,9 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const path = require('path')
 const Axios = require('axios')
-const { assert } = require('chai')
 const msgpack = require('@msgpack/msgpack')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 
@@ -49,18 +50,18 @@ describe('RASP', () => {
 
   async function assertExploitDetected () {
     await agent.assertMessageReceived(({ headers, payload }) => {
-      assert.property(payload[0][0].meta, '_dd.appsec.json')
-      assert.include(payload[0][0].meta['_dd.appsec.json'], '"test-rule-id-2"')
+      assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
+      assert.match(payload[0][0].meta['_dd.appsec.json'], /"test-rule-id-2"/)
     })
   }
 
   async function assertBodyReported (expectedBody, truncated) {
     await agent.assertMessageReceived(({ headers, payload }) => {
-      assert.property(payload[0][0].meta_struct, 'http.request.body')
+      assert.ok(Object.hasOwn(payload[0][0].meta_struct, 'http.request.body'))
       assert.deepStrictEqual(msgpack.decode(payload[0][0].meta_struct['http.request.body']), expectedBody)
 
       if (truncated) {
-        assert.property(payload[0][0].meta, '_dd.appsec.rasp.request_body_size.exceeded')
+        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.rasp.request_body_size.exceeded'))
       }
     })
   }
@@ -338,8 +339,8 @@ describe('RASP', () => {
         }
 
         // not blocked
-        assert.notEqual(response.status, 418)
-        assert.notEqual(response.status, 403)
+        assert.notStrictEqual(response.status, 418)
+        assert.notStrictEqual(response.status, 403)
         await assertExploitDetected()
       })
     })
@@ -399,7 +400,7 @@ describe('RASP', () => {
           }
 
           await agent.assertMessageReceived(({ headers, payload }) => {
-            assert.notProperty(payload[0][0].meta_struct, 'http.request.body')
+            assert.ok(!('http.request.body' in payload[0][0].meta_struct))
           })
         }
       })

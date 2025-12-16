@@ -1,11 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
-const { Span } = require('opentracing')
+const { Span } = require('../../../vendor/dist/opentracing')
 
 require('./setup/core')
 
@@ -28,7 +26,7 @@ describe('Scope', () => {
 
   describe('activate()', () => {
     it('should return the value returned by the callback', () => {
-      expect(scope.activate(span, () => 'test')).to.equal('test')
+      assert.strictEqual(scope.activate(span, () => 'test'), 'test')
     })
 
     it('should preserve the surrounding scope', () => {
@@ -40,7 +38,7 @@ describe('Scope', () => {
     })
 
     it('should support an invalid callback', () => {
-      expect(() => { scope.activate(span, 'invalid') }).to.not.throw(Error)
+      assert.doesNotThrow(() => { scope.activate(span, 'invalid') }, Error)
     })
 
     it('should activate the span on the current scope', () => {
