@@ -1,6 +1,6 @@
 'use strict'
 
-const satisfies = require('semifies')
+const satisfies = require('../../../vendor/dist/semifies')
 
 const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')

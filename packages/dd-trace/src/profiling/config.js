@@ -3,7 +3,7 @@
 const os = require('os')
 const path = require('path')
 const { URL, format, pathToFileURL } = require('url')
-const satisfies = require('semifies')
+const satisfies = require('../../../../vendor/dist/semifies')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')

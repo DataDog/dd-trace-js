@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
-const opentracing = require('opentracing')
+const opentracing = require('../../../../vendor/dist/opentracing')
 const proxyquire = require('proxyquire')
 
 const os = require('node:os')
