@@ -6,6 +6,7 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const os = require('node:os')
 const path = require('node:path')
+const satisfies = require('semifies')
 
 require('../setup/core')
 
@@ -507,6 +508,49 @@ describe('config', () => {
       })
     })
   }
+
+  describe('async context', () => {
+    const isSupported = samplingContextsAvailable && satisfies(process.versions.node, '>=24.0.0')
+    describe('where supported', () => {
+      it('should be on by default', function () {
+        if (!isSupported) {
+          this.skip()
+        } else {
+          const config = new Config({})
+          assert.strictEqual(config.asyncContextFrameEnabled, true)
+        }
+      })
+
+      it('can be turned off by env var', function () {
+        if (!isSupported) {
+          this.skip()
+        } else {
+          const config = new Config({ useAsyncContextFrame: false })
+          assert.strictEqual(config.asyncContextFrameEnabled, false)
+        }
+      })
+    })
+
+    describe('where not supported', function () {
+      it('should be off by default', function () {
+        if (isSupported) {
+          this.skip()
+        } else {
+          const config = new Config({})
+          assert.strictEqual(config.asyncContextFrameEnabled, false)
+        }
+      })
+
+      it('can not be turned on by env var', function () {
+        if (isSupported) {
+          this.skip()
+        } else {
+          const config = new Config({ useAsyncContextFrame: true })
+          assert.strictEqual(config.asyncContextFrameEnabled, false)
+        }
+      })
+    })
+  })
 
   describe('upload compression settings', () => {
     const expectConfig = (env, method, level, warning) => {
