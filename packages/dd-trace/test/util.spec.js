@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 
 require('./setup/core')
@@ -44,22 +42,22 @@ describe('util', () => {
   it('isTrue works', () => {
     TRUES.forEach((v) => {
       assert.strictEqual(isTrue(v), true)
-      expect(isTrue(String(v))).to.equal(true)
+      assert.strictEqual(isTrue(String(v)), true)
     })
     FALSES.forEach((v) => {
       assert.strictEqual(isTrue(v), false)
-      expect(isTrue(String(v))).to.equal(false)
+      assert.strictEqual(isTrue(String(v)), false)
     })
   })
 
   it('isFalse works', () => {
     FALSES.forEach((v) => {
       assert.strictEqual(isFalse(v), true)
-      expect(isFalse(String(v))).to.equal(true)
+      assert.strictEqual(isFalse(String(v)), true)
     })
     TRUES.forEach((v) => {
       assert.strictEqual(isFalse(v), false)
-      expect(isFalse(String(v))).to.equal(false)
+      assert.strictEqual(isFalse(String(v)), false)
     })
   })
 

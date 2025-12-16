@@ -1,14 +1,16 @@
 'use strict'
 
+const assert = require('assert')
 const childProcess = require('child_process')
 const { execSync, fork, spawn } = childProcess
-const http = require('http')
 const { existsSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
 const fs = require('fs/promises')
+const http = require('http')
 const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
-const assert = require('assert')
+const { inspect } = require('util')
+
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
@@ -641,7 +643,7 @@ function setShouldKill (value) {
 // we use our own assertObjectContains, to account for any types
 const assertObjectContains = function assertObjectContains (actual, expected) {
   if (Array.isArray(expected)) {
-    assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
+    assert.ok(Array.isArray(actual), `${msg ?? ''}Expected array but got ${inspect(actual)}`)
     let startIndex = 0
     for (const expectedItem of expected) {
       let found = false
@@ -649,9 +651,9 @@ const assertObjectContains = function assertObjectContains (actual, expected) {
         const actualItem = actual[i]
         try {
           if (expectedItem !== null && typeof expectedItem === 'object') {
-            assertObjectContains(actualItem, expectedItem)
+            assertObjectContains(actualItem, expectedItem, msg)
           } else {
-            assert.strictEqual(actualItem, expectedItem)
+            assert.strictEqual(actualItem, expectedItem, msg)
           }
           startIndex = i + 1
           found = true
@@ -660,12 +662,13 @@ const assertObjectContains = function assertObjectContains (actual, expected) {
           continue
         }
       }
-      assert.ok(found, `Expected array to contain ${JSON.stringify(expectedItem)}`)
+      assert.ok(found, `${msg ?? ''}Expected array ${inspect(actual)} to contain ${inspect(expectedItem)}`)
     }
     return
   }
 
   for (const [key, val] of Object.entries(expected)) {
+    assert.ok(Object.hasOwn(actual, key), `Expected object to have key ${key}`)
     if (val === ANY_STRING) {
       assert.strictEqual(typeof actual[key], 'string', `Expected ${key} to be a string but got ${typeof actual[key]}`)
     } else if (val === ANY_NUMBER) {
@@ -678,7 +681,8 @@ const assertObjectContains = function assertObjectContains (actual, expected) {
       assert.strictEqual(typeof actual[key], 'object')
       assertObjectContains(actual[key], val)
     } else {
-      assert.strictEqual(actual[key], expected[key])
+      assert.ok(actual, msg)
+      assert.strictEqual(actual[key], expected[key], msg)
     }
   }
 }

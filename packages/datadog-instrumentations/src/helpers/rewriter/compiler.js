@@ -6,19 +6,19 @@ let esquery
 
 module.exports = {
   parse: (...args) => {
-    meriyah ??= require('meriyah')
+    meriyah ??= require('../../../../../vendor/dist/meriyah')
 
     return meriyah.parse(...args)
   },
 
   generate: (...args) => {
-    astring ??= require('astring')
+    astring ??= require('../../../../../vendor/dist/astring')
 
     return astring.generate(...args)
   },
 
   traverse: (ast, query, visitor) => {
-    esquery ??= require('esquery').default
+    esquery ??= require('../../../../../vendor/dist/esquery').default
 
     const selector = esquery.parse(query)
 

@@ -1,7 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('assert')
 describe('mocha-fail-hook-sync', () => {
   beforeEach(() => {
     const value = ''
@@ -9,6 +8,6 @@ describe('mocha-fail-hook-sync', () => {
   })
 
   it('will not run but be reported as failed', () => {
-    expect(true).to.equal(true)
+    assert.strictEqual(true, true)
   })
 })

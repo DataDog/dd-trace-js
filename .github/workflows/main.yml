@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout (minimal)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           sparse-checkout: |
             .github

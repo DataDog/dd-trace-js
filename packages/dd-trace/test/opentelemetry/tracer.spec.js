@@ -1,13 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
 const { performance } = require('perf_hooks')
 const api = require('@opentelemetry/api')
-const { hrTime, timeInputToHrTime } = require('@opentelemetry/core')
+const { hrTime, timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
 require('../setup/core')
 
@@ -54,10 +52,10 @@ describe('OTel Tracer', () => {
     const otelTracer = new Tracer({}, {}, tracerProvider)
 
     const span = otelTracer.startSpan('name')
-    expect(span).to.be.an.instanceOf(Span)
+    assert.ok(span instanceof Span)
 
     const ddSpan = span._ddSpan
-    expect(ddSpan).to.be.an.instanceOf(DatadogSpan)
+    assert.ok(ddSpan instanceof DatadogSpan)
     assert.strictEqual(ddSpan._name, 'name')
   })
 
@@ -128,7 +126,7 @@ describe('OTel Tracer', () => {
     const otelTracer = new Tracer({}, {}, tracerProvider)
 
     otelTracer.startActiveSpan('name', (span) => {
-      expect(span).to.be.an.instanceOf(Span)
+      assert.ok(span instanceof Span)
       assert.strictEqual(span._ddSpan, tracer.scope().active())
     })
   })
@@ -182,7 +180,7 @@ describe('OTel Tracer', () => {
       const childContext = inner._ddSpan.context()
 
       assert.notStrictEqual(childContext.toTraceId(), parentContext.toTraceId())
-      expect(childContext._parentId).to.not.eql(parentContext._spanId)
+      assert.notDeepStrictEqual(childContext._parentId, parentContext._spanId)
     })
   })
 
