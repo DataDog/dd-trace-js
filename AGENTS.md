@@ -8,7 +8,9 @@
 
 ## Setup
 
-- Install dependencies: `yarn`
+- Install npm dependencies: `yarn`
+
+**Note:** This project uses yarn, not npm. Always use `yarn` commands instead of `npm` commands.
 
 ## Project Overview
 
@@ -50,7 +52,7 @@ Follow a similar workflow using individual test files, then component-specific t
 
 ### Running Individual Tests
 
-**IMPORTANT**: Never run `yarn test` or `npm test` directly as it requires too much setup and takes too long. Instead:
+**IMPORTANT**: Never run `yarn test` directly as it requires too much setup and takes too long. Instead:
 
 - Use `mocha` directly on test files with the appropriate setup file:
   - For unit tests: `./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" path/to/test.spec.js`
