@@ -304,6 +304,41 @@ assertObjectContains(response, {
 
 This helper performs partial deep equality checking and provides better error messages than individual assertions.
 
+### Time-Based Testing
+
+**Never rely on actual time passing in unit tests.** Tests that use `setTimeout()`, `setInterval()`, or `Date.now()` should use [sinon's fake timers](https://sinonjs.org/releases/latest/fake-timers/) to mock time. This makes tests:
+- Run instantly instead of waiting for real time
+- Deterministic and reliable (no timing-related flakiness)
+- Easier to reason about
+
+Example:
+
+```js
+const sinon = require('sinon')
+
+describe('my test', () => {
+  let clock
+
+  beforeEach(() => {
+    clock = sinon.useFakeTimers()
+  })
+
+  afterEach(() => {
+    clock.restore()
+  })
+
+  it('should handle timeout', () => {
+    let called = false
+    setTimeout(() => { called = true }, 1000)
+
+    clock.tick(1000) // Instantly advance time by 1 second
+    assert.equal(called, true)
+  })
+})
+```
+
+Use `clock.tick(ms)` to advance time, `clock.restore()` to restore real timers, and `clock.reset()` to reset fake time to 0.
+
 ### Test Coverage
 
 Coverage is measured with nyc. To check coverage for your changes, use the `:ci` variant of the test scripts:

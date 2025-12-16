@@ -104,6 +104,10 @@ assert.equal(actual, expected)
 assertObjectContains(response, { status: 200, body: { user: { name: 'Alice' } } })
 ```
 
+### Time-Based Testing
+
+**Never rely on actual time passing in unit tests.** Use sinon's fake timers to mock time and make tests deterministic and fast.
+
 ## Code Style & Linting
 
 ### Linting & Naming
