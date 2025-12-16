@@ -18,7 +18,7 @@ try {
 }
 
 exec('rm -rf ./out', { cwd: './docs' })
-exec('yarn type:doc') // run first because typedoc requires an empty directory
+exec('yarn type:doc:build') // run first because typedoc requires an empty directory
 exec('git init', { cwd: './docs/out' }) // cloning would overwrite generated docs
 exec('git remote add origin git@github.com:DataDog/dd-trace-js.git', { cwd: './docs/out' })
 exec('git add -A', { cwd: './docs/out' })
