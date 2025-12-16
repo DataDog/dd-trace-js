@@ -74,18 +74,13 @@ Eventually we plan to look into putting these permission-required tests behind a
 
 All commits in a pull request must be signed. We require commit signing to ensure the authenticity and integrity of contributions to the project.
 
-To sign your commits, you need to configure Git with your GPG key. Follow these steps:
+**Datadog employees:** We recommend using the [sign-pull-request tool](https://datadoghq.atlassian.net/wiki/spaces/SECENG/pages/5371593157/Easily+sign+commits+with+sign-pull-request+tool) for easy signing of commits.
 
-1. [Generate a GPG key](https://docs.github.com/en/authentication/managing-commit-signature-verification/generating-a-new-gpg-key) if you don't already have one
-2. [Add the GPG key to your GitHub account](https://docs.github.com/en/authentication/managing-commit-signature-verification/adding-a-gpg-key-to-your-github-account)
-3. [Configure Git to use your GPG key](https://docs.github.com/en/authentication/managing-commit-signature-verification/telling-git-about-your-signing-key)
-4. Sign commits by using the `-S` flag: `git commit -S -m "Your commit message"`
+You can also sign your commits manually using one of the following methods:
 
-To automatically sign all commits, you can configure Git globally:
-
-```sh
-$ git config --global commit.gpgsign true
-```
+- [Signing commits with GPG](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits)
+- [Signing commits with SSH](https://docs.github.com/en/authentication/managing-commit-signature-verification/about-commit-signature-verification#ssh-commit-signature-verification)
+- [Signing commits with 1Password](https://developer.1password.com/docs/ssh/git-commit-signing/)
 
 If you have already created commits without signing them, you can sign them retroactively by using an interactive rebase:
 
