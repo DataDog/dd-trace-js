@@ -325,7 +325,7 @@ for (const item of items) {
 
 **Use the `log` module for all logging in production code.**
 
-The log module is located at `packages/dd-trace/src/log/index.js`. Import it relative to your file location.
+The log module is located at `packages/dd-trace/src/log/index.js`.
 
 To add debug logs in your code:
 
