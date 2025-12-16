@@ -403,7 +403,6 @@ $ yarn lint
 This also checks that the `LICENSE-3rdparty.csv` file is up-to-date, and checks
 dependencies for vulnerabilities.
 
-
 ### Benchmarks
 
 Our microbenchmarks live in `benchmark/sirun`. Each directory in there
@@ -417,6 +416,5 @@ most efficient algorithm. To run your benchmark, use:
 ```sh
 $ yarn bench
 ```
-
 
 [1]: https://docs.datadoghq.com/help
