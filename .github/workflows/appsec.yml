@@ -29,7 +29,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -49,7 +49,7 @@ jobs:
       - run: yarn test:appsec:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -65,7 +65,7 @@ jobs:
         with:
           cache: 'true'
       - run: yarn test:appsec:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -94,7 +94,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -121,7 +121,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -148,7 +148,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -166,7 +166,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -184,7 +184,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -202,7 +202,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -226,7 +226,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -250,7 +250,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -272,7 +272,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -320,7 +320,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: appsec-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -338,7 +338,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -374,7 +374,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -392,7 +392,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -410,7 +410,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -447,7 +447,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
