@@ -216,10 +216,19 @@ describe('TracerProxy', () => {
       enable: sinon.stub()
     }
 
+    const appsecRemoteConfig = {
+      configureAppsec: sinon.stub()
+    }
+
     handlers = new Map()
     rc = {
       setProductHandler (product, handler) { handlers.set(product, handler) },
-      removeProductHandler (product) { handlers.delete(product) }
+      removeProductHandler (product) { handlers.delete(product) },
+      updateCapabilities: sinon.spy(),
+      setBatchHandler: sinon.spy(),
+      removeBatchHandler: sinon.spy(),
+      subscribeProducts: sinon.spy(),
+      unsubscribeProducts: sinon.spy()
     }
 
     remoteConfig.enable.returns(rc)
@@ -241,6 +250,7 @@ describe('TracerProxy', () => {
       './profiler': profiler,
       './appsec': appsec,
       './appsec/iast': iast,
+      './appsec/remote_config': appsecRemoteConfig,
       './telemetry': telemetry,
       './remote_config': remoteConfig,
       './aiguard/sdk': AIGuardSdk,
