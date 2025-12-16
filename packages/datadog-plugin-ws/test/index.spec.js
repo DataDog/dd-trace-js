@@ -392,7 +392,10 @@ describe('Plugin', () => {
       })
 
       describe('with span pointers', () => {
+        let tracer
+
         beforeEach(async () => {
+          tracer = require('../../dd-trace')
           await agent.load(['ws'], [{
             service: 'ws-with-pointers',
             traceWebsocketMessagesEnabled: true,
@@ -401,13 +404,15 @@ describe('Plugin', () => {
 
           wsServer = new WebSocket.Server({ port: clientPort })
 
-          // Inject distributed tracing headers to enable span pointers
-          client = new WebSocket(`ws://localhost:${clientPort}/${route}?active=true`, {
-            headers: {
-              'x-datadog-trace-id': '1234567890',
-              'x-datadog-parent-id': '9876543210',
-              'x-datadog-sampling-priority': '1'
-            }
+          // Create a parent span within a trace to properly set up distributed tracing context
+          tracer.trace('test.parent', parentSpan => {
+            const headers = {}
+            tracer.inject(parentSpan, 'http_headers', headers)
+            
+            // Inject distributed tracing headers to enable span pointers
+            client = new WebSocket(`ws://localhost:${clientPort}/${route}?active=true`, {
+              headers
+            })
           })
         })
 
@@ -434,7 +439,7 @@ describe('Plugin', () => {
             if (producerSpan.meta['_dd.span_links']) {
               const spanLinks = JSON.parse(producerSpan.meta['_dd.span_links'])
               const pointerLink = spanLinks.find(link =>
-                link.attributes && link.attributes['link.kind'] === 'span-pointer'
+                link.attributes && link.attributes['dd.kind'] === 'span-pointer'
               )
               if (pointerLink) {
                 expect(pointerLink.attributes).to.have.property('ptr.kind', 'websocket')
@@ -470,7 +475,7 @@ describe('Plugin', () => {
               if (consumerSpan.meta['_dd.span_links']) {
                 const spanLinks = JSON.parse(consumerSpan.meta['_dd.span_links'])
                 const pointerLink = spanLinks.find(link =>
-                  link.attributes && link.attributes['link.kind'] === 'span-pointer'
+                  link.attributes && link.attributes['dd.kind'] === 'span-pointer'
                 )
                 if (pointerLink) {
                   expect(pointerLink.attributes).to.have.property('ptr.kind', 'websocket')
@@ -509,7 +514,7 @@ describe('Plugin', () => {
               if (trace[0].meta['_dd.span_links']) {
                 const spanLinks = JSON.parse(trace[0].meta['_dd.span_links'])
                 const pointerLink = spanLinks.find(link =>
-                  link.attributes && link.attributes['link.kind'] === 'span-pointer'
+                  link.attributes && link.attributes['dd.kind'] === 'span-pointer'
                 )
                 if (pointerLink) {
                   const hash = pointerLink.attributes['ptr.hash']

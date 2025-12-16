@@ -78,7 +78,7 @@ class WSReceiverPlugin extends TracingPlugin {
         const handshakeSpan = ctx.socket.handshakeSpan
 
         // Only add span pointers if distributed tracing is enabled and handshake has distributed context
-        if (hasDistributedTracingContext(handshakeSpan)) {
+        if (hasDistributedTracingContext(handshakeSpan, ctx.socket)) {
           const counter = incrementWebSocketCounter(ctx.socket, 'receiveCounter')
           const handshakeContext = handshakeSpan.context()
 
