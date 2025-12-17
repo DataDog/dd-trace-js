@@ -65,19 +65,19 @@ function buildWebSocketSpanPointerHash (handshakeTraceId, handshakeSpanId, count
 /**
  * Checks if the handshake span has extracted distributed tracing context.
  * A websocket server must not set the span pointer if the handshake has not extracted a context.
- * 
+ *
  * A span has distributed tracing context if it has a parent context that was
  * extracted from headers (remote parent).
- * 
+ *
  * @param {object} span - The handshake span
- * @param {object} socket - The WebSocket socket object  
+ * @param {object} socket - The WebSocket socket object
  * @returns {boolean} True if the span has distributed tracing context
  */
 function hasDistributedTracingContext (span, socket) {
   if (!span) return false
   const context = span.context()
   if (!context) return false
-  
+
   // Check if this span has a parent. If the parent was extracted from remote headers,
   // then this span is part of a distributed trace.
   // We check if the span has a parent by looking at _parentId.
@@ -89,13 +89,13 @@ function hasDistributedTracingContext (span, socket) {
   if (context._parentId !== null) {
     return true
   }
-  
+
   // Fallback check: look for distributed tracing headers in the stored request headers
   if (socket && socket.requestHeaders) {
     const headers = socket.requestHeaders
-    return !!(headers['x-datadog-trace-id'] || headers['traceparent'])
+    return !!(headers['x-datadog-trace-id'] || headers.traceparent)
   }
-  
+
   return false
 }
 

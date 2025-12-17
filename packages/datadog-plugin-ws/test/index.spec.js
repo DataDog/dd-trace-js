@@ -2,6 +2,7 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
+const { expect } = require('chai')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
@@ -408,7 +409,7 @@ describe('Plugin', () => {
           tracer.trace('test.parent', parentSpan => {
             const headers = {}
             tracer.inject(parentSpan, 'http_headers', headers)
-            
+
             // Inject distributed tracing headers to enable span pointers
             client = new WebSocket(`ws://localhost:${clientPort}/${route}?active=true`, {
               headers

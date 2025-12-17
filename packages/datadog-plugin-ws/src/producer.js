@@ -66,7 +66,7 @@ class WSProducerPlugin extends TracingPlugin {
       // Add span pointer for context propagation
       if (this.config.traceWebsocketMessagesEnabled && ctx.socket.handshakeSpan) {
         const handshakeSpan = ctx.socket.handshakeSpan
-        
+
         // Only add span pointers if distributed tracing is enabled and handshake has distributed context
         if (hasDistributedTracingContext(handshakeSpan, ctx.socket)) {
           const counter = incrementWebSocketCounter(ctx.socket, 'sendCounter')
