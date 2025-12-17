@@ -21,6 +21,10 @@ function getIsAzureFunction () {
   return isAzureFunction
 }
 
+function getIsFlexConsumptionAzureFunction () {
+  return getIsAzureFunction() && getEnvironmentVariable('WEBSITE_SKU') === 'FlexConsumption'
+}
+
 function isInServerlessEnvironment () {
   const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
   const isGCPFunction = getIsGCPFunction()
@@ -32,5 +36,6 @@ function isInServerlessEnvironment () {
 module.exports = {
   getIsGCPFunction,
   getIsAzureFunction,
+  getIsFlexConsumptionAzureFunction,
   isInServerlessEnvironment
 }
