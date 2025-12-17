@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -12,14 +13,12 @@ describe('Dynamic Instrumentation', function () {
 
       it('should prune snapshot if payload is too large', function (done) {
         t.agent.on('debugger-input', ({ payload: [payload] }) => {
-          assert.ok(Buffer.byteLength(JSON.stringify(payload)) < 1024 * 1024) // 1MB
-          assert.ok(!('captures' in payload.debugger.snapshot))
-          assert.strictEqual(
-            payload.debugger.snapshot.captureError,
-            'Snapshot was too large (max allowed size is 1 MiB). ' +
-            'Consider reducing the capture depth or turn off "Capture Variables" completely, ' +
-            'and instead include the variables of interest directly in the message template.'
-          )
+          const payloadSize = Buffer.byteLength(JSON.stringify(payload))
+          assert.ok(payloadSize < 1024 * 1024) // 1MB
+
+          const capturesJson = JSON.stringify(payload.debugger.snapshot.captures)
+          assert.ok(capturesJson.includes('"pruned":true'))
+
           done()
         })
 
