@@ -1258,6 +1258,29 @@ describe('sdk', () => {
         value: 'it is super toxic!'
       }), { message: 'value must be a boolean for a boolean metric' })
     })
+
+    describe('with DD_TRACE_OTEL_ENABLED set', () => {
+      before(() => {
+        process.env.DD_TRACE_OTEL_ENABLED = 'true'
+      })
+
+      after(() => {
+        delete process.env.DD_TRACE_OTEL_ENABLED
+      })
+
+      it('adds source:otel tag', () => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          timestampMs: 1234,
+          label: 'test',
+          metricType: 'score',
+          value: 0.6
+        })
+
+        const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
+        assert.ok(evalMetric.tags.includes('source:otel'), 'Expected source:otel tag to be present')
+      })
+    })
   })
 
   describe('flush', () => {

@@ -26,7 +26,7 @@ jobs:
           npm init -y
       - name: actionlint
         id: actionlint
-        uses: raven-actions/actionlint@3a24062651993d40fed1019b58ac6fbdfbf276cc # v2.0.1
+        uses: raven-actions/actionlint@963d4779ef039e217e5d0e6fd73ce9ab7764e493 # v2.1.0
         with:
           matcher: true
           fail-on-error: true
