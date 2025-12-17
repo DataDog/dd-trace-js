@@ -11,8 +11,8 @@ let rc
 
 /**
  * Configures remote config handlers for appsec features
- * @param {Object} rcInstance - RemoteConfigManager instance
  *
+ * @param {Object} rcInstance - RemoteConfig instance
  * @param {Object} config - Tracer config
  * @param {Object} appsec - Appsec module
  */
