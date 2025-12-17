@@ -422,7 +422,7 @@ describe('Plugin', () => {
           agent.close({ ritmReset: false, wipe: true })
         })
 
-        it('should add span pointers to producer spans', () => {
+        it('should add span pointers to producer spans', async () => {
           wsServer.on('connection', (ws) => {
             ws.send('test message with pointer')
           })
@@ -431,7 +431,9 @@ describe('Plugin', () => {
             assert.strictEqual(data.toString(), 'test message with pointer')
           })
 
-          return agent.assertSomeTraces(traces => {
+          let didFindPointerLink = false
+
+          await agent.assertSomeTraces(traces => {
             const producerSpan = traces[0][0]
             assert.strictEqual(producerSpan.name, 'websocket.send')
             assert.strictEqual(producerSpan.service, 'ws-with-pointers')
@@ -443,6 +445,7 @@ describe('Plugin', () => {
                 link.attributes && link.attributes['dd.kind'] === 'span-pointer'
               )
               if (pointerLink) {
+                didFindPointerLink = true
                 expect(pointerLink.attributes).to.have.property('ptr.kind', 'websocket')
                 expect(pointerLink.attributes).to.have.property('ptr.dir', 'd')
                 expect(pointerLink.attributes).to.have.property('ptr.hash')
@@ -454,6 +457,8 @@ describe('Plugin', () => {
               }
             }
           })
+
+          expect(didFindPointerLink).to.be.true
         })
 
         it('should add span pointers to consumer spans', () => {
