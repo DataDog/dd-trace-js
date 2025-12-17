@@ -64,7 +64,7 @@ describe('Plugin', () => {
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
           },
-          tags: { ml_app: 'test', integration: 'genai' },
+          tags: { ml_app: 'test', integration: 'google_genai' },
         })
       })
     })
@@ -110,7 +110,7 @@ describe('Plugin', () => {
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
           },
-          tags: { ml_app: 'test', integration: 'genai' },
+          tags: { ml_app: 'test', integration: 'google_genai' },
         })
       })
     })
@@ -133,7 +133,7 @@ describe('Plugin', () => {
           modelProvider: 'google',
           inputDocuments: [{ text: 'Hello, world!' }],
           outputValue: MOCK_STRING,
-          tags: { ml_app: 'test', integration: 'genai' },
+          tags: { ml_app: 'test', integration: 'google_genai' },
         })
       })
     })
