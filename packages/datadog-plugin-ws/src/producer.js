@@ -50,7 +50,7 @@ class WSProducerPlugin extends TracingPlugin {
 
   bindAsyncStart (ctx) {
     if (!ctx.span) {
-      log.warn('Failed to run bind async start for WS producer plugin: ctx.span is not found')
+      log.warn('bindAsyncStart: cannot find span')
       return
     }
     ctx.span.finish()
