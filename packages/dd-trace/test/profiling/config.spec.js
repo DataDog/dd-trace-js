@@ -525,8 +525,13 @@ describe('config', () => {
         if (!isSupported) {
           this.skip()
         } else {
-          const config = new Config({ useAsyncContextFrame: false })
-          assert.strictEqual(config.asyncContextFrameEnabled, false)
+          process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = '0'
+          try {
+            const config = new Config({})
+            assert.strictEqual(config.asyncContextFrameEnabled, false)
+          } finally {
+            delete process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
+          }
         }
       })
     })
@@ -545,8 +550,13 @@ describe('config', () => {
         if (isSupported) {
           this.skip()
         } else {
-          const config = new Config({ useAsyncContextFrame: true })
-          assert.strictEqual(config.asyncContextFrameEnabled, false)
+          process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = '1'
+          try {
+            const config = new Config({})
+            assert.strictEqual(config.asyncContextFrameEnabled, false)
+          } finally {
+            delete process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
+          }
         }
       })
     })

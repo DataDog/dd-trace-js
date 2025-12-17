@@ -229,10 +229,7 @@ class Config {
         canUseAsyncContextFrame = hasExecArg('--experimental-async-context-frame')
       }
     }
-    this.asyncContextFrameEnabled = isTrue(
-      options.useAsyncContextFrame ??
-      DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED ?? canUseAsyncContextFrame
-    )
+    this.asyncContextFrameEnabled = isTrue(DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED ?? canUseAsyncContextFrame)
     if (this.asyncContextFrameEnabled && !canUseAsyncContextFrame) {
       if (!samplingContextsAvailable) {
         turnOffAsyncContextFrame(`on ${process.platform}`)
