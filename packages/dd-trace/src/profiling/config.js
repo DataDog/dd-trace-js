@@ -227,14 +227,12 @@ class Config {
         if (hasExecArg('--no-async-context-frame')) {
           turnOffAsyncContextFrame('with --no-async-context-frame')
         }
-      } else if (satisfies(process.versions.node, '>=23.0.0')) {
+      } else if (satisfies(process.versions.node, '>=22.9.0')) {
         if (!hasExecArg('--experimental-async-context-frame')) {
           turnOffAsyncContextFrame('without --experimental-async-context-frame')
         }
       } else {
-        // NOTE: technically, this should work starting with 22.7.0 which is when
-        // AsyncContextFrame debuted, but it would require a change in pprof-nodejs too.
-        turnOffAsyncContextFrame('but it requires at least Node.js 23')
+        turnOffAsyncContextFrame('but it requires at least Node.js 22.9.0')
       }
     }
 
