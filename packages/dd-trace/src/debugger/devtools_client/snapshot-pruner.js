@@ -63,29 +63,17 @@ class TreeNode {
   }
 
   /**
-   * Priority key for sorting in queue (higher values = higher priority for pruning). Checks ancestors for
-   * `notCapturedReason` flags to prioritize children of partially captured objects (where the flag is on the parent).
-   * Cached to avoid repeated ancestor chain walks during heap operations.
+   * Priority key for sorting in queue (higher values = higher priority for pruning).
+   * Cached to avoid repeated computation during heap operations.
    *
    * @returns {[number, number, number, number]} Priority key tuple: [not_captured_depth, level, not_captured, size]
    */
   get priorityKey () {
     if (this.#priorityKeyCache === null) {
-      let hasNotCapturedDepth = this.notCapturedDepth
-      let hasNotCaptured = this.notCaptured
-
-      // Check ancestors for notCapturedReason flags
-      let ancestor = this.parent
-      while (ancestor) {
-        if (ancestor.notCapturedDepth) hasNotCaptured = hasNotCapturedDepth = true
-        else if (ancestor.notCaptured) hasNotCaptured = true
-        ancestor = ancestor.parent
-      }
-
       this.#priorityKeyCache = [
-        hasNotCapturedDepth ? 1 : 0,
+        this.notCapturedDepth ? 1 : 0,
         this.level,
-        hasNotCaptured ? 1 : 0,
+        this.notCaptured ? 1 : 0,
         this.size
       ]
     }

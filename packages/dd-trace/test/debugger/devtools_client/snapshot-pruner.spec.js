@@ -73,7 +73,7 @@ describe('snapshot-pruner', function () {
 
       const result = pruneSnapshot(json, size, maxSize)
 
-      assert.notStrictEqual(result, undefined, 'Expected pruneSnapshot() to successfully prune')
+      assert.ok(result, 'Expected pruneSnapshot() to successfully prune')
       assert.strictEqual(result, json)
     })
 
@@ -140,106 +140,6 @@ describe('snapshot-pruner', function () {
         objWithReason: { pruned: true },
         // Normal object should be preserved if possible
         normalObj: { type: 'string', value: 'x'.repeat(150) }
-      })
-    })
-
-    it('should prioritize pruning children of nodes with notCapturedReason="collectionSize"', function () {
-      assertPrunedSnapshot(-1, {
-        normalList1: {
-          type: 'array',
-          elements: [
-            { type: 'string', value: 'a'.repeat(100) },
-            { type: 'string', value: 'b'.repeat(100) }
-          ]
-        },
-        truncatedList: {
-          type: 'array',
-          notCapturedReason: 'collectionSize',
-          elements: [
-            { type: 'string', value: 'x'.repeat(100) },
-            { type: 'string', value: 'y'.repeat(100) }
-          ]
-        },
-        normalList2: {
-          type: 'array',
-          elements: [
-            { type: 'string', value: 'a'.repeat(100) },
-            { type: 'string', value: 'b'.repeat(100) }
-          ]
-        }
-      }, {
-        normalList1: {
-          type: 'array',
-          elements: [
-            { type: 'string', value: 'a'.repeat(100) },
-            { type: 'string', value: 'b'.repeat(100) }
-          ]
-        },
-        truncatedList: {
-          type: 'array',
-          notCapturedReason: 'collectionSize',
-          elements: [
-            { pruned: true },
-            { type: 'string', value: 'y'.repeat(100) }
-          ]
-        },
-        normalList2: {
-          type: 'array',
-          elements: [
-            { type: 'string', value: 'a'.repeat(100) },
-            { type: 'string', value: 'b'.repeat(100) }
-          ]
-        }
-      })
-    })
-
-    it('should prioritize pruning children of nodes with notCapturedReason="fieldCount"', function () {
-      assertPrunedSnapshot(-1, {
-        normalObj1: {
-          type: 'object',
-          fields: {
-            c: { type: 'string', value: 'a'.repeat(100) },
-            d: { type: 'string', value: 'b'.repeat(100) }
-          }
-        },
-        truncatedObj1: {
-          type: 'object',
-          notCapturedReason: 'fieldCount',
-          fields: {
-            a: { type: 'string', value: 'x'.repeat(100) },
-            b: { type: 'string', value: 'y'.repeat(100) }
-          }
-        },
-        normalObj2: {
-          type: 'object',
-          fields: {
-            c: { type: 'string', value: 'a'.repeat(100) },
-            d: { type: 'string', value: 'b'.repeat(100) }
-          }
-        }
-      }, {
-        normalObj1: {
-          type: 'object',
-          fields: {
-            c: { type: 'string', value: 'a'.repeat(100) },
-            d: { type: 'string', value: 'b'.repeat(100) }
-          }
-        },
-        truncatedObj1: {
-          type: 'object',
-          notCapturedReason: 'fieldCount',
-          fields: {
-            a: { pruned: true },
-            b: { type: 'string', value: 'y'.repeat(100) }
-          }
-        },
-        normalObj2: {
-          type: 'object',
-          fields: {
-            c: { type: 'string', value: 'a'.repeat(100) },
-            d: { type: 'string', value: 'b'.repeat(100) }
-          }
-        }
       })
     })
 
@@ -412,11 +312,11 @@ describe('snapshot-pruner', function () {
       const result = pruneSnapshot(json, size, maxSize)
       const elapsed = Number(process.hrtime.bigint() - start) / 1_000_000
 
-      assert.notStrictEqual(result, undefined, 'Expected pruneSnapshot() to successfully prune')
+      assert.ok(result, 'Expected pruneSnapshot() to successfully prune')
 
       // The algorithm tries to prune to target but may not always hit exactly
       // Just verify significant reduction happened
-      const reduction = size - Buffer.byteLength(/** @type {string} */(result))
+      const reduction = size - Buffer.byteLength(result)
       assert.ok(reduction > size * 0.9) // At least 90% reduction
 
       // Should complete in reasonable time
@@ -546,9 +446,9 @@ describe('snapshot-pruner', function () {
 
       const result = pruneSnapshot(json, size, maxSize)
 
-      assert.notStrictEqual(result, undefined, 'Expected pruneSnapshot() to successfully prune')
+      assert.ok(result, 'Expected pruneSnapshot() to successfully prune')
 
-      const parsed = JSON.parse(/** @type {string} */(result))
+      const parsed = JSON.parse(result)
       const parsedLocals = parsed.debugger.snapshot.captures.lines['10'].locals
 
       assert.deepStrictEqual(parsedLocals, expectedLocals)
