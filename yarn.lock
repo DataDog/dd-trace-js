@@ -246,10 +246,10 @@
     "@datadog/flagging-core" "0.2.0"
     "@openfeature/server-sdk" "~1.18.0"
 
-"@datadog/pprof@5.12.0":
-  version "5.12.0"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.12.0.tgz#1f0a592aec5ea3a48ad795d069e8a925d21667db"
-  integrity sha512-qX32upm9eqObGVGvqHpjQB2bXVPTX0ccXTW3mUqUWXgJrAKyHtTfo9PqfoXhflYs0WD9el9xl9c0bM1RS4vRmQ==
+"@datadog/pprof@5.13.1":
+  version "5.13.1"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.13.1.tgz#51c540d75cf4471806db65d0686cbe0a96125ce2"
+  integrity sha512-7yXQco1xOUFFEHN3UsRw/55603lQTctHcGx9N7PgkcgLGL8t/i5qKalF0AhOKBsLBUnbQ9Iv+ecC2YJErJ07PQ==
   dependencies:
     delay "^5.0.0"
     node-gyp-build "<4.0"
