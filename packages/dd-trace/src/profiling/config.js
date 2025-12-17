@@ -221,20 +221,24 @@ class Config {
 
     const hasExecArg = (arg) => process.execArgv.includes(arg) || String(NODE_OPTIONS).includes(arg)
 
-    this.asyncContextFrameEnabled = isTrue(options.useAsyncContextFrame ?? DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED)
-    if (this.asyncContextFrameEnabled) {
+    let canUseAsyncContextFrame = false
+    if (samplingContextsAvailable) {
       if (satisfies(process.versions.node, '>=24.0.0')) {
-        if (hasExecArg('--no-async-context-frame')) {
-          turnOffAsyncContextFrame('with --no-async-context-frame')
-        }
-      } else if (satisfies(process.versions.node, '>=23.0.0')) {
-        if (!hasExecArg('--experimental-async-context-frame')) {
-          turnOffAsyncContextFrame('without --experimental-async-context-frame')
-        }
+        canUseAsyncContextFrame = !hasExecArg('--no-async-context-frame')
+      } else if (satisfies(process.versions.node, '>=22.9.0')) {
+        canUseAsyncContextFrame = hasExecArg('--experimental-async-context-frame')
+      }
+    }
+    this.asyncContextFrameEnabled = isTrue(DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED ?? canUseAsyncContextFrame)
+    if (this.asyncContextFrameEnabled && !canUseAsyncContextFrame) {
+      if (!samplingContextsAvailable) {
+        turnOffAsyncContextFrame(`on ${process.platform}`)
+      } else if (satisfies(process.versions.node, '>=24.0.0')) {
+        turnOffAsyncContextFrame('with --no-async-context-frame')
+      } else if (satisfies(process.versions.node, '>=22.9.0')) {
+        turnOffAsyncContextFrame('without --experimental-async-context-frame')
       } else {
-        // NOTE: technically, this should work starting with 22.7.0 which is when
-        // AsyncContextFrame debuted, but it would require a change in pprof-nodejs too.
-        turnOffAsyncContextFrame('but it requires at least Node.js 23')
+        turnOffAsyncContextFrame('but it requires at least Node.js 22.9.0')
       }
     }
 
