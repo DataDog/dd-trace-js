@@ -189,18 +189,18 @@ versions.forEach((version) => {
               assert.exists(testSuiteEvent.content.metrics[DD_HOST_CPU_COUNT])
             })
 
-            assert.deepStrictEqual(testEvents.map(test => test.content.resource), [
+            assert.deepStrictEqual(testEvents.map(test => test.content.resource).sort(), [
+              'landing-page-test.js.highest-level-describe' +
+              '  leading and trailing spaces    should work with annotated tests',
+              'landing-page-test.js.highest-level-describe' +
+              '  leading and trailing spaces    should work with fixme',
               'landing-page-test.js.highest-level-describe' +
               '  leading and trailing spaces    should work with passing tests',
               'landing-page-test.js.highest-level-describe' +
               '  leading and trailing spaces    should work with skipped tests',
-              'landing-page-test.js.highest-level-describe' +
-              '  leading and trailing spaces    should work with fixme',
-              'landing-page-test.js.highest-level-describe' +
-              '  leading and trailing spaces    should work with annotated tests',
-              'todo-list-page-test.js.should work with fixme root',
-              'todo-list-page-test.js.playwright should work with failing tests',
               'skipped-suite-test.js.should work with fixme root',
+              'todo-list-page-test.js.playwright should work with failing tests',
+              'todo-list-page-test.js.should work with fixme root',
             ])
 
             assertObjectContains(testEvents.map(test => test.content.meta[TEST_STATUS]), [
@@ -285,9 +285,9 @@ versions.forEach((version) => {
       receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
         const events = payloads.flatMap(({ payload }) => payload.events)
         const testEvents = events.filter(event => event.type === 'test')
-        assertObjectContains(testEvents.map(test => test.content.resource), [
-          'playwright-tests-ts/one-test.js.playwright should work with skipped tests',
+        assertObjectContains(testEvents.map(test => test.content.resource).sort(), [
           'playwright-tests-ts/one-test.js.playwright should work with passing tests',
+          'playwright-tests-ts/one-test.js.playwright should work with skipped tests',
         ])
         assert.match(testOutput, /1 passed/)
         assert.match(testOutput, /1 skipped/)
