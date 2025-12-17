@@ -800,6 +800,58 @@ describe('Dynamic Instrumentation', function () {
       )
     })
   })
+
+  describe('DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true', function () {
+    const t = setup({
+      env: { DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: 'true' },
+      dependencies: ['fastify']
+    })
+
+    describe('input messages', function () {
+      it('should include process_tags in snapshot when enabled', function (done) {
+        t.agent.on('debugger-input', ({ payload }) => {
+          const snapshot = payload[0].debugger.snapshot
+
+          // Assert that process_tags are present
+          assert.ok(snapshot.process_tags)
+          assert.strictEqual(typeof snapshot.process_tags, 'object')
+
+          // Check for expected process tags keys
+          assert.ok(snapshot.process_tags['entrypoint.name'])
+          assert.ok(snapshot.process_tags['entrypoint.type'])
+          assert.strictEqual(snapshot.process_tags['entrypoint.type'], 'script')
+
+          done()
+        })
+
+        t.triggerBreakpoint()
+        t.agent.addRemoteConfig(t.rcConfig)
+      })
+    })
+  })
+
+  describe('DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=false', function () {
+    const t = setup({
+      env: { DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: 'false' },
+      dependencies: ['fastify']
+    })
+
+    describe('input messages', function () {
+      it('should not include process_tags in snapshot when disabled', function (done) {
+        t.agent.on('debugger-input', ({ payload }) => {
+          const snapshot = payload[0].debugger.snapshot
+
+          // Assert that process_tags are not present
+          assert.strictEqual(snapshot.process_tags, undefined)
+
+          done()
+        })
+
+        t.triggerBreakpoint()
+        t.agent.addRemoteConfig(t.rcConfig)
+      })
+    })
+  })
 })
 
 function testBasicInput (t, done) {

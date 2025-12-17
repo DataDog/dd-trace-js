@@ -7,22 +7,34 @@ const { describe, it, beforeEach, afterEach } = require('tap').mocha
 require('./setup/core')
 
 describe('process-tags', () => {
-  const getProcessTags = require('../src/process-tags')
+  const processTags = require('../src/process-tags')
   const { serialize, sanitize } = require('../src/process-tags')
 
-  describe('getProcessTags', () => {
-    it('should return an object with tags and serialized properties', () => {
-      const result = getProcessTags()
+  describe('processTags', () => {
+    it('should return an object with tags, serialized, and tagsObject properties', () => {
+      assert.ok(Object.hasOwn(processTags, 'tags'))
+      assert.ok(Object.hasOwn(processTags, 'serialized'))
+      assert.ok(Object.hasOwn(processTags, 'tagsObject'))
+      assert.ok(Array.isArray(processTags.tags))
+      assert.strictEqual(typeof processTags.serialized, 'string')
+      assert.strictEqual(typeof processTags.tagsObject, 'object')
+    })
 
-      assert.ok(Object.hasOwn(result, 'tags'))
-      assert.ok(Object.hasOwn(result, 'serialized'))
-      assert.ok(Array.isArray(result.tags))
-      assert.strictEqual(typeof result.serialized, 'string')
+    it('should have tagsObject with only defined values', () => {
+      const { tagsObject } = processTags
+
+      // All values in tagsObject should be defined
+      Object.values(tagsObject).forEach(value => {
+        assert.notStrictEqual(value, undefined)
+      })
+
+      // tagsObject should have the same keys as defined tags
+      const definedTags = processTags.tags.filter(([, value]) => value !== undefined)
+      assert.strictEqual(Object.keys(tagsObject).length, definedTags.length)
     })
 
     it('should include all expected tag names', () => {
-      const result = getProcessTags()
-      const tagNames = result.tags.map(([name]) => name).sort()
+      const tagNames = processTags.tags.map(([name]) => name)
 
       assertObjectContains(
         tagNames,
@@ -37,41 +49,56 @@ describe('process-tags', () => {
     })
 
     it('should have entrypoint.type set to "script"', () => {
-      const result = getProcessTags()
-      const typeTag = result.tags.find(([name]) => name === 'entrypoint.type')
+      const typeTag = processTags.tags.find(([name]) => name === 'entrypoint.type')
 
       assert.ok(Array.isArray(typeTag))
       assert.strictEqual(typeTag[1], 'script')
     })
 
     it('should set entrypoint.workdir to the basename of cwd', () => {
-      const result = getProcessTags()
-      const workdirTag = result.tags.find(([name]) => name === 'entrypoint.workdir')
+      const workdirTag = processTags.tags.find(([name]) => name === 'entrypoint.workdir')
 
       assert.ok(Array.isArray(workdirTag))
       assert.strictEqual(typeof workdirTag[1], 'string')
       assert.doesNotMatch(workdirTag[1], /\//)
     })
 
-    // note that these tests may fail if the tracer folder structure changes
-    it('should set sensible values based on tracer project structure and be sorted alphabetically', () => {
-      const result = getProcessTags()
+    it('should set sensible values', () => {
+      const basedirTag = processTags.tags.find(([name]) => name === 'entrypoint.basedir')
+      const nameTag = processTags.tags.find(([name]) => name === 'entrypoint.name')
+      const typeTag = processTags.tags.find(([name]) => name === 'entrypoint.type')
+      const workdirTag = processTags.tags.find(([name]) => name === 'entrypoint.workdir')
+      const packageNameTag = processTags.tags.find(([name]) => name === 'package.json.name')
 
-      assert.deepStrictEqual(result.tags, [
-        ['entrypoint.basedir', 'test'],
-        ['entrypoint.name', 'process-tags.spec'],
-        ['entrypoint.type', 'script'],
-        ['entrypoint.workdir', 'dd-trace-js'],
-        ['package.json.name', 'dd-trace'],
-      ])
+      // Entrypoint values should be set (may vary depending on test runner)
+      assert.ok(basedirTag)
+      assert.strictEqual(typeof basedirTag[1], 'string')
+      assert.ok(nameTag)
+      assert.strictEqual(typeof nameTag[1], 'string')
+
+      assert.ok(typeTag)
+      assert.strictEqual(typeTag[1], 'script')
+
+      assert.ok(workdirTag)
+      assert.strictEqual(workdirTag[1], 'dd-trace-js')
+
+      // Package name should exist but may vary depending on test runner
+      assert.ok(packageNameTag)
+      assert.strictEqual(typeof packageNameTag[1], 'string')
+    })
+
+    it('should sort tags alphabetically', () => {
+      assert.strictEqual(processTags.tags[0][0], 'entrypoint.basedir')
+      assert.strictEqual(processTags.tags[1][0], 'entrypoint.name')
+      assert.strictEqual(processTags.tags[2][0], 'entrypoint.type')
+      assert.strictEqual(processTags.tags[3][0], 'entrypoint.workdir')
+      assert.strictEqual(processTags.tags[4][0], 'package.json.name')
     })
 
     it('should serialize tags correctly', () => {
-      const result = getProcessTags()
-
       // serialized should be comma-separated and not include undefined values
-      if (result.serialized) {
-        const parts = result.serialized.split(',')
+      if (processTags.serialized) {
+        const parts = processTags.serialized.split(',')
         assert.ok(parts.length > 0)
         parts.forEach(part => {
           assert.match(part, /:/)
@@ -280,10 +307,15 @@ describe('process-tags', () => {
       process.env = env
       delete require.cache[require.resolve('../src/config')]
       delete require.cache[require.resolve('../src/span_processor')]
+      delete require.cache[require.resolve('../src/process-tags')]
     })
 
     it('should enable process tags propagation when set to true', () => {
       process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'true'
+
+      // Need to reload config first, then process-tags (which reads from config)
+      delete require.cache[require.resolve('../src/config')]
+      delete require.cache[require.resolve('../src/process-tags')]
 
       getConfig = require('../src/config')
       const config = getConfig()
