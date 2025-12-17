@@ -439,29 +439,28 @@ describe('Plugin', () => {
             assert.strictEqual(producerSpan.service, 'ws-with-pointers')
 
             // Check for span links with span pointer attributes
-            if (producerSpan.meta['_dd.span_links']) {
-              const spanLinks = JSON.parse(producerSpan.meta['_dd.span_links'])
-              const pointerLink = spanLinks.find(link =>
-                link.attributes && link.attributes['dd.kind'] === 'span-pointer'
-              )
-              if (pointerLink) {
-                didFindPointerLink = true
-                expect(pointerLink.attributes).to.have.property('ptr.kind', 'websocket')
-                expect(pointerLink.attributes).to.have.property('ptr.dir', 'd')
-                expect(pointerLink.attributes).to.have.property('ptr.hash')
-                expect(pointerLink.attributes).to.have.property('link.name', 'span-pointer-down')
-                expect(pointerLink.attributes['ptr.hash']).to.be.a('string')
-                expect(pointerLink.attributes['ptr.hash']).to.have.lengthOf(57)
-                // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
-                expect(pointerLink.attributes['ptr.hash']).to.match(/^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
-              }
-            }
+            assert.ok(producerSpan.meta['_dd.span_links'], 'Producer span should have span links')
+            const spanLinks = JSON.parse(producerSpan.meta['_dd.span_links'])
+            const pointerLink = spanLinks.find(link =>
+              link.attributes && link.attributes['dd.kind'] === 'span-pointer'
+            )
+            assert.ok(pointerLink, 'Should have a span pointer link')
+            didFindPointerLink = true
+
+            expect(pointerLink.attributes).to.have.property('ptr.kind', 'websocket')
+            expect(pointerLink.attributes).to.have.property('ptr.dir', 'd')
+            expect(pointerLink.attributes).to.have.property('ptr.hash')
+            expect(pointerLink.attributes).to.have.property('link.name', 'span-pointer-down')
+            expect(pointerLink.attributes['ptr.hash']).to.be.a('string')
+            expect(pointerLink.attributes['ptr.hash']).to.have.lengthOf(57)
+            // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
+            expect(pointerLink.attributes['ptr.hash']).to.match(/^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
           })
 
           expect(didFindPointerLink).to.be.true
         })
 
-        it('should add span pointers to consumer spans', () => {
+        it('should add span pointers to consumer spans', async () => {
           wsServer.on('connection', (ws) => {
             ws.on('message', (data) => {
               assert.strictEqual(data.toString(), 'client message with pointer')
@@ -472,30 +471,33 @@ describe('Plugin', () => {
             client.send('client message with pointer')
           })
 
-          return agent.assertSomeTraces(traces => {
-            const consumerSpan = traces.find(t => t[0].name === 'websocket.receive')?.[0]
-            if (consumerSpan) {
-              assert.strictEqual(consumerSpan.service, 'ws-with-pointers')
+          let didFindPointerLink = false
 
-              // Check for span links with span pointer attributes
-              if (consumerSpan.meta['_dd.span_links']) {
-                const spanLinks = JSON.parse(consumerSpan.meta['_dd.span_links'])
-                const pointerLink = spanLinks.find(link =>
-                  link.attributes && link.attributes['dd.kind'] === 'span-pointer'
-                )
-                if (pointerLink) {
-                  expect(pointerLink.attributes).to.have.property('ptr.kind', 'websocket')
-                  expect(pointerLink.attributes).to.have.property('ptr.dir', 'u')
-                  expect(pointerLink.attributes).to.have.property('ptr.hash')
-                  expect(pointerLink.attributes).to.have.property('link.name', 'span-pointer-up')
-                  expect(pointerLink.attributes['ptr.hash']).to.be.a('string')
-                  expect(pointerLink.attributes['ptr.hash']).to.have.lengthOf(57)
-                  // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
-                  expect(pointerLink.attributes['ptr.hash']).to.match(/^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
-                }
-              }
-            }
+          await agent.assertSomeTraces(traces => {
+            const consumerSpan = traces.find(t => t[0].name === 'websocket.receive')?.[0]
+            assert.ok(consumerSpan, 'Should have a consumer span')
+            assert.strictEqual(consumerSpan.service, 'ws-with-pointers')
+
+            // Check for span links with span pointer attributes
+            assert.ok(consumerSpan.meta['_dd.span_links'], 'Consumer span should have span links')
+            const spanLinks = JSON.parse(consumerSpan.meta['_dd.span_links'])
+            const pointerLink = spanLinks.find(link =>
+              link.attributes && link.attributes['dd.kind'] === 'span-pointer'
+            )
+            assert.ok(pointerLink, 'Should have a span pointer link')
+            didFindPointerLink = true
+
+            expect(pointerLink.attributes).to.have.property('ptr.kind', 'websocket')
+            expect(pointerLink.attributes).to.have.property('ptr.dir', 'u')
+            expect(pointerLink.attributes).to.have.property('ptr.hash')
+            expect(pointerLink.attributes).to.have.property('link.name', 'span-pointer-up')
+            expect(pointerLink.attributes['ptr.hash']).to.be.a('string')
+            expect(pointerLink.attributes['ptr.hash']).to.have.lengthOf(57)
+            // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
+            expect(pointerLink.attributes['ptr.hash']).to.match(/^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
           })
+
+          expect(didFindPointerLink).to.be.true
         })
 
         it('should generate unique hashes for each message', () => {
