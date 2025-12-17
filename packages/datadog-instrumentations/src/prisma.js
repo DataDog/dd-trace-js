@@ -4,7 +4,6 @@ const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const extractOutput = require('../../datadog-instrumentations/src/helpers/extract-prisma-client-path')
 const prismaEngineStart = channel('apm:prisma:engine:start')
 const tracingChannel = require('dc-polyfill').tracingChannel
 const clientCH = tracingChannel('apm:prisma:client')
@@ -71,41 +70,50 @@ class DatadogTracingHelper {
   }
 }
 
-const prismaHook = (runtime, versions) => {
+const prismaHook = (runtime, versions, name, isIitm) => {
   const originalGetPrismaClient = runtime.getPrismaClient
+
   if (!originalGetPrismaClient) return runtime
   const datadogTracingHelper = new DatadogTracingHelper()
-  const runtime2 = new Proxy(runtime, {
-    get (target, prop) {
-      if (prop === 'getPrismaClient') {
-        return function (config) {
-          const datasources = config.inlineDatasources?.db.url?.value
-          if (datasources) {
-            const dbConfig = parseDBString(datasources)
-            datadogTracingHelper.setDbString(dbConfig)
-          }
 
-          // Call the original getPrismaClient with the config
-          const PrismaClient = originalGetPrismaClient.call(this, config)
-          return class WrappedPrismaClientClass extends PrismaClient {
-            constructor (clientConfig) {
-              super(clientConfig)
-              this._tracingHelper = datadogTracingHelper
-              this._engine.tracingHelper = datadogTracingHelper
-            }
-          }
-        }
-      }
-      return target[prop]
+  const wrappedGetPrismaClient = function (config) {
+    const datasources = config.inlineDatasources?.db.url?.value
+    if (datasources) {
+      const dbConfig = parseDBString(datasources)
+      datadogTracingHelper.setDbString(dbConfig)
     }
-  })
 
-  return runtime2
+    const PrismaClient = originalGetPrismaClient.call(this, config)
+    return class WrappedPrismaClientClass extends PrismaClient {
+      constructor (clientConfig) {
+        super(clientConfig)
+        this._tracingHelper = datadogTracingHelper
+        this._engine.tracingHelper = datadogTracingHelper
+      }
+    }
+  }
+
+  // For ESM (iitm), we can directly assign the property because iitm manages the Proxy and adding the proxy will break iitm,
+  if (isIitm) {
+    runtime.getPrismaClient = wrappedGetPrismaClient
+    return runtime
+  } else {
+    // For CommonJS, use a Proxy to intercept getPrismaClient access
+    return new Proxy(runtime, {
+      get (target, prop) {
+        if (prop === 'getPrismaClient') {
+          return wrappedGetPrismaClient
+        }
+        return target[prop]
+      }
+    })
+  }
 }
 
 const prismaConfigs = [
-  { name: '@prisma/client', versions: ['>=6.1.0'], file: 'runtime/library.js' },
-  { name: './runtime/library.js', versions: ['>=6.1.0'], file: 'runtime/library.js' }
+  { name: '@prisma/client', versions: ['>=6.1.0 <7.0.0'], filePattern: 'runtime/library.*' },
+  { name: './runtime/library.js', versions: ['>=6.1.0 <7.0.0'], file: 'runtime/library.js'},
+  { name: '@prisma/client', versions: ['>=7.0.0'], filePattern: 'runtime/client.*' }
 ]
 
 prismaConfigs.forEach(config => {

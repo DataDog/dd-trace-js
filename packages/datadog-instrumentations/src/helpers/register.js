@@ -104,7 +104,6 @@ for (const packageName of names) {
       hook[HOOK_SYMBOL] ??= new WeakSet()
       let matchesFile = moduleName === fullFilename
 
-      // Default matchesFile to true when isFilePath returns true, since file paths don't need file matching
       if (!matchesFile && isFilePath(name)) matchesFile = true
 
       if (fullFilePattern) {

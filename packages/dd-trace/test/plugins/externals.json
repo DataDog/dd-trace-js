@@ -487,6 +487,10 @@
       "name": "typescript",
       "dep": true,
       "versions": [">=5.0.0"]
+    },
+    {
+      "name": "@prisma/adapter-pg",
+      "dep": "@prisma/adapter-pg"
     }
   ],
   "q": [

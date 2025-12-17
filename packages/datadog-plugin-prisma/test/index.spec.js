@@ -13,12 +13,26 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const {
+  PRISMA_CLIENT_OUTPUT_RELATIVE,
+  SCHEMA_FIXTURES,
+  TEST_DATABASE_URL
+} = require('./prisma-fixtures')
 
 function execPrismaGenerate (config, cwd) {
   if (config.ts) {
-    execSync('./node_modules/.bin/prisma generate && ' +
-      './node_modules/.bin/tsc ../generated/**/*.ts --outDir ../dist ' +
-      '--target esnext --module commonjs --allowJs true --moduleResolution node', {
+    const outDir = config.v7 ? '../v7/dist' : '../dist'
+    execSync([
+      './node_modules/.bin/prisma generate',
+      [
+        './node_modules/.bin/tsc ../generated/**/*.ts',
+        `--outDir ${outDir}`,
+        '--target esnext',
+        '--module commonjs',
+        '--allowJs true',
+        '--moduleResolution node'
+      ].join(' ')
+    ].join(' && '), {
       cwd, // Ensure the current working directory is where the schema is located
       stdio: 'inherit'
     })
@@ -30,13 +44,43 @@ function execPrismaGenerate (config, cwd) {
   }
 }
 
-function loadPrismaModule (config) {
+function loadPrismaModule (config, range) {
   if (config.file.includes('generated')) {
     return require(config.file)
   }
 
-  const module = require(config.file)
-  return config.ts ? module : module.get()
+  const file = config.file.replace('range', range)
+  const prismaModule = require(file)
+  return config.ts ? prismaModule : prismaModule.get()
+}
+
+function clearPrismaEnv () {
+  delete process.env.PRISMA_CLIENT_OUTPUT
+  delete process.env.DATABASE_URL
+}
+
+function setGeneratedClientEnv () {
+  process.env.PRISMA_CLIENT_OUTPUT = PRISMA_CLIENT_OUTPUT_RELATIVE
+  process.env.DATABASE_URL = TEST_DATABASE_URL
+}
+
+async function copySchemaFixtureToVersionDir (schemaFixturePath, range) {
+  const cwd = path.resolve(__dirname, `../../../versions/@prisma/client@${range}`)
+  await fs.cp(
+    path.resolve(__dirname, schemaFixturePath),
+    path.join(cwd, 'schema.prisma')
+  )
+  return cwd
+}
+
+function createPrismaClient (prisma, config) {
+  // With the introduction of v7 prisma now enforces the use of adpaters
+  if (config.v7) {
+    const { PrismaPg } = require('@prisma/adapter-pg')
+    const adapter = new PrismaPg({ connectionString: `${process.env.DATABASE_URL}` })
+    return new prisma.PrismaClient({ adapter })
+  }
+  return new prisma.PrismaClient()
 }
 
 describe('Plugin', () => {
@@ -45,47 +89,51 @@ describe('Plugin', () => {
   let tracingHelper
 
   describe('prisma', () => {
-    // Prisma 7.0.0+ is not supported in Node.js < 20.19.0
-    const supportedRange = semifies(semver.clean(process.version), '>=20.19.0') ? '*' : '<7.0.0'
-
-    withVersions('prisma', ['@prisma/client'], supportedRange, async (range, _moduleName_, version) => {
-      const prismaClients = [{
-        schema: './provider-prisma-client-output-js/schema.prisma',
+    const prismaClients = [{
+        schema: `./${SCHEMA_FIXTURES.clientOutputJs}`,
         file: '../../../versions/@prisma/generated/prisma',
-        env: 'versions/@prisma/generated/prisma'
+        usesGeneratedClientOutput: true
       },
       {
-        schema: './provider-prisma-client-js/schema.prisma',
-        file: `../../../versions/@prisma/client@${range}`
+        schema: `./${SCHEMA_FIXTURES.clientJs}`,
+        file: '../../../versions/@prisma/client@range'
       },
       {
-        schema: './provider-prisma-client-ts/schema.prisma',
+        schema: `./${SCHEMA_FIXTURES.tsCjsV6}`,
         file: '../../../versions/@prisma/dist/client.js',
-        env: true,
+        usesGeneratedClientOutput: true,
         ts: true
+      },
+      {
+        schema: `./${SCHEMA_FIXTURES.tsCjsV7}`,
+        file: '../../../versions/@prisma/v7/dist/client.js',
+        usesGeneratedClientOutput: true,
+        ts: true,
+        v7: true
       }]
 
-      process.env.PRISMA_CLIENT_OUTPUT = '../generated/prisma'
+    prismaClients.forEach(config => {
+      // Prisma 7.0.0+ is not supported in Node.js < 20.19.0
+      const isNodeSupported = semifies(semver.clean(process.version), '>=20.19.0')
+      let supportedRange = config.v7 && isNodeSupported ? '>=7.0.0' : '<7.0.0'
+      // prisma-generator is only available starting prisma >= 6.16.0
+      if (config.ts && supportedRange === '<7.0.0') {
+        supportedRange = '>=6.16.0 <7.0.0'
+      }
 
-      prismaClients.forEach(config => {
+      withVersions('prisma', ['@prisma/client'], supportedRange, async (range, _moduleName_, version) => {
         describe(`without configuration ${config.schema}`, () => {
-          if (config.ts && version === '6.1.0') return
           before(async () => {
-            if (!config.env) {
-              process.env.DD_PRISMA_OUTPUT = null
-              process.env.PRISMA_CLIENT_OUTPUT = null
-            }
-            const cwd = path.resolve(__dirname, `../../../versions/@prisma/client@${range}`)
-            await fs.cp(
-              path.resolve(__dirname, config.schema),
-              cwd + '/schema.prisma',
-            )
-            await agent.load('prisma')
+            clearPrismaEnv()
+            if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
 
+            const cwd = await copySchemaFixtureToVersionDir(config.schema, range)
+
+            await agent.load(['prisma', 'pg'])
             execPrismaGenerate(config, cwd)
+            prisma = loadPrismaModule(config, range)
 
-            prisma = loadPrismaModule(config)
-            prismaClient = new prisma.PrismaClient()
+            prismaClient = createPrismaClient(prisma, config)
 
             tracingHelper = prismaClient._tracingHelper
 
@@ -107,12 +155,21 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].service, expectedSchema.client.serviceName)
 
               // grabbing actual db query span
-              const engineDBSpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
-              assert.strictEqual(engineDBSpan.resource, 'SELECT 1')
-              assert.strictEqual(engineDBSpan.type, 'sql')
-              assert.strictEqual(engineDBSpan.meta['span.kind'], 'client')
-              assert.strictEqual(engineDBSpan.name, expectedSchema.engine.opName)
-              assert.strictEqual(engineDBSpan.service, expectedSchema.engine.serviceName)
+              if (!config.v7) {
+                const engineDBSpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
+                assert.strictEqual(engineDBSpan.resource, 'SELECT 1')
+                assert.strictEqual(engineDBSpan.type, 'sql')
+                assert.strictEqual(engineDBSpan.meta['span.kind'], 'client')
+                assert.strictEqual(engineDBSpan.name, expectedSchema.engine.opName)
+                assert.strictEqual(engineDBSpan.service, expectedSchema.engine.serviceName)
+              } else {
+                const pgSpan = traces[0].find(span => span.name === 'pg.query')
+                assert.strictEqual(pgSpan.resource, 'SELECT 1')
+                assert.strictEqual(pgSpan.type, 'sql')
+                assert.strictEqual(pgSpan.meta['span.kind'], 'client')
+                assert.strictEqual(pgSpan.name, 'pg.query')
+                assert.strictEqual(pgSpan.service, 'test-postgres')
+              }
             })
 
             await Promise.all([
@@ -258,32 +315,26 @@ describe('Plugin', () => {
         })
 
         describe(`with configuration ${config.schema}`, () => {
-          if (config.ts && version === '6.1.0') return
           describe('with custom service name', () => {
             before(async () => {
-              if (!config.env) {
-                process.env.DD_PRISMA_OUTPUT = null
-                process.env.PRISMA_CLIENT_OUTPUT = null
-              }
-              const cwd = path.resolve(__dirname, `../../../versions/@prisma/client@${range}`)
-              await fs.cp(
-                path.resolve(__dirname, config.schema),
-                cwd + '/schema.prisma',
-              )
+              clearPrismaEnv()
+              if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
+
+              const cwd = await copySchemaFixtureToVersionDir(config.schema, range)
 
               execPrismaGenerate(config, cwd)
 
               const pluginConfig = {
                 service: 'custom'
               }
-              return agent.load('prisma', pluginConfig)
+              return agent.load(['prisma', 'pg'], pluginConfig)
             })
 
             after(() => { return agent.close({ ritmReset: false }) })
 
             beforeEach(() => {
-              prisma = loadPrismaModule(config)
-              prismaClient = new prisma.PrismaClient()
+              prisma = loadPrismaModule(config, range)
+              prismaClient = createPrismaClient(prisma, config)
             })
 
             it('should be configured with the correct values', async () => {
@@ -300,25 +351,24 @@ describe('Plugin', () => {
 
           describe('with prisma client disabled', () => {
             before(async () => {
-              const cwd = path.resolve(__dirname, `../../../versions/@prisma/client@${range}`)
-              await fs.cp(
-                path.resolve(__dirname, config.schema),
-                cwd + '/schema.prisma',
-              )
+              clearPrismaEnv()
+              if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
+
+              const cwd = await copySchemaFixtureToVersionDir(config.schema, range)
 
               execPrismaGenerate(config, cwd)
 
               const pluginConfig = {
                 client: false
               }
-              return agent.load('prisma', pluginConfig)
+              return agent.load(['prisma', 'pg'], pluginConfig)
             })
 
             after(() => { return agent.close({ ritmReset: false }) })
 
             beforeEach(() => {
-              prisma = loadPrismaModule(config)
-              prismaClient = new prisma.PrismaClient()
+              prisma = loadPrismaModule(config, range)
+              prismaClient = createPrismaClient(prisma, config)
             })
 
             it('should disable prisma client', async () => {
@@ -335,32 +385,31 @@ describe('Plugin', () => {
 
             withNamingSchema(
               done => prismaClient.$queryRaw`SELECT 1`.catch(done),
-              rawExpectedSchema.engine,
+              config.v7 ? 'pg.query' : rawExpectedSchema.engine,
               { desc: 'Prisma Engine' }
             )
           })
 
           describe('with prisma engine disabled', () => {
             before(async () => {
-              const cwd = path.resolve(__dirname, `../../../versions/@prisma/client@${range}`)
-              await fs.cp(
-                path.resolve(__dirname, config.schema),
-                cwd + '/schema.prisma',
-              )
+              clearPrismaEnv()
+              if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
+
+              const cwd = await copySchemaFixtureToVersionDir(config.schema, range)
 
               execPrismaGenerate(config, cwd)
 
               const pluginConfig = {
                 engine: false
               }
-              return agent.load('prisma', pluginConfig)
+              return agent.load(['prisma', 'pg'], pluginConfig)
             })
 
             after(() => { return agent.close({ ritmReset: false }) })
 
             beforeEach(() => {
-              prisma = loadPrismaModule(config)
-              prismaClient = new prisma.PrismaClient()
+              prisma = loadPrismaModule(config, range)
+              prismaClient = createPrismaClient(prisma, config)
             })
 
             it('should disable prisma engine', async () => {

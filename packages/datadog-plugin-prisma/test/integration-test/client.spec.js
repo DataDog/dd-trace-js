@@ -14,42 +14,54 @@ const {
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { SCHEMA_FIXTURES, TEST_DATABASE_URL } = require('../prisma-fixtures')
 
 const prismaClientConfigs = [{
-  name: 'default @prisma/client',
-  schema: './packages/datadog-plugin-prisma/test/provider-prisma-client-js/schema.prisma',
-  serverFile: 'server.mjs',
-  importPath: '@prisma/client'
-},
-{
-  name: 'custom output path',
-  serverFile: 'server-custom-output.mjs',
-  importPath: './generated/prisma/index.js',
-  schema: './packages/datadog-plugin-prisma/test/provider-prisma-client-output-js/schema.prisma',
-  env: { PRISMA_CLIENT_OUTPUT: './generated/prisma' }
-},
-{
-  name: 'non JS client generator',
-  serverFile: 'server-non-js-generator.js',
-  importPath: './dist/client.js',
-  schema: './packages/datadog-plugin-prisma/test/provider-prisma-client-ts/schema.prisma',
-  env: { PRISMA_CLIENT_OUTPUT: './generated/prisma' },
-  ts: true
-}]
+    name: 'default @prisma/client',
+    schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.clientJs}`,
+    serverFile: 'server.mjs',
+    importPath: '@prisma/client'
+  },
+  {
+    name: 'custom output path',
+    serverFile: 'server-custom-output.mjs',
+    importPath: './generated/prisma/index.js',
+    schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.clientOutputJs}`,
+    env: { PRISMA_CLIENT_OUTPUT: './generated/prisma' }
+  },
+  {
+    name: 'non JS client generator',
+    serverFile: 'server-non-js-generator.mjs',
+    importPath: './dist/client.js',
+    schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV6}`,
+    env: { PRISMA_CLIENT_OUTPUT: './generated/prisma', DATABASE_URL: TEST_DATABASE_URL },
+    ts: true
+  },
+  {
+    name: 'non JS client generator v7',
+    serverFile: 'server-non-js-adapter.mjs',
+    importPath: './dist/client.js',
+    schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV7}`,
+    configFile: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV7Config}`,
+    env: { PRISMA_CLIENT_OUTPUT: './generated/prisma', DATABASE_URL: TEST_DATABASE_URL },
+    ts: true
+  }]
 
 describe('esm', () => {
   let agent
   let proc
-
+  let versionRange
   prismaClientConfigs.forEach(config => {
     describe(config.name, () => {
-      withVersions('prisma', '@prisma/client', version => {
+      versionRange = config.configFile ? '>=7.0.0' : '<7.0.0'
+      withVersions('prisma', '@prisma/client', versionRange, version => {
         if (config.ts && version === '6.1.0') return
         let variants
-        useSandbox([`prisma@${version}`, `@prisma/client@${version}`, 'typescript'], false, [
-          './packages/datadog-plugin-prisma/test/integration-test/*',
-          config.schema
-        ])
+        const paths = ['./packages/datadog-plugin-prisma/test/integration-test/*', config.schema]
+
+        if (config.configFile) paths.push(config.configFile)
+
+        useSandbox([`prisma@${version}`, `@prisma/client@${version}`, 'typescript', '@prisma/adapter-pg'], false, paths)
 
         before(function () {
           variants = varySandbox(config.serverFile, config.importPath, 'PrismaClient')
@@ -58,38 +70,33 @@ describe('esm', () => {
         beforeEach(async function () {
           this.timeout(60000)
           agent = await new FakeAgent().start()
-
+          const commands = [
+            './node_modules/.bin/prisma migrate reset --force',
+            './node_modules/.bin/prisma db push --accept-data-loss',
+            './node_modules/.bin/prisma generate'
+          ]
           const cwd = sandboxCwd()
+
           if (config.ts) {
-            execSync(
-              './node_modules/.bin/prisma migrate reset --force &&' +
-              './node_modules/.bin/prisma db push --accept-data-loss &&' +
-              './node_modules/.bin/prisma generate &&' +
-              './node_modules/.bin/tsc ./generated/**/*.ts --outDir ./dist --target esnext --module commonjs --allowJs true --moduleResolution node',
-              {
-                cwd,
-                stdio: 'inherit',
-                env: {
-                  ...process.env,
-                  ...config.env
-                }
-              }
-            )
-          } else {
-            execSync(
-              './node_modules/.bin/prisma migrate reset --force &&' +
-              './node_modules/.bin/prisma db push --accept-data-loss &&' +
-              './node_modules/.bin/prisma generate',
-              {
-                cwd,
-                stdio: 'inherit',
-                env: {
-                  ...process.env,
-                  ...config.env
-                }
-              }
+            commands.push(
+              './node_modules/.bin/tsc ./generated/**/*.ts' +
+              ' --outDir ./dist' +
+              ' --target ES2023' +
+              ' --module ESNext' +
+              ' --strict true' +
+              ' --moduleResolution node' +
+              ' --esModuleInterop true'
             )
           }
+
+          execSync(commands.join(' && '), {
+            cwd,
+            stdio: 'inherit',
+            env: {
+              ...process.env,
+              ...config.env
+            }
+          })
         })
 
         afterEach(async () => {
@@ -107,8 +114,8 @@ describe('esm', () => {
                 resource: 'User.create',
                 service: 'node-prisma'
               }], [{
-                name: 'prisma.engine',
-                service: 'node-prisma',
+                name: config.configFile ? 'pg.query' : 'prisma.engine',
+                service: config.configFile ? 'node-postgres' : 'node-prisma',
                 meta: {
                   'db.user': 'postgres',
                   'db.name': 'postgres',

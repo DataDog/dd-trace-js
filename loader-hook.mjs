@@ -3,8 +3,6 @@ import * as iitm from 'import-in-the-middle/hook.mjs'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config-helper.js'
 import path from 'path'
-import { pathToFileURL } from 'url'
-import extractOutput from './packages/datadog-instrumentations/src/helpers/extract-prisma-client-path.js'
 import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
 import { isFilePath } from './packages/datadog-instrumentations/src/helpers/shared-utils.js'
 
@@ -12,8 +10,6 @@ const regexpEscape = regexpEscapeModule.default
 
 // For some reason `getEnvironmentVariable` is not otherwise available to ESM.
 const env = configHelper.getEnvironmentVariable
-
-const prismaOutput = extractOutput()
 
 function initialize (data = {}) {
   data.include ??= []
@@ -35,9 +31,7 @@ function addInstrumentations (data) {
 
   for (const moduleName of instrumentations) {
     if (isFilePath(moduleName)) {
-      const normalizedPath = moduleName.replace(/^\.\//, '')
-      const escapedPath = regexpEscape(normalizedPath)
-      data.include.push(new RegExp(`${escapedPath}$`))
+      continue
     } else {
       data.include.push(new RegExp(`node_modules/${moduleName}/(?!node_modules).+`), moduleName)
     }
@@ -69,22 +63,3 @@ function addExclusions (data) {
 
 export { initialize, load }
 export { getFormat, resolve, getSource } from 'import-in-the-middle/hook.mjs'
-
-function resolveFilePath (moduleName) {
-  let candidate
-
-  // For now we only want to support path resolution for prisma
-  if (moduleName === prismaOutput) {
-    candidate = prismaOutput
-  }
-
-  if (!candidate) {
-    return null
-  }
-
-  if (path.isAbsolute(candidate)) {
-    return candidate
-  }
-
-  return path.resolve(candidate)
-}
