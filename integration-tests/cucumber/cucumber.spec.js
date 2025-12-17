@@ -2868,7 +2868,7 @@ describe(`cucumber@${version} commonJS`, () => {
             assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
           }
 
-          const resourceNames = tests.map(span => span.resource)
+          const resourceNames = tests.map(span => span.resource).sort()
 
           // TODO: This is a duplication of the code below. We should refactor this.
           assertObjectContains(resourceNames,

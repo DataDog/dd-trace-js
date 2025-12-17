@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const { describe, it, beforeEach, context } = require('tap').mocha
 const path = require('node:path')
-const istanbul = require('istanbul-lib-coverage')
+const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
