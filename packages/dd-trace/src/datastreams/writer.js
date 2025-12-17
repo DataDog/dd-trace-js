@@ -41,10 +41,6 @@ class DataStreamsWriter {
   }
 
   flush (payload) {
-    if (!request.writable) {
-      log.debug('Maximum number of active requests reached. Payload discarded: %j', payload)
-      return
-    }
     const encodedPayload = msgpack.encode(payload)
 
     zlib.gzip(encodedPayload, { level: 1 }, (err, compressedData) => {
@@ -56,6 +52,8 @@ class DataStreamsWriter {
         log.debug('Response from the agent:', res)
         if (err) {
           log.error('Error sending datastream', err)
+        } else if (res == null) {
+          log.debug('Maximum number of active requests reached for endpoint. Datastream payload discarded.')
         }
       })
     })

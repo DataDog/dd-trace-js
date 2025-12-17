@@ -20,6 +20,7 @@ describe('span-stats writer', () => {
     span = 'formatted'
 
     request = sinon.stub().yieldsAsync(null, 'OK', 200)
+    request.isUrlWritable = sinon.stub().returns(true)
 
     encoder = {
       encode: sinon.stub(),

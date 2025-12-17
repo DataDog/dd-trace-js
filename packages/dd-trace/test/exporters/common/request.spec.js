@@ -8,6 +8,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const nock = require('nock')
 const proxyquire = require('proxyquire')
+const { setTimeout: delay } = require('node:timers/promises')
 
 require('../../setup/core')
 const FormData = require('../../../src/exporters/common/form-data')
@@ -32,6 +33,84 @@ const initHTTPServer = () => {
         server.close()
       }
       shutdown.port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      resolve(shutdown)
+    })
+  })
+}
+
+const initSlowAgentHTTPServer = () => {
+  return new Promise(resolve => {
+    const sockets = []
+    let requestCount = 0
+    /** @type {import('node:http').ServerResponse | null} */
+    let firstRes = null
+    let releaseRequested = false
+
+    const maybeReleaseFirst = () => {
+      if (!releaseRequested || !firstRes) return
+      firstRes.writeHead(200, { Connection: 'close' })
+      firstRes.end('OK')
+      firstRes = null
+    }
+
+    const requestListener = function (req, res) {
+      requestCount++
+
+      // Keep the first request open to simulate a slow/unresponsive agent.
+      if (!firstRes) {
+        firstRes = res
+        maybeReleaseFirst()
+        return
+      }
+
+      res.writeHead(200, { Connection: 'close' })
+      res.end('OK')
+    }
+
+    const server = http.createServer(requestListener)
+    server.on('connection', socket => sockets.push(socket))
+
+    server.listen(0, () => {
+      const shutdown = () => {
+        sockets.forEach(socket => socket.end())
+        server.close()
+      }
+
+      shutdown.port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      shutdown.releaseFirst = () => {
+        releaseRequested = true
+        maybeReleaseFirst()
+      }
+      shutdown.requestCount = () => requestCount
+
+      resolve(shutdown)
+    })
+  })
+}
+
+const initCountingHTTPServer = () => {
+  return new Promise(resolve => {
+    const sockets = []
+    let count = 0
+    const requestListener = function (req, res) {
+      count++
+      setTimeout(() => {
+        res.writeHead(200)
+        res.end('OK')
+      }, 1000)
+    }
+
+    const server = http.createServer(requestListener)
+
+    server.on('connection', socket => sockets.push(socket))
+
+    server.listen(0, () => {
+      const shutdown = () => {
+        sockets.forEach(socket => socket.end())
+        server.close()
+      }
+      shutdown.port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      shutdown.getCount = () => count
       resolve(shutdown)
     })
   })
@@ -209,6 +288,48 @@ describe('request', function () {
     })
   })
 
+  it('should discard payloads when agent is slow and maxActiveRequests is reached', async () => {
+    const shutdown = await initSlowAgentHTTPServer()
+
+    const makeCall = () => {
+      return new Promise(resolve => {
+        request(Buffer.from(''), {
+          path: '/',
+          method: 'PUT',
+          hostname: 'localhost',
+          protocol: 'http:',
+          port: shutdown.port,
+          timeout: 1000
+        }, (err, res) => resolve({ err, res }))
+      })
+    }
+
+    const promises = Array.from({ length: 9 }, () => makeCall())
+
+    // The 9th request should be dropped immediately because maxActiveRequests is 8.
+    const dropped = await Promise.race([
+      promises[8],
+      delay(200).then(() => {
+        throw new Error('Expected dropped request callback to be called quickly.')
+      })
+    ])
+
+    assert.strictEqual(dropped.err, null)
+    assert.strictEqual(dropped.res, undefined)
+
+    // Let the blocked request go through so the queued ones can drain.
+    shutdown.releaseFirst()
+
+    const results = await Promise.all(promises.slice(0, 8))
+    for (const { err, res } of results) {
+      assert.ifError(err)
+      assert.strictEqual(res, 'OK')
+    }
+
+    assert.strictEqual(shutdown.requestCount(), 8)
+    shutdown()
+  })
+
   it('should be able to send form data', (done) => {
     nock('http://localhost:80')
       .put('/path')
@@ -224,6 +345,103 @@ describe('request', function () {
     }, (err, res) => {
       assert.strictEqual(res, 'OK')
       done()
+    })
+  })
+
+  it('should apply backpressure per endpoint and ignore querystrings', function () {
+    return initCountingHTTPServer().then(shutdown => {
+      const { port } = shutdown
+      const requests = []
+
+      for (let i = 0; i < 9; i++) {
+        requests.push(new Promise(resolve => {
+          request(Buffer.from(''), {
+            path: `/path?a=${i}`,
+            method: 'POST',
+            hostname: 'localhost',
+            protocol: 'http:',
+            port
+          }, (err, res) => resolve({ err, res }))
+        }))
+      }
+
+      return Promise.all(requests).then(results => {
+        const dropped = results.filter(r => r.err == null && r.res == null)
+        const ok = results.filter(r => !r.err && r.res === 'OK')
+
+        assert.strictEqual(dropped.length, 1)
+        assert.strictEqual(ok.length, 8)
+        assert.strictEqual(shutdown.getCount(), 8)
+        shutdown()
+      })
+    })
+  })
+
+  it('should not apply backpressure across different endpoints', function () {
+    return Promise.all([initHTTPServer(), initHTTPServer()]).then(([shutdownFirst, shutdownSecond]) => {
+      const requests = []
+
+      for (let i = 0; i < 8; i++) {
+        requests.push(new Promise(resolve => {
+          request(Buffer.from(''), {
+            path: `/path?a=${i}`,
+            method: 'POST',
+            hostname: 'localhost',
+            protocol: 'http:',
+            port: shutdownFirst.port
+          }, (err, res) => resolve({ err, res }))
+        }))
+      }
+
+      // This request should not be affected by the first endpoint being saturated.
+      requests.push(new Promise(resolve => {
+        request(Buffer.from(''), {
+          path: '/path',
+          method: 'POST',
+          hostname: 'localhost',
+          protocol: 'http:',
+          port: shutdownSecond.port
+        }, (err, res) => resolve({ err, res }))
+      }))
+
+      return Promise.all(requests).then(results => {
+        const last = results[results.length - 1]
+        assert.ifError(last.err)
+        assert.strictEqual(last.res, 'OK')
+        shutdownFirst()
+        shutdownSecond()
+      })
+    })
+  })
+
+  it('should expose url-level writability while requests are in flight', function () {
+    return initCountingHTTPServer().then(shutdown => {
+      const url = new URL(`http://localhost:${shutdown.port}`)
+
+      const promises = []
+      for (let i = 0; i < 8; i++) {
+        promises.push(new Promise(resolve => {
+          request(Buffer.from(''), {
+            path: `/path?a=${i}`,
+            method: 'POST',
+            hostname: 'localhost',
+            protocol: 'http:',
+            port: shutdown.port
+          }, (err, res) => resolve({ err, res }))
+        }))
+      }
+
+      return delay(50).then(() => {
+        assert.strictEqual(request.isUrlWritable(url), false)
+        return Promise.all(promises).then(results => {
+          for (const { err, res } of results) {
+            assert.ifError(err)
+            assert.strictEqual(res, 'OK')
+          }
+          assert.strictEqual(request.isUrlWritable(url), true)
+          shutdown()
+        })
+      })
     })
   })
 

@@ -32,6 +32,7 @@ function describeWriter (protocolVersion) {
     })
 
     request = sinon.stub().yieldsAsync(null, response, 200)
+    request.isUrlWritable = sinon.stub().returns(true)
 
     encoder = {
       encode: sinon.stub(),

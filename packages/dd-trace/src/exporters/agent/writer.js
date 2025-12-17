@@ -27,6 +27,12 @@ class AgentWriter extends BaseWriter {
 
     const { _headers, _lookup, _protocolVersion, _url } = this
     makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, true, (err, res, status) => {
+      // When the request is dropped due to backpressure, callback is invoked with no response or status.
+      if (!err && !status && res == null) {
+        done()
+        return
+      }
+
       if (status) {
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
@@ -85,7 +91,7 @@ function makeRequest (version, data, count, url, headers, lookup, needsStartupLo
     url
   }
 
-  log.debug('Request to the agent: %j', options)
+  console.log('Request to the agent: %j', options)
 
   request(data, options, (err, res, status) => {
     if (needsStartupLog) {
