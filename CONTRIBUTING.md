@@ -213,8 +213,8 @@ most efficient algorithm. To run your benchmark, use:
 $ yarn bench
 ```
 
+### PR Checklist
 
-### Checklist
 Here is a simple checklist to help write a more complete PR:
 - [ ] Unit tests.
 - [ ] Integration tests.
