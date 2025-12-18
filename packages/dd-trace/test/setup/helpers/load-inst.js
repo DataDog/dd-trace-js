@@ -4,19 +4,10 @@ const fs = require('fs')
 const path = require('path')
 const proxyquire = require('proxyquire')
 
-const rewriterInstrumentations = require('../../../../datadog-instrumentations/src/helpers/rewriter/instrumentations')
-
 function loadInstFile (file, instrumentations) {
   const instrument = {
     addHook (instrumentation) {
       instrumentations.push(instrumentation)
-    },
-    getHooks (names) {
-      names = [names].flat()
-      return rewriterInstrumentations
-        .map(inst => inst.module)
-        .filter(({ name }) => names.includes(name))
-        .map(({ name, versionRange, filePath }) => ({ name, versions: [versionRange], file: filePath }))
     }
   }
 
