@@ -1,5 +1,4 @@
 'use strict'
-const extractOutput = require('./extract-prisma-client-path')
 
 const hooks = {
   '@anthropic-ai/sdk': { esmFirst: true, fn: () => require('../anthropic') },
@@ -31,7 +30,7 @@ const hooks = {
   '@opensearch-project/opensearch': () => require('../opensearch'),
   '@opentelemetry/sdk-trace-node': () => require('../otel-sdk-trace'),
   '@prisma/client': { esmFirst: true, fn: () => require('../prisma') },
-  './runtime/library.js': { esmFirst: true, fn: () => require('../prisma') },
+  './runtime/library.js': () => require('../prisma'),
   '@redis/client': () => require('../redis'),
   '@smithy/smithy-client': () => require('../aws-sdk'),
   '@vitest/runner': { esmFirst: true, fn: () => require('../vitest') },

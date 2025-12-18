@@ -1,7 +1,5 @@
 'use strict'
 
-const extractOutput = require('../../../datadog-instrumentations/src/helpers/extract-prisma-client-path')
-
 const plugins = {
   get '@anthropic-ai/sdk' () { return require('../../../datadog-plugin-anthropic/src') },
   get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo/src') },

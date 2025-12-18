@@ -8,7 +8,7 @@ const PRISMA_CLIENT_OUTPUT_RELATIVE = '../generated/prisma'
 
 const SCHEMA_FIXTURES = {
   clientJs: 'provider-prisma-client-js/schema.prisma',
-  clientOutputJs: 'provider-prisma-client-output-js/schema.prisma',
+  clientOutputJs: 'provider-prisma-client-js/output/schema.prisma',
   tsCjsV6: 'provider-prisma-client-ts/cjs/v6/schema.prisma',
   tsCjsV7: 'provider-prisma-client-ts/cjs/v7/schema.prisma',
   tsEsmV6: 'provider-prisma-client-ts/esm/v6/schema.prisma',

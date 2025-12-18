@@ -33,12 +33,12 @@ function execPrismaGenerate (config, cwd) {
         '--moduleResolution node'
       ].join(' ')
     ].join(' && '), {
-      cwd, // Ensure the current working directory is where the schema is located
+      cwd,
       stdio: 'inherit'
     })
   } else {
     execSync('./node_modules/.bin/prisma generate', {
-      cwd, // Ensure the current working directory is where the schema is located
+      cwd,
       stdio: 'inherit'
     })
   }
@@ -64,10 +64,10 @@ function setGeneratedClientEnv () {
   process.env.DATABASE_URL = TEST_DATABASE_URL
 }
 
-async function copySchemaFixtureToVersionDir (schemaFixturePath, range) {
+async function copySchemaToVersionDir (schemaPath, range) {
   const cwd = path.resolve(__dirname, `../../../versions/@prisma/client@${range}`)
   await fs.cp(
-    path.resolve(__dirname, schemaFixturePath),
+    path.resolve(__dirname, schemaPath),
     path.join(cwd, 'schema.prisma')
   )
   return cwd
@@ -90,27 +90,27 @@ describe('Plugin', () => {
 
   describe('prisma', () => {
     const prismaClients = [{
-        schema: `./${SCHEMA_FIXTURES.clientOutputJs}`,
-        file: '../../../versions/@prisma/generated/prisma',
-        usesGeneratedClientOutput: true
-      },
-      {
-        schema: `./${SCHEMA_FIXTURES.clientJs}`,
-        file: '../../../versions/@prisma/client@range'
-      },
-      {
-        schema: `./${SCHEMA_FIXTURES.tsCjsV6}`,
-        file: '../../../versions/@prisma/dist/client.js',
-        usesGeneratedClientOutput: true,
-        ts: true
-      },
-      {
-        schema: `./${SCHEMA_FIXTURES.tsCjsV7}`,
-        file: '../../../versions/@prisma/v7/dist/client.js',
-        usesGeneratedClientOutput: true,
-        ts: true,
-        v7: true
-      }]
+      schema: `./${SCHEMA_FIXTURES.clientOutputJs}`,
+      file: '../../../versions/@prisma/generated/prisma',
+      usesGeneratedClientOutput: true
+    },
+    {
+      schema: `./${SCHEMA_FIXTURES.clientJs}`,
+      file: '../../../versions/@prisma/client@range'
+    },
+    {
+      schema: `./${SCHEMA_FIXTURES.tsCjsV6}`,
+      file: '../../../versions/@prisma/dist/client.js',
+      usesGeneratedClientOutput: true,
+      ts: true
+    },
+    {
+      schema: `./${SCHEMA_FIXTURES.tsCjsV7}`,
+      file: '../../../versions/@prisma/v7/dist/client.js',
+      usesGeneratedClientOutput: true,
+      ts: true,
+      v7: true
+    }]
 
     prismaClients.forEach(config => {
       // Prisma 7.0.0+ is not supported in Node.js < 20.19.0
@@ -127,7 +127,7 @@ describe('Plugin', () => {
             clearPrismaEnv()
             if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
 
-            const cwd = await copySchemaFixtureToVersionDir(config.schema, range)
+            const cwd = await copySchemaToVersionDir(config.schema, range)
 
             await agent.load(['prisma', 'pg'])
             execPrismaGenerate(config, cwd)
@@ -155,20 +155,20 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].service, expectedSchema.client.serviceName)
 
               // grabbing actual db query span
-              if (!config.v7) {
-                const engineDBSpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
-                assert.strictEqual(engineDBSpan.resource, 'SELECT 1')
-                assert.strictEqual(engineDBSpan.type, 'sql')
-                assert.strictEqual(engineDBSpan.meta['span.kind'], 'client')
-                assert.strictEqual(engineDBSpan.name, expectedSchema.engine.opName)
-                assert.strictEqual(engineDBSpan.service, expectedSchema.engine.serviceName)
-              } else {
+              if (config.v7) {
                 const pgSpan = traces[0].find(span => span.name === 'pg.query')
                 assert.strictEqual(pgSpan.resource, 'SELECT 1')
                 assert.strictEqual(pgSpan.type, 'sql')
                 assert.strictEqual(pgSpan.meta['span.kind'], 'client')
                 assert.strictEqual(pgSpan.name, 'pg.query')
                 assert.strictEqual(pgSpan.service, 'test-postgres')
+              } else {
+                const engineDBSpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
+                assert.strictEqual(engineDBSpan.resource, 'SELECT 1')
+                assert.strictEqual(engineDBSpan.type, 'sql')
+                assert.strictEqual(engineDBSpan.meta['span.kind'], 'client')
+                assert.strictEqual(engineDBSpan.name, expectedSchema.engine.opName)
+                assert.strictEqual(engineDBSpan.service, expectedSchema.engine.serviceName)
               }
             })
 
@@ -314,13 +314,13 @@ describe('Plugin', () => {
           })
         })
 
-        describe(`with configuration ${config.schema}`, () => {
+        describe('with configuration', () => {
           describe('with custom service name', () => {
             before(async () => {
               clearPrismaEnv()
               if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
 
-              const cwd = await copySchemaFixtureToVersionDir(config.schema, range)
+              const cwd = await copySchemaToVersionDir(config.schema, range)
 
               execPrismaGenerate(config, cwd)
 
@@ -354,7 +354,7 @@ describe('Plugin', () => {
               clearPrismaEnv()
               if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
 
-              const cwd = await copySchemaFixtureToVersionDir(config.schema, range)
+              const cwd = await copySchemaToVersionDir(config.schema, range)
 
               execPrismaGenerate(config, cwd)
 
@@ -395,7 +395,7 @@ describe('Plugin', () => {
               clearPrismaEnv()
               if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
 
-              const cwd = await copySchemaFixtureToVersionDir(config.schema, range)
+              const cwd = await copySchemaToVersionDir(config.schema, range)
 
               execPrismaGenerate(config, cwd)
 

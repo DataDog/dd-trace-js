@@ -202,16 +202,16 @@ function isFilePath (moduleName) {
   return false
 }
 
-function findProjectRoot(startDir) {
-  let dir = startDir;
+function findProjectRoot (startDir) {
+  let dir = startDir
 
   while (!fs.existsSync(path.join(dir, 'package.json'))) {
-    const parent = path.dirname(dir);
-    if (parent === dir) break; // reached filesystem root
-    dir = parent;
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
   }
 
-  return dir;
+  return dir
 }
 
 Hook.prototype.unhook = function () {

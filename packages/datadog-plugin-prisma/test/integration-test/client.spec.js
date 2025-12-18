@@ -17,35 +17,35 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { SCHEMA_FIXTURES, TEST_DATABASE_URL } = require('../prisma-fixtures')
 
 const prismaClientConfigs = [{
-    name: 'default @prisma/client',
-    schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.clientJs}`,
-    serverFile: 'server.mjs',
-    importPath: '@prisma/client'
-  },
-  {
-    name: 'custom output path',
-    serverFile: 'server-custom-output.mjs',
-    importPath: './generated/prisma/index.js',
-    schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.clientOutputJs}`,
-    env: { PRISMA_CLIENT_OUTPUT: './generated/prisma' }
-  },
-  {
-    name: 'non JS client generator',
-    serverFile: 'server-non-js-generator.mjs',
-    importPath: './dist/client.js',
-    schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV6}`,
-    env: { PRISMA_CLIENT_OUTPUT: './generated/prisma', DATABASE_URL: TEST_DATABASE_URL },
-    ts: true
-  },
-  {
-    name: 'non JS client generator v7',
-    serverFile: 'server-non-js-adapter.mjs',
-    importPath: './dist/client.js',
-    schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV7}`,
-    configFile: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV7Config}`,
-    env: { PRISMA_CLIENT_OUTPUT: './generated/prisma', DATABASE_URL: TEST_DATABASE_URL },
-    ts: true
-  }]
+  name: 'prisma-generator-js with no output',
+  schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.clientJs}`,
+  serverFile: 'server.mjs',
+  importPath: '@prisma/client'
+},
+{
+  name: 'prisma-generator-js with custom output',
+  serverFile: 'server-output.mjs',
+  importPath: './generated/prisma/index.js',
+  schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.clientOutputJs}`,
+  env: { PRISMA_CLIENT_OUTPUT: './generated/prisma' }
+},
+{
+  name: 'prisma-generator v6',
+  serverFile: 'server-ts-v6.mjs',
+  importPath: './dist/client.js',
+  schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV6}`,
+  env: { PRISMA_CLIENT_OUTPUT: './generated/prisma', DATABASE_URL: TEST_DATABASE_URL },
+  ts: true
+},
+{
+  name: 'prisma-generator v7',
+  serverFile: 'server-ts-v7.mjs',
+  importPath: './dist/client.js',
+  schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV7}`,
+  configFile: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV7Config}`,
+  env: { PRISMA_CLIENT_OUTPUT: './generated/prisma', DATABASE_URL: TEST_DATABASE_URL },
+  ts: true
+}]
 
 describe('esm', () => {
   let agent

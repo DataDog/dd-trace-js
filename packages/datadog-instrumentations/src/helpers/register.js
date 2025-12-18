@@ -82,7 +82,6 @@ for (const packageName of names) {
 
     const namesAndSuccesses = {}
     for (const { name, file, versions, hook, filePattern, patchDefault } of instrumentations[packageName]) {
-
       if (patchDefault === false && !moduleExports.default && isIitm) {
         return moduleExports
       } else if (patchDefault === true && moduleExports.default && isIitm) {
@@ -235,25 +234,6 @@ function parseHookInstrumentationFileName (packageName) {
   }
 
   return null
-}
-
-function resolveFilePath (moduleName) {
-  let candidate
-
-  // For know we want to only resolve the file path for prisma
-  if (moduleName === prismaOutput) {
-    candidate = prismaOutput
-  }
-
-  if (!candidate) {
-    return null
-  }
-
-  if (path.isAbsolute(candidate)) {
-    return candidate
-  }
-
-  return path.resolve(candidate)
 }
 
 module.exports = {

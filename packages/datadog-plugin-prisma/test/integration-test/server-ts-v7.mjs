@@ -3,7 +3,7 @@ import { PrismaClient } from './dist/client.js'
 import { PrismaPg } from '@prisma/adapter-pg'
 
 const adapter = new PrismaPg({ connectionString: `${process.env.DATABASE_URL}` })
-const prismaClient = new PrismaClient({adapter})
+const prismaClient = new PrismaClient({ adapter })
 const user = await prismaClient.user.create({
   data: {
     name: 'John Doe',

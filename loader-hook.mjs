@@ -2,7 +2,6 @@ import regexpEscapeModule from './vendor/dist/escape-string-regexp/index.js'
 import * as iitm from 'import-in-the-middle/hook.mjs'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config-helper.js'
-import path from 'path'
 import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
 import { isFilePath } from './packages/datadog-instrumentations/src/helpers/shared-utils.js'
 

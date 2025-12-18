@@ -93,26 +93,24 @@ const prismaHook = (runtime, versions, name, isIitm) => {
     }
   }
 
-  // For ESM (iitm), we can directly assign the property because iitm manages the Proxy and adding the proxy will break iitm,
   if (isIitm) {
     runtime.getPrismaClient = wrappedGetPrismaClient
     return runtime
-  } else {
-    // For CommonJS, use a Proxy to intercept getPrismaClient access
-    return new Proxy(runtime, {
-      get (target, prop) {
-        if (prop === 'getPrismaClient') {
-          return wrappedGetPrismaClient
-        }
-        return target[prop]
-      }
-    })
   }
+
+  return new Proxy(runtime, {
+    get (target, prop) {
+      if (prop === 'getPrismaClient') {
+        return wrappedGetPrismaClient
+      }
+      return target[prop]
+    }
+  })
 }
 
 const prismaConfigs = [
   { name: '@prisma/client', versions: ['>=6.1.0 <7.0.0'], filePattern: 'runtime/library.*' },
-  { name: './runtime/library.js', versions: ['>=6.1.0 <7.0.0'], file: 'runtime/library.js'},
+  { name: './runtime/library.js', versions: ['>=6.1.0 <7.0.0'], file: 'runtime/library.js' },
   { name: '@prisma/client', versions: ['>=7.0.0'], filePattern: 'runtime/client.*' }
 ]
 
