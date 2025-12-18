@@ -15,6 +15,8 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { SCHEMA_FIXTURES, TEST_DATABASE_URL } = require('../prisma-fixtures')
+const semifies = require('semifies')
+const semver = require('semver')
 
 const prismaClientConfigs = [{
   name: 'prisma-generator-js with no output',
@@ -50,11 +52,12 @@ const prismaClientConfigs = [{
 describe('esm', () => {
   let agent
   let proc
-  let versionRange
   prismaClientConfigs.forEach(config => {
     describe(config.name, () => {
-      versionRange = config.configFile ? '>=7.0.0' : '<7.0.0'
-      withVersions('prisma', '@prisma/client', versionRange, version => {
+      const isNodeSupported = semifies(semver.clean(process.version), '>=20.19.0')
+      const supportedRange = config.configFile && isNodeSupported ? '>=7.0.0' : '<7.0.0'
+
+      withVersions('prisma', '@prisma/client', supportedRange, version => {
         if (config.ts && version === '6.1.0') return
         let variants
         const paths = ['./packages/datadog-plugin-prisma/test/integration-test/*', config.schema]
