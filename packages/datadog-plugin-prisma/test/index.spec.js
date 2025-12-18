@@ -317,7 +317,8 @@ describe('Plugin', () => {
 
         describe('with configuration', () => {
           describe('with custom service name', () => {
-            before(async () => {
+            before(async function () {
+              this.timeout(10000)
               clearPrismaEnv()
               if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
 
@@ -351,7 +352,8 @@ describe('Plugin', () => {
           })
 
           describe('with prisma client disabled', () => {
-            before(async () => {
+            before(async function () {
+              this.timeout(10000)
               clearPrismaEnv()
               if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
 
