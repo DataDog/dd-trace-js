@@ -2,8 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-
 const shimmer = require('../src/shimmer')
 
 describe('shimmer', () => {
@@ -237,7 +235,7 @@ describe('shimmer', () => {
       shimmer.wrap(obj, 'count', () => () => {})
 
       assert.strictEqual(obj.count.test, 'test')
-      expect(Object.getOwnPropertyNames(obj.count)).to.not.include('test')
+      assert.strictEqual(Object.hasOwn(obj.count, 'test'), false)
     })
 
     it('should inherit from the original method prototype 2', () => {
@@ -253,7 +251,7 @@ describe('shimmer', () => {
 
       assert.strictEqual(obj.count.test, 'test')
       assert.strictEqual(obj.count.foo, 42)
-      expect(Object.getOwnPropertyNames(obj.count)).to.not.include('test')
+      assert.strictEqual(Object.hasOwn(obj.count, 'test'), false)
     })
 
     it('should preserve the property descriptor of the original', () => {
@@ -477,7 +475,7 @@ describe('shimmer', () => {
       const wrapped = shimmer.wrapFunction(count, count => () => {})
 
       assert.strictEqual(wrapped.test, 'test')
-      expect(Object.getOwnPropertyNames(wrapped)).to.not.include('test')
+      assert.strictEqual(Object.hasOwn(wrapped, 'test'), false)
     })
 
     it('should mass wrap methods on objects', () => {

@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { after, before, beforeEach, describe, it } = require('mocha')
 
 const { assertObjectContains, useEnv } = require('../../../integration-tests/helpers')
@@ -176,7 +175,7 @@ describe('Plugin', () => {
 
           const result = await llm.generate(['what is 2 + 2?'])
 
-          assert.ok(result.generations[0][0].text != null)
+          assert.ok(result.generations[0][0].text)
 
           await checkTraces
         })
@@ -195,8 +194,8 @@ describe('Plugin', () => {
           const llm = getLangChainOpenAiClient('llm', { model: 'gpt-3.5-turbo-instruct' })
           const result = await llm.generate(['what is 2 + 2?', 'what is the circumference of the earth?'])
 
-          assert.ok(result.generations[0][0].text != null)
-          assert.ok(result.generations[1][0].text != null)
+          assert.ok(result.generations[0][0].text)
+          assert.ok(result.generations[1][0].text)
 
           await checkTraces
         })
@@ -216,8 +215,8 @@ describe('Plugin', () => {
           const llm = getLangChainOpenAiClient('llm', { model: 'gpt-3.5-turbo-instruct', n: 2 })
           const result = await llm.generate(['what is 2 + 2?'])
 
-          assert.ok(result.generations[0][0].text != null)
-          assert.ok(result.generations[0][1].text != null)
+          assert.ok(result.generations[0][0].text)
+          assert.ok(result.generations[0][1].text)
 
           await checkTraces
         })
@@ -268,7 +267,7 @@ describe('Plugin', () => {
           const chatModel = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
           const result = await chatModel.invoke('Hello!')
 
-          assert.ok(result.content != null)
+          assert.ok(result.content)
 
           await checkTraces
         })
@@ -292,7 +291,7 @@ describe('Plugin', () => {
           ]
 
           const result = await chatModel.invoke(messages)
-          assert.ok(result.content != null)
+          assert.ok(result.content)
 
           await checkTraces
         })
@@ -316,7 +315,7 @@ describe('Plugin', () => {
           ]
           const result = await chatModel.invoke(messages)
 
-          assert.ok(result.content != null)
+          assert.ok(result.content)
 
           await checkTraces
         })
@@ -382,7 +381,7 @@ describe('Plugin', () => {
           const chatModel = getLangChainAnthropicClient('chat', { modelName: 'claude-3-5-sonnet-20241022' })
 
           const result = await chatModel.invoke('Hello!')
-          assert.ok(result.content != null)
+          assert.ok(result.content)
 
           await checkTraces
         })
@@ -448,7 +447,7 @@ describe('Plugin', () => {
           ]
           const result = await chain.invoke(messages)
 
-          assert.ok(result != null)
+          assert.ok(result)
 
           await checkTraces
         })
@@ -488,7 +487,7 @@ describe('Plugin', () => {
 
           const result = await chain.invoke({ topic: 'chickens', style: 'dad joke' })
 
-          assert.ok(result != null)
+          assert.ok(result)
 
           await checkTraces
         })
@@ -524,8 +523,8 @@ describe('Plugin', () => {
           const result = await chain.batch(['chickens', 'dogs'])
 
           assert.strictEqual(result.length, 2)
-          assert.ok(result[0] != null)
-          assert.ok(result[1] != null)
+          assert.ok(result[0])
+          assert.ok(result[1])
 
           await checkTraces
         })
@@ -718,7 +717,7 @@ describe('Plugin', () => {
 
           try {
             await myTool.invoke()
-            expect.fail('Expected an error to be thrown')
+            assert.fail('Expected an error to be thrown')
           } catch {}
 
           await checkTraces
@@ -759,7 +758,7 @@ describe('Plugin', () => {
           // we need the spanResourceMatch, otherwise we'll match from the beforeEach
 
           const result = await vectorstore.similaritySearch('The powerhouse of the cell is the mitochondria', 2)
-          assert.ok(result != null)
+          assert.ok(result)
 
           await checkTraces
         })
@@ -784,7 +783,7 @@ describe('Plugin', () => {
           const result = await vectorstore.similaritySearchWithScore(
             'The powerhouse of the cell is the mitochondria', 2
           )
-          assert.ok(result != null)
+          assert.ok(result)
 
           await checkTraces
         })

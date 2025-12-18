@@ -114,18 +114,12 @@ describe('Plugin', () => {
       })
 
       it('should attach an error to the span', async () => {
-        const checkTraces = agent
-          .assertSomeTraces(traces => {
-            assertObjectContains(traces[0][0], {
-              error: 1,
-              meta: {
-                'error.type': 'Error'
-              }
-            })
-            // the message content differs on OpenAI version, even between patches
-            assert.ok(traces[0][0].meta['error.message'] != null)
-            assert.ok(traces[0][0].meta['error.stack'] != null)
-          })
+        const checkTraces = agent.assertFirstTraceSpan({
+          error: 1,
+          meta: {
+            'error.type': 'Error'
+          }
+        })
 
         const params = {
           model: 'gpt-3.5-turbo', // incorrect model
@@ -178,10 +172,10 @@ describe('Plugin', () => {
 
             if (semver.satisfies(realVersion, '>=4.0.0')) {
               const result = await openai.completions.create(params)
-              assert.ok(result.id != null)
+              assert.ok(result.id)
             } else {
               const result = await openai.createCompletion(params)
-              assert.ok(result.data.id != null)
+              assert.ok(result.data.id)
             }
 
             tracer.trace('child of outer', innerSpan => {
@@ -263,10 +257,10 @@ describe('Plugin', () => {
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             const result = await openai.completions.create(params)
-            assert.ok(result.id != null)
+            assert.ok(result.id)
           } else {
             const result = await openai.createCompletion(params)
-            assert.ok(result.data.id != null)
+            assert.ok(result.data.id)
           }
 
           await checkTraces
@@ -295,10 +289,10 @@ describe('Plugin', () => {
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             const result = await openai.completions.create(params)
-            assert.ok(result.id != null)
+            assert.ok(result.id)
           } else {
             const result = await openai.createCompletion(params)
-            assert.ok(result.data.id != null)
+            assert.ok(result.data.id)
           }
 
           await checkTraces
@@ -423,10 +417,10 @@ describe('Plugin', () => {
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
           const result = await openai.embeddings.create(params)
-          assert.ok(result.model != null)
+          assert.ok(result.model)
         } else {
           const result = await openai.createEmbedding(params)
-          assert.ok(result.data.model != null)
+          assert.ok(result.data.model)
         }
 
         await checkTraces
@@ -458,11 +452,11 @@ describe('Plugin', () => {
         if (semver.satisfies(realVersion, '>=4.0.0')) {
           const result = await openai.models.list()
           assert.deepStrictEqual(result.object, 'list')
-          assert.ok(result.data.length != null)
+          assert.ok(result.data.length)
         } else {
           const result = await openai.listModels()
           assert.deepStrictEqual(result.data.object, 'list')
-          assert.ok(result.data.data.length != null)
+          assert.ok(result.data.data.length)
         }
 
         await checkTraces
@@ -565,13 +559,13 @@ describe('Plugin', () => {
         if (semver.satisfies(realVersion, '>=4.0.0')) {
           const result = await openai.files.list()
 
-          assert.ok(result.data.length != null)
-          assert.ok(result.data[0].id != null)
+          assert.ok(result.data.length)
+          assert.ok(result.data[0].id)
         } else {
           const result = await openai.listFiles()
 
-          assert.ok(result.data.data.length != null)
-          assert.ok(result.data.data[0].id != null)
+          assert.ok(result.data.data.length)
+          assert.ok(result.data.data[0].id)
         }
 
         await checkTraces
@@ -653,11 +647,11 @@ describe('Plugin', () => {
         if (semver.satisfies(realVersion, '>=4.0.0')) {
           const result = await openai.files.retrieve('file-RpTpuvRVtnKpdKZb7DDGto')
 
-          assert.ok(result.filename != null)
+          assert.ok(result.filename)
         } else {
           const result = await openai.retrieveFile('file-RpTpuvRVtnKpdKZb7DDGto')
 
-          assert.ok(result.data.filename != null)
+          assert.ok(result.data.filename)
         }
 
         await checkTraces
@@ -687,7 +681,7 @@ describe('Plugin', () => {
         if (semver.satisfies(realVersion, '>=4.0.0 < 4.17.1')) {
           const result = await openai.files.retrieveContent('file-RpTpuvRVtnKpdKZb7DDGto')
 
-          assert.ok(result != null)
+          assert.ok(result)
         } else if (semver.satisfies(realVersion, '>=4.17.1')) {
           const result = await openai.files.content('file-RpTpuvRVtnKpdKZb7DDGto')
 
@@ -695,7 +689,7 @@ describe('Plugin', () => {
         } else {
           const result = await openai.downloadFile('file-RpTpuvRVtnKpdKZb7DDGto')
 
-          assert.ok(result.data != null)
+          assert.ok(result.data)
         }
 
         await checkTraces
@@ -772,7 +766,7 @@ describe('Plugin', () => {
         }
 
         const result = await openai.fineTuning.jobs.create(params)
-        assert.ok(result.id != null)
+        assert.ok(result.id)
 
         await checkTraces
       })
@@ -986,7 +980,7 @@ describe('Plugin', () => {
             if (responseFormat === 'url') {
               assert.strictEqual(result.data[0].url.startsWith('https://'), true)
             } else {
-              assert.ok(result.data[0].b64_json != null)
+              assert.ok(result.data[0].b64_json)
             }
           } else {
             const result = await openai.createImage({
@@ -1000,7 +994,7 @@ describe('Plugin', () => {
             if (responseFormat === 'url') {
               assert.strictEqual(result.data.data[0].url.startsWith('https://'), true)
             } else {
-              assert.ok(result.data.data[0].b64_json != null)
+              assert.ok(result.data.data[0].b64_json)
             }
           }
 
@@ -1187,7 +1181,7 @@ describe('Plugin', () => {
             temperature: 0.5
           })
 
-          assert.ok(result.text != null)
+          assert.ok(result.text)
         } else {
           const result = await openai.createTranslation(
             fs.createReadStream(Path.join(__dirname, 'translation.m4a')),
@@ -1197,7 +1191,7 @@ describe('Plugin', () => {
             0.5
           )
 
-          assert.ok(result.data.text != null)
+          assert.ok(result.data.text)
         }
 
         await checkTraces
@@ -1259,19 +1253,19 @@ describe('Plugin', () => {
 
             const result = await prom
 
-            assert.ok(result.id != null)
-            assert.ok(result.model != null)
+            assert.ok(result.id)
+            assert.ok(result.model)
             assert.deepStrictEqual(result.choices[0].message.role, 'assistant')
-            assert.ok(result.choices[0].message.content != null)
-            assert.ok(result.choices[0].finish_reason != null)
+            assert.ok(result.choices[0].message.content)
+            assert.ok(result.choices[0].finish_reason)
           } else {
             const result = await openai.createChatCompletion(params)
 
-            assert.ok(result.data.id != null)
-            assert.ok(result.data.model != null)
+            assert.ok(result.data.id)
+            assert.ok(result.data.model)
             assert.deepStrictEqual(result.data.choices[0].message.role, 'assistant')
-            assert.ok(result.data.choices[0].message.content != null)
-            assert.ok(result.data.choices[0].finish_reason != null)
+            assert.ok(result.data.choices[0].message.content)
+            assert.ok(result.data.choices[0].finish_reason)
           }
 
           await checkTraces
@@ -1349,10 +1343,10 @@ describe('Plugin', () => {
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             const result = await openai.chat.completions.create(params)
-            assert.ok(result.id != null)
+            assert.ok(result.id)
           } else {
             const result = await openai.createChatCompletion(params)
-            assert.ok(result.data.id != null)
+            assert.ok(result.data.id)
           }
 
           await checkTraces
@@ -1669,7 +1663,7 @@ describe('Plugin', () => {
 
         assert.ok(!Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom))
         const response = await prom
-        assert.ok(response.choices[0].message.content != null)
+        assert.ok(response.choices[0].message.content)
 
         await checkTraces
       })

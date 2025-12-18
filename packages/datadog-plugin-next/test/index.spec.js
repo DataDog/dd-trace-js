@@ -434,8 +434,7 @@ describe('Plugin', function () {
                     'error.type': 'Error'
                   }
                 })
-
-                assert.ok(spans[1].meta['error.stack'] != null)
+                assert.ok(spans[1].meta['error.stack'])
               })
               .then(done)
               .catch(done)
@@ -603,7 +602,7 @@ describe('Plugin', function () {
                   }
                 })
 
-                assert.ok(spans[1].meta['error.stack'] != null)
+                assert.ok(spans[1].meta['error.stack'])
               })
               .then(done)
               .catch(done)
