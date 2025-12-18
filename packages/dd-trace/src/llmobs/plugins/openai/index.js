@@ -11,7 +11,7 @@ const {
   PROMPT_TRACKING_INSTRUMENTATION_METHOD,
   PROMPT_MULTIMODAL,
   INSTRUMENTATION_METHOD_AUTO
-} = require('../../constants')
+} = require('../../constants/tags')
 
 const allowedParamKeys = new Set([
   'max_output_tokens',

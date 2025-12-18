@@ -5,7 +5,7 @@ const {
   INPUT_TYPE_FILE,
   IMAGE_FALLBACK,
   FILE_FALLBACK
-} = require('../../constants')
+} = require('./constants')
 
 const REGEX_SPECIAL_CHARS = /[.*+?^${}()|[\]\\]/g
 
