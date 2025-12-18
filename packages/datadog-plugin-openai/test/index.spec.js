@@ -8,7 +8,7 @@ const Path = require('path')
 const semver = require('semver')
 const sinon = require('sinon')
 
-const { useEnv } = require('../../../integration-tests/helpers')
+const { assertObjectContains, useEnv } = require('../../../integration-tests/helpers')
 const { DogStatsDClient } = require('../../dd-trace/src/dogstatsd')
 const { NoopExternalLogger } = require('../../dd-trace/src/external-logger/src')
 const Sampler = require('../../dd-trace/src/sampler')
@@ -116,10 +116,14 @@ describe('Plugin', () => {
       it('should attach an error to the span', async () => {
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].error, 1)
+            assertObjectContains(traces[0][0], {
+              error: 1,
+              meta: {
+                'error.type': 'Error'
+              }
+            })
             // the message content differs on OpenAI version, even between patches
             assert.ok(traces[0][0].meta['error.message'] != null)
-            assert.strictEqual(traces[0][0].meta['error.type'], 'Error')
             assert.ok(traces[0][0].meta['error.stack'] != null)
           })
 
@@ -234,14 +238,17 @@ describe('Plugin', () => {
               } else {
                 assert.strictEqual(traces[0][0].resource, 'createCompletion')
               }
-              assert.strictEqual(traces[0][0].error, 0)
-              assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
               assert.ok('openai.request.endpoint' in traces[0][0].meta)
-              assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/completions')
-
-              assert.strictEqual(traces[0][0].meta.component, 'openai')
-              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'openai')
-              assert.strictEqual(traces[0][0].meta['openai.request.model'], 'gpt-3.5-turbo-instruct')
+              assertObjectContains(traces[0][0], {
+                error: 0,
+                meta: {
+                  'openai.request.method': 'POST',
+                  'openai.request.endpoint': '/vcr/openai/completions',
+                  component: 'openai',
+                  '_dd.integration': 'openai',
+                  'openai.request.model': 'gpt-3.5-turbo-instruct'
+                }
+              })
               assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
             })
 
@@ -397,11 +404,14 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'createEmbedding')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/embeddings')
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
-
-            assert.strictEqual(traces[0][0].meta['openai.request.model'], 'text-embedding-ada-002')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.endpoint': '/vcr/openai/embeddings',
+                'openai.request.method': 'POST',
+                'openai.request.model': 'text-embedding-ada-002'
+              }
+            })
             assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
           })
 
@@ -434,9 +444,13 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'listModels')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/models')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.method': 'GET',
+                'openai.request.endpoint': '/vcr/openai/models'
+              }
+            })
 
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
           })
@@ -464,12 +478,16 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'retrieveModel')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
             // TODO: this might be a bug...
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/models/*')
-            assert.strictEqual(traces[0][0].meta['openai.request.id'], 'gpt-4')
-            assert.strictEqual(traces[0][0].meta['openai.response.owned_by'], 'openai')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.method': 'GET',
+                'openai.request.endpoint': '/v1/models/*',
+                'openai.request.id': 'gpt-4',
+                'openai.response.owned_by': 'openai'
+              }
+            })
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -496,16 +514,18 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'deleteModel')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'DELETE')
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/models/*')
-
-            assert.strictEqual(traces[0][0].metrics['openai.response.deleted'], 1)
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.method': 'DELETE',
+                'openai.request.endpoint': '/v1/models/*',
+                'openai.response.id': 'ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh'
+              },
+              metrics: {
+                'openai.response.deleted': 1
+              }
+            })
             assert.ok('openai.response.id' in traces[0][0].meta)
-            assert.strictEqual(
-              traces[0][0].meta['openai.response.id'],
-              'ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh'
-            )
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -532,10 +552,13 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'listFiles')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/files')
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.endpoint': '/vcr/openai/files',
+                'openai.request.method': 'GET'
+              }
+            })
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
           })
 
@@ -568,16 +591,19 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'createFile')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/files')
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
-
-            assert.strictEqual(traces[0][0].meta['openai.request.filename'], 'fine-tune.jsonl')
-            assert.strictEqual(traces[0][0].meta['openai.request.purpose'], 'fine-tune')
-            assert.strictEqual(traces[0][0].meta['openai.response.purpose'], 'fine-tune')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.endpoint': '/vcr/openai/files',
+                'openai.request.method': 'POST',
+                'openai.request.filename': 'fine-tune.jsonl',
+                'openai.request.purpose': 'fine-tune',
+                'openai.response.purpose': 'fine-tune',
+                'openai.response.filename': 'fine-tune.jsonl'
+              }
+            })
             assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.status'))
             assert.match(traces[0][0].meta['openai.response.id'], /^file-/)
-            assert.strictEqual(traces[0][0].meta['openai.response.filename'], 'fine-tune.jsonl')
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.bytes'))
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
           })
@@ -609,13 +635,16 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'retrieveFile')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/files/*')
-
-            assert.strictEqual(traces[0][0].meta['openai.response.filename'], 'fine-tune.jsonl')
-            assert.strictEqual(traces[0][0].meta['openai.response.id'], 'file-RpTpuvRVtnKpdKZb7DDGto')
-            assert.strictEqual(traces[0][0].meta['openai.response.purpose'], 'fine-tune')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.method': 'GET',
+                'openai.request.endpoint': '/v1/files/*',
+                'openai.response.filename': 'fine-tune.jsonl',
+                'openai.response.id': 'file-RpTpuvRVtnKpdKZb7DDGto',
+                'openai.response.purpose': 'fine-tune'
+              }
+            })
             assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.status'))
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.bytes'))
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
@@ -646,9 +675,13 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'downloadFile')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/files/*/content')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.method': 'GET',
+                'openai.request.endpoint': '/v1/files/*/content'
+              }
+            })
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0 < 4.17.1')) {
@@ -679,11 +712,14 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'deleteFile')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'DELETE')
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/files/*')
-
-            assert.strictEqual(traces[0][0].meta['openai.response.id'], 'file-RpTpuvRVtnKpdKZb7DDGto')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.method': 'DELETE',
+                'openai.request.endpoint': '/v1/files/*',
+                'openai.response.id': 'file-RpTpuvRVtnKpdKZb7DDGto'
+              }
+            })
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.deleted'))
           })
 
@@ -716,14 +752,17 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'createFineTune')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
             assert.ok('openai.request.endpoint' in traces[0][0].meta)
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/fine_tuning/jobs')
-
-            assert.strictEqual(traces[0][0].meta['openai.request.model'], 'gpt-4.1-mini-2025-04-14')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.method': 'POST',
+                'openai.request.endpoint': '/vcr/openai/fine_tuning/jobs',
+                'openai.request.model': 'gpt-4.1-mini-2025-04-14',
+                'openai.response.model': 'gpt-4.1-mini-2025-04-14'
+              }
+            })
             assert.match(traces[0][0].meta['openai.response.id'], /^ftjob-/)
-            assert.strictEqual(traces[0][0].meta['openai.response.model'], 'gpt-4.1-mini-2025-04-14')
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
           })
 
@@ -752,11 +791,14 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'retrieveFineTune')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/fine_tuning/jobs/*')
-
-            assert.strictEqual(traces[0][0].meta['openai.response.id'], 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.method': 'GET',
+                'openai.request.endpoint': '/v1/fine_tuning/jobs/*',
+                'openai.response.id': 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf'
+              }
+            })
             assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
           })
@@ -782,10 +824,14 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].resource, 'cancelFineTune')
             }
 
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/fine_tuning/jobs/*/cancel')
-            assert.strictEqual(traces[0][0].meta['openai.response.id'], 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.method': 'POST',
+                'openai.request.endpoint': '/v1/fine_tuning/jobs/*/cancel',
+                'openai.response.id': 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf'
+              }
+            })
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
           })
 
@@ -810,9 +856,13 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].resource, 'listFineTuneEvents')
             }
 
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/fine_tuning/jobs/*/events')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.method': 'GET',
+                'openai.request.endpoint': '/v1/fine_tuning/jobs/*/events'
+              }
+            })
 
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
           })
@@ -837,10 +887,14 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'listFineTunes')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
             assert.ok('openai.request.endpoint' in traces[0][0].meta)
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/fine_tuning/jobs')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.method': 'GET',
+                'openai.request.endpoint': '/vcr/openai/fine_tuning/jobs'
+              }
+            })
 
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
           })
@@ -865,9 +919,13 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'createModeration')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/moderations')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.method': 'POST',
+                'openai.request.endpoint': '/vcr/openai/moderations'
+              }
+            })
 
             assert.match(traces[0][0].meta['openai.response.id'], /^modr-/)
             assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
@@ -905,11 +963,15 @@ describe('Plugin', () => {
               } else {
                 assert.strictEqual(traces[0][0].resource, 'createImage')
               }
-              assert.strictEqual(traces[0][0].error, 0)
-              assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
               assert.ok('openai.request.endpoint' in traces[0][0].meta)
-              assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/images/generations')
-              assert.strictEqual(traces[0][0].meta['openai.request.model'], 'dall-e-3')
+              assertObjectContains(traces[0][0], {
+                error: 0,
+                meta: {
+                  'openai.request.method': 'POST',
+                  'openai.request.endpoint': '/vcr/openai/images/generations',
+                  'openai.request.model': 'dall-e-3'
+                }
+              })
             })
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -966,10 +1028,14 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'createImageEdit')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
             assert.ok('openai.request.endpoint' in traces[0][0].meta)
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/images/edits')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.method': 'POST',
+                'openai.request.endpoint': '/vcr/openai/images/edits'
+              }
+            })
             // TODO(sabrenner): fix in a follow-up (super simple - img.name)
           })
 
@@ -1009,10 +1075,14 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'createImageVariation')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
             assert.ok('openai.request.endpoint' in traces[0][0].meta)
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/images/variations')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.method': 'POST',
+                'openai.request.endpoint': '/vcr/openai/images/variations'
+              }
+            })
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -1053,12 +1123,15 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'createTranscription')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-
             assert.ok('openai.request.endpoint' in traces[0][0].meta)
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/audio/transcriptions')
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
-            assert.strictEqual(traces[0][0].meta['openai.request.model'], 'gpt-4o-mini-transcribe')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.endpoint': '/vcr/openai/audio/transcriptions',
+                'openai.request.method': 'POST',
+                'openai.request.model': 'gpt-4o-mini-transcribe'
+              }
+            })
           })
 
         const result = await openai.audio.transcriptions.create({
@@ -1095,12 +1168,15 @@ describe('Plugin', () => {
             } else {
               assert.strictEqual(traces[0][0].resource, 'createTranslation')
             }
-            assert.strictEqual(traces[0][0].error, 0)
-
             assert.ok('openai.request.endpoint' in traces[0][0].meta)
-            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/audio/translations')
-            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
-            assert.strictEqual(traces[0][0].meta['openai.request.model'], 'whisper-1')
+            assertObjectContains(traces[0][0], {
+              error: 0,
+              meta: {
+                'openai.request.endpoint': '/vcr/openai/audio/translations',
+                'openai.request.method': 'POST',
+                'openai.request.model': 'whisper-1'
+              }
+            })
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -1146,13 +1222,15 @@ describe('Plugin', () => {
               } else {
                 assert.strictEqual(traces[0][0].resource, 'createChatCompletion')
               }
-              assert.strictEqual(traces[0][0].error, 0)
-
-              assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
               assert.ok('openai.request.endpoint' in traces[0][0].meta)
-              assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/chat/completions')
-
-              assert.strictEqual(traces[0][0].meta['openai.request.model'], 'gpt-3.5-turbo')
+              assertObjectContains(traces[0][0], {
+                error: 0,
+                meta: {
+                  'openai.request.method': 'POST',
+                  'openai.request.endpoint': '/vcr/openai/chat/completions',
+                  'openai.request.model': 'gpt-3.5-turbo'
+                }
+              })
               assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
             })
 

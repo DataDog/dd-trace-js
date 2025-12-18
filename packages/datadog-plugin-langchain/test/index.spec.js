@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const { expect } = require('chai')
 const { after, before, beforeEach, describe, it } = require('mocha')
 
-const { useEnv } = require('../../../integration-tests/helpers')
+const { assertObjectContains, useEnv } = require('../../../integration-tests/helpers')
 const iastFilter = require('../../dd-trace/src/appsec/iast/taint-tracking/filter')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -163,12 +163,15 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
 
-              assert.strictEqual(span.name, 'langchain.request')
-              assert.strictEqual(span.resource, 'langchain.llms.openai.OpenAI')
-
-              assert.strictEqual(span.meta['langchain.request.provider'], 'openai')
-              assert.strictEqual(span.meta['langchain.request.model'], 'gpt-3.5-turbo-instruct')
-              assert.strictEqual(span.meta['langchain.request.type'], 'llm')
+              assertObjectContains(span, {
+                name: 'langchain.request',
+                resource: 'langchain.llms.openai.OpenAI',
+                meta: {
+                  'langchain.request.provider': 'openai',
+                  'langchain.request.model': 'gpt-3.5-turbo-instruct',
+                  'langchain.request.type': 'llm'
+                }
+              })
             })
 
           const result = await llm.generate(['what is 2 + 2?'])
@@ -183,8 +186,10 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
-              assert.strictEqual(span.meta['langchain.request.provider'], 'openai')
-              assert.strictEqual(span.meta['langchain.request.model'], 'gpt-3.5-turbo-instruct')
+              assertObjectContains(span.meta, {
+                'langchain.request.provider': 'openai',
+                'langchain.request.model': 'gpt-3.5-turbo-instruct'
+              })
             })
 
           const llm = getLangChainOpenAiClient('llm', { model: 'gpt-3.5-turbo-instruct' })
@@ -202,8 +207,10 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
 
-              assert.strictEqual(span.meta['langchain.request.provider'], 'openai')
-              assert.strictEqual(span.meta['langchain.request.model'], 'gpt-3.5-turbo-instruct')
+              assertObjectContains(span.meta, {
+                'langchain.request.provider': 'openai',
+                'langchain.request.model': 'gpt-3.5-turbo-instruct'
+              })
             })
 
           const llm = getLangChainOpenAiClient('llm', { model: 'gpt-3.5-turbo-instruct', n: 2 })
@@ -247,12 +254,15 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
 
-              assert.strictEqual(span.name, 'langchain.request')
-              assert.strictEqual(span.resource, 'langchain.chat_models.openai.ChatOpenAI')
-
-              assert.strictEqual(span.meta['langchain.request.provider'], 'openai')
-              assert.strictEqual(span.meta['langchain.request.model'], 'gpt-4')
-              assert.strictEqual(span.meta['langchain.request.type'], 'chat_model')
+              assertObjectContains(span, {
+                name: 'langchain.request',
+                resource: 'langchain.chat_models.openai.ChatOpenAI',
+                meta: {
+                  'langchain.request.provider': 'openai',
+                  'langchain.request.model': 'gpt-4',
+                  'langchain.request.type': 'chat_model'
+                }
+              })
             })
 
           const chatModel = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
@@ -269,8 +279,10 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
 
-              assert.strictEqual(span.meta['langchain.request.provider'], 'openai')
-              assert.strictEqual(span.meta['langchain.request.model'], 'gpt-4')
+              assertObjectContains(span.meta, {
+                'langchain.request.provider': 'openai',
+                'langchain.request.model': 'gpt-4'
+              })
             })
 
           const chatModel = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
@@ -291,8 +303,10 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
 
-              assert.strictEqual(span.meta['langchain.request.provider'], 'openai')
-              assert.strictEqual(span.meta['langchain.request.model'], 'gpt-4')
+              assertObjectContains(span.meta, {
+                'langchain.request.provider': 'openai',
+                'langchain.request.model': 'gpt-4'
+              })
             })
 
           const chatModel = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
@@ -313,8 +327,10 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
 
-              assert.strictEqual(span.meta['langchain.request.provider'], 'openai')
-              assert.strictEqual(span.meta['langchain.request.model'], 'gpt-4')
+              assertObjectContains(span.meta, {
+                'langchain.request.provider': 'openai',
+                'langchain.request.model': 'gpt-4'
+              })
             })
 
           const tools = [
@@ -351,12 +367,16 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
 
-              assert.strictEqual(span.name, 'langchain.request')
-              assert.strictEqual(span.resource, 'langchain.chat_models.anthropic.ChatAnthropic')
+              assertObjectContains(span, {
+                name: 'langchain.request',
+                resource: 'langchain.chat_models.anthropic.ChatAnthropic',
+                meta: {
+                  'langchain.request.provider': 'anthropic',
+                  'langchain.request.type': 'chat_model'
+                }
+              })
 
-              assert.strictEqual(span.meta['langchain.request.provider'], 'anthropic')
               assert.ok(Object.hasOwn(span.meta, 'langchain.request.model'))
-              assert.strictEqual(span.meta['langchain.request.type'], 'chat_model')
             })
 
           const chatModel = getLangChainAnthropicClient('chat', { modelName: 'claude-3-5-sonnet-20241022' })
@@ -409,10 +429,13 @@ describe('Plugin', () => {
               // we already check the chat model span in previous tests
               assert.strictEqual(spans[1].resource, 'langchain.chat_models.openai.ChatOpenAI')
 
-              assert.strictEqual(chainSpan.name, 'langchain.request')
-              assert.strictEqual(chainSpan.resource, 'langchain_core.runnables.RunnableSequence')
-
-              assert.strictEqual(chainSpan.meta['langchain.request.type'], 'chain')
+              assertObjectContains(chainSpan, {
+                name: 'langchain.request',
+                resource: 'langchain_core.runnables.RunnableSequence',
+                meta: {
+                  'langchain.request.type': 'chain'
+                }
+              })
             })
 
           const model = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
@@ -458,7 +481,9 @@ describe('Plugin', () => {
               // we already check the chat model span in previous tests
               assert.strictEqual(spans[1].resource, 'langchain.chat_models.openai.ChatOpenAI')
 
-              assert.strictEqual(chainSpan.meta['langchain.request.type'], 'chain')
+              assertObjectContains(chainSpan.meta, {
+                'langchain.request.type': 'chain'
+              })
             })
 
           const result = await chain.invoke({ topic: 'chickens', style: 'dad joke' })
@@ -491,7 +516,9 @@ describe('Plugin', () => {
 
               const chainSpan = spans[0]
 
-              assert.strictEqual(chainSpan.meta['langchain.request.type'], 'chain')
+              assertObjectContains(chainSpan.meta, {
+                'langchain.request.type': 'chain'
+              })
             })
 
           const result = await chain.batch(['chickens', 'dogs'])
@@ -513,7 +540,9 @@ describe('Plugin', () => {
 
               const chainSpan = spans[0]
 
-              assert.strictEqual(chainSpan.meta['langchain.request.type'], 'chain')
+              assertObjectContains(chainSpan.meta, {
+                'langchain.request.type': 'chain'
+              })
             })
 
           const parser = new langchainOutputParsers.JsonOutputParser()
@@ -561,12 +590,15 @@ describe('Plugin', () => {
                 assert.strictEqual(traces[0].length, 1)
                 const span = traces[0][0]
 
-                assert.strictEqual(span.name, 'langchain.request')
-                assert.strictEqual(span.resource, 'langchain.embeddings.openai.OpenAIEmbeddings')
-
-                assert.strictEqual(span.meta['langchain.request.provider'], 'openai')
-                assert.strictEqual(span.meta['langchain.request.model'], 'text-embedding-ada-002')
-                assert.strictEqual(span.meta['langchain.request.type'], 'embedding')
+                assertObjectContains(span, {
+                  name: 'langchain.request',
+                  resource: 'langchain.embeddings.openai.OpenAIEmbeddings',
+                  meta: {
+                    'langchain.request.provider': 'openai',
+                    'langchain.request.model': 'text-embedding-ada-002',
+                    'langchain.request.type': 'embedding'
+                  }
+                })
               })
 
             const query = 'Hello, world!'
@@ -583,9 +615,11 @@ describe('Plugin', () => {
                 assert.strictEqual(traces[0].length, 1)
                 const span = traces[0][0]
 
-                assert.strictEqual(span.meta['langchain.request.type'], 'embedding')
-                assert.strictEqual(span.meta['langchain.request.provider'], 'openai')
-                assert.strictEqual(span.meta['langchain.request.model'], 'text-embedding-ada-002')
+                assertObjectContains(span.meta, {
+                  'langchain.request.type': 'embedding',
+                  'langchain.request.provider': 'openai',
+                  'langchain.request.model': 'text-embedding-ada-002'
+                })
               })
 
             const embeddings = getLangChainOpenAiClient('embedding')
@@ -616,12 +650,15 @@ describe('Plugin', () => {
                 assert.strictEqual(traces[0].length, 1)
 
                 const span = traces[0][0]
-                assert.strictEqual(span.name, 'langchain.request')
-                assert.strictEqual(span.resource, 'langchain.embeddings.GoogleGenerativeAIEmbeddings')
-
-                assert.strictEqual(span.meta['langchain.request.provider'], 'googlegenerativeai')
-                assert.strictEqual(span.meta['langchain.request.model'], 'text-embedding-004')
-                assert.strictEqual(span.meta['langchain.request.type'], 'embedding')
+                assertObjectContains(span, {
+                  name: 'langchain.request',
+                  resource: 'langchain.embeddings.GoogleGenerativeAIEmbeddings',
+                  meta: {
+                    'langchain.request.provider': 'googlegenerativeai',
+                    'langchain.request.model': 'text-embedding-004',
+                    'langchain.request.type': 'embedding'
+                  }
+                })
               })
 
             const query = 'Hello, world!'
