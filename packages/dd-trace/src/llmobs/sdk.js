@@ -62,7 +62,7 @@ class LLMObs extends NoopLLMObs {
     }
     // TODO: This will update config telemetry with the origin 'code', which is not ideal when `enable()` is called
     // based on `APM_TRACING` RC product updates.
-    this._config.configure({ llmobs })
+    this._config.updateOptions({ llmobs })
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)
