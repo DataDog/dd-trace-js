@@ -1206,7 +1206,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       cwd,
       env: {
         ...restEnvVars,
-        DD_TRACE_DEBUG: 1,
+        DD_TRACE_DEBUG: '1',
         DD_TRACE_LOG_LEVEL: 'error',
         DD_SITE: '= invalid = url'
       },
@@ -1283,7 +1283,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       env: {
         ...getCiVisAgentlessConfig(receiver.port),
         RUN_IN_PARALLEL: true,
-        DD_TRACE_DEBUG: 1,
+        DD_TRACE_DEBUG: '1',
         DD_TRACE_LOG_LEVEL: 'warn',
         DD_TEST_SESSION_NAME: 'my-test-session'
       },
@@ -1393,7 +1393,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     childProcess = fork(startupTestFile, {
       cwd,
       env: {
-        DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
+        DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
         NODE_OPTIONS: '-r dd-trace/ci/init'
       },
       stdio: 'pipe'
@@ -3070,7 +3070,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             TESTS_TO_RUN: JSON.stringify([
               './test-flaky-test-retries/eventually-passing-test.js'
             ]),
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }

@@ -295,7 +295,7 @@ describe('esm', () => {
     it('should not create a tryAdd span or add span links to arrays when batch links are disabled', async () => {
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: false
+        DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: 'false'
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-messages-2', ({ headers, payload }) => {
@@ -308,7 +308,7 @@ describe('esm', () => {
     it('should not create a tryAdd span or add span links to batches when batch links are disabled', async () => {
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: false
+        DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: 'false'
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-batch-2', ({ headers, payload }) => {

@@ -73,7 +73,7 @@ describe('test optimization automatic log submission', () => {
       getExtraEnvVars: () => ({
         PW_BASE_URL: `http://localhost:${webAppPort}`,
         TEST_DIR: 'ci-visibility/automatic-log-submission-playwright',
-        DD_TRACE_DEBUG: 1
+        DD_TRACE_DEBUG: '1'
       })
     }
   ]
