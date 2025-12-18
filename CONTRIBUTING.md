@@ -70,6 +70,24 @@ We follow an all-green policy which means that for any PR to be merged _all_ tes
 
 Eventually we plan to look into putting these permission-required tests behind a label which team members can add to their PRs at creation to run the full CI and can add to outside contributor PRs to trigger the CI from their own user credentials. If the label is not present there will be another action which checks the label is present. Rather than showing a bunch of confusing failures to new contributors it would just show a single job failure which indicates an additional label is required, and we can name it in a way that makes it clear that it's not the responsibility of the outside contributor to add it. Something like `approve-full-ci` is one possible choice there.
 
+## Sign your commits
+
+All commits in a pull request must be signed. We require commit signing to ensure the authenticity and integrity of contributions to the project.
+
+**Datadog employees:** We recommend using the [sign-pull-request tool](https://datadoghq.atlassian.net/wiki/spaces/SECENG/pages/5371593157/Easily+sign+commits+with+sign-pull-request+tool) for easy signing of commits.
+
+You can also sign your commits manually using one of the following methods:
+
+- [Signing commits with GPG](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits)
+- [Signing commits with SSH](https://docs.github.com/en/authentication/managing-commit-signature-verification/about-commit-signature-verification#ssh-commit-signature-verification)
+- [Signing commits with 1Password](https://developer.1password.com/docs/ssh/git-commit-signing/)
+
+If you have already created commits without signing them, you can sign them retroactively by using an interactive rebase:
+
+```sh
+$ git rebase --exec 'git commit --amend --no-edit -n -S' -i <base-branch>
+```
+
 ## Development Requirements
 
 Since this project supports multiple Node.js versions, using a version manager
