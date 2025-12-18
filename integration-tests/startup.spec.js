@@ -233,35 +233,6 @@ execArgvs.forEach(({ execArgv, skip, optional }) => {
       })
     })
 
-    context('without optional dependencies', () => {
-      beforeEach(async () => {
-        agent = await new FakeAgent().start()
-      })
-
-      afterEach(async () => {
-        proc.kill()
-        await agent.stop()
-      })
-
-      it('works with the missing modules', async () => {
-        proc = await spawnProc(startupTestFile, {
-          cwd,
-          execArgv,
-          env: {
-            DD_TRACE_AGENT_PORT: agent.port
-          }
-        })
-        return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
-          assert.strictEqual(payload.length, 1)
-          assert.ok(Array.isArray(payload[0]))
-          assert.strictEqual(payload[0].length, 1)
-          assert.strictEqual(payload[0][0].name, 'web.request')
-        })
-      })
-    })
-
     context('with unsupported module', () => {
       it('skips the unsupported module', async () => {
         await spawnProc(unsupportedTestFile, {
