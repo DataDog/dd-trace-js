@@ -328,7 +328,6 @@ class Config {
     this.#applyStableConfig(this.stableConfig?.fleetEntries ?? {}, this.#fleetStableConfig)
     this.#applyOptions(options)
     this.#applyCalculated()
-    this.#applyRemote({})
     this.#merge()
 
     tagger.add(this.tags, {
@@ -353,15 +352,26 @@ class Config {
     return this.#parsedDdTags
   }
 
-  // Supports only a subset of options for now.
-  configure (options, remote) {
-    if (remote) {
-      this.#applyRemote(options)
-    } else {
-      this.#applyOptions(options)
-    }
+  /**
+   * Updates the configuration with remote config settings.
+   * Applies remote configuration, recalculates derived values, and merges all configuration sources.
+   *
+   * @param {import('./config/remote_config').RemoteConfigOptions|null} options - Remote config
+   *   lib_config object or null to reset all remote configuration
+   */
+  updateRemoteConfig (options) {
+    this.#applyRemoteConfig(options)
+    this.#applyCalculated()
+    this.#merge()
+  }
 
-    // TODO: test
+  /**
+   * Updates the configuration with new programmatic options.
+   *
+   * @param {Object} options - Configuration options to apply (same format as tracer init options)
+   */
+  updateOptions (options) {
+    this.#applyOptions(options)
     this.#applyCalculated()
     this.#merge()
   }
@@ -1304,31 +1314,71 @@ class Config {
     }
   }
 
-  #applyRemote (options) {
+  /**
+   * Applies remote configuration options from APM_TRACING configs.
+   *
+   * This method uses field-guarding to support multi-config merging:
+   * - Only fields present in options are updated
+   * - Missing fields retain their previous values
+   * - Fields with null values are explicitly reset (converted to undefined in merge)
+   * - When options is null, all RC-managed fields are reset to defaults
+   *
+   * @param {import('./config/remote_config').RemoteConfigOptions|null} options - Remote config
+   *   lib_config object or null to reset all
+   */
+  #applyRemoteConfig (options) {
+    // Special case: if options is null, reset all RC-managed fields
+    // This happens when all remote configs are removed
+    if (options === null) {
+      this.#remote = {}
+      return
+    }
+
     const opts = this.#remote
-    const tags = {}
-    const headerTags = options.tracing_header_tags
-      ? options.tracing_header_tags.map(tag => {
-        return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
-      })
-      : undefined
 
-    tagger.add(tags, options.tracing_tags)
-    if (Object.keys(tags).length) tags['runtime-id'] = runtimeId
-
-    this.#setUnit(opts, 'sampleRate', options.tracing_sampling_rate)
-    this.#setBoolean(opts, 'logInjection', options.log_injection_enabled)
-    opts.headerTags = headerTags
-    this.#setTags(opts, 'tags', tags)
-    this.#setBoolean(opts, 'tracing', options.tracing_enabled)
-    this.#remoteUnprocessed['sampler.rules'] = options.tracing_sampling_rules
-    this.#setSamplingRule(opts, 'sampler.rules', this.#reformatTags(options.tracing_sampling_rules))
+    if ('dynamic_instrumentation_enabled' in options || 'live_debugging_enabled' in options) {
+      this.#setBoolean(
+        opts,
+        'dynamicInstrumentation.enabled',
+        options.dynamic_instrumentation_enabled ?? options.live_debugging_enabled
+      )
+    }
+    if ('code_origin_enabled' in options) {
+      this.#setBoolean(opts, 'codeOriginForSpans.enabled', options.code_origin_enabled)
+    }
+    if ('tracing_header_tags' in options) {
+      const headerTags = options.tracing_header_tags
+        ? options.tracing_header_tags.map(tag => {
+          return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
+        })
+        : undefined
+      opts.headerTags = headerTags
+    }
+    if ('tracing_tags' in options) {
+      const tags = {}
+      tagger.add(tags, options.tracing_tags)
+      if (Object.keys(tags).length) tags['runtime-id'] = runtimeId
+      this.#setTags(opts, 'tags', tags)
+    }
+    if ('tracing_sampling_rate' in options) {
+      this.#setUnit(opts, 'sampleRate', options.tracing_sampling_rate)
+    }
+    if ('log_injection_enabled' in options) {
+      this.#setBoolean(opts, 'logInjection', options.log_injection_enabled)
+    }
+    if ('tracing_enabled' in options) {
+      this.#setBoolean(opts, 'tracing', options.tracing_enabled)
+    }
+    if ('tracing_sampling_rules' in options) {
+      this.#remoteUnprocessed['sampler.rules'] = options.tracing_sampling_rules
+      this.#setSamplingRule(opts, 'sampler.rules', this.#reformatTagsFromRC(options.tracing_sampling_rules))
+    }
   }
 
-  #reformatTags (samplingRules) {
+  #reformatTagsFromRC (samplingRules) {
     for (const rule of (samplingRules || [])) {
-      const reformattedTags = {}
       if (rule.tags) {
+        const reformattedTags = {}
         for (const tag of rule.tags) {
           reformattedTags[tag.key] = tag.value_glob
         }
