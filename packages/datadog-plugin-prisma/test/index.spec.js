@@ -394,7 +394,8 @@ describe('Plugin', () => {
           })
 
           describe('with prisma engine disabled', () => {
-            before(async () => {
+            before(async function () {
+              this.timeout(10000)
               clearPrismaEnv()
               if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
 
