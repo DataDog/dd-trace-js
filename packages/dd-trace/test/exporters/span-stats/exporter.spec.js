@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -34,8 +33,8 @@ describe('span-stats exporter', () => {
   it('should flush immediately on export', () => {
     exporter = new Exporter({ url })
 
-    expect(writer.append).to.have.not.been.called
-    expect(writer.flush).to.have.not.been.called
+    sinon.assert.notCalled(writer.append)
+    sinon.assert.notCalled(writer.flush)
 
     exporter.export('')
 

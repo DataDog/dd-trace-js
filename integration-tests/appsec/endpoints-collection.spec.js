@@ -174,7 +174,7 @@ describe('Endpoints collection', () => {
           e.method === expected.method && e.path === expected.path
         )
 
-        assert.ok(found != null)
+        assert.ok(found)
         assert.strictEqual(found.type, 'REST')
         assert.strictEqual(found.operation_name, 'http.request')
         assert.strictEqual(found.resource_name, `${expected.method} ${expected.path}`)

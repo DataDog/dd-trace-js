@@ -30,9 +30,9 @@ describe('RASP metrics', () => {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_APPSEC_ENABLED: 'true',
           DD_APPSEC_RASP_ENABLED: 'true',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
           DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp_rules.json'),
-          DD_APPSEC_WAF_TIMEOUT: 0.1
+          DD_APPSEC_WAF_TIMEOUT: '0.1'
         }
       })
       axios = Axios.create({ baseURL: proc.url })
@@ -62,7 +62,7 @@ describe('RASP metrics', () => {
           const series = payload.payload.series
           const errorSerie = series.find(s => s.metric === 'rasp.error')
 
-          assert.ok(errorSerie != null)
+          assert.ok(errorSerie)
           assert.ok(errorSerie.tags.includes('waf_error:-127'))
           assert.strictEqual(errorSerie.type, 'count')
         }
@@ -83,8 +83,8 @@ describe('RASP metrics', () => {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_APPSEC_ENABLED: 'true',
           DD_APPSEC_RASP_ENABLED: 'true',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-          DD_APPSEC_WAF_TIMEOUT: 1
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+          DD_APPSEC_WAF_TIMEOUT: '1'
         }
       })
       axios = Axios.create({ baseURL: proc.url })
@@ -112,7 +112,7 @@ describe('RASP metrics', () => {
           const series = payload.payload.series
           const timeoutSerie = series.find(s => s.metric === 'rasp.timeout')
 
-          assert.ok(timeoutSerie != null)
+          assert.ok(timeoutSerie)
           assert.ok(timeoutSerie.tags.includes('rule_type:command_injection'))
           assert.ok(timeoutSerie.tags.includes('rule_variant:shell'))
           assert.strictEqual(timeoutSerie.type, 'count')
