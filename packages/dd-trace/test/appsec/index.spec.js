@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 
 const axios = require('axios')
-const { expect } = require('chai')
+
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -178,8 +178,7 @@ describe('AppSec Index', function () {
       sinon.assert.calledOnceWithExactly(RuleManager.loadRules, config.appsec)
       sinon.assert.calledOnceWithExactly(Reporter.init, config.appsec)
       sinon.assert.calledOnceWithExactly(UserTracking.setCollectionMode, 'anon', false)
-      expect(incomingHttpRequestStart.subscribe)
-        .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
+      sinon.assert.calledOnceWithExactly(incomingHttpRequestStart.subscribe, AppSec.incomingHttpStartTranslator)
       sinon.assert.calledOnceWithExactly(incomingHttpRequestEnd.subscribe, AppSec.incomingHttpEndTranslator)
       sinon.assert.calledOnce(graphql.enable)
     })
@@ -257,13 +256,13 @@ describe('AppSec Index', function () {
       }
       AppSec.enable(config)
 
-      expect(appsecTelemetry.enable).to.be.calledOnceWithExactly(config)
+      sinon.assert.calledOnceWithExactly(appsecTelemetry.enable, config)
     })
 
     it('should call rasp enable', () => {
       AppSec.enable(config)
 
-      expect(rasp.enable).to.be.calledOnceWithExactly(config)
+      sinon.assert.calledOnceWithExactly(rasp.enable, config)
     })
 
     it('should not call rasp enable when rasp is disabled', () => {
@@ -289,8 +288,7 @@ describe('AppSec Index', function () {
       AppSec.disable()
 
       sinon.assert.calledOnce(RuleManager.clearAllRules)
-      expect(incomingHttpRequestStart.unsubscribe)
-        .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
+      sinon.assert.calledOnceWithExactly(incomingHttpRequestStart.unsubscribe, AppSec.incomingHttpStartTranslator)
       sinon.assert.calledOnceWithExactly(incomingHttpRequestEnd.unsubscribe, AppSec.incomingHttpEndTranslator)
       sinon.assert.calledOnce(graphql.disable)
       sinon.assert.calledOnce(rasp.disable)
@@ -422,7 +420,7 @@ describe('AppSec Index', function () {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.not.been.called
+      sinon.assert.notCalled(waf.run)
 
       sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, undefined)
     })
@@ -505,7 +503,7 @@ describe('AppSec Index', function () {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.not.been.called
+      sinon.assert.notCalled(waf.run)
 
       sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, undefined)
     })
@@ -696,8 +694,8 @@ describe('AppSec Index', function () {
         responseBody.publish({ req: {}, body: 'string' })
         responseBody.publish({ req: {}, body: null })
 
-        expect(apiSecuritySampler.sampleRequest).to.not.been.called
-        expect(waf.run).to.not.been.called
+        sinon.assert.notCalled(apiSecuritySampler.sampleRequest)
+        sinon.assert.notCalled(waf.run)
       })
 
       it('should not call to the waf if it is not a sampled request', () => {
@@ -708,7 +706,7 @@ describe('AppSec Index', function () {
         responseBody.publish({ req, res, body: {} })
 
         sinon.assert.calledOnceWithMatch(apiSecuritySampler.sampleRequest, req, res)
-        expect(waf.run).to.not.been.called
+        sinon.assert.notCalled(waf.run)
       })
 
       it('should call to the waf if it is a sampled request', () => {
@@ -915,7 +913,7 @@ describe('AppSec Index', function () {
 
         passportVerify.publish(payload)
 
-        expect(storage('legacy').getStore).to.have.been.calledOnce
+        sinon.assert.calledOnce(storage('legacy').getStore)
         sinon.assert.calledOnceWithExactly(web.root, req)
         sinon.assert.calledOnceWithExactly(UserTracking.trackLogin,
           payload.framework,
@@ -942,7 +940,7 @@ describe('AppSec Index', function () {
 
         passportVerify.publish(payload)
 
-        expect(storage('legacy').getStore).to.have.been.calledOnce
+        sinon.assert.calledOnce(storage('legacy').getStore)
         sinon.assert.calledOnceWithExactly(web.root, req)
         sinon.assert.calledOnceWithExactly(UserTracking.trackLogin,
           payload.framework,
@@ -969,7 +967,7 @@ describe('AppSec Index', function () {
 
         passportVerify.publish(payload)
 
-        expect(storage('legacy').getStore).to.have.been.calledOnce
+        sinon.assert.calledOnce(storage('legacy').getStore)
         sinon.assert.calledOnceWithExactly(log.warn, '[ASM] No rootSpan found in onPassportVerify')
         sinon.assert.notCalled(UserTracking.trackLogin)
         assert.strictEqual(abortController.signal.aborted, false)
@@ -993,7 +991,7 @@ describe('AppSec Index', function () {
 
         passportUser.publish(payload)
 
-        expect(storage('legacy').getStore).to.have.been.calledOnce
+        sinon.assert.calledOnce(storage('legacy').getStore)
         sinon.assert.calledOnceWithExactly(web.root, req)
         sinon.assert.calledOnceWithExactly(UserTracking.trackUser,
           payload.user,
@@ -1014,7 +1012,7 @@ describe('AppSec Index', function () {
 
         passportUser.publish(payload)
 
-        expect(storage('legacy').getStore).to.have.been.calledOnce
+        sinon.assert.calledOnce(storage('legacy').getStore)
         sinon.assert.calledOnceWithExactly(web.root, req)
         sinon.assert.calledOnceWithExactly(UserTracking.trackUser,
           payload.user,
@@ -1035,7 +1033,7 @@ describe('AppSec Index', function () {
 
         passportUser.publish(payload)
 
-        expect(storage('legacy').getStore).to.have.been.calledOnce
+        sinon.assert.calledOnce(storage('legacy').getStore)
         sinon.assert.calledOnceWithExactly(log.warn, '[ASM] No rootSpan found in onPassportDeserializeUser')
         sinon.assert.notCalled(UserTracking.trackUser)
         assert.strictEqual(abortController.signal.aborted, false)
@@ -1164,14 +1162,14 @@ describe('AppSec Index', function () {
             }
           }
         }, req)
-        expect(abortController.abort).to.have.not.been.called
-        expect(res.constructor.prototype.end).to.have.not.been.called
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
         sinon.assert.calledOnce(waf.run)
-        expect(abortController.abort).to.have.not.been.called
-        expect(res.constructor.prototype.end).to.have.not.been.called
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('should not do anything without a root span', () => {
@@ -1186,9 +1184,9 @@ describe('AppSec Index', function () {
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
-        expect(waf.run).to.have.not.been.called
-        expect(abortController.abort).to.have.not.been.called
-        expect(res.constructor.prototype.end).to.have.not.been.called
+        sinon.assert.notCalled(waf.run)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('should call the WAF with responde code and headers', () => {
@@ -1240,7 +1238,7 @@ describe('AppSec Index', function () {
       it('should not call abortController if response was not blocked', () => {
         responseSetHeader.publish({ res, abortController })
 
-        expect(abortController.abort).to.have.not.been.calledOnce
+        sinon.assert.notCalled(abortController.abort)
       })
     })
   })

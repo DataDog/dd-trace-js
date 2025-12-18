@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -114,7 +113,7 @@ describe('user_blocking - Internal API', () => {
       const ret = userBlocking.blockRequest(tracer)
       assert.strictEqual(ret, true)
       sinon.assert.calledOnce(legacyStorage.getStore)
-      expect(block).to.be.calledOnceWithExactly(req, res, rootSpan)
+      sinon.assert.calledOnceWithExactly(block, req, res, rootSpan)
     })
 
     it('should log warning when req or res is not available', () => {
@@ -123,8 +122,7 @@ describe('user_blocking - Internal API', () => {
       const ret = userBlocking.blockRequest(tracer)
       assert.strictEqual(ret, false)
       sinon.assert.calledOnce(legacyStorage.getStore)
-      expect(log.warn)
-        .to.have.been.calledOnceWithExactly('[ASM] Requests or response object not available in blockRequest')
+      sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Requests or response object not available in blockRequest')
       sinon.assert.notCalled(block)
     })
 

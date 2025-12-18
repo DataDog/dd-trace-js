@@ -1,11 +1,5 @@
 'use strict'
 
-const chai = require('chai')
-const sinonChai = require('sinon-chai')
-
-chai.use(sinonChai)
-chai.use(require('../asserts/profile'))
-
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
 // If this is a release PR, set the SSI variables.

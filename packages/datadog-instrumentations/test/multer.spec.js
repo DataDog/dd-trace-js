@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 
 const axios = require('axios')
-const { expect } = require('chai')
+
 const dc = require('dc-polyfill')
 const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -52,7 +52,7 @@ withVersions('multer', 'multer', version => {
     it('should not abort the request by default', async () => {
       const res = await axios.post(`http://localhost:${port}/`, formData)
 
-      expect(middlewareProcessBodyStub).to.be.calledOnceWithExactly(formData.get('key'))
+      sinon.assert.calledOnceWithExactly(middlewareProcessBodyStub, formData.get('key'))
       assert.strictEqual(res.data, 'DONE')
     })
 
@@ -63,7 +63,7 @@ withVersions('multer', 'multer', version => {
       try {
         const res = await axios.post(`http://localhost:${port}/`, formData)
 
-        expect(middlewareProcessBodyStub).to.be.calledOnceWithExactly(formData.get('key'))
+        sinon.assert.calledOnceWithExactly(middlewareProcessBodyStub, formData.get('key'))
         assert.strictEqual(res.data, 'DONE')
       } finally {
         multerReadCh.unsubscribe(noop)
@@ -104,7 +104,7 @@ withVersions('multer', 'multer', version => {
         assert.strictEqual(store.res, payload.res)
         assert.ok(Object.hasOwn(store, 'span'))
 
-        expect(middlewareProcessBodyStub).to.be.calledOnceWithExactly(formData.get('key'))
+        sinon.assert.calledOnceWithExactly(middlewareProcessBodyStub, formData.get('key'))
         assert.strictEqual(res.data, 'DONE')
       } finally {
         multerReadCh.unsubscribe(handler)

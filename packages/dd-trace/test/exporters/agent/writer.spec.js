@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 const { describe, it, beforeEach, context } = require('tap').mocha
@@ -165,9 +164,12 @@ function describeWriter (protocolVersion) {
       writer.flush()
 
       setTimeout(() => {
-        expect(log.errorWithoutTelemetry)
-          .to.have.been.calledWith('Error sending payload to the agent (status code: %s)',
-            error.status, error)
+        sinon.assert.calledWith(
+          log.errorWithoutTelemetry,
+          'Error sending payload to the agent (status code: %s)',
+          error.status,
+          error
+        )
         done()
       })
     })

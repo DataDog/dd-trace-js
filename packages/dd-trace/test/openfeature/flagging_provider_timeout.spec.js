@@ -76,7 +76,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
     })
 
     // Verify initialization is in progress
-    assert.ok(provider.initController != null)
+    assert.ok(provider.initController)
     assert.strictEqual(provider.initController.isInitializing(), true)
 
     // Advance time by 30 seconds (default timeout) and run pending promises

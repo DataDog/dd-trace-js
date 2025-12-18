@@ -222,7 +222,7 @@ moduleTypes.forEach(({
             span.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail'
           )
 
-          assert.ok(passedTestSpan != null)
+          assert.ok(passedTestSpan)
           assert.strictEqual(passedTestSpan.name, 'cypress.test')
           assert.strictEqual(passedTestSpan.resource, 'cypress/e2e/basic-pass.js.basic pass suite can pass')
           assert.strictEqual(passedTestSpan.type, 'test')
@@ -231,17 +231,17 @@ moduleTypes.forEach(({
           assert.strictEqual(passedTestSpan.meta[TEST_SUITE], 'cypress/e2e/basic-pass.js')
           assert.strictEqual(passedTestSpan.meta[TEST_FRAMEWORK], 'cypress')
           assert.strictEqual(passedTestSpan.meta[TEST_TYPE], 'browser')
-          assert.ok(passedTestSpan.meta[TEST_SOURCE_FILE] != null)
+          assert.ok(passedTestSpan.meta[TEST_SOURCE_FILE])
           assert.match(passedTestSpan.meta[TEST_SOURCE_FILE], /cypress\/e2e\/basic-pass\.js/)
-          assert.ok(passedTestSpan.meta[TEST_FRAMEWORK_VERSION] != null)
-          assert.ok(passedTestSpan.meta[COMPONENT] != null)
-          assert.ok(passedTestSpan.metrics[TEST_SOURCE_START] != null)
+          assert.ok(passedTestSpan.meta[TEST_FRAMEWORK_VERSION])
+          assert.ok(passedTestSpan.meta[COMPONENT])
+          assert.ok(passedTestSpan.metrics[TEST_SOURCE_START])
           assert.strictEqual(passedTestSpan.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
           assert.strictEqual(passedTestSpan.meta.customTag, 'customValue')
           assert.strictEqual(passedTestSpan.meta.addTagsBeforeEach, 'customBeforeEach')
           assert.strictEqual(passedTestSpan.meta.addTagsAfterEach, 'customAfterEach')
 
-          assert.ok(failedTestSpan != null)
+          assert.ok(failedTestSpan)
           assert.strictEqual(failedTestSpan.name, 'cypress.test')
           assert.strictEqual(failedTestSpan.resource, 'cypress/e2e/basic-fail.js.basic fail suite can fail')
           assert.strictEqual(failedTestSpan.type, 'test')
@@ -250,14 +250,14 @@ moduleTypes.forEach(({
           assert.strictEqual(failedTestSpan.meta[TEST_SUITE], 'cypress/e2e/basic-fail.js')
           assert.strictEqual(failedTestSpan.meta[TEST_FRAMEWORK], 'cypress')
           assert.strictEqual(failedTestSpan.meta[TEST_TYPE], 'browser')
-          assert.ok(failedTestSpan.meta[TEST_SOURCE_FILE] != null)
+          assert.ok(failedTestSpan.meta[TEST_SOURCE_FILE])
           assert.match(failedTestSpan.meta[TEST_SOURCE_FILE], /cypress\/e2e\/basic-fail\.js/)
-          assert.ok(failedTestSpan.meta[TEST_FRAMEWORK_VERSION] != null)
-          assert.ok(failedTestSpan.meta[COMPONENT] != null)
-          assert.ok(failedTestSpan.meta[ERROR_MESSAGE] != null)
+          assert.ok(failedTestSpan.meta[TEST_FRAMEWORK_VERSION])
+          assert.ok(failedTestSpan.meta[COMPONENT])
+          assert.ok(failedTestSpan.meta[ERROR_MESSAGE])
           assert.match(failedTestSpan.meta[ERROR_MESSAGE], /expected/)
-          assert.ok(failedTestSpan.meta[ERROR_TYPE] != null)
-          assert.ok(failedTestSpan.metrics[TEST_SOURCE_START] != null)
+          assert.ok(failedTestSpan.meta[ERROR_TYPE])
+          assert.ok(failedTestSpan.metrics[TEST_SOURCE_START])
           assert.strictEqual(passedTestSpan.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
           assert.strictEqual(failedTestSpan.meta.customTag, 'customValue')
           assert.strictEqual(failedTestSpan.meta.addTagsBeforeEach, 'customBeforeEach')
@@ -482,23 +482,23 @@ moduleTypes.forEach(({
           const { content: testSessionEventContent } = testSessionEvent
           const { content: testModuleEventContent } = testModuleEvent
 
-          assert.ok(testSessionEventContent.test_session_id != null)
-          assert.ok(testSessionEventContent.meta[TEST_COMMAND] != null)
-          assert.ok(testSessionEventContent.meta[TEST_TOOLCHAIN] != null)
+          assert.ok(testSessionEventContent.test_session_id)
+          assert.ok(testSessionEventContent.meta[TEST_COMMAND])
+          assert.ok(testSessionEventContent.meta[TEST_TOOLCHAIN])
           assert.strictEqual(testSessionEventContent.resource.startsWith('test_session.'), true)
           assert.strictEqual(testSessionEventContent.meta[TEST_STATUS], 'fail')
 
-          assert.ok(testModuleEventContent.test_session_id != null)
-          assert.ok(testModuleEventContent.test_module_id != null)
-          assert.ok(testModuleEventContent.meta[TEST_COMMAND] != null)
-          assert.ok(testModuleEventContent.meta[TEST_MODULE] != null)
+          assert.ok(testModuleEventContent.test_session_id)
+          assert.ok(testModuleEventContent.test_module_id)
+          assert.ok(testModuleEventContent.meta[TEST_COMMAND])
+          assert.ok(testModuleEventContent.meta[TEST_MODULE])
           assert.strictEqual(testModuleEventContent.resource.startsWith('test_module.'), true)
           assert.strictEqual(testModuleEventContent.meta[TEST_STATUS], 'fail')
           assert.strictEqual(
             testModuleEventContent.test_session_id.toString(10),
             testSessionEventContent.test_session_id.toString(10)
           )
-          assert.ok(testModuleEventContent.meta[TEST_FRAMEWORK_VERSION] != null)
+          assert.ok(testModuleEventContent.meta[TEST_FRAMEWORK_VERSION])
 
           assertObjectContains(testSuiteEvents.map(suite => suite.content.resource), [
             'test_suite.cypress/e2e/other.cy.js',
@@ -519,14 +519,14 @@ moduleTypes.forEach(({
               test_session_id: testSessionId
             }
           }) => {
-            assert.ok(meta[TEST_COMMAND] != null)
-            assert.ok(meta[TEST_MODULE] != null)
-            assert.ok(testSuiteId != null)
+            assert.ok(meta[TEST_COMMAND])
+            assert.ok(meta[TEST_MODULE])
+            assert.ok(testSuiteId)
             assert.strictEqual(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
             assert.strictEqual(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
             assert.strictEqual(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'), true)
             assert.strictEqual(metrics[TEST_SOURCE_START], 1)
-            assert.ok(metrics[DD_HOST_CPU_COUNT] != null)
+            assert.ok(metrics[DD_HOST_CPU_COUNT])
           })
 
           assertObjectContains(testEvents.map(test => test.content.resource), [
@@ -550,9 +550,9 @@ moduleTypes.forEach(({
               test_session_id: testSessionId
             }
           }) => {
-            assert.ok(meta[TEST_COMMAND] != null)
-            assert.ok(meta[TEST_MODULE] != null)
-            assert.ok(testSuiteId != null)
+            assert.ok(meta[TEST_COMMAND])
+            assert.ok(meta[TEST_MODULE])
+            assert.ok(testSuiteId)
             assert.strictEqual(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
             assert.strictEqual(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
             assert.strictEqual(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'), true)
@@ -560,7 +560,7 @@ moduleTypes.forEach(({
             assert.strictEqual(meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
             assert.strictEqual(meta['test.customtag'], 'customvalue')
             assert.strictEqual(meta['test.customtag2'], 'customvalue2')
-            assert.ok(metrics[DD_HOST_CPU_COUNT] != null)
+            assert.ok(metrics[DD_HOST_CPU_COUNT])
           })
         }, 25000)
 
@@ -820,7 +820,7 @@ moduleTypes.forEach(({
             const notSkippedTest = events.find(event =>
               event.content.resource === 'cypress/e2e/other.cy.js.context passes'
             )
-            assert.ok(notSkippedTest != null)
+            assert.ok(notSkippedTest)
             assert.strictEqual(notSkippedTest.content.meta[TEST_STATUS], 'pass')
           }, 25000)
 
@@ -1173,9 +1173,9 @@ moduleTypes.forEach(({
           const testModuleEvent = events.find(event => event.type === 'test_module_end')
 
           testEvents.forEach(testEvent => {
-            assert.ok(testEvent.content.test_suite_id != null)
-            assert.ok(testEvent.content.test_module_id != null)
-            assert.ok(testEvent.content.test_session_id != null)
+            assert.ok(testEvent.content.test_suite_id)
+            assert.ok(testEvent.content.test_module_id)
+            assert.ok(testEvent.content.test_session_id)
             assert.notStrictEqual(testEvent.content.test_suite_id, testModuleEvent.content.test_module_id)
           })
         }, 25000)
@@ -1205,9 +1205,9 @@ moduleTypes.forEach(({
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const testSessionEvent = events.find(event => event.type === 'test_session_end')
-          assert.ok(testSessionEvent != null)
+          assert.ok(testSessionEvent)
           const testModuleEvent = events.find(event => event.type === 'test_module_end')
-          assert.ok(testModuleEvent != null)
+          assert.ok(testModuleEvent)
           const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
           assert.strictEqual(testSuiteEvents.length, 4)
           const testEvents = events.filter(event => event.type === 'test')
@@ -1243,9 +1243,9 @@ moduleTypes.forEach(({
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const testSessionEvent = events.find(event => event.type === 'test_session_end')
-          assert.ok(testSessionEvent != null)
+          assert.ok(testSessionEvent)
           const testModuleEvent = events.find(event => event.type === 'test_module_end')
-          assert.ok(testModuleEvent != null)
+          assert.ok(testModuleEvent)
           const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
           assert.strictEqual(testSuiteEvents.length, 4)
           const testEvents = events.filter(event => event.type === 'test')
