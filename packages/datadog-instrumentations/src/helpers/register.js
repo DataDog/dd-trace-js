@@ -74,8 +74,10 @@ for (const packageName of names) {
 
   Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
+
     // This executes the integration file thus adding its entries to `instrumentations`
     hook()
+
     if (!instrumentations[packageName]) {
       return moduleExports
     }
