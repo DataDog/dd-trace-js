@@ -127,7 +127,7 @@
   ],
   "dependencies": {
     "dc-polyfill": "^0.1.10",
-    "import-in-the-middle": "^1.14.2"
+    "import-in-the-middle": "^2.0.0"
   },
   "optionalDependencies": {
     "@datadog/libdatadog": "0.7.0",
