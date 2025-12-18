@@ -37,6 +37,8 @@ describe('Config', () => {
   const BLOCKED_TEMPLATE_GRAPHQL_PATH = require.resolve('./fixtures/config/appsec-blocked-graphql-template.json')
   const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
 
+  const comparator = (a, b) => a.name.localeCompare(b.name) || a.origin.localeCompare(b.origin)
+
   function reloadLoggerAndConfig () {
     log = proxyquire('../src/log', {})
     log.use = sinon.spy()
@@ -129,7 +131,7 @@ describe('Config', () => {
       process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
       assert.strictEqual(process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, undefined)
       const config = getConfig()
-      assert.strictEqual(config?.runtimeMetricsRuntimeId, true)
+      assert.strictEqual(config.runtimeMetricsRuntimeId, true)
       assert.strictEqual(getEnvironmentVariable('DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED'), 'true')
       delete process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED
 
@@ -196,12 +198,17 @@ describe('Config', () => {
       sampleRate: 0.5,
       runtimeMetrics: {
         enabled: true
+      },
+      tags: {
+        foo: 'bar',
+        baz: 'qux'
+      },
+      tracePropagationStyle: {
+        inject: ['b3', 'tracecontext'],
+        extract: ['b3', 'tracecontext'],
+        otelPropagators: false
       }
     })
-    assertObjectContains(config.tags, { foo: 'bar', baz: 'qux' })
-    assert.deepStrictEqual(config?.tracePropagationStyle?.inject, ['b3', 'tracecontext'])
-    assert.deepStrictEqual(config?.tracePropagationStyle?.extract, ['b3', 'tracecontext'])
-    assert.deepStrictEqual(config?.tracePropagationStyle?.otelPropagators, false)
 
     const indexFile = require('../src/index')
     const proxy = require('../src/proxy')
@@ -230,12 +237,17 @@ describe('Config', () => {
       sampleRate: 0.1,
       runtimeMetrics: {
         enabled: false
+      },
+      tags: {
+        foo: 'bar1',
+        baz: 'qux1'
+      },
+      tracePropagationStyle: {
+        inject: ['b3', 'datadog'],
+        extract: ['b3', 'datadog'],
+        otelPropagators: true
       }
     })
-    assertObjectContains(config.tags, { foo: 'bar1', baz: 'qux1' })
-    assert.deepStrictEqual(config?.tracePropagationStyle?.inject, ['b3', 'datadog'])
-    assert.deepStrictEqual(config?.tracePropagationStyle?.extract, ['b3', 'datadog'])
-    assert.deepStrictEqual(config?.tracePropagationStyle?.otelPropagators, true)
 
     delete require.cache[require.resolve('../src/index')]
     const indexFile = require('../src/index')
@@ -251,36 +263,39 @@ describe('Config', () => {
     assertObjectContains(config, {
       env: 'test1',
       service: 'test2',
-      version: '5'
+      version: '5',
+      tags: {
+        foo: 'bar1',
+        baz: 'qux1'
+      }
     })
-    assertObjectContains(config.tags, { foo: 'bar1', baz: 'qux1' })
   })
 
   it('should correctly map OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG', () => {
     process.env.OTEL_TRACES_SAMPLER = 'always_on'
     process.env.OTEL_TRACES_SAMPLER_ARG = '0.1'
     let config = getConfig()
-    assert.strictEqual(config?.sampleRate, 1.0)
+    assert.strictEqual(config.sampleRate, 1.0)
 
     process.env.OTEL_TRACES_SAMPLER = 'always_off'
     config = getConfig()
-    assert.strictEqual(config?.sampleRate, 0.0)
+    assert.strictEqual(config.sampleRate, 0.0)
 
     process.env.OTEL_TRACES_SAMPLER = 'traceidratio'
     config = getConfig()
-    assert.strictEqual(config?.sampleRate, 0.1)
+    assert.strictEqual(config.sampleRate, 0.1)
 
     process.env.OTEL_TRACES_SAMPLER = 'parentbased_always_on'
     config = getConfig()
-    assert.strictEqual(config?.sampleRate, 1.0)
+    assert.strictEqual(config.sampleRate, 1.0)
 
     process.env.OTEL_TRACES_SAMPLER = 'parentbased_always_off'
     config = getConfig()
-    assert.strictEqual(config?.sampleRate, 0.0)
+    assert.strictEqual(config.sampleRate, 0.0)
 
     process.env.OTEL_TRACES_SAMPLER = 'parentbased_traceidratio'
     config = getConfig()
-    assert.strictEqual(config?.sampleRate, 0.1)
+    assert.strictEqual(config.sampleRate, 0.1)
   })
 
   it('should initialize with the correct defaults', () => {
@@ -307,13 +322,7 @@ describe('Config', () => {
           enabled: false,
           maxHeaders: 50,
           redaction: true
-        }
-      }
-    })
-    assert.strictEqual(config?.appsec?.obfuscatorKeyRegex?.length, 190)
-    assert.strictEqual(config?.appsec?.obfuscatorValueRegex?.length, 578)
-    assertObjectContains(config, {
-      appsec: {
+        },
         rules: undefined,
         rasp: {
           bodyCollection: false,
@@ -350,39 +359,23 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: false,
-        probeFile: undefined
-      }
-    })
-    assert.deepStrictEqual(config?.dynamicInstrumentation?.redactedIdentifiers, [])
-    assert.deepStrictEqual(config?.dynamicInstrumentation?.redactionExcludedIdentifiers, [])
-    assertObjectContains(config, {
-      dynamicInstrumentation: {
+        probeFile: undefined,
         uploadIntervalSeconds: 1
       },
       env: undefined,
       experimental: {
         aiguard: {
           enabled: false,
-          endpoint: undefined
-        }
-      }
-    })
-    assert.strictEqual(config?.experimental?.aiguard?.maxContentSize, 512 * 1024)
-    assertObjectContains(config, {
-      experimental: {
-        aiguard: {
+          endpoint: undefined,
           maxMessagesLength: 16,
-          timeout: 10_000
+          timeout: 10_000,
+          maxContentSize: 512 * 1024,
         },
         exporter: undefined,
         enableGetRumData: false
       },
       flushInterval: 2000,
-      flushMinSpans: 1000
-    })
-    assert.deepStrictEqual(config.grpc.client.error.statuses, GRPC_CLIENT_ERROR_STATUSES)
-    assert.deepStrictEqual(config.grpc.server.error.statuses, GRPC_SERVER_ERROR_STATUSES)
-    assertObjectContains(config, {
+      flushMinSpans: 1000,
       heapSnapshot: {
         count: 0,
         destination: '',
@@ -398,10 +391,7 @@ describe('Config', () => {
           enabled: true
         }
       },
-      injectForce: null
-    })
-    assert.deepStrictEqual(config?.injectionEnabled, [])
-    assertObjectContains(config, {
+      injectForce: null,
       installSignature: {
         id: null,
         time: null,
@@ -417,10 +407,11 @@ describe('Config', () => {
       logLevel: 'debug',
       middlewareTracingEnabled: true,
       plugins: true,
-      protocolVersion: '0.4'
-    })
-    assert.strictEqual(config?.queryStringObfuscation?.length, 626)
-    assertObjectContains(config, {
+      protocolVersion: '0.4',
+      tracing: true,
+      tags: {
+        service: 'node'
+      },
       remoteConfig: {
         enabled: true,
         pollInterval: 5
@@ -434,28 +425,30 @@ describe('Config', () => {
       runtimeMetricsRuntimeId: false,
       sampleRate: undefined,
       scope: undefined,
-      service: 'node'
-    })
-    assert.deepStrictEqual(config?.serviceMapping, {})
-    assertObjectContains(config, {
+      service: 'node',
       spanAttributeSchema: 'v0',
       spanComputePeerService: false,
-      spanRemoveIntegrationFromService: false
-    })
-    assert.strictEqual(config.tags?.service, 'node')
-    assertObjectContains(config, {
+      spanRemoveIntegrationFromService: false,
       traceEnabled: true,
       traceId128BitGenerationEnabled: true,
       traceId128BitLoggingEnabled: true,
       tracePropagationBehaviorExtract: 'continue'
     })
-    assert.deepStrictEqual(config?.tracePropagationStyle?.extract, ['datadog', 'tracecontext', 'baggage'])
-    assert.deepStrictEqual(config?.tracePropagationStyle?.inject, ['datadog', 'tracecontext', 'baggage'])
-    assert.strictEqual(config?.tracing, true)
+    assert.deepStrictEqual(config.dynamicInstrumentation?.redactedIdentifiers, [])
+    assert.deepStrictEqual(config.dynamicInstrumentation?.redactionExcludedIdentifiers, [])
+    assert.deepStrictEqual(config.grpc.client.error.statuses, GRPC_CLIENT_ERROR_STATUSES)
+    assert.deepStrictEqual(config.grpc.server.error.statuses, GRPC_SERVER_ERROR_STATUSES)
+    assert.deepStrictEqual(config.injectionEnabled, [])
+    assert.deepStrictEqual(config.serviceMapping, {})
+    assert.deepStrictEqual(config.tracePropagationStyle?.extract, ['datadog', 'tracecontext', 'baggage'])
+    assert.deepStrictEqual(config.tracePropagationStyle?.inject, ['datadog', 'tracecontext', 'baggage'])
+    assert.strictEqual(config.queryStringObfuscation?.length, 626)
+    assert.strictEqual(config.appsec?.obfuscatorKeyRegex?.length, 190)
+    assert.strictEqual(config.appsec?.obfuscatorValueRegex?.length, 578)
 
     sinon.assert.calledOnce(updateConfig)
 
-    assertObjectContains(updateConfig.getCall(0).args[0], [
+    assertObjectContains(updateConfig.getCall(0).args[0].sort(comparator), [
       { name: 'apmTracingEnabled', value: true, origin: 'default' },
       { name: 'appsec.apiSecurity.enabled', value: true, origin: 'default' },
       { name: 'appsec.apiSecurity.sampleDelay', value: 30, origin: 'default' },
@@ -540,13 +533,10 @@ describe('Config', () => {
       { name: 'isGitUploadEnabled', value: false, origin: 'default' },
       { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },
       { name: 'isManualApiEnabled', value: false, origin: 'default' },
-      { name: 'isTestDynamicInstrumentationEnabled', value: false, origin: 'default' },
       { name: 'langchain.spanCharLimit', value: 128, origin: 'default' },
       { name: 'langchain.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' },
       { name: 'llmobs.agentlessEnabled', value: undefined, origin: 'default' },
       { name: 'llmobs.mlApp', value: undefined, origin: 'default' },
-      { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
-      { name: 'ciVisAgentlessLogSubmissionEnabled', value: false, origin: 'default' },
       { name: 'isTestDynamicInstrumentationEnabled', value: false, origin: 'default' },
       { name: 'logInjection', value: true, origin: 'default' },
       { name: 'lookup', value: undefined, origin: 'default' },
@@ -568,7 +558,6 @@ describe('Config', () => {
       },
       { name: 'remoteConfig.enabled', value: true, origin: 'default' },
       { name: 'remoteConfig.pollInterval', value: 5, origin: 'default' },
-      { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'runtimeMetrics.enabled', value: false, origin: 'default' },
       { name: 'runtimeMetricsRuntimeId', value: false, origin: 'default' },
@@ -598,7 +587,7 @@ describe('Config', () => {
       { name: 'version', value: '', origin: 'default' },
       { name: 'vertexai.spanCharLimit', value: 128, origin: 'default' },
       { name: 'vertexai.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' }
-    ])
+    ].sort(comparator))
   })
 
   it('should support logging', () => {
@@ -616,8 +605,8 @@ describe('Config', () => {
       logger: {},
       debug: true
     })
-    sinon.assert.called(log.warn)
-    assert.strictEqual(config?.spanAttributeSchema, 'v0')
+    sinon.assert.notCalled(log.warn)
+    assert.strictEqual(config.spanAttributeSchema, 'v0')
   })
 
   it('should initialize from the default service', () => {
@@ -626,7 +615,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config?.service, 'test')
+    assert.strictEqual(config.service, 'test')
     assert.strictEqual(config.tags?.service, 'test')
   })
 
@@ -636,16 +625,16 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config?.version, '1.2.3')
+    assert.strictEqual(config.version, '1.2.3')
     assert.strictEqual(config.tags?.version, '1.2.3')
   })
 
   it('should initialize from environment variables', () => {
     process.env.DD_AI_GUARD_ENABLED = 'true'
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datad0g.com/api/unstable/ai-guard'
-    process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = 1024 * 1024
-    process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = 32
-    process.env.DD_AI_GUARD_TIMEOUT = 2000
+    process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = String(1024 * 1024)
+    process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = '32'
+    process.env.DD_AI_GUARD_TIMEOUT = '2000'
     process.env.DD_API_SECURITY_ENABLED = 'true'
     process.env.DD_API_SECURITY_SAMPLE_DELAY = '25'
     process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED = 'false'
@@ -774,14 +763,10 @@ describe('Config', () => {
           sampleDelay: 25,
           endpointCollectionEnabled: false,
           endpointCollectionMessageLimit: 500
-        }
-      }
-    })
-    assert.strictEqual(config?.appsec?.blockedTemplateGraphql, BLOCKED_TEMPLATE_GRAPHQL)
-    assert.strictEqual(config?.appsec?.blockedTemplateHtml, BLOCKED_TEMPLATE_HTML)
-    assert.strictEqual(config?.appsec?.blockedTemplateJson, BLOCKED_TEMPLATE_JSON)
-    assertObjectContains(config, {
-      appsec: {
+        },
+        blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
+        blockedTemplateHtml: BLOCKED_TEMPLATE_HTML,
+        blockedTemplateJson: BLOCKED_TEMPLATE_JSON,
         enabled: true,
         eventTracking: {
           mode: 'extended'
@@ -797,12 +782,8 @@ describe('Config', () => {
           bodyCollection: true,
           enabled: false
         },
-        rateLimit: 42
-      }
-    })
-    assert.strictEqual(config?.appsec?.rules, RULES_JSON_PATH)
-    assertObjectContains(config, {
-      appsec: {
+        rateLimit: 42,
+        rules: RULES_JSON_PATH,
         sca: {
           enabled: true
         },
@@ -833,37 +814,23 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: true,
-        probeFile: 'probes.json'
-      }
-    })
-    assert.deepStrictEqual(config?.dynamicInstrumentation?.redactedIdentifiers, ['foo', 'bar'])
-    assert.deepStrictEqual(config?.dynamicInstrumentation?.redactionExcludedIdentifiers, ['a', 'b', 'c'])
-    assertObjectContains(config, {
-      dynamicInstrumentation: {
+        probeFile: 'probes.json',
+        redactedIdentifiers: ['foo', 'bar'],
+        redactionExcludedIdentifiers: ['a', 'b', 'c'],
         uploadIntervalSeconds: 0.1
       },
       env: 'test',
       experimental: {
         aiguard: {
           enabled: true,
-          endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard'
-        }
-      }
-    })
-    assert.strictEqual(config?.experimental?.aiguard?.maxContentSize, 1024 * 1024)
-    assertObjectContains(config, {
-      experimental: {
-        aiguard: {
+          endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
+          maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
           timeout: 2000
         },
         enableGetRumData: true,
         exporter: 'log'
-      }
-    })
-    assert.deepStrictEqual(config.grpc.client.error.statuses, [3, 13, 400, 401, 402, 403])
-    assert.deepStrictEqual(config.grpc.server.error.statuses, [3, 13, 400, 401, 402, 403])
-    assertObjectContains(config, {
+      },
       hostname: 'agent',
       heapSnapshot: {
         count: 1,
@@ -885,22 +852,13 @@ describe('Config', () => {
           enabled: false
         },
         telemetryVerbosity: 'DEBUG'
-      }
-    })
-    assert.deepStrictEqual(
-      config?.installSignature,
-      { id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe', type: 'k8s_single_step', time: '1703188212' }
-    )
-    assertObjectContains(config, {
+      },
       instrumentation_config_id: 'abcdef123',
       llmobs: {
         agentlessEnabled: true,
         mlApp: 'myMlApp'
       },
-      middlewareTracingEnabled: false
-    })
-    assert.deepStrictEqual(config?.peerServiceMapping, { c: 'cc', d: 'dd' })
-    assertObjectContains(config, {
+      middlewareTracingEnabled: false,
       protocolVersion: '0.5',
       queryStringObfuscation: '.*',
       remoteConfig: {
@@ -914,9 +872,33 @@ describe('Config', () => {
         gc: false
       },
       runtimeMetricsRuntimeId: true,
-      sampleRate: 0.5
+      sampleRate: 0.5,
+      service: 'service',
+      spanAttributeSchema: 'v1',
+      spanComputePeerService: true,
+      spanRemoveIntegrationFromService: true,
+      tags: {
+        foo: 'bar',
+        baz: 'qux',
+        service: 'service',
+        version: '1.0.0',
+        env: 'test'
+      },
+      traceEnabled: true,
+      traceId128BitGenerationEnabled: true,
+      traceId128BitLoggingEnabled: true,
+      tracePropagationBehaviorExtract: 'restart',
+      tracing: false,
+      version: '1.0.0'
     })
-    assert.deepStrictEqual(config?.sampler, {
+    assert.deepStrictEqual(config.grpc.client.error.statuses, [3, 13, 400, 401, 402, 403])
+    assert.deepStrictEqual(config.grpc.server.error.statuses, [3, 13, 400, 401, 402, 403])
+    assert.deepStrictEqual(
+      config.installSignature,
+      { id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe', type: 'k8s_single_step', time: '1703188212' }
+    )
+    assert.deepStrictEqual(config.peerServiceMapping, { c: 'cc', d: 'dd' })
+    assert.deepStrictEqual(config.sampler, {
       sampleRate: 0.5,
       rateLimit: '-1',
       rules: [
@@ -932,31 +914,13 @@ describe('Config', () => {
         { sampleRate: 0.1 }
       ]
     })
-    assert.strictEqual(config?.service, 'service')
-    assert.deepStrictEqual(config?.serviceMapping, { a: 'aa', b: 'bb' })
-    assertObjectContains(config, {
-      spanAttributeSchema: 'v1',
-      spanComputePeerService: true,
-      spanRemoveIntegrationFromService: true
-    })
-    assertObjectContains(config.tags, { foo: 'bar', baz: 'qux' })
-    assertObjectContains(config.tags, { service: 'service', version: '1.0.0', env: 'test' })
-    assertObjectContains(config, {
-      traceEnabled: true,
-      traceId128BitGenerationEnabled: true,
-      traceId128BitLoggingEnabled: true,
-      tracePropagationBehaviorExtract: 'restart'
-    })
-    assert.deepStrictEqual(config?.tracePropagationStyle?.extract, ['b3', 'tracecontext'])
-    assert.deepStrictEqual(config?.tracePropagationStyle?.inject, ['b3', 'tracecontext'])
-    assertObjectContains(config, {
-      tracing: false,
-      version: '1.0.0'
-    })
+    assert.deepStrictEqual(config.serviceMapping, { a: 'aa', b: 'bb' })
+    assert.deepStrictEqual(config.tracePropagationStyle?.extract, ['b3', 'tracecontext'])
+    assert.deepStrictEqual(config.tracePropagationStyle?.inject, ['b3', 'tracecontext'])
 
     sinon.assert.calledOnce(updateConfig)
 
-    assertObjectContains(updateConfig.getCall(0).args[0], [
+    assertObjectContains(updateConfig.getCall(0).args[0].sort(comparator), [
       { name: 'apmTracingEnabled', value: false, origin: 'env_var' },
       { name: 'appsec.apiSecurity.enabled', value: true, origin: 'env_var' },
       { name: 'appsec.apiSecurity.sampleDelay', value: 25, origin: 'env_var' },
@@ -1049,7 +1013,7 @@ describe('Config', () => {
       { name: 'version', value: '1.0.0', origin: 'env_var' },
       { name: 'vertexai.spanCharLimit', value: 50, origin: 'env_var' },
       { name: 'vertexai.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' }
-    ])
+    ].sort(comparator))
   })
 
   it('should ignore empty strings', () => {
@@ -1144,15 +1108,12 @@ describe('Config', () => {
 
     const config = getConfig()
 
+    assert.strictEqual(config.url.toString(), 'https://agent2:7777/')
+
     assertObjectContains(config, {
       tracing: false,
       dogstatsd: {
         hostname: 'agent'
-      },
-      url: {
-        protocol: 'https:',
-        hostname: 'agent2',
-        port: '7777'
       },
       site: 'datadoghq.eu',
       service: 'service',
@@ -1167,8 +1128,8 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config?.tracePropagationStyle?.inject, ['tracecontext'])
-    assert.deepStrictEqual(config?.tracePropagationStyle?.extract, ['tracecontext'])
+    assert.deepStrictEqual(config.tracePropagationStyle?.inject, ['tracecontext'])
+    assert.deepStrictEqual(config.tracePropagationStyle?.extract, ['tracecontext'])
   })
 
   it('should enable crash tracking for SSI by default', () => {
@@ -1176,7 +1137,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config?.crashtracking?.enabled, true)
+    assert.deepStrictEqual(config.crashtracking?.enabled, true)
   })
 
   it('should disable crash tracking for SSI when configured', () => {
@@ -1185,7 +1146,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config?.crashtracking?.enabled, false)
+    assert.deepStrictEqual(config.crashtracking?.enabled, false)
   })
 
   it('should prioritize DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE over DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING', () => {
@@ -1194,7 +1155,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config?.appsec?.eventTracking?.mode, 'anonymous')
+    assert.strictEqual(config.appsec?.eventTracking?.mode, 'anonymous')
   })
 
   it('should initialize from the options', () => {
@@ -1342,8 +1303,8 @@ describe('Config', () => {
         probeFile: 'probes.json'
       }
     })
-    assert.deepStrictEqual(config?.dynamicInstrumentation?.redactedIdentifiers, ['foo', 'bar'])
-    assert.deepStrictEqual(config?.dynamicInstrumentation?.redactionExcludedIdentifiers, ['a', 'b', 'c'])
+    assert.deepStrictEqual(config.dynamicInstrumentation?.redactedIdentifiers, ['foo', 'bar'])
+    assert.deepStrictEqual(config.dynamicInstrumentation?.redactionExcludedIdentifiers, ['a', 'b', 'c'])
     assertObjectContains(config, {
       dynamicInstrumentation: {
         uploadIntervalSeconds: 0.1
@@ -1356,7 +1317,7 @@ describe('Config', () => {
         }
       }
     })
-    assert.strictEqual(config?.experimental?.aiguard?.maxContentSize, 1024 * 1024)
+    assert.strictEqual(config.experimental?.aiguard?.maxContentSize, 1024 * 1024)
     assertObjectContains(config, {
       experimental: {
         aiguard: {
@@ -1382,9 +1343,9 @@ describe('Config', () => {
       }
     })
     if (DD_MAJOR < 6) {
-      assert.strictEqual(config?.iast?.securityControlsConfiguration, 'SANITIZER:CODE_INJECTION:sanitizer.js:method')
+      assert.strictEqual(config.iast?.securityControlsConfiguration, 'SANITIZER:CODE_INJECTION:sanitizer.js:method')
     } else {
-      assert.ok(!(Object.hasOwn(config?.iast, 'securityControlsConfiguration')))
+      assert.ok(!('iast.securityControlsConfiguration' in config))
     }
     assertObjectContains(config, {
       iast: {
@@ -1398,10 +1359,10 @@ describe('Config', () => {
         mlApp: 'myMlApp'
       }
     })
-    assert.strictEqual(config?.logLevel, logLevel)
-    assert.strictEqual(config?.logger, logger)
-    assert.strictEqual(config?.middlewareTracingEnabled, false)
-    assert.deepStrictEqual(config?.peerServiceMapping, { d: 'dd' })
+    assert.strictEqual(config.logLevel, logLevel)
+    assert.strictEqual(config.logger, logger)
+    assert.strictEqual(config.middlewareTracingEnabled, false)
+    assert.deepStrictEqual(config.peerServiceMapping, { d: 'dd' })
     assertObjectContains(config, {
       plugins: false,
       port: '6218',
@@ -1418,7 +1379,7 @@ describe('Config', () => {
       runtimeMetricsRuntimeId: true,
       sampleRate: 0.5
     })
-    assert.deepStrictEqual(config?.sampler, {
+    assert.deepStrictEqual(config.sampler, {
       rateLimit: 1000,
       rules: [
         { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
@@ -1434,8 +1395,8 @@ describe('Config', () => {
         { sampleRate: 0.1 }
       ]
     })
-    assert.strictEqual(config?.service, 'service')
-    assert.deepStrictEqual(config?.serviceMapping, { a: 'aa', b: 'bb' })
+    assert.strictEqual(config.service, 'service')
+    assert.deepStrictEqual(config.serviceMapping, { a: 'aa', b: 'bb' })
     assertObjectContains(config, {
       site: 'datadoghq.eu',
       spanComputePeerService: true,
@@ -1456,13 +1417,13 @@ describe('Config', () => {
       traceId128BitGenerationEnabled: true,
       traceId128BitLoggingEnabled: true
     })
-    assert.deepStrictEqual(config?.tracePropagationStyle?.extract, ['datadog'])
-    assert.deepStrictEqual(config?.tracePropagationStyle?.inject, ['datadog'])
-    assert.strictEqual(config?.version, '0.1.0')
+    assert.deepStrictEqual(config.tracePropagationStyle?.extract, ['datadog'])
+    assert.deepStrictEqual(config.tracePropagationStyle?.inject, ['datadog'])
+    assert.strictEqual(config.version, '0.1.0')
 
     sinon.assert.calledOnce(updateConfig)
 
-    assertObjectContains(updateConfig.getCall(0).args[0], [
+    assertObjectContains(updateConfig.getCall(0).args[0].sort(comparator), [
       { name: 'appsec.enabled', value: false, origin: 'code' },
       { name: 'clientIpEnabled', value: true, origin: 'code' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'code' },
@@ -1525,7 +1486,7 @@ describe('Config', () => {
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'code' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'code' },
       { name: 'version', value: '0.1.0', origin: 'code' }
-    ].filter(v => v))
+    ].filter(v => v).sort(comparator))
   })
 
   it('should initialize from the options with url taking precedence', () => {
@@ -1546,18 +1507,15 @@ describe('Config', () => {
       plugins: false
     })
 
+    assert.strictEqual(config.url.toString(), 'https://agent2:7777/')
+
     assertObjectContains(config, {
-      url: {
-        protocol: 'https:',
-        hostname: 'agent2',
-        port: '7777'
-      },
       site: 'datadoghq.eu',
       service: 'service',
       env: 'test',
       sampleRate: 0.5
     })
-    assert.strictEqual(config?.logger, logger)
+    assert.strictEqual(config.logger, logger)
     assert.strictEqual(config.tags?.foo, 'bar')
     assertObjectContains(config, {
       flushInterval: 5000,
@@ -1594,7 +1552,7 @@ describe('Config', () => {
     const config = getConfig()
 
     sinon.assert.calledWith(log.warn, 'Unexpected input for config.spanAttributeSchema, picked default', 'v0')
-    assert.strictEqual(config?.spanAttributeSchema, 'v0')
+    assert.strictEqual(config.spanAttributeSchema, 'v0')
   })
 
   it('should parse integer range sets', () => {
@@ -1628,38 +1586,38 @@ describe('Config', () => {
       process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v0'
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
       let config = getConfig()
-      assert.strictEqual(config?.spanComputePeerService, true)
+      assert.strictEqual(config.spanComputePeerService, true)
 
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'foo'
       config = getConfig()
-      assert.strictEqual(config?.spanComputePeerService, false)
+      assert.strictEqual(config.spanComputePeerService, false)
 
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
       config = getConfig()
-      assert.strictEqual(config?.spanComputePeerService, false)
+      assert.strictEqual(config.spanComputePeerService, false)
 
       delete process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
       config = getConfig()
-      assert.strictEqual(config?.spanComputePeerService, false)
+      assert.strictEqual(config.spanComputePeerService, false)
     })
 
     it('should activate peer service in v1 unless explicitly false', () => {
       process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
       let config = getConfig()
-      assert.strictEqual(config?.spanComputePeerService, false)
+      assert.strictEqual(config.spanComputePeerService, false)
 
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'foo'
       config = getConfig()
-      assert.strictEqual(config?.spanComputePeerService, true)
+      assert.strictEqual(config.spanComputePeerService, true)
 
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
       config = getConfig()
-      assert.strictEqual(config?.spanComputePeerService, true)
+      assert.strictEqual(config.spanComputePeerService, true)
 
       delete process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
       config = getConfig()
-      assert.strictEqual(config?.spanComputePeerService, true)
+      assert.strictEqual(config.spanComputePeerService, true)
     })
   })
 
@@ -1671,16 +1629,16 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config?.hostname, 'agent')
+    assert.strictEqual(config.hostname, 'agent')
     assertObjectContains(config.tags, { foo: 'foo', baz: 'qux' })
   })
 
   it('should give priority to the options', () => {
     process.env.DD_AI_GUARD_ENABLED = 'false'
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datadog.com/api/unstable/ai-guard'
-    process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = 512 * 1024
-    process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = 16
-    process.env.DD_AI_GUARD_TIMEOUT = 1_000
+    process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = String(512 * 1024)
+    process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = '16'
+    process.env.DD_AI_GUARD_TIMEOUT = '1000'
     process.env.DD_API_KEY = '123'
     process.env.DD_API_SECURITY_ENABLED = 'false'
     process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED = 'false'
@@ -1879,14 +1837,11 @@ describe('Config', () => {
           enabled: true,
           endpointCollectionEnabled: true,
           endpointCollectionMessageLimit: 150
-        }
-      }
-    })
-    assert.strictEqual(config?.appsec?.blockedTemplateGraphql, BLOCKED_TEMPLATE_GRAPHQL)
-    assert.strictEqual(config?.appsec?.blockedTemplateHtml, BLOCKED_TEMPLATE_HTML)
-    assert.strictEqual(config?.appsec?.blockedTemplateJson, BLOCKED_TEMPLATE_JSON)
-    assertObjectContains(config, {
-      appsec: {
+        },
+        blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
+        blockedTemplateHtml: BLOCKED_TEMPLATE_HTML,
+        blockedTemplateJson: BLOCKED_TEMPLATE_JSON,
+        rules: RULES_JSON_PATH,
         enabled: true,
         eventTracking: {
           mode: 'anonymous'
@@ -1902,12 +1857,7 @@ describe('Config', () => {
           bodyCollection: true,
           enabled: false
         },
-        rateLimit: 42
-      }
-    })
-    assert.strictEqual(config?.appsec?.rules, RULES_JSON_PATH)
-    assertObjectContains(config, {
-      appsec: {
+        rateLimit: 42,
         stackTrace: {
           enabled: false,
           maxDepth: 42,
@@ -1931,27 +1881,17 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: false,
-        probeFile: 'probes2.json'
-      }
-    })
-    assert.deepStrictEqual(config?.dynamicInstrumentation?.redactedIdentifiers, ['foo2', 'bar2'])
-    assert.deepStrictEqual(config?.dynamicInstrumentation?.redactionExcludedIdentifiers, ['a2', 'b2'])
-    assertObjectContains(config, {
-      dynamicInstrumentation: {
+        probeFile: 'probes2.json',
+        redactedIdentifiers: ['foo2', 'bar2'],
+        redactionExcludedIdentifiers: ['a2', 'b2'],
         uploadIntervalSeconds: 0.2
       },
       env: 'development',
       experimental: {
         aiguard: {
           enabled: true,
-          endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard'
-        }
-      }
-    })
-    assert.strictEqual(config?.experimental?.aiguard?.maxContentSize, 1024 * 1024)
-    assertObjectContains(config, {
-      experimental: {
-        aiguard: {
+          endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
+          maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
           timeout: 2000
         },
@@ -1969,16 +1909,8 @@ describe('Config', () => {
         redactionEnabled: true,
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
         redactionValuePattern: 'REDACTION_VALUE_PATTERN',
-        requestSampling: 30
-      }
-    })
-    if (DD_MAJOR < 6) {
-      assert.strictEqual(config?.iast?.securityControlsConfiguration, 'SANITIZER:CODE_INJECTION:sanitizer.js:method2')
-    } else {
-      assert.strictEqual(config?.iast?.securityControlsConfiguration, 'SANITIZER:CODE_INJECTION:sanitizer.js:method1')
-    }
-    assertObjectContains(config, {
-      iast: {
+        requestSampling: 30,
+        securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method' + (DD_MAJOR < 6 ? '2' : '1'),
         stackTrace: {
           enabled: false
         }
@@ -1987,10 +1919,8 @@ describe('Config', () => {
         agentlessEnabled: false,
         mlApp: 'myOtherMlApp'
       },
-      middlewareTracingEnabled: true
-    })
-    assert.deepStrictEqual(config?.peerServiceMapping, { d: 'dd' })
-    assertObjectContains(config, {
+      middlewareTracingEnabled: true,
+      peerServiceMapping: { d: 'dd' },
       protocolVersion: '0.5',
       remoteConfig: {
         pollInterval: 42
@@ -2000,31 +1930,27 @@ describe('Config', () => {
         enabled: false
       },
       runtimeMetricsRuntimeId: false,
-      service: 'test'
-    })
-    assert.deepStrictEqual(config?.serviceMapping, { b: 'bb' })
-    assertObjectContains(config, {
+      service: 'test',
       site: 'datadoghq.com',
       spanAttributeSchema: 'v1',
       spanComputePeerService: true,
-      spanRemoveIntegrationFromService: true
-    })
-    assertObjectContains(config.tags, { foo: 'foo' })
-    assertObjectContains(config.tags, { service: 'test', version: '1.0.0', env: 'development' })
-    assertObjectContains(config, {
+      spanRemoveIntegrationFromService: true,
       traceId128BitGenerationEnabled: false,
-      traceId128BitLoggingEnabled: false
-    })
-    assert.deepStrictEqual(config?.tracePropagationStyle?.extract, [])
-    assert.deepStrictEqual(config?.tracePropagationStyle?.inject, [])
-    assertObjectContains(config, {
-      url: {
-        hostname: 'agent2',
-        port: '6218',
-        protocol: 'https:'
+      traceId128BitLoggingEnabled: false,
+      version: '1.0.0',
+      serviceMapping: { b: 'bb' },
+      tags: {
+        foo: 'foo',
+        service: 'test',
+        version: '1.0.0',
+        env: 'development'
       },
-      version: '1.0.0'
+      tracePropagationStyle: {
+        extract: [],
+        inject: []
+      }
     })
+    assert.strictEqual(config.url.toString(), 'https://agent2:6218/')
   })
 
   it('should give priority to non-experimental options', () => {
@@ -2119,7 +2045,7 @@ describe('Config', () => {
       }
     })
 
-    assert.deepStrictEqual(config?.appsec, {
+    assert.deepStrictEqual(config.appsec, {
       apiSecurity: {
         enabled: true,
         sampleDelay: 30,
@@ -2157,7 +2083,7 @@ describe('Config', () => {
       wafTimeout: 42
     })
 
-    assert.deepStrictEqual(config?.iast, {
+    assert.deepStrictEqual(config.iast, {
       dbRowsToTaint: 3,
       deduplicationEnabled: false,
       enabled: true,
@@ -2191,12 +2117,9 @@ describe('Config', () => {
       env: 'development'
     })
 
+    assert.strictEqual(config.url.toString(), 'https://agent3:7778/')
+
     assertObjectContains(config, {
-      url: {
-        protocol: 'https:',
-        hostname: 'agent3',
-        port: '7778'
-      },
       service: 'test',
       env: 'development'
     })
@@ -2441,7 +2364,7 @@ describe('Config', () => {
         }
       ]
     }, true)
-    assert.deepStrictEqual(config?.sampler, {
+    assert.deepStrictEqual(config.sampler, {
       spanSamplingRules: [],
       rateLimit: 100,
       rules: [
@@ -2548,7 +2471,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config?.dogstatsd?.hostname, 'localhost')
+    assert.strictEqual(config.dogstatsd?.hostname, 'localhost')
   })
 
   context('auto configuration w/ unix domain sockets', () => {
@@ -2660,104 +2583,104 @@ describe('Config', () => {
       })
       it('should activate git upload by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config?.isGitUploadEnabled, true)
+        assert.strictEqual(config.isGitUploadEnabled, true)
       })
       it('should disable git upload if the DD_CIVISIBILITY_GIT_UPLOAD_ENABLED is set to false', () => {
         process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'false'
         const config = getConfig(options)
-        assert.strictEqual(config?.isGitUploadEnabled, false)
+        assert.strictEqual(config.isGitUploadEnabled, false)
       })
       it('should activate ITR by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config?.isIntelligentTestRunnerEnabled, true)
+        assert.strictEqual(config.isIntelligentTestRunnerEnabled, true)
       })
       it('should disable ITR if DD_CIVISIBILITY_ITR_ENABLED is set to false', () => {
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 'false'
         const config = getConfig(options)
-        assert.strictEqual(config?.isIntelligentTestRunnerEnabled, false)
+        assert.strictEqual(config.isIntelligentTestRunnerEnabled, false)
       })
       it('should enable manual testing API by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config?.isManualApiEnabled, true)
+        assert.strictEqual(config.isManualApiEnabled, true)
       })
       it('should disable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is set to false', () => {
         process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'false'
         const config = getConfig(options)
-        assert.strictEqual(config?.isManualApiEnabled, false)
+        assert.strictEqual(config.isManualApiEnabled, false)
       })
       it('should disable memcached command tagging by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config?.memcachedCommandEnabled, false)
+        assert.strictEqual(config.memcachedCommandEnabled, false)
       })
       it('should enable memcached command tagging if DD_TRACE_MEMCACHED_COMMAND_ENABLED is enabled', () => {
         process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'true'
         const config = getConfig(options)
-        assert.strictEqual(config?.memcachedCommandEnabled, true)
+        assert.strictEqual(config.memcachedCommandEnabled, true)
       })
       it('should enable telemetry', () => {
         const config = getConfig(options)
-        assert.strictEqual(config?.telemetry?.enabled, true)
+        assert.strictEqual(config.telemetry?.enabled, true)
       })
       it('should enable early flake detection by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config?.isEarlyFlakeDetectionEnabled, true)
+        assert.strictEqual(config.isEarlyFlakeDetectionEnabled, true)
       })
       it('should disable early flake detection if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', () => {
         process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED = 'false'
         const config = getConfig(options)
-        assert.strictEqual(config?.isEarlyFlakeDetectionEnabled, false)
+        assert.strictEqual(config.isEarlyFlakeDetectionEnabled, false)
       })
       it('should enable flaky test retries by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config?.isFlakyTestRetriesEnabled, true)
+        assert.strictEqual(config.isFlakyTestRetriesEnabled, true)
       })
       it('should disable flaky test retries if isFlakyTestRetriesEnabled is false', () => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED = 'false'
         const config = getConfig(options)
-        assert.strictEqual(config?.isFlakyTestRetriesEnabled, false)
+        assert.strictEqual(config.isFlakyTestRetriesEnabled, false)
       })
       it('should read DD_CIVISIBILITY_FLAKY_RETRY_COUNT if present', () => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4'
         const config = getConfig(options)
-        assert.strictEqual(config?.flakyTestRetriesCount, 4)
+        assert.strictEqual(config.flakyTestRetriesCount, 4)
       })
       it('should default DD_CIVISIBILITY_FLAKY_RETRY_COUNT to 5', () => {
         const config = getConfig(options)
-        assert.strictEqual(config?.flakyTestRetriesCount, 5)
+        assert.strictEqual(config.flakyTestRetriesCount, 5)
       })
       it('should round non integer values of DD_CIVISIBILITY_FLAKY_RETRY_COUNT', () => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4.1'
         const config = getConfig(options)
-        assert.strictEqual(config?.flakyTestRetriesCount, 4)
+        assert.strictEqual(config.flakyTestRetriesCount, 4)
       })
       it('should set the default to DD_CIVISIBILITY_FLAKY_RETRY_COUNT if it is not a number', () => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = 'a'
         const config = getConfig(options)
-        assert.strictEqual(config?.flakyTestRetriesCount, 5)
+        assert.strictEqual(config.flakyTestRetriesCount, 5)
       })
       it('should set the session name if DD_TEST_SESSION_NAME is set', () => {
         process.env.DD_TEST_SESSION_NAME = 'my-test-session'
         const config = getConfig(options)
-        assert.strictEqual(config?.ciVisibilityTestSessionName, 'my-test-session')
+        assert.strictEqual(config.ciVisibilityTestSessionName, 'my-test-session')
       })
       it('should not enable agentless log submission by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config?.ciVisAgentlessLogSubmissionEnabled, false)
+        assert.strictEqual(config.ciVisAgentlessLogSubmissionEnabled, false)
       })
       it('should enable agentless log submission if DD_AGENTLESS_LOG_SUBMISSION_ENABLED is true', () => {
         process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED = 'true'
         const config = getConfig(options)
-        assert.strictEqual(config?.ciVisAgentlessLogSubmissionEnabled, true)
+        assert.strictEqual(config.ciVisAgentlessLogSubmissionEnabled, true)
       })
       it('should set isTestDynamicInstrumentationEnabled by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config?.isTestDynamicInstrumentationEnabled, true)
+        assert.strictEqual(config.isTestDynamicInstrumentationEnabled, true)
       })
       it('should set isTestDynamicInstrumentationEnabled to false if DD_TEST_FAILED_TEST_REPLAY_ENABLED is false',
         () => {
           process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED = 'false'
           const config = getConfig(options)
-          assert.strictEqual(config?.isTestDynamicInstrumentationEnabled, false)
+          assert.strictEqual(config.isTestDynamicInstrumentationEnabled, false)
         })
     })
     context('ci visibility mode is not enabled', () => {
@@ -2799,48 +2722,48 @@ describe('Config', () => {
       process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
       process.env.DD_GIT_REPOSITORY_URL = DUMMY_REPOSITORY_URL
       const config = getConfig({})
-      assert.strictEqual(config?.commitSHA, DUMMY_COMMIT_SHA)
-      assert.strictEqual(config?.repositoryUrl, DUMMY_REPOSITORY_URL)
+      assert.strictEqual(config.commitSHA, DUMMY_COMMIT_SHA)
+      assert.strictEqual(config.repositoryUrl, DUMMY_REPOSITORY_URL)
     })
     it('reads DD_GIT_* env vars and filters out user data', () => {
       process.env.DD_GIT_REPOSITORY_URL = 'https://user:password@github.com/DataDog/dd-trace-js.git'
       const config = getConfig({})
-      assert.strictEqual(config?.repositoryUrl, 'https://github.com/DataDog/dd-trace-js.git')
+      assert.strictEqual(config.repositoryUrl, 'https://github.com/DataDog/dd-trace-js.git')
     })
     it('reads DD_TAGS env var', () => {
       process.env.DD_TAGS = `git.commit.sha:${DUMMY_COMMIT_SHA},git.repository_url:${DUMMY_REPOSITORY_URL}`
       process.env.DD_GIT_REPOSITORY_URL = DUMMY_REPOSITORY_URL
       const config = getConfig({})
-      assert.strictEqual(config?.commitSHA, DUMMY_COMMIT_SHA)
-      assert.strictEqual(config?.repositoryUrl, DUMMY_REPOSITORY_URL)
+      assert.strictEqual(config.commitSHA, DUMMY_COMMIT_SHA)
+      assert.strictEqual(config.repositoryUrl, DUMMY_REPOSITORY_URL)
     })
     it('reads git.properties if it is available', () => {
       process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
       const config = getConfig({})
-      assert.strictEqual(config?.commitSHA, '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d')
-      assert.strictEqual(config?.repositoryUrl, DUMMY_REPOSITORY_URL)
+      assert.strictEqual(config.commitSHA, '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d')
+      assert.strictEqual(config.repositoryUrl, DUMMY_REPOSITORY_URL)
     })
     it('does not crash if git.properties is not available', () => {
       process.env.DD_GIT_PROPERTIES_FILE = '/does/not/exist'
 
       // Should not throw
       const config = getConfig({})
-      assert.ok((config) !== null && typeof (config) === 'object' && !Array.isArray(config))
+      assert.ok(config !== null && typeof config === 'object' && !Array.isArray(config))
     })
     it('does not read git.properties if env vars are passed', () => {
       process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
       process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
       process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:DataDog/dd-trace-js.git'
       const config = getConfig({})
-      assert.strictEqual(config?.commitSHA, DUMMY_COMMIT_SHA)
-      assert.strictEqual(config?.repositoryUrl, 'https://github.com:DataDog/dd-trace-js.git')
+      assert.strictEqual(config.commitSHA, DUMMY_COMMIT_SHA)
+      assert.strictEqual(config.repositoryUrl, 'https://github.com:DataDog/dd-trace-js.git')
     })
     it('still reads git.properties if one of the env vars is missing', () => {
       process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
       process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
       const config = getConfig({})
-      assert.strictEqual(config?.commitSHA, DUMMY_COMMIT_SHA)
-      assert.strictEqual(config?.repositoryUrl, DUMMY_REPOSITORY_URL)
+      assert.strictEqual(config.commitSHA, DUMMY_COMMIT_SHA)
+      assert.strictEqual(config.repositoryUrl, DUMMY_REPOSITORY_URL)
     })
     it('reads git.properties and filters out credentials', () => {
       process.env.DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties.credentials')
@@ -2869,15 +2792,15 @@ describe('Config', () => {
 
       // Should not throw
       const config = getConfig({})
-      assert.ok((config) !== null && typeof (config) === 'object' && !Array.isArray(config))
+      assert.ok(config !== null && typeof config === 'object' && !Array.isArray(config))
     })
     it('does not read .git/ folder if env vars are passed', () => {
       process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
       process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
       process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:DataDog/dd-trace-js.git'
       const config = getConfig({})
-      assert.strictEqual(config?.commitSHA, DUMMY_COMMIT_SHA)
-      assert.strictEqual(config?.repositoryUrl, 'https://github.com:DataDog/dd-trace-js.git')
+      assert.strictEqual(config.commitSHA, DUMMY_COMMIT_SHA)
+      assert.strictEqual(config.repositoryUrl, 'https://github.com:DataDog/dd-trace-js.git')
     })
     it('still reads .git/ if one of the env vars is missing', () => {
       process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
@@ -2896,9 +2819,9 @@ describe('Config', () => {
       assert.strictEqual(config.llmobs.enabled, false)
 
       // check origin computation
-      assertObjectContains(updateConfig.getCall(0).args[0], {
+      assertObjectContains(updateConfig.getCall(0).args[0], [{
         name: 'llmobs.enabled', value: false, origin: 'default'
-      })
+      }])
     })
 
     it('should enable llmobs if DD_LLMOBS_ENABLED is set to true', () => {
@@ -2907,9 +2830,9 @@ describe('Config', () => {
       assert.strictEqual(config.llmobs.enabled, true)
 
       // check origin computation
-      assertObjectContains(updateConfig.getCall(0).args[0], {
+      assertObjectContains(updateConfig.getCall(0).args[0], [{
         name: 'llmobs.enabled', value: true, origin: 'env_var'
-      })
+      }])
     })
 
     it('should disable llmobs if DD_LLMOBS_ENABLED is set to false', () => {
@@ -2918,9 +2841,9 @@ describe('Config', () => {
       assert.strictEqual(config.llmobs.enabled, false)
 
       // check origin computation
-      assertObjectContains(updateConfig.getCall(0).args[0], {
+      assertObjectContains(updateConfig.getCall(0).args[0], [{
         name: 'llmobs.enabled', value: false, origin: 'env_var'
-      })
+      }])
     })
 
     it('should enable llmobs with options and DD_LLMOBS_ENABLED is not set', () => {
@@ -2928,9 +2851,9 @@ describe('Config', () => {
       assert.strictEqual(config.llmobs.enabled, true)
 
       // check origin computation
-      assertObjectContains(updateConfig.getCall(0).args[0], {
+      assertObjectContains(updateConfig.getCall(0).args[0], [{
         name: 'llmobs.enabled', value: true, origin: 'code'
-      })
+      }])
     })
 
     it('should have DD_LLMOBS_ENABLED take priority over options', () => {
@@ -2939,9 +2862,9 @@ describe('Config', () => {
       assert.strictEqual(config.llmobs.enabled, false)
 
       // check origin computation
-      assertObjectContains(updateConfig.getCall(0).args[0], {
+      assertObjectContains(updateConfig.getCall(0).args[0], [{
         name: 'llmobs.enabled', value: false, origin: 'env_var'
-      })
+      }])
     })
   })
 
@@ -2991,7 +2914,9 @@ describe('Config', () => {
       })
       const awsRules = taggingConfig.rules.aws
       for (const [, service] of Object.entries(awsRules)) {
-        assert.ok((service.request).includes('$.foo.bar'))
+        assertObjectContains(service, {
+          request: ['$.foo.bar'],
+        })
       }
     })
 
@@ -3019,7 +2944,9 @@ describe('Config', () => {
       })
       const awsRules = taggingConfig.rules.aws
       for (const [, service] of Object.entries(awsRules)) {
-        assert.ok((service.response).includes('$.foo.bar'))
+        assertObjectContains(service, {
+          response: ['$.foo.bar'],
+        })
       }
     })
 
@@ -3067,7 +2994,7 @@ describe('Config', () => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
 
       const config = getConfig()
-      assert.strictEqual(config?.apmTracingEnabled, false)
+      assert.strictEqual(config.apmTracingEnabled, false)
     })
 
     it('should win DD_APM_TRACING_ENABLED', () => {
@@ -3075,14 +3002,14 @@ describe('Config', () => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
 
       const config = getConfig()
-      assert.strictEqual(config?.apmTracingEnabled, true)
+      assert.strictEqual(config.apmTracingEnabled, true)
     })
 
     it('should disable apm tracing with legacy experimental.appsec.standalone.enabled option', () => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '0'
 
       const config = getConfig({ experimental: { appsec: { standalone: { enabled: true } } } })
-      assert.strictEqual(config?.apmTracingEnabled, false)
+      assert.strictEqual(config.apmTracingEnabled, false)
     })
 
     it('should win apmTracingEnabled option', () => {
@@ -3092,7 +3019,7 @@ describe('Config', () => {
         apmTracingEnabled: false,
         experimental: { appsec: { standalone: { enabled: true } } }
       })
-      assert.strictEqual(config?.apmTracingEnabled, false)
+      assert.strictEqual(config.apmTracingEnabled, false)
     })
 
     it('should not affect stats', () => {
@@ -3168,7 +3095,7 @@ apm_configuration_default:
   DD_RUNTIME_METRICS_ENABLED: true
 `)
       const config = getConfig()
-      assert.strictEqual(config?.runtimeMetrics?.enabled, true)
+      assert.strictEqual(config.runtimeMetrics?.enabled, true)
     })
 
     it('should apply service specific config', () => {
@@ -3185,7 +3112,7 @@ rules:
       DD_SERVICE: my-service
 `)
       const config = getConfig()
-      assert.strictEqual(config?.service, 'my-service')
+      assert.strictEqual(config.service, 'my-service')
     })
 
     it('should respect the priority sources', () => {
@@ -3247,7 +3174,7 @@ apm_configuration_default:
       assert.strictEqual(stableConfig.warnings?.length, 0)
 
       const config = getConfig()
-      assert.strictEqual(config?.runtimeMetrics?.enabled, true)
+      assert.strictEqual(config.runtimeMetrics?.enabled, true)
     })
 
     it('should log a warning if the YAML files are malformed', () => {
@@ -3315,9 +3242,9 @@ apm_configuration_default:
       const config = getConfig()
 
       // Tracing
-      assert.strictEqual(config?.traceId128BitGenerationEnabled, true)
-      assert.deepStrictEqual(config?.tracePropagationStyle?.inject, ['tracecontext'])
-      assert.deepStrictEqual(config?.tracePropagationStyle?.extract, ['tracecontext'])
+      assert.strictEqual(config.traceId128BitGenerationEnabled, true)
+      assert.deepStrictEqual(config.tracePropagationStyle?.inject, ['tracecontext'])
+      assert.deepStrictEqual(config.tracePropagationStyle?.extract, ['tracecontext'])
 
       // Appsec
       assertObjectContains(config, {
@@ -3460,60 +3387,60 @@ rules:
 
     it('should be false by default', () => {
       const config = getConfig()
-      assert.strictEqual(config?.resourceRenamingEnabled, false)
+      assert.strictEqual(config.resourceRenamingEnabled, false)
     })
 
     it('should be enabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is true', () => {
       process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'true'
       const config = getConfig()
-      assert.strictEqual(config?.resourceRenamingEnabled, true)
+      assert.strictEqual(config.resourceRenamingEnabled, true)
     })
 
     it('should be disabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is false', () => {
       process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
       const config = getConfig()
-      assert.strictEqual(config?.resourceRenamingEnabled, false)
+      assert.strictEqual(config.resourceRenamingEnabled, false)
     })
 
     it('should be enabled when appsec is enabled via env var', () => {
       process.env.DD_APPSEC_ENABLED = 'true'
       const config = getConfig()
-      assert.strictEqual(config?.resourceRenamingEnabled, true)
+      assert.strictEqual(config.resourceRenamingEnabled, true)
     })
 
     it('should be enabled when appsec is enabled via options', () => {
       const config = getConfig({ appsec: { enabled: true } })
-      assert.strictEqual(config?.resourceRenamingEnabled, true)
+      assert.strictEqual(config.resourceRenamingEnabled, true)
     })
 
     it('should prioritize DD_TRACE_RESOURCE_RENAMING_ENABLED over appsec setting', () => {
       process.env.DD_APPSEC_ENABLED = 'true'
       process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
       const config = getConfig()
-      assert.strictEqual(config?.resourceRenamingEnabled, false)
+      assert.strictEqual(config.resourceRenamingEnabled, false)
     })
 
     it('should prioritize DD_TRACE_RESOURCE_RENAMING_ENABLED over appsec option', () => {
       process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
       const config = getConfig({ appsec: { enabled: true } })
-      assert.strictEqual(config?.resourceRenamingEnabled, false)
+      assert.strictEqual(config.resourceRenamingEnabled, false)
     })
 
     it('should enable when appsec is enabled via both env and options', () => {
       process.env.DD_APPSEC_ENABLED = 'true'
       const config = getConfig({ appsec: { enabled: true } })
-      assert.strictEqual(config?.resourceRenamingEnabled, true)
+      assert.strictEqual(config.resourceRenamingEnabled, true)
     })
 
     it('should remain false when appsec is disabled', () => {
       process.env.DD_APPSEC_ENABLED = 'false'
       const config = getConfig()
-      assert.strictEqual(config?.resourceRenamingEnabled, false)
+      assert.strictEqual(config.resourceRenamingEnabled, false)
     })
 
     it('should remain false when appsec is disabled via options', () => {
       const config = getConfig({ appsec: { enabled: false } })
-      assert.strictEqual(config?.resourceRenamingEnabled, false)
+      assert.strictEqual(config.resourceRenamingEnabled, false)
     })
   })
 

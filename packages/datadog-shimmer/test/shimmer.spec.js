@@ -235,7 +235,7 @@ describe('shimmer', () => {
       shimmer.wrap(obj, 'count', () => () => {})
 
       assert.strictEqual(obj.count.test, 'test')
-      assert.ok(!(Object.getOwnPropertyNames(obj.count)).includes('test'))
+      assert.strictEqual(Object.hasOwn(obj.count, 'test'), false)
     })
 
     it('should inherit from the original method prototype 2', () => {
@@ -251,7 +251,7 @@ describe('shimmer', () => {
 
       assert.strictEqual(obj.count.test, 'test')
       assert.strictEqual(obj.count.foo, 42)
-      assert.ok(!(Object.getOwnPropertyNames(obj.count)).includes('test'))
+      assert.strictEqual(Object.hasOwn(obj.count, 'test'), false)
     })
 
     it('should preserve the property descriptor of the original', () => {
@@ -475,7 +475,7 @@ describe('shimmer', () => {
       const wrapped = shimmer.wrapFunction(count, count => () => {})
 
       assert.strictEqual(wrapped.test, 'test')
-      assert.ok(!(Object.getOwnPropertyNames(wrapped)).includes('test'))
+      assert.strictEqual(Object.hasOwn(wrapped, 'test'), false)
     })
 
     it('should mass wrap methods on objects', () => {

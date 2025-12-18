@@ -205,7 +205,7 @@ describe('IAST Index', () => {
       it('should not finish global context if not enabled before ', () => {
         mockIast.disable(config)
 
-        sinon.assert.called(mockOverheadController.finishGlobalContext)
+        sinon.assert.notCalled(mockOverheadController.finishGlobalContext)
       })
     })
 

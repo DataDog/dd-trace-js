@@ -112,12 +112,12 @@ describe('IAST Plugin', () => {
         iastPlugin._getTelemetryHandler = getTelemetryHandler
         iastPlugin.addSub({ channelName, tagKey: VULNERABILITY_TYPE }, handler)
 
-        sinon.assert.called(getTelemetryHandler)
+        sinon.assert.notCalled(getTelemetryHandler)
 
         getTelemetryHandler.reset()
 
         iastPlugin.addSub({ channelName, tagKey: SOURCE_TYPE, tag: 'test-tag' }, handler)
-        sinon.assert.called(getTelemetryHandler)
+        sinon.assert.notCalled(getTelemetryHandler)
       })
     })
 

@@ -57,10 +57,10 @@ describe('Plugin', () => {
         it('should set http.endpoint with int when no route is available', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0]?.name, 'web.request')
-              assert.strictEqual(traces[0][0].meta?.http?.url, `http://localhost:${port}/users/123`)
-              assert.ok(!(Object.hasOwn(traces[0][0].meta?.http, 'route')))
-              assert.strictEqual(traces[0][0].meta?.http?.endpoint, '/users/{param:int}')
+              assert.strictEqual(traces[0][0].name, 'web.request')
+              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/users/123`)
+              assert.ok(!('http.route' in traces[0][0].meta))
+              assert.strictEqual(traces[0][0].meta['http.endpoint'], '/users/{param:int}')
             })
             .then(done)
             .catch(done)
@@ -71,9 +71,9 @@ describe('Plugin', () => {
         it('should set http.endpoint with int_id when no route is available', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0]?.name, 'web.request')
-              assert.ok(!(Object.hasOwn(traces[0][0].meta?.http, 'route')))
-              assert.strictEqual(traces[0][0].meta?.http?.endpoint, '/resources/{param:int_id}')
+              assert.strictEqual(traces[0][0].name, 'web.request')
+              assert.ok(!('http.route' in traces[0][0].meta))
+              assert.strictEqual(traces[0][0].meta['http.endpoint'], '/resources/{param:int_id}')
             })
             .then(done)
             .catch(done)
@@ -84,10 +84,10 @@ describe('Plugin', () => {
         it('should set http.endpoint with hex when no route is available', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0]?.name, 'web.request')
-              assert.strictEqual(traces[0][0].meta?.http?.url, `http://localhost:${port}/orders/abc123`)
-              assert.ok(!(Object.hasOwn(traces[0][0].meta?.http, 'route')))
-              assert.strictEqual(traces[0][0].meta?.http?.endpoint, '/orders/{param:hex}')
+              assert.strictEqual(traces[0][0].name, 'web.request')
+              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/orders/abc123`)
+              assert.ok(!('http.route' in traces[0][0].meta))
+              assert.strictEqual(traces[0][0].meta['http.endpoint'], '/orders/{param:hex}')
             })
             .then(done)
             .catch(done)
@@ -98,9 +98,9 @@ describe('Plugin', () => {
         it('should set http.endpoint with hex_id when no route is available', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0]?.name, 'web.request')
-              assert.ok(!(Object.hasOwn(traces[0][0].meta?.http, 'route')))
-              assert.strictEqual(traces[0][0].meta?.http?.endpoint, '/resources/{param:hex_id}')
+              assert.strictEqual(traces[0][0].name, 'web.request')
+              assert.ok(!('http.route' in traces[0][0].meta))
+              assert.strictEqual(traces[0][0].meta['http.endpoint'], '/resources/{param:hex_id}')
             })
             .then(done)
             .catch(done)

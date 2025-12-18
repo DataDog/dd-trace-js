@@ -15,6 +15,7 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const getDsmPathwayHash = (testTopic, isProducer, parentHash) => {
   let edgeTags
@@ -115,19 +116,19 @@ describe('Plugin', () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
-                assert.ok((span).includes({
+                assertObjectContains(span, {
                   name: expectedSchema.send.opName,
                   service: expectedSchema.send.serviceName,
                   resource: testTopic,
                   error: 1
-                }))
+                })
 
-                assert.ok((span.meta).includes({
+                assertObjectContains(span.meta, {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
                   component: 'confluentinc-kafka-javascript'
-                }))
+                })
               }, { timeoutMs: 10000 })
 
               try {
@@ -209,11 +210,11 @@ describe('Plugin', () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
-                assert.ok((span).includes({
+                assertObjectContains(span, {
                   name: 'kafka.consume',
                   service: 'test-kafka',
                   resource: testTopic
-                }))
+                })
 
                 assert.ok(parseInt(span.parent_id.toString()) > 0)
               }, { timeoutMs: 10000 })
@@ -335,18 +336,18 @@ describe('Plugin', () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
-                assert.ok((span).includes({
+                assertObjectContains(span, {
                   name: expectedSchema.send.opName,
                   service: expectedSchema.send.serviceName,
                   error: 1
-                }))
+                })
 
-                assert.ok((span.meta).includes({
+                assertObjectContains(span.meta, {
                   component: 'confluentinc-kafka-javascript'
-                }))
+                })
 
-                assert.ok(span.meta[ERROR_TYPE] != null)
-                assert.ok(span.meta[ERROR_MESSAGE] != null)
+                assert.ok(span.meta[ERROR_TYPE])
+                assert.ok(span.meta[ERROR_MESSAGE])
               }, { timeoutMs: 10000 })
 
               try {
@@ -456,11 +457,11 @@ describe('Plugin', () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
-                assert.ok((span).includes({
+                assertObjectContains(span, {
                   name: 'kafka.consume',
                   service: 'test-kafka',
                   resource: testTopic
-                }))
+                })
 
                 assert.ok(parseInt(span.parent_id.toString()) > 0)
               }, { timeoutMs: 10000 })

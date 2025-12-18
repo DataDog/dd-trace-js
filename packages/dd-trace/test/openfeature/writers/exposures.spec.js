@@ -78,7 +78,7 @@ describe('OpenFeature Exposures Writer', () => {
     })
 
     it('should set up periodic flushing', () => {
-      assert.ok(writer._periodic != null)
+      assert.ok(writer._periodic)
     })
   })
 
@@ -163,7 +163,7 @@ describe('OpenFeature Exposures Writer', () => {
       const events = [exposureEvent]
       const payload = writer.makePayload(events)
 
-      assert.ok((payload) !== null && typeof (payload) === 'object' && !Array.isArray(payload))
+      assert.ok(payload !== null && typeof payload === 'object' && !Array.isArray(payload))
       assert.ok(Object.hasOwn(payload, 'context'))
       assert.ok(Object.hasOwn(payload, 'exposures'))
       assert.strictEqual(payload.exposures?.length, 1)
@@ -265,16 +265,16 @@ describe('OpenFeature Exposures Writer', () => {
       const [payload, options] = request.getCall(0).args
 
       assert.strictEqual(options.method, 'POST')
-      assert.ok((options.path).includes('/evp_proxy/v2/'))
+      assert.match(options.path, /\/evp_proxy\/v2\//)
       assert.strictEqual(options.headers['Content-Type'], 'application/json')
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
 
       const parsedPayload = JSON.parse(payload)
-      assert.ok((parsedPayload) !== null && typeof (parsedPayload) === 'object' && !Array.isArray(parsedPayload))
+      assert.ok(parsedPayload !== null && typeof parsedPayload === 'object' && !Array.isArray(parsedPayload))
       assert.ok(Object.hasOwn(parsedPayload, 'context'))
       assert.ok(Object.hasOwn(parsedPayload, 'exposures'))
       assert.strictEqual(parsedPayload.exposures?.length, 1)
-      assert.ok(parsedPayload.exposures[0].timestamp != null)
+      assert.ok(parsedPayload.exposures[0].timestamp)
       assert.strictEqual(parsedPayload.context.service, 'test-service')
     })
 

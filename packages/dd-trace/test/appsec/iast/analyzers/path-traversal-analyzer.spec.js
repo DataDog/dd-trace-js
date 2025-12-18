@@ -183,7 +183,7 @@ describe('path-traversal-analyzer', () => {
     hasQuota.returns(true)
 
     proxyPathAnalyzer.analyze(['arg1'])
-    sinon.assert.called(addVulnerability)
+    sinon.assert.notCalled(addVulnerability)
   })
 })
 

@@ -672,8 +672,7 @@ describe('Overhead controller', () => {
 })
 
 function hasNestedProperty (obj, path) {
-  if (obj == null) return false
-  if (typeof path !== 'string') return false
+  if (obj == null || typeof path !== 'string') return false
 
   const parts = path.split('.')
   let cur = obj

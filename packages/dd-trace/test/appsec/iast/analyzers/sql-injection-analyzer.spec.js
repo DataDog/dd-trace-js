@@ -213,7 +213,7 @@ describe('sql-injection-analyzer', () => {
 
       onMysqlQueryStart({ sql: 'SELECT 1' })
 
-      sinon.assert.calledOnceWithExactly(analyze, 'SELECT 1')
+      sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1')
     })
 
     it('should call analyze on apm:mysql2:query:start', () => {
@@ -221,7 +221,7 @@ describe('sql-injection-analyzer', () => {
 
       onMysql2QueryStart({ sql: 'SELECT 1' })
 
-      sinon.assert.calledOnceWithExactly(analyze, 'SELECT 1')
+      sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1')
     })
 
     it('should call analyze on apm:pg:query:start', () => {
@@ -229,7 +229,7 @@ describe('sql-injection-analyzer', () => {
 
       onPgQueryStart({ originalText: 'SELECT 1', query: { text: 'modified-query SELECT 1' } })
 
-      sinon.assert.calledOnceWithExactly(analyze, 'SELECT 1')
+      sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1')
     })
   })
 

@@ -16,7 +16,7 @@ describe('check-require-cache', () => {
   it('should be no warnings when tracer is loaded first', (done) => {
     exec(`${process.execPath} ./check-require-cache/good-order.js`, opts, (error, stdout, stderr) => {
       assert.strictEqual(error, null)
-      assert.ok(!(stderr).includes("Package 'express' was loaded"))
+      assert.doesNotMatch(stderr, /Package 'express' was loaded/)
       done()
     })
   })

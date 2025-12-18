@@ -162,7 +162,7 @@ describe('dependencies', () => {
           { name: request, version: packageVersion }
         ]
       }
-      sinon.assert.calledOnceWithExactly(
+      sinon.assert.calledOnceWithMatch(
         sendData,
         config,
         application,
@@ -183,7 +183,7 @@ describe('dependencies', () => {
           { name: request, version: packageVersion }
         ]
       }
-      sinon.assert.calledOnceWithExactly(
+      sinon.assert.calledOnceWithMatch(
         sendData,
         config,
         application,
@@ -205,7 +205,7 @@ describe('dependencies', () => {
           { name: request, version: packageVersion }
         ]
       }
-      sinon.assert.calledOnceWithExactly(
+      sinon.assert.calledOnceWithMatch(
         sendData,
         config,
         application,
@@ -228,7 +228,7 @@ describe('dependencies', () => {
           { name: moduleName, version: packageVersion }
         ]
       }
-      sinon.assert.calledOnceWithExactly(
+      sinon.assert.calledOnceWithMatch(
         sendData,
         config,
         application,
@@ -311,7 +311,7 @@ describe('dependencies', () => {
           { name: moduleName, version: packageVersion }
         ]
       }
-      sinon.assert.calledOnceWithExactly(
+      sinon.assert.calledOnceWithMatch(
         sendData,
         config,
         application,

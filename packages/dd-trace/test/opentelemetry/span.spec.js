@@ -493,13 +493,13 @@ describe('OTel Span', () => {
     processor.onEnd = sinon.stub()
     tracerProvider.addSpanProcessor(processor)
 
-    sinon.assert.called(processor.onStart)
-    sinon.assert.called(processor.onEnd)
+    sinon.assert.notCalled(processor.onStart)
+    sinon.assert.notCalled(processor.onEnd)
 
     const span = tracer.startSpan('name')
 
     sinon.assert.calledWith(processor.onStart, span, span._context)
-    sinon.assert.called(processor.onEnd)
+    sinon.assert.notCalled(processor.onEnd)
 
     span.end()
 

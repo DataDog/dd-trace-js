@@ -56,7 +56,7 @@ function expectProfileMessagePromise (agent, timeout,
       const attachments = event.attachments
       assert.ok(Array.isArray(attachments))
       // Profiler encodes the files with Promise.all, so their ordering is not guaranteed
-      assertObjectContains(attachments, fileNames)
+      assert.deepStrictEqual(attachments.slice().sort(), fileNames.sort())
       for (const [index, fileName] of attachments.entries()) {
         assertObjectContains(files[index + 1], {
           originalname: fileName
@@ -498,12 +498,15 @@ describe('profiler', () => {
 
     it('dns timeline events work', async () => {
       const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', agent.port, 'dns')
-      assertObjectContains(dnsEvents, [
-        { operation: 'lookup', host: 'example.org' },
-        { operation: 'lookup', host: 'example.com' },
+      const compare = (a, b) => {
+        return a.operation.localeCompare(b.operation) || (a.host?.localeCompare(b.host) ?? 0)
+      }
+      assertObjectContains(dnsEvents.sort(compare), [
         { operation: 'lookup', host: 'datadoghq.com' },
+        { operation: 'lookup', host: 'example.com' },
+        { operation: 'lookup', host: 'example.org' },
+        { operation: 'lookupService', address: '13.224.103.60', port: 80 },
         { operation: 'queryA', host: 'datadoghq.com' },
-        { operation: 'lookupService', address: '13.224.103.60', port: 80 }
       ])
     })
 
@@ -711,7 +714,7 @@ describe('profiler', () => {
 
         const responses = series.find(s => s.metric === 'profile_api.responses')
         assert.strictEqual(responses.type, 'count')
-        assert.match(responses.tags, /status_code:200/)
+        assert.deepStrictEqual(responses.tags, ['status_code:200'])
 
         // Same number of requests and responses
         assert.strictEqual(responses.points[0][1], requestCount)

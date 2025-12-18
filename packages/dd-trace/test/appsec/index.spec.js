@@ -420,7 +420,7 @@ describe('AppSec Index', function () {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      sinon.assert.called(waf.run)
+      sinon.assert.notCalled(waf.run)
 
       sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, undefined)
     })
@@ -503,7 +503,7 @@ describe('AppSec Index', function () {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      sinon.assert.called(waf.run)
+      sinon.assert.notCalled(waf.run)
 
       sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, undefined)
     })
@@ -694,8 +694,8 @@ describe('AppSec Index', function () {
         responseBody.publish({ req: {}, body: 'string' })
         responseBody.publish({ req: {}, body: null })
 
-        sinon.assert.called(apiSecuritySampler.sampleRequest)
-        sinon.assert.called(waf.run)
+        sinon.assert.notCalled(apiSecuritySampler.sampleRequest)
+        sinon.assert.notCalled(waf.run)
       })
 
       it('should not call to the waf if it is not a sampled request', () => {
@@ -706,7 +706,7 @@ describe('AppSec Index', function () {
         responseBody.publish({ req, res, body: {} })
 
         sinon.assert.calledOnceWithMatch(apiSecuritySampler.sampleRequest, req, res)
-        sinon.assert.called(waf.run)
+        sinon.assert.notCalled(waf.run)
       })
 
       it('should call to the waf if it is a sampled request', () => {
@@ -1162,14 +1162,14 @@ describe('AppSec Index', function () {
             }
           }
         }, req)
-        sinon.assert.called(abortController.abort)
-        sinon.assert.called(res.constructor.prototype.end)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
         sinon.assert.calledOnce(waf.run)
-        sinon.assert.called(abortController.abort)
-        sinon.assert.called(res.constructor.prototype.end)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('should not do anything without a root span', () => {
@@ -1184,9 +1184,9 @@ describe('AppSec Index', function () {
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
-        sinon.assert.called(waf.run)
-        sinon.assert.called(abortController.abort)
-        sinon.assert.called(res.constructor.prototype.end)
+        sinon.assert.notCalled(waf.run)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('should call the WAF with responde code and headers', () => {
@@ -1238,7 +1238,7 @@ describe('AppSec Index', function () {
       it('should not call abortController if response was not blocked', () => {
         responseSetHeader.publish({ res, abortController })
 
-        sinon.assert.calledOnce(abortController.abort)
+        sinon.assert.notCalled(abortController.abort)
       })
     })
   })

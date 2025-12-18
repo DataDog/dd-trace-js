@@ -290,7 +290,7 @@ describe('Plugin', () => {
                 winston.log('info', 'test', meta)
                 assert.strictEqual(meta.dd, undefined)
 
-                sinon.assert.calledWithExactly(spy)
+                sinon.assert.calledWithMatch(spy)
               })
               assert.strictEqual(await logServer.logPromise, undefined)
             })

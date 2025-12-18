@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 
 require('./setup/core')
@@ -16,25 +17,30 @@ describe('process-tags', () => {
       assert.ok(Object.hasOwn(result, 'tags'))
       assert.ok(Object.hasOwn(result, 'serialized'))
       assert.ok(Array.isArray(result.tags))
-      assert.ok(typeof (result.serialized) === 'string')
+      assert.strictEqual(typeof result.serialized, 'string')
     })
 
     it('should include all expected tag names', () => {
       const result = getProcessTags()
-      const tagNames = result.tags.map(([name]) => name)
+      const tagNames = result.tags.map(([name]) => name).sort()
 
-      assert.ok((tagNames).includes('entrypoint.basedir'))
-      assert.ok((tagNames).includes('entrypoint.name'))
-      assert.ok((tagNames).includes('entrypoint.type'))
-      assert.ok((tagNames).includes('entrypoint.workdir'))
-      assert.ok((tagNames).includes('package.json.name'))
+      assertObjectContains(
+        tagNames,
+        [
+          'entrypoint.basedir',
+          'entrypoint.name',
+          'entrypoint.type',
+          'entrypoint.workdir',
+          'package.json.name'
+        ]
+      )
     })
 
     it('should have entrypoint.type set to "script"', () => {
       const result = getProcessTags()
       const typeTag = result.tags.find(([name]) => name === 'entrypoint.type')
 
-      assert.ok(typeTag != null)
+      assert.ok(Array.isArray(typeTag))
       assert.strictEqual(typeTag[1], 'script')
     })
 
@@ -42,30 +48,22 @@ describe('process-tags', () => {
       const result = getProcessTags()
       const workdirTag = result.tags.find(([name]) => name === 'entrypoint.workdir')
 
-      assert.ok(workdirTag != null)
-      assert.ok(typeof (workdirTag[1]) === 'string')
-      assert.ok(!(workdirTag[1]).includes('/'))
+      assert.ok(Array.isArray(workdirTag))
+      assert.strictEqual(typeof workdirTag[1], 'string')
+      assert.doesNotMatch(workdirTag[1], /\//)
     })
 
     // note that these tests may fail if the tracer folder structure changes
-    it('should set sensible values based on tracer project structure', () => {
+    it('should set sensible values based on tracer project structure and be sorted alphabetically', () => {
       const result = getProcessTags()
 
-      assert.strictEqual(result.tags.find(([name]) => name === 'entrypoint.basedir')[1], 'test')
-      assert.strictEqual(result.tags.find(([name]) => name === 'entrypoint.name')[1], 'process-tags.spec')
-      assert.strictEqual(result.tags.find(([name]) => name === 'entrypoint.type')[1], 'script')
-      assert.strictEqual(result.tags.find(([name]) => name === 'entrypoint.workdir')[1], 'dd-trace-js')
-      assert.strictEqual(result.tags.find(([name]) => name === 'package.json.name')[1], 'dd-trace')
-    })
-
-    it('should sort tags alphabetically', () => {
-      const result = getProcessTags()
-
-      assert.strictEqual(result.tags[0][0], 'entrypoint.basedir')
-      assert.strictEqual(result.tags[1][0], 'entrypoint.name')
-      assert.strictEqual(result.tags[2][0], 'entrypoint.type')
-      assert.strictEqual(result.tags[3][0], 'entrypoint.workdir')
-      assert.strictEqual(result.tags[4][0], 'package.json.name')
+      assert.deepStrictEqual(result.tags, [
+        ['entrypoint.basedir', 'test'],
+        ['entrypoint.name', 'process-tags.spec'],
+        ['entrypoint.type', 'script'],
+        ['entrypoint.workdir', 'dd-trace-js'],
+        ['package.json.name', 'dd-trace'],
+      ])
     })
 
     it('should serialize tags correctly', () => {
@@ -76,8 +74,8 @@ describe('process-tags', () => {
         const parts = result.serialized.split(',')
         assert.ok(parts.length > 0)
         parts.forEach(part => {
-          assert.ok((part).includes(':'))
-          assert.ok(!(part).includes('undefined'))
+          assert.match(part, /:/)
+          assert.doesNotMatch(part, /undefined/)
         })
       }
     })
@@ -107,7 +105,7 @@ describe('process-tags', () => {
       const result = serialize(tags)
 
       assert.strictEqual(result, 'tag1:value1,tag3:value3')
-      assert.ok(!(result).includes('undefined'))
+      assert.doesNotMatch(result, /undefined/)
     })
 
     it('should sanitize tag values', () => {
@@ -226,8 +224,11 @@ describe('process-tags', () => {
     })
 
     it('should convert non-string values to strings first', () => {
+      // @ts-expect-error: intentionally passing invalid types to test robustness
       assert.strictEqual(sanitize(123), '123')
+      // @ts-expect-error: intentionally passing invalid types to test robustness
       assert.strictEqual(sanitize(true), 'true')
+      // @ts-expect-error: intentionally passing invalid types to test robustness
       assert.strictEqual(sanitize(false), 'false')
     })
 
@@ -287,15 +288,14 @@ describe('process-tags', () => {
       getConfig = require('../src/config')
       const config = getConfig()
 
-      assert.ok(config.propagateProcessTags != null)
+      assert.ok(config.propagateProcessTags)
       assert.strictEqual(config.propagateProcessTags.enabled, true)
 
       SpanProcessor = require('../src/span_processor')
       const processor = new SpanProcessor(undefined, undefined, config)
 
-      assert.ok(typeof (processor._processTags) === 'string')
-      assert.notStrictEqual(processor._processTags, false)
-      assert.ok((processor._processTags).includes('entrypoint'))
+      assert.ok(typeof processor._processTags === 'string')
+      assert.match(processor._processTags, /entrypoint/)
     })
 
     it('should disable process tags propagation when set to false', () => {
@@ -304,7 +304,7 @@ describe('process-tags', () => {
       getConfig = require('../src/config')
       const config = getConfig()
 
-      assert.ok(config.propagateProcessTags != null)
+      assert.ok(config.propagateProcessTags)
       assert.strictEqual(config.propagateProcessTags.enabled, false)
 
       SpanProcessor = require('../src/span_processor')

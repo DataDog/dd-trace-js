@@ -67,7 +67,7 @@ describe('IastContextPlugin', () => {
     it('should add a subscription to the channel', () => {
       plugin.startCtxOn(channelName, tag)
 
-      sinon.assert.calledOnceWithExactly(addSub, channelName)
+      sinon.assert.calledOnceWithMatch(addSub, channelName)
       sinon.assert.calledOnceWithExactly(getAndRegisterSubscription, { channelName, tag, tagKey: TagKey.SOURCE_TYPE })
     })
 
@@ -89,7 +89,7 @@ describe('IastContextPlugin', () => {
     it('should add a subscription to the channel', () => {
       plugin.finishCtxOn(channelName)
 
-      sinon.assert.calledOnceWithExactly(addSub, channelName)
+      sinon.assert.calledOnceWithMatch(addSub, channelName)
     })
 
     it('should call finishContext when event is published', () => {

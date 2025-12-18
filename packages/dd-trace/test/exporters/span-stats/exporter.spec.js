@@ -33,8 +33,8 @@ describe('span-stats exporter', () => {
   it('should flush immediately on export', () => {
     exporter = new Exporter({ url })
 
-    sinon.assert.called(writer.append)
-    sinon.assert.called(writer.flush)
+    sinon.assert.notCalled(writer.append)
+    sinon.assert.notCalled(writer.flush)
 
     exporter.export('')
 

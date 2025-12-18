@@ -133,7 +133,7 @@ describe('Telemetry', () => {
         const iastContext = {}
         iastTelemetry.onRequestStart(iastContext)
 
-        sinon.assert.calledOnce(initRequestNamespace)
+        sinon.assert.notCalled(initRequestNamespace)
       })
     })
 
@@ -144,7 +144,7 @@ describe('Telemetry', () => {
         const iastContext = {}
         iastTelemetry.onRequestEnd(iastContext)
 
-        sinon.assert.calledOnceWithExactly(finalizeRequestNamespace, iastContext)
+        sinon.assert.calledOnceWithMatch(finalizeRequestNamespace, iastContext)
       })
 
       it('should not call finalizeRequestNamespace if enabled and verbosity is Off', () => {
@@ -161,7 +161,7 @@ describe('Telemetry', () => {
         const iastContext = {}
         iastTelemetry.onRequestEnd(iastContext)
 
-        sinon.assert.calledOnce(finalizeRequestNamespace)
+        sinon.assert.notCalled(finalizeRequestNamespace)
       })
     })
   })

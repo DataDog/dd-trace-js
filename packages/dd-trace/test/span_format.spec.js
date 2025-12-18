@@ -309,13 +309,8 @@ describe('spanFormat', () => {
       }
 
       trace = spanFormat(span, false)
-      assert.ok(!(trace.meta).includes({
-        chunk: 'test'
-      }))
-
-      assert.ok(!(trace.metrics).includes({
-        count: 1
-      }))
+      assert.ok(!('chunk' in trace.meta))
+      assert.ok(!('count' in trace.metrics))
     })
 
     it('should extract empty tags', () => {

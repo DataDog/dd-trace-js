@@ -173,14 +173,16 @@ describe('Plugin', () => {
           const tracingPromise = agent.assertSomeTraces(traces => {
             // Find the db_query span
             const dbQuerySpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
-            assert.ok(dbQuerySpan != null)
-
             // Verify database connection attributes are present
-            assert.strictEqual(dbQuerySpan.meta['db.name'], 'postgres')
-            assert.strictEqual(dbQuerySpan.meta['db.user'], 'foo')
-            assert.strictEqual(dbQuerySpan.meta['out.host'], 'localhost')
-            assert.strictEqual(dbQuerySpan.meta['network.destination.port'], '5432')
-            assert.strictEqual(dbQuerySpan.meta['db.type'], 'postgres')
+            assertObjectContains(dbQuerySpan, {
+              meta: {
+                'db.name': 'postgres',
+                'db.user': 'foo',
+                'out.host': 'localhost',
+                'network.destination.port': '5432',
+                'db.type': 'postgres'
+              }
+            })
           })
 
           const engineSpans = [

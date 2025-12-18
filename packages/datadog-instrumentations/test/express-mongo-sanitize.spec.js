@@ -195,7 +195,7 @@ describe('express-mongo-sanitize', () => {
           const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
 
           assert.strictEqual(sanitizedObject.safeKey, objectToSanitize.safeKey)
-          sinon.assert.calledOnceWithExactly(subscription, { sanitizedObject })
+          sinon.assert.calledOnceWithMatch(subscription, { sanitizedObject })
         })
 
         it('it works as expected with modifications', () => {
@@ -212,7 +212,7 @@ describe('express-mongo-sanitize', () => {
 
           assert.strictEqual(sanitizedObject.safeKey, objectToSanitize.safeKey)
           assert.strictEqual(sanitizedObject.unsafeKey.$ne, undefined)
-          sinon.assert.calledOnceWithExactly(subscription, { sanitizedObject })
+          sinon.assert.calledOnceWithMatch(subscription, { sanitizedObject })
         })
       })
     })

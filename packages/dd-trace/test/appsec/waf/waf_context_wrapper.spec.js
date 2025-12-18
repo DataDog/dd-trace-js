@@ -146,7 +146,7 @@ describe('WAFContextWrapper', () => {
     wafContextWrapper.run(payload)
     wafRunFinished.unsubscribe(finishedCallback)
 
-    sinon.assert.calledOnceWithExactly(finishedCallback, { payload })
+    sinon.assert.calledOnceWithMatch(finishedCallback, { payload })
   })
 
   it('should report error code when the waf run fails', () => {

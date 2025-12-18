@@ -49,7 +49,7 @@ describe('Metrics', () => {
 
     metric.inc(context)
 
-    sinon.assert.calledOnceWithExactly(reqNamespace.count, metric.name)
+    sinon.assert.calledOnceWithMatch(reqNamespace.count, metric.name)
     sinon.assert.calledOnceWithExactly(inc, 1)
   })
 
@@ -58,7 +58,7 @@ describe('Metrics', () => {
 
     metric.inc(context, 42)
 
-    sinon.assert.calledOnceWithExactly(reqNamespace.count, metric.name)
+    sinon.assert.calledOnceWithMatch(reqNamespace.count, metric.name)
     sinon.assert.calledOnceWithExactly(inc, 42)
   })
 
@@ -133,7 +133,7 @@ describe('Metrics', () => {
       noTagged.inc(undefined, 42)
       noTagged.inc(undefined, 42)
 
-      sinon.assert.calledOnceWithExactly(superCount, 'notagged')
+      sinon.assert.calledOnceWithMatch(superCount, 'notagged')
     })
   })
 })

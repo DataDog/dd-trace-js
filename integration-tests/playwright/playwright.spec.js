@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('node:assert')
 const { once } = require('node:events')
 const { exec, execSync } = require('child_process')
 const satisfies = require('semifies')
@@ -164,8 +164,8 @@ versions.forEach((version) => {
             assert.strictEqual(testSessionEvent.content.meta[TEST_TYPE], 'browser')
             assert.strictEqual(testModuleEvent.content.meta[TEST_TYPE], 'browser')
 
-            assert.ok(testSessionEvent.content.meta[ERROR_MESSAGE] != null)
-            assert.ok(testModuleEvent.content.meta[ERROR_MESSAGE] != null)
+            assert.strictEqual(typeof testSessionEvent.content.meta[ERROR_MESSAGE], 'string')
+            assert.strictEqual(typeof testModuleEvent.content.meta[ERROR_MESSAGE], 'string')
 
             assert.deepStrictEqual(testSuiteEvents.map(suite => suite.content.resource).sort(), [
               'test_suite.landing-page-test.js',
@@ -181,11 +181,11 @@ versions.forEach((version) => {
 
             testSuiteEvents.forEach(testSuiteEvent => {
               if (testSuiteEvent.content.meta[TEST_STATUS] === 'fail') {
-                assert.ok(testSuiteEvent.content.meta[ERROR_MESSAGE] != null)
+                assert.ok(testSuiteEvent.content.meta[ERROR_MESSAGE])
               }
               assert.ok(testSuiteEvent.content.meta[TEST_SOURCE_FILE].endsWith('-test.js'))
               assert.strictEqual(testSuiteEvent.content.metrics[TEST_SOURCE_START], 1)
-              assert.ok(testSuiteEvent.content.metrics[DD_HOST_CPU_COUNT] != null)
+              assert.ok(testSuiteEvent.content.metrics[DD_HOST_CPU_COUNT])
             })
 
             assert.deepStrictEqual(testEvents.map(test => test.content.resource).sort(), [
@@ -209,7 +209,7 @@ versions.forEach((version) => {
             ])
 
             testEvents.forEach(testEvent => {
-              assert.ok(testEvent.content.metrics[TEST_SOURCE_START] != null)
+              assert.ok(testEvent.content.metrics[TEST_SOURCE_START])
               assert.strictEqual(
                 testEvent.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/playwright-tests/'),
                 true
@@ -223,7 +223,7 @@ versions.forEach((version) => {
                 [TEST_BROWSER_NAME]: 'chromium',
                 [TEST_PARAMETERS]: JSON.stringify({ arguments: { browser: 'chromium' }, metadata: {} })
               })
-              assert.ok(testEvent.content.metrics[DD_HOST_CPU_COUNT] != null)
+              assert.ok(testEvent.content.metrics[DD_HOST_CPU_COUNT])
               if (version === 'latest' || satisfies(version, '>=1.38.0')) {
                 if (testEvent.content.meta[TEST_STATUS] !== 'skip' &&
                   testEvent.content.meta[TEST_SUITE].includes('landing-page-test.js')) {
@@ -328,7 +328,7 @@ versions.forEach((version) => {
         assertObjectContains(testSessionEvent.meta, {
           [TEST_STATUS]: 'fail'
         })
-        assert.ok(testSuiteEvent.meta[ERROR_MESSAGE] != null)
+        assert.ok(testSuiteEvent.meta[ERROR_MESSAGE])
         assert.match(testSessionEvent.meta[ERROR_MESSAGE], /Test suites failed: 1/)
       }).then(() => done()).catch(done)
 
@@ -2024,7 +2024,7 @@ versions.forEach((version) => {
 
             const customSpan = spans.find(span => span.name === 'my custom span')
 
-            assert.ok(customSpan != null)
+            assert.ok(customSpan)
             assert.strictEqual(customSpan.meta['test.really_custom_tag'], 'this is really custom')
 
             // custom span is children of active test span

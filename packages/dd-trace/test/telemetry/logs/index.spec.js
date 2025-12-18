@@ -68,7 +68,7 @@ describe('telemetry logs', () => {
       defaultConfig.telemetry.logCollection = false
       logs.start(defaultConfig)
 
-      sinon.assert.called(telemetryLog.subscribe)
+      sinon.assert.notCalled(telemetryLog.subscribe)
     })
   })
 

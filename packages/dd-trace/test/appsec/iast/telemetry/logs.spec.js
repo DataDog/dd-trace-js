@@ -59,6 +59,6 @@ describe('Telemetry logs', () => {
     clock.tick(3000)
 
     sinon.assert.calledOnceWithExactly(start, config)
-    sinon.assert.calledOnceWithExactly(send, config)
+    sinon.assert.calledOnceWithMatch(send, config)
   })
 })

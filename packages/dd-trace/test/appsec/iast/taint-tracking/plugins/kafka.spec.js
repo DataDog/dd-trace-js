@@ -45,7 +45,7 @@ describe('Kafka consumer plugin', () => {
   afterEach(sinon.restore)
 
   it('should subscribe to dd-trace:kafkajs:consumer:afterStart channel', () => {
-    sinon.assert.calledOnceWithExactly(addSub, {
+    sinon.assert.calledOnceWithMatch(addSub, {
       channelName: 'dd-trace:kafkajs:consumer:afterStart',
       tag: [KAFKA_MESSAGE_KEY, KAFKA_MESSAGE_VALUE]
     })
