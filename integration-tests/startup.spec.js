@@ -25,18 +25,32 @@ const execArgvs = [
   {
     execArgv: ['--loader', 'dd-trace/loader-hook.mjs'],
     skip: semver.satisfies(process.versions.node, '>=20.6')
+  },
+  {
+    execArgv: [],
+    optional: false
   }
 ]
 
-execArgvs.forEach(({ execArgv, skip }) => {
+execArgvs.forEach(({ execArgv, skip, optional }) => {
   const describe = skip ? globalThis.describe.skip : globalThis.describe
 
-  describe(`startup ${execArgv.join(' ')}`, () => {
+  describe(`startup ${execArgv.join(' ').concat(`(optional: ${!!optional})`)}`, () => {
     let agent
     let proc
     let cwd
     let startupTestFile
     let unsupportedTestFile
+
+    before(() => {
+      if (optional === false) {
+        process.env.OMIT = 'optional'
+      }
+    })
+
+    after(() => {
+      delete process.env.OMIT
+    })
 
     useSandbox(['d3-format@3.1.0'])
 
@@ -210,6 +224,35 @@ execArgvs.forEach(({ execArgv, skip }) => {
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assert.strictEqual(headers.host, '127.0.0.1:8126')
+          assert.ok(Array.isArray(payload))
+          assert.strictEqual(payload.length, 1)
+          assert.ok(Array.isArray(payload[0]))
+          assert.strictEqual(payload[0].length, 1)
+          assert.strictEqual(payload[0][0].name, 'web.request')
+        })
+      })
+    })
+
+    context('without optional dependencies', () => {
+      beforeEach(async () => {
+        agent = await new FakeAgent().start()
+      })
+
+      afterEach(async () => {
+        proc.kill()
+        await agent.stop()
+      })
+
+      it('works with the missing modules', async () => {
+        proc = await spawnProc(startupTestFile, {
+          cwd,
+          execArgv,
+          env: {
+            DD_TRACE_AGENT_PORT: agent.port
+          }
+        })
+        return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
           assert.ok(Array.isArray(payload[0]))
