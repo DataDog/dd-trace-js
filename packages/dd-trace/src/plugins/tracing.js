@@ -3,6 +3,7 @@
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT } = require('../constants')
+const { activateSpan } = require('../span_activation')
 const Plugin = require('./plugin')
 
 class TracingPlugin extends Plugin {
@@ -209,7 +210,7 @@ class TracingPlugin extends Plugin {
 
     // TODO: Remove this after migration to TracingChannel is done.
     if (enterOrCtx === true) {
-      storage('legacy').enterWith({ ...store, span })
+      activateSpan(store, span)
     } else if (enterOrCtx) {
       enterOrCtx.parentStore = store
       enterOrCtx.currentStore = { ...store, span }
