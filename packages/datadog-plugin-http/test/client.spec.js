@@ -1,8 +1,10 @@
 'use strict'
 
-const fs = require('fs')
+const fs = require('node:fs')
 const assert = require('node:assert/strict')
-const path = require('path')
+const path = require('node:path')
+
+const { satisfies } = require('semver')
 
 const tags = require('../../../ext/tags')
 const { storage } = require('../../datadog-core')
@@ -12,7 +14,6 @@ const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { rawExpectedSchema } = require('./naming')
-const { satisfies } = require('semver')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS

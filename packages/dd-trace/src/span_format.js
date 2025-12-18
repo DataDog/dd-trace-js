@@ -1,29 +1,33 @@
 'use strict'
 
-const constants = require('./constants')
+const { inspect } = require('node:util')
+
+const {
+  SAMPLING_PRIORITY_KEY,
+  SAMPLING_RULE_DECISION,
+  SAMPLING_LIMIT_DECISION,
+  SAMPLING_AGENT_DECISION,
+  SPAN_SAMPLING_MECHANISM,
+  SPAN_SAMPLING_RULE_RATE,
+  SPAN_SAMPLING_MAX_PER_SECOND,
+  SAMPLING_MECHANISM_SPAN,
+  ORIGIN_KEY,
+  HOSTNAME_KEY,
+  TOP_LEVEL_KEY,
+  PROCESS_ID,
+  ERROR_MESSAGE,
+  ERROR_STACK,
+  ERROR_TYPE,
+  IGNORE_OTEL_ERROR,
+  ERROR_FULL_SERIALIZED
+} = require('./constants')
 const tags = require('../../../ext/tags')
 const id = require('./id')
-const { isError } = require('./util')
+const { isError, addErrorProperties } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')
 const { TRACING_FIELD_NAME } = require('./process-tags')
 
-const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
-const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
-const SAMPLING_LIMIT_DECISION = constants.SAMPLING_LIMIT_DECISION
-const SAMPLING_AGENT_DECISION = constants.SAMPLING_AGENT_DECISION
-const SPAN_SAMPLING_MECHANISM = constants.SPAN_SAMPLING_MECHANISM
-const SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE
-const SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND
-const SAMPLING_MECHANISM_SPAN = constants.SAMPLING_MECHANISM_SPAN
 const { MEASURED, BASE_SERVICE, ANALYTICS } = tags
-const ORIGIN_KEY = constants.ORIGIN_KEY
-const HOSTNAME_KEY = constants.HOSTNAME_KEY
-const TOP_LEVEL_KEY = constants.TOP_LEVEL_KEY
-const PROCESS_ID = constants.PROCESS_ID
-const ERROR_MESSAGE = constants.ERROR_MESSAGE
-const ERROR_STACK = constants.ERROR_STACK
-const ERROR_TYPE = constants.ERROR_TYPE
-const { IGNORE_OTEL_ERROR } = constants
 
 // TODO(BridgeAR)[31.03.2025]: Should these land in the constants file?
 const map = {
@@ -213,12 +217,9 @@ function extractError (formattedSpan, error) {
   formattedSpan.error = 1
 
   if (isError(error)) {
-    // AggregateError only has a code and no message.
-    // TODO(BridgeAR)[31.03.2025]: An AggregateError can have a message. Should
-    // the code just generally be added, if available?
-    addTag(formattedSpan.meta, formattedSpan.metrics, ERROR_MESSAGE, error.message || error.code)
-    addTag(formattedSpan.meta, formattedSpan.metrics, ERROR_TYPE, error.name)
-    addTag(formattedSpan.meta, formattedSpan.metrics, ERROR_STACK, error.stack)
+    addErrorProperties(formattedSpan.meta, error)
+  } else {
+    formattedSpan.meta[ERROR_FULL_SERIALIZED] = inspect(error)
   }
 }
 

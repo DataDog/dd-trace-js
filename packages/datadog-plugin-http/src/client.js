@@ -1,5 +1,7 @@
 'use strict'
 
+const { URL } = require('url')
+
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const tags = require('../../../ext/tags')
@@ -8,8 +10,8 @@ const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const log = require('../../dd-trace/src/log')
-const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { URL } = require('url')
+const { CLIENT_PORT_KEY, COMPONENT } = require('../../dd-trace/src/constants')
+const { addErrorTagsToSpan } = require('../../dd-trace/src/util')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
@@ -116,11 +118,7 @@ class HttpClientPlugin extends ClientPlugin {
   error ({ span, error, args, customRequestTimeout }) {
     if (!span) return
     if (error) {
-      span.addTags({
-        [ERROR_TYPE]: error.name,
-        [ERROR_MESSAGE]: error.message || error.code,
-        [ERROR_STACK]: error.stack
-      })
+      addErrorTagsToSpan(span, error)
     } else {
       // conditions for no error:
       // 1. not using a custom agent instance with custom timeout specified

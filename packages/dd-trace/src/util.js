@@ -1,6 +1,9 @@
 'use strict'
 
+const { inspect } = require('util')
 const path = require('path')
+
+const { ERROR_STACK, ERROR_MESSAGE, ERROR_TYPE, ERROR_FULL_SERIALIZED } = require('./constants')
 
 function isTrue (str) {
   str = String(str).toLowerCase()
@@ -83,7 +86,25 @@ function normalizePluginEnvName (envPluginName, makeLowercase = false) {
   return makeLowercase ? envPluginName.toLowerCase() : envPluginName
 }
 
+function addErrorProperties (object, error) {
+  object[ERROR_MESSAGE] = error.message || (error.code ?? '')
+  object[ERROR_TYPE] = (error.constructor ? error.constructor.name : error.name) ?? ''
+  object[ERROR_STACK] = error.stack ?? ''
+  object[ERROR_FULL_SERIALIZED] = inspect(error, { colors: true })
+}
+
+function addErrorTagsToSpan (span, error) {
+  if (isError(error)) {
+    // TODO: Do not create a new object here, just add the properties to the span
+    span.addTags(addErrorProperties({}, error))
+  } else {
+    span.addTag(ERROR_FULL_SERIALIZED, inspect(error, { colors: true }))
+  }
+}
+
 module.exports = {
+  addErrorProperties,
+  addErrorTagsToSpan,
   isTrue,
   isFalse,
   isError,
