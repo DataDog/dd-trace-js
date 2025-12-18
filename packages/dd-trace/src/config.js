@@ -564,6 +564,7 @@ class Config {
       DD_VERTEXAI_SPAN_CHAR_LIMIT,
       DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,
       DD_TRACE_NATIVE_SPAN_EVENTS,
+      DD_TRACE_EXPERIMENTAL_NATIVE_SPANS_ENABLED,
       OTEL_METRICS_EXPORTER,
       OTEL_PROPAGATORS,
       OTEL_RESOURCE_ATTRIBUTES,
@@ -811,6 +812,7 @@ class Config {
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this.#setBoolean(target, 'memcachedCommandEnabled', DD_TRACE_MEMCACHED_COMMAND_ENABLED)
     this.#setBoolean(target, 'middlewareTracingEnabled', DD_TRACE_MIDDLEWARE_TRACING_ENABLED)
+    this.#setBoolean(target, 'experimental.nativeSpans.enabled', DD_TRACE_EXPERIMENTAL_NATIVE_SPANS_ENABLED)
     this.#setBoolean(target, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
     target['openai.spanCharLimit'] = maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT)
     unprocessedTarget.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
@@ -1100,6 +1102,7 @@ class Config {
     this.#setBoolean(opts, 'logInjection', options.logInjection)
     opts.lookup = options.lookup
     this.#setBoolean(opts, 'middlewareTracingEnabled', options.middlewareTracingEnabled)
+    this.#setBoolean(opts, 'experimental.nativeSpans.enabled', options.experimental?.nativeSpans?.enabled)
     this.#setBoolean(opts, 'openAiLogsEnabled', options.openAiLogsEnabled)
     opts.peerServiceMapping = options.peerServiceMapping
     this.#setBoolean(opts, 'plugins', options.plugins)
