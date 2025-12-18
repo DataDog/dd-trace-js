@@ -1,8 +1,8 @@
 'use strict'
 
 const dc = require('dc-polyfill')
+const { activeSpan, spanActivatedChannel } = require('../../span_activation')
 
-const { storage } = require('../../../../datadog-core')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
@@ -17,19 +17,13 @@ const {
 } = require('./shared')
 const TRACE_ENDPOINT_LABEL = 'trace endpoint'
 
-let beforeCh
-const enterCh = dc.channel('dd-trace:storage:enter')
+let enterCh
 const spanFinishCh = dc.channel('dd-trace:span:finish')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
 const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
 
 let kSampleCount
-
-function getActiveSpan () {
-  const store = storage('legacy').getStore()
-  return store && store.span
-}
 
 function toBigInt (spanId) {
   return spanId !== null && typeof spanId === 'object' ? spanId.toBigInt() : spanId
@@ -53,24 +47,21 @@ function updateContext (context) {
   }
 }
 
+// When _not_ using AsyncContextFrame, we need to add instrumentation to
+// AsyncLocalStorage.enterWith, AsyncLocalStorage.run, and a "before" callback
+// to async hooks.
 let channelsActivated = false
-function ensureChannelsActivated (asyncContextFrameEnabled) {
+function ensureChannelsActivated () {
   if (channelsActivated) return
 
   const shimmer = require('../../../../datadog-shimmer')
-  const asyncHooks = require('async_hooks')
+  const { createHook, AsyncLocalStorage } = require('async_hooks')
 
-  // When using AsyncContextFrame to store sample context, we do not need to use
-  // async_hooks.createHook to create a "before" callback anymore.
-  if (!asyncContextFrameEnabled) {
-    const { createHook } = asyncHooks
-    beforeCh = dc.channel('dd-trace:storage:before')
-    createHook({ before: () => beforeCh.publish() }).enable()
-  }
+  // Add a before async hooks callback
+  enterCh = dc.channel('dd-trace:storage:enter')
+  createHook({ before: () => enterCh.publish() }).enable()
 
-  const { AsyncLocalStorage } = asyncHooks
-
-  // We need to instrument AsyncLocalStorage.enterWith() both with and without AsyncContextFrame.
+  // Instrument ALS.enterWith
   let inRun = false
   shimmer.wrap(AsyncLocalStorage.prototype, 'enterWith', function (original) {
     return function (...args) {
@@ -79,28 +70,23 @@ function ensureChannelsActivated (asyncContextFrameEnabled) {
       return retVal
     }
   })
-
-  // We only need to instrument AsyncLocalStorage.run() when not using AsyncContextFrame.
-  // AsyncContextFrame-based implementation of AsyncLocalStorage.run() delegates
-  // to AsyncLocalStorage.enterWith() so it doesn't need to be separately instrumented.
-  if (!asyncContextFrameEnabled) {
-    shimmer.wrap(AsyncLocalStorage.prototype, 'run', function (original) {
-      return function (store, callback, ...args) {
-        const wrappedCb = shimmer.wrapFunction(callback, cb => function (...args) {
-          inRun = false
-          enterCh.publish()
-          const retVal = cb.apply(this, args)
-          inRun = true
-          return retVal
-        })
-        inRun = true
-        const retVal = original.call(this, store, wrappedCb, ...args)
-        enterCh.publish()
+  // Instrument ALS.run
+  shimmer.wrap(AsyncLocalStorage.prototype, 'run', function (original) {
+    return function (store, callback, ...args) {
+      const wrappedCb = shimmer.wrapFunction(callback, cb => function (...args) {
         inRun = false
+        enterCh.publish()
+        const retVal = cb.apply(this, args)
+        inRun = true
         return retVal
-      }
-    })
-  }
+      })
+      inRun = true
+      const retVal = original.call(this, store, wrappedCb, ...args)
+      enterCh.publish()
+      inRun = false
+      return retVal
+    }
+  })
 
   channelsActivated = true
 }
@@ -195,14 +181,13 @@ class NativeWallProfiler {
         this._profilerState = this.#pprof.time.getState()
         this._lastSampleCount = 0
 
-        ensureChannelsActivated(this.#asyncContextFrameEnabled)
-
         if (this.#asyncContextFrameEnabled) {
           this.#setupTelemetryMetrics()
+          spanActivatedChannel.subscribe(this.#boundEnter)
         } else {
-          beforeCh.subscribe(this.#boundEnter)
+          ensureChannelsActivated()
+          enterCh.subscribe(this.#boundEnter)
         }
-        enterCh.subscribe(this.#boundEnter)
         spanFinishCh.subscribe(this.#boundSpanFinished)
       }
     }
@@ -225,26 +210,27 @@ class NativeWallProfiler {
   #enter () {
     if (!this.#started) return
 
-    const span = getActiveSpan()
+    const span = activeSpan()
     const sampleContext = span ? this.#getProfilingContext(span) : {}
 
-    // Note that we store the sample context differently with and without the
-    // async context frame. With the async context frame, we tell the profiler
-    // to store the sample context directly in the frame on each enterWith.
-    // Without the async context frame, we store one holder object as the
-    // profiler's single sample context, and reassign its "ref" property on
-    // every async context change. Then when we detect that the profiler took a
-    // sample (and thus bound the holder as that sample's context), we create a
-    // new holder object so that we no longer mutate the old one. This is really
-    // an optimization to avoid going to profiler's native SetContext every
-    // time. With async context frame however, we can't have that optimization,
-    // as we can't tell from which async context frame was the sampling context
-    // taken. For the same reason we can't call updateContext() on the old
-    // context -- we simply can't tell which one it might've been across all
-    // possible async context frames.
+    // Note that we store the sample context differently with and without async
+    // context frame.
     if (this.#asyncContextFrameEnabled) {
+      // With async context frame, we tell the profiler to store the sample
+      // context directly in the frame whenever a span is activated.
       this.#pprof.time.setContext(sampleContext)
     } else {
+      // Without async context frame, we store one holder object as the
+      // profiler's single sample context, and reassign its "ref" property on
+      // every async context change. Then when we detect that the profiler took
+      // a sample (and thus bound the holder as that sample's context), we
+      // create a new holder object so that we no longer mutate the old one.
+      // This is really an optimization to avoid going to profiler's native
+      // SetContext every time. We can't have that optimization with async
+      // context frame, as we can't tell from which async context frame was the
+      // sampling context taken. For that same reason we can't call
+      // updateContext() on the old context -- we simply can't tell which one it
+      // might've been across all possible async context frames.
       const sampleCount = this._profilerState[kSampleCount]
       if (sampleCount !== this._lastSampleCount) {
         this._lastSampleCount = sampleCount
@@ -342,10 +328,11 @@ class NativeWallProfiler {
     } else {
       clearInterval(this._contextCountGaugeUpdater)
       if (this.#captureSpanData) {
-        if (!this.#asyncContextFrameEnabled) {
-          beforeCh.unsubscribe(this.#boundEnter)
+        if (this.#asyncContextFrameEnabled) {
+          spanActivatedChannel.unsubscribe(this.#boundEnter)
+        } else {
+          enterCh.unsubscribe(this.#boundEnter)
         }
-        enterCh.unsubscribe(this.#boundEnter)
         spanFinishCh.unsubscribe(this.#boundSpanFinished)
         this._profilerState = undefined
       }
