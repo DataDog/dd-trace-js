@@ -5,6 +5,7 @@
 const dc = require('dc-polyfill')
 const logger = require('../log')
 const { storage } = require('../../../datadog-core')
+const { activateSpan } = require('../span_activation')
 
 /**
  * Base class for all Datadog plugins.
@@ -101,7 +102,7 @@ module.exports = class Plugin {
    */
   enter (span, store) {
     store = store || storage('legacy').getStore()
-    storage('legacy').enterWith({ ...store, span })
+    activateSpan(store, span)
   }
 
   // TODO: Implement filters on resource name for all plugins.
