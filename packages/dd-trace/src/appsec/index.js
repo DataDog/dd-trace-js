@@ -24,7 +24,11 @@ const {
   responseSetHeader,
   routerParam,
   fastifyResponseChannel,
-  fastifyPathParams
+  fastifyPathParams,
+
+  checkoutSessionCreate,
+  paymentIntentCreate,
+  constructEvent
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -67,7 +71,7 @@ function enable (_config) {
 
     Reporter.init(_config.appsec)
 
-    apiSecuritySampler.configure(_config)
+    //apiSecuritySampler.configure(_config)
 
     UserTracking.setCollectionMode(_config.appsec.eventTracking.mode, false)
 
@@ -93,6 +97,11 @@ function enable (_config) {
     responseWriteHead.subscribe(onResponseWriteHead)
     responseSetHeader.subscribe(onResponseSetHeader)
 
+    checkoutSessionCreate.subscribe(onCheckoutSessionCreate)
+    paymentIntentCreate.subscribe(onPaymentIntentCreate)
+    constructEvent.subscribe(onConstructEvent)
+
+
     isEnabled = true
     config = _config
   } catch (err) {
@@ -103,6 +112,93 @@ function enable (_config) {
     disable()
   }
 }
+
+
+function onCheckoutSessionCreate (payload) {
+  waf.run({
+    persistent: {
+      'server.business_logic.payment.creation': {
+        integration: 'stripe',
+        id: payload.id,
+        amount_total: payload.amount_total,
+        client_reference_id: payload.client_reference_id,
+        currency: payload.currency,
+        customer_email: payload.customer_email,
+        'discounts.coupon': payload.discounts?.[0]?.coupon,
+        'discounts.promotion_code': payload.discounts?.[0]?.promotion_code,
+        livemode: payload.livemode,
+        'total_details.amount_discount': payload.total_details.amount_discount,
+        'total_details.amount_shipping': payload.total_details.amount_shipping
+      }
+    }
+  })
+}
+
+function onPaymentIntentCreate (payload) {
+  waf.run({
+    persistent: {
+      'server.business_logic.payment.creation': {
+        id: payload.id,
+        amount: payload.amount,
+        currency: payload.currency,
+        livemode: payload.livemode,
+        payment_method: payload.payment_method,
+        receipt_email: payload.receipt_email
+      }
+    }
+  })
+}
+
+function onConstructEvent (payload) {
+  const wafPayload = { persistent: {} }
+
+  const object = payload.data.object
+
+  switch (payload.type) {
+    case 'payment_intent.succeeded':
+      wafPayload.persistent['server.business_logic.payment.success'] = {
+        id: object.id,
+        amount: object.amount,
+        currency: object.currency,
+        livemode: object.livemode,
+        payment_method: object.payment_method
+      }
+      break
+
+    case 'payment_intent.payment_failed':
+      wafPayload.persistent['server.business_logic.payment.failure'] = {
+        id: object.id,
+        amount: object.amount_total,
+        currency: object.currency,
+        'last_payment_error.code': object.last_payment_error?.code,
+        'last_payment_error.decline_code': object.last_payment_error?.decline_code,
+        'last_payment_error.payment_method.id': object.last_payment_error?.payment_method?.id,
+        'last_payment_error.payment_method.billing_details.email': object.last_payment_error?.payment_method?.billing_details?.email,
+        'last_payment_error.payment_method.type': object.last_payment_error?.payment_method?.type,
+        livemode: object,
+
+      }
+      break
+
+    case 'payment_intent.canceled':
+      wafPayload.persistent['server.business_logic.payment.cancellation'] = {
+        id: object.id,
+        amount: object.amount,
+        cancellation_reason: object.cancellation_reason,
+        currency: object.currency,
+        livemode: object.livemode,
+        receipt_email: object.receipt_email,
+      }
+      break
+
+    default:
+      return
+  }
+
+  waf.run(wafPayload)
+}
+
+
 
 function onRequestBodyParsed ({ req, res, body, abortController }) {
   if (body === undefined || body === null) return
