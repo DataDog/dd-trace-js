@@ -1,12 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach, context } = require('tap').mocha
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const context = describe
 const sinon = require('sinon')
 const nock = require('nock')
 
 require('../../../../../dd-trace/test/setup/core')
-
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 const log = require('../../../../src/log')
 

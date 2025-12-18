@@ -2,14 +2,13 @@
 
 const assert = require('node:assert/strict')
 
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
-
 const getConfig = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
@@ -318,18 +317,18 @@ describe('Span', () => {
         'ptr.hash': 'abc123',
         'link.kind': 'span-pointer'
       })
-    })
 
-    span.addSpanPointer('another_kind', 'd', '1234567')
-    assert.strictEqual(span._links.length, 2)
-    assert.deepStrictEqual(span._links[1].attributes, {
-      'ptr.kind': 'another_kind',
-      'ptr.dir': 'd',
-      'ptr.hash': '1234567',
-      'link.kind': 'span-pointer'
+      span.addSpanPointer('another_kind', 'd', '1234567')
+      assert.strictEqual(span._links.length, 2)
+      assert.deepStrictEqual(span._links[1].attributes, {
+        'ptr.kind': 'another_kind',
+        'ptr.dir': 'd',
+        'ptr.hash': '1234567',
+        'link.kind': 'span-pointer'
+      })
+      assert.strictEqual(span._links[1].context.toTraceId(), '0')
+      assert.strictEqual(span._links[1].context.toSpanId(), '0')
     })
-    assert.strictEqual(span._links[1].context.toTraceId(), '0')
-    assert.strictEqual(span._links[1].context.toSpanId(), '0')
   })
 
   describe('events', () => {

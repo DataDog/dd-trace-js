@@ -2,12 +2,11 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
-
 const Capabilities = require('../../src/remote_config/capabilities')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../src/remote_config/apply_states')
 

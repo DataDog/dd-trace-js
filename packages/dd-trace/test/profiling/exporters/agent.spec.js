@@ -1,19 +1,18 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
-const express = require('express')
-const upload = require('multer')()
-const { Profile } = require('../../../../../vendor/dist/pprof-format')
 const os = require('node:os')
 const path = require('node:path')
 const { request } = require('node:http')
 
-require('../../setup/core')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+const express = require('express')
+const upload = require('multer')()
 
+const { Profile } = require('../../../../../vendor/dist/pprof-format')
+require('../../setup/core')
 const tracer = require('../../../../../init')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')

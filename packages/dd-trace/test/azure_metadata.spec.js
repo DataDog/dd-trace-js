@@ -1,11 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('tap').mocha
 const os = require('node:os')
 
-require('./setup/core')
+const { describe, it } = require('mocha')
 
+require('./setup/core')
 const { getAzureAppMetadata, getAzureTagsFromMetadata, getAzureFunctionMetadata } = require('../src/azure_metadata')
 
 describe('Azure metadata', () => {

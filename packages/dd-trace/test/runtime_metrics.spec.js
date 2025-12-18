@@ -1,11 +1,12 @@
 'use strict'
 
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const assert = require('node:assert')
 const os = require('node:os')
 
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+
 const performance = require('node:perf_hooks').performance
 const { setImmediate, setTimeout } = require('node:timers/promises')
 const util = require('node:util')
