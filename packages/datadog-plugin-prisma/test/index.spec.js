@@ -114,9 +114,9 @@ describe('Plugin', () => {
 
     prismaClients.forEach(config => {
       // Prisma 7.0.0+ is not supported in Node.js < 20.19.0
-      const isNodeSupported = semifies(semver.clean(process.version), '>=20.19.0') && config.v7
-      if (!isNodeSupported) return
-      let supportedRange = isNodeSupported ? '>=7.0.0' : '<7.0.0'
+      if (config.v7 && !semifies(semver.clean(process.version), '>=20.19.0')) return
+
+      let supportedRange = config.v7 ? '>=7.0.0' : '<7.0.0'
       // prisma-generator is only available starting prisma >= 6.16.0
       if (config.ts && supportedRange === '<7.0.0') {
         supportedRange = '>=6.16.0 <7.0.0'
@@ -278,20 +278,20 @@ describe('Plugin', () => {
             }
             tracingHelper.setDbString(dbConfig)
 
-          const tracingPromise = agent.assertSomeTraces(traces => {
-            // Find the db_query span
-            const dbQuerySpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
-            // Verify database connection attributes are present
-            assertObjectContains(dbQuerySpan, {
-              meta: {
-                'db.name': 'postgres',
-                'db.user': 'foo',
-                'out.host': 'localhost',
-                'network.destination.port': '5432',
-                'db.type': 'postgres'
-              }
+            const tracingPromise = agent.assertSomeTraces(traces => {
+              // Find the db_query span
+              const dbQuerySpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
+              // Verify database connection attributes are present
+              assertObjectContains(dbQuerySpan, {
+                meta: {
+                  'db.name': 'postgres',
+                  'db.user': 'foo',
+                  'out.host': 'localhost',
+                  'network.destination.port': '5432',
+                  'db.type': 'postgres'
+                }
+              })
             })
-          })
 
             const engineSpans = [
               {
