@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -50,8 +49,8 @@ describe('Metrics', () => {
 
     metric.inc(context)
 
-    expect(reqNamespace.count).to.be.calledOnceWith(metric.name)
-    expect(inc).to.be.calledOnceWith(1)
+    sinon.assert.calledOnceWithExactly(reqNamespace.count, metric.name)
+    sinon.assert.calledOnceWithExactly(inc, 1)
   })
 
   it('should add by 42 the metric value', () => {
@@ -59,8 +58,8 @@ describe('Metrics', () => {
 
     metric.inc(context, 42)
 
-    expect(reqNamespace.count).to.be.calledOnceWith(metric.name)
-    expect(inc).to.be.calledOnceWith(42)
+    sinon.assert.calledOnceWithExactly(reqNamespace.count, metric.name)
+    sinon.assert.calledOnceWithExactly(inc, 42)
   })
 
   it('should increase by one the metric tag value', () => {
@@ -68,8 +67,8 @@ describe('Metrics', () => {
 
     metric.inc(context, 'tagKey:tag1')
 
-    expect(reqNamespace.count).to.be.calledOnceWith(metric.name, 'tagKey:tag1')
-    expect(inc).to.be.calledOnceWith(1)
+    sinon.assert.calledOnceWithExactly(reqNamespace.count, metric.name, 'tagKey:tag1')
+    sinon.assert.calledOnceWithExactly(inc, 1)
   })
 
   it('should add by 42 the metric tag value', () => {
@@ -77,8 +76,8 @@ describe('Metrics', () => {
 
     metric.inc(context, 'tagKey:tag1', 42)
 
-    expect(reqNamespace.count).to.be.calledOnceWith(metric.name, 'tagKey:tag1')
-    expect(inc).to.be.calledOnceWith(42)
+    sinon.assert.calledOnceWithExactly(reqNamespace.count, metric.name, 'tagKey:tag1')
+    sinon.assert.calledOnceWithExactly(inc, 42)
   })
 
   it('should format tags according with its tagKey', () => {
@@ -86,7 +85,7 @@ describe('Metrics', () => {
 
     metric.formatTags('tag1', 'tag2').forEach(tag => metric.inc(context, tag, 42))
 
-    expect(reqNamespace.count).to.be.calledTwice
+    sinon.assert.calledTwice(reqNamespace.count)
     assert.deepStrictEqual(reqNamespace.count.firstCall.args, [metric.name, ['tagKey:tag1']])
     assert.deepStrictEqual(reqNamespace.count.secondCall.args, [metric.name, ['tagKey:tag2']])
   })
@@ -122,7 +121,7 @@ describe('Metrics', () => {
       const noTagged = new NoTaggedIastMetric('notagged', 'scope')
       noTagged.inc()
 
-      expect(inc).to.be.calledOnceWith(1)
+      sinon.assert.calledOnceWithExactly(inc, 1)
     })
 
     it('should reuse previous metric when calling add multiple times', () => {
@@ -134,7 +133,7 @@ describe('Metrics', () => {
       noTagged.inc(undefined, 42)
       noTagged.inc(undefined, 42)
 
-      expect(superCount).to.be.calledOnceWith('notagged')
+      sinon.assert.calledOnceWithExactly(superCount, 'notagged')
     })
   })
 })

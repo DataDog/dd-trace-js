@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -66,7 +65,7 @@ describe('WAFContextWrapper', () => {
     wafContextWrapper.run(payload)
 
     sinon.assert.calledTwice(ddwafContext.run)
-    expect(ddwafContext.run).to.always.have.been.calledWithExactly(payload, 1000)
+    sinon.assert.calledWithExactly(ddwafContext.run, payload, 1000)
 
     const firstCall = Reporter.reportMetrics.getCall(0).args[0]
     assert.strictEqual(firstCall.errorCode, -127)
@@ -147,7 +146,7 @@ describe('WAFContextWrapper', () => {
     wafContextWrapper.run(payload)
     wafRunFinished.unsubscribe(finishedCallback)
 
-    expect(finishedCallback).to.be.calledOnceWith({ payload })
+    sinon.assert.calledOnceWithExactly(finishedCallback, { payload })
   })
 
   it('should report error code when the waf run fails', () => {

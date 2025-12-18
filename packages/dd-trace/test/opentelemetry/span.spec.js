@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
 const { performance } = require('perf_hooks')
@@ -494,13 +493,13 @@ describe('OTel Span', () => {
     processor.onEnd = sinon.stub()
     tracerProvider.addSpanProcessor(processor)
 
-    expect(processor.onStart).to.have.not.been.called
-    expect(processor.onEnd).to.have.not.been.called
+    sinon.assert.called(processor.onStart)
+    sinon.assert.called(processor.onEnd)
 
     const span = tracer.startSpan('name')
 
     sinon.assert.calledWith(processor.onStart, span, span._context)
-    expect(processor.onEnd).to.have.not.been.called
+    sinon.assert.called(processor.onEnd)
 
     span.end()
 

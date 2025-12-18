@@ -1,6 +1,5 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it, before, after } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -59,7 +58,7 @@ describe('Telemetry logs', () => {
 
     clock.tick(3000)
 
-    expect(start).to.be.calledOnceWith(config)
-    expect(send).to.be.calledOnceWith(config)
+    sinon.assert.calledOnceWithExactly(start, config)
+    sinon.assert.calledOnceWithExactly(send, config)
   })
 })

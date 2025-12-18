@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 
 const axios = require('axios')
-const { expect } = require('chai')
+
 const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -195,7 +195,7 @@ describe('express-mongo-sanitize', () => {
           const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
 
           assert.strictEqual(sanitizedObject.safeKey, objectToSanitize.safeKey)
-          expect(subscription).to.be.calledOnceWith({ sanitizedObject })
+          sinon.assert.calledOnceWithExactly(subscription, { sanitizedObject })
         })
 
         it('it works as expected with modifications', () => {
@@ -212,7 +212,7 @@ describe('express-mongo-sanitize', () => {
 
           assert.strictEqual(sanitizedObject.safeKey, objectToSanitize.safeKey)
           assert.strictEqual(sanitizedObject.unsafeKey.$ne, undefined)
-          expect(subscription).to.be.calledOnceWith({ sanitizedObject })
+          sinon.assert.calledOnceWithExactly(subscription, { sanitizedObject })
         })
       })
     })

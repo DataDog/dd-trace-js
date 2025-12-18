@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { after, before, beforeEach, describe, it } = require('mocha')
 
 const { assertObjectContains, useEnv } = require('../../../integration-tests/helpers')
@@ -718,7 +717,7 @@ describe('Plugin', () => {
 
           try {
             await myTool.invoke()
-            expect.fail('Expected an error to be thrown')
+            assert.fail('Expected an error to be thrown')
           } catch {}
 
           await checkTraces

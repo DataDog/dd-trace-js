@@ -1,12 +1,11 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { exec, execSync } = require('child_process')
 const satisfies = require('semifies')
 const path = require('path')
 const fs = require('fs')
-
-const { assert } = require('chai')
 
 const {
   sandboxCwd,
@@ -145,7 +144,7 @@ versions.forEach((version) => {
 
             metadataDicts.forEach(metadata => {
               for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-                assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+                assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
               }
             })
 
@@ -159,14 +158,14 @@ versions.forEach((version) => {
             const stepEvents = events.filter(event => event.type === 'span')
 
             assert.ok(testSessionEvent.content.resource.includes('test_session.playwright test'))
-            assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(testSessionEvent.content.meta[TEST_STATUS], 'fail')
             assert.ok(testModuleEvent.content.resource.includes('test_module.playwright test'))
-            assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
-            assert.equal(testSessionEvent.content.meta[TEST_TYPE], 'browser')
-            assert.equal(testModuleEvent.content.meta[TEST_TYPE], 'browser')
+            assert.strictEqual(testModuleEvent.content.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(testSessionEvent.content.meta[TEST_TYPE], 'browser')
+            assert.strictEqual(testModuleEvent.content.meta[TEST_TYPE], 'browser')
 
-            assert.exists(testSessionEvent.content.meta[ERROR_MESSAGE])
-            assert.exists(testModuleEvent.content.meta[ERROR_MESSAGE])
+            assert.ok(testSessionEvent.content.meta[ERROR_MESSAGE] != null)
+            assert.ok(testModuleEvent.content.meta[ERROR_MESSAGE] != null)
 
             assert.deepStrictEqual(testSuiteEvents.map(suite => suite.content.resource).sort(), [
               'test_suite.landing-page-test.js',
@@ -182,11 +181,11 @@ versions.forEach((version) => {
 
             testSuiteEvents.forEach(testSuiteEvent => {
               if (testSuiteEvent.content.meta[TEST_STATUS] === 'fail') {
-                assert.exists(testSuiteEvent.content.meta[ERROR_MESSAGE])
+                assert.ok(testSuiteEvent.content.meta[ERROR_MESSAGE] != null)
               }
               assert.ok(testSuiteEvent.content.meta[TEST_SOURCE_FILE].endsWith('-test.js'))
-              assert.equal(testSuiteEvent.content.metrics[TEST_SOURCE_START], 1)
-              assert.exists(testSuiteEvent.content.metrics[DD_HOST_CPU_COUNT])
+              assert.strictEqual(testSuiteEvent.content.metrics[TEST_SOURCE_START], 1)
+              assert.ok(testSuiteEvent.content.metrics[DD_HOST_CPU_COUNT] != null)
             })
 
             assert.deepStrictEqual(testEvents.map(test => test.content.resource).sort(), [
@@ -210,11 +209,12 @@ versions.forEach((version) => {
             ])
 
             testEvents.forEach(testEvent => {
-              assert.exists(testEvent.content.metrics[TEST_SOURCE_START])
-              assert.equal(
-                testEvent.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/playwright-tests/'), true
+              assert.ok(testEvent.content.metrics[TEST_SOURCE_START] != null)
+              assert.strictEqual(
+                testEvent.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/playwright-tests/'),
+                true
               )
-              assert.equal(testEvent.content.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
+              assert.strictEqual(testEvent.content.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
               // Can read DD_TAGS
               assertObjectContains(testEvent.content.meta, {
                 'test.customtag': 'customvalue',
@@ -223,7 +223,7 @@ versions.forEach((version) => {
                 [TEST_BROWSER_NAME]: 'chromium',
                 [TEST_PARAMETERS]: JSON.stringify({ arguments: { browser: 'chromium' }, metadata: {} })
               })
-              assert.exists(testEvent.content.metrics[DD_HOST_CPU_COUNT])
+              assert.ok(testEvent.content.metrics[DD_HOST_CPU_COUNT] != null)
               if (version === 'latest' || satisfies(version, '>=1.38.0')) {
                 if (testEvent.content.meta[TEST_STATUS] !== 'skip' &&
                   testEvent.content.meta[TEST_SUITE].includes('landing-page-test.js')) {
@@ -241,7 +241,7 @@ versions.forEach((version) => {
             })
 
             stepEvents.forEach(stepEvent => {
-              assert.equal(stepEvent.content.name, 'playwright.step')
+              assert.strictEqual(stepEvent.content.name, 'playwright.step')
               assert.ok(Object.hasOwn(stepEvent.content.meta, 'playwright.step'))
             })
             const annotatedTest = testEvents.find(test =>
@@ -291,7 +291,7 @@ versions.forEach((version) => {
         ])
         assert.match(testOutput, /1 passed/)
         assert.match(testOutput, /1 skipped/)
-        assert.notInclude(testOutput, 'TypeError')
+        assert.doesNotMatch(testOutput, /TypeError/)
       }, 25000).then(() => done()).catch(done)
 
       childProcess = exec(
@@ -328,7 +328,7 @@ versions.forEach((version) => {
         assertObjectContains(testSessionEvent.meta, {
           [TEST_STATUS]: 'fail'
         })
-        assert.exists(testSuiteEvent.meta[ERROR_MESSAGE])
+        assert.ok(testSuiteEvent.meta[ERROR_MESSAGE] != null)
         assert.match(testSessionEvent.meta[ERROR_MESSAGE], /Test suites failed: 1/)
       }).then(() => done()).catch(done)
 
@@ -340,7 +340,7 @@ versions.forEach((version) => {
             ...getCiVisAgentlessConfig(receiver.port),
             PW_BASE_URL: `http://localhost:${webAppPort}`,
             TEST_DIR: './ci-visibility/playwright-tests-error',
-            TEST_TIMEOUT: 3000
+            TEST_TIMEOUT: '3000'
           },
           stdio: 'pipe'
         }
@@ -399,7 +399,7 @@ versions.forEach((version) => {
                 [TEST_IS_NEW]: 'true'
               })
             })
-            assert.equal(
+            assert.strictEqual(
               newPassingTests.length,
               NUM_RETRIES_EFD + 1,
               'passing test has not been retried the correct number of times'
@@ -412,7 +412,7 @@ versions.forEach((version) => {
                 [TEST_IS_NEW]: 'true'
               })
             })
-            assert.equal(
+            assert.strictEqual(
               newAnnotatedTests.length,
               NUM_RETRIES_EFD + 1,
               'annotated test has not been retried the correct number of times'
@@ -420,7 +420,7 @@ versions.forEach((version) => {
 
             // The only new tests are the passing and annotated tests
             const totalNewTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.equal(
+            assert.strictEqual(
               totalNewTests.length,
               newPassingTests.length + newAnnotatedTests.length,
               'total new tests is not the sum of the passing and annotated tests'
@@ -428,12 +428,12 @@ versions.forEach((version) => {
 
             // The only retried tests are the passing and annotated tests
             const totalRetriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.equal(
+            assert.strictEqual(
               totalRetriedTests.length,
               newPassingTests.length - 1 + newAnnotatedTests.length - 1,
               'total retried tests is not the sum of the passing and annotated tests'
             )
-            assert.equal(
+            assert.strictEqual(
               totalRetriedTests.length,
               NUM_RETRIES_EFD * 2,
               'total retried tests is not the correct number of times'
@@ -446,7 +446,7 @@ versions.forEach((version) => {
             })
 
             // all but one has been retried
-            assert.equal(totalRetriedTests.length, totalNewTests.length - 2)
+            assert.strictEqual(totalRetriedTests.length, totalNewTests.length - 2)
           })
 
         childProcess = exec(
@@ -515,7 +515,7 @@ versions.forEach((version) => {
             })
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.equal(retriedTests.length, 0)
+            assert.strictEqual(retriedTests.length, 0)
           })
 
         childProcess = exec(
@@ -579,7 +579,7 @@ versions.forEach((version) => {
               test.resource.endsWith('should work with fixme')
             )
             // no retries
-            assert.equal(newTests.length, 2)
+            assert.strictEqual(newTests.length, 2)
             newTests.forEach(test => {
               assertObjectContains(test.meta, {
                 [TEST_IS_NEW]: 'true'
@@ -588,7 +588,7 @@ versions.forEach((version) => {
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
 
-            assert.equal(retriedTests.length, 0)
+            assert.strictEqual(retriedTests.length, 0)
           })
 
         childProcess = exec(
@@ -629,15 +629,15 @@ versions.forEach((version) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-            assert.equal(tests.length, 7)
+            assert.strictEqual(tests.length, 7)
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.equal(newTests.length, 0)
+            assert.strictEqual(newTests.length, 0)
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.equal(retriedTests.length, 0)
+            assert.strictEqual(retriedTests.length, 0)
           })
 
         childProcess = exec(
@@ -707,7 +707,7 @@ versions.forEach((version) => {
             })
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.equal(retriedTests.length, 0)
+            assert.strictEqual(retriedTests.length, 0)
           })
 
         childProcess = exec(
@@ -763,7 +763,7 @@ versions.forEach((version) => {
             })
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.equal(retriedTests.length, 0)
+            assert.strictEqual(retriedTests.length, 0)
           })
 
         childProcess = exec(
@@ -824,9 +824,9 @@ versions.forEach((version) => {
               })
 
               const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-              assert.equal(newTests.length, 0)
+              assert.strictEqual(newTests.length, 0)
               const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-              assert.equal(retriedTests.length, 0)
+              assert.strictEqual(retriedTests.length, 0)
             })
         ])
       })
@@ -868,39 +868,39 @@ versions.forEach((version) => {
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+              assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
               const newTests = tests.filter(
                 test => test.meta[TEST_NAME] === 'playwright should not retry new tests'
               )
-              assert.equal(newTests.length, NUM_RETRIES_EFD + 1)
+              assert.strictEqual(newTests.length, NUM_RETRIES_EFD + 1)
               newTests.forEach(test => {
                 // tests always fail because ATR and --retries are disabled for EFD,
                 // so testInfo.retry is always 0
-                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
-                assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+                assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
               })
 
               const retriedNewTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
 
-              assert.equal(retriedNewTests.length, NUM_RETRIES_EFD)
+              assert.strictEqual(retriedNewTests.length, NUM_RETRIES_EFD)
               retriedNewTests.forEach(test => {
-                assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
-                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+                assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+                assert.strictEqual(test.meta[TEST_STATUS], 'fail')
               })
               // --retries works normally for old flaky tests
               const oldFlakyTests = tests.filter(
                 test => test.meta[TEST_NAME] === 'playwright should retry old flaky tests'
               )
-              assert.equal(oldFlakyTests.length, 2)
+              assert.strictEqual(oldFlakyTests.length, 2)
               const passedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
-              assert.equal(passedFlakyTests.length, 1)
-              assert.propertyVal(passedFlakyTests[0].meta, TEST_IS_RETRY, 'true')
-              assert.propertyVal(passedFlakyTests[0].meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
+              assert.strictEqual(passedFlakyTests.length, 1)
+              assert.strictEqual(passedFlakyTests[0].meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(passedFlakyTests[0].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
               const failedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
-              assert.equal(failedFlakyTests.length, 1)
+              assert.strictEqual(failedFlakyTests.length, 1)
             })
         ])
       })
@@ -943,37 +943,37 @@ versions.forEach((version) => {
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+              assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
               const newTests = tests.filter(
                 test => test.meta[TEST_NAME] === 'playwright should not retry new tests'
               )
-              assert.equal(newTests.length, NUM_RETRIES_EFD + 1)
+              assert.strictEqual(newTests.length, NUM_RETRIES_EFD + 1)
               newTests.forEach(test => {
-                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
-                assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+                assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
               })
 
               const retriedNewTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
 
-              assert.equal(retriedNewTests.length, NUM_RETRIES_EFD)
+              assert.strictEqual(retriedNewTests.length, NUM_RETRIES_EFD)
               retriedNewTests.forEach(test => {
-                assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
-                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+                assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+                assert.strictEqual(test.meta[TEST_STATUS], 'fail')
               })
               // ATR works normally for old flaky tests
               const oldFlakyTests = tests.filter(
                 test => test.meta[TEST_NAME] === 'playwright should retry old flaky tests'
               )
-              assert.equal(oldFlakyTests.length, 2)
+              assert.strictEqual(oldFlakyTests.length, 2)
               const passedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
-              assert.equal(passedFlakyTests.length, 1)
-              assert.propertyVal(passedFlakyTests[0].meta, TEST_IS_RETRY, 'true')
-              assert.propertyVal(passedFlakyTests[0].meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+              assert.strictEqual(passedFlakyTests.length, 1)
+              assert.strictEqual(passedFlakyTests[0].meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(passedFlakyTests[0].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
               const failedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
-              assert.equal(failedFlakyTests.length, 1)
+              assert.strictEqual(failedFlakyTests.length, 1)
             })
         ])
       })
@@ -1023,20 +1023,20 @@ versions.forEach((version) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-            assert.equal(tests.length, 3)
+            assert.strictEqual(tests.length, 3)
 
             const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.equal(failedTests.length, 2)
+            assert.strictEqual(failedTests.length, 2)
 
             const failedRetryTests = failedTests.filter(
               test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
             )
-            assert.equal(failedRetryTests.length, 1) // the first one is not a retry
+            assert.strictEqual(failedRetryTests.length, 1) // the first one is not a retry
 
             const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
-            assert.equal(passedTests.length, 1)
-            assert.equal(passedTests[0].meta[TEST_IS_RETRY], 'true')
-            assert.equal(passedTests[0].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+            assert.strictEqual(passedTests.length, 1)
+            assert.strictEqual(passedTests[0].meta[TEST_IS_RETRY], 'true')
+            assert.strictEqual(passedTests[0].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
           }, 30000)
 
         childProcess = exec(
@@ -1075,8 +1075,8 @@ versions.forEach((version) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-            assert.equal(tests.length, 1)
-            assert.equal(tests.filter(
+            assert.strictEqual(tests.length, 1)
+            assert.strictEqual(tests.filter(
               (test) => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
             ).length, 0)
           }, 30000)
@@ -1118,15 +1118,15 @@ versions.forEach((version) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-            assert.equal(tests.length, 2)
+            assert.strictEqual(tests.length, 2)
 
             const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.equal(failedTests.length, 2)
+            assert.strictEqual(failedTests.length, 2)
 
             const failedRetryTests = failedTests.filter(
               test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
             )
-            assert.equal(failedRetryTests.length, 1)
+            assert.strictEqual(failedRetryTests.length, 1)
           }, 30000)
 
         childProcess = exec(
@@ -1159,9 +1159,9 @@ versions.forEach((version) => {
           const test = events.find(event => event.type === 'test').content
           const testSuite = events.find(event => event.type === 'test_suite_end').content
           // The test is in a subproject
-          assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
-          assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
-          assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          assert.notStrictEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
+          assert.strictEqual(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          assert.strictEqual(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
         })
 
       childProcess = exec(
@@ -1231,7 +1231,7 @@ versions.forEach((version) => {
             })
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.equal(retriedTests.length, 0)
+            assert.strictEqual(retriedTests.length, 0)
           })
 
         childProcess = exec(
@@ -1259,7 +1259,7 @@ versions.forEach((version) => {
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           tests.forEach(test => {
-            assert.equal(test.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'true')
+            assert.strictEqual(test.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'true')
           })
         })
 
@@ -1334,7 +1334,7 @@ versions.forEach((version) => {
               )
 
               if (isDisabled) {
-                assert.equal(attemptedToFixTests.length, 2)
+                assert.strictEqual(attemptedToFixTests.length, 2)
                 assert.ok(attemptedToFixTests.every(test =>
                   test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'
                 ))
@@ -1343,9 +1343,9 @@ versions.forEach((version) => {
               }
 
               if (isAttemptingToFix) {
-                assert.equal(attemptedToFixTests.length, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
+                assert.strictEqual(attemptedToFixTests.length, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
               } else {
-                assert.equal(attemptedToFixTests.length, 2)
+                assert.strictEqual(attemptedToFixTests.length, 2)
               }
 
               if (isQuarantined) {
@@ -1353,7 +1353,7 @@ versions.forEach((version) => {
                   test.meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
                 ).length
                 // quarantined tests still run and are retried
-                assert.equal(numQuarantinedTests, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
+                assert.strictEqual(numQuarantinedTests, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
               }
 
               // Retried tests are in randomly order, so we just count number of tests
@@ -1381,39 +1381,39 @@ versions.forEach((version) => {
 
               // One of the tests is passing always
               if (isAttemptingToFix) {
-                assert.equal(countAttemptToFixTests, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
-                assert.equal(countRetriedAttemptToFixTests, 2 * ATTEMPT_TO_FIX_NUM_RETRIES)
+                assert.strictEqual(countAttemptToFixTests, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
+                assert.strictEqual(countRetriedAttemptToFixTests, 2 * ATTEMPT_TO_FIX_NUM_RETRIES)
                 if (shouldAlwaysPass) {
-                  assert.equal(testsMarkedAsFailedAllRetries, 0)
-                  assert.equal(testsMarkedAsFailed, 0)
-                  assert.equal(testsMarkedAsPassedAllRetries, 2)
+                  assert.strictEqual(testsMarkedAsFailedAllRetries, 0)
+                  assert.strictEqual(testsMarkedAsFailed, 0)
+                  assert.strictEqual(testsMarkedAsPassedAllRetries, 2)
                 } else if (shouldFailSometimes) {
                   // one test failed sometimes, the other always passed
-                  assert.equal(testsMarkedAsFailedAllRetries, 0)
-                  assert.equal(testsMarkedAsFailed, 1)
-                  assert.equal(testsMarkedAsPassedAllRetries, 1)
+                  assert.strictEqual(testsMarkedAsFailedAllRetries, 0)
+                  assert.strictEqual(testsMarkedAsFailed, 1)
+                  assert.strictEqual(testsMarkedAsPassedAllRetries, 1)
                 } else {
                   // one test failed always, the other always passed
-                  assert.equal(testsMarkedAsFailedAllRetries, 1)
-                  assert.equal(testsMarkedAsFailed, 1)
-                  assert.equal(testsMarkedAsPassedAllRetries, 1)
+                  assert.strictEqual(testsMarkedAsFailedAllRetries, 1)
+                  assert.strictEqual(testsMarkedAsFailed, 1)
+                  assert.strictEqual(testsMarkedAsPassedAllRetries, 1)
                 }
               } else {
-                assert.equal(countAttemptToFixTests, 0)
-                assert.equal(countRetriedAttemptToFixTests, 0)
-                assert.equal(testsMarkedAsFailedAllRetries, 0)
-                assert.equal(testsMarkedAsPassedAllRetries, 0)
+                assert.strictEqual(countAttemptToFixTests, 0)
+                assert.strictEqual(countRetriedAttemptToFixTests, 0)
+                assert.strictEqual(testsMarkedAsFailedAllRetries, 0)
+                assert.strictEqual(testsMarkedAsPassedAllRetries, 0)
               }
               if (shouldIncludeFlakyTest) {
                 const flakyTests = tests.filter(
                   test => test.meta[TEST_NAME] === 'flaky test is retried without attempt to fix'
                 )
                 // it passes at the second attempt
-                assert.equal(flakyTests.length, 2)
+                assert.strictEqual(flakyTests.length, 2)
                 const passedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
                 const failedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
-                assert.equal(passedFlakyTest.length, 1)
-                assert.equal(failedFlakyTest.length, 1)
+                assert.strictEqual(passedFlakyTest.length, 1)
+                assert.strictEqual(failedFlakyTest.length, 1)
               }
             }, 30000)
 
@@ -1460,9 +1460,9 @@ versions.forEach((version) => {
 
           if (isQuarantined || isDisabled || shouldAlwaysPass) {
             // even though a test fails, the exit code is 0 because the test is quarantined
-            assert.equal(exitCode, 0)
+            assert.strictEqual(exitCode, 0)
           } else {
-            assert.equal(exitCode, 1)
+            assert.strictEqual(exitCode, 1)
           }
         }
 
@@ -1652,19 +1652,19 @@ versions.forEach((version) => {
               }
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              assert.equal(tests.length, 8)
+              assert.strictEqual(tests.length, 8)
 
               const disabledTests = tests.filter(test => test.meta[TEST_NAME] === 'disable should disable test')
-              assert.equal(disabledTests.length, 2)
+              assert.strictEqual(disabledTests.length, 2)
 
               disabledTests.forEach(test => {
                 if (isDisabling) {
-                  assert.equal(test.meta[TEST_STATUS], 'skip')
+                  assert.strictEqual(test.meta[TEST_STATUS], 'skip')
                   assertObjectContains(test.meta, {
                     [TEST_MANAGEMENT_IS_DISABLED]: 'true'
                   })
                 } else {
-                  assert.equal(test.meta[TEST_STATUS], 'fail')
+                  assert.strictEqual(test.meta[TEST_STATUS], 'fail')
                   assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in test.meta))
                 }
               })
@@ -1703,11 +1703,11 @@ versions.forEach((version) => {
 
           // the testOutput checks whether the test is actually skipped
           if (isDisabling) {
-            assert.notMatch(testOutput, /SHOULD NOT BE EXECUTED/)
-            assert.equal(exitCode, 0)
+            assert.doesNotMatch(testOutput, /SHOULD NOT BE EXECUTED/)
+            assert.strictEqual(exitCode, 0)
           } else {
             assert.match(testOutput, /SHOULD NOT BE EXECUTED/)
-            assert.equal(exitCode, 1)
+            assert.strictEqual(exitCode, 1)
           }
         }
 
@@ -1770,27 +1770,27 @@ versions.forEach((version) => {
               )
 
               quarantinedTests.forEach(test => {
-                assert.equal(test.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(test.meta[TEST_STATUS], 'fail')
               })
 
               if (hasFlakyTests) {
-                assert.equal(flakyTests.length, 2) // first attempt fails, second attempt passes
-                assert.equal(quarantinedTests.length, 2) // both fail
+                assert.strictEqual(flakyTests.length, 2) // first attempt fails, second attempt passes
+                assert.strictEqual(quarantinedTests.length, 2) // both fail
                 assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in flakyTests[0].meta))
                 assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in flakyTests[1].meta))
                 const failedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
                 const passedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
-                assert.equal(failedFlakyTest.length, 1)
-                assert.equal(passedFlakyTest.length, 1)
+                assert.strictEqual(failedFlakyTest.length, 1)
+                assert.strictEqual(passedFlakyTest.length, 1)
               }
 
               if (isQuarantining) {
                 if (hasFlakyTests) {
-                  assert.equal(quarantinedTests[1].meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+                  assert.strictEqual(quarantinedTests[1].meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
                 } else {
-                  assert.equal(quarantinedTests.length, 1)
+                  assert.strictEqual(quarantinedTests.length, 1)
                 }
-                assert.equal(quarantinedTests[0].meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+                assert.strictEqual(quarantinedTests[0].meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
                 assertObjectContains(testSession.meta, {
                   [TEST_MANAGEMENT_ENABLED]: 'true'
                 })
@@ -1798,7 +1798,7 @@ versions.forEach((version) => {
                 if (hasFlakyTests) {
                   assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in quarantinedTests[1].meta))
                 } else {
-                  assert.equal(quarantinedTests.length, 1)
+                  assert.strictEqual(quarantinedTests.length, 1)
                 }
                 assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in quarantinedTests[0].meta))
                 assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
@@ -1833,9 +1833,9 @@ versions.forEach((version) => {
           ])
 
           if (isQuarantining) {
-            assert.equal(exitCode, 0)
+            assert.strictEqual(exitCode, 0)
           } else {
-            assert.equal(exitCode, 1)
+            assert.strictEqual(exitCode, 1)
           }
         }
 
@@ -1897,9 +1897,9 @@ versions.forEach((version) => {
             assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             // they are not retried
-            assert.equal(tests.length, 2)
+            assert.strictEqual(tests.length, 2)
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.equal(retriedTests.length, 0)
+            assert.strictEqual(retriedTests.length, 0)
           })
 
         childProcess = exec(
@@ -1941,25 +1941,25 @@ versions.forEach((version) => {
 
             assert.ok(metadataDicts.length > 0)
             metadataDicts.forEach(metadata => {
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
-              assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
+              assert.strictEqual(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
               if (satisfies(version, '>=1.38.0') || version === 'latest') {
-                assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
-                assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
-                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
-                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
-                assert.equal(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
               } else {
-                assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], undefined)
-                assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], undefined)
-                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], undefined)
-                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], undefined)
-                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], undefined)
-                assert.equal(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], undefined)
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], undefined)
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], undefined)
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], undefined)
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], undefined)
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], undefined)
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], undefined)
               }
               // capabilities logic does not overwrite test session name
-              assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
+              assert.strictEqual(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
             })
           })
 
@@ -1993,7 +1993,7 @@ versions.forEach((version) => {
 
             const test = events.find(event => event.type === 'test').content
 
-            assert.equal(test.meta['test.custom_tag'], 'this is custom')
+            assert.strictEqual(test.meta['test.custom_tag'], 'this is custom')
           })
 
         childProcess = exec(
@@ -2024,12 +2024,12 @@ versions.forEach((version) => {
 
             const customSpan = spans.find(span => span.name === 'my custom span')
 
-            assert.exists(customSpan)
-            assert.equal(customSpan.meta['test.really_custom_tag'], 'this is really custom')
+            assert.ok(customSpan != null)
+            assert.strictEqual(customSpan.meta['test.really_custom_tag'], 'this is really custom')
 
             // custom span is children of active test span
-            assert.equal(customSpan.trace_id.toString(), test.trace_id.toString())
-            assert.equal(customSpan.parent_id.toString(), test.span_id.toString())
+            assert.strictEqual(customSpan.trace_id.toString(), test.trace_id.toString())
+            assert.strictEqual(customSpan.parent_id.toString(), test.span_id.toString())
           })
 
         childProcess = exec(
@@ -2113,7 +2113,7 @@ versions.forEach((version) => {
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.equal(testSession.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
           })
 
         receiver.setSettings({ test_management: { enabled: true } })
@@ -2132,7 +2132,7 @@ versions.forEach((version) => {
         )
 
         childProcess.on('exit', (exitCode) => {
-          assert.equal(exitCode, 1)
+          assert.strictEqual(exitCode, 1)
           receiverPromise.then(() => done()).catch(done)
         })
       })
@@ -2211,9 +2211,9 @@ versions.forEach((version) => {
               test.meta[TEST_SOURCE_FILE] === 'ci-visibility/playwright-tests-impacted-tests/impacted-test.js')
 
             if (isEfd) {
-              assert.equal(impactedTests.length, (NUM_RETRIES_EFD + 1) * 2) // Retries + original test
+              assert.strictEqual(impactedTests.length, (NUM_RETRIES_EFD + 1) * 2) // Retries + original test
             } else {
-              assert.equal(impactedTests.length, 2)
+              assert.strictEqual(impactedTests.length, 2)
             }
 
             for (const impactedTest of impactedTests) {
@@ -2237,7 +2237,7 @@ versions.forEach((version) => {
               const retriedTests = tests.filter(
                 test => test.meta[TEST_IS_RETRY] === 'true'
               )
-              assert.equal(retriedTests.length, NUM_RETRIES_EFD * 2)
+              assert.strictEqual(retriedTests.length, NUM_RETRIES_EFD * 2)
               let retriedTestNew = 0
               let retriedTestsWithReason = 0
               retriedTests.forEach(test => {
@@ -2248,8 +2248,8 @@ versions.forEach((version) => {
                   retriedTestsWithReason++
                 }
               })
-              assert.equal(retriedTestNew, isNew ? NUM_RETRIES_EFD * 2 : 0)
-              assert.equal(retriedTestsWithReason, NUM_RETRIES_EFD * 2)
+              assert.strictEqual(retriedTestNew, isNew ? NUM_RETRIES_EFD * 2 : 0)
+              assert.strictEqual(retriedTestsWithReason, NUM_RETRIES_EFD * 2)
             }
           }, 25000)
 
@@ -2333,7 +2333,7 @@ versions.forEach((version) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-            assert.equal(tests.length, NUM_RETRIES_EFD + 1)
+            assert.strictEqual(tests.length, NUM_RETRIES_EFD + 1)
             for (const test of tests) {
               assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
               assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
@@ -2390,9 +2390,9 @@ versions.forEach((version) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-              assert.equal(testSuites.length, 2)
+              assert.strictEqual(testSuites.length, 2)
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              assert.equal(tests.length, 3)
+              assert.strictEqual(tests.length, 3)
 
               const skippedTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
               assertObjectContains(
@@ -2422,8 +2422,8 @@ versions.forEach((version) => {
                 ...getCiVisAgentlessConfig(receiver.port),
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-test-duration',
-                FULLY_PARALLEL: parallelism,
-                PLAYWRIGHT_WORKERS: 2
+                FULLY_PARALLEL: String(parallelism),
+                PLAYWRIGHT_WORKERS: '2'
               },
               stdio: 'pipe'
             }
@@ -2443,7 +2443,7 @@ versions.forEach((version) => {
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.equal(tests.length, 2)
+            assert.strictEqual(tests.length, 2)
             const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
             assertObjectContains(failedTest.meta, {
               [TEST_NAME]: 'failing test fails and causes early bail'

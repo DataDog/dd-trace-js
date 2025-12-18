@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
@@ -291,7 +290,7 @@ describe('Plugin', () => {
                 winston.log('info', 'test', meta)
                 assert.strictEqual(meta.dd, undefined)
 
-                expect(spy).to.have.been.calledWith()
+                sinon.assert.calledWithExactly(spy)
               })
               assert.strictEqual(await logServer.logPromise, undefined)
             })

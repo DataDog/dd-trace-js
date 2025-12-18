@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const { EventEmitter } = require('node:events')
 
 const axios = require('axios')
-const { expect } = require('chai')
+
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -50,7 +50,7 @@ describe('Overhead controller', () => {
         it('should populate request context', () => {
           const iastContext = {}
           overheadController.initializeRequestContext(iastContext)
-          expect(iastContext).to.have.nested.property(overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY)
+          assert.ok(hasNestedProperty(iastContext, overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY))
         })
       })
     })
@@ -670,3 +670,17 @@ describe('Overhead controller', () => {
     })
   })
 })
+
+function hasNestedProperty (obj, path) {
+  if (obj == null) return false
+  if (typeof path !== 'string') return false
+
+  const parts = path.split('.')
+  let cur = obj
+  for (const part of parts) {
+    if (cur == null || !Object.hasOwn(cur, part)) return false
+    cur = cur[part]
+  }
+
+  return true
+}

@@ -2,8 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
@@ -311,13 +309,13 @@ describe('spanFormat', () => {
       }
 
       trace = spanFormat(span, false)
-      expect(trace.meta).to.not.include({
+      assert.ok(!(trace.meta).includes({
         chunk: 'test'
-      })
+      }))
 
-      expect(trace.metrics).to.not.include({
+      assert.ok(!(trace.metrics).includes({
         count: 1
-      })
+      }))
     })
 
     it('should extract empty tags', () => {
