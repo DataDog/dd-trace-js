@@ -123,7 +123,7 @@ describe('Plugin', () => {
       }
       withVersions('prisma', ['@prisma/client'], supportedRange, async (range, _moduleName_, version) => {
         describe(`without configuration ${config.schema}`, () => {
-          before(async () => {
+          before(async function () {
             this.timeout(10000)
             clearPrismaEnv()
             if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
