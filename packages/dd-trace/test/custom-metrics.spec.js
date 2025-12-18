@@ -1,13 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-/* eslint-disable no-console */
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
-
 const http = require('node:http')
 const path = require('node:path')
 const os = require('node:os')
 const { exec } = require('node:child_process')
+
+/* eslint-disable no-console */
+const { describe, it, beforeEach, afterEach } = require('mocha')
 
 require('./setup/core')
 

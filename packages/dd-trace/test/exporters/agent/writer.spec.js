@@ -1,16 +1,15 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const URL = require('url').URL
 
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-
-const { describe, it, beforeEach, context } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
+const context = describe
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
-
-const URL = require('url').URL
 
 function describeWriter (protocolVersion) {
   let Writer

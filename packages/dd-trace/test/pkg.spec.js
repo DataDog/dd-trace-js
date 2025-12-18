@@ -1,9 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach } = require('tap').mocha
 const os = require('node:os')
 const { execSync } = require('node:child_process')
+
+const { describe, it, beforeEach } = require('mocha')
+
 const proxyquire = require('proxyquire').noPreserveCache()
 
 require('./setup/core')

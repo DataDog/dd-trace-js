@@ -1,14 +1,15 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('tap').mocha
+
+const { describe, it } = require('mocha')
 const sinon = require('sinon')
 const msgpack = require('@msgpack/msgpack')
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
-
 const pkg = require('../../../../package.json')
+
 const stubRequest = sinon.stub()
 
 const stubZlib = {

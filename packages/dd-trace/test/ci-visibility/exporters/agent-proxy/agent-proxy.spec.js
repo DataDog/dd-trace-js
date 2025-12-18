@@ -2,14 +2,13 @@
 
 const assert = require('node:assert/strict')
 
-const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
-
-const { describe, it, beforeEach, context } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
+const context = describe
 const sinon = require('sinon')
 const nock = require('nock')
 
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../../../dd-trace/test/setup/core')
-
 const AgentProxyCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agent-proxy')
 const AgentlessWriter = require('../../../../src/ci-visibility/exporters/agentless/writer')
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')

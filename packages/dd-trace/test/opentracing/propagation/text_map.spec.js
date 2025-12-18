@@ -2,21 +2,18 @@
 
 const assert = require('node:assert/strict')
 
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
-
 const { getConfigFresh } = require('../../helpers/config')
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
-const { channel } = require('dc-polyfill')
 const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../../src/baggage')
-
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
 

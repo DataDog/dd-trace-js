@@ -1,20 +1,18 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('tap').mocha
-const sinon = require('sinon')
 const { performance } = require('perf_hooks')
+
+const { describe, it } = require('mocha')
+const sinon = require('sinon')
 const api = require('@opentelemetry/api')
+
 const { hrTime, timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
-
 require('../setup/core')
-
 require('../../').init()
-
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const Span = require('../../src/opentelemetry/span')
-
 const DatadogSpan = require('../../src/opentracing/span')
 const tracer = require('../../')
 

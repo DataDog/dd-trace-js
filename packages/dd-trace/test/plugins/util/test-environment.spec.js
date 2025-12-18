@@ -1,14 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-const { describe, it } = require('tap').mocha
 const fs = require('node:fs')
 const path = require('node:path')
+
+const { describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
 
 const cachedExecStub = sinon.stub().returns('')

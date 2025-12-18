@@ -1,10 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach } = require('tap').mocha
+
+const { describe, it, beforeEach } = require('mocha')
 
 require('../setup/core')
-
 const { ASM } = require('../../src/standalone/product')
 const { TRACE_SOURCE_PROPAGATION_KEY } = require('../../src/constants')
 const { addTraceSourceTag } = require('../../src/standalone/tracesource')

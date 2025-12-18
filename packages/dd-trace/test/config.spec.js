@@ -1,16 +1,16 @@
 'use strict'
 
-const sinon = require('sinon')
-const { it, describe, beforeEach, afterEach, context } = require('tap').mocha
-const proxyquire = require('proxyquire')
-
 const { readFileSync, mkdtempSync, rmSync, writeFileSync } = require('node:fs')
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const path = require('node:path')
 
-require('./setup/core')
+const sinon = require('sinon')
+const { it, describe, beforeEach, afterEach } = require('mocha')
+const context = describe
+const proxyquire = require('proxyquire')
 
+require('./setup/core')
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -3069,17 +3069,25 @@ describe('Config', () => {
   })
 
   context('library config', () => {
+    const fs = require('node:fs')
+    const os = require('node:os')
+    const path = require('node:path')
+
     const StableConfig = require('../src/config_stable')
-    const path = require('path')
+
     // os.tmpdir returns undefined on Windows somehow
     const baseTempDir = os.platform() !== 'win32' ? os.tmpdir() : 'C:\\Windows\\Temp'
     let env
     let tempDir
+    let localConfigPath
+    let fleetConfigPath
     beforeEach(() => {
       env = process.env
       tempDir = fs.mkdtempSync(path.join(baseTempDir, 'config-test-'))
-      process.env.DD_TEST_LOCAL_CONFIG_PATH = path.join(tempDir, 'local.yaml')
-      process.env.DD_TEST_FLEET_CONFIG_PATH = path.join(tempDir, 'fleet.yaml')
+      localConfigPath = path.join(tempDir, 'local.yaml')
+      fleetConfigPath = path.join(tempDir, 'fleet.yaml')
+      process.env.DD_TEST_LOCAL_CONFIG_PATH = localConfigPath
+      process.env.DD_TEST_FLEET_CONFIG_PATH = fleetConfigPath
     })
 
     afterEach(() => {
@@ -3089,7 +3097,7 @@ describe('Config', () => {
 
     it('should apply host wide config', () => {
       fs.writeFileSync(
-        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        localConfigPath,
         `
 apm_configuration_default:
   DD_RUNTIME_METRICS_ENABLED: 'true'
@@ -3100,7 +3108,7 @@ apm_configuration_default:
 
     it('should apply service specific config', () => {
       fs.writeFileSync(
-        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        localConfigPath,
         `
 rules:
   - selectors:
@@ -3122,7 +3130,7 @@ rules:
 
       // 2. Local stable > Default
       fs.writeFileSync(
-        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        localConfigPath,
         `
 rules:
   - selectors:
@@ -3143,7 +3151,7 @@ rules:
 
       // 4. Fleet Stable > Env > Local stable > Default
       fs.writeFileSync(
-        process.env.DD_TEST_FLEET_CONFIG_PATH,
+        fleetConfigPath,
         `
 rules:
   - selectors:
@@ -3164,7 +3172,7 @@ rules:
 
     it('should ignore unknown keys', () => {
       fs.writeFileSync(
-        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        localConfigPath,
         `
 apm_configuration_default:
   DD_RUNTIME_METRICS_ENABLED: 'true'
@@ -3179,7 +3187,7 @@ apm_configuration_default:
 
     it('should log a warning if the YAML files are malformed', () => {
       fs.writeFileSync(
-        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        localConfigPath,
         `
     apm_configuration_default:
 DD_RUNTIME_METRICS_ENABLED true
@@ -3193,7 +3201,7 @@ DD_RUNTIME_METRICS_ENABLED true
       assert.strictEqual(stableConfig1?.wasm_loaded, false)
 
       fs.writeFileSync(
-        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        localConfigPath,
         `
 apm_configuration_default:
   DD_RUNTIME_METRICS_ENABLED: 'true'
@@ -3204,7 +3212,7 @@ apm_configuration_default:
 
     it('should not load the WASM module in a serverless environment', () => {
       fs.writeFileSync(
-        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        localConfigPath,
         `
 apm_configuration_default:
   DD_RUNTIME_METRICS_ENABLED: 'true'
@@ -3217,7 +3225,7 @@ apm_configuration_default:
 
     it('should support all extended configs across product areas', () => {
       fs.writeFileSync(
-        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        localConfigPath,
         `
 apm_configuration_default:
   DD_TRACE_PROPAGATION_STYLE: "tracecontext"
@@ -3280,7 +3288,7 @@ apm_configuration_default:
     it('should support legacy direct-set fields through all stableconfig and env var sources', () => {
       // Test 1: Local stable config should work
       fs.writeFileSync(
-        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        localConfigPath,
         `
 apm_configuration_default:
   DD_API_KEY: "local-api-key"
@@ -3325,7 +3333,7 @@ apm_configuration_default:
 
       // Test 3: Fleet stable config should take precedence over env vars
       fs.writeFileSync(
-        process.env.DD_TEST_FLEET_CONFIG_PATH,
+        fleetConfigPath,
         `
 rules:
   - selectors:

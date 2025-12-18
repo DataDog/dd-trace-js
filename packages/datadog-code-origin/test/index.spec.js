@@ -1,11 +1,11 @@
 'use strict'
 
-const { describe, it, afterEach } = require('tap').mocha
 const { resolve } = require('node:path')
 const assert = require('node:assert')
 
-require('../../dd-trace/test/setup/core')
+const { describe, it, afterEach } = require('mocha')
 
+require('../../dd-trace/test/setup/core')
 const { entryTags, exitTags } = require('../index')
 const { getNextLineNumber } = require('../../dd-trace/test/plugins/helpers')
 

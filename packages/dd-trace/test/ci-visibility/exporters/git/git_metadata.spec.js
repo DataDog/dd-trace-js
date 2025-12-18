@@ -1,17 +1,16 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
-
-const { describe, it, beforeEach, afterEach, before, after } = require('tap').mocha
-const sinon = require('sinon')
-const proxyquire = require('proxyquire').noPreserveCache()
-const nock = require('nock')
 const fs = require('node:fs')
 const os = require('node:os')
 
-require('../../../../../dd-trace/test/setup/core')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire').noPreserveCache()
+const nock = require('nock')
 
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
+require('../../../../../dd-trace/test/setup/core')
 const { validateGitRepositoryUrl, validateGitCommitSha } = require('../../../../src/plugins/util/user-provided-git')
 
 describe('git_metadata', () => {

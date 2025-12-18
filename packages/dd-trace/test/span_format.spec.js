@@ -2,12 +2,11 @@
 
 const assert = require('node:assert/strict')
 
-const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
-
 const constants = require('../src/constants')
 const tags = require('../../../ext/tags')
 const id = require('../src/id')

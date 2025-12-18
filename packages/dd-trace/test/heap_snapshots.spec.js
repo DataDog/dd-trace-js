@@ -1,14 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('tap').mocha
 const { mkdtempSync, readdirSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const { threadId } = require('node:worker_threads')
 
-require('./setup/core')
+const { describe, it } = require('mocha')
 
+require('./setup/core')
 const { start } = require('../src/heap_snapshots')
 
 const destination = mkdtempSync(join(tmpdir(), 'dd-trace-heap-snapshot-'))

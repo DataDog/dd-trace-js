@@ -1,17 +1,17 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach } = require('tap').mocha
-const sinon = require('sinon')
-const opentracing = require('../../../../vendor/dist/opentracing')
-const proxyquire = require('proxyquire')
-
 const os = require('node:os')
 
-require('../setup/core')
+const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 
+const opentracing = require('../../../../vendor/dist/opentracing')
+require('../setup/core')
 const SpanContext = require('../../src/opentracing/span_context')
 const formats = require('../../../../ext/formats')
+
 const Reference = opentracing.Reference
 
 describe('Tracer', () => {

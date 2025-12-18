@@ -1,12 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
+
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-
-const { describe, it, beforeEach } = require('tap').mocha
-
 require('../../setup/core')
-
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 

@@ -2,7 +2,8 @@
 
 const assert = require('node:assert/strict')
 
-require('tap').mochaGlobals()
+const { describe } = require('mocha')
+
 require('../setup/core')
 
 // OpenTracing's upstream API compatibility checks depend on `chai`, but this
@@ -48,10 +49,12 @@ try {
 
 const tracer = require('../..')
 
-apiCompatibilityChecks(() => {
-  return tracer.init({
-    service: 'test',
-    flushInterval: 0,
-    plugins: false
+describe('OpenTracing API', () => {
+  apiCompatibilityChecks(() => {
+    return tracer.init({
+      service: 'test',
+      flushInterval: 0,
+      plugins: false
+    })
   })
 })

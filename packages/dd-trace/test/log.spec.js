@@ -1,15 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+/* eslint-disable no-console */
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
-
 const { storage } = require('../../datadog-core')
-
-/* eslint-disable no-console */
 
 describe('log', () => {
   describe('config', () => {

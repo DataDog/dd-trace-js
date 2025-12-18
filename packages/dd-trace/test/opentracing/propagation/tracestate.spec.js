@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach } = require('tap').mocha
+
+const { describe, it, beforeEach } = require('mocha')
 
 require('../../setup/core')
 

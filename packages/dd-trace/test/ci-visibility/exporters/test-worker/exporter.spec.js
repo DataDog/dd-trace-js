@@ -1,11 +1,12 @@
 'use strict'
 
-const { describe, it, beforeEach, afterEach, context } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const context = describe
 const sinon = require('sinon')
 
 require('../../../../../dd-trace/test/setup/core')
-
 const TestWorkerCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/test-worker')
+
 const {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,

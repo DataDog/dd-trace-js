@@ -2,12 +2,11 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it } = require('tap').mocha
+const { describe, it } = require('mocha')
 const sinon = require('sinon')
 const nock = require('nock')
 
 require('../../setup/core')
-
 const AgentInfoExporter = require('../../../src/exporters/common/agent-info-exporter')
 
 describe('AgentInfoExporter', () => {
