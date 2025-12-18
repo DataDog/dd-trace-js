@@ -24,7 +24,6 @@ describe('test optimization automatic log submission', () => {
     '@cucumber/cucumber',
     'jest',
     'winston',
-    'chai@4',
     '@playwright/test'
   ], true)
 

@@ -97,7 +97,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   useSandbox(
     [
       `mocha@${MOCHA_VERSION}`,
-      'chai@v4',
       'nyc',
       'mocha-each',
       'workerpool'
@@ -4231,7 +4230,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       execSync('git checkout -b feature-branch', { cwd, stdio: 'ignore' })
       fs.writeFileSync(
         path.join(cwd, 'ci-visibility/test-impacted-test/test-impacted-1.js'),
-        `const { expect } = require('chai')
+        `const assert = require('assert')
          describe('impacted tests', () => {
            it('can pass normally', () => {
              assert.strictEqual(2 + 2, 3)
