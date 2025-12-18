@@ -128,17 +128,20 @@ describe('Plugin', () => {
 
             let error
 
-            const expectedSpanPromise = agent.assertFirstTraceSpan({
-              name: resourceName,
-              service: expectedSchema.send.serviceName,
-              resource: resourceName,
-              error: 1,
-              meta: {
-                [ERROR_TYPE]: error.name,
-                [ERROR_MESSAGE]: error.message,
-                [ERROR_STACK]: error.stack,
-                component: 'kafkajs'
-              }
+            const expectedSpanPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              assertObjectContains(span, {
+                name: resourceName,
+                service: expectedSchema.send.serviceName,
+                resource: resourceName,
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'kafkajs'
+                }
+              })
             })
 
             try {

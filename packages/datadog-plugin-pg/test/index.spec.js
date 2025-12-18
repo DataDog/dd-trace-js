@@ -155,16 +155,18 @@ describe('Plugin', () => {
           it('should handle callback errors', done => {
             let error
 
-            agent.assertFirstTraceSpan({
-              meta: {
-                [ERROR_TYPE]: error.name,
-                [ERROR_MESSAGE]: error.message,
-                [ERROR_STACK]: error.stack,
-                component: 'pg'
-              },
-              metrics: {
-                'network.destination.port': 5432
-              }
+            agent.assertSomeTraces(traces => {
+              assertObjectContains(traces[0][0], {
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'pg'
+                },
+                metrics: {
+                  'network.destination.port': 5432
+                }
+              })
             })
               .then(done)
               .catch(done)

@@ -558,14 +558,18 @@ describe('Plugin', () => {
         it('should handle connection errors', done => {
           let error
 
-          agent.assertFirstTraceSpan({
-            meta: {
-              [ERROR_TYPE]: error.name,
-              [ERROR_MESSAGE]: error.message || error.code,
-              [ERROR_STACK]: error.stack,
-              component: 'http'
-            }
-          })
+          agent
+            .assertSomeTraces(traces => {
+              assertObjectContains(traces[0][0], {
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message || error.code,
+                  [ERROR_STACK]: error.stack,
+                  component: 'http'
+                }
+              })
+            })
             .then(done)
             .catch(done)
 
