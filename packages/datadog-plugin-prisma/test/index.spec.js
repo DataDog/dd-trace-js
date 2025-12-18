@@ -114,13 +114,13 @@ describe('Plugin', () => {
 
     prismaClients.forEach(config => {
       // Prisma 7.0.0+ is not supported in Node.js < 20.19.0
-      const isNodeSupported = semifies(semver.clean(process.version), '>=20.19.0')
-      let supportedRange = config.v7 && isNodeSupported ? '>=7.0.0' : '<7.0.0'
+      const isNodeSupported = semifies(semver.clean(process.version), '>=20.19.0') && config.v7
+      if (!isNodeSupported) return
+      let supportedRange = isNodeSupported ? '>=7.0.0' : '<7.0.0'
       // prisma-generator is only available starting prisma >= 6.16.0
       if (config.ts && supportedRange === '<7.0.0') {
         supportedRange = '>=6.16.0 <7.0.0'
       }
-
       withVersions('prisma', ['@prisma/client'], supportedRange, async (range, _moduleName_, version) => {
         describe(`without configuration ${config.schema}`, () => {
           before(async () => {

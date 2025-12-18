@@ -169,7 +169,8 @@ async function assertPeerDependencies (rootFolder, parent = '') {
     const versionPkgJsonPath = join(folder, 'package.json')
     const versionPkgJson = require(versionPkgJsonPath)
 
-    for (const { dep, name } of externalDeps.get(externalName)) {
+    for (const { dep, name, node } of externalDeps.get(externalName)) {
+      if (node && !semver.satisfies(process.versions.node, node)) continue
       const pkgJsonPath = require(folder).pkgJsonPath()
       const pkgJson = require(pkgJsonPath)
 

@@ -55,16 +55,23 @@ describe('esm', () => {
   prismaClientConfigs.forEach(config => {
     describe(config.name, () => {
       const isNodeSupported = semifies(semver.clean(process.version), '>=20.19.0')
-      const supportedRange = config.configFile && isNodeSupported ? '>=7.0.0' : '<7.0.0'
+      const isPrismaV7 = config.configFile
+      if (config.configFile && !isNodeSupported) {
+        return
+      }
+
+      const supportedRange = config.configFile ? '>=7.0.0' : '<7.0.0'
 
       withVersions('prisma', '@prisma/client', supportedRange, version => {
         if (config.ts && version === '6.1.0') return
         let variants
         const paths = ['./packages/datadog-plugin-prisma/test/integration-test/*', config.schema]
 
-        if (config.configFile) paths.push(config.configFile)
+        if (isPrismaV7) paths.push(config.configFile)
 
-        useSandbox([`prisma@${version}`, `@prisma/client@${version}`, 'typescript', '@prisma/adapter-pg'], false, paths)
+        const deps = [`prisma@${version}`, `@prisma/client@${version}`, 'typescript']
+        if (isPrismaV7) deps.push('@prisma/adapter-pg')
+        useSandbox(deps, false, paths)
 
         before(function () {
           variants = varySandbox(config.serverFile, config.importPath, 'PrismaClient')
@@ -100,6 +107,18 @@ describe('esm', () => {
               ...config.env
             }
           })
+
+          // node v18 needs the package.json to have type module to treat .js files as esm
+          if (config.ts && config.name.includes('v6')) {
+            const fs = require('fs')
+            const path = require('path')
+            const distPath = path.join(cwd, 'dist')
+            if (!fs.existsSync(distPath)) {
+              fs.mkdirSync(distPath, { recursive: true })
+            }
+            const distPkgJsonPath = path.join(distPath, 'package.json')
+            fs.writeFileSync(distPkgJsonPath, JSON.stringify({ type: 'module' }, null, 2))
+          }
         })
 
         afterEach(async () => {

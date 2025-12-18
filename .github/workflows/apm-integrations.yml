@@ -1040,10 +1040,10 @@ jobs:
       matrix:
         include:
           - node-version: 18
-            package_version_range: '<7.0.0'
-            range_clean: lt.7.0.0
+            range: '>=6.1.0 <7.0.0'
+            range_clean: gte.6.16.0.and.lt.7.0.0
           - node-version: 'latest'
-            package_version_range: ''
+            range: ''
             range_clean: all
     runs-on: ubuntu-latest
     services:
@@ -1056,7 +1056,7 @@ jobs:
     env:
       PLUGINS: prisma
       SERVICES: prisma
-      PACKAGE_VERSION_RANGE: ${{ matrix.package_version_range }}
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/testagent/start
