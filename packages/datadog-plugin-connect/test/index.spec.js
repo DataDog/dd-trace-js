@@ -8,6 +8,7 @@ const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -56,15 +57,19 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].service, 'test')
-                assert.strictEqual(spans[0].type, 'web')
-                assert.strictEqual(spans[0].resource, 'GET /user')
-                assert.strictEqual(spans[0].meta['span.kind'], 'server')
-                assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user`)
-                assert.strictEqual(spans[0].meta['http.method'], 'GET')
-                assert.strictEqual(spans[0].meta['http.status_code'], '200')
-                assert.strictEqual(spans[0].meta.component, 'connect')
-                assert.strictEqual(spans[0].meta['_dd.integration'], 'connect')
+                assertObjectContains(spans[0], {
+                  service: 'test',
+                  type: 'web',
+                  resource: 'GET /user',
+                  meta: {
+                    'span.kind': 'server',
+                    'http.url': `http://localhost:${port}/user`,
+                    'http.method': 'GET',
+                    'http.status_code': '200',
+                    component: 'connect',
+                    '_dd.integration': 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -382,10 +387,14 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].error, 1)
-                assert.strictEqual(spans[0].resource, 'GET /user')
-                assert.strictEqual(spans[0].meta['http.status_code'], '500')
-                assert.strictEqual(spans[0].meta.component, 'connect')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  resource: 'GET /user',
+                  meta: {
+                    'http.status_code': '500',
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -417,10 +426,14 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].error, 0)
-                assert.strictEqual(spans[0].resource, 'GET /user')
-                assert.strictEqual(spans[0].meta['http.status_code'], '400')
-                assert.strictEqual(spans[0].meta.component, 'connect')
+                assertObjectContains(spans[0], {
+                  error: 0,
+                  resource: 'GET /user',
+                  meta: {
+                    'http.status_code': '400',
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -446,12 +459,16 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].error, 1)
-                assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                assert.strictEqual(spans[0].meta['http.status_code'], '500')
-                assert.strictEqual(spans[0].meta.component, 'connect')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    'http.status_code': '500',
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -510,16 +527,24 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].error, 1)
-                assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                assert.strictEqual(spans[0].meta.component, 'connect')
-                assert.strictEqual(spans[1].error, 1)
-                assert.strictEqual(spans[1].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[1].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(spans[1].meta[ERROR_STACK], error.stack)
-                assert.strictEqual(spans[1].meta.component, 'connect')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'connect'
+                  }
+                })
+                assertObjectContains(spans[1], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -645,14 +670,18 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].service, 'custom')
-                assert.strictEqual(spans[0].type, 'web')
-                assert.strictEqual(spans[0].resource, 'GET /user')
-                assert.strictEqual(spans[0].meta['span.kind'], 'server')
-                assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user`)
-                assert.strictEqual(spans[0].meta['http.method'], 'GET')
-                assert.strictEqual(spans[0].meta['http.status_code'], '200')
-                assert.strictEqual(spans[0].meta.component, 'connect')
+                assertObjectContains(spans[0], {
+                  service: 'custom',
+                  type: 'web',
+                  resource: 'GET /user',
+                  meta: {
+                    'span.kind': 'server',
+                    'http.url': `http://localhost:${port}/user`,
+                    'http.method': 'GET',
+                    'http.status_code': '200',
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -680,16 +709,24 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].error, 1)
-                assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                assert.strictEqual(spans[0].meta.component, 'connect')
-                assert.strictEqual(spans[1].error, 1)
-                assert.strictEqual(spans[1].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[1].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(spans[1].meta[ERROR_STACK], error.stack)
-                assert.strictEqual(spans[1].meta.component, 'connect')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'connect'
+                  }
+                })
+                assertObjectContains(spans[1], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -715,12 +752,16 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].error, 1)
-                assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                assert.strictEqual(spans[0].meta['http.status_code'], '500')
-                assert.strictEqual(spans[0].meta.component, 'connect')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    'http.status_code': '500',
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -823,12 +864,16 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].error, 1)
-                assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                assert.strictEqual(spans[0].meta['http.status_code'], '500')
-                assert.strictEqual(spans[0].meta.component, 'connect')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    'http.status_code': '500',
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -854,12 +899,16 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].error, 1)
-                assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                assert.strictEqual(spans[0].meta['http.status_code'], '500')
-                assert.strictEqual(spans[0].meta.component, 'connect')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    'http.status_code': '500',
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)

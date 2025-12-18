@@ -130,7 +130,6 @@ describe('Plugin', () => {
 
             const expectedSpanPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
-
               assertObjectContains(span, {
                 name: resourceName,
                 service: expectedSchema.send.serviceName,

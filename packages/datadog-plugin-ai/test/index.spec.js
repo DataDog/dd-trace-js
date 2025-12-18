@@ -1,7 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { useEnv } = require('../../../integration-tests/helpers')
+const { assertObjectContains, useEnv } = require('../../../integration-tests/helpers')
 const assert = require('node:assert')
 const semifies = require('semifies')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -85,15 +85,23 @@ describe('Plugin', () => {
           const generateTextSpan = traces[0][0]
           const doGenerateSpan = traces[0][1]
 
-          assert.strictEqual(generateTextSpan.name, 'ai.generateText')
-          assert.strictEqual(generateTextSpan.resource, 'ai.generateText')
-          assert.strictEqual(generateTextSpan.meta['ai.request.model'], 'gpt-4o-mini')
-          assert.strictEqual(generateTextSpan.meta['ai.request.model_provider'], 'openai')
+          assertObjectContains(generateTextSpan, {
+            name: 'ai.generateText',
+            resource: 'ai.generateText',
+            meta: {
+              'ai.request.model': 'gpt-4o-mini',
+              'ai.request.model_provider': 'openai'
+            }
+          })
 
-          assert.strictEqual(doGenerateSpan.name, 'ai.generateText.doGenerate')
-          assert.strictEqual(doGenerateSpan.resource, 'ai.generateText.doGenerate')
-          assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-4o-mini')
-          assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
+          assertObjectContains(doGenerateSpan, {
+            name: 'ai.generateText.doGenerate',
+            resource: 'ai.generateText.doGenerate',
+            meta: {
+              'ai.request.model': 'gpt-4o-mini',
+              'ai.request.model_provider': 'openai'
+            }
+          })
         })
 
         const experimentalTelemetry = { isEnabled: true }
@@ -118,15 +126,23 @@ describe('Plugin', () => {
           const generateTextSpan = traces[0][0]
           const doGenerateSpan = traces[0][1]
 
-          assert.strictEqual(generateTextSpan.name, 'ai.generateText')
-          assert.strictEqual(generateTextSpan.resource, 'ai.generateText')
-          assert.strictEqual(generateTextSpan.meta['ai.request.model'], 'gpt-4o-mini')
-          assert.strictEqual(generateTextSpan.meta['ai.request.model_provider'], 'openai')
+          assertObjectContains(generateTextSpan, {
+            name: 'ai.generateText',
+            resource: 'ai.generateText',
+            meta: {
+              'ai.request.model': 'gpt-4o-mini',
+              'ai.request.model_provider': 'openai'
+            }
+          })
 
-          assert.strictEqual(doGenerateSpan.name, 'ai.generateText.doGenerate')
-          assert.strictEqual(doGenerateSpan.resource, 'ai.generateText.doGenerate')
-          assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-4o-mini')
-          assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
+          assertObjectContains(doGenerateSpan, {
+            name: 'ai.generateText.doGenerate',
+            resource: 'ai.generateText.doGenerate',
+            meta: {
+              'ai.request.model': 'gpt-4o-mini',
+              'ai.request.model_provider': 'openai'
+            }
+          })
         })
 
         const experimentalTelemetry = { tracer: myTracer }
@@ -152,15 +168,23 @@ describe('Plugin', () => {
           const generateTextSpan = traces[0][0]
           const doGenerateSpan = traces[0][1]
 
-          assert.strictEqual(generateTextSpan.name, 'ai.generateText')
-          assert.strictEqual(generateTextSpan.resource, 'ai.generateText')
-          assert.strictEqual(generateTextSpan.meta['ai.request.model'], 'gpt-4o-mini')
-          assert.strictEqual(generateTextSpan.meta['ai.request.model_provider'], 'openai')
+          assertObjectContains(generateTextSpan, {
+            name: 'ai.generateText',
+            resource: 'ai.generateText',
+            meta: {
+              'ai.request.model': 'gpt-4o-mini',
+              'ai.request.model_provider': 'openai'
+            }
+          })
 
-          assert.strictEqual(doGenerateSpan.name, 'ai.generateText.doGenerate')
-          assert.strictEqual(doGenerateSpan.resource, 'ai.generateText.doGenerate')
-          assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-4o-mini')
-          assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
+          assertObjectContains(doGenerateSpan, {
+            name: 'ai.generateText.doGenerate',
+            resource: 'ai.generateText.doGenerate',
+            meta: {
+              'ai.request.model': 'gpt-4o-mini',
+              'ai.request.model_provider': 'openai'
+            }
+          })
         })
 
         const experimentalTelemetry = { isEnabled: true, tracer: myTracer }
@@ -186,15 +210,23 @@ describe('Plugin', () => {
         const generateTextSpan = traces[0][0]
         const doGenerateSpan = traces[0][1]
 
-        assert.strictEqual(generateTextSpan.name, 'ai.generateText')
-        assert.strictEqual(generateTextSpan.resource, 'ai.generateText')
-        assert.strictEqual(generateTextSpan.meta['ai.request.model'], 'gpt-4o-mini')
-        assert.strictEqual(generateTextSpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(generateTextSpan, {
+          name: 'ai.generateText',
+          resource: 'ai.generateText',
+          meta: {
+            'ai.request.model': 'gpt-4o-mini',
+            'ai.request.model_provider': 'openai'
+          }
+        })
 
-        assert.strictEqual(doGenerateSpan.name, 'ai.generateText.doGenerate')
-        assert.strictEqual(doGenerateSpan.resource, 'ai.generateText.doGenerate')
-        assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-4o-mini')
-        assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(doGenerateSpan, {
+          name: 'ai.generateText.doGenerate',
+          resource: 'ai.generateText.doGenerate',
+          meta: {
+            'ai.request.model': 'gpt-4o-mini',
+            'ai.request.model_provider': 'openai'
+          }
+        })
       })
 
       const result = await ai.generateText({
@@ -215,15 +247,23 @@ describe('Plugin', () => {
         const generateObjectSpan = traces[0][0]
         const doGenerateSpan = traces[0][1]
 
-        assert.strictEqual(generateObjectSpan.name, 'ai.generateObject')
-        assert.strictEqual(generateObjectSpan.resource, 'ai.generateObject')
-        assert.strictEqual(generateObjectSpan.meta['ai.request.model'], 'gpt-4o-mini')
-        assert.strictEqual(generateObjectSpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(generateObjectSpan, {
+          name: 'ai.generateObject',
+          resource: 'ai.generateObject',
+          meta: {
+            'ai.request.model': 'gpt-4o-mini',
+            'ai.request.model_provider': 'openai'
+          }
+        })
 
-        assert.strictEqual(doGenerateSpan.name, 'ai.generateObject.doGenerate')
-        assert.strictEqual(doGenerateSpan.resource, 'ai.generateObject.doGenerate')
-        assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-4o-mini')
-        assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(doGenerateSpan, {
+          name: 'ai.generateObject.doGenerate',
+          resource: 'ai.generateObject.doGenerate',
+          meta: {
+            'ai.request.model': 'gpt-4o-mini',
+            'ai.request.model_provider': 'openai'
+          }
+        })
       })
 
       const schema = ai.jsonSchema({
@@ -252,15 +292,23 @@ describe('Plugin', () => {
         const embedSpan = traces[0][0]
         const doEmbedSpan = traces[0][1]
 
-        assert.strictEqual(embedSpan.name, 'ai.embed')
-        assert.strictEqual(embedSpan.resource, 'ai.embed')
-        assert.strictEqual(embedSpan.meta['ai.request.model'], 'text-embedding-ada-002')
-        assert.strictEqual(embedSpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(embedSpan, {
+          name: 'ai.embed',
+          resource: 'ai.embed',
+          meta: {
+            'ai.request.model': 'text-embedding-ada-002',
+            'ai.request.model_provider': 'openai'
+          }
+        })
 
-        assert.strictEqual(doEmbedSpan.name, 'ai.embed.doEmbed')
-        assert.strictEqual(doEmbedSpan.resource, 'ai.embed.doEmbed')
-        assert.strictEqual(doEmbedSpan.meta['ai.request.model'], 'text-embedding-ada-002')
-        assert.strictEqual(doEmbedSpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(doEmbedSpan, {
+          name: 'ai.embed.doEmbed',
+          resource: 'ai.embed.doEmbed',
+          meta: {
+            'ai.request.model': 'text-embedding-ada-002',
+            'ai.request.model_provider': 'openai'
+          }
+        })
       })
 
       const result = await ai.embed({
@@ -278,15 +326,23 @@ describe('Plugin', () => {
         const embedManySpan = traces[0][0]
         const doEmbedSpan = traces[0][1]
 
-        assert.strictEqual(embedManySpan.name, 'ai.embedMany')
-        assert.strictEqual(embedManySpan.resource, 'ai.embedMany')
-        assert.strictEqual(embedManySpan.meta['ai.request.model'], 'text-embedding-ada-002')
-        assert.strictEqual(embedManySpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(embedManySpan, {
+          name: 'ai.embedMany',
+          resource: 'ai.embedMany',
+          meta: {
+            'ai.request.model': 'text-embedding-ada-002',
+            'ai.request.model_provider': 'openai'
+          }
+        })
 
-        assert.strictEqual(doEmbedSpan.name, 'ai.embedMany.doEmbed')
-        assert.strictEqual(doEmbedSpan.resource, 'ai.embedMany.doEmbed')
-        assert.strictEqual(doEmbedSpan.meta['ai.request.model'], 'text-embedding-ada-002')
-        assert.strictEqual(doEmbedSpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(doEmbedSpan, {
+          name: 'ai.embedMany.doEmbed',
+          resource: 'ai.embedMany.doEmbed',
+          meta: {
+            'ai.request.model': 'text-embedding-ada-002',
+            'ai.request.model_provider': 'openai'
+          }
+        })
       })
 
       const result = await ai.embedMany({
@@ -304,15 +360,23 @@ describe('Plugin', () => {
         const streamTextSpan = traces[0][0]
         const doStreamSpan = traces[0][1]
 
-        assert.strictEqual(streamTextSpan.name, 'ai.streamText')
-        assert.strictEqual(streamTextSpan.resource, 'ai.streamText')
-        assert.strictEqual(streamTextSpan.meta['ai.request.model'], 'gpt-4o-mini')
-        assert.strictEqual(streamTextSpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(streamTextSpan, {
+          name: 'ai.streamText',
+          resource: 'ai.streamText',
+          meta: {
+            'ai.request.model': 'gpt-4o-mini',
+            'ai.request.model_provider': 'openai'
+          }
+        })
 
-        assert.strictEqual(doStreamSpan.name, 'ai.streamText.doStream')
-        assert.strictEqual(doStreamSpan.resource, 'ai.streamText.doStream')
-        assert.strictEqual(doStreamSpan.meta['ai.request.model'], 'gpt-4o-mini')
-        assert.strictEqual(doStreamSpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(doStreamSpan, {
+          name: 'ai.streamText.doStream',
+          resource: 'ai.streamText.doStream',
+          meta: {
+            'ai.request.model': 'gpt-4o-mini',
+            'ai.request.model_provider': 'openai'
+          }
+        })
       })
 
       const result = await ai.streamText({
@@ -339,15 +403,23 @@ describe('Plugin', () => {
         const streamObjectSpan = traces[0][0]
         const doStreamSpan = traces[0][1]
 
-        assert.strictEqual(streamObjectSpan.name, 'ai.streamObject')
-        assert.strictEqual(streamObjectSpan.resource, 'ai.streamObject')
-        assert.strictEqual(streamObjectSpan.meta['ai.request.model'], 'gpt-4o-mini')
-        assert.strictEqual(streamObjectSpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(streamObjectSpan, {
+          name: 'ai.streamObject',
+          resource: 'ai.streamObject',
+          meta: {
+            'ai.request.model': 'gpt-4o-mini',
+            'ai.request.model_provider': 'openai'
+          }
+        })
 
-        assert.strictEqual(doStreamSpan.name, 'ai.streamObject.doStream')
-        assert.strictEqual(doStreamSpan.resource, 'ai.streamObject.doStream')
-        assert.strictEqual(doStreamSpan.meta['ai.request.model'], 'gpt-4o-mini')
-        assert.strictEqual(doStreamSpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(doStreamSpan, {
+          name: 'ai.streamObject.doStream',
+          resource: 'ai.streamObject.doStream',
+          meta: {
+            'ai.request.model': 'gpt-4o-mini',
+            'ai.request.model_provider': 'openai'
+          }
+        })
       })
 
       const schema = ai.jsonSchema({
@@ -384,23 +456,35 @@ describe('Plugin', () => {
         const toolCallSpan2 = traces[0][2]
         const doGenerateSpan2 = traces[0][3]
 
-        assert.strictEqual(toolCallSpan.name, 'ai.generateText')
-        assert.strictEqual(toolCallSpan.resource, 'ai.generateText')
-        assert.strictEqual(toolCallSpan.meta['ai.request.model'], 'gpt-4o-mini')
-        assert.strictEqual(toolCallSpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(toolCallSpan, {
+          name: 'ai.generateText',
+          resource: 'ai.generateText',
+          meta: {
+            'ai.request.model': 'gpt-4o-mini',
+            'ai.request.model_provider': 'openai'
+          }
+        })
 
-        assert.strictEqual(doGenerateSpan.name, 'ai.generateText.doGenerate')
-        assert.strictEqual(doGenerateSpan.resource, 'ai.generateText.doGenerate')
-        assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-4o-mini')
-        assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(doGenerateSpan, {
+          name: 'ai.generateText.doGenerate',
+          resource: 'ai.generateText.doGenerate',
+          meta: {
+            'ai.request.model': 'gpt-4o-mini',
+            'ai.request.model_provider': 'openai'
+          }
+        })
 
         assert.strictEqual(toolCallSpan2.name, 'ai.toolCall')
         assert.strictEqual(toolCallSpan2.resource, 'ai.toolCall')
 
-        assert.strictEqual(doGenerateSpan2.name, 'ai.generateText.doGenerate')
-        assert.strictEqual(doGenerateSpan2.resource, 'ai.generateText.doGenerate')
-        assert.strictEqual(doGenerateSpan2.meta['ai.request.model'], 'gpt-4o-mini')
-        assert.strictEqual(doGenerateSpan2.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(doGenerateSpan2, {
+          name: 'ai.generateText.doGenerate',
+          resource: 'ai.generateText.doGenerate',
+          meta: {
+            'ai.request.model': 'gpt-4o-mini',
+            'ai.request.model_provider': 'openai'
+          }
+        })
       })
 
       let tools
@@ -462,15 +546,23 @@ describe('Plugin', () => {
         const generateTextSpan = traces[0][0]
         const doGenerateSpan = traces[0][1]
 
-        assert.strictEqual(generateTextSpan.name, 'ai.generateText')
-        assert.strictEqual(generateTextSpan.resource, 'test')
-        assert.strictEqual(generateTextSpan.meta['ai.request.model'], 'gpt-4o-mini')
-        assert.strictEqual(generateTextSpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(generateTextSpan, {
+          name: 'ai.generateText',
+          resource: 'test',
+          meta: {
+            'ai.request.model': 'gpt-4o-mini',
+            'ai.request.model_provider': 'openai'
+          }
+        })
 
-        assert.strictEqual(doGenerateSpan.name, 'ai.generateText.doGenerate')
-        assert.strictEqual(doGenerateSpan.resource, 'test')
-        assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-4o-mini')
-        assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
+        assertObjectContains(doGenerateSpan, {
+          name: 'ai.generateText.doGenerate',
+          resource: 'test',
+          meta: {
+            'ai.request.model': 'gpt-4o-mini',
+            'ai.request.model_provider': 'openai'
+          }
+        })
       })
 
       const result = await ai.generateText({

@@ -118,11 +118,9 @@ describe('Sns', function () {
       })
 
       it('adds request and response payloads as flattened tags', done => {
-        agent.assertSomeTraces(traces => {
-          const span = traces[0][0]
-
-          assert.strictEqual(span.resource, `publish ${TopicArn}`)
-          assertObjectContains(span.meta, {
+        agent.assertFirstTraceSpan({
+          resource: `publish ${TopicArn}`,
+          meta: {
             'aws.sns.topic_arn': TopicArn,
             topicname: 'TestTopic',
             aws_service: 'SNS',
@@ -136,7 +134,7 @@ describe('Sns', function () {
             'aws.request.body.MessageAttributes.keyTwo.DataType': 'String',
             'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo',
             'aws.response.body.MessageId': 'redacted'
-          })
+          }
         }, { timeoutMs: 20000 }).then(done, done)
 
         sns.publish({
@@ -151,11 +149,9 @@ describe('Sns', function () {
       })
 
       it('expands and redacts keys identified as expandable', done => {
-        agent.assertSomeTraces(traces => {
-          const span = traces[0][0]
-
-          assert.strictEqual(span.resource, `publish ${TopicArn}`)
-          assertObjectContains(span.meta, {
+        agent.assertFirstTraceSpan({
+          resource: `publish ${TopicArn}`,
+          meta: {
             'aws.sns.topic_arn': TopicArn,
             topicname: 'TestTopic',
             aws_service: 'SNS',
@@ -166,7 +162,7 @@ describe('Sns', function () {
             'aws.request.body.MessageAttributes.unredacted.StringValue.foo': 'bar',
             'aws.request.body.MessageAttributes.unredacted.StringValue.baz': 'yup',
             'aws.response.body.MessageId': 'redacted'
-          })
+          }
         }, { timeoutMs: 20000 }).then(done, done)
 
         sns.publish({
@@ -184,20 +180,23 @@ describe('Sns', function () {
           agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
-            assert.strictEqual(span.resource, `publish ${TopicArn}`)
-            assertObjectContains(span.meta, {
-              'aws.sns.topic_arn': TopicArn,
-              topicname: 'TestTopic',
-              aws_service: 'SNS',
-              region: 'us-east-1',
-              'aws.request.body.TopicArn': TopicArn,
-              'aws.request.body.Message': 'message 1',
-              'aws.request.body.MessageAttributes.foo': 'redacted',
-              'aws.request.body.MessageAttributes.keyOne.DataType': 'String',
-              'aws.request.body.MessageAttributes.keyOne.StringValue': 'keyOne',
-              'aws.request.body.MessageAttributes.keyTwo.DataType': 'String',
-              'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo'
+            assertObjectContains(span, {
+              resource: `publish ${TopicArn}`,
+              meta: {
+                'aws.sns.topic_arn': TopicArn,
+                topicname: 'TestTopic',
+                aws_service: 'SNS',
+                region: 'us-east-1',
+                'aws.request.body.TopicArn': TopicArn,
+                'aws.request.body.Message': 'message 1',
+                'aws.request.body.MessageAttributes.foo': 'redacted',
+                'aws.request.body.MessageAttributes.keyOne.DataType': 'String',
+                'aws.request.body.MessageAttributes.keyOne.StringValue': 'keyOne',
+                'aws.request.body.MessageAttributes.keyTwo.DataType': 'String',
+                'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo'
+              }
             })
+
             assert.ok(Object.hasOwn(span.meta, 'aws.response.body.MessageId'))
           }, { timeoutMs: 20000 }).then(done, done)
 
@@ -214,17 +213,16 @@ describe('Sns', function () {
 
         // TODO add response tests
         it('redacts user-defined keys to suppress in response', done => {
-          agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
-            assert.strictEqual(span.resource, `getTopicAttributes ${TopicArn}`)
-            assertObjectContains(span.meta, {
+          agent.assertFirstTraceSpan({
+            resource: `getTopicAttributes ${TopicArn}`,
+            meta: {
               'aws.sns.topic_arn': TopicArn,
               topicname: 'TestTopic',
               aws_service: 'SNS',
               region: 'us-east-1',
               'aws.request.body.TopicArn': TopicArn,
               'aws.response.body.Attributes.DisplayName': 'redacted'
-            })
+            }
           }, { timeoutMs: 20000 }).then(done, done)
 
           sns.getTopicAttributes({ TopicArn }, e => e && done(e))
@@ -258,16 +256,14 @@ describe('Sns', function () {
             })
 
             it('redacts phone numbers in request', done => {
-              agent.assertSomeTraces(traces => {
-                const span = traces[0][0]
-
-                assert.strictEqual(span.resource, 'publish')
-                assertObjectContains(span.meta, {
+              agent.assertFirstTraceSpan({
+                resource: 'publish',
+                meta: {
                   aws_service: 'SNS',
                   region: 'us-east-1',
                   'aws.request.body.PhoneNumber': 'redacted',
                   'aws.request.body.Message': 'message 1'
-                })
+                }
               }, { timeoutMs: 20000 }).then(done, done)
 
               sns.publish({
@@ -277,15 +273,13 @@ describe('Sns', function () {
             })
 
             it('redacts phone numbers in response', done => {
-              agent.assertSomeTraces(traces => {
-                const span = traces[0][0]
-
-                assert.strictEqual(span.resource, 'publish')
-                assertObjectContains(span.meta, {
+              agent.assertFirstTraceSpan({
+                resource: 'publish',
+                meta: {
                   aws_service: 'SNS',
                   region: 'us-east-1',
                   'aws.response.body.PhoneNumber': 'redacted'
-                })
+                }
               }, { timeoutMs: 20000 }).then(done, done)
 
               sns.listSMSSandboxPhoneNumbers({
@@ -298,18 +292,16 @@ describe('Sns', function () {
 
         describe('subscription confirmation tokens', () => {
           it('redacts tokens in request', done => {
-            agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              assert.strictEqual(span.resource, `confirmSubscription ${TopicArn}`)
-              assertObjectContains(span.meta, {
+            agent.assertFirstTraceSpan({
+              resource: `confirmSubscription ${TopicArn}`,
+              meta: {
                 aws_service: 'SNS',
                 'aws.sns.topic_arn': TopicArn,
                 topicname: 'TestTopic',
                 region: 'us-east-1',
                 'aws.request.body.Token': 'redacted',
                 'aws.request.body.TopicArn': TopicArn
-              })
+              }
             }).then(done, done)
 
             sns.confirmSubscription({
@@ -487,16 +479,14 @@ describe('Sns', function () {
       }
 
       it('generates tags for proper publish calls', done => {
-        agent.assertSomeTraces(traces => {
-          const span = traces[0][0]
-
-          assert.strictEqual(span.resource, `publish ${TopicArn}`)
-          assertObjectContains(span.meta, {
+        agent.assertFirstTraceSpan({
+          resource: `publish ${TopicArn}`,
+          meta: {
             'aws.sns.topic_arn': TopicArn,
             topicname: 'TestTopic',
             aws_service: 'SNS',
             region: 'us-east-1'
-          })
+          }
         }).then(done, done)
 
         sns.publish({ TopicArn, Message: 'message 1' }, e => e && done(e))
