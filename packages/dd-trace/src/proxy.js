@@ -10,7 +10,7 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
-const { getResolvedEnv } = require('./config-env-sources')
+const { getValueFromEnvSources } = require('./config-helper')
 const {
   setBaggageItem,
   getBaggageItem,
@@ -202,7 +202,7 @@ class Tracer extends NoopProxy {
         this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
       if (config.ciVisAgentlessLogSubmissionEnabled) {
-        if (getResolvedEnv('DD_API_KEY')) {
+        if (getValueFromEnvSources('DD_API_KEY')) {
           const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
           const automaticLogPlugin = new LogSubmissionPlugin(this)
           automaticLogPlugin.configure({ ...config, enabled: true })

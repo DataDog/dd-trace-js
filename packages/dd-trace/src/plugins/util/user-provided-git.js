@@ -62,7 +62,7 @@ function getUserProviderGitMetadata () {
     DD_GIT_PULL_REQUEST_BASE_BRANCH,
     DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA,
     DD_GIT_COMMIT_HEAD_SHA
-  } = getEnvironmentVariables()
+  } = getEnvironmentVariables() // TODO: Get resolved for this
 
   const branch = normalizeRef(DD_GIT_BRANCH)
   let tag = normalizeRef(DD_GIT_TAG)

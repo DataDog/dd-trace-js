@@ -8,7 +8,7 @@ const { ConsoleLogger } = require('./loggers/console')
 const { tagger } = require('./tagger')
 const fs = require('fs')
 const { fileURLToPath } = require('url')
-const { getResolvedEnv } = require('../config-env-sources')
+const { getValueFromEnvSources } = require('../config-helper')
 
 const logger = new ConsoleLogger()
 const timeoutMs = 15 * 1000
@@ -17,9 +17,9 @@ function exporterFromURL (url) {
   if (url.protocol === 'file:') {
     return new FileExporter({ pprofPrefix: fileURLToPath(url) })
   }
-  const injectionEnabled = (getResolvedEnv('DD_INJECTION_ENABLED') ?? '').split(',')
+  const injectionEnabled = (getValueFromEnvSources('DD_INJECTION_ENABLED') ?? '').split(',')
   const libraryInjected = injectionEnabled.length > 0
-  const profilingEnabled = (getResolvedEnv('DD_PROFILING_ENABLED') ?? '').toLowerCase()
+  const profilingEnabled = (getValueFromEnvSources('DD_PROFILING_ENABLED') ?? '').toLowerCase()
   const activation = ['true', '1'].includes(profilingEnabled)
     ? 'manual'
     : profilingEnabled === 'auto'

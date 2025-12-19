@@ -10,7 +10,7 @@ const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags'
 const log = require('./log')
 const { version } = require('../../../../../package.json')
 const { pruneSnapshot } = require('./snapshot-pruner')
-const { getResolvedEnv } = require('../../config-env-sources')
+const { getValueFromEnvSources } = require('../../config-helper')
 
 module.exports = send
 
@@ -23,8 +23,8 @@ const hostname = getHostname()
 const service = config.service
 
 const ddtags = [
-  ['env', getResolvedEnv('DD_ENV')],
-  ['version', getResolvedEnv('DD_VERSION')],
+  ['env', getValueFromEnvSources('DD_ENV')],
+  ['version', getValueFromEnvSources('DD_VERSION')],
   ['debugger_version', version],
   ['host_name', hostname],
   [GIT_COMMIT_SHA, config.commitSHA],

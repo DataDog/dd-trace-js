@@ -37,6 +37,7 @@ function trimObject (obj) {
 function buildMetadata () {
   const {
     COMPUTERNAME,
+    // Pull this out for resolved env
     DD_AAS_DOTNET_EXTENSION_VERSION,
     DD_AZURE_RESOURCE_GROUP,
     FUNCTIONS_EXTENSION_VERSION,

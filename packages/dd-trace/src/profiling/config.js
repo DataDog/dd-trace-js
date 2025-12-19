@@ -21,6 +21,8 @@ const defaults = require('../config_defaults')
 
 class Config {
   constructor (options = {}) {
+    // TODO: Remove entries that were already resolved in config.
+    // For the others, move them over to config.
     const {
       AWS_LAMBDA_FUNCTION_NAME: functionname,
       DD_AGENT_HOST,
