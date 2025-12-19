@@ -95,6 +95,23 @@ describe('NativeDatadogSpan', () => {
       this._hostname = undefined
       this._isFinished = false
       this._syncNameToNative = sinon.stub()
+
+      // Tag accessor methods (matching real NativeSpanContext)
+      this.setTag = (key, value) => {
+        this._tags[key] = value
+      }
+      this.getTag = (key) => {
+        return this._tags[key]
+      }
+      this.hasTag = (key) => {
+        return key in this._tags
+      }
+      this.deleteTag = (key) => {
+        delete this._tags[key]
+      }
+      this.getTags = () => {
+        return this._tags
+      }
     }
 
     // Mock all dependencies with noCallThru to avoid resolving real modules

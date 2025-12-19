@@ -44,8 +44,8 @@ class WSServerPlugin extends TracingPlugin {
     }, ctx)
     ctx.span = span
 
-    ctx.socket.spanContext = ctx.span._spanContext
-    ctx.socket.spanContext.spanTags = ctx.span._spanContext._tags
+    ctx.socket.spanContext = ctx.span.context()
+    ctx.socket.spanContext.spanTags = ctx.span.context().getTags()
 
     return ctx.currentStore
   }

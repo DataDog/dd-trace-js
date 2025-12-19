@@ -44,7 +44,8 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
 
   getLLMObsSpanRegisterOptions (ctx) {
     const span = ctx.currentStore?.span
-    const tags = span?.context()._tags || {}
+    const spanContext = span?.context()
+    const tags = spanContext?.getTags() || {}
 
     const modelProvider = tags['langchain.request.provider'] // could be undefined
     const modelName = tags['langchain.request.model'] // could be undefined
@@ -74,7 +75,7 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
       return
     }
 
-    const provider = span?.context()._tags['langchain.request.provider']
+    const provider = span?.context()?.getTag('langchain.request.provider')
     const integrationName = this.getIntegrationName(type, provider)
     this.setMetadata(span, provider)
 
@@ -91,14 +92,15 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
     const metadata = {}
 
     // these fields won't be set for non model-based operations
+    const spanContext = span?.context()
     const temperature =
-      span?.context()._tags[`langchain.request.${provider}.parameters.temperature`] ||
-      span?.context()._tags[`langchain.request.${provider}.parameters.model_kwargs.temperature`]
+      spanContext?.getTag(`langchain.request.${provider}.parameters.temperature`) ||
+      spanContext?.getTag(`langchain.request.${provider}.parameters.model_kwargs.temperature`)
 
     const maxTokens =
-      span?.context()._tags[`langchain.request.${provider}.parameters.max_tokens`] ||
-      span?.context()._tags[`langchain.request.${provider}.parameters.maxTokens`] ||
-      span?.context()._tags[`langchain.request.${provider}.parameters.model_kwargs.max_tokens`]
+      spanContext?.getTag(`langchain.request.${provider}.parameters.max_tokens`) ||
+      spanContext?.getTag(`langchain.request.${provider}.parameters.maxTokens`) ||
+      spanContext?.getTag(`langchain.request.${provider}.parameters.model_kwargs.max_tokens`)
 
     if (temperature) {
       metadata.temperature = Number.parseFloat(temperature)

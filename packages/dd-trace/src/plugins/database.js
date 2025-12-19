@@ -33,11 +33,11 @@ class DatabasePlugin extends StoragePlugin {
     this.encodingServiceTags('dde', 'encodedDde', this.tracer._env)
     this.encodingServiceTags('ddps', 'encodedDdps', this.tracer._service)
     this.encodingServiceTags('ddpv', 'encodedDdpv', this.tracer._version)
-    if (span.context()._tags['out.host']) {
-      this.encodingServiceTags('ddh', 'encodedDdh', span._spanContext._tags['out.host'])
+    if (span.context().getTag('out.host')) {
+      this.encodingServiceTags('ddh', 'encodedDdh', span.context().getTag('out.host'))
     }
-    if (span.context()._tags['db.name']) {
-      this.encodingServiceTags('dddb', 'encodedDddb', span._spanContext._tags['db.name'])
+    if (span.context().getTag('db.name')) {
+      this.encodingServiceTags('dddb', 'encodedDddb', span.context().getTag('db.name'))
     }
 
     const { encodedDddb, encodedDddbs, encodedDde, encodedDdh, encodedDdps, encodedDdpv } = this.serviceTags
@@ -45,7 +45,7 @@ class DatabasePlugin extends StoragePlugin {
     let dbmComment = `dddb='${encodedDddb}',dddbs='${encodedDddbs}',dde='${encodedDde}',ddh='${encodedDdh}',` +
       `ddps='${encodedDdps}',ddpv='${encodedDdpv}'`
 
-    const peerData = this.getPeerService(span.context()._tags)
+    const peerData = this.getPeerService(span.context().getTags())
     if (peerData !== undefined && peerData[PEER_SERVICE_SOURCE_KEY] === PEER_SERVICE_KEY) {
       this.encodingServiceTags('ddprs', 'encodedDdprs', peerData[PEER_SERVICE_KEY])
 
@@ -57,7 +57,7 @@ class DatabasePlugin extends StoragePlugin {
 
   getDbmServiceName (span, tracerService) {
     if (this._tracerConfig.spanComputePeerService) {
-      const peerData = this.getPeerService(span.context()._tags)
+      const peerData = this.getPeerService(span.context().getTags())
       return this.getPeerServiceRemap(peerData)[PEER_SERVICE_KEY] || tracerService
     }
     return tracerService

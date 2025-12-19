@@ -207,7 +207,7 @@ class VitestPlugin extends CiPlugin {
     this.addSub('ci:vitest:test:pass', ({ span, task }) => {
       if (span) {
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-          hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS]
+          hasCodeowners: !!span.context().getTag(TEST_CODE_OWNERS)
         })
         span.setTag(TEST_STATUS, 'pass')
         span.finish(this.taskToFinishTime.get(task))
@@ -237,7 +237,7 @@ class VitestPlugin extends CiPlugin {
         }
       }
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-        hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS]
+        hasCodeowners: !!span.context().getTag(TEST_CODE_OWNERS)
       })
       span.setTag(TEST_STATUS, 'fail')
 
@@ -273,7 +273,7 @@ class VitestPlugin extends CiPlugin {
         }
       )
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-        hasCodeowners: !!testSpan.context()._tags[TEST_CODE_OWNERS]
+        hasCodeowners: !!testSpan.context().getTag(TEST_CODE_OWNERS)
       })
       testSpan.finish()
     })

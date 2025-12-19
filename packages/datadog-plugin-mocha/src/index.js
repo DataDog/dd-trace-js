@@ -146,7 +146,7 @@ class MochaPlugin extends CiPlugin {
     this.addSub('ci:mocha:test-suite:finish', ({ testSuiteSpan, status }) => {
       if (testSuiteSpan) {
         // the test status of the suite may have been set in ci:mocha:test-suite:error already
-        if (!testSuiteSpan.context()._tags[TEST_STATUS]) {
+        if (!testSuiteSpan.context().getTag(TEST_STATUS)) {
           testSuiteSpan.setTag(TEST_STATUS, status)
         }
         testSuiteSpan.finish()
@@ -236,7 +236,7 @@ class MochaPlugin extends CiPlugin {
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
         }
 
-        const spanTags = span.context()._tags
+        const spanTags = span.context().getTags()
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
@@ -310,7 +310,7 @@ class MochaPlugin extends CiPlugin {
           span.setTag('error', err)
         }
 
-        const spanTags = span.context()._tags
+        const spanTags = span.context().getTags()
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',

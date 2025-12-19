@@ -12,7 +12,7 @@ const id = require('../id')
 const tagger = require('../tagger')
 const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
-const { storage } = require('../../../../datadog-core')
+const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const util = require('util')
@@ -124,8 +124,10 @@ class NativeDatadogSpan {
     // Queue the span name to native storage
     this._spanContext._syncNameToNative(operationName)
 
-    // Add tags (this will sync them to native storage via the proxy)
-    Object.assign(this._spanContext._tags, tags)
+    // Add tags using setTag() to sync to native storage
+    for (const [key, value] of Object.entries(tags)) {
+      this._spanContext.setTag(key, value)
+    }
 
     // Add to trace's started spans
     this._spanContext._trace.started.push(this)
@@ -178,7 +180,7 @@ class NativeDatadogSpan {
 
   toString () {
     const spanContext = this.context()
-    const resourceName = spanContext._tags['resource.name'] || ''
+    const resourceName = spanContext.getTag('resource.name') || ''
     const resource = resourceName.length > 100
       ? `${resourceName.slice(0, 97)}...`
       : resourceName
@@ -186,7 +188,7 @@ class NativeDatadogSpan {
       traceId: spanContext._traceId,
       spanId: spanContext._spanId,
       parentId: spanContext._parentId,
-      service: spanContext._tags['service.name'],
+      service: spanContext.getTag('service.name'),
       name: spanContext._name,
       resource
     })
@@ -299,12 +301,12 @@ class NativeDatadogSpan {
       return
     }
 
-    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true' && !this._spanContext._tags['service.name']) {
+    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true' && !this._spanContext.getTag('service.name')) {
       log.error('Finishing invalid span: %s', this)
     }
 
     getIntegrationCounter('spans_finished', this._integrationName).inc()
-    this._spanContext._tags['_dd.integration'] = this._integrationName
+    this._spanContext.setTag('_dd.integration', this._integrationName)
 
     // Span leak tracking
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
@@ -414,12 +416,47 @@ class NativeDatadogSpan {
     }
 
     if (fields.context) {
-      // Use existing context (rare case)
-      spanContext = fields.context
+      // Use existing context (e.g., from OTel)
+      // If it's already a NativeSpanContext, use it directly
+      // Otherwise, create a NativeSpanContext with the same IDs
+      const existingContext = fields.context
+      if (existingContext._nativeSpanId !== undefined) {
+        // Already a NativeSpanContext
+        spanContext = existingContext
+        if (!spanContext._trace.startTime) {
+          startTime = dateNow()
+        }
+        return spanContext
+      }
+
+      // Create NativeSpanContext wrapping the existing context's data
+      spanContext = new NativeSpanContext(this._nativeSpans, {
+        traceId: existingContext._traceId,
+        spanId: existingContext._spanId,
+        parentId: existingContext._parentId,
+        sampling: existingContext._sampling,
+        baggageItems: { ...existingContext._baggageItems },
+        tags: { ...existingContext._tags },
+        trace: existingContext._trace,
+        tracestate: existingContext._tracestate
+      })
+
       if (!spanContext._trace.startTime) {
         startTime = dateNow()
       }
-      return spanContext
+
+      // Convert trace ID to u128 (high, low)
+      const traceIdBuffer = existingContext._traceId.toBuffer()
+      if (traceIdBuffer.length > 8) {
+        traceIdHigh = BigInt('0x' + Buffer.from(traceIdBuffer.slice(0, 8)).toString('hex'))
+        traceIdLow = BigInt('0x' + Buffer.from(traceIdBuffer.slice(-8)).toString('hex'))
+      } else {
+        traceIdLow = existingContext._traceId.toBigInt()
+      }
+
+      if (existingContext._parentId) {
+        parentIdBigInt = existingContext._parentId.toBigInt()
+      }
     } else if (parent) {
       // Child span - inherit trace ID, generate new span ID
       const spanId = id()
@@ -499,7 +536,15 @@ class NativeDatadogSpan {
   }
 
   #addTags (keyValuePairs) {
-    tagger.add(this._spanContext._tags, keyValuePairs)
+    // Parse tags using tagger into a temp object, then use setTag() to sync to native
+    const parsedTags = {}
+    tagger.add(parsedTags, keyValuePairs)
+
+    // Use Reflect.ownKeys to include both string and Symbol keys
+    // Object.entries() skips Symbol keys which are used internally (e.g., IGNORE_OTEL_ERROR)
+    for (const key of Reflect.ownKeys(parsedTags)) {
+      this._spanContext.setTag(key, parsedTags[key])
+    }
     this._prioritySampler.sample(this, false)
   }
 
@@ -532,8 +577,8 @@ class NativeDatadogSpan {
       return formattedLink
     })
 
-    // Set as meta tag - this will sync to native storage via the proxy
-    this._spanContext._tags['_dd.span_links'] = JSON.stringify(links)
+    // Set as meta tag - this will sync to native storage via setTag()
+    this._spanContext.setTag('_dd.span_links', JSON.stringify(links))
   }
 
   /**
@@ -559,7 +604,7 @@ class NativeDatadogSpan {
 
     // Store serialized events as a meta tag for native export
     // The native side will deserialize and handle appropriately
-    this._spanContext._tags['_dd.span_events'] = JSON.stringify(events)
+    this._spanContext.setTag('_dd.span_events', JSON.stringify(events))
   }
 }
 

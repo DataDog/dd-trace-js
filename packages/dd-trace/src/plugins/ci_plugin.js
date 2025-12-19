@@ -94,7 +94,7 @@ function getTestSuiteLevelVisibilityTags (testSuiteSpan, testFramework) {
   const suiteTags = {
     [TEST_SUITE_ID]: testSuiteSpanContext.toSpanId(),
     [TEST_SESSION_ID]: testSuiteSpanContext.toTraceId(),
-    [TEST_COMMAND]: testSuiteSpanContext._tags[TEST_COMMAND],
+    [TEST_COMMAND]: testSuiteSpanContext.getTag(TEST_COMMAND),
     [TEST_MODULE]: testFramework
   }
 
@@ -219,7 +219,7 @@ module.exports = class CiPlugin extends Plugin {
     })
 
     this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {
-      const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+      const testCommand = this.testSessionSpan.context().getTag(TEST_COMMAND)
       skippedSuites.forEach((testSuite) => {
         const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id)
         if (this.itrCorrelationId) {
@@ -480,7 +480,7 @@ module.exports = class CiPlugin extends Plugin {
       const suiteTags = {
         [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
         [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
-        [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
+        [TEST_COMMAND]: testSuiteSpan.context().getTag(TEST_COMMAND),
         [TEST_MODULE]: this.constructor.id
       }
       if (testSuiteSpan.context()._parentId) {

@@ -273,7 +273,7 @@ class NativeWallProfiler {
 
       let webTags
       if (this.#endpointCollectionEnabled) {
-        const tags = context._tags
+        const tags = context.getTags()
         if (isWebServerSpan(tags)) {
           webTags = tags
         } else {

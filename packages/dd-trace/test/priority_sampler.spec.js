@@ -51,7 +51,9 @@ describe('PrioritySampler', () => {
       _trace: {
         started: [],
         tags: {}
-      }
+      },
+      getTags () { return this._tags },
+      getTag (key) { return this._tags[key] }
     }
 
     span = {

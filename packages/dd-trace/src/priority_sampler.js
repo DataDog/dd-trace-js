@@ -112,7 +112,7 @@ class PrioritySampler {
 
     log.trace(span, auto)
 
-    const tag = this._getPriorityFromTags(context._tags, context)
+    const tag = this._getPriorityFromTags(context.getTags(), context)
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
@@ -287,7 +287,7 @@ class PrioritySampler {
    * @returns {SamplingPriority}
    */
   #getPriorityByAgent (context) {
-    const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
+    const key = `service:${context.getTag(SERVICE_NAME)},env:${this._env}`
     // TODO: Change underscored properties to private ones.
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 

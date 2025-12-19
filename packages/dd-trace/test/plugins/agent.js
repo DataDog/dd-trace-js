@@ -35,6 +35,29 @@ function isMatchingTrace (spans, spanResourceMatch) {
   return !!spans.find(span => spanResourceMatch.test(span.resource))
 }
 
+/**
+ * Normalize span fields to ensure consistent types.
+ * Native spans may encode numeric fields as smaller integer types
+ * which msgpack decodes as regular numbers instead of BigInt.
+ * This ensures start and duration are always BigInt for test consistency.
+ */
+function normalizeSpanFields (traces) {
+  if (!Array.isArray(traces)) return
+  for (const trace of traces) {
+    if (!Array.isArray(trace)) continue
+    for (const span of trace) {
+      if (span && typeof span === 'object') {
+        if (typeof span.start === 'number') {
+          span.start = BigInt(span.start)
+        }
+        if (typeof span.duration === 'number') {
+          span.duration = BigInt(span.duration)
+        }
+      }
+    }
+  }
+}
+
 function ciVisRequestHandler (request, response) {
   response.status(200).send('OK')
   traceHandlers.forEach(({ handler, spanResourceMatch }) => {
@@ -430,6 +453,9 @@ module.exports = {
       if (req.is('application/msgpack')) {
         if (!req.body.length) return res.status(200).send()
         req.body = msgpack.decode(req.body, { useBigInt64: true })
+        // Normalize span fields to BigInt for consistency
+        // Native spans may encode small durations as smaller integer types
+        normalizeSpanFields(req.body)
       }
       next()
     })
@@ -453,6 +479,11 @@ module.exports = {
     })
 
     agent.put('/v0.4/traces', (req, res) => {
+      handleTraceRequest(req, res, useTestAgent)
+    })
+
+    // Native spans exporter uses POST instead of PUT
+    agent.post('/v0.4/traces', (req, res) => {
       handleTraceRequest(req, res, useTestAgent)
     })
 

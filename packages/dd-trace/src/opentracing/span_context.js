@@ -70,6 +70,50 @@ class DatadogSpanContext {
     const version = (this._traceparent && this._traceparent.version) || '00'
     return `${version}-${traceId}-${spanId}-${flags}`
   }
+
+  /**
+   * Set a tag value.
+   * @param {string} key - Tag key
+   * @param {*} value - Tag value
+   */
+  setTag (key, value) {
+    this._tags[key] = value
+  }
+
+  /**
+   * Get a tag value.
+   * @param {string} key - Tag key
+   * @returns {*} Tag value or undefined
+   */
+  getTag (key) {
+    return this._tags[key]
+  }
+
+  /**
+   * Check if a tag exists.
+   * @param {string} key - Tag key
+   * @returns {boolean}
+   */
+  hasTag (key) {
+    return key in this._tags
+  }
+
+  /**
+   * Delete a tag.
+   * @param {string} key - Tag key
+   */
+  deleteTag (key) {
+    delete this._tags[key]
+  }
+
+  /**
+   * Get all tags. Returns the internal tags object for read-only iteration.
+   * For native spans, this returns the JS cache (not native storage).
+   * @returns {Object}
+   */
+  getTags () {
+    return this._tags
+  }
 }
 
 module.exports = DatadogSpanContext

@@ -250,7 +250,7 @@ function onExpressSession ({ req, res, sessionId, abortController }) {
     return
   }
 
-  const isSdkCalled = rootSpan.context()._tags['usr.session_id']
+  const isSdkCalled = rootSpan.context().getTag('usr.session_id')
   if (isSdkCalled) return
 
   const results = waf.run({

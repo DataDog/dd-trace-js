@@ -91,12 +91,13 @@ function trackLogin (framework, login, user, success, rootSpan) {
     [addresses.USER_LOGIN]: login
   }
 
-  const currentTags = rootSpan.context()._tags
+  const spanContext = rootSpan.context()
+  const currentTags = spanContext.getTags()
   const isSdkCalled = currentTags[`_dd.appsec.events.users.login.${success ? 'success' : 'failure'}.sdk`] === 'true'
 
   // used to not overwrite tags set by SDK
   function shouldSetTag (tag) {
-    return !(isSdkCalled && currentTags[tag])
+    return !(isSdkCalled && spanContext.getTag(tag))
   }
 
   if (success) {
@@ -167,7 +168,7 @@ function trackUser (user, rootSpan) {
 
   rootSpan.setTag('_dd.appsec.usr.id', userId)
 
-  const isSdkCalled = rootSpan.context()._tags['_dd.appsec.user.collection_mode'] === 'sdk'
+  const isSdkCalled = rootSpan.context().getTag('_dd.appsec.user.collection_mode') === 'sdk'
   // do not override SDK
   if (!isSdkCalled) {
     rootSpan.addTags({

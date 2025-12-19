@@ -74,19 +74,9 @@ describe('NativeSpanContext', () => {
 
       assert.strictEqual(spanContext._nativeSpanId, 123456789n)
     })
-
-    it('should create tags proxy', () => {
-      spanContext = new NativeSpanContext(nativeSpans, {
-        traceId: id,
-        spanId: id
-      })
-
-      // Tags should be available
-      assert.ok(spanContext._tags !== undefined)
-    })
   })
 
-  describe('tags proxy', () => {
+  describe('setTag', () => {
     beforeEach(() => {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: id,
@@ -94,8 +84,8 @@ describe('NativeSpanContext', () => {
       })
     })
 
-    it('should sync service.name to native via SetServiceName immediately', () => {
-      spanContext._tags['service.name'] = 'my-service'
+    it('should sync service.name to native via SetServiceName', () => {
+      spanContext.setTag('service.name', 'my-service')
 
       sinon.assert.calledWith(
         nativeSpans.queueOp,
@@ -105,8 +95,8 @@ describe('NativeSpanContext', () => {
       )
     })
 
-    it('should sync resource.name to native via SetResourceName immediately', () => {
-      spanContext._tags['resource.name'] = 'GET /api/users'
+    it('should sync resource.name to native via SetResourceName', () => {
+      spanContext.setTag('resource.name', 'GET /api/users')
 
       sinon.assert.calledWith(
         nativeSpans.queueOp,
@@ -116,8 +106,8 @@ describe('NativeSpanContext', () => {
       )
     })
 
-    it('should sync span.type to native via SetType immediately', () => {
-      spanContext._tags['span.type'] = 'web'
+    it('should sync span.type to native via SetType', () => {
+      spanContext.setTag('span.type', 'web')
 
       sinon.assert.calledWith(
         nativeSpans.queueOp,
@@ -127,8 +117,8 @@ describe('NativeSpanContext', () => {
       )
     })
 
-    it('should sync error to native via SetError immediately', () => {
-      spanContext._tags.error = true
+    it('should sync error=true via SetError with 1', () => {
+      spanContext.setTag('error', true)
 
       sinon.assert.calledWith(
         nativeSpans.queueOp,
@@ -138,8 +128,8 @@ describe('NativeSpanContext', () => {
       )
     })
 
-    it('should sync error=false to native as 0', () => {
-      spanContext._tags.error = false
+    it('should sync error=false via SetError with 0', () => {
+      spanContext.setTag('error', false)
 
       sinon.assert.calledWith(
         nativeSpans.queueOp,
@@ -149,8 +139,8 @@ describe('NativeSpanContext', () => {
       )
     })
 
-    it('should sync string tags via SetMetaAttr immediately', () => {
-      spanContext._tags['http.url'] = 'https://example.com'
+    it('should sync string tags via SetMetaAttr', () => {
+      spanContext.setTag('http.url', 'https://example.com')
 
       sinon.assert.calledWith(
         nativeSpans.queueOp,
@@ -161,8 +151,8 @@ describe('NativeSpanContext', () => {
       )
     })
 
-    it('should sync number tags via SetMetricAttr immediately', () => {
-      spanContext._tags['http.status_code'] = 200
+    it('should sync number tags via SetMetricAttr', () => {
+      spanContext.setTag('http.status_code', 200)
 
       sinon.assert.calledWith(
         nativeSpans.queueOp,
@@ -174,7 +164,7 @@ describe('NativeSpanContext', () => {
     })
 
     it('should sync boolean tags as metrics (0/1)', () => {
-      spanContext._tags['some.flag'] = true
+      spanContext.setTag('some.flag', true)
 
       sinon.assert.calledWith(
         nativeSpans.queueOp,
@@ -185,48 +175,94 @@ describe('NativeSpanContext', () => {
       )
     })
 
-    it('should read tags from cache', () => {
-      spanContext._tags['test.key'] = 'test-value'
-      const value = spanContext._tags['test.key']
+    it('should store tag in JS cache', () => {
+      spanContext.setTag('test.key', 'test-value')
 
-      assert.strictEqual(value, 'test-value')
-    })
-
-    it('should support tag deletion', () => {
-      spanContext._tags['test.key'] = 'test-value'
-      delete spanContext._tags['test.key']
-
-      assert.strictEqual(spanContext._tags['test.key'], undefined)
-    })
-
-    it('should support "in" operator', () => {
-      spanContext._tags['test.key'] = 'test-value'
-
-      assert.ok('test.key' in spanContext._tags)
-      assert.ok(!('missing.key' in spanContext._tags))
-    })
-
-    it('should support Object.keys()', () => {
-      spanContext._tags['key1'] = 'value1'
-      spanContext._tags['key2'] = 'value2'
-
-      const keys = Object.keys(spanContext._tags)
-      assert.ok(keys.includes('key1'))
-      assert.ok(keys.includes('key2'))
+      assert.strictEqual(spanContext.getTag('test.key'), 'test-value')
     })
 
     it('should not sync undefined values', () => {
-      spanContext._tags['test.key'] = undefined
+      spanContext.setTag('test.key', undefined)
 
-      // Should not call queueOp for undefined
       sinon.assert.notCalled(nativeSpans.queueOp)
     })
 
     it('should not sync null values', () => {
-      spanContext._tags['test.key'] = null
+      spanContext.setTag('test.key', null)
 
-      // Should not call queueOp for null
       sinon.assert.notCalled(nativeSpans.queueOp)
+    })
+  })
+
+  describe('getTag', () => {
+    beforeEach(() => {
+      spanContext = new NativeSpanContext(nativeSpans, {
+        traceId: id,
+        spanId: id
+      })
+    })
+
+    it('should return tag value', () => {
+      spanContext.setTag('test.key', 'test-value')
+
+      assert.strictEqual(spanContext.getTag('test.key'), 'test-value')
+    })
+
+    it('should return undefined for missing tag', () => {
+      assert.strictEqual(spanContext.getTag('missing.key'), undefined)
+    })
+  })
+
+  describe('hasTag', () => {
+    beforeEach(() => {
+      spanContext = new NativeSpanContext(nativeSpans, {
+        traceId: id,
+        spanId: id
+      })
+    })
+
+    it('should return true for existing tag', () => {
+      spanContext.setTag('test.key', 'test-value')
+
+      assert.ok(spanContext.hasTag('test.key'))
+    })
+
+    it('should return false for missing tag', () => {
+      assert.ok(!spanContext.hasTag('missing.key'))
+    })
+  })
+
+  describe('deleteTag', () => {
+    beforeEach(() => {
+      spanContext = new NativeSpanContext(nativeSpans, {
+        traceId: id,
+        spanId: id
+      })
+    })
+
+    it('should remove tag', () => {
+      spanContext.setTag('test.key', 'test-value')
+      spanContext.deleteTag('test.key')
+
+      assert.strictEqual(spanContext.getTag('test.key'), undefined)
+    })
+  })
+
+  describe('getTags', () => {
+    beforeEach(() => {
+      spanContext = new NativeSpanContext(nativeSpans, {
+        traceId: id,
+        spanId: id
+      })
+    })
+
+    it('should return all tags', () => {
+      spanContext.setTag('key1', 'value1')
+      spanContext.setTag('key2', 'value2')
+
+      const tags = spanContext.getTags()
+      assert.strictEqual(tags.key1, 'value1')
+      assert.strictEqual(tags.key2, 'value2')
     })
   })
 

@@ -98,7 +98,7 @@ class LLMObsSpanProcessor {
     const llmObsSpan = new LLMObservabilitySpan()
     let inputType, outputType
 
-    const spanTags = span.context()._tags
+    const spanTags = span.context().getTags()
     const mlObsTags = LLMObsTagger.tagMap.get(span)
 
     const spanKind = mlObsTags[SPAN_KIND]
@@ -253,7 +253,7 @@ class LLMObsSpanProcessor {
       language: 'javascript'
     }
 
-    const errType = span.context()._tags[ERROR_TYPE] || error?.name
+    const errType = span.context().getTag(ERROR_TYPE) || error?.name
     if (errType) tags.error_type = errType
 
     if (sessionId) tags.session_id = sessionId

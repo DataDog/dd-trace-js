@@ -32,7 +32,7 @@ function findWebSpan (startedSpans, spanId) {
     const ispan = startedSpans[i]
     const context = ispan.context()
     if (context._spanId === spanId) {
-      if (isWebServerSpan(context._tags)) {
+      if (isWebServerSpan(context.getTags())) {
         return true
       }
       spanId = context._parentId
@@ -223,7 +223,7 @@ class Profiler extends EventEmitter {
 
   #onSpanFinish (span) {
     const context = span.context()
-    const tags = context._tags
+    const tags = context.getTags()
     if (!isWebServerSpan(tags)) return
 
     const endpointName = endpointNameFromTags(tags)

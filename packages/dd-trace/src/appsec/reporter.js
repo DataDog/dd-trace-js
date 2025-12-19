@@ -337,18 +337,19 @@ function reportAttack ({ events: attackData, actions }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  const currentTags = rootSpan.context()._tags
+  const spanContext = rootSpan.context()
+  const currentTags = spanContext.getTags()
 
   const newTags = {
     'appsec.event': 'true'
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
-  if (!currentTags['_dd.origin']) {
+  if (!spanContext.getTag('_dd.origin')) {
     newTags['_dd.origin'] = 'appsec'
   }
 
-  const currentJson = currentTags['_dd.appsec.json']
+  const currentJson = spanContext.getTag('_dd.appsec.json')
 
   // merge JSON arrays without parsing them
   const attackDataStr = JSON.stringify(attackData)
@@ -437,8 +438,7 @@ function reportRequestBody (rootSpan, requestBody, comesFromRaspAction = false) 
 
   if (rootSpan.meta_struct['http.request.body']) {
     // If the rasp.exceed metric exists, set also the same for the new tag
-    const currentTags = rootSpan.context()._tags
-    const sizeExceedTagValue = currentTags['_dd.appsec.rasp.request_body_size.exceeded']
+    const sizeExceedTagValue = rootSpan.context().getTag('_dd.appsec.rasp.request_body_size.exceeded')
 
     if (sizeExceedTagValue) {
       rootSpan.setTag('_dd.appsec.request_body_size.exceeded', sizeExceedTagValue)
@@ -535,7 +535,7 @@ function finishRequest (req, res, storedResponseHeaders, requestBody) {
 
   incrementWafRequestsMetric(req)
 
-  const tags = rootSpan.context()._tags
+  const tags = rootSpan.context().getTags()
 
   const extendedDataCollection = extendedDataCollectionRequest.get(req)
   const newTags = getCollectedHeaders(

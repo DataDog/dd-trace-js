@@ -26,10 +26,12 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
     root = {}
     context = {
       _sampling: {},
+      _tags: {},
       _trace: {
         tags: {},
         started: [root]
-      }
+      },
+      getTags () { return this._tags }
     }
     sinon.stub(prioritySampler, '_getContext').returns(context)
   })

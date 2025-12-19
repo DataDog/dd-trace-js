@@ -178,7 +178,7 @@ class JestPlugin extends CiPlugin {
       configs.forEach(config => {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
-        config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+        config._ddTestCommand = this.testSessionSpan.context().getTag(TEST_COMMAND)
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
         config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
@@ -386,7 +386,7 @@ class JestPlugin extends CiPlugin {
         span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
       }
 
-      const spanTags = span.context()._tags
+      const spanTags = span.context().getTags()
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,
         'test',

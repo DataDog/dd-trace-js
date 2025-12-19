@@ -18,7 +18,7 @@ const MODEL_METADATA_KEYS = new Set([
  */
 function getSpanTags (ctx) {
   const span = ctx.currentStore?.span
-  const carrier = ctx.attributes ?? span?.context()._tags ?? {}
+  const carrier = ctx.attributes ?? span?.context()?.getTags() ?? {}
   return carrier
 }
 

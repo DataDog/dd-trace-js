@@ -159,17 +159,17 @@ describe('Native Spans Smoke Tests', () => {
       })
     })
 
-    it('should sync tags to native storage', () => {
+    it('should sync tags to native storage via setTag()', () => {
       const initialCount = nativeSpans._cqbCount
 
-      spanContext._tags['service.name'] = 'my-service'
-      spanContext._tags['http.url'] = 'https://example.com'
-      spanContext._tags['http.status_code'] = 200
+      spanContext.setTag('service.name', 'my-service')
+      spanContext.setTag('http.url', 'https://example.com')
+      spanContext.setTag('http.status_code', 200)
 
       // Tags should be cached locally
-      assert.strictEqual(spanContext._tags['service.name'], 'my-service')
-      assert.strictEqual(spanContext._tags['http.url'], 'https://example.com')
-      assert.strictEqual(spanContext._tags['http.status_code'], 200)
+      assert.strictEqual(spanContext.getTag('service.name'), 'my-service')
+      assert.strictEqual(spanContext.getTag('http.url'), 'https://example.com')
+      assert.strictEqual(spanContext.getTag('http.status_code'), 200)
 
       // Operations should be queued to the change buffer
       assert.ok(nativeSpans._cqbCount > initialCount, 'Operations should be queued to native')

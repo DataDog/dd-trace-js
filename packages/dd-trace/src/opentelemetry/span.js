@@ -9,6 +9,7 @@ const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/co
 
 const tracer = require('../../')
 const DatadogSpan = require('../opentracing/span')
+const nativeModule = require('../native')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, IGNORE_OTEL_ERROR } = require('../constants')
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
@@ -138,7 +139,7 @@ class Span {
     const hrStartTime = timeInputToHrTime(timeInput || (performance.now() + timeOrigin))
     const startTime = hrTimeToMilliseconds(hrStartTime)
 
-    this._ddSpan = new DatadogSpan(_tracer, _tracer._processor, _tracer._prioritySampler, {
+    const spanFields = {
       operationName: spanNameMapper(spanName, kind, attributes),
       context: spanContext._ddContext,
       startTime,
@@ -150,7 +151,21 @@ class Span {
         [SPAN_KIND]: spanKindNames[kind]
       },
       links
-    }, _tracer._debug)
+    }
+
+    // Use NativeDatadogSpan when native mode is enabled
+    if (_tracer._nativeSpans) {
+      const NativeDatadogSpan = nativeModule.NativeDatadogSpan
+      this._ddSpan = new NativeDatadogSpan(
+        _tracer, _tracer._processor, _tracer._prioritySampler,
+        spanFields, _tracer._debug, _tracer._nativeSpans
+      )
+    } else {
+      this._ddSpan = new DatadogSpan(
+        _tracer, _tracer._processor, _tracer._prioritySampler,
+        spanFields, _tracer._debug
+      )
+    }
 
     if (attributes) {
       this.setAttributes(attributes)
@@ -295,7 +310,7 @@ class Span {
       [ERROR_TYPE]: exception.name,
       [ERROR_MESSAGE]: exception.message,
       [ERROR_STACK]: exception.stack,
-      [IGNORE_OTEL_ERROR]: this._ddSpan.context()._tags[IGNORE_OTEL_ERROR] ?? true
+      [IGNORE_OTEL_ERROR]: this._ddSpan.context().getTag(IGNORE_OTEL_ERROR) ?? true
     })
     const attributes = {}
     if (exception.message) attributes['exception.message'] = exception.message

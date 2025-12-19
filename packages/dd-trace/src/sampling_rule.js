@@ -109,7 +109,7 @@ function matcher (pattern, locator) {
  * @returns {Locator}
  */
 function makeTagLocator (tag) {
-  return (span) => span.context()._tags[tag]
+  return (span) => span.context().getTag(tag)
 }
 
 /**
@@ -129,9 +129,9 @@ function nameLocator (span) {
  * @returns {string|undefined}
  */
 function serviceLocator (span) {
-  const { _tags: tags } = span.context()
-  return tags.service ||
-    tags['service.name'] ||
+  const context = span.context()
+  return context.getTag('service') ||
+    context.getTag('service.name') ||
     span.tracer()._service
 }
 
@@ -142,9 +142,9 @@ function serviceLocator (span) {
  * @returns {string|undefined}
  */
 function resourceLocator (span) {
-  const { _tags: tags } = span.context()
-  return tags.resource ||
-    tags['resource.name']
+  const context = span.context()
+  return context.getTag('resource') ||
+    context.getTag('resource.name')
 }
 
 /**

@@ -51,7 +51,8 @@ function createDummySpans () {
         started: []
       },
       _name: operation,
-      _tags: {}
+      _tags: {},
+      getTag (key) { return this._tags[key] }
     }
 
     // Give first span a custom service name

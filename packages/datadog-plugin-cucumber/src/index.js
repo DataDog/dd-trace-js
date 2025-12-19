@@ -364,7 +364,7 @@ class CucumberPlugin extends CiPlugin {
 
       span.finish()
       if (!isStep) {
-        const spanTags = span.context()._tags
+        const spanTags = span.context().getTags()
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',

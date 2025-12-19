@@ -45,7 +45,7 @@ function incrementLLMObsSpanStartCount (tags, value = 1) {
 
 function incrementLLMObsSpanFinishedCount (span, value = 1) {
   const mlObsTags = LLMObsTagger.tagMap.get(span)
-  const spanTags = span.context()._tags
+  const spanContext = span.context()
 
   const isRootSpan = mlObsTags[PARENT_ID_KEY] === ROOT_PARENT_ID
   const hasSessionId = mlObsTags[SESSION_ID] != null
@@ -54,7 +54,7 @@ function incrementLLMObsSpanFinishedCount (span, value = 1) {
   const decorator = !!mlObsTags[DECORATOR]
   const spanKind = mlObsTags[SPAN_KIND]
   const modelProvider = mlObsTags[MODEL_PROVIDER]
-  const error = spanTags.error || spanTags[ERROR_TYPE]
+  const error = spanContext.getTag('error') || spanContext.getTag(ERROR_TYPE)
 
   const tags = {
     autoinstrumented: Number(autoInstrumented),
