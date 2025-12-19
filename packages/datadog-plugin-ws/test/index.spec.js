@@ -2,12 +2,12 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
-const { expect } = require('chai')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 describe('Plugin', () => {
   let WebSocket
   let wsServer
@@ -447,17 +447,23 @@ describe('Plugin', () => {
             assert.ok(pointerLink, 'Should have a span pointer link')
             didFindPointerLink = true
 
-            expect(pointerLink.attributes).to.have.property('ptr.kind', 'websocket')
-            expect(pointerLink.attributes).to.have.property('ptr.dir', 'd')
-            expect(pointerLink.attributes).to.have.property('ptr.hash')
-            expect(pointerLink.attributes).to.have.property('link.name', 'span-pointer-down')
-            expect(pointerLink.attributes['ptr.hash']).to.be.a('string')
-            expect(pointerLink.attributes['ptr.hash']).to.have.lengthOf(57)
+            assertObjectContains(pointerLink, {
+              attributes: {
+                'ptr.kind': 'websocket',
+                'ptr.dir': 'd',
+                'link.name': 'span-pointer-down'
+              }
+            })
+            didFindPointerLink = true
+
+            const { attributes } = pointerLink
+            assert.ok(Object.hasOwn(attributes, 'ptr.hash'))
             // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
-            expect(pointerLink.attributes['ptr.hash']).to.match(/^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
+            assert.match(attributes['ptr.hash'], /^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
+            assert.strictEqual(attributes['ptr.hash'].length, 57)
           })
 
-          expect(didFindPointerLink).to.be.true
+          assert.strictEqual(didFindPointerLink, true)
         })
 
         it('should add span pointers to consumer spans', async () => {
@@ -484,20 +490,24 @@ describe('Plugin', () => {
             const pointerLink = spanLinks.find(link =>
               link.attributes && link.attributes['dd.kind'] === 'span-pointer'
             )
-            assert.ok(pointerLink, 'Should have a span pointer link')
+
+            assertObjectContains(pointerLink, {
+              attributes: {
+                'ptr.kind': 'websocket',
+                'ptr.dir': 'u',
+                'link.name': 'span-pointer-up'
+              }
+            })
             didFindPointerLink = true
 
-            expect(pointerLink.attributes).to.have.property('ptr.kind', 'websocket')
-            expect(pointerLink.attributes).to.have.property('ptr.dir', 'u')
-            expect(pointerLink.attributes).to.have.property('ptr.hash')
-            expect(pointerLink.attributes).to.have.property('link.name', 'span-pointer-up')
-            expect(pointerLink.attributes['ptr.hash']).to.be.a('string')
-            expect(pointerLink.attributes['ptr.hash']).to.have.lengthOf(57)
+            const { attributes } = pointerLink
+            assert.ok(Object.hasOwn(attributes, 'ptr.hash'))
             // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
-            expect(pointerLink.attributes['ptr.hash']).to.match(/^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
+            assert.match(attributes['ptr.hash'], /^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
+            assert.strictEqual(attributes['ptr.hash'].length, 57)
           })
 
-          expect(didFindPointerLink).to.be.true
+          assert.strictEqual(didFindPointerLink, true)
         })
 
         it('should generate unique hashes for each message', () => {
