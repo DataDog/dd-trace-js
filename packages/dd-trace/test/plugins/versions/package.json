@@ -133,6 +133,7 @@
     "langchain": "1.0.3",
     "ldapjs": "3.0.7",
     "ldapjs-promise": "3.0.7",
+    "light-my-request": "6.6.0",
     "limitd-client": "2.14.1",
     "lodash": "4.17.21",
     "loopback": "3.28.0",
