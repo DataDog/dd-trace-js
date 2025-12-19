@@ -5,11 +5,11 @@ const { isFalse } = require('./util')
 
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
-    getEnvironmentVariable('FUNCTION_NAME') !== undefined &&
-    getEnvironmentVariable('GCP_PROJECT') !== undefined
+    process.env.FUNCTION_NAME !== undefined &&
+    process.env.GCP_PROJECT !== undefined
   const isNewerGCPFunction =
-    getEnvironmentVariable('K_SERVICE') !== undefined &&
-    getEnvironmentVariable('FUNCTION_TARGET') !== undefined
+    process.env.K_SERVICE !== undefined &&
+    process.env.FUNCTION_TARGET !== undefined
 
   return isDeprecatedGCPFunction || isNewerGCPFunction
 }
@@ -25,8 +25,8 @@ function enableGCPPubSubPushSubscription () {
 
 function getIsAzureFunction () {
   const isAzureFunction =
-    getEnvironmentVariable('FUNCTIONS_EXTENSION_VERSION') !== undefined &&
-    getEnvironmentVariable('FUNCTIONS_WORKER_RUNTIME') !== undefined
+    process.env.FUNCTIONS_EXTENSION_VERSION !== undefined &&
+    process.env.FUNCTIONS_WORKER_RUNTIME !== undefined
 
   return isAzureFunction
 }
@@ -36,7 +36,7 @@ function getIsFlexConsumptionAzureFunction () {
 }
 
 function isInServerlessEnvironment () {
-  const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
+  const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
   const isGCPFunction = getIsGCPFunction()
   const isAzureFunction = getIsAzureFunction()
 

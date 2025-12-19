@@ -2,7 +2,7 @@
 
 const { isTrue } = require('../../dd-trace/src/util')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
-const { getResolvedEnv } = require('../../dd-trace/src/config-env-sources')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config-helper')
 
 class MongodbCorePlugin extends DatabasePlugin {
   static id = 'mongodb-core'
@@ -20,7 +20,7 @@ class MongodbCorePlugin extends DatabasePlugin {
   configure (config) {
     super.configure(config)
 
-    const heartbeatFromEnv = getResolvedEnv('DD_TRACE_MONGODB_HEARTBEAT_ENABLED')
+    const heartbeatFromEnv = getValueFromEnvSources('DD_TRACE_MONGODB_HEARTBEAT_ENABLED')
 
     this.config.heartbeatEnabled = config.heartbeatEnabled ??
       (heartbeatFromEnv && isTrue(heartbeatFromEnv)) ??

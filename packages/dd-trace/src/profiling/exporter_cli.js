@@ -3,7 +3,7 @@
 const fs = require('fs')
 const { fileURLToPath } = require('url')
 const { SourceMapper, heap, encode } = require('@datadog/pprof')
-const { getResolvedEnv } = require('../config-env-sources')
+const { getValueFromEnvSources } = require('../config-helper')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 
@@ -17,9 +17,9 @@ function exporterFromURL (url) {
   if (url.protocol === 'file:') {
     return new FileExporter({ pprofPrefix: fileURLToPath(url) })
   }
-  const injectionEnabled = (getResolvedEnv('DD_INJECTION_ENABLED') ?? '').split(',')
+  const injectionEnabled = (getValueFromEnvSources('DD_INJECTION_ENABLED') ?? '').split(',')
   const libraryInjected = injectionEnabled.length > 0
-  const profilingEnabled = (getResolvedEnv('DD_PROFILING_ENABLED') ?? '').toLowerCase()
+  const profilingEnabled = (getValueFromEnvSources('DD_PROFILING_ENABLED') ?? '').toLowerCase()
   const activation = ['true', '1'].includes(profilingEnabled)
     ? 'manual'
     : profilingEnabled === 'auto'
