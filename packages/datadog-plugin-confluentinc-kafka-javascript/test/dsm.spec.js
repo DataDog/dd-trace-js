@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
@@ -114,7 +114,7 @@ describe('Plugin', () => {
           it('Should set a checkpoint on produce', async () => {
             const messages = [{ key: 'consumerDSM1', value: 'test2' }]
             await sendMessages(kafka, testTopic, messages)
-            expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
+            assert.strictEqual(setDataStreamsContextSpy.args[0][0].hash, expectedProducerHash)
           })
 
           it('Should set a checkpoint on consume (eachMessage)', async () => {
@@ -131,7 +131,7 @@ describe('Plugin', () => {
             )
 
             for (const runArg of runArgs) {
-              expect(runArg.hash).to.equal(expectedConsumerHash)
+              assert.strictEqual(runArg.hash, expectedConsumerHash)
             }
           })
 
@@ -148,7 +148,7 @@ describe('Plugin', () => {
               async () => await consumerReceiveMessagePromise
             )
             for (const runArg of runArgs) {
-              expect(runArg.hash).to.equal(expectedConsumerHash)
+              assert.strictEqual(runArg.hash, expectedConsumerHash)
             }
           })
 
@@ -159,7 +159,7 @@ describe('Plugin', () => {
             }
             const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
             await sendMessages(kafka, testTopic, messages)
-            expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
             recordCheckpointSpy.restore()
           })
 
@@ -172,7 +172,7 @@ describe('Plugin', () => {
             let consumerReceiveMessagePromise
             await consumer.run({
               eachMessage: async () => {
-                expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+                assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
                 recordCheckpointSpy.restore()
                 consumerReceiveMessagePromise = Promise.resolve()
               }
@@ -223,7 +223,7 @@ describe('Plugin', () => {
             await consumer.disconnect()
 
             for (const call of setOffsetSpy.getCalls()) {
-              expect(call.args[0]).to.not.have.property('type', 'kafka_commit')
+              assert.notStrictEqual(call.args[0]?.type, 'kafka_commit')
             }
 
             const newConsumer = kafka.consumer({
@@ -241,18 +241,18 @@ describe('Plugin', () => {
 
             // Check our work
             const runArg = setOffsetSpy.lastCall.args[0]
-            expect(runArg).to.have.property('offset', commitMeta.offset)
-            expect(runArg).to.have.property('partition', commitMeta.partition)
-            expect(runArg).to.have.property('topic', commitMeta.topic)
-            expect(runArg).to.have.property('type', 'kafka_commit')
-            expect(runArg).to.have.property('consumer_group', groupId)
+            assert.strictEqual(runArg?.offset, commitMeta.offset)
+            assert.strictEqual(runArg?.partition, commitMeta.partition)
+            assert.strictEqual(runArg?.topic, commitMeta.topic)
+            assert.strictEqual(runArg?.type, 'kafka_commit')
+            assert.strictEqual(runArg?.consumer_group, groupId)
           })
 
           it('Should add backlog on producer response', async () => {
             await sendMessages(kafka, testTopic, messages)
-            expect(setOffsetSpy).to.be.calledOnce
+            sinon.assert.calledOnce(setOffsetSpy)
             const { topic } = setOffsetSpy.lastCall.args[0]
-            expect(topic).to.equal(testTopic)
+            assert.strictEqual(topic, testTopic)
           })
         })
 
@@ -293,19 +293,19 @@ describe('Plugin', () => {
 
             try {
               await producer.send({ topic: testTopic, messages: testMessages })
-              expect.fail('First producer.send() should have thrown an error')
+              assert.fail('First producer.send() should have thrown an error')
             } catch (e) {
-              expect(e).to.equal(error)
+              assert.strictEqual(e, error)
             }
             // Verify headers were injected in the first attempt
-            expect(testMessages[0].headers[0]).to.have.property('x-datadog-trace-id')
+            assert.ok(Object.hasOwn(testMessages[0].headers[0], 'x-datadog-trace-id'))
 
             // restore the stub to allow the next send to succeed
             produceStub.restore()
 
             const result = await producer.send({ topic: testTopic, messages: testMessages2 })
-            expect(testMessages2[0].headers).to.be.null
-            expect(result).to.not.be.undefined
+            assert.strictEqual(testMessages2[0].headers, null)
+            assert.notStrictEqual(result, undefined)
           })
         })
       })

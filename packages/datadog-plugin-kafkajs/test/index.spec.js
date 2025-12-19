@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const { randomUUID } = require('node:crypto')
 
-const { expect } = require('chai')
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
@@ -106,7 +105,6 @@ describe('Plugin', () => {
 
             const expectedSpanPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
-
               assertObjectContains(span, {
                 name: resourceName,
                 service: expectedSchema.send.serviceName,
@@ -138,7 +136,7 @@ describe('Plugin', () => {
             it('should not extract bootstrap servers when initialized with a function', async () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
-                expect(span.meta).to.not.have.any.keys(['messaging.kafka.bootstrap.servers'])
+                assert.ok(!((['messaging.kafka.bootstrap.servers']).some(k => Object.hasOwn((span.meta), k))))
               })
 
               kafka = new Kafka({
@@ -193,7 +191,7 @@ describe('Plugin', () => {
             it('should hit an error for the first send and not inject headers in later sends', async () => {
               await assert.rejects(producer.send({ topic: testTopic, messages }), error)
 
-              expect(messages[0].headers).to.have.property('x-datadog-trace-id')
+              assert.ok(Object.hasOwn(messages[0].headers, 'x-datadog-trace-id'))
 
               // restore the stub to allow the next send to succeed
               sendRequestStub.restore()
@@ -383,7 +381,7 @@ describe('Plugin', () => {
             let eachMessage = async ({ topic, partition, message }) => {
               setImmediate(() => {
                 try {
-                  expect(spy).to.have.been.calledOnceWith(undefined, beforeFinish.name)
+                  sinon.assert.calledOnceWithExactly(spy, undefined, beforeFinish.name)
 
                   done()
                 } catch (e) {

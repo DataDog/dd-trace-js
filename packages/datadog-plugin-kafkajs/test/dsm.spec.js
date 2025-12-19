@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 const { randomUUID } = require('crypto')
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
@@ -13,6 +12,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
 
@@ -199,7 +199,7 @@ describe('Plugin', () => {
               await deferred.promise
               await consumer.disconnect() // Flush ongoing `eachMessage` calls
               for (const call of setOffsetSpy.getCalls()) {
-                expect(call.args[0]).to.not.have.property('type', 'kafka_commit')
+                assert.notStrictEqual(call.args[0]?.type, 'kafka_commit')
               }
 
               /**
@@ -215,18 +215,20 @@ describe('Plugin', () => {
 
               // Check our work
               const runArg = setOffsetSpy.lastCall.args[0]
-              expect(setOffsetSpy).to.be.calledOnce
-              expect(runArg).to.have.property('offset', commitMeta.offset)
-              expect(runArg).to.have.property('partition', commitMeta.partition)
-              expect(runArg).to.have.property('topic', commitMeta.topic)
-              expect(runArg).to.have.property('type', 'kafka_commit')
-              expect(runArg).to.have.property('consumer_group', 'test-group')
+              sinon.assert.calledOnce(setOffsetSpy)
+              assert.strictEqual(runArg?.offset, commitMeta.offset)
+              assert.strictEqual(runArg?.partition, commitMeta.partition)
+              assert.strictEqual(runArg?.topic, commitMeta.topic)
+              assertObjectContains(runArg, {
+                type: 'kafka_commit',
+                consumer_group: 'test-group'
+              })
             })
           }
 
           it('Should add backlog on producer response', async () => {
             await sendMessages(kafka, testTopic, messages)
-            expect(setOffsetSpy).to.be.calledOnce
+            sinon.assert.calledOnce(setOffsetSpy)
             const { topic } = setOffsetSpy.lastCall.args[0]
             assert.strictEqual(topic, testTopic)
           })

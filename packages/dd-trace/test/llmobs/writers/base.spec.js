@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -267,8 +266,7 @@ describe('BaseLLMObsWriter', () => {
       sinon.assert.calledWith(clearInterval, writer._periodic)
       sinon.assert.calledWith(process.removeListener, 'beforeExit', writer._beforeExitHandler)
       sinon.assert.calledOnce(writer.flush)
-      expect(logger.debug)
-        .to.have.been.calledWith('Stopping BaseLLMObsWriter')
+      sinon.assert.calledWith(logger.debug, 'Stopping BaseLLMObsWriter')
     })
 
     it('does not destroy more than once', () => {

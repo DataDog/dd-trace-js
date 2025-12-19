@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
 
 const axios = require('axios')
-const { expect } = require('chai')
+
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
@@ -200,7 +200,7 @@ describe('Plugin', () => {
               try {
                 sinon.assert.called(childSpan.finish)
                 sinon.assert.called(parentSpan.finish)
-                expect(parentSpan.finish).to.have.been.calledAfter(childSpan.finish)
+                assert.strictEqual(parentSpan.finish.calledAfter(childSpan.finish), true)
                 assert.strictEqual(childSpan.context()._parentId.toString(10), parentSpan.context().toSpanId())
                 assert.notStrictEqual(parentSpan.context()._parentId, null)
                 done()

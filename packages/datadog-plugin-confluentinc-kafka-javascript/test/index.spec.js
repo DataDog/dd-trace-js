@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
 const { randomUUID } = require('node:crypto')
@@ -10,6 +10,7 @@ const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/he
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema } = require('./naming')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   const module = '@confluentinc/kafka-javascript'
@@ -98,14 +99,14 @@ describe('Plugin', () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
-                expect(span).to.include({
+                assertObjectContains(span, {
                   name: expectedSchema.send.opName,
                   service: expectedSchema.send.serviceName,
                   resource: testTopic,
                   error: 1
                 })
 
-                expect(span.meta).to.include({
+                assertObjectContains(span.meta, {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
@@ -172,8 +173,8 @@ describe('Plugin', () => {
                 const currentSpan = tracer.scope().active()
 
                 try {
-                  expect(currentSpan).to.not.equal(firstSpan)
-                  expect(currentSpan.context()._name).to.equal(expectedSchema.receive.opName)
+                  assert.notStrictEqual(currentSpan, firstSpan)
+                  assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
                   done()
                 } catch (e) {
                   done(e)
@@ -192,13 +193,13 @@ describe('Plugin', () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
-                expect(span).to.include({
+                assertObjectContains(span, {
                   name: 'kafka.consume',
                   service: 'test-kafka',
                   resource: testTopic
                 })
 
-                expect(parseInt(span.parent_id.toString())).to.be.gt(0)
+                assert.ok(parseInt(span.parent_id.toString()) > 0)
               }, { timeoutMs: 10000 })
 
               let consumerReceiveMessagePromise
@@ -318,18 +319,18 @@ describe('Plugin', () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
-                expect(span).to.include({
+                assertObjectContains(span, {
                   name: expectedSchema.send.opName,
                   service: expectedSchema.send.serviceName,
                   error: 1
                 })
 
-                expect(span.meta).to.include({
+                assertObjectContains(span.meta, {
                   component: 'confluentinc-kafka-javascript'
                 })
 
-                expect(span.meta[ERROR_TYPE]).to.exist
-                expect(span.meta[ERROR_MESSAGE]).to.exist
+                assert.ok(span.meta[ERROR_TYPE])
+                assert.ok(span.meta[ERROR_MESSAGE])
               }, { timeoutMs: 10000 })
 
               try {
@@ -439,13 +440,13 @@ describe('Plugin', () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
-                expect(span).to.include({
+                assertObjectContains(span, {
                   name: 'kafka.consume',
                   service: 'test-kafka',
                   resource: testTopic
                 })
 
-                expect(parseInt(span.parent_id.toString())).to.be.gt(0)
+                assert.ok(parseInt(span.parent_id.toString()) > 0)
               }, { timeoutMs: 10000 })
               nativeConsumer.setDefaultConsumeTimeout(10)
               nativeConsumer.subscribe([testTopic])

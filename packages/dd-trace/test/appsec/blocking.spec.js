@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -75,12 +74,14 @@ describe('blocking', () => {
       const blocked = block(req, res, rootSpan)
 
       assert.strictEqual(blocked, false)
-      expect(log.warn).to.have.been
-        .calledOnceWithExactly('[ASM] Cannot send blocking response when headers have already been sent')
+      sinon.assert.calledOnceWithExactly(
+        log.warn,
+        '[ASM] Cannot send blocking response when headers have already been sent'
+      )
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.block.failed', 1)
       sinon.assert.notCalled(res.setHeader)
       sinon.assert.notCalled(res.constructor.prototype.end)
-      expect(telemetry.updateBlockFailureMetric).to.be.calledOnceWithExactly(req)
+      sinon.assert.calledOnceWithExactly(telemetry.updateBlockFailureMetric, req)
     })
 
     it('should send blocking response with html type if present in the headers', () => {

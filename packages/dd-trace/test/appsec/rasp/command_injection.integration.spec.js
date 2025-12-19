@@ -71,12 +71,12 @@ describe('RASP - command_injection - integration', () => {
           const evalSerie = series.find(s => s.metric === 'rasp.rule.eval')
           const matchSerie = series.find(s => s.metric === 'rasp.rule.match')
 
-          assert.ok(evalSerie != null)
+          assert.ok(evalSerie)
           assert.ok(evalSerie.tags.includes('rule_type:command_injection'))
           assert.ok(evalSerie.tags.includes(`rule_variant:${variant}`))
           assert.strictEqual(evalSerie.type, 'count')
 
-          assert.ok(matchSerie != null)
+          assert.ok(matchSerie)
           assert.ok(matchSerie.tags.includes('rule_type:command_injection'))
           assert.ok(matchSerie.tags.includes(`rule_variant:${variant}`))
           assert.strictEqual(matchSerie.type, 'count')

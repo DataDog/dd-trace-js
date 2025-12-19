@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const { hostname } = require('node:os')
@@ -10,7 +9,7 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
-const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
+const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
@@ -221,7 +220,7 @@ describe('DataStreamsProcessor', () => {
     processor = new DataStreamsProcessor(config)
     clearTimeout(processor.timer)
 
-    expect(DataStreamsWriter).to.be.calledWith({
+    sinon.assert.calledWith(DataStreamsWriter, {
       hostname: config.hostname,
       port: config.port,
       url: config.url
@@ -294,7 +293,7 @@ describe('DataStreamsProcessor', () => {
   it('should export on interval', () => {
     processor.recordCheckpoint(mockCheckpoint)
     processor.onInterval()
-    expect(writer.flush).to.be.calledWith({
+    sinon.assert.calledWith(writer.flush, {
       Env: 'test',
       Service: 'service1',
       Version: 'v1',

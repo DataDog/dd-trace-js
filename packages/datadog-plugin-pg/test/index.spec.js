@@ -11,6 +11,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const ddpv = require('mocha/package.json').version
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const clients = {
   pg: pg => pg.Client
@@ -71,13 +72,19 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
               assert.strictEqual(traces[0][0].resource, 'SELECT $1::text as message')
               assert.strictEqual(traces[0][0].type, 'sql')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta['db.name'], 'postgres')
-              assert.strictEqual(traces[0][0].meta['db.user'], 'postgres')
-              assert.strictEqual(traces[0][0].meta['db.type'], 'postgres')
-              assert.strictEqual(traces[0][0].meta.component, 'pg')
-              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'pg')
-              assert.strictEqual(traces[0][0].metrics['network.destination.port'], 5432)
+              assertObjectContains(traces[0][0], {
+                meta: {
+                  'span.kind': 'client',
+                  'db.name': 'postgres',
+                  'db.user': 'postgres',
+                  'db.type': 'postgres',
+                  component: 'pg',
+                  '_dd.integration': 'pg'
+                },
+                metrics: {
+                  'network.destination.port': 5432
+                }
+              })
 
               if (implementation !== 'pg.native') {
                 assert.ok(Object.hasOwn(traces[0][0].metrics, 'db.pid'))
@@ -119,12 +126,18 @@ describe('Plugin', () => {
                 assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
                 assert.strictEqual(traces[0][0].resource, 'SELECT $1::text as message')
                 assert.strictEqual(traces[0][0].type, 'sql')
-                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                assert.strictEqual(traces[0][0].meta['db.name'], 'postgres')
-                assert.strictEqual(traces[0][0].meta['db.user'], 'postgres')
-                assert.strictEqual(traces[0][0].meta['db.type'], 'postgres')
-                assert.strictEqual(traces[0][0].meta.component, 'pg')
-                assert.strictEqual(traces[0][0].metrics['network.destination.port'], 5432)
+                assertObjectContains(traces[0][0], {
+                  meta: {
+                    'span.kind': 'client',
+                    'db.name': 'postgres',
+                    'db.user': 'postgres',
+                    'db.type': 'postgres',
+                    component: 'pg'
+                  },
+                  metrics: {
+                    'network.destination.port': 5432
+                  }
+                })
 
                 if (implementation !== 'pg.native') {
                   assert.ok(Object.hasOwn(traces[0][0].metrics, 'db.pid'))
@@ -143,11 +156,17 @@ describe('Plugin', () => {
             let error
 
             agent.assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
-              assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
-              assert.strictEqual(traces[0][0].meta.component, 'pg')
-              assert.strictEqual(traces[0][0].metrics['network.destination.port'], 5432)
+              assertObjectContains(traces[0][0], {
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'pg'
+                },
+                metrics: {
+                  'network.destination.port': 5432
+                }
+              })
             })
               .then(done)
               .catch(done)
@@ -165,16 +184,19 @@ describe('Plugin', () => {
             let error
 
             agent.assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
+              assertObjectContains(traces[0][0].meta, {
+                [ERROR_TYPE]: error.name,
+                [ERROR_MESSAGE]: error.message,
+                component: 'pg'
+              })
 
               // pg modifies stacktraces as of v8.11.1
               const actualErrorNoStack = traces[0][0].meta[ERROR_STACK].split('\n')[0]
               const expectedErrorNoStack = error.stack.split('\n')[0]
               assert.deepStrictEqual(actualErrorNoStack, expectedErrorNoStack)
-
-              assert.strictEqual(traces[0][0].meta.component, 'pg')
-              assert.strictEqual(traces[0][0].metrics['network.destination.port'], 5432)
+              assertObjectContains(traces[0][0].metrics, {
+                'network.destination.port': 5432
+              })
             })
               .then(done)
               .catch(done)
@@ -234,12 +256,18 @@ describe('Plugin', () => {
                     assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
                     assert.strictEqual(traces[0][0].resource, 'SELECT * FROM generate_series(0, 1) num')
                     assert.strictEqual(traces[0][0].type, 'sql')
-                    assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                    assert.strictEqual(traces[0][0].meta['db.name'], 'postgres')
-                    assert.strictEqual(traces[0][0].meta['db.type'], 'postgres')
-                    assert.strictEqual(traces[0][0].meta.component, 'pg')
-                    assert.strictEqual(traces[0][0].metrics['db.stream'], 1)
-                    assert.strictEqual(traces[0][0].metrics['network.destination.port'], 5432)
+                    assertObjectContains(traces[0][0], {
+                      meta: {
+                        'span.kind': 'client',
+                        'db.name': 'postgres',
+                        'db.type': 'postgres',
+                        component: 'pg'
+                      },
+                      metrics: {
+                        'db.stream': 1,
+                        'network.destination.port': 5432
+                      }
+                    })
                   })
 
                   const cursor = client.query(new Cursor('SELECT * FROM generate_series(0, 1) num'))
@@ -265,12 +293,18 @@ describe('Plugin', () => {
                     assert.strictEqual(traces[0][0].resource, 'SELECT * FROM generate_series(0, 1) num')
                     assert.strictEqual(traces[0][0].type, 'sql')
                     assert.strictEqual(traces[0][0].error, 0)
-                    assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                    assert.strictEqual(traces[0][0].meta['db.name'], 'postgres')
-                    assert.strictEqual(traces[0][0].meta['db.type'], 'postgres')
-                    assert.strictEqual(traces[0][0].meta.component, 'pg')
-                    assert.strictEqual(traces[0][0].metrics['db.stream'], 1)
-                    assert.strictEqual(traces[0][0].metrics['network.destination.port'], 5432)
+                    assertObjectContains(traces[0][0], {
+                      meta: {
+                        'span.kind': 'client',
+                        'db.name': 'postgres',
+                        'db.type': 'postgres',
+                        component: 'pg'
+                      },
+                      metrics: {
+                        'db.stream': 1,
+                        'network.destination.port': 5432
+                      }
+                    })
                   })
 
                   const query = new QueryStream('SELECT * FROM generate_series(0, 1) num', [])
@@ -294,12 +328,18 @@ describe('Plugin', () => {
                     assert.strictEqual(traces[0][0].resource, 'SELECT * FROM generate_series(0, 1) num')
                     assert.strictEqual(traces[0][0].type, 'sql')
                     assert.strictEqual(traces[0][0].error, 1)
-                    assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                    assert.strictEqual(traces[0][0].meta['db.name'], 'postgres')
-                    assert.strictEqual(traces[0][0].meta['db.type'], 'postgres')
-                    assert.strictEqual(traces[0][0].meta.component, 'pg')
-                    assert.strictEqual(traces[0][0].metrics['db.stream'], 1)
-                    assert.strictEqual(traces[0][0].metrics['network.destination.port'], 5432)
+                    assertObjectContains(traces[0][0], {
+                      meta: {
+                        'span.kind': 'client',
+                        'db.name': 'postgres',
+                        'db.type': 'postgres',
+                        component: 'pg'
+                      },
+                      metrics: {
+                        'db.stream': 1,
+                        'network.destination.port': 5432
+                      }
+                    })
                   })
 
                   const query = new QueryStream('SELECT * FROM generate_series(0, 1) num', [])
@@ -609,7 +649,9 @@ describe('Plugin', () => {
 
         it('query should inject _dd.dbm_trace_injected into span', done => {
           agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].meta['_dd.dbm_trace_injected'], 'true')
+            assertObjectContains(traces[0][0].meta, {
+              '_dd.dbm_trace_injected': 'true'
+            })
             done()
           })
 
