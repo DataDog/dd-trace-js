@@ -318,7 +318,7 @@ class PlaywrightPlugin extends CiPlugin {
     }) => {
       if (!span) return
 
-      const isRUMActive = span.context()._tags[TEST_IS_RUM_ACTIVE]
+      const isRUMActive = span.context().getTag(TEST_IS_RUM_ACTIVE)
 
       span.setTag(TEST_STATUS, testStatus)
 
@@ -399,7 +399,7 @@ class PlaywrightPlugin extends CiPlugin {
         TELEMETRY_EVENT_FINISHED,
         'test',
         {
-          hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS],
+          hasCodeOwners: !!span.context().getTag(TEST_CODE_OWNERS),
           isNew,
           isRum: isRUMActive,
           browserDriver: 'playwright',

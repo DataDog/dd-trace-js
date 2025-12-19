@@ -13,7 +13,7 @@ class LangChainLLMObsHandler {
   }
 
   getName ({ span }) {
-    return span?.context()._tags?.['resource.name']
+    return span?.context()?.getTag('resource.name')
   }
 
   setMetaTags () {}

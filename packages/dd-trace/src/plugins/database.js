@@ -15,7 +15,7 @@ class DatabasePlugin extends StoragePlugin {
    * @returns {string}
    */
   #createDBMPropagationCommentService (serviceName, span, peerData) {
-    const spanTags = span.context()._tags
+    const spanTags = span.context().getTags()
     const encodedDddb = encode(spanTags['db.name'])
     const encodedDddbs = encode(serviceName)
     const encodedDde = encode(this.tracer._env)

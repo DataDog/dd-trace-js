@@ -140,7 +140,7 @@ class SchemaExtractor {
       return
     }
 
-    if (span.context()._tags[SCHEMA_TYPE] && operation === 'serialization') {
+    if (span.context().getTag(SCHEMA_TYPE) && operation === 'serialization') {
       // we have already added a schema to this span, this call is an encode of nested schema types
       return
     }

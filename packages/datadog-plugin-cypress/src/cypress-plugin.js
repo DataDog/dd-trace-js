@@ -1052,7 +1052,7 @@ class CypressPlugin {
         // test spans are finished at after:spec
         const activeSpanTags = this.activeTestSpan.context()._tags
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-          hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS],
+          hasCodeOwners: !!this.activeTestSpan.context().getTag(TEST_CODE_OWNERS),
           isNew,
           isRum: isRUMActive,
           browserDriver: 'cypress',

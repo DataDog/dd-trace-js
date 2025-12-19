@@ -2543,6 +2543,16 @@
         "default": "false"
       }
     ],
+    "DD_TRACE_EXPERIMENTAL_NATIVE_SPANS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "experimental.nativeSpans.enabled"
+        ],
+        "default": "false"
+      }
+    ],
     "DD_TRACE_EXPERIMENTAL_SPAN_COUNTS": [
       {
         "implementation": "A",

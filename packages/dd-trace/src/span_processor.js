@@ -72,7 +72,7 @@ class SpanProcessor {
 
     // Check for manual override tags first (stays in JS)
     const manualPriority = this._prioritySampler._getPriorityFromTags(
-      spanContext._tags,
+      spanContext.getTags(),
       spanContext
     )
 
@@ -87,14 +87,17 @@ class SpanProcessor {
         this._syncSamplingToNative(spanContext, nativeSpanId)
       }
     } else {
-      // No manual override - use native sampling
-      const nativeSpanId = spanContext._nativeSpanId ?? spanContext._spanId.toBigInt()
-      const priority = this._nativeSpans.sample(nativeSpanId)
-
-      // Set result in JS context for propagation
-      spanContext._sampling.priority = priority
-      // Native sampling mechanism will be determined by native side
-      // We don't set mechanism here as native handles it
+      // No manual override - use native sampling if span is in native storage
+      if (spanContext._nativeSpanId !== undefined) {
+        const priority = this._nativeSpans.sample(spanContext._nativeSpanId)
+        // Set result in JS context for propagation
+        spanContext._sampling.priority = priority
+        // Native sampling mechanism will be determined by native side
+        // We don't set mechanism here as native handles it
+      } else {
+        // Span not in native storage (e.g., OTel spans) - fall back to JS sampling
+        this._prioritySampler.sample(spanContext)
+      }
     }
 
     // Add decision maker tag
