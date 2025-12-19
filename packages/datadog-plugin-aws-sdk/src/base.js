@@ -5,8 +5,7 @@ const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
-const { getResolvedEnv } = require('../../dd-trace/src/config-env-sources')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config-helper')
 
 class BaseAwsSdkPlugin extends ClientPlugin {
   static id = 'aws'
@@ -191,7 +190,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
   isEnabled (request) {
     const serviceId = this.serviceIdentifier.toUpperCase()
-    const envVarValue = getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`) // I'm not sure about this one
+    const envVarValue = getValueFromEnvSources(`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`)
     return envVarValue ? isTrue(envVarValue) : true
   }
 
@@ -274,10 +273,9 @@ function normalizeConfig (config, serviceIdentifier) {
   const serviceId = serviceIdentifier.toUpperCase()
   const batchPropagationEnabled = isTrue(
     specificConfig.batchPropagationEnabled ??
-    // Or this one
-    getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`) ??
+    getValueFromEnvSources(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`) ??
     config.batchPropagationEnabled ??
-    getResolvedEnv('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED')
+    getValueFromEnvSources('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED')
   )
 
   // Merge the specific config back into the main config

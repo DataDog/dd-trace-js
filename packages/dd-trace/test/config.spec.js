@@ -13,8 +13,11 @@ const path = require('node:path')
 require('./setup/core')
 
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
-const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
-const { resetConfigEnvSources } = require('../src/config-env-sources')
+const {
+  getEnvironmentVariable,
+  getEnvironmentVariables,
+  _resetStableConfigForTesting
+} = require('../src/config-helper')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../version')
 
@@ -2820,7 +2823,7 @@ describe('Config', () => {
       tempDir = fs.mkdtempSync(path.join(baseTempDir, 'config-test-'))
       process.env.DD_TEST_LOCAL_CONFIG_PATH = path.join(tempDir, 'local.yaml')
       process.env.DD_TEST_FLEET_CONFIG_PATH = path.join(tempDir, 'fleet.yaml')
-      resetConfigEnvSources()
+      _resetStableConfigForTesting()
     })
 
     afterEach(() => {
@@ -2874,7 +2877,7 @@ rules:
     configuration:
       DD_SERVICE: service_local_stable
 `)
-      resetConfigEnvSources()
+      _resetStableConfigForTesting()
 
       const config2 = getConfig()
       expect(config2).to.have.property(
@@ -2885,7 +2888,7 @@ rules:
 
       // 3. Env > Local stable > Default
       process.env.DD_SERVICE = 'service_env'
-      resetConfigEnvSources()
+      _resetStableConfigForTesting()
 
       const config3 = getConfig()
       expect(config3).to.have.property(
@@ -2907,7 +2910,7 @@ rules:
     configuration:
       DD_SERVICE: service_fleet_stable
 `)
-      resetConfigEnvSources()
+      _resetStableConfigForTesting()
       const config4 = getConfig()
       expect(config4).to.have.property(
         'service',
@@ -3047,7 +3050,7 @@ apm_configuration_default:
   DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING: "all"
   DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: 5
 `)
-      resetConfigEnvSources()
+      _resetStableConfigForTesting()
       let config = getConfig()
       expect(config).to.have.property('apiKey', 'local-api-key')
       expect(config).to.have.property('appKey', 'local-app-key')
@@ -3062,7 +3065,7 @@ apm_configuration_default:
       process.env.DD_APP_KEY = 'env-app-key'
       process.env.DD_INSTRUMENTATION_INSTALL_ID = 'env-install-id'
       process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = '7'
-      resetConfigEnvSources()
+      _resetStableConfigForTesting()
       config = getConfig()
       expect(config).to.have.property('apiKey', 'env-api-key')
       expect(config).to.have.property('appKey', 'env-app-key')
@@ -3089,7 +3092,7 @@ rules:
       DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING: "all"
       DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: 15
 `)
-      resetConfigEnvSources()
+      _resetStableConfigForTesting()
       config = getConfig()
       expect(config).to.have.property('apiKey', 'fleet-api-key')
       expect(config).to.have.property('appKey', 'fleet-app-key')

@@ -5,7 +5,7 @@ const { isFalse, isTrue, normalizePluginEnvName } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
-const { getResolvedEnv } = require('./config-env-sources')
+const { getValueFromEnvSources } = require('./config-helper')
 
 // Test optimization plugins that should only be enabled when isCiVisibility is true
 const TEST_OPTIMIZATION_PLUGINS = new Set([
@@ -25,7 +25,7 @@ if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
   require('./lambda')
 }
 
-const DD_TRACE_DISABLED_PLUGINS = getResolvedEnv('DD_TRACE_DISABLED_PLUGINS')
+const DD_TRACE_DISABLED_PLUGINS = getValueFromEnvSources('DD_TRACE_DISABLED_PLUGINS')
 
 const disabledPlugins = new Set(
   DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(',').map(plugin => plugin.trim())
@@ -57,7 +57,7 @@ function maybeEnable (Plugin) {
 
 function getEnabled (Plugin) {
   const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
-  return getResolvedEnv(normalizePluginEnvName(envName))
+  return getValueFromEnvSources(normalizePluginEnvName(envName))
 }
 
 // TODO this must always be a singleton.

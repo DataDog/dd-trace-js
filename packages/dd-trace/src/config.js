@@ -17,8 +17,7 @@ const telemetryMetrics = require('./telemetry/metrics')
 const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
-const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./config-helper')
-const { getConfigEnvSources } = require('./config-env-sources')
+const { getEnvironmentVariable: getEnv, getEnvironmentVariables, getStableConfigSources } = require('./config-helper')
 const defaults = require('./config_defaults')
 const path = require('path')
 const { DD_MAJOR } = require('../../../version')
@@ -273,7 +272,7 @@ class Config {
   constructor (options = {}) {
     if (!isInServerlessEnvironment()) {
       // Bail out early if we're in a serverless environment, stable config isn't supported
-      const configEnvSources = getConfigEnvSources()
+      const configEnvSources = getStableConfigSources()
       this.stableConfig = {
         fleetEntries: configEnvSources.fleetStableConfig,
         localEntries: configEnvSources.localStableConfig,
