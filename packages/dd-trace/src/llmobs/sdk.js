@@ -69,7 +69,9 @@ class LLMObs extends NoopLLMObs {
     }
 
     this._config.llmobs.enabled = true
-    this._config.configure({ ...this._config, llmobs: llmobsConfig })
+    // TODO: It's not nice that it's copying the entire config object to just update the llmobs config.
+    // We should find a better way to do this.
+    this._config.updateOptions({ ...this._config, llmobs: llmobsConfig })
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)
