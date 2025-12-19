@@ -1,11 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
-const opentracing = require('opentracing')
+const opentracing = require('../../../../vendor/dist/opentracing')
 const proxyquire = require('proxyquire')
 
 const os = require('node:os')
@@ -368,7 +366,7 @@ describe('Tracer', () => {
     it('should handle errors', () => {
       tracer = new Tracer(config)
 
-      expect(() => tracer.inject({})).not.to.throw()
+      assert.doesNotThrow(() => tracer.inject({}))
       sinon.assert.calledOnce(log.error)
     })
 
@@ -426,7 +424,7 @@ describe('Tracer', () => {
     it('should handle errors', () => {
       tracer = new Tracer(config)
 
-      expect(() => tracer.extract()).not.to.throw()
+      assert.doesNotThrow(() => tracer.extract())
     })
   })
 })

@@ -16,11 +16,7 @@ try {
     platform: 'node',
     target: 'es2022',
     plugins: [ddPlugin],
-    external: [
-      'graphql/language/visitor',
-      'graphql/language/printer',
-      'graphql/utilities'
-    ]
+    external: []
   })
   console.log('ok') // eslint-disable-line no-console
 } finally {

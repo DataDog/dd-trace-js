@@ -1,88 +1,79 @@
-Component,Origin,License,Copyright
-require,@datadog/libdatadog,Apache license 2.0,Copyright 2024 Datadog Inc.
-require,@datadog/native-appsec,Apache license 2.0,Copyright 2018 Datadog Inc.
-require,@datadog/native-metrics,Apache license 2.0,Copyright 2018 Datadog Inc.
-require,@datadog/native-iast-taint-tracking,Apache license 2.0,Copyright 2018 Datadog Inc.
-require,@datadog/openfeature-node-server,Apache license 2.0,Copyright 2024 Datadog Inc.
-require,@datadog/pprof,Apache license 2.0,Copyright 2019 Google Inc.
-require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
-require,@datadog/wasm-js-rewriter,Apache license 2.0,Copyright 2018 Datadog Inc.
-require,@opentelemetry/api,Apache license 2.0,Copyright OpenTelemetry Authors
-require,@opentelemetry/api-logs,Apache license 2.0,Copyright OpenTelemetry Authors
-require,@opentelemetry/core,Apache license 2.0,Copyright OpenTelemetry Authors
-require,@opentelemetry/resources,Apache license 2.0,Copyright OpenTelemetry Authors
-require,@isaacs/ttlcache,Blue Oak,Copyright Isaac Z. Schlueter and Contributors
-require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
-require,dc-polyfill,MIT,Copyright 2023 Datadog Inc.
-require,escape-string-regexp,MIT,Copyright Sindre Sorhus
-require,ignore,MIT,Copyright 2013 Kael Zhang and contributors
-require,import-in-the-middle,Apache license 2.0,Copyright 2021 Datadog Inc.
-require,istanbul-lib-coverage,BSD-3-Clause,Copyright 2012-2015 Yahoo! Inc.
-require,jest-docblock,MIT,Copyright Meta Platforms, Inc. and affiliates.
-require,jsonpath-plus,MIT,Copyright (c) 2011-2019 Stefan Goessner, Subbu Allamaraju, Mike Brevoort, Robert Krahn, Brett Zamir, Richard Schneider
-require,limiter,MIT,Copyright 2011 John Hurliman
-require,lodash.sortby,MIT,Copyright JS Foundation and other contributors
-require,lru-cache,ISC,Copyright (c) 2010-2022 Isaac Z. Schlueter and Contributors
-require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
-require,mutexify,MIT,Copyright (c) 2014 Mathias Buus
-require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
-require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
-require,pprof-format,MIT,Copyright 2022 Stephen Belanger
-require,protobufjs,BSD-3-Clause,Copyright 2016 Daniel Wirtz
-require,tlhunter-sorted-set,MIT,Copyright (c) 2023 Datadog Inc.
-require,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
-require,rfdc,MIT,Copyright 2019 David Mark Clements
-require,semifies,Apache license 2.0,Copyright Authors
-require,shell-quote,mit,Copyright (c) 2013 James Halliday
-require,source-map,BSD-3-Clause,Copyright (c) 2009-2011, Mozilla Foundation and contributors
-require,ttl-set,MIT,Copyright (c) 2024 Thomas Watson
-dev,@babel/helpers,MIT,Copyright (c) 2014-present Sebastian McKenzie and other contributors
-dev,@types/chai,MIT,Copyright (c) Microsoft Corp.
-dev,@types/mocha,MIT,Copyright (c) Microsoft Corp.
-dev,@types/node,MIT,Copyright (c) Microsoft Corp.
-dev,@types/sinon,MIT,Copyright (c) Microsoft Corp.
-dev,@types/tap,MIT,Copyright (c) Microsoft Corp.
-dev,@eslint/eslintrc,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
-dev,@eslint/js,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
-dev,@msgpack/msgpack,ISC,Copyright 2019 The MessagePack Community
-dev,@openfeature/core,Apache-2.0,Copyright OpenFeature Authors
-dev,@openfeature/server-sdk,Apache-2.0,Copyright OpenFeature Authors
-dev,@stylistic/eslint-plugin,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
-dev,axios,MIT,Copyright 2014-present Matt Zabriskie
-dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
-dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson
-dev,bun,MIT,Copyright contributors
-dev,chai,MIT,Copyright 2017 Chai.js Assertion Library
-dev,eslint,MIT,Copyright JS Foundation and other contributors https://js.foundation
-dev,eslint-plugin-cypress,MIT,Copyright (c) 2019 Cypress.io
-dev,eslint-plugin-import,MIT,Copyright 2015 Ben Mosher
-dev,eslint-plugin-jsdoc,BSD-3-Clause,Copyright Gajus Kuizinas
-dev,eslint-plugin-mocha,MIT,Copyright 2014 Mathias Schreck
-dev,eslint-plugin-n,MIT,Copyright 2015 Toru Nagashima
-dev,eslint-plugin-promise,ISC,jden and other contributors
-dev,eslint-plugin-unicorn,MIT,Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
-dev,express,MIT,Copyright 2009-2014 TJ Holowaychuk 2013-2014 Roman Shtylman 2014-2015 Douglas Christopher Wilson
-dev,glob,ISC,Copyright Isaac Z. Schlueter and Contributors
-dev,globals,MIT,Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
-dev,graphql,MIT,Copyright 2015 Facebook Inc.
-dev,jszip,MIT,Copyright 2015-2016 Stuart Knightley and contributors
-dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
-dev,mocha-multi-reporters,MIT,Copyright 2015-2019 Yousaf Nabi and Stanley Ng
-dev,mocha-junit-reporter,MIT, Copyright 2015 Michael Allen
-dev,multer,MIT,Copyright 2014 Hage Yaapa
-dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
-dev,nyc,ISC,Copyright 2015 Contributors
-dev,octokit,MIT,Copyright 2023 Octokit contributors
-dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz
-dev,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
-dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
-dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
-dev,tap,ISC,Copyright 2011-2022 Isaac Z. Schlueter and Contributors
-dev,tiktoken,MIT,Copyright (c) 2022 OpenAI, Shantanu Jain
-dev,typescript,Apache license 2.0,Copyright Microsoft Corp.
-dev,workerpool,Apache license 2.0,Copyright (C) 2014-2024 Jos de Jong wjosdejong@gmail.com
-dev,yaml,ISC,Copyright Eemeli Aro <eemeli@gmail.com>
-dev,yarn-deduplicate,Apache license 2.0,Copyright [yyyy] [name of copyright owner]
-file,aws-lambda-nodejs-runtime-interface-client,Apache 2.0,Copyright 2019 Amazon.com Inc. or its affiliates. All Rights Reserved.
-file,profile.proto,Apache license 2.0,Copyright 2016 Google Inc.
-file,is-git-url,MIT,Copyright (c) 2017 Jon Schlinkert.
+"component","origin","license","copyright"
+"@datadog/flagging-core","https://github.com/DataDog/openfeature-js-client","['Apache-2.0']","['DataDog']"
+"@datadog/libdatadog","https://github.com/DataDog/libdatadog-nodejs","['Apache-2.0']","['Datadog Inc.']"
+"@datadog/native-appsec","https://github.com/DataDog/dd-native-appsec-js","['Apache-2.0']","['Datadog Inc.']"
+"@datadog/native-iast-taint-tracking","https://github.com/DataDog/dd-native-iast-taint-tracking-js","['Apache-2.0']","['Datadog Inc.']"
+"@datadog/native-metrics","https://github.com/DataDog/dd-native-metrics-js","['Apache-2.0']","['Datadog Inc.']"
+"@datadog/openfeature-node-server","https://github.com/DataDog/openfeature-js-client","['Apache-2.0']","['DataDog']"
+"@datadog/pprof","https://github.com/DataDog/pprof-nodejs","['Apache-2.0']","['Google Inc.']"
+"@datadog/sketches-js","https://github.com/DataDog/sketches-js","['Apache-2.0']","['DataDog']"
+"@datadog/source-map","npm:@datadog/source-map","[]","[]"
+"@datadog/wasm-js-rewriter","https://github.com/DataDog/dd-wasm-js-rewriter","['Apache-2.0']","['Datadog Inc.']"
+"@isaacs/ttlcache","https://github.com/isaacs/ttlcache","['BlueOak-1.0.0']","['Isaac Z. Schlueter']"
+"@jsep-plugin/assignment","https://github.com/EricSmekens/jsep","['MIT']","['Shelly']"
+"@jsep-plugin/regex","https://github.com/EricSmekens/jsep","['MIT']","['Shelly']"
+"@openfeature/server-sdk","https://github.com/open-feature/js-sdk","['Apache-2.0']","['open-feature']"
+"@opentelemetry/api","https://github.com/open-telemetry/opentelemetry-js","['Apache-2.0']","['OpenTelemetry Authors']"
+"@opentelemetry/api-logs","https://github.com/open-telemetry/opentelemetry-js","['Apache-2.0']","['OpenTelemetry Authors']"
+"@opentelemetry/core","https://github.com/open-telemetry/opentelemetry-js","['Apache-2.0']","['OpenTelemetry Authors']"
+"@opentelemetry/resources","https://github.com/open-telemetry/opentelemetry-js","['Apache-2.0']","['OpenTelemetry Authors']"
+"@opentelemetry/semantic-conventions","https://github.com/open-telemetry/opentelemetry-js","['Apache-2.0']","['OpenTelemetry Authors']"
+"@protobufjs/aspromise","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
+"@protobufjs/base64","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
+"@protobufjs/codegen","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
+"@protobufjs/eventemitter","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
+"@protobufjs/fetch","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
+"@protobufjs/float","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
+"@protobufjs/inquire","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
+"@protobufjs/path","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
+"@protobufjs/pool","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
+"@protobufjs/utf8","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
+"@types/node","https://github.com/DefinitelyTyped/DefinitelyTyped","['MIT']","['DefinitelyTyped']"
+"acorn","https://github.com/acornjs/acorn","['MIT']","['acornjs']"
+"acorn-import-attributes","https://github.com/xtuc/acorn-import-attributes","['MIT']","['Sven Sauleau']"
+"argparse","https://github.com/nodeca/argparse","['Python-2.0']","['nodeca']"
+"astring","https://github.com/davidbonnet/astring","['MIT']","['David Bonnet']"
+"cjs-module-lexer","https://github.com/nodejs/cjs-module-lexer","['MIT']","['Guy Bedford']"
+"crypto-randomuuid","npm:crypto-randomuuid","['MIT']","['Stephen Belanger']"
+"dc-polyfill","https://github.com/DataDog/dc-polyfill","['MIT']","['Thomas Hunter II']"
+"dd-trace","https://github.com/DataDog/dd-trace-js","['(Apache-2.0 OR BSD-3-Clause)']","['Datadog Inc. <info@datadoghq.com>']"
+"delay","https://github.com/sindresorhus/delay","['MIT']","['Sindre Sorhus']"
+"detect-newline","https://github.com/sindresorhus/detect-newline","['MIT']","['Sindre Sorhus']"
+"escape-string-regexp","https://github.com/sindresorhus/escape-string-regexp","['MIT']","['Sindre Sorhus']"
+"esquery","https://github.com/estools/esquery","['BSD-3-Clause']","['Joel Feenstra']"
+"estraverse","https://github.com/estools/estraverse","['BSD-2-Clause']","['estools']"
+"fast-fifo","https://github.com/mafintosh/fast-fifo","['MIT']","['Mathias Buus']"
+"ignore","https://github.com/kaelzhang/node-ignore","['MIT']","['kael']"
+"import-in-the-middle","https://github.com/nodejs/import-in-the-middle","['Apache-2.0']","['Bryan English']"
+"istanbul-lib-coverage","https://github.com/istanbuljs/istanbuljs","['BSD-3-Clause']","['Krishnan Anantheswaran']"
+"jest-docblock","https://github.com/jestjs/jest","['MIT']","['jestjs']"
+"js-yaml","https://github.com/nodeca/js-yaml","['MIT']","['Vladimir Zapparov']"
+"jsep","https://github.com/EricSmekens/jsep","['MIT']","['Stephen Oney']"
+"jsonpath-plus","https://github.com/JSONPath-Plus/JSONPath","['MIT']","['Stefan Goessner']"
+"limiter","https://github.com/jhurliman/node-rate-limiter","['MIT']","['John Hurliman']"
+"lodash.sortby","https://github.com/lodash/lodash","['MIT']","['John-David Dalton']"
+"long","https://github.com/dcodeIO/long.js","['Apache-2.0']","['Daniel Wirtz']"
+"lru-cache","https://github.com/isaacs/node-lru-cache","['ISC']","['Isaac Z. Schlueter']"
+"meriyah","https://github.com/meriyah/meriyah","['ISC']","['Kenny F.']"
+"module-details-from-path","https://github.com/watson/module-details-from-path","['MIT']","['Thomas Watson']"
+"mutexify","https://github.com/mafintosh/mutexify","['MIT']","['Mathias Buus']"
+"node-addon-api","https://github.com/nodejs/node-addon-api","['MIT']","['nodejs']"
+"node-gyp-build","https://github.com/prebuild/node-gyp-build","['MIT']","['Mathias Buus']"
+"opentracing","https://github.com/opentracing/opentracing-javascript","['Apache-2.0']","['opentracing']"
+"p-limit","https://github.com/sindresorhus/p-limit","['MIT']","['Sindre Sorhus']"
+"path-to-regexp","https://github.com/pillarjs/path-to-regexp","['MIT']","['pillarjs']"
+"pprof-format","https://github.com/DataDog/pprof-format","['MIT']","['Datadog Inc.']"
+"protobufjs","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
+"queue-tick","https://github.com/mafintosh/queue-tick","['MIT']","['Mathias Buus']"
+"retry","https://github.com/tim-kos/node-retry","['MIT']","['Tim Koschützki']"
+"rfdc","https://github.com/davidmarkclements/rfdc","['MIT']","['David Mark Clements']"
+"semifies","https://github.com/holepunchto/semifies","['Apache-2.0']","['Holepunch Inc']"
+"shell-quote","https://github.com/ljharb/shell-quote","['MIT']","['James Halliday']"
+"source-map","https://github.com/mozilla/source-map","['BSD-3-Clause']","['Nick Fitzgerald']"
+"spark-md5","https://github.com/satazor/js-spark-md5","['(WTFPL OR MIT)']","['André Cruz']"
+"tlhunter-sorted-set","https://github.com/tlhunter/node-sorted-set","['MIT']","['Thomas Hunter II']"
+"ttl-set","https://github.com/watson/ttl-set","['MIT']","['Thomas Watson']"
+"undici-types","https://github.com/nodejs/undici","['MIT']","['nodejs']"
+"yocto-queue","https://github.com/sindresorhus/yocto-queue","['MIT']","['Sindre Sorhus']"
+"aws-lambda-nodejs-runtime-interface-client","https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/v2.1.0/src/utils/UserFunction.ts","['Apache-2.0']","['Amazon.com Inc. or its affiliates']"
+"is-git-url","https://github.com/jonschlinkert/is-git-url/blob/396965ffabf2f46656c8af4c47bef1d69f09292e/index.js#L9C15-L9C87","['MIT']","['Jon Schlinkert']"

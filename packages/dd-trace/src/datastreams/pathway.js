@@ -5,7 +5,7 @@
 // this inconsistency is ok because hashes do not need to be consistent across services
 const crypto = require('crypto')
 const { encodeVarint, decodeVarint } = require('./encoding')
-const { LRUCache } = require('lru-cache')
+const { LRUCache } = require('../../../../vendor/dist/lru-cache')
 const log = require('../log')
 const pick = require('../../../datadog-core/src/utils/src/pick')
 

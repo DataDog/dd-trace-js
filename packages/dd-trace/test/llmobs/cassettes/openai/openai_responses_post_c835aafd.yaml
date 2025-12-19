@@ -1,0 +1,252 @@
+interactions:
+- request:
+    body: "{\n  \"include\": [\n    \"message.input_image.image_url\"\n  ],\n  \"prompt\":
+      {\n    \"id\": \"pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0\",\n
+      \   \"version\": \"2\",\n    \"variables\": {\n      \"user_message\": {\n        \"type\":
+      \"input_text\",\n        \"text\": \"Analyze these images and document\"\n      },\n
+      \     \"user_image_1\": {\n        \"type\": \"input_image\",\n        \"image_url\":
+      \"https://raw.githubusercontent.com/github/explore/main/topics/python/python.png\",\n
+      \       \"detail\": \"auto\"\n      },\n      \"user_file\": {\n        \"type\":
+      \"input_file\",\n        \"file_url\": \"https://www.berkshirehathaway.com/letters/2024ltr.pdf\"\n
+      \     },\n      \"user_image_2\": {\n        \"type\": \"input_image\",\n        \"file_id\":
+      \"file-BCuhT1HQ24kmtsuuzF1mh2\",\n        \"detail\": \"auto\"\n      }\n    }\n
+      \ }\n}"
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip,deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '770'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 4.87.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-os
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-package-version
+      : - 4.87.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-retry-count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime-version
+      : - v22.17.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-timeout
+      : - '600000'
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: "{\n  \"id\": \"resp_0defb38754369abf016925be280e08819c9b45d3b0659adde9\",\n
+        \ \"object\": \"response\",\n  \"created_at\": 1764081193,\n  \"status\":
+        \"completed\",\n  \"background\": false,\n  \"billing\": {\n    \"payer\":
+        \"developer\"\n  },\n  \"error\": null,\n  \"incomplete_details\": null,\n
+        \ \"instructions\": [\n    {\n      \"type\": \"message\",\n      \"content\":
+        [],\n      \"role\": \"developer\"\n    },\n    {\n      \"type\": \"message\",\n
+        \     \"content\": [\n        {\n          \"type\": \"input_text\",\n          \"text\":
+        \"Analyze the following content from the user:\\n\\nText message: Analyze
+        these images and document\\nImage reference 1: \"\n        },\n        {\n
+        \         \"type\": \"input_image\",\n          \"detail\": \"auto\",\n          \"file_id\":
+        null,\n          \"image_url\": \"https://raw.githubusercontent.com/github/explore/main/topics/python/python.png\"\n
+        \       },\n        {\n          \"type\": \"input_text\",\n          \"text\":
+        \"\\nDocument reference: \"\n        },\n        {\n          \"type\": \"input_file\",\n
+        \         \"file_id\": null,\n          \"file_url\": \"https://www.berkshirehathaway.com/letters/2024ltr.pdf\"\n
+        \       },\n        {\n          \"type\": \"input_text\",\n          \"text\":
+        \"\\nImage reference 2: \"\n        },\n        {\n          \"type\": \"input_image\",\n
+        \         \"detail\": \"auto\",\n          \"file_id\": \"file-BCuhT1HQ24kmtsuuzF1mh2\",\n
+        \         \"image_url\": null\n        },\n        {\n          \"type\":
+        \"input_text\",\n          \"text\": \"\\n\\nPlease provide a comprehensive
+        analysis.\"\n        }\n      ],\n      \"role\": \"user\"\n    }\n  ],\n
+        \ \"max_output_tokens\": null,\n  \"max_tool_calls\": null,\n  \"model\":
+        \"o4-mini-2025-04-16\",\n  \"output\": [\n    {\n      \"id\": \"rs_0defb38754369abf016925be2b1df8819cbc2aa9ea941447ec\",\n
+        \     \"type\": \"reasoning\",\n      \"summary\": []\n    },\n    {\n      \"id\":
+        \"msg_0defb38754369abf016925be36fb84819c93bab0b3d979bb97\",\n      \"type\":
+        \"message\",\n      \"status\": \"completed\",\n      \"content\": [\n        {\n
+        \         \"type\": \"output_text\",\n          \"annotations\": [],\n          \"logprobs\":
+        [],\n          \"text\": \"Here is a three-part analysis of what you\\u2019ve
+        provided:\\n\\n1. Image #1: the Python logo  \\n- This is the official two-snake
+        \\u201cPython\\u201d mark, signifying the Python programming language.  \\n-
+        Commonly used to label anything Python-related (code, tutorials, docs, etc.).
+        \ \\n- Visually it\\u2019s two stylized snake heads (blue and yellow) arranged
+        to suggest \\u201cPy\\u201d and form an abstract 2D badge.  \\n- If your goal
+        is to signal \\u201cuse Python to process the following,\\u201d this is the
+        right icon; if you want something more descriptive (e.g. \\u201cwe\\u2019ll
+        parse financial tables in Python\\u201d), you might pair it with a brief caption
+        or callout.\\n\\n2. Image #2: unreadable/blank  \\n- What appears to have
+        been uploaded is entirely black (no visible text or graphics).  \\n- If this
+        was meant to show source code, data, or a screenshot, please re-upload or
+        send a higher-contrast / higher-resolution version so that I can read it.
+        \ \\n\\n3. The Berkshire Hathaway 2024 Annual Letter (Warren Buffett, Feb.
+        22, 2025)  \\n   A. Structure & Tone  \\n   \\u00ad\\u2013 Opens by distinguishing
+        \\u201creport\\u201d (the mandated facts) from \\u201cletter\\u201d (the candid
+        commentary shareholders deserve).  \\n   \\u00ad\\u2013 Throughout, Buffett
+        balances humility (he confesses mistakes) with pride in the managers and businesses.
+        \ \\n   \\u00ad\\u2013 He repeatedly emphasizes transparency (\\u201cpraise
+        by name, criticize by category\\u201d), quick correction of errors (\\u201cno
+        thumb-sucking\\u201d), and alignment of incentives (he and his lieutenants
+        eat the same cooking: no option-based windfalls).\\n\\n   B. Major Themes
+        \ \\n   1. Admitting Mistakes  \\n     \\u2022 16 uses of \\u201cmistake\\u201d/\\u201cerror\\u201d
+        in 2019\\u201323; many large companies never use those words.  \\n     \\u2022
+        Personnel errors (hiring/managers) can hurt as much as a \\u201cfailed marriage.\\u201d
+        \ \\n     \\u2022 The worst sin is delay\\u2014when you see a problem, act
+        immediately.  \\n\\n   2. Championing Outstanding Individuals  \\n     \\u2022
+        Pete Liegl (Forest River): bought in 2005, ran the RV business brilliantly
+        for 19 years; negotiated his own modest pay.  \\n     \\u2022 GEICO under
+        Todd Combs: modernized underwriting, delivered spectacular 2024 results.  \\n
+        \    \\u2022 Ajit Jain: built P/C insurance into a global leader, generated
+        a cost-free (or nearly so) \\u201cfloat\\u201d of $171 billion.  \\n     \\u2022
+        Charlie Munger: the \\u201cone-of-a-kind\\u201d partner whose counsel and
+        contrarian thinking formed the moral core of Berkshire.  \\n\\n   3. 2024
+        Financial & Operating Performance  \\n     \\u2022 Operating earnings: $47.4
+        billion vs. $37.35 billion in 2023  \\n       \\u2013 Insurance underwriting:
+        $9.02 bB (up from $5.43 bB)  \\n       \\u2013 Insurance investment income:
+        $13.67 bB (from $9.57 bB)  \\n       \\u2013 BNSF (rail), energy, other controlled
+        and non-controlled businesses, FX gains  \\n     \\u2022 GAAP vs. \\u201coperating
+        earnings\\u201d: Buffett insists on excluding unrealized gains/losses in the
+        securities portfolio.  \\n     \\u2022 Float growth: from $46 bB (2004) to
+        $171 bB (2024); underwriting profit (after tax) averaged 3.3\\u00a2 per premium
+        dollar.  \\n\\n   4. Portfolio Composition & Capital Allocation  \\n     \\u2022
+        Controlled businesses (fully or \\u227380% owned): industrials, services,
+        utilities, transport, manufacturing\\u2014worth \\u201cmany hundreds of billions.\\u201d
+        \ \\n     \\u2022 Minority stakes (~20\\u201350%) in high-ROE household names:
+        Apple, American Express, Coca-Cola, Moody\\u2019s, Occidental, Kraft Heinz,
+        Berkadia. Total market value $272 bB at year-end (down from $354 bB).  \\n
+        \    \\u2022 Cash and T-bills: up sharply in 2024 as yields rose\\u2014but
+        still a small fraction versus equities.  \\n     \\u00ad\\u2013 Buffett\\u2019s
+        mantra: \\u201cWe will forever deploy a substantial majority of your money
+        in equities \\u2026 Berkshire will never prefer cash equivalents over good
+        businesses.\\u201d  \\n     \\u2022 Japanese trading houses: began in July
+        2019; now ~5 companies (ITOCHU, Marubeni, Mitsubishi, Mitsui, Sumitomo) with
+        cost $13.8 bB, MV $23.5 bB.  \\n     \\u00ad\\u2013 Funded in part by yen-denominated
+        debt; GAAP-required FX mark-to-market gains of $2.3 bB (pre-tax).\\n\\n   5.
+        Tax Record & Shareholder Returns  \\n     \\u2022 1965\\u20132024: compounded
+        annual gain in per-share market value of 19.9% vs. S&P 500\\u2019s 10.4%.
+        \ \\n     \\u2022 Paid a record $26.8 bB in U.S. federal corporate income
+        taxes in 2024 (\\u22485% of all U.S. corporate taxes).  \\n     \\u2022 Only
+        one dividend ever paid (1967 \\u2013 ten cents/share); shareholders have preferred
+        reinvestment and compounding.\\n\\n   6. Risks & Competitive Advantages  \\n
+        \    \\u00ad\\u2013 P/C Insurance: unique model (\\u201cmoney up front, claim
+        payments decades later\\u201d) requires sober underwriting and strong reserves.
+        \ \\n     \\u00ad\\u2013 Berkshire has no reliance on reinsurance, massive
+        balance-sheet strength, and a culture of caution (managers \\u201cnervous
+        but not paralyzed\\u201d).  \\n     \\u00ad\\u2013 However, climate change,
+        convective storms, and one \\u201cmonster event\\u201d could cause very large
+        claims; the company must price accordingly or walk away.\\n\\n   7. Shareholder
+        Meeting & Culture  \\n     \\u00ad\\u2013 Omaha, May 3, 2025: Q&A with Buffett,
+        Greg Abel and Ajit Jain; exhibit hall, branded merchandise, exclusive \\u201c60
+        Years of Berkshire Hathaway\\u201d book.  \\n     \\u00ad\\u2013 Emphasis
+        on fun, accessibility, and the grassroots \\u201cMidwestern\\u201d culture
+        that reinforces discipline and long-term thinking.\\n\\n   C. Strategic Takeaways
+        \ \\n   \\u00ad\\u2013 Buffett\\u2019s constant refrain is that intelligent,
+        long-term capital allocation in high-quality businesses\\u2014with happy,
+        incentivized managers\\u2014is the key to compounding returns.  \\n   \\u00ad\\u2013
+        Transparency about errors builds trust and forces management to recognize
+        reality.  \\n   \\u00ad\\u2013 Even at a gargantuan scale, Berkshire prizes
+        optionality (minority stakes), flexibility (floats, cash), and control (subsidiary
+        management).  \\n   \\u00ad\\u2013 The U.S. capitalist system\\u2014and disciplined
+        reinvestment of earnings rather than payouts\\u2014remains the bedrock of
+        Buffett\\u2019s success.\\n\\n   D. Questions / Next Steps  \\n   \\u00ad\\u2013
+        If you intended to have me extract the tables or parse the letter programmatically
+        (using Python), I can walk you through OCR+text-processing code.  \\n   \\u00ad\\u2013
+        If the mysterious second image contained data you need analyzed (e.g. a chart,
+        code snippet), please re-submit a clearer version.  \\n   \\u00ad\\u2013 Otherwise,
+        let me know if you\\u2019d like deeper dives on any section\\u2014underwriting
+        metrics, portfolio breakdown, tax implications, historical performance, etc.\"\n
+        \       }\n      ],\n      \"role\": \"assistant\"\n    }\n  ],\n  \"parallel_tool_calls\":
+        true,\n  \"previous_response_id\": null,\n  \"prompt\": {\n    \"id\": \"pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0\",\n
+        \   \"variables\": {\n      \"user_message\": {\n        \"type\": \"input_text\",\n
+        \       \"text\": \"Analyze these images and document\"\n      },\n      \"user_image_1\":
+        {\n        \"type\": \"input_image\",\n        \"detail\": \"auto\",\n        \"file_id\":
+        null,\n        \"image_url\": \"https://raw.githubusercontent.com/github/explore/main/topics/python/python.png\"\n
+        \     },\n      \"user_file\": {\n        \"type\": \"input_file\",\n        \"file_id\":
+        null,\n        \"file_url\": \"https://www.berkshirehathaway.com/letters/2024ltr.pdf\"\n
+        \     },\n      \"user_image_2\": {\n        \"type\": \"input_image\",\n
+        \       \"detail\": \"auto\",\n        \"file_id\": \"file-BCuhT1HQ24kmtsuuzF1mh2\",\n
+        \       \"image_url\": null\n      }\n    },\n    \"version\": \"2\"\n  },\n
+        \ \"prompt_cache_key\": null,\n  \"prompt_cache_retention\": null,\n  \"reasoning\":
+        {\n    \"effort\": \"medium\",\n    \"summary\": null\n  },\n  \"safety_identifier\":
+        null,\n  \"service_tier\": \"default\",\n  \"store\": false,\n  \"temperature\":
+        1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    },\n
+        \   \"verbosity\": \"medium\"\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\":
+        [],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n
+        \ \"usage\": {\n    \"input_tokens\": 11041,\n    \"input_tokens_details\":
+        {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 2751,\n    \"output_tokens_details\":
+        {\n      \"reasoning_tokens\": 1216\n    },\n    \"total_tokens\": 13792\n
+        \ },\n  \"user\": null,\n  \"metadata\": {}\n}"
+    headers:
+      CF-RAY:
+      - 9a41dc181e7fd52e-CDG
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 25 Nov 2025 14:33:40 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=_zAgOtKLI9baHHAYPbkey56VPYQLb7OhX8av7nfmhz8-1764081220-1.0.1.1-Bd0.XgEtb6OyUjXObwbSqdpAcEBgcWUGefbdEU4DDR.s9K2TBQT_.TxTMg9wHJsGz6Sn.jrnOMdcUOmPlHxlP9LTjVIctCXWUk9njN9ROVk;
+        path=/; expires=Tue, 25-Nov-25 15:03:40 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=8cjOw2lgdFeLh1HGjw55QqYEdWH.CxUpEDDM9BEcR6Q-1764081220820-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '28729'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '28732'
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149998470'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_8cc19b1468f448de98a3c33c64b75fea
+    status:
+      code: 200
+      message: OK
+version: 1

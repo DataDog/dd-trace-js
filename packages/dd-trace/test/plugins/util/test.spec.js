@@ -1,11 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, beforeEach, context } = require('tap').mocha
 const path = require('node:path')
-const istanbul = require('istanbul-lib-coverage')
+const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -239,9 +237,7 @@ describe('metadata validation', () => {
     const invalidMetadata5 = { [GIT_REPOSITORY_URL]: '', [CI_PIPELINE_URL]: '', [GIT_COMMIT_SHA]: '' }
     const invalidMetadatas = [invalidMetadata1, invalidMetadata2, invalidMetadata3, invalidMetadata4, invalidMetadata5]
     invalidMetadatas.forEach((invalidMetadata) => {
-      expect(
-        JSON.stringify(removeInvalidMetadata(invalidMetadata)), `${JSON.stringify(invalidMetadata)} is valid`
-      ).to.equal(JSON.stringify({}))
+      assert.strictEqual(JSON.stringify(removeInvalidMetadata(invalidMetadata)), JSON.stringify({}))
     })
   })
 
@@ -263,7 +259,7 @@ describe('metadata validation', () => {
     }
     const validMetadatas = [validMetadata1, validMetadata2, validMetadata3]
     validMetadatas.forEach((validMetadata) => {
-      expect(JSON.stringify(removeInvalidMetadata(validMetadata))).to.be.equal(JSON.stringify(validMetadata))
+      assert.strictEqual(JSON.stringify(removeInvalidMetadata(validMetadata)), JSON.stringify(validMetadata))
     })
   })
 })

@@ -1,13 +1,13 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { exec } = require('child_process')
-
-const { assert } = require('chai')
-
 const {
   sandboxCwd,
   useSandbox,
-  getCiVisAgentlessConfig
+  getCiVisAgentlessConfig,
+  assertObjectContains
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
@@ -84,14 +84,18 @@ versionRange.forEach(version => {
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const seleniumTest = events.find(event => event.type === 'test').content
-              assert.include(seleniumTest.meta, {
-                [TEST_BROWSER_DRIVER]: 'selenium',
-                [TEST_BROWSER_NAME]: 'chrome',
-                [TEST_TYPE]: 'browser',
-                [TEST_IS_RUM_ACTIVE]: 'true'
+
+              assertObjectContains(seleniumTest, {
+                meta: {
+                  [TEST_BROWSER_DRIVER]: 'selenium',
+                  [TEST_BROWSER_NAME]: 'chrome',
+                  [TEST_TYPE]: 'browser',
+                  [TEST_IS_RUM_ACTIVE]: 'true',
+                }
               })
-              assert.property(seleniumTest.meta, TEST_BROWSER_VERSION)
-              assert.property(seleniumTest.meta, TEST_BROWSER_DRIVER_VERSION)
+
+              assert.ok(Object.hasOwn(seleniumTest.meta, TEST_BROWSER_VERSION))
+              assert.ok(Object.hasOwn(seleniumTest.meta, TEST_BROWSER_DRIVER_VERSION))
             })
 
           childProcess = exec(
@@ -132,8 +136,8 @@ versionRange.forEach(version => {
       )
 
       childProcess.on('exit', (code) => {
-        assert.equal(code, 0)
-        assert.notInclude(testOutput, 'InvalidArgumentError')
+        assert.strictEqual(code, 0)
+        assert.doesNotMatch(testOutput, /InvalidArgumentError/)
         done()
       })
 

@@ -1,7 +1,7 @@
 'use strict'
 
 const api = require('@opentelemetry/api')
-const { sanitizeAttributes } = require('@opentelemetry/core')
+const { sanitizeAttributes } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const Sampler = require('./sampler')
 const Span = require('./span')

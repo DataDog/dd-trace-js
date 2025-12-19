@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, before, after } = require('tap').mocha
 const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
@@ -120,7 +118,7 @@ describe('common Plugin behaviour', () => {
         done, 'commonPlugin', {},
         span => {
           assert.strictEqual(span.service, 'test')
-          expect(span.meta).to.not.have.property('_dd.base_service', 'test')
+          assert.ok(!('_dd.base_service' in span.meta) || span.meta['_dd.base_service'] !== 'test')
         }
       )
     })

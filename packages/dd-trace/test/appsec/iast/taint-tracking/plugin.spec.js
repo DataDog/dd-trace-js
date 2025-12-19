@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const dc = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -104,7 +103,7 @@ describe('IAST Taint tracking plugin', () => {
       }
 
       taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted)
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(iastContext, objToBeTainted, originType)
+      sinon.assert.calledOnceWithExactly(taintTrackingOperations.taintObject, iastContext, objToBeTainted, originType)
     })
 
     it('Should taint property in object', () => {
@@ -116,7 +115,8 @@ describe('IAST Taint tracking plugin', () => {
       }
 
       taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted)
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         objToBeTainted[propertyToBeTainted],
         originType
@@ -134,7 +134,8 @@ describe('IAST Taint tracking plugin', () => {
       objToBeTainted[propertyToBeTainted].self = objToBeTainted
 
       taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted)
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         objToBeTainted[propertyToBeTainted],
         originType
@@ -148,7 +149,7 @@ describe('IAST Taint tracking plugin', () => {
       }
 
       taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted)
-      expect(taintTrackingOperations.taintObject).not.to.be.called
+      sinon.assert.notCalled(taintTrackingOperations.taintObject)
     })
 
     it('Should taint request parameter when qs event is published', () => {
@@ -160,7 +161,8 @@ describe('IAST Taint tracking plugin', () => {
 
       queryReadFinishChannel.publish({ query: req.query })
 
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         req.query,
         'http.request.parameter'
@@ -176,7 +178,8 @@ describe('IAST Taint tracking plugin', () => {
 
       bodyParserFinishChannel.publish({ req })
 
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         req.body,
         'http.request.body'
@@ -192,7 +195,8 @@ describe('IAST Taint tracking plugin', () => {
 
       middlewareNextChannel.publish({ req })
 
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         req.body,
         'http.request.body'
@@ -210,7 +214,8 @@ describe('IAST Taint tracking plugin', () => {
       middlewareNextChannel.publish({ req })
       bodyParserFinishChannel.publish({ req })
 
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         req.body,
         'http.request.body'
@@ -224,7 +229,8 @@ describe('IAST Taint tracking plugin', () => {
 
       cookieParseFinishCh.publish({ cookies })
 
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         cookies,
         HTTP_REQUEST_COOKIE_VALUE
@@ -239,7 +245,8 @@ describe('IAST Taint tracking plugin', () => {
       }
 
       processParamsStartCh.publish({ req })
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         req.params,
         HTTP_REQUEST_PATH_PARAM
@@ -254,7 +261,8 @@ describe('IAST Taint tracking plugin', () => {
       }
 
       routerParamStartCh.publish({ req })
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         req.params,
         HTTP_REQUEST_PATH_PARAM
@@ -265,7 +273,7 @@ describe('IAST Taint tracking plugin', () => {
       const req = {}
 
       processParamsStartCh.publish({ req })
-      expect(taintTrackingOperations.taintObject).to.not.be.called
+      sinon.assert.notCalled(taintTrackingOperations.taintObject)
     })
 
     it('Should taint headers and uri from request', () => {
@@ -277,13 +285,15 @@ describe('IAST Taint tracking plugin', () => {
       }
       taintTrackingPlugin.taintRequest(req, iastContext)
 
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         req.headers,
         HTTP_REQUEST_HEADER_VALUE
       )
 
-      expect(taintTrackingOperations.newTaintedString).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.newTaintedString,
         iastContext,
         req.url,
         HTTP_REQUEST_URI,
@@ -325,7 +335,8 @@ describe('IAST Taint tracking plugin', () => {
             }]
           sequelizeFinish.publish({ result })
 
-          expect(taintTrackingOperations.newTaintedString).to.be.calledOnceWith(
+          sinon.assert.calledOnceWithExactly(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'string value 1',
             '0.name',
@@ -337,7 +348,8 @@ describe('IAST Taint tracking plugin', () => {
           const result = { id: 1, description: 'value' }
           sequelizeFinish.publish({ result })
 
-          expect(taintTrackingOperations.newTaintedString).to.be.calledOnceWith(
+          sinon.assert.calledOnceWithExactly(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'value',
             'description',
@@ -378,14 +390,16 @@ describe('IAST Taint tracking plugin', () => {
           ]
           sequelizeFinish.publish({ result })
 
-          expect(taintTrackingOperations.newTaintedString).to.be.calledTwice
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledTwice(taintTrackingOperations.newTaintedString)
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'value',
             '0.description',
             SQL_ROW_VALUE
           )
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'child1',
             '0.children.0.name',
@@ -418,14 +432,16 @@ describe('IAST Taint tracking plugin', () => {
             }]
           sequelizeFinish.publish({ result })
 
-          expect(taintTrackingOperations.newTaintedString).to.be.calledTwice
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledTwice(taintTrackingOperations.newTaintedString)
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'string value 1',
             '0.name',
             SQL_ROW_VALUE
           )
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'string value 2',
             '1.name',
@@ -437,7 +453,8 @@ describe('IAST Taint tracking plugin', () => {
           const result = { id: 1, description: 'value' }
           sequelizeFinish.publish({ result })
 
-          expect(taintTrackingOperations.newTaintedString).to.be.calledOnceWith(
+          sinon.assert.calledOnceWithExactly(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'value',
             'description',
@@ -504,38 +521,44 @@ describe('IAST Taint tracking plugin', () => {
           ]
           sequelizeFinish.publish({ result })
 
-          expect(taintTrackingOperations.newTaintedString).to.callCount(6)
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.callCount(taintTrackingOperations.newTaintedString, 6)
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'value',
             '0.description',
             SQL_ROW_VALUE
           )
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'child1',
             '0.children.0.name',
             SQL_ROW_VALUE
           )
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'child2',
             '0.children.1.name',
             SQL_ROW_VALUE
           )
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'value2',
             '1.description',
             SQL_ROW_VALUE
           )
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'child4',
             '1.children.0.name',
             SQL_ROW_VALUE
           )
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'child5',
             '1.children.1.name',

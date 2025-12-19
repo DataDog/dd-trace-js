@@ -1,7 +1,7 @@
 'use strict'
 
 const { readFileSync } = require('fs')
-const { parse } = require('jest-docblock')
+const { parse } = require('../../../vendor/dist/jest-docblock')
 
 const { getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')

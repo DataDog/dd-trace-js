@@ -5,22 +5,24 @@ const { execSync } = require('node:child_process')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 
-const { expect } = require('chai')
 const { after, before, beforeEach, describe, it } = require('mocha')
+const semifies = require('semifies')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-
 describe('Plugin', () => {
   let prisma
   let prismaClient
   let tracingHelper
 
   describe('prisma', () => {
-    withVersions('prisma', ['@prisma/client'], async (range, _moduleName_, version) => {
+    // Prisma 7.0.0+ is not supported in Node.js < 20.19.0
+    const supportedRange = semifies(process.version, '>=20.19.0') ? '*' : '>=7.0.0'
+
+    withVersions('prisma', ['@prisma/client'], supportedRange, async (range, _moduleName_, version) => {
       describe('without configuration', () => {
         before(async () => {
           const cwd = path.resolve(__dirname, `../../../versions/@prisma/client@${range}`)
@@ -171,14 +173,16 @@ describe('Plugin', () => {
           const tracingPromise = agent.assertSomeTraces(traces => {
             // Find the db_query span
             const dbQuerySpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
-            assert.ok(dbQuerySpan != null)
-
             // Verify database connection attributes are present
-            assert.strictEqual(dbQuerySpan.meta['db.name'], 'postgres')
-            assert.strictEqual(dbQuerySpan.meta['db.user'], 'foo')
-            assert.strictEqual(dbQuerySpan.meta['out.host'], 'localhost')
-            assert.strictEqual(dbQuerySpan.meta['network.destination.port'], '5432')
-            assert.strictEqual(dbQuerySpan.meta['db.type'], 'postgres')
+            assertObjectContains(dbQuerySpan, {
+              meta: {
+                'db.name': 'postgres',
+                'db.user': 'foo',
+                'out.host': 'localhost',
+                'network.destination.port': '5432',
+                'db.type': 'postgres'
+              }
+            })
           })
 
           const engineSpans = [
@@ -248,7 +252,7 @@ describe('Plugin', () => {
           it('should disable prisma client', async () => {
             const tracingPromise = agent.assertSomeTraces(traces => {
               const clientSpans = traces[0].find(span => span.meta['prisma.type'] === 'client')
-              expect(clientSpans).not.to.exist
+              assert.ok(clientSpans == null)
             })
 
             await Promise.all([
@@ -282,7 +286,7 @@ describe('Plugin', () => {
           it('should disable prisma engine', async () => {
             const tracingPromise = agent.assertSomeTraces(traces => {
               const engineSpans = traces[0].find(span => span.meta['prisma.type'] === 'engine')
-              expect(engineSpans).not.to.exist
+              assert.ok(engineSpans == null)
             })
 
             await Promise.all([

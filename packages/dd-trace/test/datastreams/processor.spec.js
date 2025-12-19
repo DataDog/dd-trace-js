@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const { hostname } = require('node:os')
@@ -10,7 +9,7 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
-const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
+const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
@@ -93,7 +92,7 @@ describe('StatsBucket', () => {
     it('should add a new entry when no matching key is found', () => {
       const bucket = buckets.forCheckpoint(mockCheckpoint)
       const checkpoints = buckets.checkpoints
-      expect(bucket).to.be.an.instanceOf(StatsPoint)
+      assert.ok(bucket instanceof StatsPoint)
       assert.strictEqual(checkpoints.size, 1)
       const [key, value] = Array.from(checkpoints.entries())[0]
       assert.strictEqual(key.toString(), mockCheckpoint.hash.toString())
@@ -134,7 +133,7 @@ describe('StatsBucket', () => {
     it('should add a new entry when empty', () => {
       const bucket = backlogBuckets.forBacklog(mockBacklog)
       const backlogs = backlogBuckets.backlogs
-      expect(bucket).to.be.an.instanceOf(Backlog)
+      assert.ok(bucket instanceof Backlog)
       const [, value] = Array.from(backlogs.entries())[0]
       assert.ok(value instanceof Backlog)
     })
@@ -191,7 +190,7 @@ describe('TimeBuckets', () => {
     assert.strictEqual(buckets.size, 0)
     const bucket = buckets.forTime(12345)
     assert.strictEqual(buckets.size, 1)
-    expect(bucket).to.be.an.instanceOf(StatsBucket)
+    assert.ok(bucket instanceof StatsBucket)
   })
 })
 
@@ -221,7 +220,7 @@ describe('DataStreamsProcessor', () => {
     processor = new DataStreamsProcessor(config)
     clearTimeout(processor.timer)
 
-    expect(DataStreamsWriter).to.be.calledWith({
+    sinon.assert.calledWith(DataStreamsWriter, {
       hostname: config.hostname,
       port: config.port,
       url: config.url
@@ -294,7 +293,7 @@ describe('DataStreamsProcessor', () => {
   it('should export on interval', () => {
     processor.recordCheckpoint(mockCheckpoint)
     processor.onInterval()
-    expect(writer.flush).to.be.calledWith({
+    sinon.assert.calledWith(writer.flush, {
       Env: 'test',
       Service: 'service1',
       Version: 'v1',

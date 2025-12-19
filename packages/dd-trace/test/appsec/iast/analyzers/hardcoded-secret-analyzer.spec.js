@@ -1,21 +1,22 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-
-const path = require('node:path')
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
+const path = require('node:path')
 
-const agent = require('../../../plugins/agent')
-const { getConfigFresh } = require('../../../helpers/config')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
+const iast = require('../../../../src/appsec/iast')
 const { NameAndValue, ValueOnly } = require('../../../../src/appsec/iast/analyzers/hardcoded-rule-type')
 const hardcodedSecretAnalyzer = require('../../../../src/appsec/iast/analyzers/hardcoded-secret-analyzer')
-const { suite } = require('./resources/hardcoded-secrets-suite.json')
-const iast = require('../../../../src/appsec/iast')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
+const { getConfigFresh } = require('../../../helpers/config')
+const agent = require('../../../plugins/agent')
+const { suite } = require('./resources/hardcoded-secrets-suite.json')
+
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 
 describe('Hardcoded Secret Analyzer', () => {
   describe('unit test', () => {
@@ -51,18 +52,18 @@ describe('Hardcoded Secret Analyzer', () => {
             }]
           })
 
-          expect([NameAndValue, ValueOnly]).to.be.include(testCase.type)
+          assertObjectContains([NameAndValue, ValueOnly], [testCase.type])
           sinon.assert.calledOnceWithExactly(report, { file: relFile, line, column, ident, data: testCase.id })
         })
       })
     })
 
     it('should not fail with an malformed secrets', () => {
-      expect(() => hardcodedSecretAnalyzer.analyze(undefined)).not.to.throw()
-      expect(() => hardcodedSecretAnalyzer.analyze({ file: undefined })).not.to.throw()
-      expect(() => hardcodedSecretAnalyzer.analyze({ file, literals: undefined })).not.to.throw()
-      expect(() => hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: undefined }] })).not.to.throw()
-      expect(() => hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: 'test' }] })).not.to.throw()
+      assert.doesNotThrow(() => hardcodedSecretAnalyzer.analyze(undefined))
+      assert.doesNotThrow(() => hardcodedSecretAnalyzer.analyze({ file: undefined }))
+      assert.doesNotThrow(() => hardcodedSecretAnalyzer.analyze({ file, literals: undefined }))
+      assert.doesNotThrow(() => hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: undefined }] }))
+      assert.doesNotThrow(() => hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: 'test' }] }))
     })
 
     it('should not report secrets in line 0', () => {
@@ -121,7 +122,10 @@ describe('Hardcoded Secret Analyzer', () => {
       it('should detect vulnerability', (done) => {
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0].meta['_dd.iast.json']).to.include('"HARDCODED_SECRET"')
+            assertObjectContains(
+              JSON.parse(traces[0][0].meta['_dd.iast.json']),
+              { vulnerabilities: [{ type: 'HARDCODED_SECRET' }] }
+            )
           })
           .then(done)
           .catch(done)

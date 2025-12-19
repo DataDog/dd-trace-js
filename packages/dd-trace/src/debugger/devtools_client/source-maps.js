@@ -3,7 +3,7 @@
 const { join, dirname } = require('path')
 const { readFileSync } = require('fs')
 const { readFile } = require('fs/promises')
-const { SourceMapConsumer } = require('source-map')
+const { SourceMapConsumer } = require('../../../../../vendor/dist/source-map')
 
 const cache = new Map()
 let cacheTimer = null

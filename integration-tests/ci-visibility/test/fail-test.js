@@ -1,9 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('assert')
 describe('fail', () => {
   it('can report failed tests', () => {
-    expect(1 + 2).to.equal(4)
+    assert.strictEqual(1 + 2, 4)
   })
 })

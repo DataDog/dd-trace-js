@@ -1,15 +1,20 @@
 'use strict'
 
+const { LARGE_OBJECT_SKIP_THRESHOLD } = require('../../../../../src/debugger/devtools_client/snapshot/constants')
+
+// `LARGE_SIZE` is larger than the default maxCollectionSize, but lower than the large object skip threshold, after
+// which nothing is captured.
+const LARGE_SIZE = LARGE_OBJECT_SKIP_THRESHOLD - 1
+
 function run () {
   const arr = []
   const map = new Map()
   const set = new Set()
   const wmap = new WeakMap()
   const wset = new WeakSet()
-  const typedArray = new Uint16Array(new ArrayBuffer(2000))
+  const typedArray = new Uint16Array(new ArrayBuffer(LARGE_SIZE * 2))
 
-  // 1000 is larger the default maxCollectionSize of 100
-  for (let i = 1; i <= 1000; i++) {
+  for (let i = 1; i <= LARGE_SIZE; i++) {
     // A reference that can be used in WeakMap/WeakSet to avoid GC
     const obj = { i }
 

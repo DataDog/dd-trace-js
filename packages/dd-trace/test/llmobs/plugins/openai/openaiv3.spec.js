@@ -61,7 +61,8 @@ describe('integrations', () => {
           metrics: {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
-            total_tokens: MOCK_NUMBER
+            total_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0
           },
           modelName: 'gpt-3.5-turbo-instruct:20230824-v2',
           modelProvider: 'openai',
@@ -113,6 +114,7 @@ describe('integrations', () => {
           ],
           metrics: {
             cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER
@@ -146,7 +148,9 @@ describe('integrations', () => {
             { text: 'hello world' }
           ],
           outputValue: '[1 embedding(s) returned]',
-          metrics: { input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER },
+          metrics: {
+            input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER, reasoning_output_tokens: 0
+          },
           modelName: 'text-embedding-ada-002-v2',
           modelProvider: 'openai',
           metadata: { encoding_format: 'base64' },

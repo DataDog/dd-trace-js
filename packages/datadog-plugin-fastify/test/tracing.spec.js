@@ -10,6 +10,7 @@ const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withExports, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const host = 'localhost'
 
 describe('Plugin', () => {
@@ -58,16 +59,20 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = traces[0]
 
-                  assert.strictEqual(spans[0].name, 'fastify.request')
-                  assert.strictEqual(spans[0].service, 'test')
-                  assert.strictEqual(spans[0].type, 'web')
-                  assert.strictEqual(spans[0].resource, 'GET /user')
-                  assert.strictEqual(spans[0].meta['span.kind'], 'server')
-                  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user`)
-                  assert.strictEqual(spans[0].meta['http.method'], 'GET')
-                  assert.strictEqual(spans[0].meta['http.status_code'], '200')
-                  assert.strictEqual(spans[0].meta.component, 'fastify')
-                  assert.strictEqual(spans[0].meta['_dd.integration'], 'fastify')
+                  assertObjectContains(spans[0], {
+                    name: 'fastify.request',
+                    service: 'test',
+                    type: 'web',
+                    resource: 'GET /user',
+                    meta: {
+                      'span.kind': 'server',
+                      'http.url': `http://localhost:${port}/user`,
+                      'http.method': 'GET',
+                      'http.status_code': '200',
+                      component: 'fastify',
+                      '_dd.integration': 'fastify'
+                    }
+                  })
                 })
                 .then(done)
                 .catch(done)
@@ -94,15 +99,19 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = traces[0]
 
-                  assert.strictEqual(spans[0].name, 'fastify.request')
-                  assert.strictEqual(spans[0].service, 'test')
-                  assert.strictEqual(spans[0].type, 'web')
-                  assert.strictEqual(spans[0].resource, 'GET /user/:id')
-                  assert.strictEqual(spans[0].meta['span.kind'], 'server')
-                  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user/123`)
-                  assert.strictEqual(spans[0].meta['http.method'], 'GET')
-                  assert.strictEqual(spans[0].meta['http.status_code'], '200')
-                  assert.strictEqual(spans[0].meta.component, 'fastify')
+                  assertObjectContains(spans[0], {
+                    name: 'fastify.request',
+                    service: 'test',
+                    type: 'web',
+                    resource: 'GET /user/:id',
+                    meta: {
+                      'span.kind': 'server',
+                      'http.url': `http://localhost:${port}/user/123`,
+                      'http.method': 'GET',
+                      'http.status_code': '200',
+                      component: 'fastify'
+                    }
+                  })
                 })
                 .then(done)
                 .catch(done)
@@ -128,15 +137,19 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = traces[0]
 
-                    assert.strictEqual(spans[0].name, 'fastify.request')
-                    assert.strictEqual(spans[0].service, 'test')
-                    assert.strictEqual(spans[0].type, 'web')
-                    assert.strictEqual(spans[0].resource, 'GET /user/:id')
-                    assert.strictEqual(spans[0].meta['span.kind'], 'server')
-                    assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user/123`)
-                    assert.strictEqual(spans[0].meta['http.method'], 'GET')
-                    assert.strictEqual(spans[0].meta['http.status_code'], '200')
-                    assert.strictEqual(spans[0].meta.component, 'fastify')
+                    assertObjectContains(spans[0], {
+                      name: 'fastify.request',
+                      service: 'test',
+                      type: 'web',
+                      resource: 'GET /user/:id',
+                      meta: {
+                        'span.kind': 'server',
+                        'http.url': `http://localhost:${port}/user/123`,
+                        'http.method': 'GET',
+                        'http.status_code': '200',
+                        component: 'fastify'
+                      }
+                    })
                   })
                   .then(done)
                   .catch(done)
@@ -275,12 +288,16 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = traces[0]
 
-                  assert.strictEqual(spans[0].name, 'fastify.request')
-                  assert.strictEqual(spans[0].resource, 'GET /user')
-                  assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                  assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                  assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                  assert.strictEqual(spans[0].meta.component, 'fastify')
+                  assertObjectContains(spans[0], {
+                    name: 'fastify.request',
+                    resource: 'GET /user',
+                    meta: {
+                      [ERROR_TYPE]: error.name,
+                      [ERROR_MESSAGE]: error.message,
+                      [ERROR_STACK]: error.stack,
+                      component: 'fastify'
+                    }
+                  })
                 })
                 .then(done)
                 .catch(done)
@@ -354,13 +371,17 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = traces[0]
 
-                  assert.strictEqual(spans[0].name, 'fastify.request')
-                  assert.strictEqual(spans[0].resource, 'GET /user')
-                  assert.strictEqual(spans[0].error, 1)
-                  assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                  assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                  assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                  assert.strictEqual(spans[0].meta.component, 'fastify')
+                  assertObjectContains(spans[0], {
+                    name: 'fastify.request',
+                    resource: 'GET /user',
+                    error: 1,
+                    meta: {
+                      [ERROR_TYPE]: error.name,
+                      [ERROR_MESSAGE]: error.message,
+                      [ERROR_STACK]: error.stack,
+                      component: 'fastify'
+                    }
+                  })
                 })
                 .then(done)
                 .catch(done)
@@ -387,10 +408,14 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = traces[0]
 
-                    assert.strictEqual(spans[0].name, 'fastify.request')
-                    assert.strictEqual(spans[0].resource, 'GET /user')
-                    assert.strictEqual(spans[0].error, 0)
-                    assert.strictEqual(spans[0].meta.component, 'fastify')
+                    assertObjectContains(spans[0], {
+                      name: 'fastify.request',
+                      resource: 'GET /user',
+                      error: 0,
+                      meta: {
+                        component: 'fastify'
+                      }
+                    })
                   })
                   .then(done)
                   .catch(done)
@@ -418,12 +443,16 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = traces[0]
 
-                    assert.strictEqual(spans[0].name, 'fastify.request')
-                    assert.strictEqual(spans[0].resource, 'GET /user')
-                    assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                    assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                    assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                    assert.strictEqual(spans[0].meta.component, 'fastify')
+                    assertObjectContains(spans[0], {
+                      name: 'fastify.request',
+                      resource: 'GET /user',
+                      meta: {
+                        [ERROR_TYPE]: error.name,
+                        [ERROR_MESSAGE]: error.message,
+                        [ERROR_STACK]: error.stack,
+                        component: 'fastify'
+                      }
+                    })
                   })
                   .then(done)
                   .catch(done)
@@ -452,13 +481,17 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = traces[0]
 
-                    assert.strictEqual(spans[0].name, 'fastify.request')
-                    assert.strictEqual(spans[0].resource, 'GET /user')
-                    assert.strictEqual(spans[0].error, 1)
-                    assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                    assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                    assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                    assert.strictEqual(spans[0].meta.component, 'fastify')
+                    assertObjectContains(spans[0], {
+                      name: 'fastify.request',
+                      resource: 'GET /user',
+                      error: 1,
+                      meta: {
+                        [ERROR_TYPE]: error.name,
+                        [ERROR_MESSAGE]: error.message,
+                        [ERROR_STACK]: error.stack,
+                        component: 'fastify'
+                      }
+                    })
                   })
                   .then(done)
                   .catch(done)
@@ -488,10 +521,12 @@ describe('Plugin', () => {
                     assert.strictEqual(spans[0].name, 'fastify.request')
                     assert.strictEqual(spans[0].resource, 'GET /user')
                     assert.strictEqual(spans[0].error, 0)
-                    assert.ok(!Object.hasOwn(spans[0].meta, ERROR_TYPE))
-                    assert.ok(!Object.hasOwn(spans[0].meta, ERROR_MESSAGE))
-                    assert.ok(!Object.hasOwn(spans[0].meta, ERROR_STACK))
-                    assert.strictEqual(spans[0].meta.component, 'fastify')
+                    assert.ok(!(ERROR_TYPE in spans[0].meta))
+                    assert.ok(!(ERROR_MESSAGE in spans[0].meta))
+                    assert.ok(!(ERROR_STACK in spans[0].meta))
+                    assertObjectContains(spans[0].meta, {
+                      component: 'fastify'
+                    })
                   })
                   .then(done)
                   .catch(done)
@@ -524,13 +559,17 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = traces[0]
 
-                    assert.strictEqual(spans[0].name, 'fastify.request')
-                    assert.strictEqual(spans[0].resource, 'GET /user')
-                    assert.strictEqual(spans[0].error, 1)
-                    assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                    assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                    assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                    assert.strictEqual(spans[0].meta.component, 'fastify')
+                    assertObjectContains(spans[0], {
+                      name: 'fastify.request',
+                      resource: 'GET /user',
+                      error: 1,
+                      meta: {
+                        [ERROR_TYPE]: error.name,
+                        [ERROR_MESSAGE]: error.message,
+                        [ERROR_STACK]: error.stack,
+                        component: 'fastify'
+                      }
+                    })
                   })
                   .then(done)
                   .catch(done)

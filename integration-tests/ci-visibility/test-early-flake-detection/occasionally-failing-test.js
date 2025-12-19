@@ -1,11 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('assert')
 let globalCounter = 0
 
 describe('fail', () => {
   it('occasionally fails', () => {
-    expect((globalCounter++) % 2).to.equal(0)
+    assert.strictEqual((globalCounter++) % 2, 0)
   })
 })

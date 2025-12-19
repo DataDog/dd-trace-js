@@ -21,7 +21,7 @@ runs:
       with:
         suffix: upstream-${{ github.job }}
     - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-      if: always()
+      if: always() && github.actor != 'dependabot[bot]'
       with:
         api_key: ${{ inputs.dd_api_key }}
         service: dd-trace-js-tests

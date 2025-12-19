@@ -175,23 +175,18 @@ function enableRewriter (telemetryVerbosity) {
           shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
         }
       }
+      enableEsmRewriter(telemetryVerbosity)
     }
-
-    enableEsmRewriter(telemetryVerbosity)
   } catch (e) {
     log.error('Error enabling Rewriter', e)
   }
 }
 
 function isEsmConfigured () {
-  const hasLoaderArg = isFlagPresent('--loader') || isFlagPresent('--experimental-loader')
-  if (hasLoaderArg) return true
-
-  // Fast path for common case when enabled
-  if (require.cache[`${process.cwd()}/node_modules/import-in-the-middle/hook.js`]) {
-    return true
-  }
-  return Object.keys(require.cache).some(file => file.endsWith('import-in-the-middle/hook.js'))
+  return (isFlagPresent('--loader') ||
+    isFlagPresent('--experimental-loader') ||
+    isFlagPresent('dd-trace/initialize.mjs')) ||
+    isFlagPresent('dd-trace/register.js')
 }
 
 let enableEsmRewriter = function (telemetryVerbosity) {

@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { after, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -71,9 +70,9 @@ describe('source map utils', function () {
       })
 
       it('should throw if inline source map is invalid', function () {
-        expect(() => {
+        assert.throws(() => {
           loadSourceMapSync(dir, inlineSourceMap.slice(0, -10))
-        }).to.throw()
+        })
       })
 
       it('should return parsed source map', function () {

@@ -2,9 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-
 const { describe, it } = require('tap').mocha
 const fs = require('node:fs')
 const path = require('node:path')
@@ -99,14 +97,16 @@ describe('test environment data', () => {
           ...restOfExpectedTags
         } = expectedSpanTags
 
-        expect(restOfTags, testCaseName ? `${testCaseName} has failed.` : undefined).to.contain(restOfExpectedTags)
-        // `CI_ENV_VARS` key contains a dictionary, so we do a `eql` comparison
+        const msg = testCaseName ?? `${testCaseName} Failed`
+
+        assertObjectContains(restOfTags, restOfExpectedTags, msg)
+        // `CI_ENV_VARS` key contains a dictionary
         if (envVars && expectedEnvVars) {
-          assert.deepStrictEqual(JSON.parse(envVars), JSON.parse(expectedEnvVars))
+          assert.deepStrictEqual(JSON.parse(envVars), JSON.parse(expectedEnvVars), msg)
         }
-        // `CI_NODE_LABELS` key contains an array, so we do a `to.have.same.members` comparison
+        // `CI_NODE_LABELS` key contains an array
         if (nodeLabels && expectedNodeLabels) {
-          expect(JSON.parse(nodeLabels)).to.have.same.members(JSON.parse(expectedNodeLabels))
+          assertObjectContains(JSON.parse(nodeLabels).sort(), JSON.parse(expectedNodeLabels).sort(), msg)
         }
       })
     })

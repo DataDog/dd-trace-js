@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -79,7 +77,7 @@ describe('External Logger', () => {
         assert.strictEqual(request[0].level, 'info')
         assert.strictEqual(request[0]['dd.trace_id'], '000001000')
         assert.strictEqual(request[0]['dd.span_id'], '9999991999')
-        expect(request[0].timestamp).to.be.greaterThanOrEqual(currentTime)
+        assert.ok(request[0].timestamp >= currentTime)
         assert.strictEqual(request[0].ddsource, 'logging_from_space')
         assert.strictEqual(request[0].ddtags, 'env:external_logger,version:1.2.3,service:external')
       } catch (e) {
@@ -112,7 +110,7 @@ describe('External Logger', () => {
 
     externalLogger.enqueue({})
     externalLogger.flush((err) => {
-      expect(err).to.be.an.instanceOf(Error)
+      assert.ok(err instanceof Error)
       assert.strictEqual(errorLog.getCall(0).args[0],
         'failed to send 1 logs, received response code 400'
       )
@@ -127,7 +125,7 @@ describe('External Logger', () => {
 
     externalLogger.enqueue({})
     externalLogger.flush((err) => {
-      expect(err).to.be.an.instanceOf(Error)
+      assert.ok(err instanceof Error)
       assert.strictEqual(errorLog.getCall(0).args[0],
         'failed to send 1 log(s), with error missing API key'
       )

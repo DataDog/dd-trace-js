@@ -166,16 +166,17 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
-  const processLocalState = numberOfProbesWithSnapshots !== 0 && await getLocalStateForCallFrame(
-    params.callFrames[0],
-    {
+  let processLocalState, captureErrors
+  if (numberOfProbesWithSnapshots !== 0) {
+    const opts = {
       maxReferenceDepth,
       maxCollectionSize,
       maxFieldCount,
       maxLength,
       deadlineNs: start + config.dynamicInstrumentation.captureTimeoutNs
     }
-  )
+    ;({ processLocalState, captureErrors } = await getLocalStateForCallFrame(params.callFrames[0], opts))
+  }
 
   await session.post('Debugger.resume')
   const diff = process.hrtime.bigint() - start // TODO: Recorded as telemetry (DEBUG-2858)
@@ -215,14 +216,21 @@ session.on('Debugger.paused', async ({ params }) => {
     }
 
     if (probe.captureSnapshot) {
-      const state = processLocalState()
-      if (state instanceof Error) {
-        snapshot.captureError = state.message
-      } else if (state) {
-        snapshot.captures = {
-          lines: { [probe.location.lines[0]]: { locals: state } }
-        }
+      if (captureErrors?.length > 0) {
+        // There was an error collecting the snapshot for this probe, let's not try again
+        probe.captureSnapshot = false
+        probe.permanentEvaluationErrors = captureErrors.map(error => ({
+          expr: '',
+          message: error.message
+        }))
       }
+      snapshot.captures = {
+        lines: { [probe.location.lines[0]]: { locals: processLocalState() } }
+      }
+    }
+
+    if (probe.permanentEvaluationErrors !== undefined) {
+      snapshot.evaluationErrors = [...probe.permanentEvaluationErrors]
     }
 
     let message = ''

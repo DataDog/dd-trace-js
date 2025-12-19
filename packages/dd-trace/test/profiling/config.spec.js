@@ -2,12 +2,11 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
-
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const os = require('node:os')
 const path = require('node:path')
+const satisfies = require('semifies')
 
 require('../setup/core')
 
@@ -54,12 +53,12 @@ describe('config', () => {
       host: os.hostname()
     })
 
-    expect(config.logger).to.be.an.instanceof(ConsoleLogger)
-    expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
-    expect(config.profilers[0]).to.be.an.instanceof(SpaceProfiler)
-    expect(config.profilers[1]).to.be.an.instanceof(WallProfiler)
+    assert.ok(config.logger instanceof ConsoleLogger)
+    assert.ok(config.exporters[0] instanceof AgentExporter)
+    assert.ok(config.profilers[0] instanceof SpaceProfiler)
+    assert.ok(config.profilers[1] instanceof WallProfiler)
     assert.strictEqual(config.profilers[1].codeHotspotsEnabled(), samplingContextsAvailable)
-    expect(config.v8ProfilerBugWorkaroundEnabled).true
+    assert.strictEqual(config.v8ProfilerBugWorkaroundEnabled, true)
     assert.strictEqual(config.cpuProfilingEnabled, samplingContextsAvailable)
     assert.strictEqual(config.uploadCompression.method, 'gzip')
     assert.strictEqual(config.uploadCompression.level, undefined)
@@ -88,16 +87,16 @@ describe('config', () => {
     assert.strictEqual(config.flushInterval, 65 * 1000)
     assert.ok(Array.isArray(config.exporters))
     assert.strictEqual(config.exporters.length, 2)
-    expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
+    assert.ok(config.exporters[0] instanceof AgentExporter)
     assert.strictEqual(config.exporters[0]._url.toString(), options.url)
-    expect(config.exporters[1]).to.be.an.instanceof(FileExporter)
+    assert.ok(config.exporters[1] instanceof FileExporter)
     assert.ok(Array.isArray(config.profilers))
     assert.strictEqual(config.profilers.length, 2 + (samplingContextsAvailable ? 1 : 0))
-    expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
-    expect(config.profilers[1]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[1].codeHotspotsEnabled()).false
+    assert.ok(config.profilers[0] instanceof SpaceProfiler)
+    assert.ok(config.profilers[1] instanceof WallProfiler)
+    assert.strictEqual(config.profilers[1].codeHotspotsEnabled(), false)
     if (samplingContextsAvailable) {
-      expect(config.profilers[2]).to.be.an.instanceOf(EventsProfiler)
+      assert.ok(config.profilers[2] instanceof EventsProfiler)
     }
   })
 
@@ -155,12 +154,12 @@ describe('config', () => {
 
     assert.ok(Array.isArray(config.profilers))
     assert.strictEqual(config.profilers.length, 1 + (samplingContextsAvailable ? 1 : 0))
-    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
+    assert.ok(config.profilers[0] instanceof WallProfiler)
     assert.strictEqual(config.profilers[0].codeHotspotsEnabled(), samplingContextsAvailable)
     if (samplingContextsAvailable) {
-      expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
+      assert.ok(config.profilers[1] instanceof EventsProfiler)
     }
-    expect(config.v8ProfilerBugWorkaroundEnabled).false
+    assert.strictEqual(config.v8ProfilerBugWorkaroundEnabled, false)
     assert.strictEqual(config.cpuProfilingEnabled, samplingContextsAvailable)
   })
 
@@ -178,7 +177,7 @@ describe('config', () => {
 
     assert.ok(Array.isArray(config.profilers))
     assert.strictEqual(config.profilers.length, 1)
-    expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
+    assert.ok(config.profilers[0] instanceof SpaceProfiler)
   })
 
   it('should ensure space profiler is ordered first with DD_PROFILING_HEAP_ENABLED', () => {
@@ -194,8 +193,8 @@ describe('config', () => {
 
     assert.ok(Array.isArray(config.profilers))
     assert.strictEqual(config.profilers.length, 2 + (samplingContextsAvailable ? 1 : 0))
-    expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
-    expect(config.profilers[1]).to.be.an.instanceOf(WallProfiler)
+    assert.ok(config.profilers[0] instanceof SpaceProfiler)
+    assert.ok(config.profilers[1] instanceof WallProfiler)
   })
 
   it('should ensure space profiler order is preserved when explicitly set with DD_PROFILING_PROFILERS', () => {
@@ -211,8 +210,8 @@ describe('config', () => {
 
     assert.ok(Array.isArray(config.profilers))
     assert.strictEqual(config.profilers.length, 2 + (samplingContextsAvailable ? 1 : 0))
-    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[1]).to.be.an.instanceOf(SpaceProfiler)
+    assert.ok(config.profilers[0] instanceof WallProfiler)
+    assert.ok(config.profilers[1] instanceof SpaceProfiler)
   })
 
   it('should be able to read some env vars', () => {
@@ -252,9 +251,9 @@ describe('config', () => {
 
     assert.ok(Array.isArray(config.profilers))
     assert.strictEqual(config.profilers.length, 1 + (samplingContextsAvailable ? 1 : 0))
-    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
+    assert.ok(config.profilers[0] instanceof WallProfiler)
     if (samplingContextsAvailable) {
-      expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
+      assert.ok(config.profilers[1] instanceof EventsProfiler)
     }
   })
 
@@ -278,10 +277,10 @@ describe('config', () => {
 
     assert.ok(Array.isArray(config.profilers))
     assert.strictEqual(config.profilers.length, 2)
-    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).false
-    expect(config.profilers[0].endpointCollectionEnabled()).false
-    expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
+    assert.ok(config.profilers[0] instanceof WallProfiler)
+    assert.strictEqual(config.profilers[0].codeHotspotsEnabled(), false)
+    assert.strictEqual(config.profilers[0].endpointCollectionEnabled(), false)
+    assert.ok(config.profilers[1] instanceof EventsProfiler)
   })
 
   it('should prioritize non-experimental env variables and warn about experimental ones', () => {
@@ -312,10 +311,10 @@ describe('config', () => {
 
     assert.ok(Array.isArray(config.profilers))
     assert.strictEqual(config.profilers.length, 2)
-    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).false
-    expect(config.profilers[0].endpointCollectionEnabled()).false
-    expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
+    assert.ok(config.profilers[0] instanceof WallProfiler)
+    assert.strictEqual(config.profilers[0].codeHotspotsEnabled(), false)
+    assert.strictEqual(config.profilers[0].endpointCollectionEnabled(), false)
+    assert.ok(config.profilers[1] instanceof EventsProfiler)
   })
 
   function optionOnlyWorksWithGivenCondition (property, name, condition) {
@@ -365,7 +364,7 @@ describe('config', () => {
 
     const config = new Config({ tags })
 
-    expect(config.tags).to.include(tags)
+    assertObjectContains(config.tags, tags)
   })
 
   it('should prioritize options over tags', () => {
@@ -509,6 +508,59 @@ describe('config', () => {
       })
     })
   }
+
+  describe('async context', () => {
+    const isSupported = samplingContextsAvailable && satisfies(process.versions.node, '>=24.0.0')
+    describe('where supported', () => {
+      it('should be on by default', function () {
+        if (!isSupported) {
+          this.skip()
+        } else {
+          const config = new Config({})
+          assert.strictEqual(config.asyncContextFrameEnabled, true)
+        }
+      })
+
+      it('can be turned off by env var', function () {
+        if (!isSupported) {
+          this.skip()
+        } else {
+          process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = '0'
+          try {
+            const config = new Config({})
+            assert.strictEqual(config.asyncContextFrameEnabled, false)
+          } finally {
+            delete process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
+          }
+        }
+      })
+    })
+
+    describe('where not supported', function () {
+      it('should be off by default', function () {
+        if (isSupported) {
+          this.skip()
+        } else {
+          const config = new Config({})
+          assert.strictEqual(config.asyncContextFrameEnabled, false)
+        }
+      })
+
+      it('can not be turned on by env var', function () {
+        if (isSupported) {
+          this.skip()
+        } else {
+          process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = '1'
+          try {
+            const config = new Config({})
+            assert.strictEqual(config.asyncContextFrameEnabled, false)
+          } finally {
+            delete process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
+          }
+        }
+      })
+    })
+  })
 
   describe('upload compression settings', () => {
     const expectConfig = (env, method, level, warning) => {

@@ -9,13 +9,13 @@ function wrapOn (on) {
   return function onWithTrace (method, path, opts) {
     const index = typeof opts === 'function' ? 2 : 3
     const handler = arguments[index]
-    const wrapper = shimmer.wrapFunction(handler, handler => function (req) {
-      routeChannel.publish({ req, route: path })
-
-      return handler.apply(this, arguments)
-    })
 
     if (typeof handler === 'function') {
+      const wrapper = shimmer.wrapFunction(handler, handler => function (req) {
+        routeChannel.publish({ req, route: path })
+
+        return handler.apply(this, arguments)
+      })
       arguments[index] = wrapper
     }
 
@@ -24,6 +24,7 @@ function wrapOn (on) {
 }
 
 addHook({ name: 'find-my-way', versions: ['>=1'] }, Router => {
+  // No need to wrap the off method as it would not contain the handler function.
   shimmer.wrap(Router.prototype, 'on', wrapOn)
 
   return Router

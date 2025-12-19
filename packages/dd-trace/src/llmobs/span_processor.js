@@ -126,6 +126,11 @@ class LLMObsSpanProcessor {
       inputType = 'value'
     }
 
+    // Handle prompt metadata for reusable prompts
+    if (mlObsTags['_ml_obs.meta.input.prompt']) {
+      input.prompt = mlObsTags['_ml_obs.meta.input.prompt']
+    }
+
     if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
       llmObsSpan.output = mlObsTags[OUTPUT_MESSAGES]
       outputType = 'messages'
@@ -207,7 +212,7 @@ class LLMObsSpanProcessor {
     const seenObjects = new WeakSet([obj])
 
     const isCircular = value => {
-      if (typeof value !== 'object') return false
+      if (value == null || typeof value !== 'object') return false
       if (seenObjects.has(value)) return true
       seenObjects.add(value)
       return false

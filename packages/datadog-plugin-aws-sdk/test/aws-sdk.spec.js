@@ -285,10 +285,12 @@ describe('Plugin', () => {
               resource: 'listBuckets',
               service: 'test'
             })
-            assert.strictEqual(span.error, 0)
-            assertObjectContains(span.meta, {
-              'hook.operation': 'listBuckets',
-              component: 'aws-sdk'
+            assertObjectContains(span, {
+              error: 0,
+              meta: {
+                'hook.operation': 'listBuckets',
+                component: 'aws-sdk'
+              }
             })
           }).then(done, done)
 

@@ -4,7 +4,7 @@ const os = require('os')
 const { version } = require('./pkg')
 const pkg = require('../../../package.json')
 
-const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
+const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
 const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('./constants')
 const {
   MEASURED,

@@ -1,6 +1,6 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -15,7 +15,7 @@ describe('Dynamic Instrumentation', function () {
 
       it('should support source maps', function (done) {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
-          assert.deepEqual(location, {
+          assert.deepStrictEqual(location, {
             file: 'target-app/source-map-support/typescript.ts',
             lines: ['11']
           })
@@ -36,7 +36,7 @@ describe('Dynamic Instrumentation', function () {
 
       it('should support source maps', function (done) {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
-          assert.deepEqual(location, {
+          assert.deepStrictEqual(location, {
             file: 'target-app/source-map-support/minify.js',
             lines: ['9']
           })
@@ -60,7 +60,7 @@ describe('Dynamic Instrumentation', function () {
 
       it('should support relative source paths in source maps', function (done) {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
-          assert.deepEqual(location, {
+          assert.deepStrictEqual(location, {
             file: 'target-app/source-map-support/hello/world.ts',
             lines: ['2']
           })

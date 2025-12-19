@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const {
   FakeAgent,
   spawnPluginIntegrationTestProc,
@@ -7,7 +9,6 @@ const {
   useSandbox,
   varySandbox
 } = require('../../../../integration-tests/helpers')
-const { assert } = require('chai')
 const http2 = require('http2')
 
 describe('esm', () => {
@@ -36,13 +37,13 @@ describe('esm', () => {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const resultPromise = agent.assertMessageReceived(({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
-          assert.isArray(payload[0])
+          assert.ok(Array.isArray(payload[0]))
           assert.strictEqual(payload[0].length, 1)
-          assert.propertyVal(payload[0][0], 'name', 'web.request')
-          assert.propertyVal(payload[0][0].meta, 'component', 'http2')
+          assert.strictEqual(payload[0][0].name, 'web.request')
+          assert.strictEqual(payload[0][0].meta.component, 'http2')
         })
         await curl(proc)
         return resultPromise

@@ -1,13 +1,13 @@
 'use strict'
 
-const rfdc = require('rfdc')({ proto: false, circles: false })
+const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 
 const {
   PAYLOAD_TAG_REQUEST_PREFIX,
   PAYLOAD_TAG_RESPONSE_PREFIX
 } = require('../constants')
 
-const jsonpath = require('jsonpath-plus').JSONPath
+const jsonpath = require('../../../../vendor/dist/jsonpath-plus').JSONPath
 
 const { tagsFromObject } = require('./tagging')
 

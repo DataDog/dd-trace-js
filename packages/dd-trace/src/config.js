@@ -2,7 +2,7 @@
 
 const fs = require('fs')
 const os = require('os')
-const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
+const uuid = require('../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const { URL } = require('url')
 
 const log = require('./log')
@@ -280,8 +280,6 @@ class Config {
       }
     }
 
-    const envs = getEnvironmentVariables()
-
     options = {
       ...options,
       appsec: options.appsec == null ? options.experimental?.appsec : options.appsec,
@@ -325,7 +323,7 @@ class Config {
     this.#defaults = defaults
     this.#applyDefaults()
     this.#applyStableConfig(this.stableConfig?.localEntries ?? {}, this.#localStableConfig)
-    this.#applyEnvironment(envs)
+    this.#applyEnvironment()
     this.#applyStableConfig(this.stableConfig?.fleetEntries ?? {}, this.#fleetStableConfig)
     this.#applyOptions(options)
     this.#applyCalculated()
@@ -346,7 +344,7 @@ class Config {
     }
 
     if (this.gitMetadataEnabled) {
-      this.#loadGitMetadata(envs)
+      this.#loadGitMetadata()
     }
   }
 
@@ -458,6 +456,7 @@ class Config {
       DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS,
       DD_ENV,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
+      DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED,
       DD_PROFILING_ENABLED,
       DD_GRPC_CLIENT_ERROR_STATUSES,
       DD_GRPC_SERVER_ERROR_STATUSES,
@@ -631,8 +630,12 @@ class Config {
     target.otelMaxExportBatchSize = nonNegInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE, 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE', false)
     target.otelMaxQueueSize = nonNegInt(OTEL_BSP_MAX_QUEUE_SIZE, 'OTEL_BSP_MAX_QUEUE_SIZE', false)
 
-    const otelMetricsExporter = !OTEL_METRICS_EXPORTER || OTEL_METRICS_EXPORTER.toLowerCase() !== 'none'
-    this.#setBoolean(target, 'otelMetricsEnabled', DD_METRICS_OTEL_ENABLED && otelMetricsExporter)
+    const otelMetricsExporterEnabled = OTEL_METRICS_EXPORTER?.toLowerCase() !== 'none'
+    this.#setBoolean(
+      target,
+      'otelMetricsEnabled',
+      DD_METRICS_OTEL_ENABLED && isTrue(DD_METRICS_OTEL_ENABLED) && otelMetricsExporterEnabled
+    )
     // Set OpenTelemetry metrics configuration with specific _METRICS_ vars
     // taking precedence over generic _EXPORTERS_ vars
     if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) {
@@ -658,6 +661,7 @@ class Config {
       DD_APM_TRACING_ENABLED ??
         (DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED))
     )
+    this.#setBoolean(target, 'propagateProcessTags.enabled', DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED)
     this.#setString(target, 'appKey', DD_APP_KEY)
     this.#setBoolean(target, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
     target['appsec.apiSecurity.sampleDelay'] = maybeFloat(DD_API_SECURITY_SAMPLE_DELAY)
@@ -1471,26 +1475,24 @@ class Config {
     }
   }
 
-  #loadGitMetadata (envs) {
+  #loadGitMetadata () {
     // try to read Git metadata from the environment variables
     this.repositoryUrl = removeUserSensitiveInfo(
-      envs.DD_GIT_REPOSITORY_URL ??
-      this.tags[GIT_REPOSITORY_URL]
+      getEnv('DD_GIT_REPOSITORY_URL') ?? this.tags[GIT_REPOSITORY_URL]
     )
-    this.commitSHA = envs.DD_GIT_COMMIT_SHA ??
-      this.tags[GIT_COMMIT_SHA]
+    this.commitSHA = getEnv('DD_GIT_COMMIT_SHA') ?? this.tags[GIT_COMMIT_SHA]
 
     // otherwise, try to read Git metadata from the git.properties file
     if (!this.repositoryUrl || !this.commitSHA) {
-      const DD_GIT_PROPERTIES_FILE = envs.DD_GIT_PROPERTIES_FILE ??
-        `${process.cwd()}/git.properties`
+      const DD_GIT_PROPERTIES_FILE = getEnv('DD_GIT_PROPERTIES_FILE')
+      const gitPropertiesFile = DD_GIT_PROPERTIES_FILE ?? `${process.cwd()}/git.properties`
       let gitPropertiesString
       try {
-        gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
+        gitPropertiesString = fs.readFileSync(gitPropertiesFile, 'utf8')
       } catch (e) {
         // Only log error if the user has set a git.properties path
-        if (envs.DD_GIT_PROPERTIES_FILE) {
-          log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, e)
+        if (DD_GIT_PROPERTIES_FILE) {
+          log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', gitPropertiesFile, e)
         }
       }
       if (gitPropertiesString) {
@@ -1501,11 +1503,11 @@ class Config {
     }
     // otherwise, try to read Git metadata from the .git/ folder
     if (!this.repositoryUrl || !this.commitSHA) {
-      const DD_GIT_FOLDER_PATH = envs.DD_GIT_FOLDER_PATH ??
-        path.join(process.cwd(), '.git')
+      const DD_GIT_FOLDER_PATH = getEnv('DD_GIT_FOLDER_PATH')
+      const gitFolderPath = DD_GIT_FOLDER_PATH ?? path.join(process.cwd(), '.git')
       if (!this.repositoryUrl) {
         // try to read git config (repository URL)
-        const gitConfigPath = path.join(DD_GIT_FOLDER_PATH, 'config')
+        const gitConfigPath = path.join(gitFolderPath, 'config')
         try {
           const gitConfigContent = fs.readFileSync(gitConfigPath, 'utf8')
           if (gitConfigContent) {
@@ -1513,14 +1515,14 @@ class Config {
           }
         } catch (e) {
           // Only log error if the user has set a .git/ path
-          if (envs.DD_GIT_FOLDER_PATH) {
+          if (DD_GIT_FOLDER_PATH) {
             log.error('Error reading git config: %s', gitConfigPath, e)
           }
         }
       }
       if (!this.commitSHA) {
         // try to read git HEAD (commit SHA)
-        const gitHeadSha = resolveGitHeadSHA(DD_GIT_FOLDER_PATH)
+        const gitHeadSha = resolveGitHeadSHA(gitFolderPath)
         if (gitHeadSha) {
           this.commitSHA = gitHeadSha
         }

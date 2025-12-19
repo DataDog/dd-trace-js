@@ -1,6 +1,6 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const path = require('path')
 const Axios = require('axios')
 
@@ -55,7 +55,7 @@ describe('ASM Data collection', () => {
         requestHeaders.length
       )
       requestHeaders.forEach((headerName) => {
-        assert.property(payload[0][0].meta, `http.request.headers.${headerName}`)
+        assert.ok(Object.hasOwn(payload[0][0].meta, `http.request.headers.${headerName}`))
       })
 
       // Response headers
@@ -64,7 +64,7 @@ describe('ASM Data collection', () => {
         responseHeaders.length
       )
       responseHeaders.forEach((headerName) => {
-        assert.property(payload[0][0].meta, `http.response.headers.${headerName}`)
+        assert.ok(Object.hasOwn(payload[0][0].meta, `http.response.headers.${headerName}`))
       })
     })
   }

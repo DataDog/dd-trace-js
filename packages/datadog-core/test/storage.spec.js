@@ -58,7 +58,7 @@ describe('storage', () => {
 
     for (const sym of Object.getOwnPropertySymbols(resource)) {
       if (sym.toString() === 'Symbol(kResourceStore)' && resource[sym]) {
-        assert.ok(!Object.hasOwn(resource[sym], 'internal'))
+        assert.ok(!('internal' in resource[sym]))
       }
     }
   })

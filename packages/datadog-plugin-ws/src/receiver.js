@@ -1,6 +1,16 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
+const {
+  incrementWebSocketCounter,
+  buildWebSocketSpanPointerHash,
+  hasDistributedTracingContext
+} = require('./util')
+const {
+  WEBSOCKET_PTR_KIND,
+  SPAN_POINTER_DIRECTION,
+  SPAN_POINTER_DIRECTION_NAME
+} = require('../../dd-trace/src/constants')
 
 class WSReceiverPlugin extends TracingPlugin {
   static get id () { return 'ws' }
@@ -61,9 +71,37 @@ class WSReceiverPlugin extends TracingPlugin {
     if (!Object.hasOwn(ctx, 'result') || !ctx.span) return
 
     if (ctx.socket.spanContext) {
+      const linkAttributes = { 'dd.kind': 'executed_by' }
+
+      // Add span pointer for context propagation
+      if (this.config.traceWebsocketMessagesEnabled && ctx.socket.handshakeSpan) {
+        const handshakeSpan = ctx.socket.handshakeSpan
+
+        // Only add span pointers if distributed tracing is enabled and handshake has distributed context
+        if (hasDistributedTracingContext(handshakeSpan, ctx.socket)) {
+          const counter = incrementWebSocketCounter(ctx.socket, 'receiveCounter')
+          const handshakeContext = handshakeSpan.context()
+
+          const ptrHash = buildWebSocketSpanPointerHash(
+            handshakeContext._traceId,
+            handshakeContext._spanId,
+            counter,
+            true, // isServer
+            true // isIncoming
+          )
+
+          // Add span pointer attributes to link
+          linkAttributes['link.name'] = SPAN_POINTER_DIRECTION_NAME.UPSTREAM
+          linkAttributes['dd.kind'] = 'span-pointer'
+          linkAttributes['ptr.kind'] = WEBSOCKET_PTR_KIND
+          linkAttributes['ptr.dir'] = SPAN_POINTER_DIRECTION.UPSTREAM
+          linkAttributes['ptr.hash'] = ptrHash
+        }
+      }
+
       ctx.span.addLink({
         context: ctx.socket.spanContext,
-        attributes: { 'dd.kind': 'executed_by' },
+        attributes: linkAttributes,
       })
     }
 
