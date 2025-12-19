@@ -34,7 +34,7 @@ describe('OuboundPlugin', () => {
     it('should attempt to remap when we found peer service', () => {
       computePeerServiceStub.value({ spanComputePeerService: true })
       getPeerServiceStub.returns({ foo: 'bar' })
-      instance.tagPeerService({ context: () => { return { _tags: {} } }, addTags: () => {} })
+      instance.tagPeerService({ context: () => ({ _tags: {}, getTags () { return this._tags } }), addTags: () => {} })
 
       sinon.assert.called(getPeerServiceStub)
       sinon.assert.called(getRemapStub)
@@ -43,7 +43,7 @@ describe('OuboundPlugin', () => {
     it('should not attempt to remap if we found no peer service', () => {
       computePeerServiceStub.value({ spanComputePeerService: true })
       getPeerServiceStub.returns(undefined)
-      instance.tagPeerService({ context: () => { return { _tags: {} } }, addTags: () => {} })
+      instance.tagPeerService({ context: () => ({ _tags: {}, getTags () { return this._tags } }), addTags: () => {} })
 
       sinon.assert.called(getPeerServiceStub)
       sinon.assert.notCalled(getRemapStub)
@@ -51,7 +51,7 @@ describe('OuboundPlugin', () => {
 
     it('should do nothing when disabled', () => {
       computePeerServiceStub.value({ spanComputePeerService: false })
-      instance.tagPeerService({ context: () => { return { _tags: {} } }, addTags: () => {} })
+      instance.tagPeerService({ context: () => ({ _tags: {}, getTags () { return this._tags } }), addTags: () => {} })
       sinon.assert.notCalled(getPeerServiceStub)
       sinon.assert.notCalled(getRemapStub)
     })

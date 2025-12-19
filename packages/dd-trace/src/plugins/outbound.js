@@ -125,7 +125,7 @@ class OutboundPlugin extends TracingPlugin {
    */
   tagPeerService (span) {
     if (this._tracerConfig.spanComputePeerService) {
-      const peerData = this.getPeerService(span.context()._tags)
+      const peerData = this.getPeerService(span.context().getTags())
       if (peerData !== undefined) {
         span.addTags(this.getPeerServiceRemap(peerData))
       }

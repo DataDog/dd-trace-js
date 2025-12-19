@@ -6,16 +6,14 @@ const { OpCode } = require('./index')
 /**
  * NativeSpanContext extends DatadogSpanContext to store span data in native Rust storage.
  *
- * This class maintains the same interface as DatadogSpanContext but uses a Proxy
- * to sync tag writes immediately to native storage. The Proxy is necessary because
- * tags have arbitrary dynamic keys that cannot be handled with static getters/setters.
+ * This class overrides setTag() to sync tag writes immediately to native storage.
+ * Code should use setTag()/getTag() accessors instead of accessing _tags directly.
  *
  * Key differences from DatadogSpanContext:
  * - Has a _nativeSpanId (BigInt) for native operations
- * - Tag writes are immediately synced to native storage via Proxy
+ * - setTag() syncs to native storage immediately
  */
 class NativeSpanContext extends DatadogSpanContext {
-  #tagsCache
   #nativeSpans
 
   /**
@@ -34,67 +32,29 @@ class NativeSpanContext extends DatadogSpanContext {
 
     this.#nativeSpans = nativeSpans
     this._nativeSpanId = props.spanId.toBigInt()
-
-    // Cache for tags - reads come from here, writes sync to native
-    this.#tagsCache = props.tags || {}
-
-    // Replace inherited _tags with a Proxy that syncs writes to native
-    this._tags = this.#createTagsProxy()
   }
 
   /**
-   * Create a Proxy for tags that syncs writes immediately to native storage.
-   * A Proxy is required because tags have arbitrary dynamic keys that cannot
-   * be handled with static getters/setters.
-   * @returns {Proxy}
+   * Set a tag value and sync to native storage.
+   * @param {string|Symbol} key - Tag key
+   * @param {*} value - Tag value
    */
-  #createTagsProxy () {
-    const self = this
-    return new Proxy(this.#tagsCache, {
-      get (target, key) {
-        return target[key]
-      },
+  setTag (key, value) {
+    // Store in JS cache
+    this._tags[key] = value
 
-      set (target, key, value) {
-        if (typeof key === 'symbol') {
-          target[key] = value
-          return true
-        }
+    // Symbol keys are for internal JS use only (e.g., IGNORE_OTEL_ERROR)
+    // They should not be synced to native storage
+    if (typeof key === 'symbol') {
+      return
+    }
 
-        target[key] = value
-        self.#syncTagToNative(key, value)
-        return true
-      },
-
-      deleteProperty (target, key) {
-        delete target[key]
-        return true
-      },
-
-      has (target, key) {
-        return key in target
-      },
-
-      ownKeys (target) {
-        return Object.keys(target)
-      },
-
-      getOwnPropertyDescriptor (target, key) {
-        if (key in target) {
-          return {
-            value: target[key],
-            writable: true,
-            enumerable: true,
-            configurable: true
-          }
-        }
-        return undefined
-      }
-    })
+    // Sync to native storage
+    this.#syncTagToNative(key, value)
   }
 
   /**
-   * Sync a tag value to native storage immediately.
+   * Sync a tag value to native storage.
    * @param {string} key - Tag key
    * @param {*} value - Tag value
    */

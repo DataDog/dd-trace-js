@@ -41,7 +41,7 @@ const VERCEL_AI_GENERATION_METADATA_PREFIX = 'ai.settings.'
  */
 function getSpanTags (ctx) {
   const span = ctx.currentStore?.span
-  const carrier = ctx.attributes ?? span?.context()._tags ?? {}
+  const carrier = ctx.attributes ?? span?.context()?.getTags() ?? {}
   return /** @type {SpanTags} */ (carrier)
 }
 

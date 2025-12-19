@@ -185,9 +185,10 @@ class NativeSpansInterface {
             break
           case 'u128':
             // u128 is passed as array of two BigInts [high, low]
-            this._changeQueueBuffer.writeBigUInt64LE(value[0], this._cqbIndex)
+            // For little-endian u128, low bytes come first, then high bytes
+            this._changeQueueBuffer.writeBigUInt64LE(value[1], this._cqbIndex)  // low part first
             this._cqbIndex += 8
-            this._changeQueueBuffer.writeBigUInt64LE(value[1], this._cqbIndex)
+            this._changeQueueBuffer.writeBigUInt64LE(value[0], this._cqbIndex)  // high part second
             this._cqbIndex += 8
             break
           case 'i64':
@@ -400,7 +401,11 @@ class NativeSpansInterface {
   sample (spanId) {
     // Flush pending changes so native has current span state
     this.flushChangeQueue()
-    return this._state.sample(spanId)
+
+    // Write span ID to sampling buffer as u64 LE (required by native side)
+    this._samplingBuffer.writeBigUInt64LE(spanId, 0)
+
+    return this._state.sample()
   }
 }
 

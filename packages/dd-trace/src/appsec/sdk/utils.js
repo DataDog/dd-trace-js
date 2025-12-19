@@ -18,7 +18,7 @@ function getRootSpan () {
 
     parentId = pContext._parentId
 
-    if (!pContext._tags?._inferred_span) {
+    if (!pContext.getTag('_inferred_span')) {
       span = parent
     }
   }

@@ -60,7 +60,7 @@ class NextPlugin extends ServerPlugin {
     if (!store) return
 
     const span = store.span
-    const error = span.context()._tags.error
+    const error = span.context().getTag('error')
     const requestError = req.error || nextRequest.error
 
     if (requestError) {
@@ -97,7 +97,7 @@ class NextPlugin extends ServerPlugin {
     if (!req) return
 
     // Only use error page names if there's not already a name
-    const current = span.context()._tags['next.page']
+    const current = span.context().getTag('next.page')
     const isErrorPage = errorPages.has(page)
 
     if (current && isErrorPage) {
