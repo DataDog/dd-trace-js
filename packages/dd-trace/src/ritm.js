@@ -13,7 +13,6 @@ const origRequire = Module.prototype.require
 module.exports = Hook
 
 let moduleHooks = Object.create(null)
-const pathModuleHooks = new Set()
 let cache = Object.create(null)
 let patching = Object.create(null)
 let patchedRequire = null
@@ -45,7 +44,6 @@ function Hook (modules, options, onrequire) {
       if (hooks) {
         hooks.push(onrequire)
       } else {
-        if (path.isAbsolute(mod)) pathModuleHooks.add(mod)
         moduleHooks[mod] = [onrequire]
       }
     }
