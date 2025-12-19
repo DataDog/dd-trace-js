@@ -87,7 +87,7 @@ const web = {
     if (!span) return
 
     span.context()._name = `${name}.request`
-    span.context()._tags.component = name
+    span.context().setTag('component', name)
     span._integrationName = name
 
     web.setConfig(req, config)
@@ -227,9 +227,10 @@ const web = {
     const context = contexts.get(req)
     const { span, inferredProxySpan, error } = context
 
-    const spanHasExistingError = span.context()._tags.error || span.context()._tags[ERROR_MESSAGE]
+    const spanContext = span.context()
+    const spanHasExistingError = spanContext.getTag('error') || spanContext.getTag(ERROR_MESSAGE)
     const inferredSpanContext = inferredProxySpan?.context()
-    const inferredSpanHasExistingError = inferredSpanContext?._tags.error || inferredSpanContext?._tags[ERROR_MESSAGE]
+    const inferredSpanHasExistingError = inferredSpanContext?.getTag('error') || inferredSpanContext?.getTag(ERROR_MESSAGE)
 
     const isValidStatusCode = context.config.validateStatus(statusCode)
 
@@ -393,7 +394,7 @@ function addRequestTags (context, spanType) {
   })
 
   // if client ip has already been set by appsec, no need to run it again
-  if (extractIp && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
+  if (extractIp && !span.context().hasTag(HTTP_CLIENT_IP)) {
     const clientIp = extractIp(config, req)
 
     if (clientIp) {
@@ -444,11 +445,11 @@ function applyRouteOrEndpointTag (context) {
 
 function addResourceTag (context) {
   const { req, span } = context
-  const tags = span.context()._tags
+  const spanContext = span.context()
 
-  if (tags[RESOURCE_NAME]) return
+  if (spanContext.getTag(RESOURCE_NAME)) return
 
-  const resource = [req.method, tags[HTTP_ROUTE]]
+  const resource = [req.method, spanContext.getTag(HTTP_ROUTE)]
     .filter(Boolean)
     .join(' ')
 
