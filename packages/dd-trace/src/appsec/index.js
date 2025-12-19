@@ -2,7 +2,7 @@
 
 const log = require('../log')
 const RuleManager = require('./rule_manager')
-const remoteConfig = require('../remote_config')
+const appsecRemoteConfig = require('./remote_config')
 const {
   bodyParser,
   cookieParser,
@@ -63,7 +63,7 @@ function enable (_config) {
 
     RuleManager.loadRules(_config.appsec)
 
-    remoteConfig.enableWafUpdate(_config.appsec)
+    appsecRemoteConfig.enableWafUpdate(_config.appsec)
 
     Reporter.init(_config.appsec)
 
@@ -373,7 +373,7 @@ function disable () {
   graphql.disable()
   rasp.disable()
 
-  remoteConfig.disableWafUpdate()
+  appsecRemoteConfig.disableWafUpdate()
 
   apiSecuritySampler.disable()
 
