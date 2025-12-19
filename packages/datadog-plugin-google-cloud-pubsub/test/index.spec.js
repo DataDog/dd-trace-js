@@ -3,18 +3,14 @@
 const assert = require('node:assert/strict')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
-const sinon = require('sinon')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const id = require('../../dd-trace/src/id')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const TIMEOUT = 30000
-const dsmTopicName = 'dsm-topic'
 
 describe('Plugin', () => {
   let tracer
@@ -24,7 +20,6 @@ describe('Plugin', () => {
 
     before(() => {
       process.env.PUBSUB_EMULATOR_HOST = 'localhost:8081'
-      process.env.DD_DATA_STREAMS_ENABLED = 'true'
     })
 
     after(() => {
@@ -41,8 +36,6 @@ describe('Plugin', () => {
       let resource
       let v1
       let gax
-      let expectedProducerHash
-      let expectedConsumerHash
 
       describe('without configuration', () => {
         beforeEach(() => {
@@ -328,113 +321,6 @@ describe('Plugin', () => {
             })
             await pubsub.createTopic(topicName)
             return expectedSpanPromise
-          })
-        })
-      })
-
-      describe('data stream monitoring', () => {
-        let dsmTopic
-        let sub
-        let consume
-
-        beforeEach(() => {
-          return agent.load('google-cloud-pubsub', {
-            dsmEnabled: true
-          })
-        })
-
-        before(async () => {
-          const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
-          project = getProjectId()
-          resource = `projects/${project}/topics/${dsmTopicName}`
-          pubsub = new PubSub({ projectId: project })
-          tracer.use('google-cloud-pubsub', { dsmEnabled: true })
-
-          dsmTopic = await pubsub.createTopic(dsmTopicName)
-          dsmTopic = dsmTopic[0]
-          sub = await dsmTopic.createSubscription('DSM')
-          sub = sub[0]
-          consume = function (cb) {
-            sub.on('message', cb)
-          }
-
-          const dsmFullTopic = `projects/${project}/topics/${dsmTopicName}`
-
-          expectedProducerHash = computePathwayHash(
-            'test',
-            'tester',
-            ['direction:out', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
-            ENTRY_PARENT_HASH
-          )
-          expectedConsumerHash = computePathwayHash(
-            'test',
-            'tester',
-            ['direction:in', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
-            expectedProducerHash
-          )
-        })
-
-        describe('should set a DSM checkpoint', () => {
-          it('on produce', async () => {
-            await publish(dsmTopic, { data: Buffer.from('DSM produce checkpoint') })
-
-            agent.expectPipelineStats(dsmStats => {
-              let statsPointsReceived = 0
-              // we should have 1 dsm stats points
-              dsmStats.forEach((timeStatsBucket) => {
-                if (timeStatsBucket && timeStatsBucket.Stats) {
-                  timeStatsBucket.Stats.forEach((statsBuckets) => {
-                    statsPointsReceived += statsBuckets.Stats.length
-                  })
-                }
-              })
-              assert.ok(statsPointsReceived >= 1)
-              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64BE(0).toString()), true)
-            }, { timeoutMs: TIMEOUT })
-          })
-
-          it('on consume', async () => {
-            await publish(dsmTopic, { data: Buffer.from('DSM consume checkpoint') })
-            await consume(async () => {
-              agent.expectPipelineStats(dsmStats => {
-                let statsPointsReceived = 0
-                // we should have 2 dsm stats points
-                dsmStats.forEach((timeStatsBucket) => {
-                  if (timeStatsBucket && timeStatsBucket.Stats) {
-                    timeStatsBucket.Stats.forEach((statsBuckets) => {
-                      statsPointsReceived += statsBuckets.Stats.length
-                    })
-                  }
-                })
-                assert.ok(statsPointsReceived >= 2)
-                assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64BE(0).toString()), true)
-              }, { timeoutMs: TIMEOUT })
-            })
-          })
-        })
-
-        describe('it should set a message payload size', () => {
-          let recordCheckpointSpy
-
-          beforeEach(() => {
-            recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-          })
-
-          afterEach(() => {
-            DataStreamsProcessor.prototype.recordCheckpoint.restore()
-          })
-
-          it('when producing a message', async () => {
-            await publish(dsmTopic, { data: Buffer.from('DSM produce payload size') })
-            assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-          })
-
-          it('when consuming a message', async () => {
-            await publish(dsmTopic, { data: Buffer.from('DSM consume payload size') })
-
-            await consume(async () => {
-              assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-            })
           })
         })
       })
