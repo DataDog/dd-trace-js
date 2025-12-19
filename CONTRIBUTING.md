@@ -85,6 +85,24 @@ Eventually we plan to look into putting these permission-required tests behind a
 
 Always search the codebase first before creating new code to avoid duplicates. Check for existing utilities, helpers, or patterns that solve similar problems. Reuse existing code when possible rather than reinventing solutions.
 
+## Sign your commits
+
+All commits in a pull request must be signed. We require commit signing to ensure the authenticity and integrity of contributions to the project.
+
+**Datadog employees:** We recommend using the [sign-pull-request tool](https://datadoghq.atlassian.net/wiki/spaces/SECENG/pages/5371593157/Easily+sign+commits+with+sign-pull-request+tool) for easy signing of commits.
+
+You can also sign your commits manually using one of the following methods:
+
+- [Signing commits with GPG](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits)
+- [Signing commits with SSH](https://docs.github.com/en/authentication/managing-commit-signature-verification/about-commit-signature-verification#ssh-commit-signature-verification)
+- [Signing commits with 1Password](https://developer.1password.com/docs/ssh/git-commit-signing/)
+
+If you have already created commits without signing them, you can sign them retroactively by using an interactive rebase:
+
+```sh
+$ git rebase --exec 'git commit --amend --no-edit -n -S' -i <base-branch>
+```
+
 ## Development Requirements
 
 Since this project supports multiple Node.js versions, using a version manager

@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const {
   FakeAgent,
   sandboxCwd,
@@ -9,12 +10,12 @@ const {
 const childProcess = require('child_process')
 const { fork } = childProcess
 const path = require('path')
-const { assert } = require('chai')
+
 const fs = require('fs/promises')
 const fsync = require('fs')
 const net = require('net')
 const zlib = require('zlib')
-const { Profile } = require('pprof-format')
+const { Profile } = require('../../vendor/dist/pprof-format')
 const satisfies = require('semifies')
 
 const DEFAULT_PROFILE_TYPES = ['wall', 'space']
@@ -55,7 +56,7 @@ function expectProfileMessagePromise (agent, timeout,
       const attachments = event.attachments
       assert.ok(Array.isArray(attachments))
       // Profiler encodes the files with Promise.all, so their ordering is not guaranteed
-      assert.sameMembers(attachments, fileNames)
+      assert.deepStrictEqual(attachments.slice().sort(), fileNames.sort())
       for (const [index, fileName] of attachments.entries()) {
         assertObjectContains(files[index + 1], {
           originalname: fileName
@@ -355,12 +356,12 @@ describe('profiler', () => {
         BUSY_CYCLE_TIME: (busyCycleTimeNs | 0).toString(),
         DD_TRACE_AGENT_PORT: agent.port
       }
-      // With Node 23 or later, test the profiler with async context frame use.
+      // With Node 22.9.0 or later, test the profiler with async context frame use.
       const execArgv = []
-      if (satisfies(process.versions.node, '>=23.0.0')) {
+      if (satisfies(process.versions.node, '>=22.9.0')) {
         env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = 1
         if (!satisfies(process.versions.node, '>=24.0.0')) {
-          // For Node 23, use the experimental command line flag for Node to enable
+          // For Node 22.9.0+, use the experimental command line flag for Node to enable
           // async context frame. Node 24 has it enabled by default.
           execArgv.push('--experimental-async-context-frame')
         }
@@ -372,7 +373,7 @@ describe('profiler', () => {
 
       // Must've counted the number of times each endpoint was hit
       const event = JSON.parse((await readLatestFile(cwd, /^event_.+\.json$/)).toString())
-      assert.deepEqual(event.endpoint_counts, { 'endpoint-0': 1, 'endpoint-1': 1, 'endpoint-2': 1 })
+      assert.deepStrictEqual(event.endpoint_counts, { 'endpoint-0': 1, 'endpoint-1': 1, 'endpoint-2': 1 })
 
       const { profile, encoded } = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
 
@@ -424,13 +425,13 @@ describe('profiler', () => {
           // Timestamp must be defined and be between process start and end time
           assert.notStrictEqual(ts, undefined, encoded)
           assert.strictEqual(typeof osThreadId, 'number', encoded)
-          assert.equal(threadId, strings.dedup('0'), encoded)
+          assert.strictEqual(threadId, strings.dedup('0'), encoded)
           assert.ok(ts <= procEnd, encoded)
           assert.ok(ts >= procStart, encoded)
           // Thread name must be defined and exactly equal "Main Event Loop"
-          assert.equal(threadName, threadNameValue, encoded)
+          assert.strictEqual(threadName, threadNameValue, encoded)
         } else {
-          assert.equal(threadId, strings.dedup('NA'), encoded)
+          assert.strictEqual(threadId, strings.dedup('NA'), encoded)
         }
         // Either all or none of span-related labels are defined
         if (endpoint === undefined) {
@@ -454,7 +455,7 @@ describe('profiler', () => {
           const existingSpanData = spans.get(spanId)
           if (existingSpanData) {
             // Span's root span and endpoint must be consistent across samples
-            assert.deepEqual(spanData, existingSpanData, encoded)
+            assert.deepStrictEqual(spanData, existingSpanData, encoded)
           } else {
             // New span id, store span data
             spans.set(spanId, spanData)
@@ -474,18 +475,18 @@ describe('profiler', () => {
       }
       // Need to have a total of 9 different spans, with 3 different root spans
       // and 3 different endpoints.
-      assert.equal(spans.size, 9, encoded)
-      assert.equal(rootSpans.size, 3, encoded)
-      assert.equal(endpoints.size, 3, encoded)
+      assert.strictEqual(spans.size, 9, encoded)
+      assert.strictEqual(rootSpans.size, 3, encoded)
+      assert.strictEqual(endpoints.size, 3, encoded)
     })
 
     it('fs timeline events work', async () => {
       const fsEvents = await gatherFilesystemTimelineEvents(cwd, 'profiler/fstest.js', agent.port)
-      assert.equal(fsEvents.length, 6)
+      assert.strictEqual(fsEvents.length, 6)
       const path = fsEvents[0].path
       const fd = fsEvents[1].fd
       assert(path.endsWith('tempfile.txt'))
-      assert.sameDeepMembers(fsEvents, [
+      assertObjectContains(fsEvents, [
         { flag: 'w', mode: '', operation: 'open', path },
         { fd, operation: 'write' },
         { fd, operation: 'close' },
@@ -497,12 +498,15 @@ describe('profiler', () => {
 
     it('dns timeline events work', async () => {
       const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', agent.port, 'dns')
-      assert.sameDeepMembers(dnsEvents, [
-        { operation: 'lookup', host: 'example.org' },
-        { operation: 'lookup', host: 'example.com' },
+      const compare = (a, b) => {
+        return a.operation.localeCompare(b.operation) || (a.host?.localeCompare(b.host) ?? 0)
+      }
+      assertObjectContains(dnsEvents.sort(compare), [
         { operation: 'lookup', host: 'datadoghq.com' },
+        { operation: 'lookup', host: 'example.com' },
+        { operation: 'lookup', host: 'example.org' },
+        { operation: 'lookupService', address: '13.224.103.60', port: 80 },
         { operation: 'queryA', host: 'datadoghq.com' },
-        { operation: 'lookupService', address: '13.224.103.60', port: 80 }
       ])
     })
 
@@ -537,7 +541,7 @@ describe('profiler', () => {
           const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', agent.port, 'net', args)
           // The profiled program should have two TCP connection events to the two
           // servers.
-          assert.sameDeepMembers(events, [
+          assertObjectContains(events, [
             { operation: 'connect', host: '127.0.0.1', port: port1 },
             { operation: 'connect', host: '127.0.0.1', port: port2 }
           ])
@@ -698,10 +702,10 @@ describe('profiler', () => {
 
       const checkMetrics = agent.assertTelemetryReceived(({ _, payload }) => {
         const pp = payload.payload
-        assert.equal(pp.namespace, 'profilers')
+        assert.strictEqual(pp.namespace, 'profilers')
         const series = pp.series
         const requests = series.find(s => s.metric === 'profile_api.requests')
-        assert.equal(requests.type, 'count')
+        assert.strictEqual(requests.type, 'count')
         // There's a race between metrics and on-shutdown profile, so metric
         // value will be between 1 and 3
         requestCount = requests.points[0][1]
@@ -709,30 +713,30 @@ describe('profiler', () => {
         assert.ok(requestCount <= 3)
 
         const responses = series.find(s => s.metric === 'profile_api.responses')
-        assert.equal(responses.type, 'count')
-        assert.match(responses.tags, /status_code:200/)
+        assert.strictEqual(responses.type, 'count')
+        assert.deepStrictEqual(responses.tags, ['status_code:200'])
 
         // Same number of requests and responses
-        assert.equal(responses.points[0][1], requestCount)
+        assert.strictEqual(responses.points[0][1], requestCount)
       }, 'generate-metrics', timeout)
 
       const checkDistributions = agent.assertTelemetryReceived(({ _, payload }) => {
         const pp = payload.payload
-        assert.equal(pp.namespace, 'profilers')
+        assert.strictEqual(pp.namespace, 'profilers')
         const series = pp.series
         assert.strictEqual(series.length, 2)
-        assert.equal(series[0].metric, 'profile_api.bytes')
-        assert.equal(series[1].metric, 'profile_api.ms')
+        assert.strictEqual(series[0].metric, 'profile_api.bytes')
+        assert.strictEqual(series[1].metric, 'profile_api.ms')
 
         // Same number of points
         pointsCount = series[0].points.length
-        assert.equal(pointsCount, series[1].points.length)
+        assert.strictEqual(pointsCount, series[1].points.length)
       }, 'distributions', timeout)
 
       await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions])
 
       // Same number of requests and points
-      assert.equal(requestCount, pointsCount)
+      assert.strictEqual(requestCount, pointsCount)
     })
 
     it('sends wall profiler sample context telemetry', async function () {
@@ -759,11 +763,11 @@ describe('profiler', () => {
 
       const checkMetrics = agent.assertTelemetryReceived(({ _, payload }) => {
         const pp = payload.payload
-        assert.equal(pp.namespace, 'profilers');
+        assert.strictEqual(pp.namespace, 'profilers');
         ['live', 'used'].forEach(metricName => {
           const sampleContexts = pp.series.find(s => s.metric === `wall.async_contexts_${metricName}`)
           assert.notStrictEqual(sampleContexts, undefined)
-          assert.equal(sampleContexts.type, 'gauge')
+          assert.strictEqual(sampleContexts.type, 'gauge')
           assert.ok(sampleContexts.points[0][1] >= 1)
         })
       }, 'generate-metrics', timeout)

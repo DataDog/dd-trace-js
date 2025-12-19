@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
-const { Span } = require('opentracing')
+const { Span } = require('../../../vendor/dist/opentracing')
 
 require('./setup/core')
 

@@ -201,7 +201,7 @@ describe(`cucumber@${version} commonJS`, () => {
             assert.strictEqual(testSpan.meta[ORIGIN_KEY], CI_APP_ORIGIN)
             assert.strictEqual(testSpan.meta[COMPONENT], 'cucumber')
             assert.strictEqual(testSpan.metrics[SAMPLING_PRIORITY], AUTO_KEEP)
-            assert.ok(testSpan.meta[TEST_FRAMEWORK_VERSION] != null)
+            assert.ok(testSpan.meta[TEST_FRAMEWORK_VERSION])
             assert.strictEqual(testSpan.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
             assert.strictEqual(testSpan.meta[TEST_SUITE], 'ci-visibility/cucumber-plugin-tests/features/simple.feature')
             assert.strictEqual(
@@ -209,7 +209,7 @@ describe(`cucumber@${version} commonJS`, () => {
               'ci-visibility/cucumber-plugin-tests/features/simple.feature',
               'Test source file should be the simple feature'
             )
-            assert.ok(testSpan.metrics[TEST_SOURCE_START] != null)
+            assert.ok(testSpan.metrics[TEST_SOURCE_START])
             assert.strictEqual(testSpan.type, 'test')
             assert.strictEqual(testSpan.name, 'cucumber.test')
             assert.strictEqual(testSpan.parent_id.toString(), '0')
@@ -236,7 +236,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.match(errorMessage, /AssertionError/)
               assert.match(errorMessage, /datadog/)
               assert.match(errorMessage, /godatad/)
-              assert.ok(testSpan.meta[ERROR_STACK] != null)
+              assert.ok(testSpan.meta[ERROR_STACK])
             }
 
             if (testName === 'hooks fail') {
@@ -245,7 +245,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.match(errorMessage, /TypeError: Cannot set/)
               assert.match(errorMessage, /of undefined/)
               assert.match(errorMessage, /boom/)
-              assert.ok(testSpan.meta[ERROR_STACK] != null)
+              assert.ok(testSpan.meta[ERROR_STACK])
             }
 
             const testSteps = spans.filter(
@@ -254,7 +254,7 @@ describe(`cucumber@${version} commonJS`, () => {
             const { steps } = testInfoByTestName[testName]
             steps.forEach(({ name, stepStatus }) => {
               const stepSpan = testSteps.find(span => span.meta['cucumber.step'] === name)
-              assert.ok(stepSpan != null)
+              assert.ok(stepSpan)
               assert.strictEqual(stepSpan.meta['step.status'], stepStatus,
                 `Test ${testName} should have step ${name} with status ${stepStatus}`)
               assert.strictEqual(stepSpan.meta[COMPONENT], 'cucumber')
@@ -328,16 +328,16 @@ describe(`cucumber@${version} commonJS`, () => {
                 assert.strictEqual(testSessionEventContent.meta[CUCUMBER_IS_PARALLEL], 'true')
               }
 
-              assert.ok(testSessionEventContent.test_session_id != null)
-              assert.ok(testSessionEventContent.meta[TEST_COMMAND] != null)
-              assert.ok(testSessionEventContent.meta[TEST_TOOLCHAIN] != null)
+              assert.ok(testSessionEventContent.test_session_id)
+              assert.ok(testSessionEventContent.meta[TEST_COMMAND])
+              assert.ok(testSessionEventContent.meta[TEST_TOOLCHAIN])
               assert.strictEqual(testSessionEventContent.resource.startsWith('test_session.'), true)
               assert.strictEqual(testSessionEventContent.meta[TEST_STATUS], 'fail')
 
-              assert.ok(testModuleEventContent.test_session_id != null)
-              assert.ok(testModuleEventContent.test_module_id != null)
-              assert.ok(testModuleEventContent.meta[TEST_COMMAND] != null)
-              assert.ok(testModuleEventContent.meta[TEST_MODULE] != null)
+              assert.ok(testModuleEventContent.test_session_id)
+              assert.ok(testModuleEventContent.test_module_id)
+              assert.ok(testModuleEventContent.meta[TEST_COMMAND])
+              assert.ok(testModuleEventContent.meta[TEST_MODULE])
               assert.strictEqual(testModuleEventContent.resource.startsWith('test_module.'), true)
               assert.strictEqual(testModuleEventContent.meta[TEST_STATUS], 'fail')
               assert.strictEqual(
@@ -363,14 +363,14 @@ describe(`cucumber@${version} commonJS`, () => {
                   test_session_id: testSessionId
                 }
               }) => {
-                assert.ok(meta[TEST_COMMAND] != null)
-                assert.ok(meta[TEST_MODULE] != null)
-                assert.ok(testSuiteId != null)
+                assert.ok(meta[TEST_COMMAND])
+                assert.ok(meta[TEST_MODULE])
+                assert.ok(testSuiteId)
                 assert.strictEqual(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
                 assert.strictEqual(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
                 assert.strictEqual(meta[TEST_SOURCE_FILE].startsWith(featuresPath), true)
                 assert.strictEqual(metrics[TEST_SOURCE_START], 1)
-                assert.ok(metrics[DD_HOST_CPU_COUNT] != null)
+                assert.ok(metrics[DD_HOST_CPU_COUNT])
               })
 
               assert.deepStrictEqual(testEvents.map(test => test.content.resource).sort(), [
@@ -399,9 +399,9 @@ describe(`cucumber@${version} commonJS`, () => {
                   test_session_id: testSessionId
                 }
               }) => {
-                assert.ok(meta[TEST_COMMAND] != null)
-                assert.ok(meta[TEST_MODULE] != null)
-                assert.ok(testSuiteId != null)
+                assert.ok(meta[TEST_COMMAND])
+                assert.ok(meta[TEST_MODULE])
+                assert.ok(testSuiteId)
                 assert.strictEqual(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
                 assert.strictEqual(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
                 assert.strictEqual(meta[TEST_SOURCE_FILE].startsWith('ci-visibility/features'), true)
@@ -412,7 +412,7 @@ describe(`cucumber@${version} commonJS`, () => {
                 if (runMode === 'parallel') {
                   assert.strictEqual(meta[CUCUMBER_IS_PARALLEL], 'true')
                 }
-                assert.ok(metrics[DD_HOST_CPU_COUNT] != null)
+                assert.ok(metrics[DD_HOST_CPU_COUNT])
                 if (!meta[TEST_NAME].includes('Say skip')) {
                   assert.strictEqual(meta['custom_tag.before'], 'hello before')
                   assert.strictEqual(meta['custom_tag.after'], 'hello after')
@@ -535,15 +535,15 @@ describe(`cucumber@${version} commonJS`, () => {
               2,
               'Steps should be covered twice'
             )
-            assert.ok(coveragePayload.content.coverages[0].test_session_id != null)
-            assert.ok(coveragePayload.content.coverages[0].test_suite_id != null)
+            assert.ok(coveragePayload.content.coverages[0].test_session_id)
+            assert.ok(coveragePayload.content.coverages[0].test_suite_id)
 
             const testSession = eventsRequest
               .payload
               .events
               .find(event => event.type === 'test_session_end')
               .content
-            assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT] != null)
+            assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
 
             const eventTypes = eventsRequest.payload.events.map(event => event.type)
             assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
@@ -593,7 +593,7 @@ describe(`cucumber@${version} commonJS`, () => {
             assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
             assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
             assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
-            assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT] != null)
+            assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
             const testModule = payload.events.find(event => event.type === 'test_module_end').content
             assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
             assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
@@ -1980,7 +1980,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
               const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
-              assert.ok(retriedTest.meta[snapshotIdKey] != null)
+              assert.ok(retriedTest.meta[snapshotIdKey])
 
               snapshotIdByTest = retriedTest.meta[snapshotIdKey]
               spanIdByTest = retriedTest.span_id.toString()
@@ -2868,7 +2868,7 @@ describe(`cucumber@${version} commonJS`, () => {
             assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
           }
 
-          const resourceNames = tests.map(span => span.resource)
+          const resourceNames = tests.map(span => span.resource).sort()
 
           // TODO: This is a duplication of the code below. We should refactor this.
           assertObjectContains(resourceNames,

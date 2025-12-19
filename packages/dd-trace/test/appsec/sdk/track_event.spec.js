@@ -1,6 +1,5 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -72,10 +71,8 @@ describe('track_event - Internal API', () => {
       trackUserLoginSuccessEvent(tracer, {}, { key: 'value' })
 
       sinon.assert.calledTwice(log.warn)
-      expect(log.warn.firstCall)
-        .to.have.been.calledWithExactly('[ASM] Invalid user provided to trackUserLoginSuccessEvent')
-      expect(log.warn.secondCall)
-        .to.have.been.calledWithExactly('[ASM] Invalid user provided to trackUserLoginSuccessEvent')
+      sinon.assert.calledWithExactly(log.warn.firstCall, '[ASM] Invalid user provided to trackUserLoginSuccessEvent')
+      sinon.assert.calledWithExactly(log.warn.secondCall, '[ASM] Invalid user provided to trackUserLoginSuccessEvent')
       sinon.assert.notCalled(setUserTags)
       sinon.assert.notCalled(rootSpan.addTags)
       sinon.assert.notCalled(telemetry.incrementSdkEventMetric)
@@ -86,8 +83,7 @@ describe('track_event - Internal API', () => {
 
       trackUserLoginSuccessEvent(tracer, { id: 'user_id' }, { key: 'value' })
 
-      expect(log.warn)
-        .to.have.been.calledOnceWithExactly('[ASM] Root span not available in trackUserLoginSuccessEvent')
+      sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Root span not available in trackUserLoginSuccessEvent')
       sinon.assert.notCalled(setUserTags)
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'login_success', 'v1')
     })
@@ -111,8 +107,7 @@ describe('track_event - Internal API', () => {
         'appsec.events.users.login.success.metakey2': 'metaValue2',
         'appsec.events.users.login.success.metakey3': 'metaValue3'
       })
-      expect(prioritySampler.setPriority)
-        .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           [LOGIN_SUCCESS]: null,
@@ -135,8 +130,7 @@ describe('track_event - Internal API', () => {
         '_dd.appsec.events.users.login.success.sdk': 'true',
         'appsec.events.users.login.success.usr.login': 'user_id'
       })
-      expect(prioritySampler.setPriority)
-        .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           [LOGIN_SUCCESS]: null,
@@ -159,8 +153,7 @@ describe('track_event - Internal API', () => {
         '_dd.appsec.events.users.login.success.sdk': 'true',
         'appsec.events.users.login.success.usr.login': 'user_login'
       })
-      expect(prioritySampler.setPriority)
-        .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           [LOGIN_SUCCESS]: null,
@@ -178,10 +171,8 @@ describe('track_event - Internal API', () => {
       trackUserLoginFailureEvent(tracer, [], false, { key: 'value' })
 
       sinon.assert.calledTwice(log.warn)
-      expect(log.warn.firstCall)
-        .to.have.been.calledWithExactly('[ASM] Invalid userId provided to trackUserLoginFailureEvent')
-      expect(log.warn.secondCall)
-        .to.have.been.calledWithExactly('[ASM] Invalid userId provided to trackUserLoginFailureEvent')
+      sinon.assert.calledWithExactly(log.warn.firstCall, '[ASM] Invalid userId provided to trackUserLoginFailureEvent')
+      sinon.assert.calledWithExactly(log.warn.secondCall, '[ASM] Invalid userId provided to trackUserLoginFailureEvent')
       sinon.assert.notCalled(setUserTags)
       sinon.assert.notCalled(rootSpan.addTags)
       sinon.assert.notCalled(telemetry.incrementSdkEventMetric)
@@ -192,8 +183,7 @@ describe('track_event - Internal API', () => {
 
       trackUserLoginFailureEvent(tracer, 'user_id', false, { key: 'value' })
 
-      expect(log.warn)
-        .to.have.been.calledOnceWithExactly('[ASM] Root span not available in %s', 'trackUserLoginFailureEvent')
+      sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Root span not available in %s', 'trackUserLoginFailureEvent')
       sinon.assert.notCalled(setUserTags)
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'login_failure', 'v1')
     })
@@ -217,8 +207,7 @@ describe('track_event - Internal API', () => {
         'appsec.events.users.login.failure.metakey2': 'metaValue2',
         'appsec.events.users.login.failure.metakey3': 'metaValue3'
       })
-      expect(prioritySampler.setPriority)
-        .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           [LOGIN_FAILURE]: null,
@@ -247,8 +236,7 @@ describe('track_event - Internal API', () => {
         'appsec.events.users.login.failure.metakey2': 'metaValue2',
         'appsec.events.users.login.failure.metakey3': 'metaValue3'
       })
-      expect(prioritySampler.setPriority)
-        .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           [LOGIN_FAILURE]: null,
@@ -270,8 +258,7 @@ describe('track_event - Internal API', () => {
         'appsec.events.users.login.failure.usr.login': 'user_id',
         'appsec.events.users.login.failure.usr.exists': 'true'
       })
-      expect(prioritySampler.setPriority)
-        .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           [LOGIN_FAILURE]: null,
@@ -288,10 +275,8 @@ describe('track_event - Internal API', () => {
       trackCustomEvent(tracer, { name: 'name' })
 
       sinon.assert.calledTwice(log.warn)
-      expect(log.warn.firstCall)
-        .to.have.been.calledWithExactly('[ASM] Invalid eventName provided to trackCustomEvent')
-      expect(log.warn.secondCall)
-        .to.have.been.calledWithExactly('[ASM] Invalid eventName provided to trackCustomEvent')
+      sinon.assert.calledWithExactly(log.warn.firstCall, '[ASM] Invalid eventName provided to trackCustomEvent')
+      sinon.assert.calledWithExactly(log.warn.secondCall, '[ASM] Invalid eventName provided to trackCustomEvent')
       sinon.assert.notCalled(setUserTags)
       sinon.assert.notCalled(rootSpan.addTags)
       sinon.assert.notCalled(telemetry.incrementSdkEventMetric)
@@ -302,8 +287,7 @@ describe('track_event - Internal API', () => {
 
       trackCustomEvent(tracer, 'custom_event')
 
-      expect(log.warn)
-        .to.have.been.calledOnceWithExactly('[ASM] Root span not available in %s', 'trackCustomEvent')
+      sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Root span not available in %s', 'trackCustomEvent')
       sinon.assert.notCalled(setUserTags)
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'custom', 'v1')
     })
@@ -322,8 +306,7 @@ describe('track_event - Internal API', () => {
         'appsec.events.custom_event.metaKey1': 'metaValue1',
         'appsec.events.custom_event.metakey2': 'metaValue2'
       })
-      expect(prioritySampler.setPriority)
-        .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.notCalled(waf.run)
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'custom', 'v1')
     })
@@ -338,8 +321,7 @@ describe('track_event - Internal API', () => {
         '_dd.appsec.events.custom_event.sdk': 'true'
       })
       sinon.assert.notCalled(waf.run)
-      expect(prioritySampler.setPriority)
-        .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'custom', 'v1')
     })
 
@@ -371,8 +353,10 @@ describe('track_event - Internal API', () => {
 
         trackUserLoginSuccessV2(tracer, 'login')
 
-        expect(log.warn)
-          .to.have.been.calledOnceWithExactly('[ASM] Root span not available in eventTrackingV2.trackUserLoginSuccess')
+        sinon.assert.calledOnceWithExactly(
+          log.warn,
+          '[ASM] Root span not available in eventTrackingV2.trackUserLoginSuccess'
+        )
         sinon.assert.notCalled(setUserTags)
       })
 
@@ -381,10 +365,14 @@ describe('track_event - Internal API', () => {
         trackUserLoginSuccessV2(tracer, {})
 
         sinon.assert.calledTwice(log.warn)
-        expect(log.warn.firstCall)
-          .to.have.been.calledWithExactly('[ASM] Invalid login provided to eventTrackingV2.trackUserLoginSuccess')
-        expect(log.warn.secondCall)
-          .to.have.been.calledWithExactly('[ASM] Invalid login provided to eventTrackingV2.trackUserLoginSuccess')
+        sinon.assert.calledWithExactly(
+          log.warn.firstCall,
+          '[ASM] Invalid login provided to eventTrackingV2.trackUserLoginSuccess'
+        )
+        sinon.assert.calledWithExactly(
+          log.warn.secondCall,
+          '[ASM] Invalid login provided to eventTrackingV2.trackUserLoginSuccess'
+        )
         sinon.assert.notCalled(setUserTags)
         sinon.assert.notCalled(rootSpan.addTags)
         sinon.assert.notCalled(waf.run)
@@ -590,8 +578,7 @@ describe('track_event - Internal API', () => {
       it('should keep the trace', () => {
         trackUserLoginSuccessV2(tracer, 'login')
 
-        expect(prioritySampler.setPriority)
-          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
+        sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       })
 
       it('should update the metrics', () => {
@@ -607,8 +594,10 @@ describe('track_event - Internal API', () => {
 
         trackUserLoginFailureV2(tracer, 'login', false)
 
-        expect(log.warn)
-          .to.have.been.calledOnceWithExactly('[ASM] Root span not available in eventTrackingV2.trackUserLoginFailure')
+        sinon.assert.calledOnceWithExactly(
+          log.warn,
+          '[ASM] Root span not available in eventTrackingV2.trackUserLoginFailure'
+        )
         sinon.assert.notCalled(setUserTags)
       })
 
@@ -617,10 +606,14 @@ describe('track_event - Internal API', () => {
         trackUserLoginFailureV2(tracer, {}, false)
 
         sinon.assert.calledTwice(log.warn)
-        expect(log.warn.firstCall)
-          .to.have.been.calledWithExactly('[ASM] Invalid login provided to eventTrackingV2.trackUserLoginFailure')
-        expect(log.warn.secondCall)
-          .to.have.been.calledWithExactly('[ASM] Invalid login provided to eventTrackingV2.trackUserLoginFailure')
+        sinon.assert.calledWithExactly(
+          log.warn.firstCall,
+          '[ASM] Invalid login provided to eventTrackingV2.trackUserLoginFailure'
+        )
+        sinon.assert.calledWithExactly(
+          log.warn.secondCall,
+          '[ASM] Invalid login provided to eventTrackingV2.trackUserLoginFailure'
+        )
         sinon.assert.notCalled(setUserTags)
         sinon.assert.notCalled(rootSpan.addTags)
         sinon.assert.notCalled(waf.run)
@@ -815,8 +808,7 @@ describe('track_event - Internal API', () => {
       it('should keep the trace', () => {
         trackUserLoginFailureV2(tracer, 'login', true)
 
-        expect(prioritySampler.setPriority)
-          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
+        sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       })
 
       it('should update the metrics', () => {

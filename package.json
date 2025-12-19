@@ -48,7 +48,7 @@
     "test:llmobs:plugins:ci": "yarn services && nyc --no-clean --include \"packages/dd-trace/src/llmobs/**/*.js\" -- npm run test:llmobs:plugins",
     "test:openfeature": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/dd-trace/test/openfeature/*.spec.js\"",
     "test:openfeature:ci": "nyc --no-clean --include \"packages/dd-trace/src/openfeature/**/*.js\" -- npm run test:openfeature",
-    "test:plugins": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/@($(echo ${SPEC:-'*'})).spec.js\"",
+    "test:plugins": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/@($(echo ${SPEC:-'*'}))*.spec.js\"",
     "test:plugins:ci": "yarn services && nyc --no-clean --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- npm run test:plugins",
     "test:plugins:ci:flaky": "yarn services && nyc --no-clean --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- npm run test:plugins -- --bail --retries 2",
     "test:plugins:upstream": "node ./packages/dd-trace/test/plugins/suite.js",
@@ -95,9 +95,10 @@
   },
   "homepage": "https://github.com/DataDog/dd-trace-js#readme",
   "engines": {
-    "node": ">=18"
+    "node": ">=18 <26"
   },
   "files": [
+    "/package.json",
     "ci/**/*",
     "cypress/**/*",
     "esbuild.js",
@@ -111,23 +112,22 @@
     "LICENSE.Apache",
     "LICENSE.BSD3",
     "loader-hook.mjs",
-    "package.json",
     "packages/*/index.js",
     "packages/*/lib/**/*",
     "packages/*/src/**/*",
-    "packages/node_modules/**/*.js",
-    "packages/node_modules/**/*.d.ts",
-    "packages/node_modules/**/*.wasm",
-    "packages/node_modules/**/LICENSE",
     "packages/datadog-instrumentations/orchestrion.yml",
     "README.md",
     "register.js",
     "scripts/preinstall.js",
+    "vendor/dist/**/*.d.ts",
+    "vendor/dist/**/*.js",
+    "vendor/dist/**/*.wasm",
+    "vendor/dist/**/LICENSE",
     "version.js"
   ],
   "dependencies": {
     "dc-polyfill": "^0.1.10",
-    "import-in-the-middle": "^1.14.2"
+    "import-in-the-middle": "2.0.0"
   },
   "optionalDependencies": {
     "@datadog/libdatadog": "0.7.0",
@@ -135,7 +135,7 @@
     "@datadog/native-iast-taint-tracking": "4.1.0",
     "@datadog/native-metrics": "3.1.1",
     "@datadog/openfeature-node-server": "^0.2.0",
-    "@datadog/pprof": "5.12.0",
+    "@datadog/pprof": "5.13.1",
     "@datadog/wasm-js-rewriter": "5.0.1",
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
     "@opentelemetry/api-logs": "<1.0.0"

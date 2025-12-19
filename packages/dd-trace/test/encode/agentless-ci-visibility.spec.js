@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
@@ -152,7 +151,7 @@ describe('agentless-ci-visibility-encode', () => {
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
 
-    expect(decodedTrace)
+    assert.ok(decodedTrace)
     const spanEvent = decodedTrace.events[0]
     assert.strictEqual(spanEvent.content.type.length, MAX_TYPE_LENGTH)
     assert.strictEqual(spanEvent.content.name.length, MAX_NAME_LENGTH)
@@ -180,7 +179,7 @@ describe('agentless-ci-visibility-encode', () => {
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
 
-    expect(decodedTrace)
+    assert.ok(decodedTrace)
     const spanEvent = decodedTrace.events[0]
     assert.strictEqual(spanEvent.content.service, DEFAULT_SERVICE_NAME)
     assert.strictEqual(spanEvent.content.name, DEFAULT_SPAN_NAME)

@@ -17,7 +17,8 @@ describe('ESM', () => {
 
   const nodeOptionsList = [
     '--import dd-trace/initialize.mjs',
-    '--require dd-trace/init.js --loader dd-trace/loader-hook.mjs'
+    '--require dd-trace/init.js --loader dd-trace/loader-hook.mjs',
+    '--import dd-trace/register.js --require dd-trace/init'
   ]
 
   nodeOptionsList.forEach(nodeOptions => {

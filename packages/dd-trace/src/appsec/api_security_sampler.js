@@ -1,6 +1,6 @@
 'use strict'
 
-const { TTLCache } = require('@isaacs/ttlcache')
+const { TTLCache } = require('../../../../vendor/dist/@isaacs/ttlcache')
 const web = require('../plugins/util/web')
 const log = require('../log')
 const { AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')

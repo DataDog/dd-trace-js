@@ -5,7 +5,7 @@ const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
 const { performance } = require('perf_hooks')
 const api = require('@opentelemetry/api')
-const { hrTime, timeInputToHrTime } = require('@opentelemetry/core')
+const { hrTime, timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
 require('../setup/core')
 

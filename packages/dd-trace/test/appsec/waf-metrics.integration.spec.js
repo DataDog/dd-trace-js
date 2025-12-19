@@ -29,8 +29,8 @@ describe('WAF Metrics', () => {
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_APPSEC_ENABLED: 'true',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-          DD_APPSEC_WAF_TIMEOUT: 0.1
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+          DD_APPSEC_WAF_TIMEOUT: '0.1'
         }
       })
       axios = Axios.create({ baseURL: proc.url })
@@ -63,13 +63,13 @@ describe('WAF Metrics', () => {
           const series = payload.payload.series
           const wafRequests = series.find(s => s.metric === 'waf.requests')
 
-          assert.ok(wafRequests != null)
+          assert.ok(wafRequests)
           assert.strictEqual(wafRequests.type, 'count')
           assert.ok(wafRequests.tags.includes('waf_error:true'))
           assert.ok(wafRequests.tags.includes('rate_limited:false'))
 
           const wafError = series.find(s => s.metric === 'waf.error')
-          assert.ok(wafError != null)
+          assert.ok(wafError)
           assert.strictEqual(wafError.type, 'count')
           assert.ok(wafError.tags.includes('waf_error:-127'))
         }
@@ -91,8 +91,8 @@ describe('WAF Metrics', () => {
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_APPSEC_ENABLED: 'true',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-          DD_APPSEC_WAF_TIMEOUT: 1
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+          DD_APPSEC_WAF_TIMEOUT: '1'
         }
       })
       axios = Axios.create({ baseURL: proc.url })
@@ -122,7 +122,7 @@ describe('WAF Metrics', () => {
           const series = payload.payload.series
           const wafRequests = series.find(s => s.metric === 'waf.requests')
 
-          assert.ok(wafRequests != null)
+          assert.ok(wafRequests)
           assert.strictEqual(wafRequests.type, 'count')
           assert.ok(wafRequests.tags.includes('waf_timeout:true'))
         }
@@ -144,7 +144,7 @@ describe('WAF Metrics', () => {
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_APPSEC_ENABLED: 'true',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1'
         }
       })
       axios = Axios.create({ baseURL: proc.url })
@@ -176,12 +176,12 @@ describe('WAF Metrics', () => {
           const series = payload.payload.series
           const inputTruncated = series.find(s => s.metric === 'waf.input_truncated')
 
-          assert.ok(inputTruncated != null)
+          assert.ok(inputTruncated)
           assert.strictEqual(inputTruncated.type, 'count')
           assert.ok(inputTruncated.tags.includes('truncation_reason:7'))
 
           const wafRequests = series.find(s => s.metric === 'waf.requests')
-          assert.ok(wafRequests != null)
+          assert.ok(wafRequests)
           assert.ok(wafRequests.tags.includes('input_truncated:true'))
         }
       }, 'generate-metrics', 30_000, 2)
