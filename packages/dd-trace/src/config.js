@@ -326,20 +326,23 @@ class Config {
     this.#applyRemote({})
     this.#merge()
 
-    tagger.add(this.tags, {
-      service: this.service,
-      env: this.env,
-      version: this.version,
+    // Use typed version of `this` to appease the type checker
+    const self = /** @type {Record<string, any>} */ (this)
+
+    tagger.add(self.tags, {
+      service: self.service,
+      env: self.env,
+      version: self.version,
       'runtime-id': runtimeId
     })
 
-    if (this.isCiVisibility) {
-      tagger.add(this.tags, {
+    if (self.isCiVisibility) {
+      tagger.add(self.tags, {
         [ORIGIN_KEY]: 'ciapp-test'
       })
     }
 
-    if (this.gitMetadataEnabled) {
+    if (self.gitMetadataEnabled) {
       this.#loadGitMetadata()
     }
   }
@@ -1458,7 +1461,11 @@ class Config {
         }
       }
     }
-    this.sampler.sampleRate = this.sampleRate
+
+    // Use typed version of `this` to appease the type checker
+    const self = /** @type {Record<string, any>} */ (this)
+    self.sampler.sampleRate = self.sampleRate
+
     updateConfig(changes, this)
   }
 
@@ -1472,14 +1479,17 @@ class Config {
   }
 
   #loadGitMetadata () {
+    // Use typed version of `this` to appease the type checker
+    const self = /** @type {Record<string, any>} */ (this)
+
     // try to read Git metadata from the environment variables
-    this.repositoryUrl = removeUserSensitiveInfo(
-      getEnv('DD_GIT_REPOSITORY_URL') ?? this.tags[GIT_REPOSITORY_URL]
+    self.repositoryUrl = removeUserSensitiveInfo(
+      getEnv('DD_GIT_REPOSITORY_URL') ?? self.tags[GIT_REPOSITORY_URL]
     )
-    this.commitSHA = getEnv('DD_GIT_COMMIT_SHA') ?? this.tags[GIT_COMMIT_SHA]
+    self.commitSHA = getEnv('DD_GIT_COMMIT_SHA') ?? self.tags[GIT_COMMIT_SHA]
 
     // otherwise, try to read Git metadata from the git.properties file
-    if (!this.repositoryUrl || !this.commitSHA) {
+    if (!self.repositoryUrl || !self.commitSHA) {
       const DD_GIT_PROPERTIES_FILE = getEnv('DD_GIT_PROPERTIES_FILE')
       const gitPropertiesFile = DD_GIT_PROPERTIES_FILE ?? `${process.cwd()}/git.properties`
       let gitPropertiesString
@@ -1493,21 +1503,21 @@ class Config {
       }
       if (gitPropertiesString) {
         const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
-        this.commitSHA = this.commitSHA || commitSHA
-        this.repositoryUrl = this.repositoryUrl || repositoryUrl
+        self.commitSHA = self.commitSHA || commitSHA
+        self.repositoryUrl = self.repositoryUrl || repositoryUrl
       }
     }
     // otherwise, try to read Git metadata from the .git/ folder
-    if (!this.repositoryUrl || !this.commitSHA) {
+    if (!self.repositoryUrl || !self.commitSHA) {
       const DD_GIT_FOLDER_PATH = getEnv('DD_GIT_FOLDER_PATH')
       const gitFolderPath = DD_GIT_FOLDER_PATH ?? path.join(process.cwd(), '.git')
-      if (!this.repositoryUrl) {
+      if (!self.repositoryUrl) {
         // try to read git config (repository URL)
         const gitConfigPath = path.join(gitFolderPath, 'config')
         try {
           const gitConfigContent = fs.readFileSync(gitConfigPath, 'utf8')
           if (gitConfigContent) {
-            this.repositoryUrl = getRemoteOriginURL(gitConfigContent)
+            self.repositoryUrl = getRemoteOriginURL(gitConfigContent)
           }
         } catch (e) {
           // Only log error if the user has set a .git/ path
@@ -1516,11 +1526,11 @@ class Config {
           }
         }
       }
-      if (!this.commitSHA) {
+      if (!self.commitSHA) {
         // try to read git HEAD (commit SHA)
         const gitHeadSha = resolveGitHeadSHA(gitFolderPath)
         if (gitHeadSha) {
-          this.commitSHA = gitHeadSha
+          self.commitSHA = gitHeadSha
         }
       }
     }
