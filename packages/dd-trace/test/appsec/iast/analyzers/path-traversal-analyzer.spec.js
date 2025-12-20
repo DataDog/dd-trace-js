@@ -6,7 +6,7 @@ const path = require('path')
 
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
-const expect = require('chai').expect
+
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const pathTraversalAnalyzer = require('../../../../src/appsec/iast/analyzers/path-traversal-analyzer')
@@ -183,7 +183,7 @@ describe('path-traversal-analyzer', () => {
     hasQuota.returns(true)
 
     proxyPathAnalyzer.analyze(['arg1'])
-    expect(addVulnerability).not.have.been.called
+    sinon.assert.notCalled(addVulnerability)
   })
 })
 

@@ -14,6 +14,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { rawExpectedSchema } = require('./naming')
 const { satisfies } = require('semver')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const NODE_MAJOR = parseInt(process.versions.node.split('.')[0])
@@ -104,19 +105,20 @@ describe('Plugin', () => {
           })
 
           appListener = server(app, port => {
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].service, SERVICE_NAME)
-                assert.strictEqual(traces[0][0].type, 'http')
-                assert.strictEqual(traces[0][0].resource, 'GET')
-                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
-                assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
-                assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-                assert.strictEqual(traces[0][0].meta.component, 'http')
-                assert.strictEqual(traces[0][0].meta['_dd.integration'], 'http')
-                assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
-              })
+            agent.assertFirstTraceSpan({
+              service: SERVICE_NAME,
+              type: 'http',
+              resource: 'GET',
+              meta: {
+                'span.kind': 'client',
+                'http.url': `${protocol}://localhost:${port}/user`,
+                'http.method': 'GET',
+                'http.status_code': '200',
+                component: 'http',
+                '_dd.integration': 'http',
+                'out.host': 'localhost'
+              }
+            })
               .then(done)
               .catch(done)
 
@@ -159,18 +161,19 @@ describe('Plugin', () => {
           })
 
           appListener = server(app, port => {
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].service, SERVICE_NAME)
-                assert.strictEqual(traces[0][0].type, 'http')
-                assert.strictEqual(traces[0][0].resource, 'CONNECT')
-                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
-                assert.strictEqual(traces[0][0].meta['http.method'], 'CONNECT')
-                assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-                assert.strictEqual(traces[0][0].meta.component, 'http')
-                assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
-              })
+            agent.assertFirstTraceSpan({
+              service: SERVICE_NAME,
+              type: 'http',
+              resource: 'CONNECT',
+              meta: {
+                'span.kind': 'client',
+                'http.url': `${protocol}://localhost:${port}/user`,
+                'http.method': 'CONNECT',
+                'http.status_code': '200',
+                component: 'http',
+                'out.host': 'localhost'
+              }
+            })
               .then(done)
               .catch(done)
 
@@ -203,17 +206,18 @@ describe('Plugin', () => {
           })
 
           appListener = server(app, port => {
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].service, SERVICE_NAME)
-                assert.strictEqual(traces[0][0].type, 'http')
-                assert.strictEqual(traces[0][0].resource, 'GET')
-                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
-                assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
-                assert.strictEqual(traces[0][0].meta['http.status_code'], '101')
-                assert.strictEqual(traces[0][0].meta.component, 'http')
-              })
+            agent.assertFirstTraceSpan({
+              service: SERVICE_NAME,
+              type: 'http',
+              resource: 'GET',
+              meta: {
+                'span.kind': 'client',
+                'http.url': `${protocol}://localhost:${port}/user`,
+                'http.method': 'GET',
+                'http.status_code': '101',
+                component: 'http'
+              }
+            })
               .then(done)
               .catch(done)
 
@@ -276,11 +280,12 @@ describe('Plugin', () => {
           })
 
           appListener = server(app, port => {
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
-              })
+            agent.assertFirstTraceSpan({
+              meta: {
+                'http.status_code': '200',
+                'http.url': `${protocol}://localhost:${port}/user`
+              }
+            })
               .then(done)
               .catch(done)
 
@@ -302,11 +307,12 @@ describe('Plugin', () => {
             })
 
             appListener = server(app, port => {
-              agent
-                .assertSomeTraces(traces => {
-                  assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-                  assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
-                })
+              agent.assertFirstTraceSpan({
+                meta: {
+                  'http.status_code': '200',
+                  'http.url': `${protocol}://localhost:${port}/user`
+                }
+              })
                 .then(done)
                 .catch(done)
 
@@ -325,11 +331,12 @@ describe('Plugin', () => {
           })
 
           appListener = server(app, port => {
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
-              })
+            agent.assertFirstTraceSpan({
+              meta: {
+                'http.status_code': '200',
+                'http.url': `${protocol}://localhost:${port}/user`
+              }
+            })
               .then(done)
               .catch(done)
 
@@ -353,9 +360,11 @@ describe('Plugin', () => {
 
             app.get('/user', (req, res) => res.status(200).send())
 
-            agent.assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-              assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
+            agent.assertFirstTraceSpan({
+              meta: {
+                'http.status_code': '200',
+                'http.url': `${protocol}://localhost:${port}/user`
+              }
             }).then(done, done)
 
             const req = http.request(url)
@@ -551,10 +560,15 @@ describe('Plugin', () => {
 
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message || error.code)
-              assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
-              assert.strictEqual(traces[0][0].meta.component, 'http')
+              assertObjectContains(traces[0][0], {
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message || error.code,
+                  [ERROR_STACK]: error.stack,
+                  component: 'http'
+                }
+              })
             })
             .then(done)
             .catch(done)
@@ -623,12 +637,17 @@ describe('Plugin', () => {
 
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].error, 1)
-              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
-              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+              assertObjectContains(traces[0][0], {
+                error: 1,
+                meta: {
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_STACK]: error.stack,
+                  component: 'http'
+                }
+              })
+
               assert.ok(!('http.status_code' in traces[0][0].meta))
-              assert.strictEqual(traces[0][0].meta.component, 'http')
             })
             .then(done)
             .catch(done)
@@ -860,11 +879,12 @@ describe('Plugin', () => {
           })
 
           appListener = server(app, port => {
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
-              })
+            agent.assertFirstTraceSpan({
+              meta: {
+                'http.status_code': '200',
+                'http.url': `${protocol}://localhost:${port}/user`
+              }
+            })
               .then(done)
               .catch(done)
 
@@ -890,9 +910,13 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][1].error, 0)
-                assert.strictEqual(traces[0][1].meta['http.status_code'], '200')
-                assert.strictEqual(traces[0][1].meta['http.url'], `${protocol}://localhost:${port}/user`)
+                assertObjectContains(traces[0][1], {
+                  error: 0,
+                  meta: {
+                    'http.status_code': '200',
+                    'http.url': `${protocol}://localhost:${port}/user`
+                  }
+                })
               })
               .then(done)
               .catch(done)

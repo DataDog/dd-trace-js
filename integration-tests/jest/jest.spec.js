@@ -191,7 +191,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
       testSpans.forEach(testSpan => {
         assert.strictEqual(testSpan.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
-        assert.ok(testSpan.metrics[TEST_SOURCE_START] != null)
+        assert.ok(testSpan.metrics[TEST_SOURCE_START])
       })
     })
 
@@ -241,7 +241,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               (!parameters || test.meta[TEST_PARAMETERS] === JSON.stringify(parameters))
             )
 
-            assert.ok(test != null)
+            assert.ok(test)
 
             assert.strictEqual(test.meta.language, 'javascript')
             assert.strictEqual(test.meta.service, 'plugin-tests')
@@ -262,8 +262,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(test.service, 'plugin-tests')
             assert.strictEqual(test.resource, `ci-visibility/jest-plugin-tests/jest-test.js.${name}`)
 
-            assert.ok(test.metrics[TEST_SOURCE_START] != null)
-            assert.ok(test.meta[TEST_FRAMEWORK_VERSION] != null)
+            assert.ok(test.metrics[TEST_SOURCE_START])
+            assert.ok(test.meta[TEST_FRAMEWORK_VERSION])
 
             if (extraTags) {
               Object.entries(extraTags).forEach(([key, value]) => {
@@ -319,7 +319,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               span.resource === `ci-visibility/jest-plugin-tests/jest-hook-failure.js.${name}`
             )
 
-            assert.ok(testSpan != null)
+            assert.ok(testSpan)
             assert.strictEqual(testSpan.meta.language, 'javascript')
             assert.strictEqual(testSpan.meta[ORIGIN_KEY], CI_APP_ORIGIN)
             assert.strictEqual(testSpan.meta[TEST_FRAMEWORK], 'jest')
@@ -334,7 +334,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(testSpan.type, 'test')
             assert.strictEqual(testSpan.name, 'jest.test')
             assert.strictEqual(testSpan.resource, `ci-visibility/jest-plugin-tests/jest-hook-failure.js.${name}`)
-            assert.ok(testSpan.meta[TEST_FRAMEWORK_VERSION] != null)
+            assert.ok(testSpan.meta[TEST_FRAMEWORK_VERSION])
           })
         }, 25000)
 
@@ -372,7 +372,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               span.resource === `ci-visibility/jest-plugin-tests/jest-focus.js.${name}`
             )
 
-            assert.ok(testSpan != null)
+            assert.ok(testSpan)
             assert.strictEqual(testSpan.meta.language, 'javascript')
             assert.strictEqual(testSpan.meta[ORIGIN_KEY], CI_APP_ORIGIN)
             assert.strictEqual(testSpan.meta[TEST_FRAMEWORK], 'jest')
@@ -384,7 +384,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(testSpan.type, 'test')
             assert.strictEqual(testSpan.name, 'jest.test')
             assert.strictEqual(testSpan.resource, `ci-visibility/jest-plugin-tests/jest-focus.js.${name}`)
-            assert.ok(testSpan.meta[TEST_FRAMEWORK_VERSION] != null)
+            assert.ok(testSpan.meta[TEST_FRAMEWORK_VERSION])
           })
         }, 25000)
 
@@ -413,7 +413,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const testSpan = payloads
             .flatMap(({ payload }) => payload.flatMap(trace => trace))
             .find(span => span.type === 'test')
-          assert.ok(testSpan != null)
+          assert.ok(testSpan)
           assert.strictEqual(testSpan.meta[TEST_NAME], 'jest-inject-globals will be run')
           assert.strictEqual(testSpan.meta[TEST_STATUS], 'pass')
           assert.strictEqual(testSpan.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-inject-globals.js')
@@ -476,8 +476,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               ]
             )
             assert.strictEqual(suites.length, 2)
-            assert.ok(sessionEventContent != null)
-            assert.ok(moduleEventContent != null)
+            assert.ok(sessionEventContent)
+            assert.ok(moduleEventContent)
 
             assert.match(testOutput, new RegExp(expectedStdout))
 
@@ -486,12 +486,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                 testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'),
                 true
               )
-              assert.ok(testEvent.metrics[TEST_SOURCE_START] != null)
+              assert.ok(testEvent.metrics[TEST_SOURCE_START])
               assert.strictEqual(testEvent.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
               // Can read DD_TAGS
               assert.strictEqual(testEvent.meta['test.customtag'], 'customvalue')
               assert.strictEqual(testEvent.meta['test.customtag2'], 'customvalue2')
-              assert.ok(testEvent.metrics[DD_HOST_CPU_COUNT] != null)
+              assert.ok(testEvent.metrics[DD_HOST_CPU_COUNT])
             })
 
             suites.forEach(testSuite => {
@@ -500,7 +500,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                 true
               )
               assert.strictEqual(testSuite.metrics[TEST_SOURCE_START], 1)
-              assert.ok(testSuite.metrics[DD_HOST_CPU_COUNT] != null)
+              assert.ok(testSuite.metrics[DD_HOST_CPU_COUNT])
             })
             done()
           } catch (error) {
@@ -542,38 +542,38 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const testSuiteEvent = events.find(event => event.type === 'test_suite_end').content
             const testEvent = events.find(event => event.type === 'test').content
 
-            assert.ok(testSessionEvent != null)
+            assert.ok(testSessionEvent)
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'pass')
-            assert.ok(testSessionEvent[TEST_SESSION_ID] != null)
-            assert.ok(testSessionEvent.meta[TEST_COMMAND] != null)
+            assert.ok(testSessionEvent[TEST_SESSION_ID])
+            assert.ok(testSessionEvent.meta[TEST_COMMAND])
             assert.ok(testSessionEvent[TEST_SUITE_ID] == null)
             assert.ok(testSessionEvent[TEST_MODULE_ID] == null)
 
-            assert.ok(testModuleEvent != null)
+            assert.ok(testModuleEvent)
             assert.strictEqual(testModuleEvent.meta[TEST_STATUS], 'pass')
-            assert.ok(testModuleEvent[TEST_SESSION_ID] != null)
-            assert.ok(testModuleEvent[TEST_MODULE_ID] != null)
-            assert.ok(testModuleEvent.meta[TEST_COMMAND] != null)
+            assert.ok(testModuleEvent[TEST_SESSION_ID])
+            assert.ok(testModuleEvent[TEST_MODULE_ID])
+            assert.ok(testModuleEvent.meta[TEST_COMMAND])
             assert.ok(testModuleEvent[TEST_SUITE_ID] == null)
 
-            assert.ok(testSuiteEvent != null)
+            assert.ok(testSuiteEvent)
             assert.strictEqual(testSuiteEvent.meta[TEST_STATUS], 'pass')
             assert.strictEqual(testSuiteEvent.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test-suite.js')
-            assert.ok(testSuiteEvent.meta[TEST_COMMAND] != null)
-            assert.ok(testSuiteEvent.meta[TEST_MODULE] != null)
-            assert.ok(testSuiteEvent[TEST_SUITE_ID] != null)
-            assert.ok(testSuiteEvent[TEST_SESSION_ID] != null)
-            assert.ok(testSuiteEvent[TEST_MODULE_ID] != null)
+            assert.ok(testSuiteEvent.meta[TEST_COMMAND])
+            assert.ok(testSuiteEvent.meta[TEST_MODULE])
+            assert.ok(testSuiteEvent[TEST_SUITE_ID])
+            assert.ok(testSuiteEvent[TEST_SESSION_ID])
+            assert.ok(testSuiteEvent[TEST_MODULE_ID])
 
-            assert.ok(testEvent != null)
+            assert.ok(testEvent)
             assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
             assert.strictEqual(testEvent.meta[TEST_NAME], 'jest-test-suite-visibility works')
             assert.strictEqual(testEvent.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test-suite.js')
-            assert.ok(testEvent.meta[TEST_COMMAND] != null)
-            assert.ok(testEvent.meta[TEST_MODULE] != null)
-            assert.ok(testEvent[TEST_SUITE_ID] != null)
-            assert.ok(testEvent[TEST_SESSION_ID] != null)
-            assert.ok(testEvent[TEST_MODULE_ID] != null)
+            assert.ok(testEvent.meta[TEST_COMMAND])
+            assert.ok(testEvent.meta[TEST_MODULE])
+            assert.ok(testEvent[TEST_SUITE_ID])
+            assert.ok(testEvent[TEST_SESSION_ID])
+            assert.ok(testEvent[TEST_MODULE_ID])
           })
 
         childProcess = exec(
@@ -823,7 +823,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         env: {
           DD_TRACE_AGENT_PORT: receiver.port,
           NODE_OPTIONS: '-r dd-trace/ci/init',
-          RUN_IN_PARALLEL: true
+          RUN_IN_PARALLEL: 'true',
         },
         stdio: 'pipe'
       })
@@ -844,7 +844,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
-          RUN_IN_PARALLEL: true,
+          RUN_IN_PARALLEL: 'true',
           DD_TEST_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
@@ -874,7 +874,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         cwd,
         env: {
           ...getCiVisEvpProxyConfig(receiver.port),
-          RUN_IN_PARALLEL: true
+          RUN_IN_PARALLEL: 'true',
         },
         stdio: 'pipe'
       })
@@ -915,7 +915,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
           const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
-          assert.ok(retriedTest.meta[snapshotIdKey] != null)
+          assert.ok(retriedTest.meta[snapshotIdKey])
 
           snapshotIdByTest = retriedTest.meta[snapshotIdKey]
           spanIdByTest = retriedTest.span_id.toString()
@@ -946,7 +946,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/test-',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
-            RUN_IN_PARALLEL: true
+            RUN_IN_PARALLEL: 'true',
           },
           stdio: 'inherit'
         }
@@ -969,7 +969,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       env: {
         ...getCiVisAgentlessConfig(receiver.port),
         NODE_OPTIONS: '-r dd-trace/ci/init',
-        RUN_IN_PARALLEL: true,
+        RUN_IN_PARALLEL: 'true',
         TESTS_TO_RUN: 'timeout-test/timeout-test.js'
       },
       stdio: 'pipe'
@@ -1051,8 +1051,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           TESTS_TO_RUN: 'jest-bad-import/jest-bad-import-test',
-          RUN_IN_PARALLEL: true,
-          WAIT_FOR_UNHANDLED_REJECTIONS: true
+          RUN_IN_PARALLEL: 'true',
+          WAIT_FOR_UNHANDLED_REJECTIONS: 'true'
         },
         stdio: 'inherit'
       })
@@ -1103,7 +1103,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           TESTS_TO_RUN: 'jest-bad-import-torn-down/jest-bad-import-test',
-          RUN_IN_PARALLEL: true,
+          RUN_IN_PARALLEL: 'true',
         },
         stdio: 'inherit'
       })
@@ -1146,7 +1146,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
     receiver.assertPayloadReceived(({ payload }) => {
       const testSession = payload.events.find(event => event.type === 'test_session_end').content
-      assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT] != null)
+      assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
     }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
     childProcess = exec(
@@ -1170,8 +1170,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         const testSuites = events.filter(event => event.type === 'test_suite_end')
         const tests = events.filter(event => event.type === 'test')
 
-        assert.ok(testSession != null)
-        assert.ok(testModule != null)
+        assert.ok(testSession)
+        assert.ok(testModule)
         assert.strictEqual(testSuites.length, 2)
         assert.strictEqual(tests.length, 2)
       })
@@ -1301,7 +1301,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     childProcess = fork(startupTestFile, {
       cwd,
       env: {
-        DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
+        DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
         NODE_OPTIONS: '-r dd-trace/ci/init'
       },
       stdio: 'pipe'
@@ -1431,11 +1431,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assertObjectContains(allCoverageFiles.sort(), expectedCoverageFiles.sort())
 
         const [coveragePayload] = codeCovRequest.payload
-        assert.ok(coveragePayload.content.coverages[0].test_session_id != null)
-        assert.ok(coveragePayload.content.coverages[0].test_suite_id != null)
+        assert.ok(coveragePayload.content.coverages[0].test_session_id)
+        assert.ok(coveragePayload.content.coverages[0].test_suite_id)
 
         const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
-        assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT] != null)
+        assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
 
         const eventTypes = eventsRequest.payload.events.map(event => event.type)
         assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
@@ -1482,7 +1482,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
         assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
         assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
-        assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT] != null)
+        assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
         const testModule = payload.events.find(event => event.type === 'test_module_end').content
         assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
         assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
@@ -3519,7 +3519,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
           const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
-          assert.ok(retriedTest.meta[snapshotIdKey] != null)
+          assert.ok(retriedTest.meta[snapshotIdKey])
 
           snapshotIdByTest = retriedTest.meta[snapshotIdKey]
           spanIdByTest = retriedTest.span_id.toString()
@@ -3603,7 +3603,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
           const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
-          assert.ok(retriedTest.meta[snapshotIdKey] != null)
+          assert.ok(retriedTest.meta[snapshotIdKey])
 
           snapshotIdByTest = retriedTest.meta[snapshotIdKey]
           spanIdByTest = retriedTest.span_id.toString()

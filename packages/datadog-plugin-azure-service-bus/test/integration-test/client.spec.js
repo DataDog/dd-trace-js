@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 
 const {
   FakeAgent,
+  assertObjectContains,
   sandboxCwd,
   useSandbox,
   spawnPluginIntegrationTestProc
@@ -44,105 +45,177 @@ describe('esm', () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.strictEqual(payload.length, 23)
         // queue message
-        assert.strictEqual(payload[0][0].name, 'azure.servicebus.send')
-        assert.strictEqual(payload[0][0].meta['span.kind'], 'producer')
-        assert.strictEqual(payload[0][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[0][0].meta['messaging.destination.name'], 'queue.1')
-        assert.strictEqual(payload[0][0].meta['messaging.operation'], 'send')
-        assert.strictEqual(payload[0][0].meta['network.destination.name'], '127.0.0.1')
+        assertObjectContains(payload[0][0], {
+          name: 'azure.servicebus.send',
+          meta: {
+            'span.kind': 'producer',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.1',
+            'messaging.operation': 'send',
+            'network.destination.name': '127.0.0.1'
+          }
+        })
         // queue array of messages
-        assert.strictEqual(payload[1][0].name, 'azure.servicebus.create')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'producer')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'create')
-        assert.strictEqual(payload[1][0].meta['network.destination.name'], '127.0.0.1')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.servicebus.create',
+          meta: {
+            'span.kind': 'producer',
+            'messaging.system': 'servicebus',
+            'messaging.operation': 'create',
+            'network.destination.name': '127.0.0.1'
+          }
+        })
         assert.strictEqual(payload[2][0].name, 'azure.servicebus.create')
-        assert.strictEqual(payload[3][0].name, 'azure.servicebus.send')
-        assert.strictEqual(payload[3][0].meta['messaging.operation'], 'send')
-        assert.strictEqual(payload[3][0].meta['messaging.destination.name'], 'queue.1')
+        assertObjectContains(payload[3][0], {
+          name: 'azure.servicebus.send',
+          meta: {
+            'messaging.operation': 'send',
+            'messaging.destination.name': 'queue.1'
+          }
+        })
         // queue amqp messages
         assert.strictEqual(payload[1][0].name, 'azure.servicebus.create')
-        assert.strictEqual(payload[4][0].meta['span.kind'], 'producer')
-        assert.strictEqual(payload[4][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[4][0].meta['messaging.operation'], 'create')
-        assert.strictEqual(payload[4][0].meta['network.destination.name'], '127.0.0.1')
+        assertObjectContains(payload[4][0], {
+          meta: {
+            'span.kind': 'producer',
+            'messaging.system': 'servicebus',
+            'messaging.operation': 'create',
+            'network.destination.name': '127.0.0.1'
+          }
+        })
         assert.strictEqual(payload[5][0].name, 'azure.servicebus.create')
-        assert.strictEqual(payload[6][0].name, 'azure.servicebus.send')
-        assert.strictEqual(payload[6][0].meta['messaging.operation'], 'send')
-        assert.strictEqual(payload[6][0].meta['messaging.destination.name'], 'queue.1')
+        assertObjectContains(payload[6][0], {
+          name: 'azure.servicebus.send',
+          meta: {
+            'messaging.operation': 'send',
+            'messaging.destination.name': 'queue.1'
+          }
+        })
 
         // topic message
-        assert.strictEqual(payload[7][0].name, 'azure.servicebus.send')
-        assert.strictEqual(payload[7][0].meta['span.kind'], 'producer')
-        assert.strictEqual(payload[7][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[7][0].meta['messaging.destination.name'], 'topic.1')
-        assert.strictEqual(payload[7][0].meta['messaging.operation'], 'send')
-        assert.strictEqual(payload[7][0].meta['network.destination.name'], '127.0.0.1')
+        assertObjectContains(payload[7][0], {
+          name: 'azure.servicebus.send',
+          meta: {
+            'span.kind': 'producer',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'topic.1',
+            'messaging.operation': 'send',
+            'network.destination.name': '127.0.0.1'
+          }
+        })
         // topic array of messages
-        assert.strictEqual(payload[8][0].name, 'azure.servicebus.create')
-        assert.strictEqual(payload[8][0].meta['span.kind'], 'producer')
-        assert.strictEqual(payload[8][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[8][0].meta['messaging.operation'], 'create')
-        assert.strictEqual(payload[8][0].meta['network.destination.name'], '127.0.0.1')
+        assertObjectContains(payload[8][0], {
+          name: 'azure.servicebus.create',
+          meta: {
+            'span.kind': 'producer',
+            'messaging.system': 'servicebus',
+            'messaging.operation': 'create',
+            'network.destination.name': '127.0.0.1'
+          }
+        })
         assert.strictEqual(payload[9][0].name, 'azure.servicebus.create')
-        assert.strictEqual(payload[10][0].name, 'azure.servicebus.send')
-        assert.strictEqual(payload[10][0].meta['messaging.operation'], 'send')
-        assert.strictEqual(payload[10][0].meta['messaging.destination.name'], 'topic.1')
+        assertObjectContains(payload[10][0], {
+          name: 'azure.servicebus.send',
+          meta: {
+            'messaging.operation': 'send',
+            'messaging.destination.name': 'topic.1'
+          }
+        })
 
         // topic amqp messages
-        assert.strictEqual(payload[11][0].name, 'azure.servicebus.create')
-        assert.strictEqual(payload[11][0].meta['span.kind'], 'producer')
-        assert.strictEqual(payload[11][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[11][0].meta['messaging.operation'], 'create')
-        assert.strictEqual(payload[11][0].meta['network.destination.name'], '127.0.0.1')
+        assertObjectContains(payload[11][0], {
+          name: 'azure.servicebus.create',
+          meta: {
+            'span.kind': 'producer',
+            'messaging.system': 'servicebus',
+            'messaging.operation': 'create',
+            'network.destination.name': '127.0.0.1'
+          }
+        })
         assert.strictEqual(payload[12][0].name, 'azure.servicebus.create')
-        assert.strictEqual(payload[13][0].name, 'azure.servicebus.send')
-        assert.strictEqual(payload[13][0].meta['messaging.operation'], 'send')
-        assert.strictEqual(payload[13][0].meta['messaging.destination.name'], 'topic.1')
+        assertObjectContains(payload[13][0], {
+          name: 'azure.servicebus.send',
+          meta: {
+            'messaging.operation': 'send',
+            'messaging.destination.name': 'topic.1'
+          }
+        })
         // scheduled message
-        assert.strictEqual(payload[14][0].name, 'azure.servicebus.send')
-        assert.strictEqual(payload[14][0].meta['span.kind'], 'producer')
-        assert.strictEqual(payload[14][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[14][0].meta['messaging.destination.name'], 'queue.1')
-        assert.strictEqual(payload[14][0].meta['messaging.operation'], 'send')
-        assert.strictEqual(payload[14][0].meta['network.destination.name'], '127.0.0.1')
+        assertObjectContains(payload[14][0], {
+          name: 'azure.servicebus.send',
+          meta: {
+            'span.kind': 'producer',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.1',
+            'messaging.operation': 'send',
+            'network.destination.name': '127.0.0.1'
+          }
+        })
         // scheduled array of messages
-        assert.strictEqual(payload[15][0].name, 'azure.servicebus.send')
-        assert.strictEqual(payload[15][0].meta['span.kind'], 'producer')
-        assert.strictEqual(payload[15][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[15][0].meta['messaging.destination.name'], 'queue.1')
-        assert.strictEqual(payload[15][0].meta['messaging.operation'], 'send')
-        assert.strictEqual(payload[15][0].meta['network.destination.name'], '127.0.0.1')
+        assertObjectContains(payload[15][0], {
+          name: 'azure.servicebus.send',
+          meta: {
+            'span.kind': 'producer',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.1',
+            'messaging.operation': 'send',
+            'network.destination.name': '127.0.0.1'
+          }
+        })
         // scheduled amqp messages
-        assert.strictEqual(payload[16][0].name, 'azure.servicebus.send')
-        assert.strictEqual(payload[16][0].meta['span.kind'], 'producer')
-        assert.strictEqual(payload[16][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[16][0].meta['messaging.destination.name'], 'queue.1')
-        assert.strictEqual(payload[16][0].meta['messaging.operation'], 'send')
-        assert.strictEqual(payload[16][0].meta['network.destination.name'], '127.0.0.1')
+        assertObjectContains(payload[16][0], {
+          name: 'azure.servicebus.send',
+          meta: {
+            'span.kind': 'producer',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.1',
+            'messaging.operation': 'send',
+            'network.destination.name': '127.0.0.1'
+          }
+        })
 
         // queue batch
-        assert.strictEqual(payload[17][0].name, 'azure.servicebus.create')
-        assert.strictEqual(payload[17][0].meta['span.kind'], 'producer')
-        assert.strictEqual(payload[17][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[17][0].meta['messaging.operation'], 'create')
-        assert.strictEqual(payload[17][0].meta['network.destination.name'], '127.0.0.1')
+        assertObjectContains(payload[17][0], {
+          name: 'azure.servicebus.create',
+          meta: {
+            'span.kind': 'producer',
+            'messaging.system': 'servicebus',
+            'messaging.operation': 'create',
+            'network.destination.name': '127.0.0.1'
+          }
+        })
         assert.strictEqual(payload[18][0].name, 'azure.servicebus.create')
-        assert.strictEqual(payload[19][0].name, 'azure.servicebus.send')
-        assert.strictEqual(payload[19][0].metrics['messaging.batch.message_count'], 2)
-        assert.strictEqual(payload[19][0].meta['messaging.destination.name'], 'queue.1')
+        assertObjectContains(payload[19][0], {
+          name: 'azure.servicebus.send',
+          meta: {
+            'messaging.destination.name': 'queue.1'
+          },
+          metrics: {
+            'messaging.batch.message_count': 2
+          }
+        })
         assert.strictEqual(parseLinks(payload[19][0]).length, 2)
 
         // topic batch
-        assert.strictEqual(payload[20][0].name, 'azure.servicebus.create')
-        assert.strictEqual(payload[20][0].meta['span.kind'], 'producer')
-        assert.strictEqual(payload[20][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[20][0].meta['messaging.operation'], 'create')
-        assert.strictEqual(payload[20][0].meta['network.destination.name'], '127.0.0.1')
+        assertObjectContains(payload[20][0], {
+          name: 'azure.servicebus.create',
+          meta: {
+            'span.kind': 'producer',
+            'messaging.system': 'servicebus',
+            'messaging.operation': 'create',
+            'network.destination.name': '127.0.0.1'
+          }
+        })
         assert.strictEqual(payload[21][0].name, 'azure.servicebus.create')
-        assert.strictEqual(payload[22][0].name, 'azure.servicebus.send')
-        assert.strictEqual(payload[22][0].metrics['messaging.batch.message_count'], 2)
-        assert.strictEqual(payload[22][0].meta['messaging.destination.name'], 'topic.1')
+        assertObjectContains(payload[22][0], {
+          name: 'azure.servicebus.send',
+          meta: {
+            'messaging.destination.name': 'topic.1'
+          },
+          metrics: {
+            'messaging.batch.message_count': 2
+          }
+        })
         assert.strictEqual(parseLinks(payload[22][0]).length, 2)
       })
 

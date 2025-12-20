@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -121,38 +120,36 @@ describe('metrics', () => {
 
       manager.send(config, application, host)
 
-      expect(sendData).to.have.been
-        .calledWith(config, application, host, 'generate-metrics', {
-          namespace: 'test1',
-          series: [
-            {
-              metric: 'metric1',
-              points: [[now / 1e3, 1]],
-              interval: undefined,
-              type: 'count',
-              tags: [
-                'bar:baz'
-              ],
-              common: true
-            }
-          ]
-        })
-      expect(sendData).to.have.been
-        .calledWith(config, application, host, 'generate-metrics', {
-          namespace: 'test2',
-          series: [
-            {
-              metric: 'metric2',
-              points: [[now / 1e3, 1]],
-              interval: undefined,
-              type: 'count',
-              tags: [
-                'bux:bax'
-              ],
-              common: true
-            }
-          ]
-        })
+      sinon.assert.calledWith(sendData, config, application, host, 'generate-metrics', {
+        namespace: 'test1',
+        series: [
+          {
+            metric: 'metric1',
+            points: [[now / 1e3, 1]],
+            interval: undefined,
+            type: 'count',
+            tags: [
+              'bar:baz'
+            ],
+            common: true
+          }
+        ]
+      })
+      sinon.assert.calledWith(sendData, config, application, host, 'generate-metrics', {
+        namespace: 'test2',
+        series: [
+          {
+            metric: 'metric2',
+            points: [[now / 1e3, 1]],
+            interval: undefined,
+            type: 'count',
+            tags: [
+              'bux:bax'
+            ],
+            common: true
+          }
+        ]
+      })
     })
 
     it('should not send empty metrics', () => {
@@ -338,7 +335,7 @@ describe('metrics', () => {
 
       metric.dec()
 
-      expect(metric.track).to.be.calledWith(-1)
+      sinon.assert.calledWith(metric.track, -1)
 
       assert.deepStrictEqual(metric.points, [
         [now / 1e3, 1]
@@ -355,7 +352,7 @@ describe('metrics', () => {
 
       metric.dec(2)
 
-      expect(metric.track).to.be.calledWith(-2)
+      sinon.assert.calledWith(metric.track, -2)
 
       assert.deepStrictEqual(metric.points, [
         [now / 1e3, 1]

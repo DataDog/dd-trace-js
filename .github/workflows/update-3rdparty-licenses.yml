@@ -51,6 +51,8 @@ jobs:
           EOF
 
       - name: Regenerate LICENSE-3rdparty.csv
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           dd-license-attribution generate-sbom-csv \
             --use-mirrors=mirrors.json \

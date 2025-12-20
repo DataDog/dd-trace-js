@@ -1,6 +1,5 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -37,8 +36,7 @@ describe('IAST TaintTracking', () => {
     taintTracking.enableTaintTracking(config.iast)
     sinon.assert.calledOnce(taintTrackingOperations.enableTaintOperations)
     sinon.assert.calledOnce(taintTrackingPlugin.enable)
-    expect(taintTrackingOperations.setMaxTransactions)
-      .to.have.been.calledOnceWithExactly(config.iast.maxConcurrentRequests)
+    sinon.assert.calledOnceWithExactly(taintTrackingOperations.setMaxTransactions, config.iast.maxConcurrentRequests)
   })
 
   it('Should disable both rewriter, taint tracking operations, plugin', () => {

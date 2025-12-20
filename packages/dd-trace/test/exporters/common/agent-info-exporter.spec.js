@@ -2,8 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-
 const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
 const nock = require('nock')
@@ -74,7 +72,7 @@ describe('AgentInfoExporter', () => {
       agentInfoExporter.export(trace)
       sinon.assert.calledWith(writer.append, trace)
       sinon.assert.notCalled(writer.flush)
-      expect(agentInfoExporter.getUncodedTraces()).not.to.include(trace)
+      assert.ok(!(agentInfoExporter.getUncodedTraces()).includes(trace))
       setTimeout(() => {
         sinon.assert.called(writer.flush)
         done()

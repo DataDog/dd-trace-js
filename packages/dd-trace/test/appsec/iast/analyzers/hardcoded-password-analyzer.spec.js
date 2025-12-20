@@ -6,7 +6,6 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
@@ -102,7 +101,12 @@ describe('Hardcoded Password Analyzer', () => {
       })
 
       const evidence = { value: ident }
-      expect(reportEvidence).to.be.calledOnceWithExactly({ file: relFile, line, column, ident, data: ruleId }, undefined, evidence)
+      sinon.assert.calledOnceWithExactly(
+        reportEvidence,
+        { file: relFile, line, column, ident, data: ruleId },
+        undefined,
+        evidence
+      )
     })
   })
 

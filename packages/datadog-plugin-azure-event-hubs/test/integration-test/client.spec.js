@@ -7,6 +7,7 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
+  assertObjectContains,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -48,39 +49,62 @@ describe.skip('esm', () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         // list of EventData
         assert.strictEqual(payload.length, 5)
-        assert.strictEqual(payload[0][0].name, 'azure.eventhubs.send')
-        assert.strictEqual(payload[0][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[0][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[0][0].meta['messaging.operation'], 'send')
-        assert.strictEqual(payload[0][0].meta['network.destination.name'], '127.0.0.1:5673')
-        assert.strictEqual(payload[0][0].metrics['messaging.batch.message_count'], 2)
+        assertObjectContains(payload[0][0], {
+          name: 'azure.eventhubs.send',
+          meta: {
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'messaging.operation': 'send',
+            'network.destination.name': '127.0.0.1:5673'
+          },
+          metrics: {
+            'messaging.batch.message_count': 2
+          }
+        })
         // list of AMPQ messages
-        assert.strictEqual(payload[1][0].name, 'azure.eventhubs.send')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'send')
-        assert.strictEqual(payload[1][0].meta['network.destination.name'], '127.0.0.1:5673')
-        assert.strictEqual(payload[1][0].metrics['messaging.batch.message_count'], 2)
+        assertObjectContains(payload[1][0], {
+          name: 'azure.eventhubs.send',
+          meta: {
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'messaging.operation': 'send',
+            'network.destination.name': '127.0.0.1:5673'
+          },
+          metrics: {
+            'messaging.batch.message_count': 2
+          }
+        })
         // Batch -> EventDataBatchImpl
-        assert.strictEqual(payload[2][0].name, 'azure.eventhubs.create')
-        assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'create')
-        assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[2][0].meta['network.destination.name'], '127.0.0.1:5673')
-        assert.strictEqual(payload[3][0].name, 'azure.eventhubs.create')
-        assert.strictEqual(payload[3][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[3][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[3][0].meta['messaging.operation'], 'create')
-        assert.strictEqual(payload[3][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[3][0].meta['network.destination.name'], '127.0.0.1:5673')
-        assert.strictEqual(payload[4][0].name, 'azure.eventhubs.send')
-        assert.strictEqual(payload[4][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[4][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[4][0].meta['messaging.operation'], 'send')
-        assert.strictEqual(payload[4][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[4][0].meta['network.destination.name'], '127.0.0.1:5673')
-        assert.strictEqual(payload[4][0].metrics['messaging.batch.message_count'], 4)
+        assertObjectContains(payload[2][0], {
+          name: 'azure.eventhubs.create',
+          meta: {
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'messaging.operation': 'create',
+            'network.destination.name': '127.0.0.1:5673'
+          }
+        })
+        assertObjectContains(payload[3][0], {
+          name: 'azure.eventhubs.create',
+          meta: {
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'messaging.operation': 'create',
+            'network.destination.name': '127.0.0.1:5673'
+          }
+        })
+        assertObjectContains(payload[4][0], {
+          name: 'azure.eventhubs.send',
+          meta: {
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'messaging.operation': 'send',
+            'network.destination.name': '127.0.0.1:5673'
+          },
+          metrics: {
+            'messaging.batch.message_count': 4
+          }
+        })
         assert.strictEqual(parseLinks(payload[4][0]).length, 2)
       })
 
@@ -92,8 +116,8 @@ describe.skip('esm', () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.ok(!('_dd.span_links' in payload[2][0]))
       })
-      const envVar = { DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: false, ...spawnEnv }
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, undefined, envVar)
+      const envVar = { DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: 'false', ...spawnEnv }
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, envVar)
       await res
     }).timeout(60000)
   })

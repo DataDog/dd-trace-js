@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -215,9 +214,8 @@ describe('RASP - utils.js', () => {
       assert.strictEqual(error.message, 'DatadogRaspAbortError')
       assert.strictEqual(error.blockingAction, blockingAction)
       assert.strictEqual(error.raspRule, raspRule)
-      assert.ok(Object.hasOwn(error, 'req'))
-      assert.ok(Object.hasOwn(error, 'res'))
-      expect(Object.keys(error)).to.not.include.members(['req', 'res'])
+      assert.strictEqual(Object.getOwnPropertyDescriptor(error, 'req')?.enumerable, false)
+      assert.strictEqual(Object.getOwnPropertyDescriptor(error, 'res')?.enumerable, false)
     })
   })
 })

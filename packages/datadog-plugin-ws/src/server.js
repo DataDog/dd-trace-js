@@ -2,6 +2,8 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 const tags = require('../../../ext/tags.js')
+const { initWebSocketMessageCounters } = require('./util')
+const { FORMAT_HTTP_HEADERS } = require('../../../ext/formats')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 
@@ -28,9 +30,13 @@ class WSServerPlugin extends TracingPlugin {
 
     ctx.args = { options }
 
+    // Extract distributed tracing context from request headers
+    const childOf = this.tracer.extract(FORMAT_HTTP_HEADERS, req.headers)
+
     const service = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
       service,
+      childOf,
       meta: {
         'span.type': 'websocket',
         'http.upgraded': 'websocket',
@@ -46,6 +52,13 @@ class WSServerPlugin extends TracingPlugin {
 
     ctx.socket.spanContext = ctx.span._spanContext
     ctx.socket.spanContext.spanTags = ctx.span._spanContext._tags
+    // Store the handshake span for use in message span pointers
+    ctx.socket.handshakeSpan = ctx.span
+    // Store the request headers for distributed tracing check
+    ctx.socket.requestHeaders = req.headers
+
+    // Initialize message counters for span pointers
+    initWebSocketMessageCounters(ctx.socket)
 
     return ctx.currentStore
   }

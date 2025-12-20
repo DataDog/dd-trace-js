@@ -1,6 +1,5 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -38,7 +37,7 @@ describe('LogExporter', () => {
       exporter.export([span, span])
       log.restore()
       const result = `${expectedPrefix}${span.tag}${expectedSuffix}`
-      expect(log).to.have.calledTwice
+      sinon.assert.calledTwice(log)
       sinon.assert.calledWithMatch(log, result)
     })
 

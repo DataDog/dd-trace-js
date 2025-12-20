@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 
 const {
   FakeAgent,
+  assertObjectContains,
   hookFile,
   sandboxCwd,
   useSandbox,
@@ -46,19 +47,27 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-eventdata', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest1')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[2][0].resource, 'EventHubs eventHubTest1')
-        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[2][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
     }).timeout(60000)
@@ -71,19 +80,27 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-amqpmessages', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest1')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[2][0].resource, 'EventHubs eventHubTest1')
-        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[2][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
     }).timeout(60000)
@@ -95,19 +112,27 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-batch', ({ headers, payload }) => {
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest1')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[2][0].resource, 'EventHubs eventHubTest1')
-        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[2][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
     }).timeout(60000)
@@ -120,12 +145,16 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-eventdata', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest2')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh2')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest2',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh2',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
     }).timeout(60000)
@@ -138,12 +167,16 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-amqpmessages', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest2')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh2')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest2',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh2',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
     }).timeout(60000)
@@ -156,12 +189,16 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-batch', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest2')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh2')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest2',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh2',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
     }).timeout(60000)
@@ -174,12 +211,16 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-enqueueEvent', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest1')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
       })
     }).timeout(60000)
@@ -192,19 +233,27 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-enqueueEvents', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest1')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[2][0].resource, 'EventHubs eventHubTest1')
-        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[2][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
     }).timeout(60000)
@@ -217,19 +266,27 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-enqueueAmqp', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest1')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[2][0].resource, 'EventHubs eventHubTest1')
-        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[2][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
     }).timeout(60000)
@@ -242,12 +299,16 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-enqueueEvent', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest2')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh2')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest2',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh2',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
       })
     }).timeout(60000)
@@ -264,12 +325,16 @@ describe('esm', () => {
         assert.strictEqual(payload[0][2].name, 'azure.eventhubs.create')
         assert.strictEqual(payload[0][3].name, 'azure.eventhubs.send')
         assert.strictEqual(parseLinks(payload[0][3]).length, 2)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest2')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh2')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest2',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh2',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
     }).timeout(60000)
@@ -286,12 +351,16 @@ describe('esm', () => {
         assert.strictEqual(payload[0][2].name, 'azure.eventhubs.create')
         assert.strictEqual(payload[0][3].name, 'azure.eventhubs.send')
         assert.strictEqual(parseLinks(payload[0][3]).length, 2)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest2')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh2')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'EventHubs eventHubTest2',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': 'eh2',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
     }).timeout(60000)

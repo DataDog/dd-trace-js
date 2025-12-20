@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 const { describe, it, beforeEach } = require('tap').mocha
@@ -438,7 +437,7 @@ describe('TextMapPropagator', () => {
         propagator.inject(undefined, carrier)
 
         sinon.assert.calledWith(tracerMetrics.count, 'context_header_style.injected', ['header_style:baggage'])
-        expect(tracerMetrics.count().inc).to.have.been.called
+        sinon.assert.called(tracerMetrics.count().inc)
         assert.strictEqual(carrier.baggage, 'test-key=test-value')
       })
 
@@ -458,7 +457,7 @@ describe('TextMapPropagator', () => {
           'context_header.truncated',
           ['truncation_reason:baggage_item_count_exceeded']
         )
-        expect(tracerMetrics.count().inc).to.have.been.called
+        sinon.assert.called(tracerMetrics.count().inc)
 
         // Restore original config
         config.baggageMaxItems = originalMaxItems
@@ -478,7 +477,7 @@ describe('TextMapPropagator', () => {
           'context_header.truncated',
           ['truncation_reason:baggage_byte_count_exceeded']
         )
-        expect(tracerMetrics.count().inc).to.have.been.called
+        sinon.assert.called(tracerMetrics.count().inc)
 
         // Restore original config
         config.baggageMaxBytes = originalMaxBytes
@@ -977,7 +976,7 @@ describe('TextMapPropagator', () => {
         propagator.extract(carrier)
 
         sinon.assert.calledWith(tracerMetrics.count, 'context_header_style.extracted', ['header_style:baggage'])
-        expect(tracerMetrics.count().inc).to.have.been.called
+        sinon.assert.called(tracerMetrics.count().inc)
         assert.strictEqual(getBaggageItem('test-key'), 'test-value')
       })
 
@@ -991,7 +990,7 @@ describe('TextMapPropagator', () => {
         propagator.extract(carrier)
 
         sinon.assert.calledWith(tracerMetrics.count, 'context_header_style.malformed', ['header_style:baggage'])
-        expect(tracerMetrics.count().inc).to.have.been.called
+        sinon.assert.called(tracerMetrics.count().inc)
         assert.deepStrictEqual(getAllBaggageItems(), {})
       })
     })

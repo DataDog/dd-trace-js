@@ -7,7 +7,7 @@ const path = require('node:path')
 
 const msgpack = require('@msgpack/msgpack')
 const axios = require('axios')
-const { expect } = require('chai')
+
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const iast = require('../../../src/appsec/iast')
@@ -163,7 +163,7 @@ function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest
       if (traces[0][0].type !== 'web') throw new Error('Not a web span')
       // iastJson == undefiend is valid
       const iastJson = traces[0][0].meta['_dd.iast.json'] || ''
-      expect(iastJson).to.not.include(`"${vulnerability}"`)
+      assert.ok(!(iastJson).includes(`"${vulnerability}"`))
     })
     .then(done)
     .catch(done)

@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -132,8 +131,8 @@ describe('exporters/agent', function () {
     const wallProfile = Profile.decode(req.files[1].buffer)
     const spaceProfile = Profile.decode(req.files[2].buffer)
 
-    expect(wallProfile).to.be.a.profile
-    expect(spaceProfile).to.be.a.profile
+    assertIsProfile(wallProfile)
+    assertIsProfile(spaceProfile)
 
     assert.deepStrictEqual(wallProfile, Profile.decode(profiles.wall))
     assert.deepStrictEqual(spaceProfile, Profile.decode(profiles.space))
@@ -490,3 +489,56 @@ describe('exporters/agent', function () {
     })
   }, { skip: os.platform() === 'win32' })
 })
+
+function assertIsProfile (obj, msg) {
+  assert.ok(typeof obj === 'object' && obj !== null, msg)
+  assert.strictEqual(typeof obj.timeNanos, 'bigint', msg)
+  assert.ok(typeof obj.period === 'number' || typeof obj.period === 'bigint', msg)
+
+  assertIsValueType(obj.periodType, msg)
+
+  assert.ok(Array.isArray(obj.sampleType), msg)
+  assert.strictEqual(obj.sampleType.length, 2, msg)
+  assert.ok(Array.isArray(obj.sample), msg)
+  assert.ok(Array.isArray(obj.location), msg)
+  assert.ok(Array.isArray(obj.function), msg)
+
+  assert.ok(typeof obj.stringTable === 'object' && obj.stringTable !== null, msg)
+  assert.ok(Array.isArray(obj.stringTable.strings), msg)
+  assert.ok(obj.stringTable.strings.length >= 1, msg)
+  assert.strictEqual(obj.stringTable.strings[0], '', msg)
+
+  for (const sampleType of obj.sampleType) {
+    assertIsValueType(sampleType, msg)
+  }
+
+  for (const fn of obj.function) {
+    assert.strictEqual(typeof fn.filename, 'number', msg)
+    assert.strictEqual(typeof fn.systemName, 'number', msg)
+    assert.strictEqual(typeof fn.name, 'number', msg)
+    assert.ok(Number.isSafeInteger(fn.id), msg)
+  }
+
+  for (const location of obj.location) {
+    assert.ok(Number.isSafeInteger(location.id), msg)
+    assert.ok(Array.isArray(location.line), msg)
+
+    for (const line of location.line) {
+      assert.ok(Number.isSafeInteger(line.functionId), msg)
+      assert.strictEqual(typeof line.line, 'number', msg)
+    }
+  }
+
+  for (const sample of obj.sample) {
+    assert.ok(Array.isArray(sample.locationId), msg)
+    assert.ok(sample.locationId.length >= 1, msg)
+    assert.ok(Array.isArray(sample.value), msg)
+    assert.strictEqual(sample.value.length, obj.sampleType.length, msg)
+  }
+
+  function assertIsValueType (valueType, msg) {
+    assert.ok(typeof valueType === 'object' && valueType !== null, msg)
+    assert.strictEqual(typeof valueType.type, 'number', msg)
+    assert.strictEqual(typeof valueType.unit, 'number', msg)
+  }
+}

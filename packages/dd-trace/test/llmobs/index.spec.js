@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const { after, afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -138,8 +137,8 @@ describe('module', () => {
           site: 'datadoghq.com'
         })
 
-        expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(true)
-        expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(true)
+        sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
+        sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)
       })
     })
   })
@@ -152,8 +151,8 @@ describe('module', () => {
         }
       })
 
-      expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(false)
-      expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(false)
+      sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
+      sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
     })
   })
 
@@ -190,8 +189,8 @@ describe('module', () => {
             site: 'datadoghq.com'
           })
 
-          expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(true)
-          expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(true)
+          sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
+          sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)
         })
       })
 
@@ -206,8 +205,8 @@ describe('module', () => {
         it('configures the agent-proxy writers', () => {
           llmobsModule.enable({ llmobs: { mlApp: 'test' } })
 
-          expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(false)
-          expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(false)
+          sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
+          sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
         })
       })
     })
@@ -243,8 +242,8 @@ describe('module', () => {
         it('configures the agentless writers', () => {
           llmobsModule.enable({ llmobs: {}, apiKey: 'test', site: 'datadoghq.com' })
 
-          expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(true)
-          expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(true)
+          sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
+          sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)
         })
       })
     })
@@ -257,7 +256,7 @@ describe('module', () => {
 
     evalMetricAppendCh.publish(payload)
 
-    expect(LLMObsEvalMetricsWriterSpy().append).to.have.been.calledWith(payload)
+    sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().append, payload)
   })
 
   it('removes all subscribers when disabling', () => {

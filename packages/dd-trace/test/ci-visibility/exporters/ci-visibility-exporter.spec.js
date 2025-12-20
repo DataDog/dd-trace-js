@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 const { describe, it, beforeEach, afterEach, context } = require('tap').mocha
@@ -948,7 +947,7 @@ describe('CI Visibility Exporter', () => {
           },
           diLog
         )
-        expect(ciVisibilityExporter._logsWriter.append).to.be.calledWith(sinon.match({
+        sinon.assert.calledWith(ciVisibilityExporter._logsWriter.append, sinon.match({
           ddtags: 'git.repository_url:https://github.com/datadog/dd-trace-js.git,git.commit.sha:1234',
           level: 'error',
           ddsource: 'dd_debugger',

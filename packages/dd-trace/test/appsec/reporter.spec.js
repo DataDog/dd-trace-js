@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const zlib = require('node:zlib')
 
-const { expect } = require('chai')
 const dc = require('dc-polyfill')
 const { after, afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -342,28 +341,28 @@ describe('reporter', () => {
       Reporter.reportWafConfigUpdate(product, rcConfigId, diagnostics)
 
       sinon.assert.calledThrice(telemetryLogHandlerAssert)
-      expect(telemetryLogHandlerAssert.getCall(0)).to.have.been.calledWithExactly({
+      assert.strictEqual(telemetryLogHandlerAssert.getCall(0).calledWithExactly({
         message: '"missing key operator": ["blk-001-001"]',
         level: 'ERROR',
         tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:rules,rc_config_id:1'
-      }, 'datadog:telemetry:log')
-      expect(telemetryLogHandlerAssert.getCall(1)).to.have.been.calledWithExactly({
+      }, 'datadog:telemetry:log'), true)
+      assert.strictEqual(telemetryLogHandlerAssert.getCall(1).calledWithExactly({
         message: '"invalid tag": ["blk-001-001"]',
         level: 'WARN',
         tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:rules,rc_config_id:1'
-      }, 'datadog:telemetry:log')
-      expect(telemetryLogHandlerAssert.getCall(2)).to.have.been.calledWithExactly({
+      }, 'datadog:telemetry:log'), true)
+      assert.strictEqual(telemetryLogHandlerAssert.getCall(2).calledWithExactly({
         message: '"no mappings defined": ["http-endpoint-fingerprint"]',
         level: 'ERROR',
         tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:processors,rc_config_id:1'
-      }, 'datadog:telemetry:log')
+      }, 'datadog:telemetry:log'), true)
     })
 
     it('should increment waf.config_errors metric', () => {
       Reporter.reportWafConfigUpdate(product, rcConfigId, diagnostics, '1.24.1')
 
       sinon.assert.calledTwice(telemetry.incrementWafConfigErrorsMetric)
-      expect(telemetry.incrementWafConfigErrorsMetric).to.always.have.been.calledWithExactly('1.24.1', '1.42.11')
+      sinon.assert.calledWithExactly(telemetry.incrementWafConfigErrorsMetric, '1.24.1', '1.42.11')
     })
   })
 
@@ -718,7 +717,7 @@ describe('reporter', () => {
 
     it('should call addTags with an empty array', () => {
       Reporter.reportAttributes([])
-      expect(span.addTags).to.be.calledOnceWithExactly({})
+      sinon.assert.calledOnceWithExactly(span.addTags, {})
     })
 
     it('should call addTags', () => {
@@ -740,7 +739,7 @@ describe('reporter', () => {
       Reporter.reportAttributes(attributes)
 
       const schemaEncoded = zlib.gzipSync(JSON.stringify(schemaValue)).toString('base64')
-      expect(span.addTags).to.be.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         '_dd.appsec.fp.http.endpoint': 'endpoint_fingerprint',
         '_dd.appsec.fp.http.header': 'header_fingerprint',
         '_dd.appsec.fp.http.network': 'network_fingerprint',
@@ -1014,7 +1013,7 @@ describe('reporter', () => {
       const res = {}
       Reporter.finishRequest(req, res)
 
-      expect(telemetry.incrementWafRequestsMetric).to.be.calledOnceWithExactly(req)
+      sinon.assert.calledOnceWithExactly(telemetry.incrementWafRequestsMetric, req)
     })
 
     it('should set waf.duration tags if there are metrics stored', () => {

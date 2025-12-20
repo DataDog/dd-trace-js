@@ -404,7 +404,7 @@ describe('Child process plugin', () => {
       const execFileAsync = util.promisify(childProcess.execFile)
 
       assert.strictEqual(global.Promise, Bluebird)
-      assert.ok(global.Promise.version != null)
+      assert.ok(global.Promise.version)
 
       const expectedPromise = expectSomeSpan(agent, {
         type: 'system',
@@ -417,7 +417,7 @@ describe('Child process plugin', () => {
       })
 
       const result = await execFileAsync('echo', ['bluebird-test'])
-      assert.ok(result != null)
+      assert.ok(result)
       assert.strictEqual(result.stdout, 'bluebird-test\n')
 
       return expectedPromise
@@ -460,8 +460,8 @@ describe('Child process plugin', () => {
         await execFileAsync('node', ['-invalidFlag'], { stdio: 'pipe' })
         throw new Error('Expected command to fail')
       } catch (error) {
-        assert.ok(error != null)
-        assert.ok(error.code != null)
+        assert.ok(error)
+        assert.ok(error.code)
       }
 
       return expectedPromise
@@ -476,7 +476,7 @@ describe('Child process plugin', () => {
 
       const promise = execFileAsync('echo', ['util-promisify-test'])
       assert.strictEqual(promise.constructor, Bluebird)
-      assert.ok(promise.constructor.version != null)
+      assert.ok(promise.constructor.version)
 
       const result = await promise
       assert.strictEqual(result.stdout, 'util-promisify-test\n')
