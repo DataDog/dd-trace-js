@@ -445,7 +445,6 @@ describe('Plugin', () => {
               link.attributes && link.attributes['dd.kind'] === 'span-pointer'
             )
             assert.ok(pointerLink, 'Should have a span pointer link')
-            didFindPointerLink = true
 
             assertObjectContains(pointerLink, {
               attributes: {
