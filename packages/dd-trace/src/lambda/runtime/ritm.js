@@ -79,7 +79,7 @@ function _getLambdaFilePaths (lambdaStylePath) {
  */
 const registerLambdaHook = () => {
   const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
-  const originalLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER')
+  const originalLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER')
 
   if (originalLambdaHandler !== undefined && lambdaTaskRoot !== undefined) {
     const [moduleRoot, moduleAndHandler] = _extractModuleRootAndHandler(originalLambdaHandler)
