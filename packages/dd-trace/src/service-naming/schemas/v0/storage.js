@@ -1,5 +1,7 @@
 'use strict'
 
+const { identityService } = require('../util')
+
 function getRedisService (pluginConfig, connectionName) {
   if (pluginConfig.splitByInstance && connectionName) {
     return pluginConfig.service
@@ -105,6 +107,10 @@ const storage = {
     prisma: {
       opName: ({ operation }) => `prisma.${operation}`,
       serviceName: withSuffixFunction('prisma')
+    },
+    postgres: {
+      opName: () => 'postgres.command',
+      serviceName: identityService
     },
     redis: redisConfig,
     tedious: {

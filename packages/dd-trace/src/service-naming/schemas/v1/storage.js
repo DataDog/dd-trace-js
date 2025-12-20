@@ -1,5 +1,7 @@
 'use strict'
 
+const { identityService } = require('../util')
+
 function configWithFallback ({ tracerService, pluginConfig }) {
   return pluginConfig.service || tracerService
 }
@@ -74,6 +76,10 @@ const storage = {
     prisma: {
       opName: ({ operation }) => `prisma.${operation}`,
       serviceName: configWithFallback
+    },
+    postgres: {
+      opName: () => 'postgres.command',
+      serviceName: identityService
     },
     redis: redisNaming,
     tedious: {

@@ -29,6 +29,7 @@ tracer.use('pg', {
 <h5 id="aws-sdk-tags"></h5>
 <h5 id="aws-sdk-config"></h5>
 <h5 id="azure-functions"></h5>
+<h5 id="bullmq"></h5>
 <h5 id="bunyan"></h5>
 <h5 id="confluentinc-kafka-javascript"></h5>
 <h5 id="couchbase"></h5>
@@ -90,6 +91,7 @@ tracer.use('pg', {
 <h5 id="pg"></h5>
 <h5 id="pg-tags"></h5>
 <h5 id="pg-config"></h5>
+<h5 id="postgres"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
 <h5 id="redis"></h5>
@@ -111,6 +113,7 @@ tracer.use('pg', {
 * [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
 * [azure-functions](./interfaces/export_.plugins.azure_functions.html)
 * [bluebird](./interfaces/export_.plugins.bluebird.html)
+* [bullmq](./interfaces/export_.plugins.bullmq.html)
 * [couchbase](./interfaces/export_.plugins.couchbase.html)
 * [cucumber](./interfaces/export_.plugins.cucumber.html)
 * [bunyan](./interfaces/export_.plugins.bunyan.html)
@@ -149,6 +152,7 @@ tracer.use('pg', {
 * [oracledb](./interfaces/export_.plugins.oracledb.html)
 * [pino](./interfaces/export_.plugins.pino.html)
 * [pg](./interfaces/export_.plugins.pg.html)
+* [postgres](./interfaces/export_.plugins.postgres.html)
 * [prisma](./interfaces/export_.plugins.prisma.html)
 * [promise](./interfaces/export_.plugins.promise.html)
 * [promise-js](./interfaces/export_.plugins.promise_js.html)

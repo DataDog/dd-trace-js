@@ -36,6 +36,10 @@ const messaging = {
       opName: () => 'kafka.send',
       serviceName: identityService
     },
+    bullmq: {
+      opName: ({ operation }) => `bullmq.${operation || 'send'}`,
+      serviceName: identityService
+    },
     rhea: amqpOutbound,
     sqs: {
       opName: () => 'aws.sqs.send',
@@ -59,6 +63,10 @@ const messaging = {
     },
     'confluentinc-kafka-javascript': {
       opName: () => 'kafka.process',
+      serviceName: identityService
+    },
+    bullmq: {
+      opName: ({ operation }) => `bullmq.${operation || 'process'}`,
       serviceName: identityService
     },
     rhea: amqpInbound,

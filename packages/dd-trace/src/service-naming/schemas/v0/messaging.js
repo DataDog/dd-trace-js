@@ -47,6 +47,10 @@ const messaging = {
     sns: {
       opName: () => 'aws.request',
       serviceName: awsServiceV0
+    },
+    bullmq: {
+      opName: ({ operation }) => `bullmq.${operation || 'send'}`,
+      serviceName: identityService
     }
   },
   consumer: {
@@ -77,6 +81,10 @@ const messaging = {
     sqs: {
       opName: () => 'aws.request',
       serviceName: awsServiceV0
+    },
+    bullmq: {
+      opName: ({ operation }) => `bullmq.${operation || 'process'}`,
+      serviceName: identityService
     }
   },
   client: {

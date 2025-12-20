@@ -191,6 +191,7 @@ interface Plugins {
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
+  "bullmq": tracer.plugins.bullmq;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
@@ -238,6 +239,7 @@ interface Plugins {
   "playwright": tracer.plugins.playwright;
   "pg": tracer.plugins.pg;
   "pino": tracer.plugins.pino;
+  "postgres": tracer.plugins.postgres;
   "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
   "redis": tracer.plugins.redis;
@@ -1757,6 +1759,12 @@ declare namespace tracer {
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
      * on the tracer.
      */
+    /**
+     * This plugin automatically instruments the
+     * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
+     */
+    interface bullmq extends Instrumentation {}
+
     interface bunyan extends Integration {}
 
     /**
@@ -2340,6 +2348,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [@prisma/client](https://www.prisma.io/docs/orm/prisma-client) module.
      */
+    /**
+     * This plugin automatically instruments the
+     * [postgres](https://github.com/npmjs/package/postgres) database client library.
+     */
+    interface postgres extends Instrumentation {}
+
     interface prisma extends PrismaClient, PrismaEngine {
       /**
        * Configuration for prisma client.

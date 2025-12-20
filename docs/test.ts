@@ -310,6 +310,7 @@ tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
+tracer.use('bullmq');
 tracer.use('bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
@@ -400,6 +401,7 @@ tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
 tracer.use('pg', { appendComment: true });
 tracer.use('pino');
+tracer.use('postgres');
 tracer.use('prisma');
 tracer.use('protobufjs');
 tracer.use('redis');
