@@ -4,8 +4,8 @@
 const tracer = require('../packages/dd-trace')
 const { isTrue, isFalse } = require('../packages/dd-trace/src/util')
 const log = require('../packages/dd-trace/src/log')
-const { getEnvironmentVariable } = require('../packages/dd-trace/src/config-helper')
-const { getResolvedEnv } = require('../packages/dd-trace/src/config-env-sources')
+const { getEnvironmentVariable, getValueFromEnvSources } =
+  require('../packages/dd-trace/src/config-helper')
 
 const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
 const DEFAULT_FLUSH_INTERVAL = 5000
@@ -44,8 +44,8 @@ const baseOptions = {
   flushInterval: isJestWorker ? JEST_FLUSH_INTERVAL : DEFAULT_FLUSH_INTERVAL
 }
 
-let shouldInit = !isFalse(getResolvedEnv('DD_CIVISIBILITY_ENABLED'))
-const isAgentlessEnabled = isTrue(getResolvedEnv('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
+let shouldInit = !isFalse(getValueFromEnvSources('DD_CIVISIBILITY_ENABLED'))
+const isAgentlessEnabled = isTrue(getValueFromEnvSources('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
 
 if (!isTestWorker && isPackageManager()) {
   log.debug('dd-trace is not initialized in a package manager.')
@@ -59,7 +59,7 @@ if (isTestWorker) {
   }
 } else {
   if (isAgentlessEnabled) {
-    if (getResolvedEnv('DD_API_KEY')) {
+    if (getValueFromEnvSources('DD_API_KEY')) {
       baseOptions.experimental = {
         exporter: 'datadog'
       }

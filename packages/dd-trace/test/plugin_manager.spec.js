@@ -79,13 +79,11 @@ describe('Plugin Manager', () => {
       '../../dd-trace/src/config-helper': {
         getEnvironmentVariable (name) {
           return process.env[name]
-        }
-      },
-      './config-env-sources': {
-        getResolvedEnv (name) {
+        },
+        getValueFromEnvSources (name) {
           return process.env[name]
         }
-      }
+      },
     })
     pm = new PluginManager(tracer)
   })
