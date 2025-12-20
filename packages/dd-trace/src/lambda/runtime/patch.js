@@ -59,7 +59,7 @@ function patchLambdaHandler (lambdaHandler) {
 }
 
 const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
-const originalLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER')
+const originalLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER')
 
 if (originalLambdaHandler === undefined) {
   // Instrumentation is done manually.
