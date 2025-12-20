@@ -6,7 +6,7 @@ const { _extractModuleNameAndHandlerPath, _extractModuleRootAndHandler, _getLamb
 const { datadog } = require('../handler')
 const { addHook } = require('../../../../datadog-instrumentations/src/helpers/instrument')
 const shimmer = require('../../../../datadog-shimmer')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config-helper')
 
 /**
  * Patches a Datadog Lambda module by calling `patchDatadogLambdaHandler`
