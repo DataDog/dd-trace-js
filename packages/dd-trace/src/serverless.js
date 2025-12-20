@@ -1,6 +1,7 @@
 'use strict'
 
 const { getEnvironmentVariable } = require('./config-helper')
+const { isFalse } = require('./util')
 
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
@@ -11,6 +12,15 @@ function getIsGCPFunction () {
     getEnvironmentVariable('FUNCTION_TARGET') !== undefined
 
   return isDeprecatedGCPFunction || isNewerGCPFunction
+}
+
+/**
+ * Enable GCP Pub/Sub PUSH subscription tracing for Cloud Run (K_SERVICE present).
+ * PUSH: GCP sends HTTP POST requests to the service with message data in headers.
+ */
+function enableGCPPubSubPushSubscription () {
+  const isGCPPubSubPushSubscriptionEnabled = getEnvironmentVariable('DD_TRACE_GCP_PUBSUB_PUSH_ENABLED')
+  return getEnvironmentVariable('K_SERVICE') !== undefined && !isFalse(isGCPPubSubPushSubscriptionEnabled)
 }
 
 function getIsAzureFunction () {
@@ -36,6 +46,7 @@ function isInServerlessEnvironment () {
 module.exports = {
   getIsGCPFunction,
   getIsAzureFunction,
+  enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
   isInServerlessEnvironment
 }
