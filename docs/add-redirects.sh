@@ -64,6 +64,7 @@ declare -a plugins=(
   "net"
   "next"
   "openai"
+  "openai-agents"
   "opensearch"
   "oracledb"
   "pg"
