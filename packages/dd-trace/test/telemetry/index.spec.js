@@ -908,8 +908,18 @@ describe('Telemetry retry', () => {
     assertObjectContains(extendedHeartbeatPayload, {
       integrations: [{
         integrations: [
-          { name: 'foo2', enabled: true, auto_enabled: true, process_tags: require('../../src/process-tags').tagsObject },
-          { name: 'bar2', enabled: false, auto_enabled: true, process_tags: require('../../src/process-tags').tagsObject }
+          {
+            name: 'foo2',
+            enabled: true,
+            auto_enabled: true,
+            process_tags: require('../../src/process-tags').tagsObject
+          },
+          {
+            name: 'bar2',
+            enabled: false,
+            auto_enabled: true,
+            process_tags: require('../../src/process-tags').tagsObject
+          }
         ]
       }]
     })
