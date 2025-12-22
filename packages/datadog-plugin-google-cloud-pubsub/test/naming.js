@@ -16,11 +16,11 @@ const rawExpectedSchema = {
   receive: {
     v0: {
       opName: 'pubsub.receive',
-      serviceName: 'test'
+      serviceName: 'test-pubsub'
     },
     v1: {
       opName: 'gcp.pubsub.process',
-      serviceName: 'test'
+      serviceName: 'test-pubsub'
     }
   },
   controlPlane: {
