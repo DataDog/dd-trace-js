@@ -274,6 +274,9 @@ function createGarbage (count = 50) {
 
           global.gc()
 
+          await setImmediate()
+          await setImmediate()
+
           clock.tick(10000 - waitTime)
 
           const isFiniteNumber = sinon.match((value) => {

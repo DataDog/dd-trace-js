@@ -37,7 +37,7 @@ describe('stacktrace utils', () => {
         const { stack } = new Error('foo')
         const [frame] = parseUserLandFrames(stack)
         assert.deepStrictEqual(frame, {
-          typeName: 'Test',
+          typeName: 'Context',
           functionName: 'outerFunction',
           methodName: undefined,
           fileName: __filename,
