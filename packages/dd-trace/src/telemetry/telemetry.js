@@ -149,13 +149,15 @@ function onBeforeExit () {
 }
 
 function createAppObject (config) {
+  const processTags = require('../process-tags')
   return {
     service_name: config.service,
     env: config.env,
     service_version: config.version,
     tracer_version: tracerVersion,
     language_name: 'nodejs',
-    language_version: process.versions.node
+    language_version: process.versions.node,
+    process_tags: processTags.tagsObject
   }
 }
 
