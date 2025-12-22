@@ -35,7 +35,6 @@ versionRange.forEach(version => {
       'mocha',
       'jest',
       '@cucumber/cucumber',
-      'chai@v4',
       `selenium-webdriver@${version}`
     ])
 

@@ -3092,7 +3092,7 @@ describe('Config', () => {
         process.env.DD_TEST_LOCAL_CONFIG_PATH,
         `
 apm_configuration_default:
-  DD_RUNTIME_METRICS_ENABLED: true
+  DD_RUNTIME_METRICS_ENABLED: 'true'
 `)
       const config = getConfig()
       assert.strictEqual(config.runtimeMetrics?.enabled, true)
@@ -3167,7 +3167,7 @@ rules:
         process.env.DD_TEST_LOCAL_CONFIG_PATH,
         `
 apm_configuration_default:
-  DD_RUNTIME_METRICS_ENABLED: true
+  DD_RUNTIME_METRICS_ENABLED: 'true'
   DD_FOOBAR_ENABLED: baz
 `)
       const stableConfig = new StableConfig()
@@ -3196,7 +3196,7 @@ DD_RUNTIME_METRICS_ENABLED true
         process.env.DD_TEST_LOCAL_CONFIG_PATH,
         `
 apm_configuration_default:
-  DD_RUNTIME_METRICS_ENABLED: true
+  DD_RUNTIME_METRICS_ENABLED: 'true'
 `)
       const stableConfig2 = new StableConfig()
       assert.strictEqual(stableConfig2?.wasm_loaded, true)
@@ -3207,7 +3207,7 @@ apm_configuration_default:
         process.env.DD_TEST_LOCAL_CONFIG_PATH,
         `
 apm_configuration_default:
-  DD_RUNTIME_METRICS_ENABLED: true
+  DD_RUNTIME_METRICS_ENABLED: 'true'
 `)
 
       process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
@@ -3223,15 +3223,15 @@ apm_configuration_default:
   DD_TRACE_PROPAGATION_STYLE: "tracecontext"
   DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true
 
-  DD_APPSEC_TRACE_RATE_LIMIT: 100
-  DD_APPSEC_MAX_STACK_TRACES: 2
+  DD_APPSEC_TRACE_RATE_LIMIT: '100'
+  DD_APPSEC_MAX_STACK_TRACES: '2'
   DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: "password|token"
 
-  DD_IAST_REQUEST_SAMPLING: 50
-  DD_IAST_MAX_CONCURRENT_REQUESTS: 10
+  DD_IAST_REQUEST_SAMPLING: '50'
+  DD_IAST_MAX_CONCURRENT_REQUESTS: '10'
 
-  DD_TELEMETRY_HEARTBEAT_INTERVAL: 42
-  DD_TELEMETRY_METRICS_ENABLED: false
+  DD_TELEMETRY_HEARTBEAT_INTERVAL: '42'
+  DD_TELEMETRY_METRICS_ENABLED: 'false'
 
   DD_LLMOBS_ML_APP: "my-llm-app"
 
@@ -3289,7 +3289,7 @@ apm_configuration_default:
   DD_INSTRUMENTATION_INSTALL_TIME: "1234567890"
   DD_INSTRUMENTATION_INSTALL_TYPE: "local_install"
   DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING: "all"
-  DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: 5
+  DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: '5'
 `)
       let config = getConfig()
       assertObjectContains(config, {
@@ -3341,7 +3341,7 @@ rules:
       DD_INSTRUMENTATION_INSTALL_TYPE: "fleet_install"
       DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING: ""
       DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING: "all"
-      DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: 15
+      DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: '15'
 `)
       config = getConfig()
       assertObjectContains(config, {

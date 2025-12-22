@@ -368,7 +368,7 @@ describe('esm', () => {
     it('should add span links to non-batched messages when batch links are disabled', async () => {
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: false
+        DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: 'false'
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-eventdata', ({ headers, payload }) => {
@@ -379,7 +379,7 @@ describe('esm', () => {
     it('should not create a tryAdd span or add span links to batches when batch links are disabled', async () => {
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: false
+        DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: 'false'
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-batch', ({ headers, payload }) => {
