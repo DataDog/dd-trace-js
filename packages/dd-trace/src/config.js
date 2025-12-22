@@ -14,7 +14,12 @@ const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOrigi
   require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
-const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
+const {
+  isInServerlessEnvironment,
+  getIsGCPFunction,
+  getIsAzureFunction,
+  enableGCPPubSubPushSubscription
+} = require('./serverless')
 const { ORIGIN_KEY } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./config-helper')
@@ -799,6 +804,7 @@ class Config {
     this.#setBoolean(target, 'injectForce', DD_INJECT_FORCE)
     this.#setBoolean(target, 'isAzureFunction', getIsAzureFunction())
     this.#setBoolean(target, 'isGCPFunction', getIsGCPFunction())
+    this.#setBoolean(target, 'gcpPubSubPushSubscriptionEnabled', enableGCPPubSubPushSubscription())
     target['langchain.spanCharLimit'] = maybeInt(DD_LANGCHAIN_SPAN_CHAR_LIMIT)
     target['langchain.spanPromptCompletionSampleRate'] = maybeFloat(DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
     this.#setBoolean(target, 'legacyBaggageEnabled', DD_TRACE_LEGACY_BAGGAGE_ENABLED)
