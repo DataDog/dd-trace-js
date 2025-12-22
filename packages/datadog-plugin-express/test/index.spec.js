@@ -1,19 +1,19 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+const { AsyncLocalStorage } = require('node:async_hooks')
+
 const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
-const { AsyncLocalStorage } = require('node:async_hooks')
-
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { NODE_MAJOR } = require('../../../version')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-
+const plugin = require('../src')
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 describe('Plugin', () => {
@@ -25,7 +25,10 @@ describe('Plugin', () => {
     withVersions('express', 'express', version => {
     // Express.js 4.10.5 and below have a Node.js incompatibility in the `fresh` package RE res._headers missing
       if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
-        describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
+        describe.skip(
+          `refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`,
+          () => {}
+        )
         return
       }
 
@@ -119,15 +122,19 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET /user')
-                expect(spans[0].meta).to.have.property('component', 'express')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
-                expect(spans[0].meta).to.have.property('http.route', '/user')
+                assertObjectContains(spans[0], {
+                  service: 'test',
+                  type: 'web',
+                  resource: 'GET /user',
+                  meta: {
+                    component: 'express',
+                    'span.kind': 'server',
+                    'http.url': `http://localhost:${port}/user`,
+                    'http.method': 'GET',
+                    'http.status_code': '200',
+                    'http.route': '/user'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -155,15 +162,19 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
-                expect(spans[0].meta).to.have.property('component', 'express')
-                expect(spans[0].meta).to.have.property('_dd.integration', 'express')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/app/user/1`)
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
+                assertObjectContains(spans[0], {
+                  service: 'test',
+                  type: 'web',
+                  resource: 'GET /app/user/:id',
+                  meta: {
+                    component: 'express',
+                    '_dd.integration': 'express',
+                    'span.kind': 'server',
+                    'http.url': `http://localhost:${port}/app/user/1`,
+                    'http.method': 'GET',
+                    'http.status_code': '200'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -193,14 +204,18 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
-                expect(spans[0].meta).to.have.property('component', 'express')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/app/user/1`)
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
+                assertObjectContains(spans[0], {
+                  service: 'test',
+                  type: 'web',
+                  resource: 'GET /app/user/:id',
+                  meta: {
+                    component: 'express',
+                    'span.kind': 'server',
+                    'http.url': `http://localhost:${port}/app/user/1`,
+                    'http.method': 'GET',
+                    'http.status_code': '200'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -233,52 +248,80 @@ describe('Plugin', () => {
                 const whichMiddleware = isExpress4 ? 'express' : 'router'
 
                 const rootSpan = spans[index++]
-                expect(rootSpan).to.have.property('resource', 'GET /app/user/:id')
-                expect(rootSpan).to.have.property('name', 'express.request')
-                expect(rootSpan.meta).to.have.property('component', 'express')
+                assertObjectContains(rootSpan, {
+                  resource: 'GET /app/user/:id',
+                  name: 'express.request',
+                  meta: {
+                    component: 'express'
+                  }
+                })
 
                 if (isExpress4) {
-                  expect(spans[index]).to.have.property('resource', 'query')
-                  expect(spans[index]).to.have.property('name', 'express.middleware')
-                  expect(spans[index].parent_id.toString()).to.equal(rootSpan.span_id.toString())
-                  expect(spans[index].meta).to.have.property('component', 'express')
+                  assertObjectContains(spans[index], {
+                    resource: 'query',
+                    name: 'express.middleware',
+                    meta: {
+                      component: 'express'
+                    }
+                  })
+                  assert.strictEqual(spans[index].parent_id.toString(), rootSpan.span_id.toString())
                   index++
 
-                  expect(spans[index]).to.have.property('resource', 'expressInit')
-                  expect(spans[index]).to.have.property('name', 'express.middleware')
-                  expect(spans[index].parent_id.toString()).to.equal(rootSpan.span_id.toString())
-                  expect(spans[index].meta).to.have.property('component', 'express')
+                  assertObjectContains(spans[index], {
+                    resource: 'expressInit',
+                    name: 'express.middleware',
+                    meta: {
+                      component: 'express'
+                    }
+                  })
+                  assert.strictEqual(spans[index].parent_id.toString(), rootSpan.span_id.toString())
                   index++
                 }
 
-                expect(spans[index]).to.have.property('resource', 'named')
-                expect(spans[index]).to.have.property('name', `${whichMiddleware}.middleware`)
-                expect(spans[index].parent_id.toString()).to.equal(rootSpan.span_id.toString())
-                expect(spans[index].meta).to.have.property('component', whichMiddleware)
+                assertObjectContains(spans[index], {
+                  resource: 'named',
+                  name: `${whichMiddleware}.middleware`,
+                  meta: {
+                    component: whichMiddleware
+                  }
+                })
+                assert.strictEqual(spans[index].parent_id.toString(), rootSpan.span_id.toString())
                 index++
 
-                expect(spans[index]).to.have.property('resource', 'router')
-                expect(spans[index]).to.have.property('name', `${whichMiddleware}.middleware`)
-                expect(spans[index].parent_id.toString()).to.equal(rootSpan.span_id.toString())
-                expect(spans[index].meta).to.have.property('component', whichMiddleware)
+                assertObjectContains(spans[index], {
+                  resource: 'router',
+                  name: `${whichMiddleware}.middleware`,
+                  meta: {
+                    component: whichMiddleware
+                  }
+                })
+                assert.strictEqual(spans[index].parent_id.toString(), rootSpan.span_id.toString())
                 index++
 
                 if (isExpress4) {
-                  expect(spans[index].resource).to.match(/^bound\s.*$/)
+                  assert.match(spans[index].resource, /^bound\s.*$/)
                 } else {
-                  expect(spans[index]).to.have.property('resource', 'handle')
+                  assert.strictEqual(spans[index].resource, 'handle')
                 }
-                expect(spans[index]).to.have.property('name', `${whichMiddleware}.middleware`)
-                expect(spans[index].parent_id.toString()).to.equal(spans[index - 1].span_id.toString())
-                expect(spans[index].meta).to.have.property('component', whichMiddleware)
+                assertObjectContains(spans[index], {
+                  name: `${whichMiddleware}.middleware`,
+                  meta: {
+                    component: whichMiddleware
+                  }
+                })
+                assert.strictEqual(spans[index].parent_id.toString(), spans[index - 1].span_id.toString())
                 index++
 
-                expect(spans[index]).to.have.property('resource', '<anonymous>')
-                expect(spans[index]).to.have.property('name', `${whichMiddleware}.middleware`)
-                expect(spans[index].parent_id.toString()).to.equal(spans[index - 1].span_id.toString())
-                expect(spans[index].meta).to.have.property('component', whichMiddleware)
+                assertObjectContains(spans[index], {
+                  resource: '<anonymous>',
+                  name: `${whichMiddleware}.middleware`,
+                  meta: {
+                    component: whichMiddleware
+                  }
+                })
+                assert.strictEqual(spans[index].parent_id.toString(), spans[index - 1].span_id.toString())
 
-                expect(index).to.equal(spans.length - 1)
+                assert.strictEqual(index, spans.length - 1)
               })
               .then(done)
               .catch(done)
@@ -319,12 +362,20 @@ describe('Plugin', () => {
                   ? 'express'
                   : 'router'
 
-                expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-                expect(spans[0]).to.have.property('name', 'express.request')
-                expect(spans[0].meta).to.have.property('component', 'express')
-                expect(spans[breakingSpanIndex]).to.have.property('resource', 'breaking')
-                expect(spans[breakingSpanIndex]).to.have.property('name', `${whichMiddleware}.middleware`)
-                expect(spans[breakingSpanIndex].meta).to.have.property('component', whichMiddleware)
+                assertObjectContains(spans[0], {
+                  resource: 'GET /user/:id',
+                  name: 'express.request',
+                  meta: {
+                    component: 'express'
+                  }
+                })
+                assertObjectContains(spans[breakingSpanIndex], {
+                  resource: 'breaking',
+                  name: `${whichMiddleware}.middleware`,
+                  meta: {
+                    component: whichMiddleware
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -367,11 +418,19 @@ describe('Plugin', () => {
                   ? 'express'
                   : 'router'
 
-                expect(spans[0]).to.have.property('name', 'express.request')
-                expect(spans[errorSpanIndex]).to.have.property('name', `${whichMiddleware}.middleware`)
-                expect(spans[errorSpanIndex].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[0].meta).to.have.property('component', 'express')
-                expect(spans[errorSpanIndex].meta).to.have.property('component', whichMiddleware)
+                assertObjectContains(spans[0], {
+                  name: 'express.request',
+                  meta: {
+                    component: 'express'
+                  }
+                })
+                assertObjectContains(spans[errorSpanIndex], {
+                  name: `${whichMiddleware}.middleware`,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    component: whichMiddleware
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -399,7 +458,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /app(/^\\/user\\/(\\d)$/)')
+                assert.strictEqual(spans[0].resource, 'GET /app(/^\\/user\\/(\\d)$/)')
               })
               .then(done)
               .catch(done)
@@ -427,7 +486,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
+                assert.strictEqual(spans[0].resource, 'GET /app/user/:id')
               })
               .then(done)
               .catch(done)
@@ -461,7 +520,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
+                assert.strictEqual(spans[0].resource, 'GET /foo/bar')
               })
               .then(done)
               .catch(done)
@@ -489,7 +548,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
+                assert.strictEqual(spans[0].resource, 'GET /app/user/:id')
               })
               .then(done)
               .catch(done)
@@ -518,7 +577,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
+                assert.strictEqual(spans[0].resource, 'GET /app/user/:id')
               })
               .then(done)
               .catch(done)
@@ -546,9 +605,13 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans.filter(span => span.name === 'express.request')).to.have.length(1)
-                expect(spans[0]).to.have.property('resource', 'GET /parent/child')
-                expect(spans[0].meta).to.have.property('component', 'express')
+                assert.strictEqual(spans.filter(span => span.name === 'express.request').length, 1)
+                assertObjectContains(spans[0], {
+                  resource: 'GET /parent/child',
+                  meta: {
+                    component: 'express'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -573,7 +636,7 @@ describe('Plugin', () => {
           })
 
           app.use((req, res, next) => {
-            expect(span.finish).to.have.been.called
+            sinon.assert.called(span.finish)
             res.status(200).send()
             done()
           })
@@ -614,7 +677,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
+                assert.strictEqual(spans[0].resource, 'GET /app/user/:id')
               })
               .then(done)
               .catch(done)
@@ -646,7 +709,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
+                assert.strictEqual(spans[0].resource, 'GET /app/user/:id')
               })
               .then(done)
               .catch(done)
@@ -675,7 +738,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /app')
+                assert.strictEqual(spans[0].resource, 'GET /app')
               })
               .then(done)
               .catch(done)
@@ -710,7 +773,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /v1/a')
+                assert.strictEqual(spans[0].resource, 'GET /v1/a')
               })
               .then(done)
               .catch(done)
@@ -740,7 +803,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /app')
+                assert.strictEqual(spans[0].resource, 'GET /app')
               })
               .then(done)
               .catch(done)
@@ -751,7 +814,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('long regex should not steal path', done => {
+        it('long regex should not steal path', function (done) {
           const app = express()
 
           try {
@@ -761,7 +824,7 @@ describe('Plugin', () => {
           } catch (err) {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
-            this.skip && this.skip() // mocha allows dynamic skipping, tap does not
+            this.skip()
             return done()
           }
 
@@ -776,7 +839,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
+                assert.strictEqual(spans[0].resource, 'GET /foo/bar')
               })
               .then(done)
               .catch(done)
@@ -787,7 +850,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should work with regex having flags', done => {
+        it('should work with regex having flags', function (done) {
           const app = express()
 
           try {
@@ -797,7 +860,7 @@ describe('Plugin', () => {
           } catch (err) {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
-            this.skip && this.skip() // mocha allows dynamic skipping, tap does not
+            this.skip()
             return done()
           }
 
@@ -812,7 +875,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
+                assert.strictEqual(spans[0].resource, 'GET /foo/bar')
               })
               .then(done)
               .catch(done)
@@ -823,7 +886,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('long regex child of string router should not steal path', done => {
+        it('long regex child of string router should not steal path', function (done) {
           const app = express()
           const router = express.Router()
 
@@ -835,7 +898,7 @@ describe('Plugin', () => {
           } catch (err) {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
-            this.skip && this.skip() // mocha allows dynamic skipping, tap does not
+            this.skip()
             return done()
           }
 
@@ -850,7 +913,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
+                assert.strictEqual(spans[0].resource, 'GET /foo/bar')
               })
               .then(done)
               .catch(done)
@@ -881,7 +944,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /v1/a')
+                assert.strictEqual(spans[0].resource, 'GET /v1/a')
               })
               .then(done)
               .catch(done)
@@ -903,7 +966,7 @@ describe('Plugin', () => {
 
               clearInterval(interval)
 
-              expect(tracer.scope().active()).to.be.null
+              assert.strictEqual(tracer.scope().active(), null)
 
               done()
             }
@@ -938,7 +1001,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET')
+                assert.strictEqual(spans[0].resource, 'GET')
               })
               .then(done)
               .catch(done)
@@ -964,7 +1027,9 @@ describe('Plugin', () => {
             res.status(200).send()
 
             try {
-              expect(tracer.scope().active()).to.not.be.null.and.not.equal(span)
+              const activeSpan = tracer.scope().active()
+              assert.ok(activeSpan)
+              assert.notStrictEqual(activeSpan, span)
               done()
             } catch (e) {
               done(e)
@@ -993,7 +1058,9 @@ describe('Plugin', () => {
               res.status(200).send()
 
               try {
-                expect(tracer.scope().active()).to.not.be.null.and.not.equal(span)
+                const activeSpan = tracer.scope().active()
+                assert.ok(activeSpan)
+                assert.notStrictEqual(activeSpan, span)
                 done()
               } catch (e) {
                 done(e)
@@ -1030,7 +1097,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
+                assert.strictEqual(spans[0].resource, 'GET /app/user/:id')
               })
               .then(done)
               .catch(done)
@@ -1053,8 +1120,8 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0].trace_id.toString()).to.equal('1234')
-              expect(spans[0].parent_id.toString()).to.equal('5678')
+              assert.strictEqual(spans[0].trace_id.toString(), '1234')
+              assert.strictEqual(spans[0].parent_id.toString(), '5678')
             })
               .then(done)
               .catch(done)
@@ -1088,10 +1155,14 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0]).to.have.property('error', 1)
-              expect(spans[0]).to.have.property('resource', 'GET /user')
-              expect(spans[0].meta).to.have.property('http.status_code', '500')
-              expect(spans[0].meta).to.have.property('component', 'express')
+              assertObjectContains(spans[0], {
+                error: 1,
+                resource: 'GET /user',
+                meta: {
+                  'http.status_code': '500',
+                  component: 'express'
+                }
+              })
 
               done()
             })
@@ -1122,10 +1193,14 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0]).to.have.property('error', 0)
-              expect(spans[0]).to.have.property('resource', 'GET /user')
-              expect(spans[0].meta).to.have.property('http.status_code', '400')
-              expect(spans[0].meta).to.have.property('component', 'express')
+              assertObjectContains(spans[0], {
+                error: 0,
+                resource: 'GET /user',
+                meta: {
+                  'http.status_code': '400',
+                  component: 'express'
+                }
+              })
 
               done()
             })
@@ -1151,12 +1226,16 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[0].meta).to.have.property('http.status_code', '500')
-                expect(spans[0].meta).to.have.property('component', 'express')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    'http.status_code': '500',
+                    component: 'express'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -1187,16 +1266,24 @@ describe('Plugin', () => {
                   ? 'express'
                   : 'router'
 
-                expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[0].meta).to.have.property('component', 'express')
-                expect(spans[secondErrorIndex]).to.have.property('error', 1)
-                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[secondErrorIndex].meta).to.have.property('component', whichMiddleware)
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'express'
+                  }
+                })
+                assertObjectContains(spans[secondErrorIndex], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: whichMiddleware
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -1224,16 +1311,26 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
                 const secondErrorIndex = spans.length - 2
 
-                expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[0].meta).to.have.property('component', 'express')
-                expect(spans[secondErrorIndex]).to.have.property('error', 1)
-                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[0].meta).to.have.property('component', 'express')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'express'
+                  }
+                })
+                assertObjectContains(spans[secondErrorIndex], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack
+                  }
+                })
+                assertObjectContains(spans[0].meta, {
+                  component: 'express'
+                })
               })
               .then(done)
               .catch(done)
@@ -1246,9 +1343,9 @@ describe('Plugin', () => {
           })
         })
 
-        it('should support capturing groups in routes', done => {
+        it('should support capturing groups in routes', function (done) {
           if (semver.intersects(version, '>=5.0.0')) {
-            this.skip && this.skip() // mocha allows dynamic skipping, tap does not
+            this.skip()
             return done()
           }
 
@@ -1265,8 +1362,12 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /:path(*)')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+                assertObjectContains(spans[0], {
+                  resource: 'GET /:path(*)',
+                  meta: {
+                    'http.url': `http://localhost:${port}/user`
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -1291,8 +1392,12 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /*user')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+                assertObjectContains(spans[0], {
+                  resource: 'GET /*user',
+                  meta: {
+                    'http.url': `http://localhost:${port}/user`
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -1320,7 +1425,7 @@ describe('Plugin', () => {
             return layer.regexp.test('/users')
           })
 
-          expect(layer.handle).to.have.ownProperty('stack')
+          assert.ok(Object.hasOwn(layer.handle, 'stack'))
         })
 
         it('should keep user stores untouched', done => {
@@ -1334,7 +1439,7 @@ describe('Plugin', () => {
 
           app.get('/user', (req, res) => {
             try {
-              expect(storage.getStore()).to.equal(store)
+              assert.strictEqual(storage.getStore(), store)
               done()
             } catch (e) {
               done(e)
@@ -1369,11 +1474,15 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0]).to.have.property('error', 0)
-              expect(spans[0]).to.have.property('resource', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '404')
-              expect(spans[0].meta).to.have.property('component', 'express')
-              expect(spans[0].meta).to.not.have.property('http.route')
+              assertObjectContains(spans[0], {
+                error: 0,
+                resource: 'GET',
+                meta: {
+                  'http.status_code': '404',
+                  component: 'express'
+                }
+              })
+              assert.ok(!('http.route' in spans[0].meta))
             }).then(done).catch(done)
 
             axios
@@ -1407,14 +1516,18 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  expect(spans[0]).to.have.property('service', 'test')
-                  expect(spans[0]).to.have.property('type', 'web')
-                  expect(spans[0]).to.have.property('resource', 'GET /dd')
-                  expect(spans[0].meta).to.have.property('span.kind', 'server')
-                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/dd`)
-                  expect(spans[0].meta).to.have.property('http.method', 'GET')
-                  expect(spans[0].meta).to.have.property('http.status_code', '200')
-                  expect(spans[0].meta).to.have.property('component', 'express')
+                  assertObjectContains(spans[0], {
+                    service: 'test',
+                    type: 'web',
+                    resource: 'GET /dd',
+                    meta: {
+                      'span.kind': 'server',
+                      'http.url': `http://localhost:${port}/dd`,
+                      'http.method': 'GET',
+                      'http.status_code': '200',
+                      component: 'express'
+                    }
+                  })
                 })
                 .then(done)
                 .catch(done)
@@ -1442,9 +1555,9 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  expect(spans[4]).to.have.property('name', 'express.middleware')
-                  expect(spans[4]).to.have.property('service', 'test')
-                  expect(spans[4]).to.have.property('resource', 'handleDD')
+                  assert.strictEqual(spans[4].name, 'express.middleware')
+                  assert.strictEqual(spans[4].service, 'test')
+                  assert.strictEqual(spans[4].resource, 'handleDD')
                 })
                 .then(done)
                 .catch(done)
@@ -1488,7 +1601,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('service', 'custom')
+                assert.strictEqual(spans[0].service, 'custom')
               })
               .then(done)
               .catch(done)
@@ -1513,7 +1626,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 1)
+                assert.strictEqual(spans[0].error, 1)
               })
               .then(done)
               .catch(done)
@@ -1540,7 +1653,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0].meta).to.have.property('http.request.headers.user-agent', 'test')
+                assert.strictEqual(spans[0].meta['http.request.headers.user-agent'], 'test')
               })
               .then(done)
               .catch(done)
@@ -1570,7 +1683,7 @@ describe('Plugin', () => {
 
             setTimeout(() => {
               try {
-                expect(spy).to.not.have.been.called
+                sinon.assert.notCalled(spy)
                 done()
               } catch (e) {
                 done(e)
@@ -1612,7 +1725,9 @@ describe('Plugin', () => {
           app.get('/user', (req, res) => {
             res.status(200).send()
             try {
-              expect(tracer.scope().active()).to.equal(span).and.to.not.be.null
+              const activeSpan = tracer.scope().active()
+              assert.ok(activeSpan)
+              assert.strictEqual(activeSpan, span)
               done()
             } catch (e) {
               done(e)
@@ -1645,8 +1760,8 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /user')
-                expect(traces.length).to.equal(1)
+                assert.strictEqual(spans[0].resource, 'GET /user')
+                assert.strictEqual(traces.length, 1)
               })
               .then(done)
               .catch(done)
@@ -1673,10 +1788,14 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0]).to.have.property('error', 1)
-              expect(spans[0]).to.have.property('resource', 'GET /user')
-              expect(spans[0].meta).to.have.property('http.status_code', '500')
-              expect(spans[0].meta).to.have.property('component', 'express')
+              assertObjectContains(spans[0], {
+                error: 1,
+                resource: 'GET /user',
+                meta: {
+                  'http.status_code': '500',
+                  component: 'express'
+                }
+              })
 
               done()
             })
@@ -1708,10 +1827,14 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 0)
-                expect(spans[0]).to.have.property('resource', 'GET /user')
-                expect(spans[0].meta).to.have.property('http.status_code', '400')
-                expect(spans[0].meta).to.have.property('component', 'express')
+                assertObjectContains(spans[0], {
+                  error: 0,
+                  resource: 'GET /user',
+                  meta: {
+                    'http.status_code': '400',
+                    component: 'express'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -1738,11 +1861,15 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[0].meta).to.have.property('component', 'express')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'express'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -1768,12 +1895,16 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[0].meta).to.have.property('http.status_code', '500')
-                expect(spans[0].meta).to.have.property('component', 'express')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    'http.status_code': '500',
+                    component: 'express'
+                  }
+                })
               })
               .then(done)
               .catch(done)

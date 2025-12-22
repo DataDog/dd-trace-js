@@ -1,13 +1,15 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+const { AsyncLocalStorage } = require('node:async_hooks')
+
 const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
-const { AsyncLocalStorage } = require('node:async_hooks')
-
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -61,21 +63,21 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('name', 'koa.request')
-                expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
-                expect(spans[0].meta).to.have.property('component', 'koa')
-                expect(spans[0].meta).to.have.property('_dd.integration', 'koa')
+                assert.strictEqual(spans[0].name, 'koa.request')
+                assert.strictEqual(spans[0].service, 'test')
+                assert.strictEqual(spans[0].type, 'web')
+                assert.strictEqual(spans[0].resource, 'GET')
+                assert.strictEqual(spans[0].meta['span.kind'], 'server')
+                assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user`)
+                assert.strictEqual(spans[0].meta['http.method'], 'GET')
+                assert.strictEqual(spans[0].meta['http.status_code'], '200')
+                assert.strictEqual(spans[0].meta.component, 'koa')
+                assert.strictEqual(spans[0].meta['_dd.integration'], 'koa')
 
-                expect(spans[1]).to.have.property('name', 'koa.middleware')
-                expect(spans[1]).to.have.property('service', 'test')
-                expect(spans[1]).to.have.property('resource', 'handle')
-                expect(spans[1].meta).to.have.property('component', 'koa')
+                assert.strictEqual(spans[1].name, 'koa.middleware')
+                assert.strictEqual(spans[1].service, 'test')
+                assert.strictEqual(spans[1].resource, 'handle')
+                assert.strictEqual(spans[1].meta.component, 'koa')
               })
               .then(done)
               .catch(done)
@@ -102,20 +104,20 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  expect(spans[0]).to.have.property('name', 'koa.request')
-                  expect(spans[0]).to.have.property('service', 'test')
-                  expect(spans[0]).to.have.property('type', 'web')
-                  expect(spans[0]).to.have.property('resource', 'GET')
-                  expect(spans[0].meta).to.have.property('span.kind', 'server')
-                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                  expect(spans[0].meta).to.have.property('http.method', 'GET')
-                  expect(spans[0].meta).to.have.property('http.status_code', '200')
-                  expect(spans[0].meta).to.have.property('component', 'koa')
+                  assert.strictEqual(spans[0].name, 'koa.request')
+                  assert.strictEqual(spans[0].service, 'test')
+                  assert.strictEqual(spans[0].type, 'web')
+                  assert.strictEqual(spans[0].resource, 'GET')
+                  assert.strictEqual(spans[0].meta['span.kind'], 'server')
+                  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user`)
+                  assert.strictEqual(spans[0].meta['http.method'], 'GET')
+                  assert.strictEqual(spans[0].meta['http.status_code'], '200')
+                  assert.strictEqual(spans[0].meta.component, 'koa')
 
-                  expect(spans[1]).to.have.property('name', 'koa.middleware')
-                  expect(spans[1]).to.have.property('service', 'test')
-                  expect(spans[1]).to.have.property('resource', 'converted')
-                  expect(spans[1].meta).to.have.property('component', 'koa')
+                  assert.strictEqual(spans[1].name, 'koa.middleware')
+                  assert.strictEqual(spans[1].service, 'test')
+                  assert.strictEqual(spans[1].resource, 'converted')
+                  assert.strictEqual(spans[1].meta.component, 'koa')
                 })
                 .then(done)
                 .catch(done)
@@ -133,11 +135,11 @@ describe('Plugin', () => {
           app.use((ctx, next) => {
             ctx.body = ''
 
-            expect(tracer.scope().active()).to.not.be.null
+            assert.notStrictEqual(tracer.scope().active(), null)
 
             return next()
               .then(() => {
-                expect(tracer.scope().active()).to.not.be.null
+                assert.notStrictEqual(tracer.scope().active(), null)
                 done()
               })
               .catch(done)
@@ -166,7 +168,9 @@ describe('Plugin', () => {
             ctx.body = ''
 
             try {
-              expect(tracer.scope().active()).to.not.be.null.and.not.equal(span)
+              const activeSpan = tracer.scope().active()
+              assert.ok(activeSpan)
+              assert.notStrictEqual(activeSpan, span)
               done()
             } catch (e) {
               done(e)
@@ -194,11 +198,11 @@ describe('Plugin', () => {
 
             setImmediate(() => {
               try {
-                expect(childSpan.finish).to.have.been.called
-                expect(parentSpan.finish).to.have.been.called
-                expect(parentSpan.finish).to.have.been.calledAfter(childSpan.finish)
-                expect(childSpan.context()._parentId.toString(10)).to.equal(parentSpan.context().toSpanId())
-                expect(parentSpan.context()._parentId).to.not.be.null
+                sinon.assert.called(childSpan.finish)
+                sinon.assert.called(parentSpan.finish)
+                assert.strictEqual(parentSpan.finish.calledAfter(childSpan.finish), true)
+                assert.strictEqual(childSpan.context()._parentId.toString(10), parentSpan.context().toSpanId())
+                assert.notStrictEqual(parentSpan.context()._parentId, null)
                 done()
               } catch (e) {
                 done(e)
@@ -217,13 +221,13 @@ describe('Plugin', () => {
 
             setImmediate(() => {
               try {
-                expect(childSpan.finish).to.have.been.called
+                sinon.assert.called(childSpan.finish)
               } catch (e) {
                 done(e)
               }
             })
 
-            expect(parentSpan.finish).to.not.have.been.called
+            sinon.assert.notCalled(parentSpan.finish)
 
             return next()
           })
@@ -250,7 +254,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
-                expect(spans[0].meta).to.have.property('http.client_ip', '8.8.8.8')
+                assert.strictEqual(spans[0].meta['http.client_ip'], '8.8.8.8')
               })
               .then(done)
               .catch(done)
@@ -276,7 +280,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
-                expect(spans[0].meta).to.not.have.property('http.client_ip')
+                assert.ok(!('http.client_ip' in spans[0].meta))
               })
               .then(done)
               .catch(done)
@@ -313,8 +317,8 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                  assert.strictEqual(spans[0].resource, 'GET /user/:id')
+                  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user/123`)
                 })
                 .then(done)
                 .catch(done)
@@ -351,13 +355,13 @@ describe('Plugin', () => {
               agent
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
-                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                  assert.strictEqual(spans[0].resource, 'GET /user/:id')
+                  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user/123`)
 
-                  expect(spans[1]).to.have.property('resource')
-                  expect(spans[1].resource).to.match(/^dispatch/)
+                  assert.ok(Object.hasOwn(spans[1], 'resource'))
+                  assert.match(spans[1].resource, /^dispatch/)
 
-                  expect(spans[2]).to.have.property('resource', 'handle')
+                  assert.strictEqual(spans[2].resource, 'handle')
                 })
                 .then(done)
                 .catch(done)
@@ -388,7 +392,7 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                  assert.strictEqual(spans[0].resource, 'GET /user/:id')
                 })
                 .then(done)
                 .catch(done)
@@ -419,7 +423,7 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                  assert.strictEqual(spans[0].resource, 'GET /user/:id')
                 })
                 .then(done)
                 .catch(done)
@@ -449,7 +453,7 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                  assert.strictEqual(spans[0].resource, 'GET /user/:id')
                 })
                 .then(done)
                 .catch(done)
@@ -481,7 +485,7 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  expect(spans[0]).to.have.property('resource', 'GET /public/plop')
+                  assert.strictEqual(spans[0].resource, 'GET /public/plop')
                 })
                 .then(done)
                 .catch(done)
@@ -515,9 +519,9 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  expect(spans[0]).to.have.property('resource', 'GET /forums/:fid/discussions/:did/posts/:pid')
-                  expect(spans[0].meta)
-                    .to.have.property('http.url', `http://localhost:${port}/forums/123/discussions/456/posts/789`)
+                  assert.strictEqual(spans[0].resource, 'GET /forums/:fid/discussions/:did/posts/:pid')
+                  assert.ok('http.url' in spans[0].meta)
+                  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/forums/123/discussions/456/posts/789`)
                 })
                 .then(done)
                 .catch(done)
@@ -552,9 +556,9 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = sort(traces[0])
 
-                    expect(spans[0]).to.have.property('resource', 'GET /first/child')
-                    expect(spans[0].meta)
-                      .to.have.property('http.url', `http://localhost:${port}/first/child`)
+                    assert.strictEqual(spans[0].resource, 'GET /first/child')
+                    assert.ok('http.url' in spans[0].meta)
+                    assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/first/child`)
                   })
                   .then(done)
                   .catch(done)
@@ -589,8 +593,8 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  expect(spans[0]).to.have.property('resource', 'GET /forums/:fid/posts/:pid')
-                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/forums/123/posts/456`)
+                  assert.strictEqual(spans[0].resource, 'GET /forums/:fid/posts/:pid')
+                  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/forums/123/posts/456`)
                 })
                 .then(done)
                 .catch(done)
@@ -622,8 +626,8 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                  assert.strictEqual(spans[0].resource, 'GET /user/:id')
+                  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user/123`)
                 })
                 .then(done)
                 .catch(done)
@@ -657,17 +661,17 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
-                  expect(spans[0].error).to.equal(1)
+                  assert.strictEqual(spans[0].resource, 'GET /user/:id')
+                  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user/123`)
+                  assert.strictEqual(spans[0].error, 1)
 
-                  expect(spans[1]).to.have.property('resource')
-                  expect(spans[1].resource).to.match(/^dispatch/)
-                  expect(spans[1].meta).to.include({
+                  assert.ok(Object.hasOwn(spans[1], 'resource'))
+                  assert.match(spans[1].resource, /^dispatch/)
+                  assertObjectContains(spans[1].meta, {
                     [ERROR_TYPE]: error.name,
                     component: 'koa'
                   })
-                  expect(spans[1].error).to.equal(1)
+                  assert.strictEqual(spans[1].error, 1)
                 })
                 .then(done)
                 .catch(done)
@@ -744,17 +748,17 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  expect(spans[0]).to.have.property('name', 'koa.request')
-                  expect(spans[0]).to.have.property('service', 'test')
-                  expect(spans[0]).to.have.property('type', 'web')
-                  expect(spans[0]).to.have.property('resource', 'GET')
-                  expect(spans[0].meta).to.have.property('span.kind', 'server')
-                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                  expect(spans[0].meta).to.have.property('http.method', 'GET')
-                  expect(spans[0].meta).to.have.property('http.status_code', '200')
-                  expect(spans[0].meta).to.have.property('component', 'koa')
+                  assert.strictEqual(spans[0].name, 'koa.request')
+                  assert.strictEqual(spans[0].service, 'test')
+                  assert.strictEqual(spans[0].type, 'web')
+                  assert.strictEqual(spans[0].resource, 'GET')
+                  assert.strictEqual(spans[0].meta['span.kind'], 'server')
+                  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user`)
+                  assert.strictEqual(spans[0].meta['http.method'], 'GET')
+                  assert.strictEqual(spans[0].meta['http.status_code'], '200')
+                  assert.strictEqual(spans[0].meta.component, 'koa')
 
-                  expect(spans).to.have.length(1)
+                  assert.strictEqual(spans.length, 1)
                 })
                 .then(done)
                 .catch(done)
@@ -781,17 +785,17 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = sort(traces[0])
 
-                    expect(spans[0]).to.have.property('name', 'koa.request')
-                    expect(spans[0]).to.have.property('service', 'test')
-                    expect(spans[0]).to.have.property('type', 'web')
-                    expect(spans[0]).to.have.property('resource', 'GET')
-                    expect(spans[0].meta).to.have.property('span.kind', 'server')
-                    expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                    expect(spans[0].meta).to.have.property('http.method', 'GET')
-                    expect(spans[0].meta).to.have.property('http.status_code', '200')
-                    expect(spans[0].meta).to.have.property('component', 'koa')
+                    assert.strictEqual(spans[0].name, 'koa.request')
+                    assert.strictEqual(spans[0].service, 'test')
+                    assert.strictEqual(spans[0].type, 'web')
+                    assert.strictEqual(spans[0].resource, 'GET')
+                    assert.strictEqual(spans[0].meta['span.kind'], 'server')
+                    assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user`)
+                    assert.strictEqual(spans[0].meta['http.method'], 'GET')
+                    assert.strictEqual(spans[0].meta['http.status_code'], '200')
+                    assert.strictEqual(spans[0].meta.component, 'koa')
 
-                    expect(spans).to.have.length(1)
+                    assert.strictEqual(spans.length, 1)
                   })
                   .then(done)
                   .catch(done)
@@ -809,11 +813,11 @@ describe('Plugin', () => {
             app.use((ctx, next) => {
               ctx.body = ''
 
-              expect(tracer.scope().active()).to.not.be.null
+              assert.notStrictEqual(tracer.scope().active(), null)
 
               return next()
                 .then(() => {
-                  expect(tracer.scope().active()).to.not.be.null
+                  assert.notStrictEqual(tracer.scope().active(), null)
                   done()
                 })
                 .catch(done)
@@ -842,7 +846,9 @@ describe('Plugin', () => {
               ctx.body = ''
 
               try {
-                expect(tracer.scope().active()).to.equal(span).and.to.not.be.null
+                const activeSpan = tracer.scope().active()
+                assert.ok(activeSpan)
+                assert.strictEqual(activeSpan, span)
                 done()
               } catch (e) {
                 done(e)
@@ -870,7 +876,7 @@ describe('Plugin', () => {
               ctx.body = ''
 
               try {
-                expect(storage.getStore()).to.equal(store)
+                assert.strictEqual(storage.getStore(), store)
                 done()
               } catch (e) {
                 done(e)
@@ -915,10 +921,10 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = sort(traces[0])
 
-                    expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-                    expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
-                    expect(spans[0].error).to.equal(1)
-                    expect(spans[0].meta).to.have.property('component', 'koa')
+                    assert.strictEqual(spans[0].resource, 'GET /user/:id')
+                    assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user/123`)
+                    assert.strictEqual(spans[0].error, 1)
+                    assert.strictEqual(spans[0].meta.component, 'koa')
                   })
                   .then(done)
                   .catch(done)

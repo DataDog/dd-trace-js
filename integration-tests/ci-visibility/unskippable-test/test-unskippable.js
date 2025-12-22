@@ -1,14 +1,15 @@
 /** Some comment */
+/* eslint-disable jsdoc/valid-types */
 /**
  * @datadog {"unskippable": true}
  */
 /* Some other comment */
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('assert')
 
 describe('test-unskippable', () => {
   it('can report tests', () => {
-    expect(1 + 2).to.equal(3)
+    assert.strictEqual(1 + 2, 3)
   })
 })

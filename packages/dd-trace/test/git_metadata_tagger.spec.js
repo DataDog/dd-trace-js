@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 
 require('./setup/core')
@@ -50,12 +50,12 @@ describe('git metadata tagging', () => {
 
     return agent.assertSomeTraces((payload) => {
       const firstSpan = payload[0][0]
-      expect(firstSpan.meta[SCI_COMMIT_SHA]).to.equal(DUMMY_GIT_SHA)
-      expect(firstSpan.meta[SCI_REPOSITORY_URL]).to.equal(DUMMY_REPOSITORY_URL)
+      assert.strictEqual(firstSpan.meta[SCI_COMMIT_SHA], DUMMY_GIT_SHA)
+      assert.strictEqual(firstSpan.meta[SCI_REPOSITORY_URL], DUMMY_REPOSITORY_URL)
 
       const secondSpan = payload[0][1]
-      expect(secondSpan.meta[SCI_COMMIT_SHA]).not.to.exist
-      expect(secondSpan.meta[SCI_REPOSITORY_URL]).not.to.exist
+      assert.ok(secondSpan.meta[SCI_COMMIT_SHA] == null)
+      assert.ok(secondSpan.meta[SCI_REPOSITORY_URL] == null)
     })
   })
 })

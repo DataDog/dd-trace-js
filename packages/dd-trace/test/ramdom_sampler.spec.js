@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -24,7 +24,7 @@ describe('RandomSampler', () => {
     it('should return the sample rate', () => {
       sampler = new RandomSampler(0.5)
 
-      expect(sampler.rate()).to.equal(0.5)
+      assert.strictEqual(sampler.rate(), 0.5)
     })
   })
 
@@ -34,7 +34,7 @@ describe('RandomSampler', () => {
 
       randomStub.returns(0.9999999999999999)
 
-      expect(sampler.isSampled()).to.be.true
+      assert.strictEqual(sampler.isSampled(), true)
     })
 
     it('should never sample when rate is 0', () => {
@@ -42,7 +42,7 @@ describe('RandomSampler', () => {
 
       randomStub.returns(0)
 
-      expect(sampler.isSampled()).to.be.false
+      assert.strictEqual(sampler.isSampled(), false)
     })
 
     it('should sample according to the rate', () => {
@@ -50,11 +50,11 @@ describe('RandomSampler', () => {
 
       randomStub.returns(0.1233999999999999)
 
-      expect(sampler.isSampled()).to.be.true
+      assert.strictEqual(sampler.isSampled(), true)
 
       randomStub.returns(0.1234)
 
-      expect(sampler.isSampled()).to.be.false
+      assert.strictEqual(sampler.isSampled(), false)
     })
   })
 })

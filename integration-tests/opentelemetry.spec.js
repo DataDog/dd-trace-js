@@ -1,9 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { FakeAgent, sandboxCwd, useSandbox } = require('./helpers')
 const { fork } = require('child_process')
 const { join } = require('path')
-const { assert } = require('chai')
 const axios = require('axios')
 
 async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
@@ -82,9 +83,9 @@ describe('opentelemetry', () => {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_TRACE_OTEL_ENABLED: 1,
-        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-        TIMEOUT: 1500,
+        DD_TRACE_OTEL_ENABLED: '1',
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        TIMEOUT: '1500',
         DD_SERVICE: 'service',
         DD_TRACE_LOG_LEVEL: 'error',
         DD_TRACE_SAMPLE_RATE: '0.5',
@@ -114,9 +115,9 @@ describe('opentelemetry', () => {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_TRACE_OTEL_ENABLED: 1,
-        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-        TIMEOUT: 1500,
+        DD_TRACE_OTEL_ENABLED: '1',
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        TIMEOUT: '1500',
         DD_SERVICE: 'service',
         OTEL_SERVICE_NAME: 'otel_service',
         DD_TRACE_LOG_LEVEL: 'error',
@@ -194,9 +195,9 @@ describe('opentelemetry', () => {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_TRACE_OTEL_ENABLED: 1,
-        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-        TIMEOUT: 1500,
+        DD_TRACE_OTEL_ENABLED: '1',
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        TIMEOUT: '1500',
         OTEL_SERVICE_NAME: 'otel_service',
         OTEL_LOG_LEVEL: 'foo',
         OTEL_TRACES_SAMPLER: 'foo',
@@ -292,9 +293,9 @@ describe('opentelemetry', () => {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_TRACE_OTEL_ENABLED: 1,
-        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-        TIMEOUT: 1500
+        DD_TRACE_OTEL_ENABLED: '1',
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        TIMEOUT: '1500'
       }
     })
 
@@ -334,10 +335,10 @@ describe('opentelemetry', () => {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_TRACE_OTEL_ENABLED: 1,
+        DD_TRACE_OTEL_ENABLED: '1',
         SERVER_PORT,
         DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net',
-        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: '1'
       }
     })
     await new Promise(resolve => setTimeout(resolve, 1000)) // Adjust the delay as necessary
@@ -386,13 +387,13 @@ describe('opentelemetry', () => {
       assert.strictEqual(trace.length, 3)
 
       // Should have expected span names and ordering
-      assert.isTrue(eachEqual(trace, ['web.request', 'otel-sub', 'dd-sub'], span => span.name))
+      assert.strictEqual(eachEqual(trace, ['web.request', 'otel-sub', 'dd-sub'], span => span.name), true)
 
       // Should have matching trace ids
-      assert.isTrue(allEqual(trace, span => span.trace_id.toString()))
+      assert.ok(allEqual(trace, span => span.trace_id.toString()))
 
       // Should have matching service names
-      assert.isTrue(allEqual(trace, span => span.service))
+      assert.strictEqual(allEqual(trace, span => span.service), true)
 
       // Should have expected span parentage
       const [webSpan, otelSpan, ddSpan] = trace
@@ -407,7 +408,7 @@ describe('opentelemetry', () => {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_TRACE_OTEL_ENABLED: 1,
+        DD_TRACE_OTEL_ENABLED: '1',
         SERVER_PORT,
         DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net'
       }
@@ -422,7 +423,7 @@ describe('opentelemetry', () => {
       assert.strictEqual(trace.length, 9)
 
       // Should have expected span names and ordering
-      assert.isTrue(eachEqual(trace, [
+      assert.ok(eachEqual(trace, [
         'GET /second-endpoint',
         'middleware - query',
         'middleware - expressInit',
@@ -435,7 +436,7 @@ describe('opentelemetry', () => {
       ],
       (span) => span.name))
 
-      assert.isTrue(allEqual(trace, (span) => {
+      assert.ok(allEqual(trace, (span) => {
         span.trace_id.toString()
       }))
 

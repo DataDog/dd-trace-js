@@ -7,7 +7,7 @@ const os = require('os')
  */
 
 /**
- * @fileoverview OpenTelemetry Logs Implementation for dd-trace-js
+ * OpenTelemetry Logs Implementation for `dd-trace-js`
  *
  * This package provides a custom OpenTelemetry Logs implementation that integrates
  * with the Datadog tracing library. It includes all necessary components for
@@ -70,8 +70,8 @@ function initializeOpenTelemetryLogs (config) {
   // Create batch processor for exporting logs to Datadog Agent
   const processor = new BatchLogRecordProcessor(
     exporter,
-    config.otelLogsBatchTimeout,
-    config.otelLogsMaxExportBatchSize
+    config.otelBatchTimeout,
+    config.otelMaxExportBatchSize
   )
 
   // Create logger provider with processor for Datadog Agent export

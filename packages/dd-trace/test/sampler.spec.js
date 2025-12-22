@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -26,7 +26,7 @@ describe('Sampler', () => {
     it('should return the sample rate', () => {
       sampler = new Sampler(0.5)
 
-      expect(sampler.rate()).to.equal(0.5)
+      assert.strictEqual(sampler.rate(), 0.5)
     })
   })
 
@@ -44,7 +44,7 @@ describe('Sampler', () => {
 
       rates.forEach(([rate, expected]) => {
         sampler = new Sampler(rate)
-        expect(sampler.threshold).to.equal(expected)
+        assert.strictEqual(sampler.threshold, expected)
       })
     })
   })
@@ -53,20 +53,20 @@ describe('Sampler', () => {
     it('should always sample when rate is 1', () => {
       sampler = new Sampler(1)
 
-      expect(sampler.isSampled(new SpanContext({ traceId: id() }))).to.be.true
+      assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id() })), true)
     })
 
     it('should never sample when rate is 0', () => {
       sampler = new Sampler(0)
 
-      expect(sampler.isSampled(new SpanContext({ traceId: id() }))).to.be.false
+      assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id() })), false)
     })
 
     it('should sample according to the rate', () => {
       sampler = new Sampler(0.1234)
 
-      expect(sampler.isSampled(new SpanContext({ traceId: id('8135292307740797052', 10) }))).to.be.true
-      expect(sampler.isSampled(new SpanContext({ traceId: id('2263640730249415707', 10) }))).to.be.false
+      assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id('8135292307740797052', 10) })), true)
+      assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id('2263640730249415707', 10) })), false)
     })
 
     it('should sample according to different rates', () => {
@@ -104,7 +104,7 @@ describe('Sampler', () => {
 
       idsAndRates.forEach(([id, rate, expected]) => {
         const sampler = new Sampler(rate)
-        expect(sampler.isSampled(new SpanContext({ traceId: id }))).to.equal(expected)
+        assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id })), expected)
       })
     })
   })

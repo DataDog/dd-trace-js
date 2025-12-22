@@ -1,24 +1,24 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it } = require('tap').mocha
 const os = require('node:os')
 
 require('./setup/core')
 
-const { getAzureAppMetadata, getAzureTagsFromMetadata } = require('../src/azure_metadata')
+const { getAzureAppMetadata, getAzureTagsFromMetadata, getAzureFunctionMetadata } = require('../src/azure_metadata')
 
 describe('Azure metadata', () => {
   describe('for apps is', () => {
     it('not provided without WEBSITE_SITE_NAME', () => {
       delete process.env.WEBSITE_SITE_NAME
-      expect(getAzureAppMetadata()).to.be.undefined
+      assert.strictEqual(getAzureAppMetadata(), undefined)
     })
 
     it('provided with WEBSITE_SITE_NAME', () => {
       delete process.env.COMPUTERNAME // actually defined on Windows
       process.env.WEBSITE_SITE_NAME = 'website_name'
-      expect(getAzureAppMetadata()).to.deep.equal({
+      assert.deepStrictEqual(getAzureAppMetadata(), {
         operatingSystem: os.platform(), siteKind: 'app', siteName: 'website_name', siteType: 'app'
       })
     })
@@ -48,7 +48,7 @@ describe('Azure metadata', () => {
       siteType: 'app',
       subscriptionID: 'subscription_id'
     }
-    expect(getAzureAppMetadata()).to.deep.equal(expected)
+    assert.deepStrictEqual(getAzureAppMetadata(), expected)
   })
 
   it('provided completely with complete vars', () => {
@@ -78,7 +78,7 @@ describe('Azure metadata', () => {
       siteType: 'function',
       subscriptionID: 'subscription_id'
     }
-    expect(getAzureAppMetadata()).to.deep.equal(expected)
+    assert.deepStrictEqual(getAzureAppMetadata(), expected)
   })
 
   it('tags are correctly generated from vars', () => {
@@ -105,6 +105,47 @@ describe('Azure metadata', () => {
       'aas.site.type': 'app',
       'aas.subscription.id': 'subscription_id'
     }
-    expect(getAzureTagsFromMetadata(getAzureAppMetadata())).to.deep.equal(expected)
+    assert.deepStrictEqual(getAzureTagsFromMetadata(getAzureAppMetadata()), expected)
+  })
+
+  it('uses DD_AZURE_RESOURCE_GROUP for Flex Consumption Azure Functions', () => {
+    delete process.env.WEBSITE_RESOURCE_GROUP
+    delete process.env.WEBSITE_OS
+    delete process.env.DD_AAS_DOTNET_EXTENSION_VERSION
+    process.env.COMPUTERNAME = 'flex_function'
+    process.env.WEBSITE_SITE_NAME = 'flex_function_app'
+    process.env.WEBSITE_OWNER_NAME = 'subscription_id+flex-regionwebspace'
+    process.env.WEBSITE_INSTANCE_ID = 'instance_id'
+    process.env.WEBSITE_SKU = 'FlexConsumption'
+    process.env.FUNCTIONS_EXTENSION_VERSION = '4'
+    process.env.FUNCTIONS_WORKER_RUNTIME = 'node'
+    process.env.DD_AZURE_RESOURCE_GROUP = 'flex_resource_group'
+    const expected = {
+      functionRuntimeVersion: '4',
+      instanceID: 'instance_id',
+      instanceName: 'flex_function',
+      operatingSystem: os.platform(),
+      resourceGroup: 'flex_resource_group',
+      resourceID:
+        '/subscriptions/subscription_id/resourcegroups/flex_resource_group' +
+        '/providers/microsoft.web/sites/flex_function_app',
+      runtime: 'node',
+      siteKind: 'functionapp',
+      siteName: 'flex_function_app',
+      siteType: 'function',
+      subscriptionID: 'subscription_id'
+    }
+    assert.deepStrictEqual(getAzureFunctionMetadata(), expected)
+  })
+
+  it('uses WEBSITE_RESOURCE_GROUP for non-Flex Consumption plans', () => {
+    process.env.WEBSITE_SITE_NAME = 'regular_function_app'
+    process.env.WEBSITE_RESOURCE_GROUP = 'regular_resource_group'
+    process.env.WEBSITE_OWNER_NAME = 'subscription_id+extracted_group-regionwebspace'
+    process.env.WEBSITE_SKU = 'Consumption'
+    process.env.FUNCTIONS_EXTENSION_VERSION = '4'
+    process.env.DD_AZURE_RESOURCE_GROUP = 'should_not_use_this'
+    const metadata = getAzureFunctionMetadata()
+    assert.strictEqual(metadata.resourceGroup, 'regular_resource_group')
   })
 })

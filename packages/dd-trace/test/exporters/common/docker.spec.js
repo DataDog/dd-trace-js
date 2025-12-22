@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -30,8 +30,8 @@ describe('docker', () => {
     docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
-    expect(carrier['Datadog-Container-Id']).to.be.undefined
-    expect(carrier['Datadog-Entity-ID']).to.be.undefined
+    assert.strictEqual(carrier['Datadog-Container-Id'], undefined)
+    assert.strictEqual(carrier['Datadog-Entity-ID'], undefined)
   })
 
   it('should support IDs with long format', () => {
@@ -44,8 +44,8 @@ describe('docker', () => {
     docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
-    expect(carrier['Datadog-Container-Id']).to.equal(id)
-    expect(carrier['Datadog-Entity-ID']).to.equal(`ci-${id}`)
+    assert.strictEqual(carrier['Datadog-Container-Id'], id)
+    assert.strictEqual(carrier['Datadog-Entity-ID'], `ci-${id}`)
   })
 
   it('should support IDs with UUID format', () => {
@@ -58,8 +58,8 @@ describe('docker', () => {
     docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
-    expect(carrier['Datadog-Container-Id']).to.equal(id)
-    expect(carrier['Datadog-Entity-ID']).to.equal(`ci-${id}`)
+    assert.strictEqual(carrier['Datadog-Container-Id'], id)
+    assert.strictEqual(carrier['Datadog-Entity-ID'], `ci-${id}`)
   })
 
   it('should support IDs with ECS task format', () => {
@@ -72,8 +72,8 @@ describe('docker', () => {
     docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
-    expect(carrier['Datadog-Container-Id']).to.equal(id)
-    expect(carrier['Datadog-Entity-ID']).to.equal(`ci-${id}`)
+    assert.strictEqual(carrier['Datadog-Container-Id'], id)
+    assert.strictEqual(carrier['Datadog-Entity-ID'], `ci-${id}`)
   })
 
   it('should support IDs with Kubernetes format', () => {
@@ -86,8 +86,8 @@ describe('docker', () => {
     docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
-    expect(carrier['Datadog-Container-Id']).to.equal(id)
-    expect(carrier['Datadog-Entity-ID']).to.equal(`ci-${id}`)
+    assert.strictEqual(carrier['Datadog-Container-Id'], id)
+    assert.strictEqual(carrier['Datadog-Entity-ID'], `ci-${id}`)
   })
 
   it('should support finding IDs on any line of the cgroup', () => {
@@ -102,8 +102,8 @@ describe('docker', () => {
     docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
-    expect(carrier['Datadog-Container-Id']).to.equal(id)
-    expect(carrier['Datadog-Entity-ID']).to.equal(`ci-${id}`)
+    assert.strictEqual(carrier['Datadog-Container-Id'], id)
+    assert.strictEqual(carrier['Datadog-Entity-ID'], `ci-${id}`)
   })
 
   it('should support Control Group v2', () => {
@@ -116,8 +116,8 @@ describe('docker', () => {
     docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
-    expect(carrier['Datadog-Container-Id']).to.equal(id)
-    expect(carrier['Datadog-Entity-ID']).to.equal(`ci-${id}`)
+    assert.strictEqual(carrier['Datadog-Container-Id'], id)
+    assert.strictEqual(carrier['Datadog-Entity-ID'], `ci-${id}`)
   })
 
   it('should support Cloud Foundry', () => {
@@ -130,8 +130,8 @@ describe('docker', () => {
     docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
-    expect(carrier['Datadog-Container-Id']).to.equal(id)
-    expect(carrier['Datadog-Entity-ID']).to.equal(`ci-${id}`)
+    assert.strictEqual(carrier['Datadog-Container-Id'], id)
+    assert.strictEqual(carrier['Datadog-Entity-ID'], `ci-${id}`)
   })
 
   it('should support inode when the ID is not available', () => {
@@ -145,8 +145,8 @@ describe('docker', () => {
     docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
-    expect(carrier['Datadog-Container-Id']).to.be.undefined
-    expect(carrier['Datadog-Entity-ID']).to.equal(`in-${ino}`)
+    assert.strictEqual(carrier['Datadog-Container-Id'], undefined)
+    assert.strictEqual(carrier['Datadog-Entity-ID'], `in-${ino}`)
   })
 
   it('should support inode when the ID is not available (any line)', () => {
@@ -161,8 +161,8 @@ describe('docker', () => {
     docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
-    expect(carrier['Datadog-Container-Id']).to.be.undefined
-    expect(carrier['Datadog-Entity-ID']).to.equal(`in-${ino}`)
+    assert.strictEqual(carrier['Datadog-Container-Id'], undefined)
+    assert.strictEqual(carrier['Datadog-Entity-ID'], `in-${ino}`)
   })
 
   it('should support external env', () => {
@@ -171,6 +171,6 @@ describe('docker', () => {
     docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
-    expect(carrier['Datadog-External-Env']).to.equal('test')
+    assert.strictEqual(carrier['Datadog-External-Env'], 'test')
   })
 })

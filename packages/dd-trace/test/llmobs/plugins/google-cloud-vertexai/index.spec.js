@@ -13,7 +13,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 /**
- * @google-cloud/vertexai uses `fetch` to call against their API, which cannot
+ * `@google-cloud/vertexai` uses `fetch` to call against their API, which cannot
  * be stubbed with `nock`. This function allows us to stub the `fetch` function
  * to return a specific response for a given scenario.
  *
@@ -203,7 +203,7 @@ describe('integrations', () => {
 
             inputMessages.push({ role: 'user', content: 'Foobar?' })
             inputMessages.push({ role: 'model', content: 'Foobar!' })
-            inputMessages.push({ content: 'Hello, how are you?' })
+            inputMessages.push({ content: 'Hello, how are you?', role: '' })
 
             assertLlmObsSpanEvent(llmobsSpans[0], {
               span: apmSpans[0],

@@ -2,7 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 const path = require('path')
-const satisfies = require('semifies')
+const satisfies = require('../../../../vendor/dist/semifies')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
@@ -10,6 +10,7 @@ const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
 const { getEnvironmentVariables } = require('../../../dd-trace/src/config-helper')
+const rewriter = require('./rewriter')
 
 const envs = getEnvironmentVariables()
 
@@ -47,6 +48,10 @@ if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
 
 const seenCombo = new Set()
 const allInstrumentations = {}
+
+for (const inst of disabledInstrumentations) {
+  rewriter.disable(inst)
+}
 
 // TODO: make this more efficient
 for (const packageName of names) {

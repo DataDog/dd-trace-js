@@ -1,7 +1,7 @@
 'use strict'
 
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
-const { Chunk, MsgpackEncoder } = require('../msgpack')
+const { MsgpackChunk, MsgpackEncoder } = require('../msgpack')
 const log = require('../log')
 const { isTrue } = require('../util')
 const { memoize } = require('../log/utils')
@@ -27,8 +27,8 @@ class AgentEncoder {
   constructor (writer, limit = SOFT_LIMIT) {
     this._msgpack = new MsgpackEncoder()
     this._limit = limit
-    this._traceBytes = new Chunk()
-    this._stringBytes = new Chunk()
+    this._traceBytes = new MsgpackChunk()
+    this._stringBytes = new MsgpackChunk()
     this._writer = writer
     this._reset()
     this._debugEncoding = isTrue(getEnvironmentVariable('DD_TRACE_ENCODING_DEBUG'))

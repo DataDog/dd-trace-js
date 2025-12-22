@@ -1,13 +1,13 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-
 describe('Plugin', () => {
   let ShareDB
 
@@ -47,13 +47,13 @@ describe('Plugin', () => {
             if (err) { throw err }
 
             agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', 'test')
-              expect(traces[0][0]).to.have.property('resource', 'fetch some-collection')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-              expect(traces[0][0].meta).to.have.property('service', 'test')
-              expect(traces[0][0].meta).to.have.property('sharedb.action', 'fetch')
-              expect(traces[0][0].meta).to.have.property('component', 'sharedb')
-              expect(traces[0][0].meta).to.have.property('_dd.integration', 'sharedb')
+              assert.strictEqual(traces[0][0].service, 'test')
+              assert.strictEqual(traces[0][0].resource, 'fetch some-collection')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
+              assert.strictEqual(traces[0][0].meta.service, 'test')
+              assert.strictEqual(traces[0][0].meta['sharedb.action'], 'fetch')
+              assert.strictEqual(traces[0][0].meta.component, 'sharedb')
+              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'sharedb')
             })
               .then(done)
               .catch(done)
@@ -75,9 +75,9 @@ describe('Plugin', () => {
             if (err) { throw err }
 
             agent.assertSomeTraces(traces => {
-              expect(receiveSpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.func)
-              expect(replySpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.func)
-              expect(traces[0][0]).to.have.property('service', 'test')
+              sinon.assert.calledWithMatch(receiveSpy, sinon.match.object, sinon.match.func)
+              sinon.assert.calledWithMatch(replySpy, sinon.match.object, sinon.match.func)
+              assert.strictEqual(traces[0][0].service, 'test')
             })
               .then(done)
               .catch(done)
@@ -94,16 +94,16 @@ describe('Plugin', () => {
             if (err) { throw err }
 
             agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', 'test')
-              expect(traces[0][0])
-                .to
-                .have
-                .property('resource',
-                  'query-fetch some-collection {"randomValues":{"property":"?","one":"?"}}')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-              expect(traces[0][0].meta).to.have.property('service', 'test')
-              expect(traces[0][0].meta).to.have.property('sharedb.action', 'query-fetch')
-              expect(traces[0][0].meta).to.have.property('component', 'sharedb')
+              assert.strictEqual(traces[0][0].service, 'test')
+              assert.ok('resource' in traces[0][0])
+              assert.strictEqual(
+                traces[0][0].resource,
+                'query-fetch some-collection {"randomValues":{"property":"?","one":"?"}}'
+              )
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
+              assert.strictEqual(traces[0][0].meta.service, 'test')
+              assert.strictEqual(traces[0][0].meta['sharedb.action'], 'query-fetch')
+              assert.strictEqual(traces[0][0].meta.component, 'sharedb')
             })
               .then(done)
               .catch(done)
@@ -151,7 +151,7 @@ describe('Plugin', () => {
           doc.fetch(function (err) {
             if (err) { throw err }
 
-            expect(tracer.scope().active()).to.equal(firstSpan)
+            assert.strictEqual(tracer.scope().active(), firstSpan)
             done()
           })
         })
@@ -197,9 +197,9 @@ describe('Plugin', () => {
             if (err) { throw err }
 
             agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', 'test-sharedb')
-              expect(receiveHookSpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.object)
-              expect(replyHookSpy).to.have.been.calledWithMatch(
+              assert.strictEqual(traces[0][0].service, 'test-sharedb')
+              sinon.assert.calledWithMatch(receiveHookSpy, sinon.match.object, sinon.match.object)
+              sinon.assert.calledWithMatch(replyHookSpy,
                 sinon.match.object,
                 sinon.match.object,
                 sinon.match.object
@@ -252,19 +252,19 @@ describe('Plugin', () => {
           const doc = connection.get('some-collection', 'some-id')
 
           doc.fetch(function (err) {
-            expect(err).not.to.be.null
-            expect(err.message).to.equal('Snapshot Fetch Failure')
+            assert.notStrictEqual(err, null)
+            assert.strictEqual(err.message, 'Snapshot Fetch Failure')
 
             agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', 'test')
-              expect(traces[0][0]).to.have.property('resource', 'fetch some-collection')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-              expect(traces[0][0].meta).to.have.property('service', 'test')
-              expect(traces[0][0].meta).to.have.property('sharedb.action', 'fetch')
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, 'Error')
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'Snapshot Fetch Failure')
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK)
-              expect(traces[0][0].meta).to.have.property('component', 'sharedb')
+              assert.strictEqual(traces[0][0].service, 'test')
+              assert.strictEqual(traces[0][0].resource, 'fetch some-collection')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
+              assert.strictEqual(traces[0][0].meta.service, 'test')
+              assert.strictEqual(traces[0][0].meta['sharedb.action'], 'fetch')
+              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], 'Error')
+              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], 'Snapshot Fetch Failure')
+              assert.ok(Object.hasOwn(traces[0][0].meta, ERROR_STACK))
+              assert.strictEqual(traces[0][0].meta.component, 'sharedb')
             })
               .then(done)
               .catch(done)

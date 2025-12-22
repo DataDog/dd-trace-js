@@ -7,8 +7,20 @@ const path = require('node:path')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../version.js')
 
 const getExportsImporting = (url) => import(url).then(Object.keys)
+let getExportsModulePromise
+
+const loadGetExportsModule = () => {
+  if (!getExportsModulePromise) {
+    getExportsModulePromise = import('import-in-the-middle/lib/get-exports.mjs')
+  }
+  return getExportsModulePromise
+}
+
 const getExports = NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)
-  ? require('import-in-the-middle/lib/get-exports.js')
+  ? async (srcUrl, context, getSource) => {
+    const mod = await loadGetExportsModule()
+    return mod.getExports(srcUrl, context, getSource)
+  }
   : getExportsImporting
 
 function isStarExportLine (line) {
@@ -65,7 +77,11 @@ function getSource (url, { format }) {
 /**
  * Generates the pieces of code for the proxy module before the path
  *
- * @param {Object} moduleData { path, internal, context, excludeDefault }
+ * @param {object} moduleData
+ * @param {string} moduleData.path
+ * @param {boolean} moduleData.internal
+ * @param {object} moduleData.context
+ * @param {boolean} moduleData.excludeDefault
  * @returns {Promise<Map>}
  */
 async function processModule ({ path, internal, context, excludeDefault }) {

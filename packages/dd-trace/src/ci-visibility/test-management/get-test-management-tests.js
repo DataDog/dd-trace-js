@@ -14,7 +14,8 @@ function getTestManagementTests ({
   commitMessage,
   sha,
   commitHeadSha,
-  commitHeadMessage
+  commitHeadMessage,
+  branch
 }, done) {
   const options = {
     path: '/api/v2/test/libraries/test-management/tests',
@@ -49,7 +50,8 @@ function getTestManagementTests ({
       attributes: {
         repository_url: repositoryUrl,
         commit_message: commitHeadMessage || commitMessage,
-        sha: commitHeadSha || sha
+        sha: commitHeadSha || sha,
+        branch
       }
     }
   })

@@ -1,16 +1,15 @@
 'use strict'
 
-const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-
-const http = require('node:http')
+const assert = require('node:assert/strict')
 const { once } = require('node:events')
+const http = require('node:http')
 
-const agent = require('../../dd-trace/test/plugins/agent')
+const axios = require('axios')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+
 const web = require('../../dd-trace/src/plugins/util/web')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 describe('Plugin', () => {
@@ -75,8 +74,8 @@ describe('Plugin', () => {
 
           router.use('/parent', childRouter)
           const index = router.stack.length - 1
-          expect(router.stack[index].handle.hello).to.equal('goodbye')
-          expect(router.stack[index].handle.foo).to.equal('bar')
+          assert.strictEqual(router.stack[index].handle.hello, 'goodbye')
+          assert.strictEqual(router.stack[index].handle.foo, 'bar')
         })
 
         it('should add the route to the request span', done => {
@@ -97,7 +96,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /parent/child/:id')
+                assert.strictEqual(spans[0].resource, 'GET /parent/child/:id')
               })
               .then(done)
               .catch(done)
@@ -120,7 +119,7 @@ describe('Plugin', () => {
 
           const agentPromise = agent.assertSomeTraces(traces => {
             for (const span of traces[0]) {
-              expect(span.error).to.equal(0)
+              assert.strictEqual(span.error, 0)
             }
           }, { rejectFirst: true })
 
@@ -144,7 +143,7 @@ describe('Plugin', () => {
 
           const agentPromise = agent.assertSomeTraces(traces => {
             for (const span of traces[0]) {
-              expect(span.error).to.equal(0)
+              assert.strictEqual(span.error, 0)
             }
           }, { rejectFirst: true })
 

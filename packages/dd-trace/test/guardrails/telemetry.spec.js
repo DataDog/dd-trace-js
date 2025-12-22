@@ -1,11 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, before } = require('mocha')
 const { EventEmitter } = require('events')
-const proxyquire = require('proxyquire')
-const { telemetryForwarder, assertTelemetryPoints } = require('../../../../integration-tests/helpers')
+const assert = require('node:assert/strict')
 
+const { before, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+
+const { telemetryForwarder, assertTelemetryPoints } = require('../../../../integration-tests/helpers')
 process.env.DD_INJECTION_ENABLED = 'true'
 
 describe('sendTelemetry', () => {
@@ -92,11 +93,11 @@ describe('sendTelemetry', () => {
     }
 
     function assertStdinMetadata (expected) {
-      expect(capturedStdinData).to.exist
+      assert.ok(capturedStdinData)
       const parsed = JSON.parse(capturedStdinData)
-      expect(parsed.metadata.result).to.equal(expected.result)
-      expect(parsed.metadata.result_class).to.equal(expected.result_class)
-      expect(parsed.metadata.result_reason).to.equal(expected.result_reason)
+      assert.strictEqual(parsed.metadata.result, expected.result)
+      assert.strictEqual(parsed.metadata.result_class, expected.result_class)
+      assert.strictEqual(parsed.metadata.result_reason, expected.result_reason)
     }
 
     beforeEach(() => {

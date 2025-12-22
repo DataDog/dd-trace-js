@@ -60,6 +60,7 @@ function get () {
     yield 1
     yield 2
   }
+  /** @type {Generator<1 | 2, void, unknown> & { foo?: number }} */
   const gen = makeIterator()
   gen.foo = 42
 
@@ -91,7 +92,7 @@ function get () {
     date: new Date('2024-09-20T07:22:59.998Z'),
     map: new Map([[1, 2], [3, 4]]),
     set: new Set([[1, 2], 3, 4]),
-    wmap: new WeakMap([[ref.wmo1, 2], [ref.wmo2, 4]]),
+    wmap: new WeakMap(/** @type {Array<[object, number]>} */ ([[ref.wmo1, 2], [ref.wmo2, 4]])),
     wset: new WeakSet([ref.wso1, ref.wso2, ref.wso3]),
     gen,
     err,

@@ -1,17 +1,17 @@
 /* eslint-disable @stylistic/max-len */
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-
-const path = require('node:path')
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
+const path = require('node:path')
+
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const agent = require('../../../plugins/agent')
 const { getConfigFresh } = require('../../../helpers/config')
-
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 const hardcodedPasswordAnalyzer = require('../../../../src/appsec/iast/analyzers/hardcoded-password-analyzer')
 const iast = require('../../../../src/appsec/iast')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
@@ -61,16 +61,16 @@ describe('Hardcoded Password Analyzer', () => {
           }]
         })
 
-        expect(report).to.have.been.calledOnceWithExactly({ file: relFile, line, column, ident, data: ruleId })
+        sinon.assert.calledOnceWithExactly(report, { file: relFile, line, column, ident, data: ruleId })
       })
     })
 
     it('should not fail with a malformed secret', () => {
-      expect(() => hardcodedPasswordAnalyzer.analyze(undefined)).not.to.throw()
-      expect(() => hardcodedPasswordAnalyzer.analyze({ file: undefined })).not.to.throw()
-      expect(() => hardcodedPasswordAnalyzer.analyze({ file, literals: undefined })).not.to.throw()
-      expect(() => hardcodedPasswordAnalyzer.analyze({ file, literals: [{ value: undefined }] })).not.to.throw()
-      expect(() => hardcodedPasswordAnalyzer.analyze({ file, literals: [{ value: 'test' }] })).not.to.throw()
+      assert.doesNotThrow(() => hardcodedPasswordAnalyzer.analyze(undefined))
+      assert.doesNotThrow(() => hardcodedPasswordAnalyzer.analyze({ file: undefined }))
+      assert.doesNotThrow(() => hardcodedPasswordAnalyzer.analyze({ file, literals: undefined }))
+      assert.doesNotThrow(() => hardcodedPasswordAnalyzer.analyze({ file, literals: [{ value: undefined }] }))
+      assert.doesNotThrow(() => hardcodedPasswordAnalyzer.analyze({ file, literals: [{ value: 'test' }] }))
     })
 
     it('should not report secrets in line 0', () => {
@@ -79,7 +79,7 @@ describe('Hardcoded Password Analyzer', () => {
         literals: [{ value: 'test', line: 0 }]
       })
 
-      expect(report).not.to.have.been.called
+      sinon.assert.notCalled(report)
     })
 
     it('should use ident as evidence', () => {
@@ -101,7 +101,12 @@ describe('Hardcoded Password Analyzer', () => {
       })
 
       const evidence = { value: ident }
-      expect(reportEvidence).to.be.calledOnceWithExactly({ file: relFile, line, column, ident, data: ruleId }, undefined, evidence)
+      sinon.assert.calledOnceWithExactly(
+        reportEvidence,
+        { file: relFile, line, column, ident, data: ruleId },
+        undefined,
+        evidence
+      )
     })
   })
 
@@ -151,8 +156,12 @@ describe('Hardcoded Password Analyzer', () => {
       it('should detect vulnerability', (done) => {
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0].meta['_dd.iast.json']).to.include('"HARDCODED_PASSWORD"')
-            expect(traces[0][0].meta['_dd.iast.json']).to.include('"evidence":{"value":"pswd"}')
+            assertObjectContains(
+              JSON.parse(traces[0][0].meta['_dd.iast.json']),
+              {
+                vulnerabilities: [{ evidence: { value: 'pswd' }, type: 'HARDCODED_PASSWORD' }],
+              }
+            )
           })
           .then(done)
           .catch(done)

@@ -1,7 +1,7 @@
 'use strict'
 
 /**
- * @fileoverview Protobuf Loader for OpenTelemetry Logs and Metrics
+ * Protobuf Loader for OpenTelemetry Logs and Metrics
  *
  * This module loads protobuf definitions for OpenTelemetry logs and metrics.
  *
@@ -14,7 +14,7 @@
  * - https://github.com/open-telemetry/opentelemetry-proto (v1.7.0)
  */
 
-const protobuf = require('protobufjs')
+const protobuf = require('../../../../../vendor/dist/protobufjs')
 const path = require('path')
 
 let _root = null

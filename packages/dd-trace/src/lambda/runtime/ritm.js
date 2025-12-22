@@ -3,7 +3,7 @@
  * Modifications copyright 2022 Datadog, Inc.
  *
  * Some functions are part of aws-lambda-nodejs-runtime-interface-client
- * https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/main/src/utils/UserFunction.ts
+ * https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/v2.1.0/src/utils/UserFunction.ts
  */
 'use strict'
 
@@ -53,8 +53,7 @@ function _extractModuleNameAndHandlerPath (handler) {
   const FUNCTION_EXPR = /^([^.]*)\.(.*)$/
   const match = handler.match(FUNCTION_EXPR)
   if (!match || match.length !== 3) {
-    // Malformed Handler Name
-    return // TODO: throw error
+    throw new Error(`Malformed handler name: ${handler}`)
   }
   return [match[1], match[2]] // [module, handler-path]
 }

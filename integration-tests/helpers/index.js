@@ -1,14 +1,16 @@
 'use strict'
 
+const assert = require('assert')
 const childProcess = require('child_process')
 const { execSync, fork, spawn } = childProcess
-const http = require('http')
 const { existsSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
 const fs = require('fs/promises')
+const http = require('http')
 const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
-const assert = require('assert')
+const { inspect } = require('util')
+
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
@@ -25,7 +27,7 @@ let shouldKill
 /**
  * @param {string} filename
  * @param {string} cwd
- * @param {string|function} expectedOut
+ * @param {string|((out: Promise<string>) => void)} expectedOut
  * @param {string} expectedSource
  */
 async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
@@ -69,7 +71,7 @@ let sandbox
  * This _must_ be used with the useSandbox function
  *
  * @param {string} filename
- * @param {string|function} expectedOut
+ * @param {string|((out: Promise<string>) => void)} expectedOut
  * @param {string[]} expectedTelemetryPoints
  * @param {string} expectedSource
  */
@@ -165,6 +167,10 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
 }
 
 /**
+ * @typedef {childProcess.ChildProcess & { url: string }} SpawnedProcess
+ */
+
+/**
  * Spawns a Node.js script in a child process and returns a promise that resolves when the process is ready.
  *
  * @param {string|URL} filename - The filename of the Node.js script to spawn in a child process.
@@ -173,14 +179,14 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
  *   standard output of the child process. If not provided, the output will be logged to the console.
  * @param {(data: Buffer) => void} [stderrHandler] - A function that's called with one data argument to handle the
  *   standard error of the child process. If not provided, the error will be logged to the console.
- * @returns {Promise<childProcess.ChildProcess & { url?: string }|void>} A promise that resolves when the process
- *   is either ready or terminated without an error. If the process is terminated without an error, the promise will
- *   resolve with `undefined`.The returned process will have a `url` property if the process didn't terminate.
+ * @returns {Promise<SpawnedProcess|void>} A promise that resolves when the process is either ready or terminated
+ *   without an error. If the process is terminated without an error, the promise will resolve with `undefined`. The
+ *   returned process will have a `url` property if the process didn't terminate.
  */
 function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   const proc = fork(filename, { ...options, stdio: 'pipe' })
 
-  return /** @type {Promise<childProcess.ChildProcess & { url?: string }|void>} */ (new Promise((resolve, reject) => {
+  return /** @type {Promise<SpawnedProcess|void>} */ (new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
         if (typeof port !== 'number' && typeof port !== 'string') {
@@ -494,7 +500,7 @@ async function curl (url) {
 /**
  * @param {FakeAgent} agent
  * @param {string|{ then: (callback: () => Promise<string>) => Promise<string> }|URL} procOrUrl
- * @param {function} fn
+ * @param {(res: { headers: Record<string, string>, payload: unknown[] }) => void} fn
  * @param {number} [timeout]
  * @param {number} [expectedMessageCount]
  * @param {boolean} [resolveAtFirstSuccess]
@@ -557,7 +563,7 @@ function checkSpansForServiceName (spans, name) {
  * @param {string} cwd
  * @param {string} serverFile
  * @param {string|number} agentPort
- * @param {function} [stdioHandler]
+ * @param {(data: Buffer) => void} [stdioHandler]
  * @param {Record<string, string|undefined>} [additionalEnvArgs]
  */
 async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
@@ -574,7 +580,8 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
   env = { ...process.env, ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
-    env
+    env,
+    execArgv: additionalEnvArgs.execArgv
   }, stdioHandler)
 }
 
@@ -594,8 +601,7 @@ function useEnv (env) {
 }
 
 /**
- * @param {unknown[]} args
- * @returns {object}
+ * @param {Parameters<createSandbox>} args
  */
 function useSandbox (...args) {
   before(async function () {
@@ -631,9 +637,14 @@ function setShouldKill (value) {
 
 // @ts-expect-error assert.partialDeepStrictEqual does not exist on older Node.js versions
 // eslint-disable-next-line n/no-unsupported-features/node-builtins
-const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
+const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected, msg) {
+  if (expected === null || typeof expected !== 'object') {
+    assert.strictEqual(actual, expected, msg)
+    return
+  }
+
   if (Array.isArray(expected)) {
-    assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
+    assert.ok(Array.isArray(actual), `${msg ?? ''}Expected array but got ${inspect(actual)}`)
     let startIndex = 0
     for (const expectedItem of expected) {
       let found = false
@@ -641,9 +652,9 @@ const assertObjectContains = assert.partialDeepStrictEqual || function assertObj
         const actualItem = actual[i]
         try {
           if (expectedItem !== null && typeof expectedItem === 'object') {
-            assertObjectContains(actualItem, expectedItem)
+            assertObjectContains(actualItem, expectedItem, msg)
           } else {
-            assert.strictEqual(actualItem, expectedItem)
+            assert.strictEqual(actualItem, expectedItem, msg)
           }
           startIndex = i + 1
           found = true
@@ -652,19 +663,18 @@ const assertObjectContains = assert.partialDeepStrictEqual || function assertObj
           continue
         }
       }
-      assert.ok(found, `Expected array to contain ${JSON.stringify(expectedItem)}`)
+      assert.ok(found, `${msg ?? ''}Expected array ${inspect(actual)} to contain ${inspect(expectedItem)}`)
     }
     return
   }
 
   for (const [key, val] of Object.entries(expected)) {
+    assert.ok(Object.hasOwn(actual, key), msg)
     if (val !== null && typeof val === 'object') {
-      assert.ok(Object.hasOwn(actual, key))
-      assert.notStrictEqual(actual[key], null)
-      assert.strictEqual(typeof actual[key], 'object')
-      assertObjectContains(actual[key], val)
+      assertObjectContains(actual[key], val, msg)
     } else {
-      assert.strictEqual(actual[key], expected[key])
+      assert.ok(actual, msg)
+      assert.strictEqual(actual[key], expected[key], msg)
     }
   }
 }

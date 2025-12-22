@@ -1,9 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('mocha')
-const sinon = require('sinon')
+const assert = require('node:assert/strict')
+
+const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 describe('RASP - utils.js', () => {
   let web, utils, stackTrace, config, telemetry
@@ -66,9 +67,9 @@ describe('RASP - utils.js', () => {
 
     sinon.assert.calledOnce(abortController.abort)
     const abortError = abortController.abort.firstCall.args[0]
-    expect(abortError).to.be.instanceOf(utils.DatadogRaspAbortError)
-    expect(abortError.raspRule).to.equal(raspRule)
-    expect(abortError.blockingAction).to.equal(result.actions.blocking_action)
+    assert.ok(abortError instanceof utils.DatadogRaspAbortError)
+    assert.strictEqual(abortError.raspRule, raspRule)
+    assert.strictEqual(abortError.blockingAction, result.actions.blocking_action)
   }
 
   describe('handleResult', () => {
@@ -209,13 +210,12 @@ describe('RASP - utils.js', () => {
 
       const error = new utils.DatadogRaspAbortError(req, res, blockingAction, raspRule)
 
-      expect(error.name).to.equal('DatadogRaspAbortError')
-      expect(error.message).to.equal('DatadogRaspAbortError')
-      expect(error.blockingAction).to.equal(blockingAction)
-      expect(error.raspRule).to.equal(raspRule)
-      expect(error).to.have.property('req')
-      expect(error).to.have.property('res')
-      expect(Object.keys(error)).to.not.include.members(['req', 'res'])
+      assert.strictEqual(error.name, 'DatadogRaspAbortError')
+      assert.strictEqual(error.message, 'DatadogRaspAbortError')
+      assert.strictEqual(error.blockingAction, blockingAction)
+      assert.strictEqual(error.raspRule, raspRule)
+      assert.strictEqual(Object.getOwnPropertyDescriptor(error, 'req')?.enumerable, false)
+      assert.strictEqual(Object.getOwnPropertyDescriptor(error, 'res')?.enumerable, false)
     })
   })
 })

@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -39,7 +39,7 @@ describe('Exporter', () => {
   it('should pass computed stats header through to writer', () => {
     const stats = { enabled: true }
     exporter = new Exporter({ url, flushInterval, stats }, prioritySampler)
-    expect(Writer).to.have.been.calledWithMatch({
+    sinon.assert.calledWithMatch(Writer, {
       headers: {
         'Datadog-Client-Computed-Stats': 'yes'
       }
@@ -51,7 +51,7 @@ describe('Exporter', () => {
     const apmTracingEnabled = false
     exporter = new Exporter({ url, flushInterval, stats, apmTracingEnabled }, prioritySampler)
 
-    expect(Writer).to.have.been.calledWithMatch({
+    sinon.assert.calledWithMatch(Writer, {
       headers: {
         'Datadog-Client-Computed-Stats': 'yes'
       }
@@ -61,7 +61,7 @@ describe('Exporter', () => {
   it('should support IPv6', () => {
     const stats = { enabled: true }
     exporter = new Exporter({ hostname: '::1', flushInterval, stats }, prioritySampler)
-    expect(Writer).to.have.been.calledWithMatch({
+    sinon.assert.calledWithMatch(Writer, {
       url: new URL('http://[::1]')
     })
   })
@@ -74,7 +74,7 @@ describe('Exporter', () => {
     it('should not flush if export has not been called', (done) => {
       exporter = new Exporter({ url, flushInterval }, prioritySampler)
       setTimeout(() => {
-        expect(writer.flush).not.to.have.been.called
+        sinon.assert.notCalled(writer.flush)
         done()
       }, flushInterval + 100)
     })
@@ -83,7 +83,7 @@ describe('Exporter', () => {
       exporter = new Exporter({ url, flushInterval }, prioritySampler)
       exporter.export([{}])
       setTimeout(() => {
-        expect(writer.flush).to.have.been.called
+        sinon.assert.called(writer.flush)
         done()
       }, flushInterval + 100)
     })
@@ -97,7 +97,7 @@ describe('Exporter', () => {
         writer.length = 0
         exporter.export([span])
 
-        expect(writer.append).to.have.been.calledWith([span])
+        sinon.assert.calledWith(writer.append, [span])
       })
     })
   })
@@ -109,7 +109,7 @@ describe('Exporter', () => {
 
     it('should flush right away when interval is set to 0', () => {
       exporter.export([span])
-      expect(writer.flush).to.have.been.called
+      sinon.assert.called(writer.flush)
     })
   })
 
@@ -121,8 +121,8 @@ describe('Exporter', () => {
     it('should set the URL on self and writer', () => {
       exporter.setUrl('http://example2.com')
       const url = new URL('http://example2.com')
-      expect(exporter._url).to.deep.equal(url)
-      expect(writer.setUrl).to.have.been.calledWith(url)
+      assert.deepStrictEqual(exporter._url, url)
+      sinon.assert.calledWith(writer.setUrl, url)
     })
   })
 })

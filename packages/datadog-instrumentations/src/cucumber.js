@@ -1,5 +1,5 @@
 'use strict'
-const { createCoverageMap } = require('istanbul-lib-coverage')
+const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
 
 const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
@@ -43,7 +43,7 @@ const {
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection
 } = require('../../dd-trace/src/plugins/util/test')
-const satisfies = require('semifies')
+const satisfies = require('../../../vendor/dist/semifies')
 
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')

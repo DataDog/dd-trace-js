@@ -12,7 +12,7 @@ const fs = require('fs')
  * @typedef { import('module').Module } Module
  * @param {string} name
  * @param {Module} module
- * @return {Object} The parsed package.json
+ * @returns {Object} The parsed package.json
  */
 function requirePackageJson (name, module) {
   if (path.isAbsolute(name)) {

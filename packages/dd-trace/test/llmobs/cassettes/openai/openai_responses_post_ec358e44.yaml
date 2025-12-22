@@ -1,0 +1,248 @@
+interactions:
+- request:
+    body: "{\n  \"prompt\": {\n    \"id\": \"pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0\",\n
+      \   \"version\": \"2\",\n    \"variables\": {\n      \"user_message\": {\n        \"type\":
+      \"input_text\",\n        \"text\": \"Analyze these images and document\"\n      },\n
+      \     \"user_image_1\": {\n        \"type\": \"input_image\",\n        \"image_url\":
+      \"https://raw.githubusercontent.com/github/explore/main/topics/python/python.png\",\n
+      \       \"detail\": \"auto\"\n      },\n      \"user_file\": {\n        \"type\":
+      \"input_file\",\n        \"file_url\": \"https://www.berkshirehathaway.com/letters/2024ltr.pdf\"\n
+      \     },\n      \"user_image_2\": {\n        \"type\": \"input_image\",\n        \"file_id\":
+      \"file-BCuhT1HQ24kmtsuuzF1mh2\",\n        \"detail\": \"auto\"\n      }\n    }\n
+      \ }\n}"
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip,deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '714'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 4.87.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-os
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-package-version
+      : - 4.87.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-retry-count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime-version
+      : - v22.17.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-timeout
+      : - '600000'
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: "{\n  \"id\": \"resp_0e7942f033694f0c016925be0d8da8819c97f045583ee7bee8\",\n
+        \ \"object\": \"response\",\n  \"created_at\": 1764081166,\n  \"status\":
+        \"completed\",\n  \"background\": false,\n  \"billing\": {\n    \"payer\":
+        \"developer\"\n  },\n  \"error\": null,\n  \"incomplete_details\": null,\n
+        \ \"instructions\": [\n    {\n      \"type\": \"message\",\n      \"content\":
+        [],\n      \"role\": \"developer\"\n    },\n    {\n      \"type\": \"message\",\n
+        \     \"content\": [\n        {\n          \"type\": \"input_text\",\n          \"text\":
+        \"Analyze the following content from the user:\\n\\nText message: Analyze
+        these images and document\\nImage reference 1: \"\n        },\n        {\n
+        \         \"type\": \"input_image\",\n          \"detail\": \"auto\",\n          \"file_id\":
+        null,\n          \"image_url\": null\n        },\n        {\n          \"type\":
+        \"input_text\",\n          \"text\": \"\\nDocument reference: \"\n        },\n
+        \       {\n          \"type\": \"input_file\",\n          \"file_id\": null,\n
+        \         \"file_url\": \"https://www.berkshirehathaway.com/letters/2024ltr.pdf\"\n
+        \       },\n        {\n          \"type\": \"input_text\",\n          \"text\":
+        \"\\nImage reference 2: \"\n        },\n        {\n          \"type\": \"input_image\",\n
+        \         \"detail\": \"auto\",\n          \"file_id\": \"file-BCuhT1HQ24kmtsuuzF1mh2\",\n
+        \         \"image_url\": null\n        },\n        {\n          \"type\":
+        \"input_text\",\n          \"text\": \"\\n\\nPlease provide a comprehensive
+        analysis.\"\n        }\n      ],\n      \"role\": \"user\"\n    }\n  ],\n
+        \ \"max_output_tokens\": null,\n  \"max_tool_calls\": null,\n  \"model\":
+        \"o4-mini-2025-04-16\",\n  \"output\": [\n    {\n      \"id\": \"rs_0e7942f033694f0c016925be1135ac819caaba4965ed1375d1\",\n
+        \     \"type\": \"reasoning\",\n      \"summary\": []\n    },\n    {\n      \"id\":
+        \"msg_0e7942f033694f0c016925be15ff9c819cac5c5cea9375341f\",\n      \"type\":
+        \"message\",\n      \"status\": \"completed\",\n      \"content\": [\n        {\n
+        \         \"type\": \"output_text\",\n          \"annotations\": [],\n          \"logprobs\":
+        [],\n          \"text\": \"Here\\u2019s a three-part breakdown covering (1)
+        the first image, (2) the Berkshire Hathaway annual-letter text, and (3) the
+        performance-versus-S&P table in the second image.\\n\\n1. Image 1: The Python
+        Logo  \\n\\u00b7 Two intertwining snakes forming a stylized \\u201cPy\\u201d
+        shape, one in blue (upper left) and one in yellow (lower right).  \\n\\u00b7
+        This is the de facto logo of the Python programming language. No people or
+        private data.  \\n\\n2. Document (Warren Buffett\\u2019s 2024 Letter to Berkshire
+        Hathaway Shareholders)  \\nA. Tone and Purpose  \\n \\u2022 Buffett emphasizes
+        full transparency\\u2014\\u201creport\\u201d means candidly sharing both successes
+        and mistakes.  \\n \\u2022 He invites shareholders to think of themselves
+        as CEOs and his family as passive investors.  \\n \\u2022 He contrasts Berkshire\\u2019s
+        openness (16 uses of \\u201cmistake\\u201d/\\u201cerror\\u201d in five years)
+        with the \\u201chappy talk\\u201d elsewhere.  \\n\\nB. Acknowledged Mistakes
+        \ \\n \\u2022 Capital\\u2010allocation errors in both public\\u2010market
+        and wholly-owned acquisitions.  \\n \\u2022 Occasional misjudgments in hiring
+        or in manager \\u201cfidelity.\\u201d  \\n \\u2022 Charlie Munger\\u2019s
+        admonition: when mistakes occur, correct them promptly\\u2014no \\u201cthumb-sucking.\\u201d
+        \ \\n\\nC. Illustrative Success Story: Forest River and Pete Liegl  \\n \\u2022
+        2005 acquisition meeting: Buffett accepted Liegl\\u2019s straight-forward
+        valuations, let him set his own modest pay.  \\n \\u2022 Result: Forest River
+        dramatically outperformed, adding \\u201cmany billions\\u201d to shareholder
+        wealth over 19 years.  \\n \\u2022 Lesson: align incentives, empower strong
+        operators, avoid over-engineering deals.  \\n\\nD. Succession and Culture
+        \ \\n \\u2022 Buffett (age 94) will hand the CEO role to Greg Abel, who shares
+        the creed of candid reporting.  \\n \\u2022 Buffett never considers pedigree
+        (school attended) in manager hires; he prizes innate talent.  \\n\\nE. 2024
+        Financial Highlights  \\n \\u2022 Operating earnings rose to $47.4 billion
+        vs. $37.3 billion in 2023.  \\n   \\u2013 Insurance underwriting profit: $9.0
+        billion (up from $5.4 billion)  \\n   \\u2013 Insurance investment income:
+        $13.7 billion (up from $9.6 billion)  \\n   \\u2013 BNSF and utilities roughly
+        flat to slightly up  \\n   \\u2013 Other businesses slightly down from prior
+        year  \\n \\u2022 Excludes unrealized capital gains/losses\\u2014focus on
+        long-term, underlying operating performance.  \\n\\nF. Historic U.S. Tax Record
+        \ \\n \\u2022 In 2024 Berkshire paid $26.8 billion of U.S. corporate income
+        tax\\u2014more than any other U.S. company ever.  \\n \\u2022 Since 1965,
+        Berkshire has paid over $100 billion in U.S. tax while never paying a cash
+        dividend (save a one-time 1967 ten-cent A-share distribution).  \\n\\nG. Portfolio
+        Composition and Philosophy  \\n \\u2022 Two \\u201chands\\u201d of equity
+        ownership:  \\n   1. 100%-controlled subsidiaries (189 businesses, valued
+        in the hundreds of billions)  \\n   2. Minority stakes (~20\\u201350%) in
+        marquee names (Apple, American Express, Coca-Cola, etc.), ~\\\\$272 billion
+        at year-end.  \\n \\u2022 Despite a record cash float, the majority of capital
+        remains in equities\\u2014Berkshire won\\u2019t hoard cash or equivalents
+        indefinitely.  \\n \\u2022 Emphasis on capitalism\\u2019s power to deploy
+        savings into growing goods and services; U.S. as \\u201cExhibit A.\\u201d
+        \ \\n\\nH. Property-Casualty Insurance Deep Dive  \\n \\u2022 P/C insurance
+        gets premiums up front but may incur long-tail liabilities decades later.
+        \ \\n \\u2022 Berkshire\\u2019s \\u201cfloat\\u201d (premiums held pending
+        claim payments) has grown from \\\\$46 billion to \\\\$171 billion.  \\n \\u2022
+        Underwriting profits, though modest (3.3\\u00a2 per premium dollar), plus
+        the reinvestment of float, have been a core driver of value.  \\n \\u2022
+        Stress on disciplined pricing\\u2014never chase market share with underpriced
+        policies.  \\n\\nI. Japanese Trading-House Investments  \\n \\u2022 Since
+        mid-2019, Berkshire has built ~\\\\$13.8 billion cost basis in five major
+        Japanese sogo-shosha (Itochu, Marubeni, Mitsubishi, Mitsui, Sumitomo).  \\n
+        \\u2022 Stakes held long term, capped initially at <10% each (with room to
+        grow).  \\n \\u2022 Partially hedged by yen-denominated borrowings; GAAP requires
+        marking those to market (2.3 billion after-tax gain at year-end).  \\n\\nJ.
+        Shareholder Meeting and Miscellany  \\n \\u2022 May 3, 2025 gathering in Omaha:
+        Q&A with Warren, Greg Abel and Ajit Jain; \\u201c60 Years of Berkshire Hathaway\\u201d
+        special book; fund-raising for local charity; Squishmallows and other merch;
+        Brooks run on Sunday.  \\n \\u2022 Warm family anecdote about his 91-year-old
+        sister Bertie and her cane\\u2014an excuse for light humor and an invitation
+        to keep an eye on her in Omaha.  \\n\\n3. Image 2: Berkshire vs. S&P 500 Annual
+        Returns (1965\\u20132024)  \\n \\u2022 A two\\u2010column table listing year-by-year
+        annual % changes in Berkshire\\u2019s per-share market value vs. the S&P 500
+        total return (including dividends).  \\n \\u2022 Highlights:  \\n   \\u2013
+        Berkshire\\u2019s compounded annual gain 1965\\u20132024: 19.9% vs. S&P\\u2019s
+        10.4%.  \\n   \\u2013 Overall gain since 1964: 5,502,284% for Berkshire vs.
+        39,054% for the S&P.  \\n   \\u2013 Berkshire outperformed in the vast majority
+        of years, often by very wide margins (e.g. 1976: +129.3% vs. S&P +23.6%; 1979:
+        +102.5% vs. +18.2%).  \\n   \\u2013 Berkshire suffered some large down years
+        (1974: \\u201348.7% vs. \\u201326.4%; 1990: \\u201323.1% vs. \\u20133.1%;
+        2008: \\u201331.8% vs. \\u201337.0%) but historically recovered strongly.
+        \ \\n\\nKey Takeaways  \\n\\u2022 Culture of Radical Candor: Buffett insists
+        on naming mistakes, correcting them quickly, and never sugar-coating results.
+        \ \\n\\u2022 Long-term, Equity-heavy Philosophy: Controlled businesses + high-quality
+        minority stakes, with persistent reinvestment rather than dividends.  \\n\\u2022
+        Insurance Float as a Competitive Advantage: Generates low-cost capital for
+        decades, provided underwriting remains disciplined.  \\n\\u2022 Capital Allocation
+        Mastery: From GEICO to Forest River to Japanese trading houses, success has
+        hinged on backing exceptional operators.  \\n\\u2022 Outstanding Shareholder
+        Returns: Nearly 20% compounded growth over sixty years, dwarfing broad-market
+        returns.  \\n\\nAll three artifacts reinforce a single message: disciplined,
+        honest stewardship of capital\\u2014whether in an inscrutable insurance balance
+        sheet, a small RV factory in Indiana or a portfolio of high-quality global
+        equities\\u2014can generate extraordinary long-term results.\"\n        }\n
+        \     ],\n      \"role\": \"assistant\"\n    }\n  ],\n  \"parallel_tool_calls\":
+        true,\n  \"previous_response_id\": null,\n  \"prompt\": {\n    \"id\": \"pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0\",\n
+        \   \"variables\": {\n      \"user_message\": {\n        \"type\": \"input_text\",\n
+        \       \"text\": \"Analyze these images and document\"\n      },\n      \"user_image_1\":
+        {\n        \"type\": \"input_image\",\n        \"detail\": \"auto\",\n        \"file_id\":
+        null,\n        \"image_url\": null\n      },\n      \"user_file\": {\n        \"type\":
+        \"input_file\",\n        \"file_id\": null,\n        \"file_url\": \"https://www.berkshirehathaway.com/letters/2024ltr.pdf\"\n
+        \     },\n      \"user_image_2\": {\n        \"type\": \"input_image\",\n
+        \       \"detail\": \"auto\",\n        \"file_id\": \"file-BCuhT1HQ24kmtsuuzF1mh2\",\n
+        \       \"image_url\": null\n      }\n    },\n    \"version\": \"2\"\n  },\n
+        \ \"prompt_cache_key\": null,\n  \"prompt_cache_retention\": null,\n  \"reasoning\":
+        {\n    \"effort\": \"medium\",\n    \"summary\": null\n  },\n  \"safety_identifier\":
+        null,\n  \"service_tier\": \"default\",\n  \"store\": false,\n  \"temperature\":
+        1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    },\n
+        \   \"verbosity\": \"medium\"\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\":
+        [],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n
+        \ \"usage\": {\n    \"input_tokens\": 11041,\n    \"input_tokens_details\":
+        {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 2010,\n    \"output_tokens_details\":
+        {\n      \"reasoning_tokens\": 512\n    },\n    \"total_tokens\": 13051\n
+        \ },\n  \"user\": null,\n  \"metadata\": {}\n}"
+    headers:
+      CF-RAY:
+      - 9a41db743de9d706-CDG
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 25 Nov 2025 14:33:11 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=9E40q8ml8q.AebrKH9bzHmPazrrcsnjdAvduWOPtUaI-1764081191-1.0.1.1-vnaC9nNFW43JFndX4oBn.5x1SE7qy8IT3qOYwDQzqGjkWCSwRZWBMlYFcGyo6cjBWMxgeUmY2IN3q99.ZJNMUw5FfxMG5rxHGFSHOYFWAEA;
+        path=/; expires=Tue, 25-Nov-25 15:03:11 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=D3wjRW3pq6gYsq4Sz23oNlxo8nQsgoneNhe73PIgyUM-1764081191651-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '26068'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '26074'
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149998470'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_434874cd9d324c71820fa2f7dc132cf9
+    status:
+      code: 200
+      message: OK
+version: 1

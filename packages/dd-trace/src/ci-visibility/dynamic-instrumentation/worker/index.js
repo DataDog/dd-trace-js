@@ -2,6 +2,7 @@
 
 const {
   workerData: {
+    config,
     breakpointSetChannel,
     breakpointHitChannel,
     breakpointRemoveChannel
@@ -21,6 +22,7 @@ const {
   getStackFromCallFrames
 } = require('../../../debugger/devtools_client/state')
 const log = require('../../../log')
+const processTags = require('../../../process-tags')
 
 let sessionStarted = false
 
@@ -36,7 +38,7 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
 
   const stack = getStackFromCallFrames(callFrames)
 
-  const getLocalState = await getLocalStateForCallFrame(callFrames[0])
+  const { processLocalState } = await getLocalStateForCallFrame(callFrames[0])
 
   await session.post('Debugger.resume')
 
@@ -48,15 +50,15 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
       version: '0',
       location: probe.location
     },
+    captures: {
+      lines: { [probe.location.lines[0]]: { locals: processLocalState() } }
+    },
     stack,
     language: 'javascript'
   }
 
-  const state = getLocalState()
-  if (state) {
-    snapshot.captures = {
-      lines: { [probe.location.lines[0]]: { locals: state } }
-    }
+  if (config.propagateProcessTags?.enabled) {
+    snapshot[processTags.DYNAMIC_INSTRUMENTATION_FIELD_NAME] = processTags.tagsObject
   }
 
   breakpointHitChannel.postMessage({ snapshot })

@@ -1,6 +1,9 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+
 const { describe, it, beforeEach, context } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -68,7 +71,7 @@ function describeWriter (protocolVersion) {
     it('should append a trace', () => {
       writer.append([span])
 
-      expect(encoder.encode).to.have.been.calledWith([span])
+      sinon.assert.calledWith(encoder.encode, [span])
     })
   })
 
@@ -80,7 +83,7 @@ function describeWriter (protocolVersion) {
       encoder.count.returns(2)
       encoder.makePayload.returns([Buffer.alloc(0)])
       writer.flush()
-      expect(request.getCall(0).args[1]).to.contain({
+      assertObjectContains(request.getCall(0).args[1], {
         url
       })
     })
@@ -90,7 +93,7 @@ function describeWriter (protocolVersion) {
     it('should skip flushing if empty', () => {
       writer.flush()
 
-      expect(encoder.makePayload).to.not.have.been.called
+      sinon.assert.notCalled(encoder.makePayload)
     })
 
     it('should empty the internal queue', () => {
@@ -98,7 +101,7 @@ function describeWriter (protocolVersion) {
 
       writer.flush()
 
-      expect(encoder.makePayload).to.have.been.called
+      sinon.assert.called(encoder.makePayload)
     })
 
     it('should call callback when empty', (done) => {
@@ -111,8 +114,8 @@ function describeWriter (protocolVersion) {
       encoder.count.returns(2)
       encoder.makePayload.returns([expectedData])
       writer.flush(() => {
-        expect(request.getCall(0).args[0]).to.eql([expectedData])
-        expect(request.getCall(0).args[1]).to.eql({
+        assert.deepStrictEqual(request.getCall(0).args[0], [expectedData])
+        assert.deepStrictEqual(request.getCall(0).args[1], {
           url,
           path: `/v${protocolVersion}/traces`,
           method: 'PUT',
@@ -138,7 +141,7 @@ function describeWriter (protocolVersion) {
       encoder.count.returns(2)
       encoder.makePayload.returns([Buffer.from('data')])
       writer.flush(() => {
-        expect(request.getCall(0).args[1].headers).to.eql({
+        assert.deepStrictEqual(request.getCall(0).args[1].headers, {
           ...headers,
           'Content-Type': 'application/msgpack',
           'Datadog-Meta-Lang': 'nodejs',
@@ -161,9 +164,12 @@ function describeWriter (protocolVersion) {
       writer.flush()
 
       setTimeout(() => {
-        expect(log.errorWithoutTelemetry)
-          .to.have.been.calledWith('Error sending payload to the agent (status code: %s)',
-            error.status, error)
+        sinon.assert.calledWith(
+          log.errorWithoutTelemetry,
+          'Error sending payload to the agent (status code: %s)',
+          error.status,
+          error
+        )
         done()
       })
     })
@@ -171,7 +177,7 @@ function describeWriter (protocolVersion) {
     it('should update sampling rates', (done) => {
       encoder.count.returns(1)
       writer.flush(() => {
-        expect(prioritySampler.update).to.have.been.calledWith({
+        sinon.assert.calledWith(prioritySampler.update, {
           'service:hello,env:test': 1
         })
         done()
@@ -188,7 +194,7 @@ function describeWriter (protocolVersion) {
         encoder.count.returns(1)
         writer.flush()
         setImmediate(() => {
-          expect(request.getCall(0).args[1]).to.contain({
+          assertObjectContains(request.getCall(0).args[1], {
             url
           })
         })

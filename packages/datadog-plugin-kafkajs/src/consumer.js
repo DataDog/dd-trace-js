@@ -28,7 +28,8 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
    * @property {string} topic
    * @property {number} partition
    * @property {number} offset
-   *
+   */
+  /**
    * @typedef {object} CommitEventItem
    * @property {string} groupId
    * @property {string} topic

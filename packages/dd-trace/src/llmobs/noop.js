@@ -75,6 +75,12 @@ class NoopLLMObs {
   submitEvaluation (llmobsSpanContext, options) {}
 
   flush () {}
+
+  registerProcessor (processor) {}
+
+  deregisterProcessor () {}
+
+  annotationContext (options, fn) { return fn() }
 }
 
 module.exports = NoopLLMObs

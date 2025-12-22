@@ -1,6 +1,6 @@
 'use strict'
 
-const { createCoverageMap } = require('istanbul-lib-coverage')
+const { createCoverageMap } = require('../../../../vendor/dist/istanbul-lib-coverage')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')

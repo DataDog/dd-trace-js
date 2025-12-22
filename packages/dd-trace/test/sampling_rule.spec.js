@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -111,17 +111,17 @@ describe('sampling rule', () => {
         name: 'operation'
       })
 
-      expect(rule.match(spans[0])).to.equal(true)
-      expect(rule.match(spans[1])).to.equal(false)
-      expect(rule.match(spans[2])).to.equal(false)
-      expect(rule.match(spans[3])).to.equal(false)
-      expect(rule.match(spans[4])).to.equal(false)
-      expect(rule.match(spans[5])).to.equal(false)
-      expect(rule.match(spans[6])).to.equal(false)
-      expect(rule.match(spans[7])).to.equal(false)
-      expect(rule.match(spans[8])).to.equal(false)
-      expect(rule.match(spans[9])).to.equal(false)
-      expect(rule.match(spans[10])).to.equal(false)
+      assert.strictEqual(rule.match(spans[0]), true)
+      assert.strictEqual(rule.match(spans[1]), false)
+      assert.strictEqual(rule.match(spans[2]), false)
+      assert.strictEqual(rule.match(spans[3]), false)
+      assert.strictEqual(rule.match(spans[4]), false)
+      assert.strictEqual(rule.match(spans[5]), false)
+      assert.strictEqual(rule.match(spans[6]), false)
+      assert.strictEqual(rule.match(spans[7]), false)
+      assert.strictEqual(rule.match(spans[8]), false)
+      assert.strictEqual(rule.match(spans[9]), false)
+      assert.strictEqual(rule.match(spans[10]), false)
     })
 
     it('should match with case-insensitive strings', () => {
@@ -135,17 +135,17 @@ describe('sampling rule', () => {
         name: 'oPeration'
       })
 
-      expect(lowerCaseRule.match(spans[0])).to.equal(mixedCaseRule.match(spans[0]))
-      expect(lowerCaseRule.match(spans[1])).to.equal(mixedCaseRule.match(spans[1]))
-      expect(lowerCaseRule.match(spans[2])).to.equal(mixedCaseRule.match(spans[2]))
-      expect(lowerCaseRule.match(spans[3])).to.equal(mixedCaseRule.match(spans[3]))
-      expect(lowerCaseRule.match(spans[4])).to.equal(mixedCaseRule.match(spans[4]))
-      expect(lowerCaseRule.match(spans[5])).to.equal(mixedCaseRule.match(spans[5]))
-      expect(lowerCaseRule.match(spans[6])).to.equal(mixedCaseRule.match(spans[6]))
-      expect(lowerCaseRule.match(spans[7])).to.equal(mixedCaseRule.match(spans[7]))
-      expect(lowerCaseRule.match(spans[8])).to.equal(mixedCaseRule.match(spans[8]))
-      expect(lowerCaseRule.match(spans[9])).to.equal(mixedCaseRule.match(spans[9]))
-      expect(lowerCaseRule.match(spans[10])).to.equal(mixedCaseRule.match(spans[10]))
+      assert.strictEqual(lowerCaseRule.match(spans[0]), mixedCaseRule.match(spans[0]))
+      assert.strictEqual(lowerCaseRule.match(spans[1]), mixedCaseRule.match(spans[1]))
+      assert.strictEqual(lowerCaseRule.match(spans[2]), mixedCaseRule.match(spans[2]))
+      assert.strictEqual(lowerCaseRule.match(spans[3]), mixedCaseRule.match(spans[3]))
+      assert.strictEqual(lowerCaseRule.match(spans[4]), mixedCaseRule.match(spans[4]))
+      assert.strictEqual(lowerCaseRule.match(spans[5]), mixedCaseRule.match(spans[5]))
+      assert.strictEqual(lowerCaseRule.match(spans[6]), mixedCaseRule.match(spans[6]))
+      assert.strictEqual(lowerCaseRule.match(spans[7]), mixedCaseRule.match(spans[7]))
+      assert.strictEqual(lowerCaseRule.match(spans[8]), mixedCaseRule.match(spans[8]))
+      assert.strictEqual(lowerCaseRule.match(spans[9]), mixedCaseRule.match(spans[9]))
+      assert.strictEqual(lowerCaseRule.match(spans[10]), mixedCaseRule.match(spans[10]))
     })
 
     it('should match with regexp', () => {
@@ -154,17 +154,17 @@ describe('sampling rule', () => {
         name: /op.*/
       })
 
-      expect(rule.match(spans[0])).to.equal(true)
-      expect(rule.match(spans[1])).to.equal(true)
-      expect(rule.match(spans[2])).to.equal(true)
-      expect(rule.match(spans[3])).to.equal(true)
-      expect(rule.match(spans[4])).to.equal(true)
-      expect(rule.match(spans[5])).to.equal(true)
-      expect(rule.match(spans[6])).to.equal(false)
-      expect(rule.match(spans[7])).to.equal(false)
-      expect(rule.match(spans[8])).to.equal(false)
-      expect(rule.match(spans[9])).to.equal(true)
-      expect(rule.match(spans[10])).to.equal(true)
+      assert.strictEqual(rule.match(spans[0]), true)
+      assert.strictEqual(rule.match(spans[1]), true)
+      assert.strictEqual(rule.match(spans[2]), true)
+      assert.strictEqual(rule.match(spans[3]), true)
+      assert.strictEqual(rule.match(spans[4]), true)
+      assert.strictEqual(rule.match(spans[5]), true)
+      assert.strictEqual(rule.match(spans[6]), false)
+      assert.strictEqual(rule.match(spans[7]), false)
+      assert.strictEqual(rule.match(spans[8]), false)
+      assert.strictEqual(rule.match(spans[9]), true)
+      assert.strictEqual(rule.match(spans[10]), true)
     })
 
     it('should match with postfix glob', () => {
@@ -173,17 +173,17 @@ describe('sampling rule', () => {
         name: 'op*'
       })
 
-      expect(rule.match(spans[0])).to.equal(true)
-      expect(rule.match(spans[1])).to.equal(false)
-      expect(rule.match(spans[2])).to.equal(false)
-      expect(rule.match(spans[3])).to.equal(false)
-      expect(rule.match(spans[4])).to.equal(false)
-      expect(rule.match(spans[5])).to.equal(false)
-      expect(rule.match(spans[6])).to.equal(false)
-      expect(rule.match(spans[7])).to.equal(false)
-      expect(rule.match(spans[8])).to.equal(false)
-      expect(rule.match(spans[9])).to.equal(false)
-      expect(rule.match(spans[10])).to.equal(false)
+      assert.strictEqual(rule.match(spans[0]), true)
+      assert.strictEqual(rule.match(spans[1]), false)
+      assert.strictEqual(rule.match(spans[2]), false)
+      assert.strictEqual(rule.match(spans[3]), false)
+      assert.strictEqual(rule.match(spans[4]), false)
+      assert.strictEqual(rule.match(spans[5]), false)
+      assert.strictEqual(rule.match(spans[6]), false)
+      assert.strictEqual(rule.match(spans[7]), false)
+      assert.strictEqual(rule.match(spans[8]), false)
+      assert.strictEqual(rule.match(spans[9]), false)
+      assert.strictEqual(rule.match(spans[10]), false)
     })
 
     it('should match with prefix glob', () => {
@@ -192,17 +192,17 @@ describe('sampling rule', () => {
         name: '*operation'
       })
 
-      expect(rule.match(spans[0])).to.equal(true)
-      expect(rule.match(spans[1])).to.equal(true)
-      expect(rule.match(spans[2])).to.equal(true)
-      expect(rule.match(spans[3])).to.equal(false)
-      expect(rule.match(spans[4])).to.equal(false)
-      expect(rule.match(spans[5])).to.equal(false)
-      expect(rule.match(spans[6])).to.equal(false)
-      expect(rule.match(spans[7])).to.equal(false)
-      expect(rule.match(spans[8])).to.equal(false)
-      expect(rule.match(spans[9])).to.equal(true)
-      expect(rule.match(spans[10])).to.equal(true)
+      assert.strictEqual(rule.match(spans[0]), true)
+      assert.strictEqual(rule.match(spans[1]), true)
+      assert.strictEqual(rule.match(spans[2]), true)
+      assert.strictEqual(rule.match(spans[3]), false)
+      assert.strictEqual(rule.match(spans[4]), false)
+      assert.strictEqual(rule.match(spans[5]), false)
+      assert.strictEqual(rule.match(spans[6]), false)
+      assert.strictEqual(rule.match(spans[7]), false)
+      assert.strictEqual(rule.match(spans[8]), false)
+      assert.strictEqual(rule.match(spans[9]), true)
+      assert.strictEqual(rule.match(spans[10]), true)
     })
 
     it('should match with single character any matcher', () => {
@@ -211,17 +211,17 @@ describe('sampling rule', () => {
         name: 'o?eration'
       })
 
-      expect(rule.match(spans[0])).to.equal(true)
-      expect(rule.match(spans[1])).to.equal(false)
-      expect(rule.match(spans[2])).to.equal(false)
-      expect(rule.match(spans[3])).to.equal(false)
-      expect(rule.match(spans[4])).to.equal(false)
-      expect(rule.match(spans[5])).to.equal(false)
-      expect(rule.match(spans[6])).to.equal(false)
-      expect(rule.match(spans[7])).to.equal(false)
-      expect(rule.match(spans[8])).to.equal(false)
-      expect(rule.match(spans[9])).to.equal(false)
-      expect(rule.match(spans[10])).to.equal(false)
+      assert.strictEqual(rule.match(spans[0]), true)
+      assert.strictEqual(rule.match(spans[1]), false)
+      assert.strictEqual(rule.match(spans[2]), false)
+      assert.strictEqual(rule.match(spans[3]), false)
+      assert.strictEqual(rule.match(spans[4]), false)
+      assert.strictEqual(rule.match(spans[5]), false)
+      assert.strictEqual(rule.match(spans[6]), false)
+      assert.strictEqual(rule.match(spans[7]), false)
+      assert.strictEqual(rule.match(spans[8]), false)
+      assert.strictEqual(rule.match(spans[9]), false)
+      assert.strictEqual(rule.match(spans[10]), false)
     })
 
     it('should consider missing service as match-all for service name', () => {
@@ -229,18 +229,18 @@ describe('sampling rule', () => {
         name: 'sub_second_operation_*'
       })
 
-      expect(rule.match(spans[0])).to.equal(false)
-      expect(rule.match(spans[1])).to.equal(false)
-      expect(rule.match(spans[2])).to.equal(false)
+      assert.strictEqual(rule.match(spans[0]), false)
+      assert.strictEqual(rule.match(spans[1]), false)
+      assert.strictEqual(rule.match(spans[2]), false)
       // Only 3 and 4 should match because of the name pattern
-      expect(rule.match(spans[3])).to.equal(true)
-      expect(rule.match(spans[4])).to.equal(true)
-      expect(rule.match(spans[5])).to.equal(false)
-      expect(rule.match(spans[6])).to.equal(false)
-      expect(rule.match(spans[7])).to.equal(false)
-      expect(rule.match(spans[8])).to.equal(false)
-      expect(rule.match(spans[9])).to.equal(false)
-      expect(rule.match(spans[10])).to.equal(false)
+      assert.strictEqual(rule.match(spans[3]), true)
+      assert.strictEqual(rule.match(spans[4]), true)
+      assert.strictEqual(rule.match(spans[5]), false)
+      assert.strictEqual(rule.match(spans[6]), false)
+      assert.strictEqual(rule.match(spans[7]), false)
+      assert.strictEqual(rule.match(spans[8]), false)
+      assert.strictEqual(rule.match(spans[9]), false)
+      assert.strictEqual(rule.match(spans[10]), false)
     })
 
     it('should consider missing name as match-all for span name', () => {
@@ -248,18 +248,18 @@ describe('sampling rule', () => {
         service: 'test'
       })
 
-      expect(rule.match(spans[0])).to.equal(true)
-      expect(rule.match(spans[1])).to.equal(true)
-      expect(rule.match(spans[2])).to.equal(true)
-      expect(rule.match(spans[3])).to.equal(true)
-      expect(rule.match(spans[4])).to.equal(true)
-      expect(rule.match(spans[5])).to.equal(true)
-      expect(rule.match(spans[8])).to.equal(true)
-      expect(rule.match(spans[9])).to.equal(true)
-      expect(rule.match(spans[10])).to.equal(true)
+      assert.strictEqual(rule.match(spans[0]), true)
+      assert.strictEqual(rule.match(spans[1]), true)
+      assert.strictEqual(rule.match(spans[2]), true)
+      assert.strictEqual(rule.match(spans[3]), true)
+      assert.strictEqual(rule.match(spans[4]), true)
+      assert.strictEqual(rule.match(spans[5]), true)
+      assert.strictEqual(rule.match(spans[8]), true)
+      assert.strictEqual(rule.match(spans[9]), true)
+      assert.strictEqual(rule.match(spans[10]), true)
       // Should not match because of different service name
-      expect(rule.match(spans[6])).to.equal(false)
-      expect(rule.match(spans[7])).to.equal(false)
+      assert.strictEqual(rule.match(spans[6]), false)
+      assert.strictEqual(rule.match(spans[7]), false)
     })
 
     it('should use span service name tags where present', () => {
@@ -267,17 +267,17 @@ describe('sampling rule', () => {
         service: 'span-service'
       })
 
-      expect(rule.match(spans[0])).to.equal(false)
-      expect(rule.match(spans[1])).to.equal(false)
-      expect(rule.match(spans[2])).to.equal(false)
-      expect(rule.match(spans[3])).to.equal(false)
-      expect(rule.match(spans[4])).to.equal(false)
-      expect(rule.match(spans[5])).to.equal(false)
-      expect(rule.match(spans[6])).to.equal(true)
-      expect(rule.match(spans[7])).to.equal(true)
-      expect(rule.match(spans[8])).to.equal(false)
-      expect(rule.match(spans[9])).to.equal(false)
-      expect(rule.match(spans[10])).to.equal(false)
+      assert.strictEqual(rule.match(spans[0]), false)
+      assert.strictEqual(rule.match(spans[1]), false)
+      assert.strictEqual(rule.match(spans[2]), false)
+      assert.strictEqual(rule.match(spans[3]), false)
+      assert.strictEqual(rule.match(spans[4]), false)
+      assert.strictEqual(rule.match(spans[5]), false)
+      assert.strictEqual(rule.match(spans[6]), true)
+      assert.strictEqual(rule.match(spans[7]), true)
+      assert.strictEqual(rule.match(spans[8]), false)
+      assert.strictEqual(rule.match(spans[9]), false)
+      assert.strictEqual(rule.match(spans[10]), false)
     })
 
     it('should match renamed spans', () => {
@@ -286,17 +286,17 @@ describe('sampling rule', () => {
         name: 'renamed'
       })
 
-      expect(rule.match(spans[0])).to.equal(false)
-      expect(rule.match(spans[1])).to.equal(false)
-      expect(rule.match(spans[2])).to.equal(false)
-      expect(rule.match(spans[3])).to.equal(false)
-      expect(rule.match(spans[4])).to.equal(false)
-      expect(rule.match(spans[5])).to.equal(false)
-      expect(rule.match(spans[6])).to.equal(false)
-      expect(rule.match(spans[7])).to.equal(false)
-      expect(rule.match(spans[8])).to.equal(true)
-      expect(rule.match(spans[9])).to.equal(false)
-      expect(rule.match(spans[10])).to.equal(false)
+      assert.strictEqual(rule.match(spans[0]), false)
+      assert.strictEqual(rule.match(spans[1]), false)
+      assert.strictEqual(rule.match(spans[2]), false)
+      assert.strictEqual(rule.match(spans[3]), false)
+      assert.strictEqual(rule.match(spans[4]), false)
+      assert.strictEqual(rule.match(spans[5]), false)
+      assert.strictEqual(rule.match(spans[6]), false)
+      assert.strictEqual(rule.match(spans[7]), false)
+      assert.strictEqual(rule.match(spans[8]), true)
+      assert.strictEqual(rule.match(spans[9]), false)
+      assert.strictEqual(rule.match(spans[10]), false)
     })
 
     it('should match tag sets', () => {
@@ -307,17 +307,17 @@ describe('sampling rule', () => {
         }
       })
 
-      expect(rule.match(spans[0])).to.equal(false)
-      expect(rule.match(spans[1])).to.equal(false)
-      expect(rule.match(spans[2])).to.equal(false)
-      expect(rule.match(spans[3])).to.equal(false)
-      expect(rule.match(spans[4])).to.equal(false)
-      expect(rule.match(spans[5])).to.equal(false)
-      expect(rule.match(spans[6])).to.equal(false)
-      expect(rule.match(spans[7])).to.equal(false)
-      expect(rule.match(spans[8])).to.equal(false)
-      expect(rule.match(spans[9])).to.equal(true)
-      expect(rule.match(spans[10])).to.equal(false)
+      assert.strictEqual(rule.match(spans[0]), false)
+      assert.strictEqual(rule.match(spans[1]), false)
+      assert.strictEqual(rule.match(spans[2]), false)
+      assert.strictEqual(rule.match(spans[3]), false)
+      assert.strictEqual(rule.match(spans[4]), false)
+      assert.strictEqual(rule.match(spans[5]), false)
+      assert.strictEqual(rule.match(spans[6]), false)
+      assert.strictEqual(rule.match(spans[7]), false)
+      assert.strictEqual(rule.match(spans[8]), false)
+      assert.strictEqual(rule.match(spans[9]), true)
+      assert.strictEqual(rule.match(spans[10]), false)
     })
 
     it('should match resource name', () => {
@@ -325,17 +325,17 @@ describe('sampling rule', () => {
         resource: 'named'
       })
 
-      expect(rule.match(spans[0])).to.equal(false)
-      expect(rule.match(spans[1])).to.equal(false)
-      expect(rule.match(spans[2])).to.equal(false)
-      expect(rule.match(spans[3])).to.equal(false)
-      expect(rule.match(spans[4])).to.equal(false)
-      expect(rule.match(spans[5])).to.equal(false)
-      expect(rule.match(spans[6])).to.equal(false)
-      expect(rule.match(spans[7])).to.equal(false)
-      expect(rule.match(spans[8])).to.equal(false)
-      expect(rule.match(spans[9])).to.equal(false)
-      expect(rule.match(spans[10])).to.equal(true)
+      assert.strictEqual(rule.match(spans[0]), false)
+      assert.strictEqual(rule.match(spans[1]), false)
+      assert.strictEqual(rule.match(spans[2]), false)
+      assert.strictEqual(rule.match(spans[3]), false)
+      assert.strictEqual(rule.match(spans[4]), false)
+      assert.strictEqual(rule.match(spans[5]), false)
+      assert.strictEqual(rule.match(spans[6]), false)
+      assert.strictEqual(rule.match(spans[7]), false)
+      assert.strictEqual(rule.match(spans[8]), false)
+      assert.strictEqual(rule.match(spans[9]), false)
+      assert.strictEqual(rule.match(spans[10]), true)
     })
   })
 
@@ -356,7 +356,7 @@ describe('sampling rule', () => {
         maxPerSecond: 1
       })
 
-      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
+      assert.strictEqual(rule.sample(new SpanContext({ traceId: id() })), true)
     })
 
     it('should not sample on non-allowed sample rate', () => {
@@ -367,7 +367,7 @@ describe('sampling rule', () => {
         maxPerSecond: 1
       })
 
-      expect(rule.sample(new SpanContext({ traceId: id('6148299799767393280', 10) }))).to.equal(false)
+      assert.strictEqual(rule.sample(new SpanContext({ traceId: id('6148299799767393280', 10) })), false)
     })
   })
 
@@ -379,8 +379,8 @@ describe('sampling rule', () => {
         sampleRate: 1.0
       })
 
-      expect(rule._limiter).to.equal(undefined)
-      expect(rule.maxPerSecond).to.equal(undefined)
+      assert.strictEqual(rule._limiter, undefined)
+      assert.strictEqual(rule.maxPerSecond, undefined)
     })
 
     it('should create limiter with finite maxPerSecond', () => {
@@ -391,8 +391,8 @@ describe('sampling rule', () => {
         maxPerSecond: 123
       })
 
-      expect(rule._limiter).to.not.equal(undefined)
-      expect(rule).to.have.property('maxPerSecond', 123)
+      assert.notStrictEqual(rule._limiter, undefined)
+      assert.strictEqual(rule.maxPerSecond, 123)
     })
 
     it('should not sample spans past the rate limit', () => {
@@ -405,8 +405,8 @@ describe('sampling rule', () => {
 
       const spanContext = new SpanContext({ traceId: id('2986627970102095326', 10) })
 
-      expect(rule.sample(spanContext)).to.equal(true)
-      expect(rule.sample(spanContext)).to.equal(false)
+      assert.strictEqual(rule.sample(spanContext), true)
+      assert.strictEqual(rule.sample(spanContext), false)
     })
 
     it('should allow unlimited rate limits', () => {
@@ -417,7 +417,7 @@ describe('sampling rule', () => {
       })
 
       for (let i = 0; i < 1e3; i++) {
-        expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
+        assert.strictEqual(rule.sample(new SpanContext({ traceId: id() })), true)
       }
     })
 
@@ -433,10 +433,10 @@ describe('sampling rule', () => {
         now: new Date(),
         toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'hrtime']
       })
-      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
-      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(false)
+      assert.strictEqual(rule.sample(new SpanContext({ traceId: id() })), true)
+      assert.strictEqual(rule.sample(new SpanContext({ traceId: id() })), false)
       clock.tick(1000)
-      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
+      assert.strictEqual(rule.sample(new SpanContext({ traceId: id() })), true)
     })
   })
 })

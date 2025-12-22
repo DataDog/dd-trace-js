@@ -1,6 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+
 const { describe, it, beforeEach } = require('tap').mocha
 
 require('../../setup/core')
@@ -40,9 +42,9 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      expect(carrier).to.have.property('dd')
-      expect(carrier.dd).to.have.property('trace_id', '123')
-      expect(carrier.dd).to.have.property('span_id', '456')
+      assert.ok(Object.hasOwn(carrier, 'dd'))
+      assert.strictEqual(carrier.dd.trace_id, '123')
+      assert.strictEqual(carrier.dd.span_id, '456')
     })
 
     it('should inject the global context into the carrier', () => {
@@ -50,7 +52,7 @@ describe('LogPropagator', () => {
 
       propagator.inject(null, carrier)
 
-      expect(carrier).to.deep.include({
+      assertObjectContains(carrier, {
         dd: {
           service: 'test',
           env: 'dev',
@@ -75,9 +77,9 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      expect(carrier).to.have.property('dd')
-      expect(carrier.dd).to.have.property('trace_id', '87654321876543211234567812345678')
-      expect(carrier.dd).to.have.property('span_id', '456')
+      assert.ok(Object.hasOwn(carrier, 'dd'))
+      assert.strictEqual(carrier.dd.trace_id, '87654321876543211234567812345678')
+      assert.strictEqual(carrier.dd.span_id, '456')
     })
 
     it('should correctly inject 128 bit trace ids when _dd.p.tid is present', () => {
@@ -95,9 +97,9 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      expect(carrier).to.have.property('dd')
-      expect(carrier.dd).to.have.property('trace_id', '4e2a9c1573d240b1a3b7e3c1d4c2f9a7')
-      expect(carrier.dd).to.have.property('span_id', '456')
+      assert.ok(Object.hasOwn(carrier, 'dd'))
+      assert.strictEqual(carrier.dd.trace_id, '4e2a9c1573d240b1a3b7e3c1d4c2f9a7')
+      assert.strictEqual(carrier.dd.span_id, '456')
     })
 
     it('should not inject 128-bit trace IDs when disabled', () => {
@@ -115,9 +117,9 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      expect(carrier).to.have.property('dd')
-      expect(carrier.dd).to.have.property('trace_id', '123')
-      expect(carrier.dd).to.have.property('span_id', '456')
+      assert.ok(Object.hasOwn(carrier, 'dd'))
+      assert.strictEqual(carrier.dd.trace_id, '123')
+      assert.strictEqual(carrier.dd.span_id, '456')
     })
 
     it('should not inject 128-bit trace IDs when 128 bit generation is disabled', () => {
@@ -135,9 +137,9 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      expect(carrier).to.have.property('dd')
-      expect(carrier.dd).to.have.property('trace_id', '123')
-      expect(carrier.dd).to.have.property('span_id', '456')
+      assert.ok(Object.hasOwn(carrier, 'dd'))
+      assert.strictEqual(carrier.dd.trace_id, '123')
+      assert.strictEqual(carrier.dd.span_id, '456')
     })
   })
 
@@ -146,7 +148,7 @@ describe('LogPropagator', () => {
       const carrier = log
       const spanContext = propagator.extract(carrier)
 
-      expect(spanContext).to.deep.equal(new SpanContext({
+      assert.deepStrictEqual(spanContext, new SpanContext({
         traceId: id('123', 10),
         spanId: id('456', 10)
       }))
@@ -159,7 +161,7 @@ describe('LogPropagator', () => {
       const carrier = log
       const spanContext = propagator.extract(carrier)
 
-      expect(spanContext).to.deep.equal(new SpanContext({
+      assert.deepStrictEqual(spanContext, new SpanContext({
         traceId: id('18446744073709551493', 10), // -123 casted to uint64
         spanId: id('18446744073709551160', 10) // -456 casted to uint64
       }))
@@ -169,7 +171,7 @@ describe('LogPropagator', () => {
       const carrier = {}
       const spanContext = propagator.extract(carrier)
 
-      expect(spanContext).to.equal(null)
+      assert.strictEqual(spanContext, null)
     })
 
     it('should extract 128-bit IDs', () => {
@@ -179,7 +181,7 @@ describe('LogPropagator', () => {
       const carrier = log
       const spanContext = propagator.extract(carrier)
 
-      expect(spanContext).to.deep.equal(new SpanContext({
+      assert.deepStrictEqual(spanContext, new SpanContext({
         traceId: id('1234567812345678', 16),
         spanId: id('456', 10),
         trace: {

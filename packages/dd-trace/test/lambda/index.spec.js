@@ -1,11 +1,11 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
 const path = require('node:path')
 
-const agent = require('../plugins/agent')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 
+const agent = require('../plugins/agent')
 const oldEnv = process.env
 /**
  * Sets up the minimum environment variables to make sure
@@ -86,16 +86,16 @@ describe('lambda', () => {
       // Run the function.
       const result = await datadog(app.handler)(_event, _context)
 
-      expect(result).to.not.equal(undefined)
+      assert.notStrictEqual(result, undefined)
       const body = JSON.parse(result.body)
-      expect(body.message).to.equal('hello!')
+      assert.strictEqual(body.message, 'hello!')
 
       // Expect traces to be correct.
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
-          expect(trace.error).to.equal(0)
+          assert.strictEqual(trace.error, 0)
         })
       })
       await checkTraces
@@ -123,16 +123,16 @@ describe('lambda', () => {
       // Run the function.
       datadog(app.callbackHandler)(_event, _context, callback)
 
-      expect(result).to.not.equal(undefined)
+      assert.notStrictEqual(result, undefined)
       const body = JSON.parse(result.body)
-      expect(body.message).to.equal('hello!')
+      assert.strictEqual(body.message, 'hello!')
 
       // Expect traces to be correct.
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
-          expect(trace.error).to.equal(0)
+          assert.strictEqual(trace.error, 0)
         })
       })
       await checkTraces
@@ -158,15 +158,15 @@ describe('lambda', () => {
       try {
         await datadog(app.errorHandler)(_event, _context)
       } catch (e) {
-        expect(e.name).to.equal('CustomError')
+        assert.strictEqual(e.name, 'CustomError')
       }
 
       // Expect traces to be correct.
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
-          expect(trace.error).to.equal(1)
+          assert.strictEqual(trace.error, 1)
         })
       })
       await checkTraces
@@ -189,15 +189,15 @@ describe('lambda', () => {
 
       const result = await datadog(app.swappedArgsHandler)(_event, _, _context)
 
-      expect(result).to.not.equal(undefined)
+      assert.notStrictEqual(result, undefined)
       const body = JSON.parse(result.body)
-      expect(body.message).to.equal('hello!')
+      assert.strictEqual(body.message, 'hello!')
 
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
-          expect(trace.error).to.equal(0)
+          assert.strictEqual(trace.error, 0)
         })
       })
       await checkTraces
@@ -215,7 +215,7 @@ describe('lambda', () => {
 
       // Mock `datadog-lambda` handler resolve and import.
       const handlerAfter = require(_handlerPath).handler
-      expect(handlerBefore).to.equal(handlerAfter)
+      assert.strictEqual(handlerBefore, handlerAfter)
     })
   })
 
@@ -244,7 +244,7 @@ describe('lambda', () => {
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
         traces.forEach((trace) => {
-          expect(trace.error).to.equal(0)
+          assert.strictEqual(trace.error, 0)
         })
       })
 
@@ -291,8 +291,8 @@ describe('lambda', () => {
           const checkTraces = agent.assertSomeTraces(_traces => {
             // First trace, since errors are tagged at root span level.
             const trace = _traces[0][0]
-            expect(trace.error).to.equal(1)
-            expect(trace.meta['error.type']).to.equal('Impending Timeout')
+            assert.strictEqual(trace.error, 1)
+            assert.strictEqual(trace.meta['error.type'], 'Impending Timeout')
             // Ensure that once this finish, an error was tagged.
           })
 

@@ -1,14 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
+const assert = require('node:assert/strict')
+
 const { channel } = require('dc-polyfill')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
-const { getExecutedMetric, getInstrumentedMetric, TagKey } = require('../../../src/appsec/iast/telemetry/iast-metric')
 const { IastPlugin } = require('../../../src/appsec/iast/iast-plugin')
-
+const { getExecutedMetric, getInstrumentedMetric, TagKey } = require('../../../src/appsec/iast/telemetry/iast-metric')
 const VULNERABILITY_TYPE = TagKey.VULNERABILITY_TYPE
 const SOURCE_TYPE = TagKey.SOURCE_TYPE
 
@@ -75,36 +75,36 @@ describe('IAST Plugin', () => {
       it('should call Plugin.addSub with channelName and handler', () => {
         iastPlugin.addSub('test', handler)
 
-        expect(addSubMock).to.be.calledOnce
+        sinon.assert.calledOnce(addSubMock)
         const args = addSubMock.getCall(0).args
-        expect(args[0]).equal('test')
-        expect(args[1]).to.equal(handler)
+        assert.strictEqual(args[0], 'test')
+        assert.strictEqual(args[1], handler)
       })
 
       it('should call Plugin.addSub with channelName and handler after registering iastPluginSub', () => {
         const iastPluginSub = { channelName: 'test' }
         iastPlugin.addSub(iastPluginSub, handler)
 
-        expect(addSubMock).to.be.calledOnce
+        sinon.assert.calledOnce(addSubMock)
         const args = addSubMock.getCall(0).args
-        expect(args[0]).equal('test')
-        expect(args[1]).to.equal(handler)
+        assert.strictEqual(args[0], 'test')
+        assert.strictEqual(args[1], handler)
       })
 
       it('should infer moduleName from channelName after registering iastPluginSub', () => {
         const iastPluginSub = { channelName: 'test' }
         iastPlugin.addSub(iastPluginSub, handler)
 
-        expect(iastPlugin.pluginSubs).to.have.lengthOf(1)
-        expect(iastPlugin.pluginSubs[0].moduleName).eq('test')
+        assert.strictEqual(iastPlugin.pluginSubs.length, 1)
+        assert.strictEqual(iastPlugin.pluginSubs[0].moduleName, 'test')
       })
 
       it('should infer moduleName from channelName after registering iastPluginSub with real channelName', () => {
         const iastPluginSub = { channelName: 'datadog:test:start' }
         iastPlugin.addSub(iastPluginSub, handler)
 
-        expect(iastPlugin.pluginSubs).to.have.lengthOf(1)
-        expect(iastPlugin.pluginSubs[0].moduleName).eq('test')
+        assert.strictEqual(iastPlugin.pluginSubs.length, 1)
+        assert.strictEqual(iastPlugin.pluginSubs[0].moduleName, 'test')
       })
 
       it('should not call _getTelemetryHandler', () => {
@@ -112,12 +112,12 @@ describe('IAST Plugin', () => {
         iastPlugin._getTelemetryHandler = getTelemetryHandler
         iastPlugin.addSub({ channelName, tagKey: VULNERABILITY_TYPE }, handler)
 
-        expect(getTelemetryHandler).to.be.not.called
+        sinon.assert.notCalled(getTelemetryHandler)
 
         getTelemetryHandler.reset()
 
         iastPlugin.addSub({ channelName, tagKey: SOURCE_TYPE, tag: 'test-tag' }, handler)
-        expect(getTelemetryHandler).to.be.not.called
+        sinon.assert.notCalled(getTelemetryHandler)
       })
     })
 
@@ -128,8 +128,8 @@ describe('IAST Plugin', () => {
         iastPlugin.configure(false)
         iastPlugin.configure(true)
 
-        expect(iastPlugin.configured).to.be.true
-        expect(iastPlugin.onConfigure).to.be.calledOnce
+        assert.strictEqual(iastPlugin.configured, true)
+        sinon.assert.calledOnce(iastPlugin.onConfigure)
       })
     })
 
@@ -141,16 +141,17 @@ describe('IAST Plugin', () => {
           handler
         })
 
-        expect(handler).to.be.calledOnce
+        sinon.assert.calledOnce(handler)
       })
 
       it('should exec handler and catch exception if any', () => {
         const handler = () => { throw new Error('error') }
 
-        expect(iastPlugin._execHandlerAndIncMetric({
+        // Should not throw
+        iastPlugin._execHandlerAndIncMetric({
           handler
-        })).to.not.throw
-        expect(logError).to.be.calledOnce
+        })
+        sinon.assert.calledOnce(logError)
       })
 
       it('should exec handler and not increase metric', () => {
@@ -164,8 +165,8 @@ describe('IAST Plugin', () => {
           metric
         })
 
-        expect(handler).to.be.calledOnce
-        expect(metric.increase).to.not.be.called
+        sinon.assert.calledOnce(handler)
+        sinon.assert.notCalled(metric.increase)
       })
     })
   })
@@ -215,7 +216,7 @@ describe('IAST Plugin', () => {
 
         loadChannel.publish({ name: 'test' })
 
-        expect(onInstrumentationLoadedMock).to.be.calledWith('test')
+        sinon.assert.calledWith(onInstrumentationLoadedMock, 'test')
       })
     })
 
@@ -225,12 +226,12 @@ describe('IAST Plugin', () => {
         iastPlugin._getTelemetryHandler = getTelemetryHandler
         iastPlugin.addSub({ channelName, tagKey: VULNERABILITY_TYPE }, handler)
 
-        expect(getTelemetryHandler).to.be.calledOnceWith(iastPlugin.pluginSubs[0])
+        sinon.assert.calledOnceWithExactly(getTelemetryHandler, iastPlugin.pluginSubs[0])
 
         getTelemetryHandler.reset()
 
         iastPlugin.addSub({ channelName, tagKey: SOURCE_TYPE, tag: 'test-tag' }, handler)
-        expect(getTelemetryHandler).to.be.calledOnceWith(iastPlugin.pluginSubs[1])
+        sinon.assert.calledOnceWithExactly(getTelemetryHandler, iastPlugin.pluginSubs[1])
       })
 
       it('should register a pluginSubscription and increment a sink metric when a sink module is loaded', () => {
@@ -247,7 +248,7 @@ describe('IAST Plugin', () => {
 
         loadChannel.publish({ name: 'sink' })
 
-        expect(metricInc).to.be.calledOnceWith(undefined, vulnTags)
+        sinon.assert.calledOnceWithExactly(metricInc, undefined, vulnTags)
       })
 
       it('should register and increment a sink metric when a sink module is loaded using a tracingChannel', () => {
@@ -263,7 +264,7 @@ describe('IAST Plugin', () => {
 
         loadChannel.publish({ name: 'sink' })
 
-        expect(metricInc).to.be.calledOnceWith(undefined, vulnTags)
+        sinon.assert.calledOnceWithExactly(metricInc, undefined, vulnTags)
       })
 
       it('should register an pluginSubscription and increment a source metric when a source module is loaded', () => {
@@ -280,7 +281,7 @@ describe('IAST Plugin', () => {
 
         loadChannel.publish({ name: 'source' })
 
-        expect(metricInc).to.be.calledOnceWith(undefined, sourceTags)
+        sinon.assert.calledOnceWithExactly(metricInc, undefined, sourceTags)
       })
 
       it('should increment a sink metric when event is received', () => {
@@ -298,7 +299,7 @@ describe('IAST Plugin', () => {
         const telemetryHandler = addSubMock.secondCall.args[1]
         telemetryHandler()
 
-        expect(metricInc).to.be.calledOnceWith(undefined, vulnTags)
+        sinon.assert.calledOnceWithExactly(metricInc, undefined, vulnTags)
       })
 
       it('should increment a source metric when event is received', () => {
@@ -316,7 +317,7 @@ describe('IAST Plugin', () => {
         const telemetryHandler = addSubMock.secondCall.args[1]
         telemetryHandler()
 
-        expect(metricInc).to.be.calledOnceWith(undefined, sourceTags)
+        sinon.assert.calledOnceWithExactly(metricInc, undefined, sourceTags)
       })
 
       it('should increment a source metric when event is received for every tag', () => {
@@ -334,10 +335,10 @@ describe('IAST Plugin', () => {
         const telemetryHandler = addSubMock.secondCall.args[1]
         telemetryHandler()
 
-        expect(metricInc).to.be.calledThrice
-        expect(metricInc.firstCall).to.be.calledWith(undefined, [`${SOURCE_TYPE}:http.source`])
-        expect(metricInc.secondCall).to.be.calledWith(undefined, [`${SOURCE_TYPE}:http.source2`])
-        expect(metricInc.thirdCall).to.be.calledWith(undefined, [`${SOURCE_TYPE}:http.source3`])
+        sinon.assert.calledThrice(metricInc)
+        sinon.assert.calledWith(metricInc.firstCall, undefined, [`${SOURCE_TYPE}:http.source`])
+        sinon.assert.calledWith(metricInc.secondCall, undefined, [`${SOURCE_TYPE}:http.source2`])
+        sinon.assert.calledWith(metricInc.thirdCall, undefined, [`${SOURCE_TYPE}:http.source3`])
       })
     })
 
@@ -349,16 +350,17 @@ describe('IAST Plugin', () => {
           handler
         })
 
-        expect(handler).to.be.calledOnce
+        sinon.assert.calledOnce(handler)
       })
 
       it('should exec handler and catch exception if any', () => {
         const handler = () => { throw new Error('error') }
 
-        expect(iastPlugin._execHandlerAndIncMetric({
+        // Should not throw
+        iastPlugin._execHandlerAndIncMetric({
           handler
-        })).to.not.throw
-        expect(logError).to.be.calledOnce
+        })
+        sinon.assert.calledOnce(logError)
       })
 
       it('should exec handler and increase metric', () => {
@@ -375,8 +377,8 @@ describe('IAST Plugin', () => {
           iastContext
         })
 
-        expect(handler).to.be.calledOnce
-        expect(metric.inc).to.be.calledOnceWithExactly(iastContext, tags)
+        sinon.assert.calledOnce(handler)
+        sinon.assert.calledOnceWithExactly(metric.inc, iastContext, tags)
       })
     })
   })
@@ -410,20 +412,20 @@ describe('IAST Plugin', () => {
 
     it('should disable bad plugin', () => {
       badPlugin.configure({ enabled: true })
-      expect(badPlugin._enabled).to.be.true
+      assert.strictEqual(badPlugin._enabled, true)
 
       channel('appsec:badPlugin:start').publish({ foo: 'bar' })
 
-      expect(badPlugin._enabled).to.be.false
+      assert.strictEqual(badPlugin._enabled, false)
     })
 
     it('should not disable good plugin', () => {
       goodPlugin.configure({ enabled: true })
-      expect(goodPlugin._enabled).to.be.true
+      assert.strictEqual(goodPlugin._enabled, true)
 
       channel('appsec:goodPlugin:start').publish({ foo: 'bar' })
 
-      expect(goodPlugin._enabled).to.be.true
+      assert.strictEqual(goodPlugin._enabled, true)
     })
   })
 })

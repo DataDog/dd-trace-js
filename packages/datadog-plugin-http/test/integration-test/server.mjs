@@ -9,6 +9,6 @@ const server = http.createServer(async (req, res) => {
     res.end('integration test response handler failure')
   }
 }).listen(0, () => {
-  const port = server.address().port
+  const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
   process.send({ port })
 })

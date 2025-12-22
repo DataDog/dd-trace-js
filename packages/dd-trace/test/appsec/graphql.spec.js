@@ -1,15 +1,15 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
+const assert = require('node:assert/strict')
 
-const waf = require('../../src/appsec/waf')
-const web = require('../../src/plugins/util/web')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 const { storage } = require('../../../datadog-core')
 const addresses = require('../../src/appsec/addresses')
-
+const waf = require('../../src/appsec/waf')
+const web = require('../../src/plugins/util/web')
 const {
   startGraphqlResolve,
   graphqlMiddlewareChannel,
@@ -58,21 +58,21 @@ describe('GraphQL', () => {
     })
 
     it('Should subscribe to all channels', () => {
-      expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.false
-      expect(apolloChannel.start.hasSubscribers).to.be.false
-      expect(apolloChannel.asyncEnd.hasSubscribers).to.be.false
-      expect(apolloServerCoreChannel.start.hasSubscribers).to.be.false
-      expect(apolloServerCoreChannel.asyncEnd.hasSubscribers).to.be.false
-      expect(startGraphqlResolve.hasSubscribers).to.be.false
+      assert.strictEqual(graphqlMiddlewareChannel.start.hasSubscribers, false)
+      assert.strictEqual(apolloChannel.start.hasSubscribers, false)
+      assert.strictEqual(apolloChannel.asyncEnd.hasSubscribers, false)
+      assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, false)
+      assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, false)
+      assert.strictEqual(startGraphqlResolve.hasSubscribers, false)
 
       graphql.enable()
 
-      expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.true
-      expect(apolloChannel.start.hasSubscribers).to.be.true
-      expect(apolloChannel.asyncEnd.hasSubscribers).to.be.true
-      expect(apolloServerCoreChannel.start.hasSubscribers).to.be.true
-      expect(apolloServerCoreChannel.asyncEnd.hasSubscribers).to.be.true
-      expect(startGraphqlResolve.hasSubscribers).to.be.true
+      assert.strictEqual(graphqlMiddlewareChannel.start.hasSubscribers, true)
+      assert.strictEqual(apolloChannel.start.hasSubscribers, true)
+      assert.strictEqual(apolloChannel.asyncEnd.hasSubscribers, true)
+      assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, true)
+      assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, true)
+      assert.strictEqual(startGraphqlResolve.hasSubscribers, true)
     })
   })
 
@@ -80,21 +80,21 @@ describe('GraphQL', () => {
     it('Should unsubscribe from all channels', () => {
       graphql.enable()
 
-      expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.true
-      expect(apolloChannel.start.hasSubscribers).to.be.true
-      expect(apolloChannel.asyncEnd.hasSubscribers).to.be.true
-      expect(apolloServerCoreChannel.start.hasSubscribers).to.be.true
-      expect(apolloServerCoreChannel.asyncEnd.hasSubscribers).to.be.true
-      expect(startGraphqlResolve.hasSubscribers).to.be.true
+      assert.strictEqual(graphqlMiddlewareChannel.start.hasSubscribers, true)
+      assert.strictEqual(apolloChannel.start.hasSubscribers, true)
+      assert.strictEqual(apolloChannel.asyncEnd.hasSubscribers, true)
+      assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, true)
+      assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, true)
+      assert.strictEqual(startGraphqlResolve.hasSubscribers, true)
 
       graphql.disable()
 
-      expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.false
-      expect(apolloChannel.start.hasSubscribers).to.be.false
-      expect(apolloChannel.asyncEnd.hasSubscribers).to.be.false
-      expect(apolloServerCoreChannel.start.hasSubscribers).to.be.false
-      expect(apolloServerCoreChannel.asyncEnd.hasSubscribers).to.be.false
-      expect(startGraphqlResolve.hasSubscribers).to.be.false
+      assert.strictEqual(graphqlMiddlewareChannel.start.hasSubscribers, false)
+      assert.strictEqual(apolloChannel.start.hasSubscribers, false)
+      assert.strictEqual(apolloChannel.asyncEnd.hasSubscribers, false)
+      assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, false)
+      assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, false)
+      assert.strictEqual(startGraphqlResolve.hasSubscribers, false)
     })
   })
 
@@ -118,7 +118,7 @@ describe('GraphQL', () => {
 
       startGraphqlResolve.publish({ context })
 
-      expect(waf.run).not.to.have.been.called
+      sinon.assert.notCalled(waf.run)
     })
 
     it('Should not call waf if resolvers is not an object', () => {
@@ -128,7 +128,7 @@ describe('GraphQL', () => {
 
       startGraphqlResolve.publish({ context })
 
-      expect(waf.run).not.to.have.been.called
+      sinon.assert.notCalled(waf.run)
     })
 
     it('Should not call waf if req is unavailable', () => {
@@ -141,7 +141,7 @@ describe('GraphQL', () => {
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
-      expect(waf.run).not.to.have.been.called
+      sinon.assert.notCalled(waf.run)
     })
 
     it('Should call waf if resolvers is well formatted', () => {
@@ -153,7 +153,7 @@ describe('GraphQL', () => {
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
           [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
         }
@@ -201,17 +201,17 @@ describe('GraphQL', () => {
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
           [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
         }
       }, {})
 
-      expect(context.abortController.abort).not.to.have.been.called
+      sinon.assert.notCalled(context.abortController.abort)
 
       apolloChannel.asyncEnd.publish({ abortController })
 
-      expect(blocking.getBlockingData).not.to.have.been.called
+      sinon.assert.notCalled(blocking.getBlockingData)
     })
 
     it('Should call abort', () => {
@@ -227,21 +227,21 @@ describe('GraphQL', () => {
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
           [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
         }
       }, {})
 
-      expect(context.abortController.abort).to.have.been.called
+      sinon.assert.called(context.abortController.abort)
 
       const abortData = {}
       apolloChannel.asyncEnd.publish({ abortController, abortData })
 
-      expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(req, 'graphql', blockParameters)
+      sinon.assert.calledOnceWithExactly(blocking.getBlockingData, req, 'graphql', blockParameters)
 
-      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
-      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
+      sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
     })
 
     it('Should catch error when block fails', () => {
@@ -259,21 +259,21 @@ describe('GraphQL', () => {
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
           [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
         }
       }, {})
 
-      expect(abortController.abort).to.have.been.calledOnce
+      sinon.assert.calledOnce(abortController.abort)
 
       const abortData = {}
       apolloChannel.asyncEnd.publish({ abortController, abortData })
 
-      expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(req, 'graphql', blockParameters)
+      sinon.assert.calledOnceWithExactly(blocking.getBlockingData, req, 'graphql', blockParameters)
 
-      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.block.failed', 1)
-      expect(telemetry.updateBlockFailureMetric).to.be.calledOnceWithExactly(req)
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.block.failed', 1)
+      sinon.assert.calledOnceWithExactly(telemetry.updateBlockFailureMetric, req)
     })
   })
 })

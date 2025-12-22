@@ -1,17 +1,17 @@
 'use strict'
 
-const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-const sinon = require('sinon')
-
+const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
 const http = require('node:http')
 
+const axios = require('axios')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
+
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
-
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 describe('Plugin', () => {
@@ -57,15 +57,19 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET /user')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
-                expect(spans[0].meta).to.have.property('component', 'connect')
-                expect(spans[0].meta).to.have.property('_dd.integration', 'connect')
+                assertObjectContains(spans[0], {
+                  service: 'test',
+                  type: 'web',
+                  resource: 'GET /user',
+                  meta: {
+                    'span.kind': 'server',
+                    'http.url': `http://localhost:${port}/user`,
+                    'http.method': 'GET',
+                    'http.status_code': '200',
+                    component: 'connect',
+                    '_dd.integration': 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -89,15 +93,15 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans).to.have.length(3)
+                assert.strictEqual(spans.length, 3)
 
-                expect(spans[0]).to.have.property('resource', 'GET /app/user')
-                expect(spans[0]).to.have.property('name', 'connect.request')
-                expect(spans[1]).to.have.property('resource', 'named')
-                expect(spans[1]).to.have.property('name', 'connect.middleware')
-                expect(spans[1].parent_id.toString()).to.equal(spans[0].trace_id.toString())
-                expect(spans[2]).to.have.property('resource', '<anonymous>')
-                expect(spans[2]).to.have.property('name', 'connect.middleware')
+                assert.strictEqual(spans[0].resource, 'GET /app/user')
+                assert.strictEqual(spans[0].name, 'connect.request')
+                assert.strictEqual(spans[1].resource, 'named')
+                assert.strictEqual(spans[1].name, 'connect.middleware')
+                assert.strictEqual(spans[1].parent_id.toString(), spans[0].trace_id.toString())
+                assert.strictEqual(spans[2].resource, '<anonymous>')
+                assert.strictEqual(spans[2].name, 'connect.middleware')
               })
               .then(done)
               .catch(done)
@@ -122,7 +126,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
+                assert.strictEqual(spans[0].resource, 'GET /foo/bar')
               })
               .then(done)
               .catch(done)
@@ -150,8 +154,8 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans.filter(span => span.name === 'connect.request')).to.have.length(1)
-                expect(spans[0]).to.have.property('resource', 'GET /parent/child')
+                assert.strictEqual(spans.filter(span => span.name === 'connect.request').length, 1)
+                assert.strictEqual(spans[0].resource, 'GET /parent/child')
               })
               .then(done)
               .catch(done)
@@ -176,7 +180,7 @@ describe('Plugin', () => {
           })
 
           app.use((req, res, next) => {
-            expect(span.finish).to.have.been.called
+            sinon.assert.called(span.finish)
             res.end()
             done()
           })
@@ -209,7 +213,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /app')
+                assert.strictEqual(spans[0].resource, 'GET /app')
               })
               .then(done)
               .catch(done)
@@ -231,7 +235,7 @@ describe('Plugin', () => {
 
               clearInterval(interval)
 
-              expect(tracer.scope().active()).to.be.null
+              assert.strictEqual(tracer.scope().active(), null)
 
               done()
             }
@@ -266,7 +270,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET')
+                assert.strictEqual(spans[0].resource, 'GET')
               })
               .then(done)
               .catch(done)
@@ -292,7 +296,9 @@ describe('Plugin', () => {
             res.end()
 
             try {
-              expect(tracer.scope().active()).to.not.be.null.and.not.equal(span)
+              const activeSpan = tracer.scope().active()
+              assert.ok(activeSpan)
+              assert.notStrictEqual(activeSpan, span)
               done()
             } catch (e) {
               done(e)
@@ -321,7 +327,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /app')
+                assert.strictEqual(spans[0].resource, 'GET /app')
               })
               .then(done)
               .catch(done)
@@ -344,8 +350,8 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0].trace_id.toString()).to.equal('1234')
-              expect(spans[0].parent_id.toString()).to.equal('5678')
+              assert.strictEqual(spans[0].trace_id.toString(), '1234')
+              assert.strictEqual(spans[0].parent_id.toString(), '5678')
             })
               .then(done)
               .catch(done)
@@ -381,10 +387,14 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0]).to.have.property('resource', 'GET /user')
-                expect(spans[0].meta).to.have.property('http.status_code', '500')
-                expect(spans[0].meta).to.have.property('component', 'connect')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  resource: 'GET /user',
+                  meta: {
+                    'http.status_code': '500',
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -416,10 +426,14 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 0)
-                expect(spans[0]).to.have.property('resource', 'GET /user')
-                expect(spans[0].meta).to.have.property('http.status_code', '400')
-                expect(spans[0].meta).to.have.property('component', 'connect')
+                assertObjectContains(spans[0], {
+                  error: 0,
+                  resource: 'GET /user',
+                  meta: {
+                    'http.status_code': '400',
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -445,12 +459,16 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[0].meta).to.have.property('http.status_code', '500')
-                expect(spans[0].meta).to.have.property('component', 'connect')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    'http.status_code': '500',
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -474,7 +492,7 @@ describe('Plugin', () => {
 
           app.use((req, res) => {
             try {
-              expect(storage.getStore()).to.equal(store)
+              assert.strictEqual(storage.getStore(), store)
               done()
             } catch (e) {
               done(e)
@@ -509,16 +527,24 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[0].meta).to.have.property('component', 'connect')
-                expect(spans[1]).to.have.property('error', 1)
-                expect(spans[1].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[1].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[1].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[1].meta).to.have.property('component', 'connect')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'connect'
+                  }
+                })
+                assertObjectContains(spans[1], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -563,7 +589,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('service', 'custom')
+                assert.strictEqual(spans[0].service, 'custom')
               })
               .then(done)
               .catch(done)
@@ -589,7 +615,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 1)
+                assert.strictEqual(spans[0].error, 1)
               })
               .then(done)
               .catch(done)
@@ -616,7 +642,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0].meta).to.have.property('http.request.headers.user-agent', 'test')
+                assert.strictEqual(spans[0].meta['http.request.headers.user-agent'], 'test')
               })
               .then(done)
               .catch(done)
@@ -644,14 +670,18 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('service', 'custom')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET /user')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
-                expect(spans[0].meta).to.have.property('component', 'connect')
+                assertObjectContains(spans[0], {
+                  service: 'custom',
+                  type: 'web',
+                  resource: 'GET /user',
+                  meta: {
+                    'span.kind': 'server',
+                    'http.url': `http://localhost:${port}/user`,
+                    'http.method': 'GET',
+                    'http.status_code': '200',
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -679,16 +709,24 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[0].meta).to.have.property('component', 'connect')
-                expect(spans[1]).to.have.property('error', 1)
-                expect(spans[1].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[1].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[1].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[1].meta).to.have.property('component', 'connect')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'connect'
+                  }
+                })
+                assertObjectContains(spans[1], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -714,12 +752,16 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[0].meta).to.have.property('http.status_code', '500')
-                expect(spans[0].meta).to.have.property('component', 'connect')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    'http.status_code': '500',
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -761,9 +803,9 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans).to.have.length(1)
-                expect(spans[0]).to.have.property('resource', 'GET /app/user')
-                expect(spans[0]).to.have.property('name', 'connect.request')
+                assert.strictEqual(spans.length, 1)
+                assert.strictEqual(spans[0].resource, 'GET /app/user')
+                assert.strictEqual(spans[0].name, 'connect.request')
               })
               .then(done)
               .catch(done)
@@ -788,7 +830,9 @@ describe('Plugin', () => {
             res.end()
 
             try {
-              expect(tracer.scope().active()).to.equal(span).and.to.not.be.null
+              const activeSpan = tracer.scope().active()
+              assert.ok(activeSpan)
+              assert.strictEqual(activeSpan, span)
               done()
             } catch (e) {
               done(e)
@@ -820,12 +864,16 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[0].meta).to.have.property('http.status_code', '500')
-                expect(spans[0].meta).to.have.property('component', 'connect')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    'http.status_code': '500',
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)
@@ -851,12 +899,16 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[0].meta).to.have.property('http.status_code', '500')
-                expect(spans[0].meta).to.have.property('component', 'connect')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    'http.status_code': '500',
+                    component: 'connect'
+                  }
+                })
               })
               .then(done)
               .catch(done)

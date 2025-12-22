@@ -1,14 +1,14 @@
 /**
-  * This file serves one of two purposes, depending on how it's used.
-  *
-  * If used with --import, it will import init.js and register the loader hook.
-  * If used with --loader, it will act as the loader hook, except that it will
-  * also import init.js inside the source code of the entrypoint file.
-  *
-  * The result is that no matter how this file is used, so long as it's with
-  * one of the two flags, the tracer will always be initialized, and the loader
-  * hook will always be active for ESM support.
-  */
+ * This file serves one of two purposes, depending on how it's used.
+ *
+ * If used with --import, it will import init.js and register the loader hook.
+ * If used with --loader, it will act as the loader hook, except that it will
+ * also import init.js inside the source code of the entrypoint file.
+ *
+ * The result is that no matter how this file is used, so long as it's with
+ * one of the two flags, the tracer will always be initialized, and the loader
+ * hook will always be active for ESM support.
+ */
 
 /* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['module.register'] }] */
 

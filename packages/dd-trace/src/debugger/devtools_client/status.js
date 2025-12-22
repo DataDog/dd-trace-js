@@ -1,6 +1,6 @@
 'use strict'
 
-const TTLSet = require('ttl-set')
+const TTLSet = require('../../../../../vendor/dist/ttl-set')
 const config = require('./config')
 const JSONBuffer = require('./json-buffer')
 const request = require('../../exporters/common/request')

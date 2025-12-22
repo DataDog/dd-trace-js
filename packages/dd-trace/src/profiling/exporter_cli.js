@@ -58,12 +58,13 @@ async function exportProfile (urls, tags, profileType, profile) {
   }))
 }
 
-/** Expected command line arguments are:
-* - Comma separated list of URLs (eg. "http://127.0.0.1:8126/,file:///tmp/foo.pprof")
-* - Tags (eg. "service:nodejs_oom_test,version:1.0.0")
-* - Profiletype (eg. space,wall,cpu)
-* - JSON profile filepath
-**/
+/**
+ * Expected command line arguments are:
+ * - Comma separated list of URLs (eg. "http://127.0.0.1:8126/,file:///tmp/foo.pprof")
+ * - Tags (eg. "service:nodejs_oom_test,version:1.0.0")
+ * - Profiletype (eg. space,wall,cpu)
+ * - JSON profile filepath
+ */
 const urls = process.argv[2].split(',').map(s => new URL(s))
 const tags = tagger.parse(process.argv[3])
 const profileType = process.argv[4]

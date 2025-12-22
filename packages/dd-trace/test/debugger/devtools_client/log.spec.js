@@ -1,9 +1,10 @@
 'use strict'
 
+const assert = require('node:assert')
+const { MessageChannel } = require('node:worker_threads')
+
 const { describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
-
-const assert = require('node:assert')
 
 require('../../setup/mocha')
 

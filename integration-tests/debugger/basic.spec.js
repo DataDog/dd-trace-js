@@ -4,7 +4,7 @@ const { writeFileSync } = require('fs')
 const os = require('os')
 const { join } = require('path')
 
-const { assert } = require('chai')
+const assert = require('assert')
 const { pollInterval, setup } = require('./utils')
 const { assertObjectContains, assertUUID } = require('../helpers')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/remote_config/apply_states')
@@ -46,7 +46,7 @@ describe('Dynamic Instrumentation', function () {
           assert.strictEqual(id, t.rcConfig.id)
           assert.strictEqual(version, 1)
           assert.strictEqual(state, ACKNOWLEDGED)
-          assert.notOk(error) // falsy check since error will be an empty string, but that's an implementation detail
+          assert.ok(!error) // falsy check since error will be an empty string, but that's an implementation detail
 
           receivedAckUpdate = true
           endIfDone()
@@ -114,7 +114,7 @@ describe('Dynamic Instrumentation', function () {
           assert.strictEqual(id, t.rcConfig.id)
           assert.strictEqual(version, ++receivedAckUpdates)
           assert.strictEqual(state, ACKNOWLEDGED)
-          assert.notOk(error) // falsy check since error will be an empty string, but that's an implementation detail
+          assert.ok(!error) // falsy check since error will be an empty string, but that's an implementation detail
 
           endIfDone()
         })
@@ -124,7 +124,11 @@ describe('Dynamic Instrumentation', function () {
             const expected = expectedPayloads.shift()
             assertObjectContains(event, expected)
             assertUUID(event.debugger.diagnostics.runtimeId)
-            if (event.debugger.diagnostics.status === 'INSTALLED') triggers.shift()()
+            if (event.debugger.diagnostics.status === 'INSTALLED') {
+              const trigger = triggers.shift()
+              assert.ok(trigger, 'expecting a trigger function to be defined')
+              trigger()
+            }
             endIfDone()
           })
         })
@@ -158,7 +162,7 @@ describe('Dynamic Instrumentation', function () {
           assert.strictEqual(id, t.rcConfig.id)
           assert.strictEqual(version, 1)
           assert.strictEqual(state, ACKNOWLEDGED)
-          assert.notOk(error) // falsy check since error will be an empty string, but that's an implementation detail
+          assert.ok(!error) // falsy check since error will be an empty string, but that's an implementation detail
 
           receivedAckUpdate = true
           endIfDone()
@@ -190,22 +194,24 @@ describe('Dynamic Instrumentation', function () {
 
       it(
         'should send expected error diagnostics messages if probe doesn\'t conform to expected schema',
-        unsupporedOrInvalidProbesTest({ invalid: 'config' }, { status: 'ERROR' })
+        unsupportedOrInvalidProbesTest({ invalid: 'config' }, { status: 'ERROR' })
       )
 
       it(
         'should send expected error diagnostics messages if probe type isn\'t supported',
-        unsupporedOrInvalidProbesTest(t.generateProbeConfig({ type: 'INVALID_PROBE' }))
+        // @ts-expect-error Expecting this probe type to be invalid
+        unsupportedOrInvalidProbesTest(t.generateProbeConfig({ type: 'INVALID_PROBE' }))
       )
 
       it(
         'should send expected error diagnostics messages if it isn\'t a line-probe',
-        unsupporedOrInvalidProbesTest(
+        unsupportedOrInvalidProbesTest(
+          // @ts-expect-error Expecting this probe type to be invalid
           t.generateProbeConfig({ where: { typeName: 'index.js', methodName: 'handlerA' } })
         )
       )
 
-      function unsupporedOrInvalidProbesTest (config, customErrorDiagnosticsObj) {
+      function unsupportedOrInvalidProbesTest (config, customErrorDiagnosticsObj) {
         return function (done) {
           let receivedAckUpdate = false
 
@@ -238,10 +244,10 @@ describe('Dynamic Instrumentation', function () {
               assertUUID(diagnostics.runtimeId)
 
               if (diagnostics.status === 'ERROR') {
-                assert.property(diagnostics, 'exception')
-                assert.hasAllKeys(diagnostics.exception, ['message', 'stacktrace'])
-                assert.typeOf(diagnostics.exception.message, 'string')
-                assert.typeOf(diagnostics.exception.stacktrace, 'string')
+                assert.ok(Object.hasOwn(diagnostics, 'exception'))
+                assert.deepStrictEqual(['message', 'stacktrace'], Object.keys(diagnostics.exception).sort())
+                assert.strictEqual(typeof diagnostics.exception.message, 'string')
+                assert.strictEqual(typeof diagnostics.exception.stacktrace, 'string')
               }
 
               endIfDone()
@@ -363,7 +369,7 @@ describe('Dynamic Instrumentation', function () {
           t.agent.addRemoteConfig(rcConfig2)
         })
 
-        it('should only trigger the probes whos conditions are met (all have conditions)', function (done) {
+        it('should only trigger the probes whose conditions are met (all have conditions)', function (done) {
           let installed = 0
           const rcConfig1 = t.generateRemoteConfig({
             when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } }
@@ -444,7 +450,7 @@ describe('Dynamic Instrumentation', function () {
           }
         })
 
-        it('should only trigger the probes whos conditions are met (not all have conditions)', function (done) {
+        it('should only trigger the probes whose conditions are met (not all have conditions)', function (done) {
           let installed = 0
           const rcConfig1 = t.generateRemoteConfig({
             when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } }
@@ -513,7 +519,11 @@ describe('Dynamic Instrumentation', function () {
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {
           payload.forEach((event) => {
-            if (event.debugger.diagnostics.status === 'INSTALLED') triggers.shift()().catch(done)
+            if (event.debugger.diagnostics.status === 'INSTALLED') {
+              const trigger = triggers.shift()
+              assert.ok(trigger, 'expecting a trigger function to be defined')
+              trigger().catch(done)
+            }
           })
         })
 
@@ -529,7 +539,7 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-diagnostics', ({ payload }) => {
           payload.forEach((event) => {
             if (event.debugger.diagnostics.status === 'INSTALLED') {
-              t.agent.once('remote-confg-responded', async () => {
+              t.agent.once('remote-config-responded', async () => {
                 await t.axios.get(t.breakpoint.url)
                 // We want to wait enough time to see if the client triggers on the breakpoint so that the test can fail
                 // if it does, but not so long that the test times out.
@@ -573,8 +583,8 @@ describe('Dynamic Instrumentation', function () {
               clearTimeout(timer)
 
               // Allow for a variance of +50ms (time will tell if this is enough)
-              assert.isAtLeast(duration, 1000)
-              assert.isBelow(duration, 1050)
+              assert.ok(duration >= 1000)
+              assert.ok(duration < 1050)
 
               // Wait at least a full sampling period, to see if we get any more payloads
               timer = setTimeout(done, 1250)
@@ -587,19 +597,25 @@ describe('Dynamic Instrumentation', function () {
       })
 
       it('should adhere to individual probes sample rate', function (done) {
+        /** @type {(() => void) & { calledOnce?: boolean }} */
+        const doneWhenCalledTwice = () => {
+          if (doneWhenCalledTwice.calledOnce) return done()
+          doneWhenCalledTwice.calledOnce = true
+        }
+
         const rcConfig1 = t.breakpoints[0].generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
         const rcConfig2 = t.breakpoints[1].generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
         const state = {
           [rcConfig1.config.id]: {
-            tiggerBreakpointContinuously () {
+            triggerBreakpointContinuously () {
               t.axios.get(t.breakpoints[0].url).catch(done)
-              this.timer = setTimeout(this.tiggerBreakpointContinuously.bind(this), 10)
+              this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
             }
           },
           [rcConfig2.config.id]: {
-            tiggerBreakpointContinuously () {
+            triggerBreakpointContinuously () {
               t.axios.get(t.breakpoints[1].url).catch(done)
-              this.timer = setTimeout(this.tiggerBreakpointContinuously.bind(this), 10)
+              this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
             }
           }
         }
@@ -607,7 +623,7 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-diagnostics', ({ payload }) => {
           payload.forEach((event) => {
             const { probeId, status } = event.debugger.diagnostics
-            if (status === 'INSTALLED') state[probeId].tiggerBreakpointContinuously()
+            if (status === 'INSTALLED') state[probeId].triggerBreakpointContinuously()
           })
         })
 
@@ -620,8 +636,8 @@ describe('Dynamic Instrumentation', function () {
               clearTimeout(_state.timer)
 
               // Allow for a variance of +50ms (time will tell if this is enough)
-              assert.isAtLeast(duration, 1000)
-              assert.isBelow(duration, 1050)
+              assert.ok(duration >= 1000)
+              assert.ok(duration < 1050)
 
               // Wait at least a full sampling period, to see if we get any more payloads
               _state.timer = setTimeout(doneWhenCalledTwice, 1250)
@@ -632,16 +648,11 @@ describe('Dynamic Instrumentation', function () {
 
         t.agent.addRemoteConfig(rcConfig1)
         t.agent.addRemoteConfig(rcConfig2)
-
-        function doneWhenCalledTwice () {
-          if (doneWhenCalledTwice.calledOnce) return done()
-          doneWhenCalledTwice.calledOnce = true
-        }
       })
     })
 
     describe('condition', function () {
-      beforeEach(t.triggerBreakpoint)
+      beforeEach(() => { t.triggerBreakpoint() })
 
       it('should trigger when condition is met', function (done) {
         t.agent.on('debugger-input', () => {
@@ -730,7 +741,7 @@ describe('Dynamic Instrumentation', function () {
               t.axios.get(t.breakpoint.url).catch((err) => {
                 // If the request hasn't fully completed by the time the tests ends and the target app is destroyed,
                 // Axios will complain with a "socket hang up" error. Hence this sanity check before calling
-                // `done(err)`. If we later add more tests below this one, this shouuldn't be an issue.
+                // `done(err)`. If we later add more tests below this one, this shouldn't be an issue.
                 if (!finished) done(err)
               })
             }
@@ -756,7 +767,7 @@ describe('Dynamic Instrumentation', function () {
 
   describe('DD_TRACING_ENABLED=true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED=true', function () {
     const t = setup({
-      env: { DD_TRACING_ENABLED: true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true },
+      env: { DD_TRACING_ENABLED: 'true', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true },
       dependencies: ['fastify']
     })
 
@@ -767,7 +778,7 @@ describe('Dynamic Instrumentation', function () {
 
   describe('DD_TRACING_ENABLED=true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED=false', function () {
     const t = setup({
-      env: { DD_TRACING_ENABLED: true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: false },
+      env: { DD_TRACING_ENABLED: 'true', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: false },
       dependencies: ['fastify']
     })
 
@@ -778,7 +789,7 @@ describe('Dynamic Instrumentation', function () {
 
   describe('DD_TRACING_ENABLED=false', function () {
     const t = setup({
-      env: { DD_TRACING_ENABLED: false },
+      env: { DD_TRACING_ENABLED: 'false' },
       dependencies: ['fastify']
     })
 
@@ -787,6 +798,58 @@ describe('Dynamic Instrumentation', function () {
         'should capture and send expected payload when a log line probe is triggered',
         testBasicInputWithoutDD.bind(null, t)
       )
+    })
+  })
+
+  describe('DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true', function () {
+    const t = setup({
+      env: { DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: 'true' },
+      dependencies: ['fastify']
+    })
+
+    describe('input messages', function () {
+      it('should include process_tags in snapshot when enabled', function (done) {
+        t.agent.on('debugger-input', ({ payload }) => {
+          const snapshot = payload[0].debugger.snapshot
+
+          // Assert that process_tags are present
+          assert.ok(snapshot.process_tags)
+          assert.strictEqual(typeof snapshot.process_tags, 'object')
+
+          // Check for expected process tags keys
+          assert.ok(snapshot.process_tags['entrypoint.name'])
+          assert.ok(snapshot.process_tags['entrypoint.type'])
+          assert.strictEqual(snapshot.process_tags['entrypoint.type'], 'script')
+
+          done()
+        })
+
+        t.triggerBreakpoint()
+        t.agent.addRemoteConfig(t.rcConfig)
+      })
+    })
+  })
+
+  describe('DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=false', function () {
+    const t = setup({
+      env: { DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: 'false' },
+      dependencies: ['fastify']
+    })
+
+    describe('input messages', function () {
+      it('should not include process_tags in snapshot when disabled', function (done) {
+        t.agent.on('debugger-input', ({ payload }) => {
+          const snapshot = payload[0].debugger.snapshot
+
+          // Assert that process_tags are not present
+          assert.strictEqual(snapshot.process_tags, undefined)
+
+          done()
+        })
+
+        t.triggerBreakpoint()
+        t.agent.addRemoteConfig(t.rcConfig)
+      })
     })
   })
 })
@@ -819,12 +882,12 @@ function setupAssertionListeners (t, done, probe) {
     assertBasicInputPayload(t, payload, probe)
 
     payload = payload[0]
-    assert.isObject(payload.dd)
-    assert.hasAllKeys(payload.dd, ['trace_id', 'span_id'])
-    assert.typeOf(payload.dd.trace_id, 'string')
-    assert.typeOf(payload.dd.span_id, 'string')
-    assert.isAbove(payload.dd.trace_id.length, 0)
-    assert.isAbove(payload.dd.span_id.length, 0)
+    assert.ok(typeof payload.dd === 'object' && payload.dd !== null)
+    assert.deepStrictEqual(['span_id', 'trace_id'], Object.keys(payload.dd).sort())
+    assert.strictEqual(typeof payload.dd.trace_id, 'string')
+    assert.strictEqual(typeof payload.dd.span_id, 'string')
+    assert.ok(payload.dd.trace_id.length > 0)
+    assert.ok(payload.dd.span_id.length > 0)
     dd = payload.dd
 
     assertDD()
@@ -843,7 +906,7 @@ function testBasicInputWithoutDD (t, done) {
 
   t.agent.on('debugger-input', ({ payload }) => {
     assertBasicInputPayload(t, payload)
-    assert.doesNotHaveAnyKeys(payload[0], ['dd'])
+    assert.ok(!('dd' in payload[0]))
     done()
   })
 
@@ -851,8 +914,8 @@ function testBasicInputWithoutDD (t, done) {
 }
 
 function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
-  assert.isArray(payload)
-  assert.lengthOf(payload, 1)
+  assert.ok(Array.isArray(payload))
+  assert.strictEqual(payload.length, 1)
   payload = payload[0]
 
   const expected = {
@@ -883,22 +946,22 @@ function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
   assert.match(payload.logger.thread_id, /^pid:\d+$/)
 
   assertUUID(payload.debugger.snapshot.id)
-  assert.isNumber(payload.debugger.snapshot.timestamp)
-  assert.isTrue(payload.debugger.snapshot.timestamp > Date.now() - 1000 * 60)
-  assert.isTrue(payload.debugger.snapshot.timestamp <= Date.now())
+  assert.strictEqual(typeof payload.debugger.snapshot.timestamp, 'number')
+  assert.ok(payload.debugger.snapshot.timestamp > Date.now() - 1000 * 60)
+  assert.ok(payload.debugger.snapshot.timestamp <= Date.now())
 
-  assert.isArray(payload.debugger.snapshot.stack)
-  assert.isAbove(payload.debugger.snapshot.stack.length, 0)
+  assert.ok(Array.isArray(payload.debugger.snapshot.stack))
+  assert.ok(payload.debugger.snapshot.stack.length > 0)
   for (const frame of payload.debugger.snapshot.stack) {
-    assert.isObject(frame)
-    assert.hasAllKeys(frame, ['fileName', 'function', 'lineNumber', 'columnNumber'])
-    assert.isString(frame.fileName)
-    assert.isString(frame.function)
-    assert.isAbove(frame.lineNumber, 0)
-    assert.isAbove(frame.columnNumber, 0)
+    assert.ok(typeof frame === 'object' && frame !== null)
+    assert.deepStrictEqual(['columnNumber', 'fileName', 'function', 'lineNumber'], Object.keys(frame).sort())
+    assert.strictEqual(typeof frame.fileName, 'string')
+    assert.strictEqual(typeof frame.function, 'string')
+    assert.ok(frame.lineNumber > 0)
+    assert.ok(frame.columnNumber > 0)
   }
   const topFrame = payload.debugger.snapshot.stack[0]
-  // path seems to be prefeixed with `/private` on Mac
+  // path seems to be prefixed with `/private` on Mac
   assert.match(topFrame.fileName, new RegExp(`${t.appFile}$`))
   assert.strictEqual(topFrame.function, 'fooHandler')
   assert.strictEqual(topFrame.lineNumber, t.breakpoint.line)

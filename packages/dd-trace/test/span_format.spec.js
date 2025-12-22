@@ -1,6 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -31,8 +33,8 @@ const spanId = id('0234567812345678')
 const spanId2 = id('0254567812345678')
 const spanId3 = id('0264567812345678')
 
-describe('format', () => {
-  let format
+describe('spanFormat', () => {
+  let spanFormat
   let span
   let trace
   let spanContext
@@ -87,10 +89,10 @@ describe('format', () => {
       toSpanId: sinon.stub().returns(spanId3.toString(16))
     }
 
-    format = require('../src/format')
+    spanFormat = require('../src/span_format')
   })
 
-  describe('format', () => {
+  describe('spanFormat', () => {
     it('should format span events', () => {
       span._events = [
         { name: 'Something went so wrong', startTime: 1 },
@@ -101,9 +103,9 @@ describe('format', () => {
         }
       ]
 
-      trace = format(span)
+      trace = spanFormat(span)
       const spanEvents = trace.span_events
-      expect(spanEvents).to.deep.equal([{
+      assert.deepStrictEqual(spanEvents, [{
         name: 'Something went so wrong',
         time_unix_nano: 1000000,
         attributes: undefined
@@ -115,56 +117,56 @@ describe('format', () => {
     })
 
     it('should convert a span to the correct trace format', () => {
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.trace_id.toString()).to.equal(span.context()._traceId.toString())
-      expect(trace.span_id.toString()).to.equal(span.context()._spanId.toString())
-      expect(trace.parent_id.toString()).to.equal(span.context()._parentId.toString())
-      expect(trace.name).to.equal(span.context()._name)
-      expect(trace.resource).to.equal(span.context()._name)
-      expect(trace.error).to.equal(0)
-      expect(trace.start).to.equal(span._startTime * 1e6)
-      expect(trace.duration).to.equal(span._duration * 1e6)
+      assert.strictEqual(trace.trace_id.toString(), span.context()._traceId.toString())
+      assert.strictEqual(trace.span_id.toString(), span.context()._spanId.toString())
+      assert.strictEqual(trace.parent_id.toString(), span.context()._parentId.toString())
+      assert.strictEqual(trace.name, span.context()._name)
+      assert.strictEqual(trace.resource, span.context()._name)
+      assert.strictEqual(trace.error, 0)
+      assert.strictEqual(trace.start, span._startTime * 1e6)
+      assert.strictEqual(trace.duration, span._duration * 1e6)
     })
 
     it('should always set a parent ID', () => {
       span.context()._parentId = null
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.trace_id.toString()).to.equal(span.context()._traceId.toString())
-      expect(trace.span_id.toString()).to.equal(span.context()._spanId.toString())
-      expect(trace.parent_id.toString()).to.equal('0000000000000000')
-      expect(trace.name).to.equal(span.context()._name)
-      expect(trace.resource).to.equal(span.context()._name)
-      expect(trace.error).to.equal(0)
-      expect(trace.start).to.equal(span._startTime * 1e6)
-      expect(trace.duration).to.equal(span._duration * 1e6)
+      assert.strictEqual(trace.trace_id.toString(), span.context()._traceId.toString())
+      assert.strictEqual(trace.span_id.toString(), span.context()._spanId.toString())
+      assert.strictEqual(trace.parent_id.toString(), '0000000000000000')
+      assert.strictEqual(trace.name, span.context()._name)
+      assert.strictEqual(trace.resource, span.context()._name)
+      assert.strictEqual(trace.error, 0)
+      assert.strictEqual(trace.start, span._startTime * 1e6)
+      assert.strictEqual(trace.duration, span._duration * 1e6)
     })
 
     describe('_dd.base_service', () => {
       it('should infer the tag when span service changes', () => {
         span.context()._tags['service.name'] = 'foo'
 
-        trace = format(span)
+        trace = spanFormat(span)
 
-        expect(span.setTag).to.have.been.calledWith('_dd.base_service', 'test')
+        sinon.assert.calledWith(span.setTag, '_dd.base_service', 'test')
       })
 
       it('should infer the tag when no changes occur', () => {
         span.context()._tags['service.name'] = 'test'
 
-        trace = format(span)
+        trace = spanFormat(span)
 
-        expect(span.setTag).to.not.have.been.called
+        sinon.assert.notCalled(span.setTag)
       })
 
       it('should register extra service name', () => {
         span.context()._tags['service.name'] = 'foo'
 
-        trace = format(span)
+        trace = spanFormat(span)
 
-        expect(getExtraServices()).to.deep.equal(['foo'])
+        assert.deepStrictEqual(getExtraServices(), ['foo'])
       })
     })
 
@@ -173,11 +175,11 @@ describe('format', () => {
       spanContext._tags['span.type'] = 'type'
       spanContext._tags['resource.name'] = 'resource'
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.service).to.equal('service')
-      expect(trace.type).to.equal('type')
-      expect(trace.resource).to.equal('resource')
+      assert.strictEqual(trace.service, 'service')
+      assert.strictEqual(trace.type, 'type')
+      assert.strictEqual(trace.resource, 'resource')
     })
 
     it('should extract Datadog specific root tags', () => {
@@ -186,9 +188,9 @@ describe('format', () => {
       spanContext._trace[SAMPLING_LIMIT_DECISION] = 0.2
       spanContext._trace[SAMPLING_RULE_DECISION] = 0.5
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.metrics).to.include({
+      assertObjectContains(trace.metrics, {
         [SAMPLING_AGENT_DECISION]: 0.8,
         [SAMPLING_LIMIT_DECISION]: 0.2,
         [SAMPLING_RULE_DECISION]: 0.5
@@ -200,13 +202,11 @@ describe('format', () => {
       spanContext._trace[SAMPLING_LIMIT_DECISION] = 0.2
       spanContext._trace[SAMPLING_RULE_DECISION] = 0.5
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.metrics).to.not.have.keys(
-        SAMPLING_AGENT_DECISION,
-        SAMPLING_LIMIT_DECISION,
-        SAMPLING_RULE_DECISION
-      )
+      assert.ok(
+        !([SAMPLING_AGENT_DECISION, SAMPLING_LIMIT_DECISION, SAMPLING_RULE_DECISION]
+          .some(k => Object.hasOwn(trace.metrics, k))))
     })
 
     it('should always add single span ingestion tags from options if present', () => {
@@ -214,9 +214,9 @@ describe('format', () => {
         maxPerSecond: 5,
         sampleRate: 1.0
       }
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.metrics).to.include({
+      assertObjectContains(trace.metrics, {
         [SPAN_SAMPLING_MECHANISM]: SAMPLING_MECHANISM_SPAN,
         [SPAN_SAMPLING_MAX_PER_SECOND]: 5,
         [SPAN_SAMPLING_RULE_RATE]: 1.0
@@ -224,13 +224,11 @@ describe('format', () => {
     })
 
     it('should not add single span ingestion tags if options not present', () => {
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.metrics).to.not.have.keys(
-        SPAN_SAMPLING_MECHANISM,
-        SPAN_SAMPLING_MAX_PER_SECOND,
-        SPAN_SAMPLING_RULE_RATE
-      )
+      assert.ok(
+        !([SPAN_SAMPLING_MECHANISM, SPAN_SAMPLING_MAX_PER_SECOND, SPAN_SAMPLING_RULE_RATE]
+          .some(k => Object.hasOwn(trace.metrics, k))))
     })
 
     it('should format span links', () => {
@@ -243,10 +241,10 @@ describe('format', () => {
         }
       ]
 
-      trace = format(span)
+      trace = spanFormat(span)
       const spanLinks = JSON.parse(trace.meta['_dd.span_links'])
 
-      expect(spanLinks).to.deep.equal([{
+      assert.deepStrictEqual(spanLinks, [{
         trace_id: spanId2.toString(16),
         span_id: spanId2.toString(16)
       }, {
@@ -275,10 +273,10 @@ describe('format', () => {
       }
       span._links = [link]
 
-      trace = format(span)
+      trace = spanFormat(span)
       const spanLinks = JSON.parse(trace.meta['_dd.span_links'])
 
-      expect(spanLinks).to.deep.equal([{
+      assert.deepStrictEqual(spanLinks, [{
         trace_id: spanId2.toString(16),
         span_id: spanId2.toString(16),
         attributes: { foo: 'bar' },
@@ -293,13 +291,13 @@ describe('format', () => {
         count: 1
       }
 
-      trace = format(span, true)
+      trace = spanFormat(span, true)
 
-      expect(trace.meta).to.include({
+      assertObjectContains(trace.meta, {
         chunk: 'test'
       })
 
-      expect(trace.metrics).to.include({
+      assertObjectContains(trace.metrics, {
         count: 1
       })
     })
@@ -310,14 +308,9 @@ describe('format', () => {
         count: 1
       }
 
-      trace = format(span, false)
-      expect(trace.meta).to.not.include({
-        chunk: 'test'
-      })
-
-      expect(trace.metrics).to.not.include({
-        count: 1
-      })
+      trace = spanFormat(span, false)
+      assert.ok(!('chunk' in trace.meta))
+      assert.ok(!('count' in trace.metrics))
     })
 
     it('should extract empty tags', () => {
@@ -326,13 +319,13 @@ describe('format', () => {
         count: 1
       }
 
-      trace = format(span, true)
+      trace = spanFormat(span, true)
 
-      expect(trace.meta).to.include({
+      assertObjectContains(trace.meta, {
         foo: ''
       })
 
-      expect(trace.metrics).to.include({
+      assertObjectContains(trace.metrics, {
         count: 1
       })
     })
@@ -340,16 +333,16 @@ describe('format', () => {
     it('should discard user-defined tags with name HOSTNAME_KEY by default', () => {
       spanContext._tags[HOSTNAME_KEY] = 'some_hostname'
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.meta[HOSTNAME_KEY]).to.be.undefined
+      assert.strictEqual(trace.meta[HOSTNAME_KEY], undefined)
     })
 
     it('should include the real hostname of the system if reportHostname is true', () => {
       spanContext._hostname = 'my_hostname'
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.meta[HOSTNAME_KEY]).to.equal('my_hostname')
+      assert.strictEqual(trace.meta[HOSTNAME_KEY], 'my_hostname')
     })
 
     it('should only extract tags that are not Datadog specific to meta', () => {
@@ -358,56 +351,56 @@ describe('format', () => {
       spanContext._tags['resource.name'] = 'resource'
       spanContext._tags['foo.bar'] = 'foobar'
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.meta['service.name']).to.be.undefined
-      expect(trace.meta['span.type']).to.be.undefined
-      expect(trace.meta['resource.name']).to.be.undefined
-      expect(trace.meta['foo.bar']).to.equal('foobar')
+      assert.strictEqual(trace.meta['service.name'], undefined)
+      assert.strictEqual(trace.meta['span.type'], undefined)
+      assert.strictEqual(trace.meta['resource.name'], undefined)
+      assert.strictEqual(trace.meta['foo.bar'], 'foobar')
     })
 
     it('should extract numeric tags as metrics', () => {
       spanContext._tags = { metric: 50 }
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.metrics).to.have.property('metric', 50)
+      assert.strictEqual(trace.metrics.metric, 50)
     })
 
     it('should extract boolean tags as metrics', () => {
       spanContext._tags = { yes: true, no: false }
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.metrics).to.have.property('yes', 1)
-      expect(trace.metrics).to.have.property('no', 0)
+      assert.strictEqual(trace.metrics.yes, 1)
+      assert.strictEqual(trace.metrics.no, 0)
     })
 
     it('should ignore metrics with invalid type', () => {
       spanContext._metrics = { metric: 'test' }
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.metrics).to.not.have.property('metric')
+      assert.ok(!('metric' in trace.metrics))
     })
 
     it('should ignore metrics that are not a number', () => {
       spanContext._metrics = { metric: NaN }
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.metrics).to.not.have.property('metric')
+      assert.ok(!('metric' in trace.metrics))
     })
 
     it('should extract errors', () => {
       const error = new Error('boom')
 
       spanContext._tags.error = error
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.meta[ERROR_MESSAGE]).to.equal(error.message)
-      expect(trace.meta[ERROR_TYPE]).to.equal(error.name)
-      expect(trace.meta[ERROR_STACK]).to.equal(error.stack)
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], error.message)
+      assert.strictEqual(trace.meta[ERROR_TYPE], error.name)
+      assert.strictEqual(trace.meta[ERROR_STACK], error.stack)
     })
 
     it('should skip error properties without a value', () => {
@@ -416,50 +409,50 @@ describe('format', () => {
       error.name = null
       error.stack = null
       spanContext._tags.error = error
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.meta[ERROR_MESSAGE]).to.equal(error.message)
-      expect(trace.meta).to.not.have.property(ERROR_TYPE)
-      expect(trace.meta).to.not.have.property(ERROR_STACK)
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], error.message)
+      assert.ok(!(ERROR_TYPE in trace.meta))
+      assert.ok(!(ERROR_STACK in trace.meta))
     })
 
     it('should extract the origin', () => {
       spanContext._trace.origin = 'synthetics'
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.meta[ORIGIN_KEY]).to.equal('synthetics')
+      assert.strictEqual(trace.meta[ORIGIN_KEY], 'synthetics')
     })
 
     it('should add the language tag for a basic span', () => {
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.meta.language).to.equal('javascript')
+      assert.strictEqual(trace.meta.language, 'javascript')
     })
 
     describe('when there is an `error` tag ', () => {
       it('should set the error flag when error tag is true', () => {
         spanContext._tags.error = true
 
-        trace = format(span)
+        trace = spanFormat(span)
 
-        expect(trace.error).to.equal(1)
+        assert.strictEqual(trace.error, 1)
       })
 
       it('should not set the error flag when error is false', () => {
         spanContext._tags.error = false
 
-        trace = format(span)
+        trace = spanFormat(span)
 
-        expect(trace.error).to.equal(0)
+        assert.strictEqual(trace.error, 0)
       })
 
       it('should not extract error to meta', () => {
         spanContext._tags.error = true
 
-        trace = format(span)
+        trace = spanFormat(span)
 
-        expect(trace.meta.error).to.be.undefined
+        assert.strictEqual(trace.meta.error, undefined)
       })
     })
 
@@ -468,9 +461,9 @@ describe('format', () => {
       spanContext._tags[ERROR_MESSAGE] = 'boom'
       spanContext._tags[ERROR_STACK] = ''
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.error).to.equal(1)
+      assert.strictEqual(trace.error, 1)
     })
 
     it('should set the error flag when there is an error-related tag with should setTrace', () => {
@@ -479,15 +472,15 @@ describe('format', () => {
       spanContext._tags[ERROR_STACK] = ''
       spanContext._tags.setTraceError = 1
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.error).to.equal(1)
+      assert.strictEqual(trace.error, 1)
 
       spanContext._tags[ERROR_TYPE] = 'foo'
       spanContext._tags[ERROR_MESSAGE] = 'foo'
       spanContext._tags[ERROR_STACK] = 'foo'
 
-      expect(trace.error).to.equal(1)
+      assert.strictEqual(trace.error, 1)
     })
 
     it('should not set the error flag for internal spans with error tags', () => {
@@ -496,18 +489,18 @@ describe('format', () => {
       spanContext._tags[ERROR_STACK] = ''
       spanContext._name = 'fs.operation'
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.error).to.equal(0)
+      assert.strictEqual(trace.error, 0)
     })
 
     it('should not set the error flag for internal spans with error tag', () => {
       spanContext._tags.error = new Error('boom')
       spanContext._name = 'fs.operation'
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.error).to.equal(0)
+      assert.strictEqual(trace.error, 0)
     })
 
     it('should sanitize the input', () => {
@@ -519,20 +512,20 @@ describe('format', () => {
       span._startTime = NaN
       span._duration = NaN
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.name).to.equal('null')
-      expect(trace.resource).to.equal('null')
-      expect(trace.meta).to.not.have.property('foo.bar')
-      expect(trace.meta).to.not.have.property('baz.qux')
-      expect(trace.start).to.be.a('number')
-      expect(trace.duration).to.be.a('number')
+      assert.strictEqual(trace.name, 'null')
+      assert.strictEqual(trace.resource, 'null')
+      assert.ok(!('foo.bar' in trace.meta))
+      assert.ok(!('baz.qux' in trace.meta))
+      assert.strictEqual(typeof trace.start, 'number')
+      assert.strictEqual(typeof trace.duration, 'number')
     })
 
     it('should include the sampling priority', () => {
       spanContext._sampling.priority = 0
-      trace = format(span)
-      expect(trace.metrics[SAMPLING_PRIORITY_KEY]).to.equal(0)
+      trace = spanFormat(span)
+      assert.strictEqual(trace.metrics[SAMPLING_PRIORITY_KEY], 0)
     })
 
     it('should support only the first level of depth for objects', () => {
@@ -545,59 +538,59 @@ describe('format', () => {
       }
 
       spanContext._tags.nested = tag
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.meta['nested.num']).to.equal('1')
-      expect(trace.meta['nested.A']).to.be.undefined
-      expect(trace.meta['nested.A.B']).to.be.undefined
-      expect(trace.meta['nested.A.num']).to.be.undefined
+      assert.strictEqual(trace.meta['nested.num'], '1')
+      assert.strictEqual(trace.meta['nested.A'], undefined)
+      assert.strictEqual(trace.meta['nested.A.B'], undefined)
+      assert.strictEqual(trace.meta['nested.A.num'], undefined)
     })
 
     it('should accept a boolean for measured', () => {
       spanContext._tags[MEASURED] = true
-      trace = format(span)
-      expect(trace.metrics[MEASURED]).to.equal(1)
+      trace = spanFormat(span)
+      assert.strictEqual(trace.metrics[MEASURED], 1)
     })
 
     it('should accept a numeric value for measured', () => {
       spanContext._tags[MEASURED] = 0
-      trace = format(span)
-      expect(trace.metrics[MEASURED]).to.equal(0)
+      trace = spanFormat(span)
+      assert.strictEqual(trace.metrics[MEASURED], 0)
     })
 
     it('should accept undefined for measured', () => {
       spanContext._tags[MEASURED] = undefined
-      trace = format(span)
-      expect(trace.metrics[MEASURED]).to.equal(1)
+      trace = spanFormat(span)
+      assert.strictEqual(trace.metrics[MEASURED], 1)
     })
 
     it('should not measure internal spans', () => {
       spanContext._tags['span.kind'] = 'internal'
-      trace = format(span)
-      expect(trace.metrics).to.not.have.property(MEASURED)
+      trace = spanFormat(span)
+      assert.ok(!(MEASURED in trace.metrics))
     })
 
     it('should not measure unknown spans', () => {
-      trace = format(span)
-      expect(trace.metrics).to.not.have.property(MEASURED)
+      trace = spanFormat(span)
+      assert.ok(!(MEASURED in trace.metrics))
     })
 
     it('should measure non-internal spans', () => {
       spanContext._tags['span.kind'] = 'server'
-      trace = format(span)
-      expect(trace.metrics[MEASURED]).to.equal(1)
+      trace = spanFormat(span)
+      assert.strictEqual(trace.metrics[MEASURED], 1)
     })
 
     it('should not override explicit measure decision', () => {
       spanContext._tags[MEASURED] = 0
       spanContext._tags['span.kind'] = 'server'
-      trace = format(span)
-      expect(trace.metrics[MEASURED]).to.equal(0)
+      trace = spanFormat(span)
+      assert.strictEqual(trace.metrics[MEASURED], 0)
     })
 
     it('should possess a process_id tag', () => {
-      trace = format(span)
-      expect(trace.metrics[PROCESS_ID]).to.equal(process.pid)
+      trace = spanFormat(span)
+      assert.strictEqual(trace.metrics[PROCESS_ID], process.pid)
     })
 
     it('should not crash on prototype-free tags objects when nesting', () => {
@@ -605,15 +598,15 @@ describe('format', () => {
       tags.nested = { foo: 'bar' }
       spanContext._tags.nested = tags
 
-      format(span)
+      spanFormat(span)
     })
 
     it('should capture analytics.event', () => {
       spanContext._tags['analytics.event'] = 1
 
-      trace = format(span)
+      trace = spanFormat(span)
 
-      expect(trace.metrics).to.have.property('_dd1.sr.eausr', 1)
+      assert.strictEqual(trace.metrics['_dd1.sr.eausr'], 1)
     })
   })
 })

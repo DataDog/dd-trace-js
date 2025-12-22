@@ -91,7 +91,7 @@ function wrapFunction (original, wrapper) {
  * @param {Record<string | symbol, unknown> | Function | undefined} target - The target
  * object.
  * @param {string | symbol} name - The property key of the method to wrap.
- * @param {(original: Function) => (...args) => any} wrapper - The wrapper function.
+ * @param {(original: Function) => (...args: unknown[]) => any} wrapper - The wrapper function.
  * @param {{ replaceGetter?: boolean }} [options] - If `replaceGetter` is set to
  * true, the getter is accessed and the getter is replaced with one that just
  * returns the earlier retrieved value. Use with care! This may only be done in
@@ -214,7 +214,7 @@ function wrap (target, name, wrapper, options) {
  *         Record<string | symbol, unknown> |
  *         Function} targets - The target objects.
  * @param {Array<string | symbol> | string | symbol} names - The property keys of the methods to wrap.
- * @param {(original: Function) => (...args) => any} wrapper - The wrapper function.
+ * @param {(original: Function) => (...args: unknown[]) => any} wrapper - The wrapper function.
  */
 function massWrap (targets, names, wrapper) {
   targets = toArray(targets)

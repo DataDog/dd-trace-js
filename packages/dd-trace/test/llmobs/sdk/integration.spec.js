@@ -1,12 +1,12 @@
 'use strict'
 
-const { describe, it, afterEach, before, after } = require('mocha')
-const sinon = require('sinon')
-
-const { useLlmObs, assertLlmObsSpanEvent } = require('../util')
-
 const assert = require('node:assert')
 
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
+
+const agent = require('../../plugins/agent')
+const { useLlmObs, assertLlmObsSpanEvent } = require('../util')
 function getTag (llmobsSpan, tagName) {
   const tag = llmobsSpan.tags.find(tag => tag.split(':')[0] === tagName)
   return tag?.split(':')[1]
@@ -37,7 +37,7 @@ describe('end to end sdk integration tests', () => {
 
     assert.equal(result, 'boom')
 
-    const { apmSpans, llmobsSpans } = await getEvents()
+    const { apmSpans, llmobsSpans } = await getEvents(2)
     assert.equal(apmSpans.length, 3)
     assert.equal(llmobsSpans.length, 2)
 
@@ -86,7 +86,7 @@ describe('end to end sdk integration tests', () => {
 
     agent('my custom input')
 
-    const { apmSpans, llmobsSpans } = await getEvents()
+    const { apmSpans, llmobsSpans } = await getEvents(2)
     assert.equal(apmSpans.length, 3)
     assert.equal(llmobsSpans.length, 2)
 
@@ -133,9 +133,9 @@ describe('end to end sdk integration tests', () => {
       })
 
       // const { spans, llmobsSpans, evaluationMetrics } = run(payloadGenerator)
-      // expect(spans).to.have.lengthOf(1)
-      // expect(llmobsSpans).to.have.lengthOf(1)
-      // expect(evaluationMetrics).to.have.lengthOf(1)
+      // assert.strictEqual(spans.length, 1)
+      // assert.strictEqual(llmobsSpans.length, 1)
+      // assert.strictEqual(evaluationMetrics.length, 1)
 
       // // check eval metrics content
       // const expected = [
@@ -167,7 +167,7 @@ describe('end to end sdk integration tests', () => {
         llmobs.trace({ kind: 'workflow', name: 'child' }, () => {})
       })
 
-      const { llmobsSpans } = await getEvents()
+      const { llmobsSpans } = await getEvents(2)
       assert.equal(llmobsSpans.length, 2)
 
       assert.equal(getTag(llmobsSpans[0], 'ml_app'), 'test')
@@ -185,7 +185,7 @@ describe('end to end sdk integration tests', () => {
         llmobs.trace({ kind: 'workflow', name: 'child' }, () => {})
       })
 
-      const { llmobsSpans } = await getEvents()
+      const { llmobsSpans } = await getEvents(2)
       assert.equal(llmobsSpans.length, 2)
 
       assert.equal(getTag(llmobsSpans[0], 'ml_app'), 'span-level-ml-app')
@@ -213,7 +213,7 @@ describe('end to end sdk integration tests', () => {
         llmobs.trace({ kind: 'workflow', name: 'child-2' }, () => {})
       })
 
-      const { llmobsSpans } = await getEvents()
+      const { llmobsSpans } = await getEvents(3)
       assert.equal(llmobsSpans.length, 3)
 
       assert.equal(getTag(llmobsSpans[0], 'ml_app'), 'test')
@@ -291,6 +291,7 @@ describe('end to end sdk integration tests', () => {
 
       beforeEach(() => {
         llmobs.registerProcessor(processor)
+        agent.reset() // make sure llmobs requests are cleared
       })
 
       it('does not submit the span', async () => {
@@ -333,7 +334,7 @@ describe('end to end sdk integration tests', () => {
           })
         })
 
-        const { llmobsSpans } = await getEvents()
+        const { llmobsSpans } = await getEvents(2)
         assert.equal(llmobsSpans.length, 2)
 
         assert.equal(llmobsSpans[0].meta.input.value, 'REDACTED')
@@ -357,7 +358,7 @@ describe('end to end sdk integration tests', () => {
         llmobs.trace({ kind: 'workflow', name: 'afterAnnotationContext' }, () => {})
       })
 
-      const { llmobsSpans } = await getEvents()
+      const { llmobsSpans } = await getEvents(6)
       assert.equal(llmobsSpans.length, 6)
 
       assert.equal(getTag(llmobsSpans[0], 'foo'), undefined)
