@@ -1,9 +1,12 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+const { setTimeout: wait } = require('node:timers/promises')
+
 const axios = require('axios')
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Push Subscription Plugin', () => {
   let tracer
@@ -71,33 +74,33 @@ describe('Push Subscription Plugin', () => {
             )
             if (!trace) return
 
-            expect(handlerCalled).to.be.true
+            assert.strictEqual(handlerCalled, true)
 
             const httpSpan = trace.find(s => s.name === 'web.request')
             const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
 
-            expect(httpSpan, 'HTTP server span must exist').to.exist
-            expect(pubsubSpan, 'pubsub.delivery span must exist').to.exist
+            assert.ok(httpSpan, 'HTTP server span must exist')
+            assert.ok(pubsubSpan, 'pubsub.delivery span must exist')
 
             // For raw HTTP, the active span might be web.request OR pubsub.delivery depending on timing
             if (activeSpanInHandler) {
               const spanName = activeSpanInHandler.context()._name
-              expect(['web.request', 'pubsub.delivery']).to.include(spanName)
+              assert.ok(['web.request', 'pubsub.delivery'].includes(spanName))
             }
 
             // For raw HTTP, parent-child relationship might not be established the same way
             // as with framework-based servers (Express, Fastify, etc.)
             // Both spans should exist in the same trace though
-            expect(pubsubSpan.trace_id.toString()).to.equal(httpSpan.trace_id.toString())
+            assert.strictEqual(pubsubSpan.trace_id.toString(), httpSpan.trace_id.toString())
 
-            expect(pubsubSpan.meta).to.include({
+            assertObjectContains(pubsubSpan.meta, {
               'span.kind': 'consumer',
               component: 'google-cloud-pubsub',
               'pubsub.message_id': messageId,
               'pubsub.delivery_method': 'push'
             })
 
-            expect(httpSpan.meta).to.include({
+            assertObjectContains(httpSpan.meta, {
               'span.kind': 'server',
               'http.method': 'POST'
             })
@@ -150,15 +153,15 @@ describe('Push Subscription Plugin', () => {
             if (!trace) return
 
             const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
-            expect(pubsubSpan).to.exist
+            assert.ok(pubsubSpan)
 
             if (pubsubSpan.meta['_dd.span_links']) {
               const spanLinks = JSON.parse(pubsubSpan.meta['_dd.span_links'])
-              expect(spanLinks).to.be.an('array')
+              assert.ok(Array.isArray(spanLinks))
               const hasProducerLink = spanLinks.some(link =>
                 link.trace_id && link.span_id
               )
-              expect(hasProducerLink).to.be.true
+              assert.strictEqual(hasProducerLink, true)
             }
           })
           .then(done)
@@ -207,14 +210,14 @@ describe('Push Subscription Plugin', () => {
             if (!trace) return
 
             const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
-            expect(pubsubSpan).to.exist
+            assert.ok(pubsubSpan)
 
-            expect(pubsubSpan.meta).to.include({
+            assertObjectContains(pubsubSpan.meta, {
               'pubsub.batch.description': 'Message 1 of 3',
               'pubsub.batch.request_trace_id': batchTraceId,
               'pubsub.batch.request_span_id': batchSpanId
             })
-            expect(pubsubSpan.metrics).to.include({
+            assertObjectContains(pubsubSpan.metrics, {
               'pubsub.batch.message_count': 3,
               'pubsub.batch.message_index': 0
             })
@@ -264,10 +267,10 @@ describe('Push Subscription Plugin', () => {
             if (!trace) return
 
             const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
-            expect(pubsubSpan).to.exist
+            assert.ok(pubsubSpan)
 
-            expect(pubsubSpan.service).to.equal('test-pubsub')
-            expect(pubsubSpan.meta).to.include({
+            assert.strictEqual(pubsubSpan.service, 'test-pubsub')
+            assertObjectContains(pubsubSpan.meta, {
               '_dd.base_service': 'test',
               '_dd.serviceoverride.type': 'integration'
             })
@@ -309,9 +312,9 @@ describe('Push Subscription Plugin', () => {
             const trace = traces.find(t => t.some(s => s.name === 'web.request'))
             if (!trace) return
 
-            expect(trace).to.exist
+            assert.ok(trace)
             const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
-            expect(pubsubSpan).to.not.exist
+            assert.ok(!pubsubSpan)
           })
           .then(done)
           .catch(done)
@@ -347,9 +350,9 @@ describe('Push Subscription Plugin', () => {
             const trace = traces.find(t => t.some(s => s.name === 'web.request'))
             if (!trace) return
 
-            expect(trace).to.exist
+            assert.ok(trace)
             const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
-            expect(pubsubSpan).to.not.exist
+            assert.ok(!pubsubSpan)
           })
           .then(done)
           .catch(done)
@@ -413,21 +416,24 @@ describe('Push Subscription Plugin', () => {
             })
 
             // Wait for request to complete
-            await new Promise(resolve => setTimeout(resolve, 100))
+            await wait(100)
 
             // Force garbage collection
+            // @ts-expect-error We expect the test to be started with --trace-gc
             global.gc()
-            await new Promise(resolve => setTimeout(resolve, 100))
+            await wait(100)
+            // @ts-expect-error We expect the test to be started with --trace-gc
             global.gc()
-            await new Promise(resolve => setTimeout(resolve, 100))
+            await wait(100)
+            // @ts-expect-error We expect the test to be started with --trace-gc
             global.gc()
 
             // Wait for FinalizationRegistry callback
-            await new Promise(resolve => setTimeout(resolve, 500))
+            await wait(500)
 
             // Verify request was garbage collected
             // This proves deliverySpans WeakMap doesn't prevent GC
-            expect(requestWasCollected).to.be.true
+            assert.strictEqual(requestWasCollected, true)
             done()
           } catch (err) {
             done(err)
@@ -478,11 +484,13 @@ describe('Push Subscription Plugin', () => {
             await Promise.all(promises)
 
             // Wait for all requests to complete
-            await new Promise(resolve => setTimeout(resolve, 500))
+            await wait(500)
 
             // Force GC
+            // @ts-expect-error We expect the test to be started with --trace-gc
             global.gc()
-            await new Promise(resolve => setTimeout(resolve, 100))
+            await wait(100)
+            // @ts-expect-error We expect the test to be started with --trace-gc
             global.gc()
 
             const afterMemory = process.memoryUsage().heapUsed
@@ -490,8 +498,10 @@ describe('Push Subscription Plugin', () => {
 
             // Memory should not increase significantly (less than 10MB for 100 requests)
             // If deliverySpans WeakMap is leaking, this would be much higher
-            expect(memoryIncrease).to.be.lessThan(10 * 1024 * 1024,
-              `Memory increase should be minimal but was ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB`)
+            assert.ok(
+              memoryIncrease < (10 * 1024 * 1024),
+              `Memory increase should be minimal but was ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB`
+            )
 
             done()
           } catch (err) {
