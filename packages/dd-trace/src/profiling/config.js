@@ -16,52 +16,52 @@ const { getIsAzureFunction } = require('../serverless')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
-const { getEnvironmentVariables, getValueFromEnvSources: getEnvValue } = require('../config-helper')
+const { getEnvironmentVariables, getValueFromEnvSources } = require('../config-helper')
 
 function getProfilingEnvValues () {
   return {
     DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED:
-      getEnvValue('DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED'),
+    getValueFromEnvSources('DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED'),
     DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED:
-      getEnvValue('DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED'),
+      getValueFromEnvSources('DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED'),
     DD_PROFILING_CODEHOTSPOTS_ENABLED:
-      getEnvValue('DD_PROFILING_CODEHOTSPOTS_ENABLED'),
+      getValueFromEnvSources('DD_PROFILING_CODEHOTSPOTS_ENABLED'),
     DD_PROFILING_CPU_ENABLED:
-      getEnvValue('DD_PROFILING_CPU_ENABLED'),
+      getValueFromEnvSources('DD_PROFILING_CPU_ENABLED'),
     DD_PROFILING_DEBUG_SOURCE_MAPS:
-      getEnvValue('DD_PROFILING_DEBUG_SOURCE_MAPS'),
+      getValueFromEnvSources('DD_PROFILING_DEBUG_SOURCE_MAPS'),
     DD_PROFILING_DEBUG_UPLOAD_COMPRESSION:
-      getEnvValue('DD_PROFILING_DEBUG_UPLOAD_COMPRESSION'),
+      getValueFromEnvSources('DD_PROFILING_DEBUG_UPLOAD_COMPRESSION'),
     DD_PROFILING_ENDPOINT_COLLECTION_ENABLED:
-      getEnvValue('DD_PROFILING_ENDPOINT_COLLECTION_ENABLED'),
+      getValueFromEnvSources('DD_PROFILING_ENDPOINT_COLLECTION_ENABLED'),
     DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES:
-      getEnvValue('DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES'),
+      getValueFromEnvSources('DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES'),
     DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE:
-      getEnvValue('DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE'),
+      getValueFromEnvSources('DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE'),
     DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT:
-      getEnvValue('DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT'),
+      getValueFromEnvSources('DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT'),
     DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED:
-      getEnvValue('DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED'),
+      getValueFromEnvSources('DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED'),
     DD_PROFILING_HEAP_ENABLED:
-      getEnvValue('DD_PROFILING_HEAP_ENABLED'),
+      getValueFromEnvSources('DD_PROFILING_HEAP_ENABLED'),
     DD_PROFILING_HEAP_SAMPLING_INTERVAL:
-      getEnvValue('DD_PROFILING_HEAP_SAMPLING_INTERVAL'),
+      getValueFromEnvSources('DD_PROFILING_HEAP_SAMPLING_INTERVAL'),
     DD_PROFILING_PPROF_PREFIX:
-      getEnvValue('DD_PROFILING_PPROF_PREFIX'),
+      getValueFromEnvSources('DD_PROFILING_PPROF_PREFIX'),
     DD_PROFILING_PROFILERS:
-      getEnvValue('DD_PROFILING_PROFILERS'),
+      getValueFromEnvSources('DD_PROFILING_PROFILERS'),
     DD_PROFILING_TIMELINE_ENABLED:
-      getEnvValue('DD_PROFILING_TIMELINE_ENABLED'),
+      getValueFromEnvSources('DD_PROFILING_TIMELINE_ENABLED'),
     DD_PROFILING_UPLOAD_PERIOD:
-      getEnvValue('DD_PROFILING_UPLOAD_PERIOD'),
+      getValueFromEnvSources('DD_PROFILING_UPLOAD_PERIOD'),
     DD_PROFILING_UPLOAD_TIMEOUT:
-      getEnvValue('DD_PROFILING_UPLOAD_TIMEOUT'),
+      getValueFromEnvSources('DD_PROFILING_UPLOAD_TIMEOUT'),
     DD_PROFILING_V8_PROFILER_BUG_WORKAROUND:
-      getEnvValue('DD_PROFILING_V8_PROFILER_BUG_WORKAROUND'),
+      getValueFromEnvSources('DD_PROFILING_V8_PROFILER_BUG_WORKAROUND'),
     DD_PROFILING_WALLTIME_ENABLED:
-      getEnvValue('DD_PROFILING_WALLTIME_ENABLED'),
+      getValueFromEnvSources('DD_PROFILING_WALLTIME_ENABLED'),
     DD_TAGS:
-      getEnvValue('DD_TAGS')
+      getValueFromEnvSources('DD_TAGS')
   }
 }
 
@@ -74,6 +74,7 @@ class Config {
       NODE_OPTIONS
     } = getEnvironmentVariables()
 
+    // TODO: Move initialization of these values to packages/dd-trace/src/config.js, and just read from config
     const {
       DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED,
       DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED,
