@@ -4,6 +4,7 @@ module.exports = {
   '@anthropic-ai/sdk': { esmFirst: true, fn: () => require('../anthropic') },
   '@apollo/server': () => require('../apollo-server'),
   '@apollo/gateway': () => require('../apollo'),
+  '@electric-sql/pglite': () => require('../electric-sql-pglite'),
   'apollo-server-core': () => require('../apollo-server-core'),
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),
   '@azure/event-hubs': () => require('../azure-event-hubs'),

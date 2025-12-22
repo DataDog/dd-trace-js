@@ -201,6 +201,7 @@ interface Plugins {
   "cypress": tracer.plugins.cypress;
   "dns": tracer.plugins.dns;
   "elasticsearch": tracer.plugins.elasticsearch;
+  "electric-sql-pglite": tracer.plugins.electric_sql_pglite;
   "express": tracer.plugins.express;
   "fastify": tracer.plugins.fastify;
   "fetch": tracer.plugins.fetch;
@@ -1827,6 +1828,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [express](http://expressjs.com/) module.
      */
+    /**
+     * This plugin automatically instruments the
+     * [electric-sql-pglite](https://github.com/npmjs/package/electric-sql-pglite) database client library.
+     */
+    interface electric_sql_pglite extends Instrumentation {}
+
     interface express extends HttpServer {}
 
     /**

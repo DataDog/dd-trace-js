@@ -1,5 +1,7 @@
 'use strict'
 
+const { identityService } = require('../util')
+
 function getRedisService (pluginConfig, connectionName) {
   if (pluginConfig.splitByInstance && connectionName) {
     return pluginConfig.service
@@ -64,6 +66,18 @@ const storage = {
       opName: () => 'elasticsearch.query',
       serviceName: ({ tracerService, pluginConfig }) =>
         pluginConfig.service || `${tracerService}-elasticsearch`
+    },
+    'electric-sql-pglite': {
+      opName: ({ operation }) => `electric-sql-pglite.${operation || 'query'}`,
+      serviceName: identityService
+    },
+    'electric-sql-pglite-exec': {
+      opName: ({ operation }) => `electric-sql-pglite.${operation || 'exec'}`,
+      serviceName: identityService
+    },
+    'electric-sql-pglite-transaction': {
+      opName: ({ operation }) => `electric-sql-pglite.${operation || 'transaction'}`,
+      serviceName: identityService
     },
     ioredis: redisConfig,
     iovalkey: valkeyConfig,

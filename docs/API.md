@@ -37,6 +37,7 @@ tracer.use('pg', {
 <h5 id="elasticsearch"></h5>
 <h5 id="elasticsearch-tags"></h5>
 <h5 id="elasticsearch-config"></h5>
+<h5 id="electric-sql-pglite"></h5>
 <h5 id="express"></h5>
 <h5 id="express-tags"></h5>
 <h5 id="express-config"></h5>
@@ -119,6 +120,7 @@ tracer.use('pg', {
 * [connect](./interfaces/export_.plugins.connect.html)
 * [dns](./interfaces/export_.plugins.dns.html)
 * [elasticsearch](./interfaces/export_.plugins.elasticsearch.html)
+* [electric-sql-pglite](./interfaces/export_.plugins.electric_sql_pglite.html)
 * [express](./interfaces/export_.plugins.express.html)
 * [fastify](./interfaces/export_.plugins.fastify.html)
 * [fetch](./interfaces/export_.plugins.fetch.html)

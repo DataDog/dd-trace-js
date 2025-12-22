@@ -323,6 +323,7 @@ tracer.use('cucumber', { service: 'cucumber-service' });
 tracer.use('dns');
 tracer.use('elasticsearch');
 tracer.use('elasticsearch', elasticsearchOptions);
+tracer.use('electric-sql-pglite');
 tracer.use('express');
 tracer.use('express', httpServerOptions);
 tracer.use('fastify');

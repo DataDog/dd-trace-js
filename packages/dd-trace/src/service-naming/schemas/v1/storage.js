@@ -1,5 +1,7 @@
 'use strict'
 
+const { identityService } = require('../util')
+
 function configWithFallback ({ tracerService, pluginConfig }) {
   return pluginConfig.service || tracerService
 }
@@ -39,6 +41,18 @@ const storage = {
     elasticsearch: {
       opName: () => 'elasticsearch.query',
       serviceName: configWithFallback
+    },
+    'electric-sql-pglite': {
+      opName: ({ operation }) => `electric-sql-pglite.${operation || 'query'}`,
+      serviceName: identityService
+    },
+    'electric-sql-pglite-exec': {
+      opName: ({ operation }) => `electric-sql-pglite.${operation || 'exec'}`,
+      serviceName: identityService
+    },
+    'electric-sql-pglite-transaction': {
+      opName: ({ operation }) => `electric-sql-pglite.${operation || 'transaction'}`,
+      serviceName: identityService
     },
     ioredis: redisNaming,
     iovalkey: {

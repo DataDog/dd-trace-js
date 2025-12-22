@@ -33,6 +33,7 @@ declare -a plugins=(
   "cypress"
   "dns"
   "elasticsearch"
+  "electric-sql-pglite"
   "express"
   "fastify"
   "fetch"
