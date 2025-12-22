@@ -295,9 +295,12 @@ function buildExpressServer (agent) {
 
   app.post('/v0.7/config', (req, res) => {
     const {
-      client: { products, state },
+      client: { products, state, client_tracer: clientTracer },
       cached_target_files: cachedTargetFiles
     } = req.body
+
+    // Emit the remote config request payload for testing
+    agent.emit('remote-config-request', req.body)
 
     if (state.has_error) {
       // Print the error sent by the client in case it's useful in debugging tests
