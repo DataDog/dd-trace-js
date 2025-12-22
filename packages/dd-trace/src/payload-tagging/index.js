@@ -1,6 +1,5 @@
 'use strict'
 
-
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 
 const {
