@@ -69,6 +69,12 @@
       "versions": [">=3.422.0"]
     }
   ],
+  "bullmq": [
+    {
+      "name": "redis",
+      "versions": [">=4"]
+    }
+  ],
   "body-parser": [
     {
       "name": "express",
