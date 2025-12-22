@@ -24,9 +24,9 @@ describe('test visibility with dynamic instrumentation', () => {
     childProcess = fork(path.join(__dirname, 'target-app', 'test-visibility-dynamic-instrumentation-script.js'))
 
     childProcess.on('message', ({ snapshot: { language, stack, probe, captures }, probeId }) => {
-      assert.ok(probeId != null)
-      assert.ok(probe != null)
-      assert.ok(stack != null)
+      assert.ok(probeId)
+      assert.ok(probe)
+      assert.ok(stack)
       assert.strictEqual(language, 'javascript')
 
       assert.deepStrictEqual(captures, {

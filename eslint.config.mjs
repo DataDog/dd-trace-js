@@ -596,7 +596,6 @@ export default [
         allowModules: [
           ...Object.keys(dependencies),
           'mocha',
-          'chai'
         ]
       }],
       'n/no-missing-require': 'off',
