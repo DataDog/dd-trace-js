@@ -202,10 +202,11 @@ describe('telemetry', () => {
 
   it('should send app-integrations', () => {
     return testSeq(2, 'app-integrations-change', payload => {
+      const processTags = require('../../src/process-tags')
       assert.deepStrictEqual(payload, {
         integrations: [
-          { name: 'foo2', enabled: true, auto_enabled: true },
-          { name: 'bar2', enabled: false, auto_enabled: true }
+          { name: 'foo2', enabled: true, auto_enabled: true, process_tags: processTags.tagsObject },
+          { name: 'bar2', enabled: false, auto_enabled: true, process_tags: processTags.tagsObject }
         ]
       })
     })
@@ -216,9 +217,10 @@ describe('telemetry', () => {
     telemetry.updateIntegrations()
 
     return testSeq(3, 'app-integrations-change', payload => {
+      const processTags = require('../../src/process-tags')
       assert.deepStrictEqual(payload, {
         integrations: [
-          { name: 'baz2', enabled: true, auto_enabled: true }
+          { name: 'baz2', enabled: true, auto_enabled: true, process_tags: processTags.tagsObject }
         ]
       })
     })
@@ -229,9 +231,10 @@ describe('telemetry', () => {
     telemetry.updateIntegrations()
 
     return testSeq(4, 'app-integrations-change', payload => {
+      const processTags = require('../../src/process-tags')
       assert.deepStrictEqual(payload, {
         integrations: [
-          { name: 'boo2', enabled: true, auto_enabled: true }
+          { name: 'boo2', enabled: true, auto_enabled: true, process_tags: processTags.tagsObject }
         ]
       })
     })
@@ -592,12 +595,14 @@ describe('Telemetry retry', () => {
 
     pluginsByName.boo3 = { _enabled: true }
     telemetry.updateIntegrations()
+    const processTags = require('../../src/process-tags')
     assert.strictEqual(capturedRequestType, 'app-integrations-change')
     assert.deepStrictEqual(capturedPayload, {
       integrations: [{
         name: 'boo3',
         enabled: true,
-        auto_enabled: true
+        auto_enabled: true,
+        process_tags: processTags.tagsObject
       }]
     })
 
@@ -610,7 +615,8 @@ describe('Telemetry retry', () => {
         integrations: [{
           name: 'boo5',
           enabled: true,
-          auto_enabled: true
+          auto_enabled: true,
+          process_tags: processTags.tagsObject
         }]
       }
 
@@ -620,7 +626,8 @@ describe('Telemetry retry', () => {
         integrations: [{
           name: 'boo3',
           enabled: true,
-          auto_enabled: true
+          auto_enabled: true,
+          process_tags: processTags.tagsObject
         }]
       }
 
@@ -687,12 +694,14 @@ describe('Telemetry retry', () => {
         integrations: [{
           name: 'foo2',
           enabled: true,
-          auto_enabled: true
+          auto_enabled: true,
+          process_tags: require('../../src/process-tags').tagsObject
         },
         {
           name: 'bar2',
           enabled: false,
-          auto_enabled: true
+          auto_enabled: true,
+          process_tags: require('../../src/process-tags').tagsObject
         }]
       }
 
@@ -755,7 +764,8 @@ describe('Telemetry retry', () => {
       integrations: [{
         name: 'zoo1',
         enabled: true,
-        auto_enabled: true
+        auto_enabled: true,
+        process_tags: require('../../src/process-tags').tagsObject
       }]
     })
   })
@@ -819,7 +829,8 @@ describe('Telemetry retry', () => {
         integrations: [{
           name: 'zoo1',
           enabled: true,
-          auto_enabled: true
+          auto_enabled: true,
+          process_tags: require('../../src/process-tags').tagsObject
         }]
       }
 
@@ -829,7 +840,8 @@ describe('Telemetry retry', () => {
         integrations: [{
           name: 'foo1',
           enabled: true,
-          auto_enabled: true
+          auto_enabled: true,
+          process_tags: require('../../src/process-tags').tagsObject
         }]
       }
 
@@ -896,8 +908,8 @@ describe('Telemetry retry', () => {
     assertObjectContains(extendedHeartbeatPayload, {
       integrations: [{
         integrations: [
-          { name: 'foo2', enabled: true, auto_enabled: true },
-          { name: 'bar2', enabled: false, auto_enabled: true }
+          { name: 'foo2', enabled: true, auto_enabled: true, process_tags: require('../../src/process-tags').tagsObject },
+          { name: 'bar2', enabled: false, auto_enabled: true, process_tags: require('../../src/process-tags').tagsObject }
         ]
       }]
     })
