@@ -1838,7 +1838,7 @@ describe(`cucumber@${version} commonJS`, () => {
               cwd,
               env: {
                 ...envVars,
-                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
               },
               stdio: 'pipe'
             }

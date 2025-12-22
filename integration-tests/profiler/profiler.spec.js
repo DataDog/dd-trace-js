@@ -231,8 +231,8 @@ async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, 
     cwd,
     env: {
       DD_PROFILING_EXPORTERS: 'file',
-      DD_PROFILING_ENABLED: 1,
-      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: 0, // capture all events
+      DD_PROFILING_ENABLED: '1',
+      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: '0', // capture all events
       DD_TRACE_AGENT_PORT: agentPort
     }
   })
@@ -352,7 +352,7 @@ describe('profiler', () => {
       const procStart = BigInt(Date.now() * 1000000)
       const env = {
         DD_PROFILING_EXPORTERS: 'file',
-        DD_PROFILING_ENABLED: 1,
+        DD_PROFILING_ENABLED: '1',
         BUSY_CYCLE_TIME: (busyCycleTimeNs | 0).toString(),
         DD_TRACE_AGENT_PORT: agent.port
       }
@@ -558,8 +558,8 @@ describe('profiler', () => {
     beforeEach(() => {
       oomEnv = {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_PROFILING_ENABLED: 1,
-        DD_TRACE_DEBUG: 1,
+        DD_PROFILING_ENABLED: '1',
+        DD_TRACE_DEBUG: '1',
         DD_TRACE_LOG_LEVEL: 'warn'
       }
     })
@@ -573,7 +573,7 @@ describe('profiler', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          DD_PROFILING_ENABLED: 1
+          DD_PROFILING_ENABLED: '1'
         }
       })
       const checkTelemetry = agent.assertTelemetryReceived('generate-metrics', 1000)
@@ -601,7 +601,7 @@ describe('profiler', () => {
       it('sends a heap profile on OOM in worker thread and exits successfully', () => {
         proc = fork(oomTestFile, [1, 50], {
           cwd,
-          env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: 0 }
+          env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: '0' }
         })
         return checkProfiles(agent, proc, timeout, ['space'], false)
       })
@@ -615,8 +615,8 @@ describe('profiler', () => {
           execArgv: oomExecArgv,
           env: {
             ...oomEnv,
-            DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 15000000,
-            DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 3
+            DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '15000000',
+            DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '3'
           }
         })
         return checkProfiles(agent, proc, timeout, ['space'], false, false)
@@ -628,8 +628,8 @@ describe('profiler', () => {
           execArgv: oomExecArgv,
           env: {
             ...oomEnv,
-            DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
-            DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
+            DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '10000000',
+            DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '1',
             DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async'
           }
         })
@@ -642,8 +642,8 @@ describe('profiler', () => {
           execArgv: oomExecArgv,
           env: {
             ...oomEnv,
-            DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
-            DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
+            DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '10000000',
+            DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '1',
             DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async,process'
           }
         })
@@ -691,8 +691,8 @@ describe('profiler', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          DD_PROFILING_ENABLED: 1,
-          DD_PROFILING_UPLOAD_PERIOD: 1,
+          DD_PROFILING_ENABLED: '1',
+          DD_PROFILING_UPLOAD_PERIOD: '1',
           TEST_DURATION_MS: 2500
         }
       })
@@ -753,10 +753,10 @@ describe('profiler', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          DD_PROFILING_ENABLED: 1,
-          DD_PROFILING_UPLOAD_PERIOD: 1,
-          DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: 1,
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1, // every second
+          DD_PROFILING_ENABLED: '1',
+          DD_PROFILING_UPLOAD_PERIOD: '1',
+          DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: '1',
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1', // every second
           TEST_DURATION_MS: 1500
         }
       })
