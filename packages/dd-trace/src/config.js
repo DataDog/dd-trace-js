@@ -14,7 +14,12 @@ const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOrigi
   require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
-const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
+const {
+  isInServerlessEnvironment,
+  getIsGCPFunction,
+  getIsAzureFunction,
+  enableGCPPubSubPushSubscription
+} = require('./serverless')
 const { ORIGIN_KEY } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./config-helper')
@@ -276,8 +281,6 @@ class Config {
       this.stableConfig = new StableConfig()
     }
 
-    const envs = getEnvironmentVariables()
-
     options = {
       ...options,
       appsec: options.appsec == null ? options.experimental?.appsec : options.appsec,
@@ -321,7 +324,7 @@ class Config {
     this.#defaults = defaults
     this.#applyDefaults()
     this.#applyStableConfig(this.stableConfig?.localEntries ?? {}, this.#localStableConfig)
-    this.#applyEnvironment(envs)
+    this.#applyEnvironment()
     this.#applyStableConfig(this.stableConfig?.fleetEntries ?? {}, this.#fleetStableConfig)
     this.#applyOptions(options)
     this.#applyCalculated()
@@ -342,7 +345,7 @@ class Config {
     }
 
     if (this.gitMetadataEnabled) {
-      this.#loadGitMetadata(envs)
+      this.#loadGitMetadata()
     }
   }
 
@@ -801,6 +804,7 @@ class Config {
     this.#setBoolean(target, 'injectForce', DD_INJECT_FORCE)
     this.#setBoolean(target, 'isAzureFunction', getIsAzureFunction())
     this.#setBoolean(target, 'isGCPFunction', getIsGCPFunction())
+    this.#setBoolean(target, 'gcpPubSubPushSubscriptionEnabled', enableGCPPubSubPushSubscription())
     target['langchain.spanCharLimit'] = maybeInt(DD_LANGCHAIN_SPAN_CHAR_LIMIT)
     target['langchain.spanPromptCompletionSampleRate'] = maybeFloat(DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
     this.#setBoolean(target, 'legacyBaggageEnabled', DD_TRACE_LEGACY_BAGGAGE_ENABLED)
@@ -1473,26 +1477,24 @@ class Config {
     }
   }
 
-  #loadGitMetadata (envs) {
+  #loadGitMetadata () {
     // try to read Git metadata from the environment variables
     this.repositoryUrl = removeUserSensitiveInfo(
-      envs.DD_GIT_REPOSITORY_URL ??
-      this.tags[GIT_REPOSITORY_URL]
+      getEnv('DD_GIT_REPOSITORY_URL') ?? this.tags[GIT_REPOSITORY_URL]
     )
-    this.commitSHA = envs.DD_GIT_COMMIT_SHA ??
-      this.tags[GIT_COMMIT_SHA]
+    this.commitSHA = getEnv('DD_GIT_COMMIT_SHA') ?? this.tags[GIT_COMMIT_SHA]
 
     // otherwise, try to read Git metadata from the git.properties file
     if (!this.repositoryUrl || !this.commitSHA) {
-      const DD_GIT_PROPERTIES_FILE = envs.DD_GIT_PROPERTIES_FILE ??
-        `${process.cwd()}/git.properties`
+      const DD_GIT_PROPERTIES_FILE = getEnv('DD_GIT_PROPERTIES_FILE')
+      const gitPropertiesFile = DD_GIT_PROPERTIES_FILE ?? `${process.cwd()}/git.properties`
       let gitPropertiesString
       try {
-        gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
+        gitPropertiesString = fs.readFileSync(gitPropertiesFile, 'utf8')
       } catch (e) {
         // Only log error if the user has set a git.properties path
-        if (envs.DD_GIT_PROPERTIES_FILE) {
-          log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, e)
+        if (DD_GIT_PROPERTIES_FILE) {
+          log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', gitPropertiesFile, e)
         }
       }
       if (gitPropertiesString) {
@@ -1503,11 +1505,11 @@ class Config {
     }
     // otherwise, try to read Git metadata from the .git/ folder
     if (!this.repositoryUrl || !this.commitSHA) {
-      const DD_GIT_FOLDER_PATH = envs.DD_GIT_FOLDER_PATH ??
-        path.join(process.cwd(), '.git')
+      const DD_GIT_FOLDER_PATH = getEnv('DD_GIT_FOLDER_PATH')
+      const gitFolderPath = DD_GIT_FOLDER_PATH ?? path.join(process.cwd(), '.git')
       if (!this.repositoryUrl) {
         // try to read git config (repository URL)
-        const gitConfigPath = path.join(DD_GIT_FOLDER_PATH, 'config')
+        const gitConfigPath = path.join(gitFolderPath, 'config')
         try {
           const gitConfigContent = fs.readFileSync(gitConfigPath, 'utf8')
           if (gitConfigContent) {
@@ -1515,14 +1517,14 @@ class Config {
           }
         } catch (e) {
           // Only log error if the user has set a .git/ path
-          if (envs.DD_GIT_FOLDER_PATH) {
+          if (DD_GIT_FOLDER_PATH) {
             log.error('Error reading git config: %s', gitConfigPath, e)
           }
         }
       }
       if (!this.commitSHA) {
         // try to read git HEAD (commit SHA)
-        const gitHeadSha = resolveGitHeadSHA(DD_GIT_FOLDER_PATH)
+        const gitHeadSha = resolveGitHeadSHA(gitFolderPath)
         if (gitHeadSha) {
           this.commitSHA = gitHeadSha
         }

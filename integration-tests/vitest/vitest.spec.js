@@ -217,7 +217,7 @@ versions.forEach((version) => {
                 assert.strictEqual(test.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
               }
               assert.strictEqual(test.content.meta[TEST_COMMAND], 'vitest run')
-              assert.ok(test.content.metrics[DD_HOST_CPU_COUNT] != null)
+              assert.ok(test.content.metrics[DD_HOST_CPU_COUNT])
               assert.strictEqual(test.content.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
             })
 
@@ -232,7 +232,7 @@ versions.forEach((version) => {
                 true
               )
               assert.strictEqual(testSuite.content.metrics[TEST_SOURCE_START], 1)
-              assert.ok(testSuite.content.metrics[DD_HOST_CPU_COUNT] != null)
+              assert.ok(testSuite.content.metrics[DD_HOST_CPU_COUNT])
             })
           })
         ])
@@ -390,7 +390,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
-              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1,
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
             },
             stdio: 'pipe'
@@ -1277,7 +1277,7 @@ versions.forEach((version) => {
               assert.strictEqual(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
 
               const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
-              assert.ok(retriedTest.meta[snapshotIdKey] != null)
+              assert.ok(retriedTest.meta[snapshotIdKey])
 
               snapshotIdByTest = retriedTest.meta[snapshotIdKey]
               spanIdByTest = retriedTest.span_id.toString()

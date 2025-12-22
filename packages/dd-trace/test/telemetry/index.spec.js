@@ -1051,7 +1051,7 @@ async function testSeq (seqId, reqType, validatePayload) {
     },
     host
   })
-  assert.strictEqual([1, 0, -1].includes(Math.floor(Date.now() / 1000) - req.body.tracer_time), true)
+  assertObjectContains([1, 0, -1], [Math.floor(Date.now() / 1000) - req.body.tracer_time])
 
   validatePayload(req.body.payload)
 }

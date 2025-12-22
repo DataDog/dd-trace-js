@@ -449,13 +449,16 @@ describe('Plugin', () => {
 
                 agent.assertSomeTraces(traces => {
                   const span = traces[0][0]
-                  assert.strictEqual(span.error, 1)
-                  assertObjectContains(span.meta, {
-                    [ERROR_MESSAGE]: 'this is an error',
-                    [ERROR_TYPE]: 'Error',
-                    [ERROR_STACK]: error.stack,
-                    component: 'rhea'
+                  assertObjectContains(span, {
+                    error: 1,
+                    meta: {
+                      [ERROR_MESSAGE]: 'this is an error',
+                      [ERROR_TYPE]: 'Error',
+                      [ERROR_STACK]: error.stack,
+                      component: 'rhea'
+                    }
                   })
+
                   Session.prototype.on_transfer = onTransfer
                 }).then(done, done)
 

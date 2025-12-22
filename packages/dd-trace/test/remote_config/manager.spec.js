@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -87,7 +86,7 @@ describe('RemoteConfigManager', () => {
     assert.strictEqual(secondArg, 5e3)
 
     firstArg(noop)
-    expect(rc.poll).to.have.calledOnceWithExactly(noop)
+    sinon.assert.calledOnceWithExactly(rc.poll, noop)
 
     assert.strictEqual(rc.scheduler, scheduler)
 
@@ -276,8 +275,7 @@ describe('RemoteConfigManager', () => {
       rc.poll(() => {
         sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
         sinon.assert.calledOnceWithExactly(rc.parseConfig, { a: 'b' })
-        expect(log.error).to.have.been
-          .calledOnceWithExactly('[RC] Could not parse remote config response', error)
+        sinon.assert.calledOnceWithExactly(log.error, '[RC] Could not parse remote config response', error)
         assert.strictEqual(rc.state.client.state.has_error, true)
         assert.strictEqual(rc.state.client.state.error, 'Error: Unable to parse config')
 
