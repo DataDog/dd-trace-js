@@ -18,6 +18,7 @@ describe('process-tags', () => {
       assert.strictEqual(processTags.DYNAMIC_INSTRUMENTATION_FIELD_NAME, 'process_tags')
       assert.strictEqual(processTags.TELEMETRY_FIELD_NAME, 'process_tags')
       assert.strictEqual(processTags.REMOTE_CONFIG_FIELD_NAME, 'process_tags')
+      assert.strictEqual(processTags.CRASH_TRACKING_FIELD_NAME, 'process_tags')
     })
   })
 

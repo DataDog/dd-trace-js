@@ -107,5 +107,57 @@ describe('crashtracking', () => {
         assert.doesNotThrow(() => crashtracker.configure(config))
       })
     })
+
+    describe('process tags', () => {
+      it('should include process tags in metadata', () => {
+        crashtracker.start(config)
+
+        sinon.assert.calledOnce(binding.init)
+        const metadata = binding.init.firstCall.args[2]
+
+        assert.ok(metadata)
+        assert.ok(Array.isArray(metadata.tags))
+
+        // Check that process tags are included
+        const hasEntrypointType = metadata.tags.some(tag => tag.startsWith('entrypoint.type:'))
+        const hasEntrypointName = metadata.tags.some(tag => tag.startsWith('entrypoint.name:'))
+        const hasEntrypointWorkdir = metadata.tags.some(tag => tag.startsWith('entrypoint.workdir:'))
+        const hasEntrypointBasedir = metadata.tags.some(tag => tag.startsWith('entrypoint.basedir:'))
+
+        assert.ok(hasEntrypointType, 'should include entrypoint.type tag')
+        assert.ok(hasEntrypointName, 'should include entrypoint.name tag')
+        assert.ok(hasEntrypointWorkdir, 'should include entrypoint.workdir tag')
+        assert.ok(hasEntrypointBasedir, 'should include entrypoint.basedir tag')
+      })
+
+      it('should include user tags and process tags together', () => {
+        crashtracker.start(config)
+
+        const metadata = binding.init.firstCall.args[2]
+
+        // Check that user tags are included
+        const hasFooTag = metadata.tags.some(tag => tag === 'foo:bar')
+        assert.ok(hasFooTag, 'should include user-defined tags')
+
+        // Check that process tags are also included
+        const hasProcessTags = metadata.tags.some(tag => tag.startsWith('entrypoint.'))
+        assert.ok(hasProcessTags, 'should include process tags')
+      })
+
+      it('should update process tags when reconfiguring', () => {
+        crashtracker.start(config)
+        crashtracker.configure(config)
+
+        sinon.assert.called(binding.updateMetadata)
+        const metadata = binding.updateMetadata.firstCall.args[0]
+
+        assert.ok(metadata)
+        assert.ok(Array.isArray(metadata.tags))
+
+        // Verify process tags are in the updated metadata
+        const hasProcessTags = metadata.tags.some(tag => tag.startsWith('entrypoint.'))
+        assert.ok(hasProcessTags, 'should include process tags in updated metadata')
+      })
+    })
   })
 })
