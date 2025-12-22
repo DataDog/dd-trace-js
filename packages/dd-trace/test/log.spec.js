@@ -204,7 +204,7 @@ describe('log', () => {
 
         sinon.assert.calledOnce(console.debug)
         assert.match(console.debug.firstCall.args[0],
-          /^Trace: Test.foo\('argument', { hello: 'world' }, Foo { bar: 'baz' }\)/
+          /^Trace: Context.foo\('argument', { hello: 'world' }, Foo { bar: 'baz' }\)/
         )
         assert.ok(console.debug.firstCall.args[0].split('\n').length >= 3)
       })

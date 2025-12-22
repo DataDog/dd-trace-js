@@ -3,12 +3,40 @@
 const assert = require('node:assert/strict')
 const os = require('node:os')
 
-const { describe, it } = require('mocha')
+const { describe, it, afterEach } = require('mocha')
 
 require('./setup/core')
 const { getAzureAppMetadata, getAzureTagsFromMetadata, getAzureFunctionMetadata } = require('../src/azure_metadata')
 
 describe('Azure metadata', () => {
+  const AZURE_ENV_KEYS = [
+    'COMPUTERNAME',
+    'DD_AAS_DOTNET_EXTENSION_VERSION',
+    'DD_AZURE_RESOURCE_GROUP',
+    'FUNCTIONS_EXTENSION_VERSION',
+    'FUNCTIONS_WORKER_RUNTIME',
+    'FUNCTIONS_WORKER_RUNTIME_VERSION',
+    'WEBSITE_INSTANCE_ID',
+    'WEBSITE_OWNER_NAME',
+    'WEBSITE_OS',
+    'WEBSITE_RESOURCE_GROUP',
+    'WEBSITE_SITE_NAME',
+    'WEBSITE_SKU'
+  ]
+
+  const initialAzureEnv = Object.fromEntries(AZURE_ENV_KEYS.map(k => [k, process.env[k]]))
+
+  afterEach(() => {
+    for (const key of AZURE_ENV_KEYS) {
+      const value = initialAzureEnv[key]
+      if (value === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = value
+      }
+    }
+  })
+
   describe('for apps is', () => {
     it('not provided without WEBSITE_SITE_NAME', () => {
       delete process.env.WEBSITE_SITE_NAME
@@ -144,6 +172,7 @@ describe('Azure metadata', () => {
     process.env.WEBSITE_OWNER_NAME = 'subscription_id+extracted_group-regionwebspace'
     process.env.WEBSITE_SKU = 'Consumption'
     process.env.FUNCTIONS_EXTENSION_VERSION = '4'
+    process.env.FUNCTIONS_WORKER_RUNTIME = 'node'
     process.env.DD_AZURE_RESOURCE_GROUP = 'should_not_use_this'
     const metadata = getAzureFunctionMetadata()
     assert.strictEqual(metadata.resourceGroup, 'regular_resource_group')
