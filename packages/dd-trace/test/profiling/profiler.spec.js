@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -239,8 +238,8 @@ describe('profiler', function () {
       assert.ok(Object.hasOwn(profiles, 'space'))
       assert.ok(profiles.space instanceof Buffer)
       assert.strictEqual(profiles.space.indexOf(magicBytes), 0)
-      expect(start).to.be.a('date')
-      expect(end).to.be.a('date')
+      assert.ok((start) instanceof Date)
+      assert.ok((end) instanceof Date)
       assert.strictEqual(end - start, 65000)
       assert.strictEqual(tags.foo, 'foo')
     }
@@ -311,8 +310,8 @@ describe('profiler', function () {
       await waitForExport()
 
       const { start, end } = exporter.export.args[0][0]
-      expect(start).to.be.a('date')
-      expect(end).to.be.a('date')
+      assert.ok((start) instanceof Date)
+      assert.ok((end) instanceof Date)
       assert.strictEqual(end - start, 65000)
 
       sinon.assert.calledOnce(exporter.export)
@@ -323,9 +322,9 @@ describe('profiler', function () {
       await waitForExport()
 
       const { start: start2, end: end2 } = exporter.export.args[0][0]
-      expect(start2).to.be.greaterThanOrEqual(end)
-      expect(start2).to.be.a('date')
-      expect(end2).to.be.a('date')
+      assert.ok(start2 >= end)
+      assert.ok((start2) instanceof Date)
+      assert.ok((end2) instanceof Date)
       assert.strictEqual(end2 - start2, 65000)
 
       sinon.assert.calledOnce(exporter.export)

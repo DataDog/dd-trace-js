@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 
 const axios = require('axios')
-const { expect } = require('chai')
+
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -16,6 +16,7 @@ const { IAST_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
 const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
 const { testInRequest } = require('./utils')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 describe('IAST Index', () => {
   beforeEach(() => {
@@ -69,7 +70,10 @@ describe('IAST Index', () => {
         it('should detect vulnerability', (done) => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
+              assertObjectContains(
+                JSON.parse(traces[0][0].meta['_dd.iast.json']),
+                { vulnerabilities: [{ type: 'WEAK_HASH' }] }
+              )
             })
             .then(done)
             .catch(done)
@@ -81,7 +85,10 @@ describe('IAST Index', () => {
           iastContextFunctions.cleanIastContext = mockedCleanIastContext
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
+              assertObjectContains(
+                JSON.parse(traces[0][0].meta['_dd.iast.json']),
+                { vulnerabilities: [{ type: 'WEAK_HASH' }] }
+              )
               sinon.assert.calledOnce(mockedCleanIastContext)
             })
             .then(done)
@@ -94,7 +101,10 @@ describe('IAST Index', () => {
           overheadController.releaseRequest = releaseRequest
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
+              assertObjectContains(
+                JSON.parse(traces[0][0].meta['_dd.iast.json']),
+                { vulnerabilities: [{ type: 'WEAK_HASH' }] }
+              )
               sinon.assert.calledOnce(releaseRequest)
             })
             .then(done)
@@ -160,7 +170,7 @@ describe('IAST Index', () => {
       it('should enable AppsecFsPlugin', () => {
         mockIast.enable(config)
         sinon.assert.calledOnceWithExactly(appsecFsPlugin.enable, IAST_MODULE)
-        expect(analyzers.enableAllAnalyzers).to.have.been.calledAfter(appsecFsPlugin.enable)
+        assert.strictEqual(analyzers.enableAllAnalyzers.calledAfter(appsecFsPlugin.enable), true)
       })
     })
 
@@ -195,7 +205,7 @@ describe('IAST Index', () => {
       it('should not finish global context if not enabled before ', () => {
         mockIast.disable(config)
 
-        expect(mockOverheadController.finishGlobalContext).to.have.been.not.called
+        sinon.assert.notCalled(mockOverheadController.finishGlobalContext)
       })
     })
 
@@ -235,17 +245,17 @@ describe('IAST Index', () => {
 
       it('should not call send vulnerabilities without context', () => {
         mockIast.onIncomingHttpRequestEnd({ req: {} })
-        expect(mockVulnerabilityReporter.sendVulnerabilities).not.to.be.called
+        sinon.assert.notCalled(mockVulnerabilityReporter.sendVulnerabilities)
       })
 
       it('should not call send vulnerabilities with context but without iast context', () => {
         mockIast.onIncomingHttpRequestEnd({ req: {} })
-        expect(mockVulnerabilityReporter.sendVulnerabilities).not.to.be.called
+        sinon.assert.notCalled(mockVulnerabilityReporter.sendVulnerabilities)
       })
 
       it('should not call releaseRequest without iast context', () => {
         mockIast.onIncomingHttpRequestEnd({ req: {} })
-        expect(mockOverheadController.releaseRequest).not.to.be.called
+        sinon.assert.notCalled(mockOverheadController.releaseRequest)
       })
     })
   })

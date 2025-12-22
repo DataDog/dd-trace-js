@@ -3,7 +3,7 @@
 const os = require('os')
 const pkg = require('../../../../package.json')
 
-const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
+const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 const { DsmPathwayCodec } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')

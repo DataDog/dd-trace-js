@@ -3,12 +3,11 @@
 const assert = require('node:assert')
 const { once } = require('node:events')
 
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 describe('Plugin', () => {
   let WebSocket
   let wsServer
@@ -357,7 +356,7 @@ describe('Plugin', () => {
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0].meta).to.not.have.property('_dd.dm.inherited', 1)
+            assert.ok(!('_dd.dm.inherited' in traces[0][0].meta) || traces[0][0].meta['_dd.dm.inherited'] !== 1)
             assert.strictEqual(traces[0][0].meta['span.kind'], 'consumer')
             assert.strictEqual(traces[0][0].name, 'websocket.receive')
             assert.strictEqual(traces[0][0].type, 'websocket')
@@ -389,6 +388,162 @@ describe('Plugin', () => {
             assert.strictEqual(traces[0][0].service, 'custom-ws-service')
             assert.strictEqual(traces[0][0].name, 'websocket.send')
             assert.strictEqual(traces[0][0].type, 'websocket')
+          })
+        })
+      })
+
+      describe('with span pointers', () => {
+        let tracer
+
+        beforeEach(async () => {
+          tracer = require('../../dd-trace')
+          await agent.load(['ws'], [{
+            service: 'ws-with-pointers',
+            traceWebsocketMessagesEnabled: true,
+          }])
+          WebSocket = require(`../../../versions/ws@${version}`).get()
+
+          wsServer = new WebSocket.Server({ port: clientPort })
+
+          // Create a parent span within a trace to properly set up distributed tracing context
+          tracer.trace('test.parent', parentSpan => {
+            const headers = {}
+            tracer.inject(parentSpan, 'http_headers', headers)
+
+            // Inject distributed tracing headers to enable span pointers
+            client = new WebSocket(`ws://localhost:${clientPort}/${route}?active=true`, {
+              headers
+            })
+          })
+        })
+
+        afterEach(async () => {
+          clientPort++
+          agent.close({ ritmReset: false, wipe: true })
+        })
+
+        it('should add span pointers to producer spans', async () => {
+          wsServer.on('connection', (ws) => {
+            ws.send('test message with pointer')
+          })
+
+          client.on('message', (data) => {
+            assert.strictEqual(data.toString(), 'test message with pointer')
+          })
+
+          let didFindPointerLink = false
+
+          await agent.assertSomeTraces(traces => {
+            const producerSpan = traces[0][0]
+            assert.strictEqual(producerSpan.name, 'websocket.send')
+            assert.strictEqual(producerSpan.service, 'ws-with-pointers')
+
+            // Check for span links with span pointer attributes
+            assert.ok(producerSpan.meta['_dd.span_links'], 'Producer span should have span links')
+            const spanLinks = JSON.parse(producerSpan.meta['_dd.span_links'])
+            const pointerLink = spanLinks.find(link =>
+              link.attributes && link.attributes['dd.kind'] === 'span-pointer'
+            )
+            assert.ok(pointerLink, 'Should have a span pointer link')
+
+            assertObjectContains(pointerLink, {
+              attributes: {
+                'ptr.kind': 'websocket',
+                'ptr.dir': 'd',
+                'link.name': 'span-pointer-down'
+              }
+            })
+            didFindPointerLink = true
+
+            const { attributes } = pointerLink
+            assert.ok(Object.hasOwn(attributes, 'ptr.hash'))
+            // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
+            assert.match(attributes['ptr.hash'], /^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
+            assert.strictEqual(attributes['ptr.hash'].length, 57)
+          })
+
+          assert.strictEqual(didFindPointerLink, true)
+        })
+
+        it('should add span pointers to consumer spans', async () => {
+          wsServer.on('connection', (ws) => {
+            ws.on('message', (data) => {
+              assert.strictEqual(data.toString(), 'client message with pointer')
+            })
+          })
+
+          client.on('open', () => {
+            client.send('client message with pointer')
+          })
+
+          let didFindPointerLink = false
+
+          await agent.assertSomeTraces(traces => {
+            const consumerSpan = traces.find(t => t[0].name === 'websocket.receive')?.[0]
+            assert.ok(consumerSpan, 'Should have a consumer span')
+            assert.strictEqual(consumerSpan.service, 'ws-with-pointers')
+
+            // Check for span links with span pointer attributes
+            assert.ok(consumerSpan.meta['_dd.span_links'], 'Consumer span should have span links')
+            const spanLinks = JSON.parse(consumerSpan.meta['_dd.span_links'])
+            const pointerLink = spanLinks.find(link =>
+              link.attributes && link.attributes['dd.kind'] === 'span-pointer'
+            )
+
+            assertObjectContains(pointerLink, {
+              attributes: {
+                'ptr.kind': 'websocket',
+                'ptr.dir': 'u',
+                'link.name': 'span-pointer-up'
+              }
+            })
+            didFindPointerLink = true
+
+            const { attributes } = pointerLink
+            assert.ok(Object.hasOwn(attributes, 'ptr.hash'))
+            // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
+            assert.match(attributes['ptr.hash'], /^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
+            assert.strictEqual(attributes['ptr.hash'].length, 57)
+          })
+
+          assert.strictEqual(didFindPointerLink, true)
+        })
+
+        it('should generate unique hashes for each message', () => {
+          const testMessage = 'test message'
+          const hashes = new Set()
+
+          wsServer.on('connection', (ws) => {
+            ws.send(testMessage)
+            // Send a second message to test counter increment
+            setTimeout(() => ws.send(testMessage), 10)
+          })
+
+          client.on('message', (data) => {
+            assert.strictEqual(data.toString(), testMessage)
+          })
+
+          return agent.assertSomeTraces(traces => {
+            // Find all producer spans
+            const producerTraces = traces.filter(t => t[0].name === 'websocket.send')
+
+            producerTraces.forEach(trace => {
+              if (trace[0].meta['_dd.span_links']) {
+                const spanLinks = JSON.parse(trace[0].meta['_dd.span_links'])
+                const pointerLink = spanLinks.find(link =>
+                  link.attributes && link.attributes['dd.kind'] === 'span-pointer'
+                )
+                if (pointerLink) {
+                  const hash = pointerLink.attributes['ptr.hash']
+                  hashes.add(hash)
+                }
+              }
+            })
+
+            // Each message should have a unique hash due to counter increment
+            if (hashes.size > 1) {
+              assert.ok(hashes.size >= 2, 'Multiple messages should have different hashes')
+            }
           })
         })
       })

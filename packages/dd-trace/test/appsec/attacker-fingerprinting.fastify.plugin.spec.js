@@ -1,10 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const path = require('node:path')
 
 const Axios = require('axios')
-const { assert } = require('chai')
-
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
@@ -71,12 +71,12 @@ withVersions('fastify', 'fastify', fastifyVersion => {
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
-        assert.property(span.meta, '_dd.appsec.fp.http.header')
-        assert.equal(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-74c2908f-5-55682ec1')
-        assert.property(span.meta, '_dd.appsec.fp.http.network')
-        assert.equal(span.meta['_dd.appsec.fp.http.network'], 'net-1-0100000000')
-        assert.property(span.meta, '_dd.appsec.fp.http.endpoint')
-        assert.equal(span.meta['_dd.appsec.fp.http.endpoint'], 'http-post-8a5edab2-2c70e12b-be31090f')
+        assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.header'))
+        assert.strictEqual(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-74c2908f-5-55682ec1')
+        assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.network'))
+        assert.strictEqual(span.meta['_dd.appsec.fp.http.network'], 'net-1-0100000000')
+        assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.endpoint'))
+        assert.strictEqual(span.meta['_dd.appsec.fp.http.endpoint'], 'http-post-8a5edab2-2c70e12b-be31090f')
       })
     })
   })

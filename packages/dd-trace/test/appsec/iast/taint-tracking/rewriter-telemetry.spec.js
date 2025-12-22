@@ -1,6 +1,5 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -35,7 +34,7 @@ describe('rewriter telemetry', () => {
       }
       incrementTelemetryIfNeeded(metrics)
 
-      expect(instrumentedPropagationInc).not.to.be.called
+      sinon.assert.notCalled(instrumentedPropagationInc)
     })
 
     it('should increment telemetry when verbosity is not OFF', () => {
@@ -45,7 +44,7 @@ describe('rewriter telemetry', () => {
       }
       incrementTelemetryIfNeeded(metrics)
 
-      expect(instrumentedPropagationInc).to.be.calledOnceWith(undefined, metrics.instrumentedPropagation)
+      sinon.assert.calledOnceWithExactly(instrumentedPropagationInc, undefined, metrics.instrumentedPropagation)
     })
   })
 })

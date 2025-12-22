@@ -5,7 +5,7 @@ const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const { getEnvironmentVariable } = require('./config-helper')
-const getProcessTags = require('./process-tags')
+const processTags = require('./process-tags')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -27,7 +27,7 @@ class SpanProcessor {
     this._gitMetadataTagger = new GitMetadataTagger(config)
 
     this._processTags = config.propagateProcessTags?.enabled
-      ? getProcessTags().serialized
+      ? processTags.serialized
       : false
   }
 

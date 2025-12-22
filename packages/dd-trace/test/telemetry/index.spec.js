@@ -2,9 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
-
 const { describe, it, beforeEach, afterEach, before, after } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -215,7 +213,7 @@ describe('telemetry', () => {
     telemetry.stop()
 
     const server = http.createServer(() => {
-      expect.fail('server should not be called')
+      assert.fail('server should not be called')
     }).listen(0, () => {
       telemetry.start({
         telemetry: { enabled: false, heartbeatInterval: 60000 },
@@ -859,12 +857,13 @@ describe('Telemetry retry', () => {
     // Skip forward a day
     clock.tick(86400000)
     assert.strictEqual(extendedHeartbeatRequest, 'app-extended-heartbeat')
-    expect(extendedHeartbeatPayload).to.haveOwnProperty('integrations')
-    expect(extendedHeartbeatPayload.integrations).to.deep.include({
-      integrations: [
-        { name: 'foo2', enabled: true, auto_enabled: true },
-        { name: 'bar2', enabled: false, auto_enabled: true }
-      ]
+    assertObjectContains(extendedHeartbeatPayload, {
+      integrations: [{
+        integrations: [
+          { name: 'foo2', enabled: true, auto_enabled: true },
+          { name: 'bar2', enabled: false, auto_enabled: true }
+        ]
+      }]
     })
   })
 })
@@ -1036,7 +1035,7 @@ async function testSeq (seqId, reqType, validatePayload) {
       architecture: os.arch()
     }
   }
-  expect(req.body).to.deep.include({
+  assertObjectContains(req.body, {
     api_version: 'v2',
     naming_schema_version: '',
     request_type: reqType,
@@ -1052,7 +1051,7 @@ async function testSeq (seqId, reqType, validatePayload) {
     },
     host
   })
-  expect([1, 0, -1].includes(Math.floor(Date.now() / 1000) - req.body.tracer_time)).to.be.true
+  assertObjectContains([1, 0, -1], [Math.floor(Date.now() / 1000) - req.body.tracer_time])
 
   validatePayload(req.body.payload)
 }

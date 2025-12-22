@@ -1,11 +1,10 @@
 'use strict'
 
 const assert = require('node:assert')
-const { expect } = require('chai')
+
 const { describe, it } = require('mocha')
 
 const { parse } = require('../../../../src/appsec/iast/security-controls/parser')
-
 const {
   COMMAND_INJECTION_MARK,
   CODE_INJECTION_MARK,
@@ -60,7 +59,7 @@ describe('IAST Security Controls parser', () => {
 
       const civ = securityControls.get(civFilename)[0]
 
-      expect(civ).not.undefined
+      assert.notStrictEqual(civ, undefined)
       assert.deepStrictEqual(civ, {
         type: 'INPUT_VALIDATOR',
         file: civFilename,

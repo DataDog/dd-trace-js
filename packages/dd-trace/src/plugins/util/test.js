@@ -5,10 +5,10 @@ const fs = require('fs')
 const { URL } = require('url')
 const log = require('../../log')
 const { getEnvironmentVariable } = require('../../config-helper')
-const satisfies = require('semifies')
+const satisfies = require('../../../../../vendor/dist/semifies')
 
-const istanbul = require('istanbul-lib-coverage')
-const ignore = require('ignore')
+const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
+const ignore = require('../../../../../vendor/dist/ignore')
 
 const {
   getGitMetadata,

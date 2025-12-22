@@ -1,10 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('assert')
+
+const { When, Then, Before, After } = require('@cucumber/cucumber')
 const { By, Builder } = require('selenium-webdriver')
 const chrome = require('selenium-webdriver/chrome')
-const { When, Then, Before, After } = require('@cucumber/cucumber')
-
 let driver
 let title
 let helloWorldText
@@ -22,8 +22,8 @@ After(async function () {
 })
 
 Then('I should have run selenium', async function () {
-  expect(title).to.equal('Hello World')
-  expect(helloWorldText).to.equal('Hello World')
+  assert.strictEqual(title, 'Hello World')
+  assert.strictEqual(helloWorldText, 'Hello World')
 })
 
 When('we run selenium', async function () {

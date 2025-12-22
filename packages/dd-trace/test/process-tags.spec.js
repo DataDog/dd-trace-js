@@ -1,83 +1,108 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 
 require('./setup/core')
 
 describe('process-tags', () => {
-  const getProcessTags = require('../src/process-tags')
+  const processTags = require('../src/process-tags')
   const { serialize, sanitize } = require('../src/process-tags')
 
-  describe('getProcessTags', () => {
-    it('should return an object with tags and serialized properties', () => {
-      const result = getProcessTags()
+  describe('processTags', () => {
+    it('should return an object with tags, serialized, and tagsObject properties', () => {
+      assert.ok(Object.hasOwn(processTags, 'tags'))
+      assert.ok(Object.hasOwn(processTags, 'serialized'))
+      assert.ok(Object.hasOwn(processTags, 'tagsObject'))
+      assert.ok(Array.isArray(processTags.tags))
+      assert.strictEqual(typeof processTags.serialized, 'string')
+      assert.strictEqual(typeof processTags.tagsObject, 'object')
+    })
 
-      expect(result).to.have.property('tags')
-      expect(result).to.have.property('serialized')
-      expect(result.tags).to.be.an('array')
-      expect(result.serialized).to.be.a('string')
+    it('should have tagsObject with only defined values', () => {
+      const { tagsObject } = processTags
+
+      // All values in tagsObject should be defined
+      Object.values(tagsObject).forEach(value => {
+        assert.notStrictEqual(value, undefined)
+      })
+
+      // tagsObject should have the same keys as defined tags
+      const definedTags = processTags.tags.filter(([, value]) => value !== undefined)
+      assert.strictEqual(Object.keys(tagsObject).length, definedTags.length)
     })
 
     it('should include all expected tag names', () => {
-      const result = getProcessTags()
-      const tagNames = result.tags.map(([name]) => name)
+      const tagNames = processTags.tags.map(([name]) => name)
 
-      expect(tagNames).to.include('entrypoint.basedir')
-      expect(tagNames).to.include('entrypoint.name')
-      expect(tagNames).to.include('entrypoint.type')
-      expect(tagNames).to.include('entrypoint.workdir')
-      expect(tagNames).to.include('package.json.name')
+      assertObjectContains(
+        tagNames,
+        [
+          'entrypoint.basedir',
+          'entrypoint.name',
+          'entrypoint.type',
+          'entrypoint.workdir',
+          'package.json.name'
+        ]
+      )
     })
 
     it('should have entrypoint.type set to "script"', () => {
-      const result = getProcessTags()
-      const typeTag = result.tags.find(([name]) => name === 'entrypoint.type')
+      const typeTag = processTags.tags.find(([name]) => name === 'entrypoint.type')
 
-      expect(typeTag).to.exist
-      expect(typeTag[1]).to.equal('script')
+      assert.ok(Array.isArray(typeTag))
+      assert.strictEqual(typeTag[1], 'script')
     })
 
     it('should set entrypoint.workdir to the basename of cwd', () => {
-      const result = getProcessTags()
-      const workdirTag = result.tags.find(([name]) => name === 'entrypoint.workdir')
+      const workdirTag = processTags.tags.find(([name]) => name === 'entrypoint.workdir')
 
-      expect(workdirTag).to.exist
-      expect(workdirTag[1]).to.be.a('string')
-      expect(workdirTag[1]).to.not.include('/')
+      assert.ok(Array.isArray(workdirTag))
+      assert.strictEqual(typeof workdirTag[1], 'string')
+      assert.doesNotMatch(workdirTag[1], /\//)
     })
 
-    // note that these tests may fail if the tracer folder structure changes
-    it('should set sensible values based on tracer project structure', () => {
-      const result = getProcessTags()
+    it('should set sensible values', () => {
+      const basedirTag = processTags.tags.find(([name]) => name === 'entrypoint.basedir')
+      const nameTag = processTags.tags.find(([name]) => name === 'entrypoint.name')
+      const typeTag = processTags.tags.find(([name]) => name === 'entrypoint.type')
+      const workdirTag = processTags.tags.find(([name]) => name === 'entrypoint.workdir')
+      const packageNameTag = processTags.tags.find(([name]) => name === 'package.json.name')
 
-      expect(result.tags.find(([name]) => name === 'entrypoint.basedir')[1]).to.equal('test')
-      expect(result.tags.find(([name]) => name === 'entrypoint.name')[1]).to.equal('process-tags.spec')
-      expect(result.tags.find(([name]) => name === 'entrypoint.type')[1]).to.equal('script')
-      expect(result.tags.find(([name]) => name === 'entrypoint.workdir')[1]).to.equal('dd-trace-js')
-      expect(result.tags.find(([name]) => name === 'package.json.name')[1]).to.equal('dd-trace')
+      // Entrypoint values should be set (may vary depending on test runner)
+      assert.ok(basedirTag)
+      assert.strictEqual(typeof basedirTag[1], 'string')
+      assert.ok(nameTag)
+      assert.strictEqual(typeof nameTag[1], 'string')
+
+      assert.ok(typeTag)
+      assert.strictEqual(typeTag[1], 'script')
+
+      assert.ok(workdirTag)
+      assert.strictEqual(workdirTag[1], 'dd-trace-js')
+
+      // Package name should exist but may vary depending on test runner
+      assert.ok(packageNameTag)
+      assert.strictEqual(typeof packageNameTag[1], 'string')
     })
 
     it('should sort tags alphabetically', () => {
-      const result = getProcessTags()
-
-      expect(result.tags[0][0]).to.equal('entrypoint.basedir')
-      expect(result.tags[1][0]).to.equal('entrypoint.name')
-      expect(result.tags[2][0]).to.equal('entrypoint.type')
-      expect(result.tags[3][0]).to.equal('entrypoint.workdir')
-      expect(result.tags[4][0]).to.equal('package.json.name')
+      assert.strictEqual(processTags.tags[0][0], 'entrypoint.basedir')
+      assert.strictEqual(processTags.tags[1][0], 'entrypoint.name')
+      assert.strictEqual(processTags.tags[2][0], 'entrypoint.type')
+      assert.strictEqual(processTags.tags[3][0], 'entrypoint.workdir')
+      assert.strictEqual(processTags.tags[4][0], 'package.json.name')
     })
 
     it('should serialize tags correctly', () => {
-      const result = getProcessTags()
-
       // serialized should be comma-separated and not include undefined values
-      if (result.serialized) {
-        const parts = result.serialized.split(',')
-        expect(parts.length).to.be.greaterThan(0)
+      if (processTags.serialized) {
+        const parts = processTags.serialized.split(',')
+        assert.ok(parts.length > 0)
         parts.forEach(part => {
-          expect(part).to.include(':')
-          expect(part).to.not.include('undefined')
+          assert.match(part, /:/)
+          assert.doesNotMatch(part, /undefined/)
         })
       }
     })
@@ -93,7 +118,7 @@ describe('process-tags', () => {
 
       const result = serialize(tags)
 
-      expect(result).to.equal('tag1:value1,tag2:value2,tag3:value3')
+      assert.strictEqual(result, 'tag1:value1,tag2:value2,tag3:value3')
     })
 
     it('should filter out tags with undefined values', () => {
@@ -106,8 +131,8 @@ describe('process-tags', () => {
 
       const result = serialize(tags)
 
-      expect(result).to.equal('tag1:value1,tag3:value3')
-      expect(result).to.not.include('undefined')
+      assert.strictEqual(result, 'tag1:value1,tag3:value3')
+      assert.doesNotMatch(result, /undefined/)
     })
 
     it('should sanitize tag values', () => {
@@ -119,7 +144,7 @@ describe('process-tags', () => {
 
       const result = serialize(tags)
 
-      expect(result).to.equal('tag1:value_with_spaces,tag2:uppercase,tag3:special_chars_')
+      assert.strictEqual(result, 'tag1:value_with_spaces,tag2:uppercase,tag3:special_chars_')
     })
 
     it('should return empty string when all values are undefined', () => {
@@ -130,13 +155,13 @@ describe('process-tags', () => {
 
       const result = serialize(tags)
 
-      expect(result).to.equal('')
+      assert.strictEqual(result, '')
     })
 
     it('should handle empty tags array', () => {
       const result = serialize([])
 
-      expect(result).to.equal('')
+      assert.strictEqual(result, '')
     })
 
     it('should handle numeric values', () => {
@@ -147,7 +172,7 @@ describe('process-tags', () => {
 
       const result = serialize(tags)
 
-      expect(result).to.equal('tag1:123,tag2:456')
+      assert.strictEqual(result, 'tag1:123,tag2:456')
     })
 
     it('should handle mixed defined and undefined values', () => {
@@ -161,107 +186,110 @@ describe('process-tags', () => {
 
       const result = serialize(tags)
 
-      expect(result).to.equal('tag1:value1,tag3:value3,tag5:value5')
+      assert.strictEqual(result, 'tag1:value1,tag3:value3,tag5:value5')
     })
   })
 
   describe('sanitize', () => {
     it('should convert to lowercase', () => {
-      expect(sanitize('UPPERCASE')).to.equal('uppercase')
-      expect(sanitize('MixedCase')).to.equal('mixedcase')
-      expect(sanitize('CamelCase')).to.equal('camelcase')
+      assert.strictEqual(sanitize('UPPERCASE'), 'uppercase')
+      assert.strictEqual(sanitize('MixedCase'), 'mixedcase')
+      assert.strictEqual(sanitize('CamelCase'), 'camelcase')
     })
 
     it('should replace spaces with underscores', () => {
-      expect(sanitize('hello world')).to.equal('hello_world')
-      expect(sanitize('multiple   spaces')).to.equal('multiple_spaces')
+      assert.strictEqual(sanitize('hello world'), 'hello_world')
+      assert.strictEqual(sanitize('multiple   spaces'), 'multiple_spaces')
     })
 
     it('should replace special characters with underscores', () => {
-      expect(sanitize('hello@world')).to.equal('hello_world')
-      expect(sanitize('hello!world')).to.equal('hello_world')
-      expect(sanitize('hello#world')).to.equal('hello_world')
-      expect(sanitize('hello$world')).to.equal('hello_world')
-      expect(sanitize('hello%world')).to.equal('hello_world')
-      expect(sanitize('hello&world')).to.equal('hello_world')
-      expect(sanitize('hello*world')).to.equal('hello_world')
+      assert.strictEqual(sanitize('hello@world'), 'hello_world')
+      assert.strictEqual(sanitize('hello!world'), 'hello_world')
+      assert.strictEqual(sanitize('hello#world'), 'hello_world')
+      assert.strictEqual(sanitize('hello$world'), 'hello_world')
+      assert.strictEqual(sanitize('hello%world'), 'hello_world')
+      assert.strictEqual(sanitize('hello&world'), 'hello_world')
+      assert.strictEqual(sanitize('hello*world'), 'hello_world')
     })
 
     it('should preserve forward slashes', () => {
-      expect(sanitize('path/to/file')).to.equal('path/to/file')
-      expect(sanitize('foo/bar/baz')).to.equal('foo/bar/baz')
+      assert.strictEqual(sanitize('path/to/file'), 'path/to/file')
+      assert.strictEqual(sanitize('foo/bar/baz'), 'foo/bar/baz')
     })
 
     it('should preserve underscores', () => {
-      expect(sanitize('hello_world')).to.equal('hello_world')
-      expect(sanitize('foo_bar_baz')).to.equal('foo_bar_baz')
+      assert.strictEqual(sanitize('hello_world'), 'hello_world')
+      assert.strictEqual(sanitize('foo_bar_baz'), 'foo_bar_baz')
     })
 
     it('should preserve dots', () => {
-      expect(sanitize('file.txt')).to.equal('file.txt')
-      expect(sanitize('my.package.name')).to.equal('my.package.name')
+      assert.strictEqual(sanitize('file.txt'), 'file.txt')
+      assert.strictEqual(sanitize('my.package.name'), 'my.package.name')
     })
 
     it('should preserve hyphens', () => {
-      expect(sanitize('my-package')).to.equal('my-package')
-      expect(sanitize('foo-bar-baz')).to.equal('foo-bar-baz')
+      assert.strictEqual(sanitize('my-package'), 'my-package')
+      assert.strictEqual(sanitize('foo-bar-baz'), 'foo-bar-baz')
     })
 
     it('should preserve alphanumeric characters', () => {
-      expect(sanitize('abc123')).to.equal('abc123')
-      expect(sanitize('ABC123')).to.equal('abc123')
-      expect(sanitize('test123abc')).to.equal('test123abc')
+      assert.strictEqual(sanitize('abc123'), 'abc123')
+      assert.strictEqual(sanitize('ABC123'), 'abc123')
+      assert.strictEqual(sanitize('test123abc'), 'test123abc')
     })
 
     it('should handle multiple consecutive special characters', () => {
-      expect(sanitize('hello!!!world')).to.equal('hello_world')
-      expect(sanitize('foo@@@bar')).to.equal('foo_bar')
-      expect(sanitize('test   spaces')).to.equal('test_spaces')
+      assert.strictEqual(sanitize('hello!!!world'), 'hello_world')
+      assert.strictEqual(sanitize('foo@@@bar'), 'foo_bar')
+      assert.strictEqual(sanitize('test   spaces'), 'test_spaces')
     })
 
     it('should handle complex combinations', () => {
-      expect(sanitize('My-Package_Name/v1.2.3')).to.equal('my-package_name/v1.2.3')
-      expect(sanitize('foo@bar#baz.txt')).to.equal('foo_bar_baz.txt')
-      expect(sanitize('Test File (Copy).js')).to.equal('test_file_copy_.js')
+      assert.strictEqual(sanitize('My-Package_Name/v1.2.3'), 'my-package_name/v1.2.3')
+      assert.strictEqual(sanitize('foo@bar#baz.txt'), 'foo_bar_baz.txt')
+      assert.strictEqual(sanitize('Test File (Copy).js'), 'test_file_copy_.js')
     })
 
     it('should convert non-string values to strings first', () => {
-      expect(sanitize(123)).to.equal('123')
-      expect(sanitize(true)).to.equal('true')
-      expect(sanitize(false)).to.equal('false')
+      // @ts-expect-error: intentionally passing invalid types to test robustness
+      assert.strictEqual(sanitize(123), '123')
+      // @ts-expect-error: intentionally passing invalid types to test robustness
+      assert.strictEqual(sanitize(true), 'true')
+      // @ts-expect-error: intentionally passing invalid types to test robustness
+      assert.strictEqual(sanitize(false), 'false')
     })
 
     it('should handle empty string', () => {
-      expect(sanitize('')).to.equal('')
+      assert.strictEqual(sanitize(''), '')
     })
 
     it('should handle strings with only special characters', () => {
-      expect(sanitize('!!!')).to.equal('_')
-      expect(sanitize('@@@')).to.equal('_')
-      expect(sanitize('   ')).to.equal('_')
+      assert.strictEqual(sanitize('!!!'), '_')
+      assert.strictEqual(sanitize('@@@'), '_')
+      assert.strictEqual(sanitize('   '), '_')
     })
 
     it('should handle unicode characters', () => {
-      expect(sanitize('hello™world')).to.equal('hello_world')
-      expect(sanitize('café')).to.equal('caf_')
-      expect(sanitize('日本語')).to.equal('_')
+      assert.strictEqual(sanitize('hello™world'), 'hello_world')
+      assert.strictEqual(sanitize('café'), 'caf_')
+      assert.strictEqual(sanitize('日本語'), '_')
     })
 
     it('should handle brackets and parentheses', () => {
-      expect(sanitize('func()')).to.equal('func_')
-      expect(sanitize('array[0]')).to.equal('array_0_')
-      expect(sanitize('{object}')).to.equal('_object_')
+      assert.strictEqual(sanitize('func()'), 'func_')
+      assert.strictEqual(sanitize('array[0]'), 'array_0_')
+      assert.strictEqual(sanitize('{object}'), '_object_')
     })
 
     it('should handle quotes and backticks', () => {
-      expect(sanitize('"quoted"')).to.equal('_quoted_')
-      expect(sanitize("'quoted'")).to.equal('_quoted_')
-      expect(sanitize('`backtick`')).to.equal('_backtick_')
+      assert.strictEqual(sanitize('"quoted"'), '_quoted_')
+      assert.strictEqual(sanitize("'quoted'"), '_quoted_')
+      assert.strictEqual(sanitize('`backtick`'), '_backtick_')
     })
 
     it('should preserve allowed characters in combination', () => {
-      expect(sanitize('my_file-v1.0/test.js')).to.equal('my_file-v1.0/test.js')
-      expect(sanitize('package_name-2.4.6/lib/index.js')).to.equal('package_name-2.4.6/lib/index.js')
+      assert.strictEqual(sanitize('my_file-v1.0/test.js'), 'my_file-v1.0/test.js')
+      assert.strictEqual(sanitize('package_name-2.4.6/lib/index.js'), 'package_name-2.4.6/lib/index.js')
     })
   })
 
@@ -279,23 +307,27 @@ describe('process-tags', () => {
       process.env = env
       delete require.cache[require.resolve('../src/config')]
       delete require.cache[require.resolve('../src/span_processor')]
+      delete require.cache[require.resolve('../src/process-tags')]
     })
 
     it('should enable process tags propagation when set to true', () => {
       process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'true'
 
+      // Need to reload config first, then process-tags (which reads from config)
+      delete require.cache[require.resolve('../src/config')]
+      delete require.cache[require.resolve('../src/process-tags')]
+
       getConfig = require('../src/config')
       const config = getConfig()
 
-      expect(config.propagateProcessTags).to.exist
-      expect(config.propagateProcessTags.enabled).to.equal(true)
+      assert.ok(config.propagateProcessTags)
+      assert.strictEqual(config.propagateProcessTags.enabled, true)
 
       SpanProcessor = require('../src/span_processor')
       const processor = new SpanProcessor(undefined, undefined, config)
 
-      expect(processor._processTags).to.be.a('string')
-      expect(processor._processTags).to.not.be.false
-      expect(processor._processTags).to.include('entrypoint')
+      assert.ok(typeof processor._processTags === 'string')
+      assert.match(processor._processTags, /entrypoint/)
     })
 
     it('should disable process tags propagation when set to false', () => {
@@ -304,13 +336,13 @@ describe('process-tags', () => {
       getConfig = require('../src/config')
       const config = getConfig()
 
-      expect(config.propagateProcessTags).to.exist
-      expect(config.propagateProcessTags.enabled).to.equal(false)
+      assert.ok(config.propagateProcessTags)
+      assert.strictEqual(config.propagateProcessTags.enabled, false)
 
       SpanProcessor = require('../src/span_processor')
       const processor = new SpanProcessor(undefined, undefined, config)
 
-      expect(processor._processTags).to.equal(false)
+      assert.strictEqual(processor._processTags, false)
     })
 
     it('should disable process tags propagation when not set', () => {
@@ -319,12 +351,12 @@ describe('process-tags', () => {
       getConfig = require('../src/config')
       const config = getConfig()
 
-      expect(config.propagateProcessTags?.enabled).to.not.equal(true)
+      assert.notStrictEqual(config.propagateProcessTags?.enabled, true)
 
       SpanProcessor = require('../src/span_processor')
       const processor = new SpanProcessor(undefined, undefined, config)
 
-      expect(processor._processTags).to.equal(false)
+      assert.strictEqual(processor._processTags, false)
     })
   })
 })

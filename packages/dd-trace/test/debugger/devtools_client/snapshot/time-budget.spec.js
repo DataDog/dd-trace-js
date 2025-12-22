@@ -1,6 +1,6 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const proxyquire = require('proxyquire')
 const { timeBudgetSym } = require('../../../../src/debugger/devtools_client/snapshot/symbols')
 
@@ -38,7 +38,7 @@ describe('Debugger snapshot time budget', () => {
     }]
 
     const out = processRawState(raw, MAX_LENGTH)
-    assert.deepEqual(out.fn, {
+    assert.deepStrictEqual(out.fn, {
       type: 'Function',
       notCapturedReason: 'timeout'
     })
@@ -55,7 +55,7 @@ describe('Debugger snapshot time budget', () => {
     }]
 
     const out = processRawState(raw, MAX_LENGTH)
-    assert.deepEqual(out.obj, {
+    assert.deepStrictEqual(out.obj, {
       type: 'Object',
       notCapturedReason: 'timeout'
     })
@@ -73,7 +73,7 @@ describe('Debugger snapshot time budget', () => {
     }]
 
     const out = processRawState(raw, MAX_LENGTH)
-    assert.deepEqual(out.arr, {
+    assert.deepStrictEqual(out.arr, {
       type: 'Array',
       notCapturedReason: 'timeout'
     })
@@ -101,7 +101,7 @@ describe('Debugger snapshot time budget', () => {
     }]
 
     const out = processRawState(raw, MAX_LENGTH)
-    assert.deepEqual(out.map, {
+    assert.deepStrictEqual(out.map, {
       type: 'Map',
       notCapturedReason: 'timeout'
     })
@@ -129,7 +129,7 @@ describe('Debugger snapshot time budget', () => {
     }]
 
     const out = processRawState(raw, MAX_LENGTH)
-    assert.deepEqual(out.set, {
+    assert.deepStrictEqual(out.set, {
       type: 'Set',
       notCapturedReason: 'timeout'
     })

@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 const {
@@ -51,7 +50,7 @@ describe('IAST metric namespaces', () => {
     sinon.assert.called(rootSpan.addTags)
 
     const tag = rootSpan.addTags.getCalls()[0].args[0]
-    expect(tag).to.has.property(`${TAG_PREFIX}.${REQUEST_TAINTED}`)
+    assert.ok(`${TAG_PREFIX}.${REQUEST_TAINTED}` in tag)
     assert.strictEqual(tag[`${TAG_PREFIX}.${REQUEST_TAINTED}`], 10)
 
     assert.strictEqual(context[DD_IAST_METRICS_NAMESPACE], undefined)
@@ -68,11 +67,11 @@ describe('IAST metric namespaces', () => {
 
     const calls = rootSpan.addTags.getCalls()
     const reqTaintedTag = calls[0].args[0]
-    expect(reqTaintedTag).to.has.property(`${TAG_PREFIX}.${REQUEST_TAINTED}`)
+    assert.ok(`${TAG_PREFIX}.${REQUEST_TAINTED}` in reqTaintedTag)
     assert.strictEqual(reqTaintedTag[`${TAG_PREFIX}.${REQUEST_TAINTED}`], 15)
 
     const execSinkTag = calls[1].args[0]
-    expect(execSinkTag).to.has.property(`${TAG_PREFIX}.${EXECUTED_SINK}`)
+    assert.ok(`${TAG_PREFIX}.${EXECUTED_SINK}` in execSinkTag)
     assert.strictEqual(execSinkTag[`${TAG_PREFIX}.${EXECUTED_SINK}`], 1)
   })
 
@@ -87,9 +86,9 @@ describe('IAST metric namespaces', () => {
 
     finalizeRequestNamespace(context, rootSpan)
 
-    expect(count).to.be.calledTwice
+    sinon.assert.calledTwice(count)
     assert.deepStrictEqual(count.firstCall.args, [REQUEST_TAINTED, ['tag1:test']])
-    expect(metric.inc).to.be.calledTwice
+    sinon.assert.calledTwice(metric.inc)
     assert.strictEqual(metric.inc.firstCall.args[0], 10)
 
     assert.deepStrictEqual(count.secondCall.args, [EXECUTED_SINK, undefined])
@@ -201,7 +200,7 @@ describe('IastNamespace', () => {
       namespace.getMetric('metric.name', tags)
       namespace.getMetric('metric.name', tags)
 
-      expect(count).to.be.calledOnceWith('metric.name', tags)
+      sinon.assert.calledOnceWithExactly(count, 'metric.name', tags)
     })
 
     it('should reuse a previously created metric', () => {

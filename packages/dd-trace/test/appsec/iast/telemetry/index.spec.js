@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 
 const axios = require('axios')
-const { expect } = require('chai')
+
 const { after, afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -73,7 +73,7 @@ describe('Telemetry', () => {
 
         assert.strictEqual(iastTelemetry.enabled, false)
         assert.strictEqual(iastTelemetry.verbosity, Verbosity.OFF)
-        expect(telemetryMetrics.manager.set).to.not.be.called
+        sinon.assert.notCalled(telemetryMetrics.manager.set)
       })
 
       it('should enable telemetry if telemetry.metrics is true', () => {
@@ -95,7 +95,7 @@ describe('Telemetry', () => {
 
         assert.strictEqual(iastTelemetry.enabled, false)
         assert.strictEqual(iastTelemetry.verbosity, Verbosity.OFF)
-        expect(telemetryMetrics.manager.set).to.not.be.called
+        sinon.assert.notCalled(telemetryMetrics.manager.set)
       })
     })
 
@@ -116,7 +116,7 @@ describe('Telemetry', () => {
         const iastContext = {}
         iastTelemetry.onRequestStart(iastContext)
 
-        expect(initRequestNamespace).to.be.calledOnceWith(iastContext)
+        sinon.assert.calledOnceWithExactly(initRequestNamespace, iastContext)
       })
 
       it('should not call init if enabled and verbosity is Off', () => {
@@ -133,7 +133,7 @@ describe('Telemetry', () => {
         const iastContext = {}
         iastTelemetry.onRequestStart(iastContext)
 
-        expect(initRequestNamespace).to.not.be.calledOnce
+        sinon.assert.notCalled(initRequestNamespace)
       })
     })
 
@@ -144,7 +144,7 @@ describe('Telemetry', () => {
         const iastContext = {}
         iastTelemetry.onRequestEnd(iastContext)
 
-        expect(finalizeRequestNamespace).to.be.calledOnceWith(iastContext)
+        sinon.assert.calledOnceWithMatch(finalizeRequestNamespace, iastContext)
       })
 
       it('should not call finalizeRequestNamespace if enabled and verbosity is Off', () => {
@@ -161,7 +161,7 @@ describe('Telemetry', () => {
         const iastContext = {}
         iastTelemetry.onRequestEnd(iastContext)
 
-        expect(finalizeRequestNamespace).to.not.be.calledOnce
+        sinon.assert.notCalled(finalizeRequestNamespace)
       })
     })
   })

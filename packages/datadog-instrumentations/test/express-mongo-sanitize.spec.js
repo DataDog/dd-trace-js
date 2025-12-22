@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 
 const axios = require('axios')
-const { expect } = require('chai')
+
 const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -103,8 +103,10 @@ describe('express-mongo-sanitize', () => {
           await axios.get(`http://localhost:${port}/?param=paramvalue`)
 
           sinon.assert.calledOnce(subscription)
-          expect(subscription.firstCall.args[0].sanitizedProperties)
-            .to.be.deep.equal(['body', 'params', 'headers', 'query'])
+          assert.deepStrictEqual(
+            subscription.firstCall.args[0].sanitizedProperties,
+            ['body', 'params', 'headers', 'query'],
+          )
           assert.strictEqual(subscription.firstCall.args[0].req.query.param, 'paramvalue')
         })
 
@@ -114,8 +116,11 @@ describe('express-mongo-sanitize', () => {
           await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
 
           sinon.assert.calledOnce(subscription)
-          expect(subscription.firstCall.args[0].sanitizedProperties)
-            .to.be.deep.equal(['body', 'params', 'headers', 'query'])
+          assert.deepStrictEqual(
+            subscription.firstCall.args[0].sanitizedProperties,
+            ['body', 'params', 'headers', 'query'],
+            'Sanitized properties should be called with expected parameters'
+          )
           assert.strictEqual(subscription.firstCall.args[0].req.query.param.$eq, undefined)
         })
       })
@@ -190,7 +195,7 @@ describe('express-mongo-sanitize', () => {
           const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
 
           assert.strictEqual(sanitizedObject.safeKey, objectToSanitize.safeKey)
-          expect(subscription).to.be.calledOnceWith({ sanitizedObject })
+          sinon.assert.calledOnceWithMatch(subscription, { sanitizedObject })
         })
 
         it('it works as expected with modifications', () => {
@@ -207,7 +212,7 @@ describe('express-mongo-sanitize', () => {
 
           assert.strictEqual(sanitizedObject.safeKey, objectToSanitize.safeKey)
           assert.strictEqual(sanitizedObject.unsafeKey.$ne, undefined)
-          expect(subscription).to.be.calledOnceWith({ sanitizedObject })
+          sinon.assert.calledOnceWithMatch(subscription, { sanitizedObject })
         })
       })
     })

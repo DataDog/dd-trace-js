@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const dc = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -18,9 +17,9 @@ const iastEnabledConfig = {
 describe('IAST Rewriter', () => {
   it('Addon should return a rewritter instance', () => {
     let rewriter = null
-    expect(() => {
+    assert.doesNotThrow(() => {
       rewriter = require('@datadog/wasm-js-rewriter')
-    }).to.not.throw(Error)
+    }, Error)
     assert.notStrictEqual(rewriter, null)
   })
 
@@ -115,7 +114,7 @@ describe('IAST Rewriter', () => {
     it('Should wrap module compile method on taint tracking enable', () => {
       rewriter.enable(iastEnabledConfig)
       sinon.assert.calledOnce(shimmer.wrap)
-      expect(shimmer.wrap.getCall(0).args[1]).eq('_compile')
+      assert.strictEqual(shimmer.wrap.getCall(0).args[1], '_compile')
 
       rewriter.disable()
     })
@@ -145,7 +144,7 @@ describe('IAST Rewriter', () => {
 
       rewriter.disable()
 
-      expect(Error.prepareStackTrace).to.be.eq(testPrepareStackTrace)
+      assert.strictEqual(Error.prepareStackTrace, testPrepareStackTrace)
 
       Error.prepareStackTrace = orig
     })
@@ -160,7 +159,7 @@ describe('IAST Rewriter', () => {
 
       rewriter.disable()
 
-      expect(Error.prepareStackTrace).to.be.eq(testPrepareStackTrace)
+      assert.strictEqual(Error.prepareStackTrace, testPrepareStackTrace)
 
       Error.prepareStackTrace = orig
     })
@@ -180,7 +179,7 @@ describe('IAST Rewriter', () => {
 
       rewriter.disable()
 
-      expect(Error.prepareStackTrace).to.be.eq(testPrepareStackTrace)
+      assert.strictEqual(Error.prepareStackTrace, testPrepareStackTrace)
 
       Error.prepareStackTrace = orig
     })
@@ -204,7 +203,7 @@ describe('IAST Rewriter', () => {
       it('Should not enable esm rewriter when ESM is not instrumented', () => {
         rewriter.enable(iastEnabledConfig)
 
-        expect(Module.register).not.to.be.called
+        sinon.assert.notCalled(Module.register)
       })
 
       it('Should enable esm rewriter when ESM is configured with --loader exec arg', () => {
@@ -277,7 +276,7 @@ describe('IAST Rewriter', () => {
           port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
 
           waitUntilCheckSuccess(() => {
-            expect(cacheRewrittenSourceMap).to.be.calledOnceWith('file.js', content)
+            sinon.assert.calledOnceWithExactly(cacheRewrittenSourceMap, 'file.js', content)
 
             done()
           })
@@ -297,7 +296,7 @@ describe('IAST Rewriter', () => {
           port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
 
           waitUntilCheckSuccess(() => {
-            expect(rewriterTelemetry.incrementTelemetryIfNeeded).to.be.calledOnceWith(metrics)
+            sinon.assert.calledOnceWithExactly(rewriterTelemetry.incrementTelemetryIfNeeded, metrics)
 
             done()
           })
@@ -339,13 +338,13 @@ describe('IAST Rewriter', () => {
           port.postMessage({ type: constants.LOG_MESSAGE, data })
 
           waitUntilCheckSuccess(() => {
-            expect(log.error).to.be.calledOnceWith(...messages)
+            sinon.assert.calledOnceWithExactly(log.error, ...messages)
             done()
           })
         })
 
         it('should call port1.on before port1.unref', () => {
-          expect(port1On).to.be.calledBefore(port1Unref)
+          assert.strictEqual(port1On.calledBefore(port1Unref), true)
         })
       })
     })
@@ -377,7 +376,7 @@ describe('IAST Rewriter', () => {
       const location = { path: 'test', line: 42, column: 4 }
       rewriter.getOriginalPathAndLineFromSourceMap(location)
 
-      expect(getOriginalPathAndLineFromSourceMap).to.be.calledOnceWithExactly('test', 42, 4)
+      sinon.assert.calledOnceWithExactly(getOriginalPathAndLineFromSourceMap, 'test', 42, 4)
     })
 
     it('should not call native getOriginalPathAndLineFromSourceMap if --enable-source-maps is present', () => {
@@ -388,7 +387,7 @@ describe('IAST Rewriter', () => {
       const location = { path: 'test', line: 42, column: 4 }
       rewriter.getOriginalPathAndLineFromSourceMap(location)
 
-      expect(getOriginalPathAndLineFromSourceMap).to.not.be.called
+      sinon.assert.notCalled(getOriginalPathAndLineFromSourceMap)
     })
 
     it('should not call native getOriginalPathAndLineFromSourceMap if --enable-source-maps as NODE_OPTION', () => {
@@ -405,7 +404,7 @@ describe('IAST Rewriter', () => {
       const location = { path: 'test', line: 42, column: 4 }
       rewriter.getOriginalPathAndLineFromSourceMap(location)
 
-      expect(getOriginalPathAndLineFromSourceMap).to.not.be.called
+      sinon.assert.notCalled(getOriginalPathAndLineFromSourceMap)
 
       process.env.NODE_OPTIONS = origNodeOptions
     })
