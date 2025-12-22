@@ -106,6 +106,11 @@ const storage = {
       opName: ({ operation }) => `prisma.${operation}`,
       serviceName: withSuffixFunction('prisma')
     },
+    postgres: {
+      opName: () => 'postgres.command',
+      serviceName: ({ tracerService, pluginConfig }) =>
+        pluginConfig.service || `${tracerService}-postgres`
+    },
     redis: redisConfig,
     tedious: {
       opName: () => 'tedious.request',

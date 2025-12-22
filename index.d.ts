@@ -238,6 +238,7 @@ interface Plugins {
   "playwright": tracer.plugins.playwright;
   "pg": tracer.plugins.pg;
   "pino": tracer.plugins.pino;
+  "postgres": tracer.plugins.postgres;
   "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
   "redis": tracer.plugins.redis;
@@ -2340,6 +2341,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [@prisma/client](https://www.prisma.io/docs/orm/prisma-client) module.
      */
+    /**
+     * This plugin automatically instruments the
+     * [postgres](https://github.com/npmjs/package/postgres) database client library.
+     */
+    interface postgres extends Instrumentation {}
+
     interface prisma extends PrismaClient, PrismaEngine {
       /**
        * Configuration for prisma client.
