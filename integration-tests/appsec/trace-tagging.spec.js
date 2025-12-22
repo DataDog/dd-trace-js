@@ -20,7 +20,7 @@ describe('ASM Trace Tagging rules', () => {
 
       const env = {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_APPSEC_ENABLED: true,
+        DD_APPSEC_ENABLED: 'true',
         DD_APPSEC_RULES: path.join(cwd, 'appsec', 'data-collection', 'data-collection-rules.json')
       }
 

@@ -14,7 +14,7 @@ const {
 
 class GenAiLLMObsPlugin extends LLMObsPlugin {
   static id = 'google-genai'
-  static integration = 'genai'
+  static integration = 'google_genai'
   static prefix = 'tracing:apm:google:genai:request'
 
   constructor () {

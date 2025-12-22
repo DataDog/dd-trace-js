@@ -52,7 +52,7 @@ describe('Hardcoded Secret Analyzer', () => {
             }]
           })
 
-          assert.ok([NameAndValue, ValueOnly].includes(testCase.type))
+          assertObjectContains([NameAndValue, ValueOnly], [testCase.type])
           sinon.assert.calledOnceWithExactly(report, { file: relFile, line, column, ident, data: testCase.id })
         })
       })

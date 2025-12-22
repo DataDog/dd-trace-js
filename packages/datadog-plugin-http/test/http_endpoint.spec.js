@@ -1,7 +1,8 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const axios = require('axios')
-const { expect } = require('chai')
+
 const { describe, it, beforeEach, afterEach, before } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -56,10 +57,10 @@ describe('Plugin', () => {
         it('should set http.endpoint with int when no route is available', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'web.request')
-              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/users/123`)
-              expect(traces[0][0].meta).to.not.have.property('http.route')
-              expect(traces[0][0].meta).to.have.property('http.endpoint', '/users/{param:int}')
+              assert.strictEqual(traces[0][0].name, 'web.request')
+              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/users/123`)
+              assert.ok(!('http.route' in traces[0][0].meta))
+              assert.strictEqual(traces[0][0].meta['http.endpoint'], '/users/{param:int}')
             })
             .then(done)
             .catch(done)
@@ -70,9 +71,9 @@ describe('Plugin', () => {
         it('should set http.endpoint with int_id when no route is available', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'web.request')
-              expect(traces[0][0].meta).to.not.have.property('http.route')
-              expect(traces[0][0].meta).to.have.property('http.endpoint', '/resources/{param:int_id}')
+              assert.strictEqual(traces[0][0].name, 'web.request')
+              assert.ok(!('http.route' in traces[0][0].meta))
+              assert.strictEqual(traces[0][0].meta['http.endpoint'], '/resources/{param:int_id}')
             })
             .then(done)
             .catch(done)
@@ -83,10 +84,10 @@ describe('Plugin', () => {
         it('should set http.endpoint with hex when no route is available', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'web.request')
-              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/orders/abc123`)
-              expect(traces[0][0].meta).to.not.have.property('http.route')
-              expect(traces[0][0].meta).to.have.property('http.endpoint', '/orders/{param:hex}')
+              assert.strictEqual(traces[0][0].name, 'web.request')
+              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/orders/abc123`)
+              assert.ok(!('http.route' in traces[0][0].meta))
+              assert.strictEqual(traces[0][0].meta['http.endpoint'], '/orders/{param:hex}')
             })
             .then(done)
             .catch(done)
@@ -97,9 +98,9 @@ describe('Plugin', () => {
         it('should set http.endpoint with hex_id when no route is available', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'web.request')
-              expect(traces[0][0].meta).to.not.have.property('http.route')
-              expect(traces[0][0].meta).to.have.property('http.endpoint', '/resources/{param:hex_id}')
+              assert.strictEqual(traces[0][0].name, 'web.request')
+              assert.ok(!('http.route' in traces[0][0].meta))
+              assert.strictEqual(traces[0][0].meta['http.endpoint'], '/resources/{param:hex_id}')
             })
             .then(done)
             .catch(done)

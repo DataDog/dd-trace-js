@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const dc = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -277,7 +276,7 @@ describe('IAST Rewriter', () => {
           port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
 
           waitUntilCheckSuccess(() => {
-            expect(cacheRewrittenSourceMap).to.be.calledOnceWith('file.js', content)
+            sinon.assert.calledOnceWithExactly(cacheRewrittenSourceMap, 'file.js', content)
 
             done()
           })
@@ -297,7 +296,7 @@ describe('IAST Rewriter', () => {
           port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
 
           waitUntilCheckSuccess(() => {
-            expect(rewriterTelemetry.incrementTelemetryIfNeeded).to.be.calledOnceWith(metrics)
+            sinon.assert.calledOnceWithExactly(rewriterTelemetry.incrementTelemetryIfNeeded, metrics)
 
             done()
           })
@@ -339,13 +338,13 @@ describe('IAST Rewriter', () => {
           port.postMessage({ type: constants.LOG_MESSAGE, data })
 
           waitUntilCheckSuccess(() => {
-            expect(log.error).to.be.calledOnceWith(...messages)
+            sinon.assert.calledOnceWithExactly(log.error, ...messages)
             done()
           })
         })
 
         it('should call port1.on before port1.unref', () => {
-          expect(port1On).to.be.calledBefore(port1Unref)
+          assert.strictEqual(port1On.calledBefore(port1Unref), true)
         })
       })
     })
@@ -377,7 +376,7 @@ describe('IAST Rewriter', () => {
       const location = { path: 'test', line: 42, column: 4 }
       rewriter.getOriginalPathAndLineFromSourceMap(location)
 
-      expect(getOriginalPathAndLineFromSourceMap).to.be.calledOnceWithExactly('test', 42, 4)
+      sinon.assert.calledOnceWithExactly(getOriginalPathAndLineFromSourceMap, 'test', 42, 4)
     })
 
     it('should not call native getOriginalPathAndLineFromSourceMap if --enable-source-maps is present', () => {

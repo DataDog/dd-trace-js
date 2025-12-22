@@ -87,7 +87,6 @@
     "bson": "7.0.0",
     "bunyan": "2.0.5",
     "cassandra-driver": "4.8.0",
-    "chai": "6.2.0",
     "collections": "5.1.13",
     "connect": "3.7.0",
     "cookie": "1.0.2",

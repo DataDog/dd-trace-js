@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -533,7 +532,7 @@ describe('PrioritySampler', () => {
 
       PrioritySampler.keepTrace(span, SAMPLING_MECHANISM_APPSEC)
 
-      expect(setPriority).to.be.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      sinon.assert.calledOnceWithExactly(setPriority, span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
     })
   })
 })

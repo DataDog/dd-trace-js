@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -156,10 +155,20 @@ describe('IAST TaintTracking Operations', () => {
 
       const result = taintTrackingOperations.taintObject(iastContext, obj, null)
       sinon.assert.calledTwice(taintedUtilsMock.newTaintedString)
-      expect(taintedUtilsMock.newTaintedString.firstCall).to.have.been
-        .calledWithExactly(transactionId, 'child', 'child.value', null)
-      expect(taintedUtilsMock.newTaintedString.secondCall).to.have.been
-        .calledWithExactly(transactionId, 'parent', 'value', null)
+      sinon.assert.calledWithExactly(
+        taintedUtilsMock.newTaintedString.firstCall,
+        transactionId,
+        'child',
+        'child.value',
+        null
+      )
+      sinon.assert.calledWithExactly(
+        taintedUtilsMock.newTaintedString.secondCall,
+        transactionId,
+        'parent',
+        'value',
+        null
+      )
       assert.deepStrictEqual(result, expected)
     })
 
@@ -227,9 +236,7 @@ describe('IAST TaintTracking Operations', () => {
         [taintTrackingOperations.IAST_TRANSACTION_ID]: transactionId
       }
       taintTrackingOperations.removeTransaction(iastContext)
-      expect(taintedUtils.removeTransaction).to.be.calledWithExactly(
-        transactionId
-      )
+      sinon.assert.calledWithExactly(taintedUtils.removeTransaction, transactionId)
       assert.strictEqual(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID], undefined)
     })
 
@@ -258,7 +265,7 @@ describe('IAST TaintTracking Operations', () => {
       taintTrackingOperations.enableTaintOperations(iastTelemetry.verbosity)
       taintTrackingOperations.removeTransaction(iastContext)
 
-      expect(requestTaintedInc).to.be.calledOnceWith(iastContext, 5)
+      sinon.assert.calledOnceWithExactly(requestTaintedInc, iastContext, 5)
     })
   })
 
@@ -325,7 +332,7 @@ describe('IAST TaintTracking Operations', () => {
       global._ddiast.plusOperator('helloworld', 'hello', 'world')
       sinon.assert.called(taintedUtils.concat)
 
-      expect(executedPropagationIncrease).to.be.calledOnceWith(context)
+      sinon.assert.calledOnceWithExactly(executedPropagationIncrease, context)
     })
   })
 
@@ -339,8 +346,13 @@ describe('IAST TaintTracking Operations', () => {
       const type = 'REQUEST'
       taintTrackingOperations.newTaintedString(iastContext, value, param, type)
       sinon.assert.called(taintedUtils.newTaintedString)
-      expect(taintedUtils.newTaintedString).to.be
-        .calledWithExactly(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID], value, param, type)
+      sinon.assert.calledWithExactly(
+        taintedUtils.newTaintedString,
+        iastContext[taintTrackingOperations.IAST_TRANSACTION_ID],
+        value,
+        param,
+        type
+      )
     })
 
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.newTaintedString', () => {
@@ -373,8 +385,13 @@ describe('IAST TaintTracking Operations', () => {
       const type = 'REQUEST'
       taintTrackingOperations.newTaintedObject(iastContext, value, param, type)
       sinon.assert.called(taintedUtils.newTaintedObject)
-      expect(taintedUtils.newTaintedObject).to.be
-        .calledWithExactly(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID], value, param, type)
+      sinon.assert.calledWithExactly(
+        taintedUtils.newTaintedObject,
+        iastContext[taintTrackingOperations.IAST_TRANSACTION_ID],
+        value,
+        param,
+        type
+      )
     })
 
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.newTaintedObject', () => {
@@ -405,7 +422,8 @@ describe('IAST TaintTracking Operations', () => {
       const value = 'value'
       taintTrackingOperations.isTainted(iastContext, value)
       sinon.assert.called(taintedUtils.isTainted)
-      expect(taintedUtils.isTainted).to.be.calledWithExactly(
+      sinon.assert.calledWithExactly(
+        taintedUtils.isTainted,
         iastContext[taintTrackingOperations.IAST_TRANSACTION_ID],
         value
       )
@@ -432,7 +450,8 @@ describe('IAST TaintTracking Operations', () => {
       const value = 'value'
       taintTrackingOperations.getRanges(iastContext, value)
       sinon.assert.called(taintedUtils.getRanges)
-      expect(taintedUtils.getRanges).to.be.calledWithExactly(
+      sinon.assert.calledWithExactly(
+        taintedUtils.getRanges,
         iastContext[taintTrackingOperations.IAST_TRANSACTION_ID],
         value
       )

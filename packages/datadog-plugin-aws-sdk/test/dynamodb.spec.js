@@ -13,8 +13,6 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const DynamoDb = require('../src/services/dynamodb')
 const { generatePointerHash } = require('../src/util')
 const { setup } = require('./spec_helpers')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
-
 /* eslint-disable no-console */
 async function resetLocalStackDynamo () {
   try {
@@ -160,18 +158,16 @@ describe('Plugin', () => {
 
         describe('with payload tagging', () => {
           it('adds request and response payloads as flattened tags for putItem', async () => {
-            const agentPromise = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              assert.strictEqual(span.resource, `putItem ${oneKeyTableName}`)
-              assertObjectContains(span.meta, {
+            const agentPromise = agent.assertFirstTraceSpan({
+              resource: `putItem ${oneKeyTableName}`,
+              meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
                 'aws.request.body.Item.name': 'redacted',
                 'aws.request.body.Item.data.S': 'test-data'
-              })
+              }
             })
 
             const operation = () => promisify(dynamo.putItem)({
@@ -186,18 +182,16 @@ describe('Plugin', () => {
           })
 
           it('adds request and response payloads as flattened tags for updateItem', async () => {
-            const agentPromise = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              assert.strictEqual(span.resource, `updateItem ${oneKeyTableName}`)
-              assertObjectContains(span.meta, {
+            const agentPromise = agent.assertFirstTraceSpan({
+              resource: `updateItem ${oneKeyTableName}`,
+              meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
                 'aws.request.body.Key.name.S': 'test-name',
                 'aws.request.body.AttributeUpdates.data.Value.S': 'updated-data'
-              })
+              }
             })
 
             const operation = () => promisify(dynamo.updateItem)({
@@ -217,17 +211,15 @@ describe('Plugin', () => {
           })
 
           it('adds request and response payloads as flattened tags for deleteItem', async () => {
-            const agentPromise = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              assert.strictEqual(span.resource, `deleteItem ${oneKeyTableName}`)
-              assertObjectContains(span.meta, {
+            const agentPromise = agent.assertFirstTraceSpan({
+              resource: `deleteItem ${oneKeyTableName}`,
+              meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
                 'aws.request.body.Key.name.S': 'test-name'
-              })
+              }
             })
 
             const operation = () => promisify(dynamo.deleteItem)({
@@ -253,11 +245,9 @@ describe('Plugin', () => {
             // Wait a bit to ensure the put completes
             await wait(100)
 
-            const agentPromise = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              assert.strictEqual(span.resource, `getItem ${oneKeyTableName}`)
-              assertObjectContains(span.meta, {
+            const agentPromise = agent.assertFirstTraceSpan({
+              resource: `getItem ${oneKeyTableName}`,
+              meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
@@ -265,7 +255,7 @@ describe('Plugin', () => {
                 'aws.request.body.Key.name.S': 'test-get-name',
                 'aws.response.body.Item.name.S': 'test-get-name',
                 'aws.response.body.Item.data': 'redacted'
-              })
+              }
             })
 
             const operation = () => promisify(dynamo.getItem)({

@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -71,14 +71,14 @@ describe('OpenFeature Exposures Writer', () => {
 
   describe('constructor', () => {
     it('should initialize with correct defaults', () => {
-      expect(writer._interval).to.equal(1000)
-      expect(writer._timeout).to.equal(5000)
-      expect(writer._bufferLimit).to.equal(1000)
-      expect(writer._buffer).to.be.an('array').that.is.empty
+      assert.strictEqual(writer._interval, 1000)
+      assert.strictEqual(writer._timeout, 5000)
+      assert.strictEqual(writer._bufferLimit, 1000)
+      assert.deepStrictEqual(writer._buffer, [])
     })
 
     it('should set up periodic flushing', () => {
-      expect(writer._periodic).to.exist
+      assert.ok(writer._periodic)
     })
   })
 
@@ -90,8 +90,8 @@ describe('OpenFeature Exposures Writer', () => {
     it('should add exposure event to buffer', () => {
       writer.append(exposureEvent)
 
-      expect(writer._buffer).to.have.length(1)
-      expect(writer._buffer[0]).to.equal(exposureEvent)
+      assert.strictEqual(writer._buffer?.length, 1)
+      assert.strictEqual(writer._buffer[0], exposureEvent)
     })
 
     it('should track buffer size', () => {
@@ -99,7 +99,7 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.append(exposureEvent)
 
-      expect(writer._bufferSize).to.be.greaterThan(initialSize)
+      assert.ok(writer._bufferSize > initialSize)
     })
 
     it('should drop events when buffer is full', () => {
@@ -109,9 +109,9 @@ describe('OpenFeature Exposures Writer', () => {
       writer.append(exposureEvent)
       writer.append(exposureEvent) // Should be dropped
 
-      expect(writer._buffer).to.have.length(2)
-      expect(writer._droppedEvents).to.equal(1)
-      expect(log.warn).to.have.been.calledOnce
+      assert.strictEqual(writer._buffer?.length, 2)
+      assert.strictEqual(writer._droppedEvents, 1)
+      sinon.assert.calledOnce(log.warn)
     })
 
     it('should drop events exceeding 1MB size limit', () => {
@@ -122,11 +122,9 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.append(largeEvent)
 
-      expect(writer._buffer).to.have.length(0)
-      expect(writer._droppedEvents).to.equal(1)
-      expect(log.warn).to.have.been.calledWith(
-        sinon.match(/event size[\s\S]*bytes exceeds limit/)
-      )
+      assert.strictEqual(writer._buffer?.length, 0)
+      assert.strictEqual(writer._droppedEvents, 1)
+      sinon.assert.calledWith(log.warn, sinon.match(/event size[\s\S]*bytes exceeds limit/))
     })
 
     it('should flush when payload would exceed 5MB limit', () => {
@@ -137,18 +135,16 @@ describe('OpenFeature Exposures Writer', () => {
       }
 
       writer.append(largeEvent) // First event, buffer = ~2MB
-      expect(writer._buffer).to.have.length(1)
+      assert.strictEqual(writer._buffer?.length, 1)
 
       writer.append(largeEvent) // Second event, buffer = ~4MB
-      expect(writer._buffer).to.have.length(2)
+      assert.strictEqual(writer._buffer?.length, 2)
 
       writer.append(largeEvent) // Third event would make buffer ~6MB, should trigger flush
 
-      expect(log.debug).to.have.been.calledWith(
-        sinon.match(/buffer size would exceed .* bytes, flushing first/)
-      )
+      sinon.assert.calledWith(log.debug, sinon.match(/buffer size would exceed .* bytes, flushing first/))
       // After flush is triggered, buffer should be cleared and new event added
-      expect(writer._buffer).to.have.length(1)
+      assert.strictEqual(writer._buffer?.length, 1)
     })
 
     it('should buffer events when disabled', () => {
@@ -156,9 +152,9 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.append(exposureEvent)
 
-      expect(writer._buffer).to.have.length(0) // Event should not be in main buffer
-      expect(writer._pendingEvents).to.have.length(1) // Should be in pending events
-      expect(writer._pendingEvents[0].event).to.equal(exposureEvent)
+      assert.strictEqual(writer._buffer?.length, 0) // Event should not be in main buffer
+      assert.strictEqual(writer._pendingEvents?.length, 1) // Should be in pending events
+      assert.strictEqual(writer._pendingEvents[0].event, exposureEvent)
     })
   })
 
@@ -167,17 +163,17 @@ describe('OpenFeature Exposures Writer', () => {
       const events = [exposureEvent]
       const payload = writer.makePayload(events)
 
-      expect(payload).to.be.an('object')
-      expect(payload).to.have.property('context')
-      expect(payload).to.have.property('exposures')
-      expect(payload.exposures).to.be.an('array').with.length(1)
+      assert.ok(payload !== null && typeof payload === 'object' && !Array.isArray(payload))
+      assert.ok(Object.hasOwn(payload, 'context'))
+      assert.ok(Object.hasOwn(payload, 'exposures'))
+      assert.strictEqual(payload.exposures?.length, 1)
     })
 
     it('should include service metadata in context', () => {
       const events = [exposureEvent]
       const payload = writer.makePayload(events)
 
-      expect(payload.context).to.deep.equal({
+      assert.deepStrictEqual(payload.context, {
         service: 'test-service',
         version: '1.0.0',
         env: 'test'
@@ -189,7 +185,7 @@ describe('OpenFeature Exposures Writer', () => {
       const payload = writer.makePayload(events)
       const formattedEvent = payload.exposures[0]
 
-      expect(formattedEvent).to.deep.equal({
+      assert.deepStrictEqual(formattedEvent, {
         timestamp: 1672531200000,
         allocation: { key: 'allocation_123' },
         flag: { key: 'test_flag' },
@@ -212,11 +208,11 @@ describe('OpenFeature Exposures Writer', () => {
       const events = [exposureEvent]
       const payload = writerWithoutOptionals.makePayload(events)
 
-      expect(payload.context).to.deep.equal({
+      assert.deepStrictEqual(payload.context, {
         service: 'test-service'
       })
-      expect(payload.context).to.not.have.property('version')
-      expect(payload.context).to.not.have.property('env')
+      assert.ok(!(Object.hasOwn(payload.context, 'version')))
+      assert.ok(!(Object.hasOwn(payload.context, 'env')))
     })
 
     it('should handle flat format with dot notation', () => {
@@ -231,12 +227,12 @@ describe('OpenFeature Exposures Writer', () => {
       const payload = writer.makePayload([flatEvent])
       const formattedEvent = payload.exposures[0]
 
-      expect(formattedEvent.allocation.key).to.equal('allocation_123')
-      expect(formattedEvent.flag.key).to.equal('test_flag')
-      expect(formattedEvent.variant.key).to.equal('A')
-      expect(formattedEvent.subject.id).to.equal('user_123')
-      expect(formattedEvent.subject.type).to.be.undefined
-      expect(formattedEvent.subject.attributes).to.be.undefined
+      assert.strictEqual(formattedEvent.allocation.key, 'allocation_123')
+      assert.strictEqual(formattedEvent.flag.key, 'test_flag')
+      assert.strictEqual(formattedEvent.variant.key, 'A')
+      assert.strictEqual(formattedEvent.subject.id, 'user_123')
+      assert.strictEqual(formattedEvent.subject.type, undefined)
+      assert.strictEqual(formattedEvent.subject.attributes, undefined)
     })
   })
 
@@ -248,7 +244,7 @@ describe('OpenFeature Exposures Writer', () => {
     it('should skip flushing when buffer is empty', () => {
       writer.flush()
 
-      expect(request).to.not.have.been.called
+      sinon.assert.called(request)
     })
 
     it('should skip flushing when writer is disabled', () => {
@@ -257,7 +253,7 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.flush()
 
-      expect(request).to.not.have.been.called
+      sinon.assert.called(request)
     })
 
     it('should flush events to agent via EVP proxy', () => {
@@ -265,31 +261,31 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.flush()
 
-      expect(request).to.have.been.calledOnce
+      sinon.assert.calledOnce(request)
       const [payload, options] = request.getCall(0).args
 
-      expect(options.method).to.equal('POST')
-      expect(options.path).to.include('/evp_proxy/v2/')
-      expect(options.headers['Content-Type']).to.equal('application/json')
-      expect(options.headers['X-Datadog-EVP-Subdomain']).to.equal('event-platform-intake')
+      assert.strictEqual(options.method, 'POST')
+      assert.match(options.path, /\/evp_proxy\/v2\//)
+      assert.strictEqual(options.headers['Content-Type'], 'application/json')
+      assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
 
       const parsedPayload = JSON.parse(payload)
-      expect(parsedPayload).to.be.an('object')
-      expect(parsedPayload).to.have.property('context')
-      expect(parsedPayload).to.have.property('exposures')
-      expect(parsedPayload.exposures).to.be.an('array').with.length(1)
-      expect(parsedPayload.exposures[0].timestamp).to.exist
-      expect(parsedPayload.context.service).to.equal('test-service')
+      assert.ok(parsedPayload !== null && typeof parsedPayload === 'object' && !Array.isArray(parsedPayload))
+      assert.ok(Object.hasOwn(parsedPayload, 'context'))
+      assert.ok(Object.hasOwn(parsedPayload, 'exposures'))
+      assert.strictEqual(parsedPayload.exposures?.length, 1)
+      assert.ok(parsedPayload.exposures[0].timestamp)
+      assert.strictEqual(parsedPayload.context.service, 'test-service')
     })
 
     it('should empty buffer after flushing', () => {
       writer.append(exposureEvent)
-      expect(writer._buffer).to.have.length(1)
+      assert.strictEqual(writer._buffer?.length, 1)
 
       writer.flush()
 
-      expect(writer._buffer).to.have.length(0)
-      expect(writer._bufferSize).to.equal(0)
+      assert.strictEqual(writer._buffer?.length, 0)
+      assert.strictEqual(writer._bufferSize, 0)
     })
 
     it('should log errors on request failure', (done) => {
@@ -299,7 +295,7 @@ describe('OpenFeature Exposures Writer', () => {
       writer.flush()
 
       clock.tickAsync(0).then(() => {
-        expect(log.error).to.have.been.calledOnce
+        sinon.assert.calledOnce(log.error)
         done()
       })
     })
@@ -309,7 +305,7 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.flush()
 
-      expect(log.debug).to.have.been.called
+      sinon.assert.called(log.debug)
     })
 
     it('should warn on non-2xx response', (done) => {
@@ -319,7 +315,7 @@ describe('OpenFeature Exposures Writer', () => {
       writer.flush()
 
       clock.tickAsync(0).then(() => {
-        expect(log.warn).to.have.been.calledOnce
+        sinon.assert.calledOnce(log.warn)
         done()
       })
     })
@@ -335,13 +331,13 @@ describe('OpenFeature Exposures Writer', () => {
 
       clock.tick(1000) // Advance by flush interval
 
-      expect(request).to.have.been.calledOnce
+      sinon.assert.calledOnce(request)
     })
 
     it('should not flush empty buffer periodically', () => {
       clock.tick(1000)
 
-      expect(request).to.not.have.been.called
+      sinon.assert.called(request)
     })
   })
 
@@ -351,7 +347,7 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.destroy()
 
-      expect(clearIntervalSpy).to.have.been.calledOnce
+      sinon.assert.calledOnce(clearIntervalSpy)
       clearIntervalSpy.restore()
     })
 
@@ -361,7 +357,7 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.destroy()
 
-      expect(request).to.have.been.calledOnce
+      sinon.assert.calledOnce(request)
     })
 
     it('should log dropped events count', () => {
@@ -369,16 +365,14 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.destroy()
 
-      expect(log.warn).to.have.been.calledWith(
-        sinon.match(/dropped 5 events/)
-      )
+      sinon.assert.calledWith(log.warn, sinon.match(/dropped 5 events/))
     })
 
     it('should prevent multiple destruction', () => {
       writer.destroy()
       writer.destroy() // Should not throw or cause issues
 
-      expect(writer._destroyed).to.be.true
+      assert.strictEqual(writer._destroyed, true)
     })
   })
 })

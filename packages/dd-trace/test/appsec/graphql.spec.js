@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -274,7 +273,7 @@ describe('GraphQL', () => {
       sinon.assert.calledOnceWithExactly(blocking.getBlockingData, req, 'graphql', blockParameters)
 
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.block.failed', 1)
-      expect(telemetry.updateBlockFailureMetric).to.be.calledOnceWithExactly(req)
+      sinon.assert.calledOnceWithExactly(telemetry.updateBlockFailureMetric, req)
     })
   })
 })

@@ -1,6 +1,5 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -69,7 +68,7 @@ describe('telemetry logs', () => {
       defaultConfig.telemetry.logCollection = false
       logs.start(defaultConfig)
 
-      expect(telemetryLog.subscribe).to.not.been.called
+      sinon.assert.notCalled(telemetryLog.subscribe)
     })
   })
 
@@ -114,13 +113,13 @@ describe('telemetry logs', () => {
     it('should be called with WARN level', () => {
       telemetryLog.publish({ message: 'message', level: 'WARN' })
 
-      expect(logCollectorAdd).to.be.calledOnceWith(match({ message: 'message', level: 'WARN' }))
+      sinon.assert.calledOnceWithExactly(logCollectorAdd, match({ message: 'message', level: 'WARN' }))
     })
 
     it('should be called with ERROR level', () => {
       telemetryLog.publish({ message: 'message', level: 'ERROR' })
 
-      expect(logCollectorAdd).to.be.calledOnceWith(match({ message: 'message', level: 'ERROR' }))
+      sinon.assert.calledOnceWithExactly(logCollectorAdd, match({ message: 'message', level: 'ERROR' }))
     })
 
     it('should be called with ERROR level and stack_trace', () => {
@@ -128,7 +127,10 @@ describe('telemetry logs', () => {
       const stack = error.stack
       telemetryLog.publish({ message: error.message, stack_trace: stack, level: 'ERROR' })
 
-      expect(logCollectorAdd).to.be.calledOnceWith(match({ message: 'message', level: 'ERROR', stack_trace: stack }))
+      sinon.assert.calledOnceWithExactly(
+        logCollectorAdd,
+        match({ message: 'message', level: 'ERROR', stack_trace: stack })
+      )
     })
 
     it('should not be called with no defined level', () => {
@@ -149,19 +151,18 @@ describe('telemetry logs', () => {
         const stack = error.stack
         errorLog.publish({ cause: error, sendViaTelemetry: true })
 
-        expect(logCollectorAdd)
-          .to.be.calledOnceWith(match({
-            message: 'Generic Error',
-            level: 'ERROR',
-            errorType: 'Error',
-            stack_trace: stack
-          }))
+        sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
+          message: 'Generic Error',
+          level: 'ERROR',
+          errorType: 'Error',
+          stack_trace: stack
+        }))
       })
 
       it('should be called when an error string is published to datadog:log:error', () => {
         errorLog.publish({ message: 'custom error message', sendViaTelemetry: true })
 
-        expect(logCollectorAdd).to.be.calledOnceWith(match({
+        sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
           message: 'custom error message',
           level: 'ERROR',
           stack_trace: undefined
@@ -217,7 +218,7 @@ describe('telemetry logs', () => {
 
       logs.send(defaultConfig, application, host)
 
-      expect(sendData).to.be.calledOnceWithExactly(defaultConfig, application, host, 'logs', { logs: collectedLogs })
+      sinon.assert.calledOnceWithExactly(sendData, defaultConfig, application, host, 'logs', { logs: collectedLogs })
     })
 
     it('should not drain logCollector and call sendData if not enabled', () => {

@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -131,6 +130,6 @@ describe('ldap-injection-analyzer', () => {
 
     onLdapClientSearch({ base: 'base', filter: 'filter', name: 'datadog:ldapjs:client:search' })
 
-    expect(analyzeAll.firstCall).to.be.calledWith('base', 'filter')
+    sinon.assert.calledWith(analyzeAll.firstCall, 'base', 'filter')
   })
 })

@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
@@ -35,7 +34,7 @@ describe('Telemetry Span tags', () => {
 
     addMetricsToSpan(rootSpan, metrics.series, tagPrefix)
 
-    expect(rootSpan.addTags).to.be.calledTwice
+    sinon.assert.calledTwice(rootSpan.addTags)
     assert.deepStrictEqual(rootSpan.addTags.firstCall.args[0], { '_dd.test.executed.source.source_type_1': 42 })
     assert.deepStrictEqual(rootSpan.addTags.secondCall.args[0], { '_dd.test.executed.sink.sink_type_1': 3 })
   })
@@ -49,7 +48,7 @@ describe('Telemetry Span tags', () => {
 
     addMetricsToSpan(rootSpan, metrics.series, tagPrefix)
 
-    expect(rootSpan.addTags).to.be.calledOnceWithExactly({ '_dd.test.executed.source.source_type_1': 74 })
+    sinon.assert.calledOnceWithExactly(rootSpan.addTags, { '_dd.test.executed.source.source_type_1': 74 })
   })
 
   it('should add span tags with tag name like \'tagPrefix.metricName.tagKey\' for different tagged metrics', () => {
@@ -63,7 +62,7 @@ describe('Telemetry Span tags', () => {
 
     addMetricsToSpan(rootSpan, metrics.series, tagPrefix)
 
-    expect(rootSpan.addTags).to.be.calledTwice
+    sinon.assert.calledTwice(rootSpan.addTags)
     assert.deepStrictEqual(rootSpan.addTags.firstCall.args[0], { '_dd.test.executed.source.source_type_1': 74 })
     assert.deepStrictEqual(rootSpan.addTags.secondCall.args[0], { '_dd.test.executed.source.source_type_2': 2 })
   })
@@ -75,6 +74,6 @@ describe('Telemetry Span tags', () => {
 
     addMetricsToSpan(rootSpan, metrics.series, tagPrefix)
 
-    expect(rootSpan.addTags).to.be.calledOnceWithExactly({ '_dd.test.request.tainted': 42 })
+    sinon.assert.calledOnceWithExactly(rootSpan.addTags, { '_dd.test.request.tainted': 42 })
   })
 })

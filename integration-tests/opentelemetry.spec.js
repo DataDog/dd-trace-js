@@ -83,9 +83,9 @@ describe('opentelemetry', () => {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_TRACE_OTEL_ENABLED: 1,
-        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-        TIMEOUT: 1500,
+        DD_TRACE_OTEL_ENABLED: '1',
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        TIMEOUT: '1500',
         DD_SERVICE: 'service',
         DD_TRACE_LOG_LEVEL: 'error',
         DD_TRACE_SAMPLE_RATE: '0.5',
@@ -115,9 +115,9 @@ describe('opentelemetry', () => {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_TRACE_OTEL_ENABLED: 1,
-        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-        TIMEOUT: 1500,
+        DD_TRACE_OTEL_ENABLED: '1',
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        TIMEOUT: '1500',
         DD_SERVICE: 'service',
         OTEL_SERVICE_NAME: 'otel_service',
         DD_TRACE_LOG_LEVEL: 'error',
@@ -195,9 +195,9 @@ describe('opentelemetry', () => {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_TRACE_OTEL_ENABLED: 1,
-        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-        TIMEOUT: 1500,
+        DD_TRACE_OTEL_ENABLED: '1',
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        TIMEOUT: '1500',
         OTEL_SERVICE_NAME: 'otel_service',
         OTEL_LOG_LEVEL: 'foo',
         OTEL_TRACES_SAMPLER: 'foo',
@@ -293,9 +293,9 @@ describe('opentelemetry', () => {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_TRACE_OTEL_ENABLED: 1,
-        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-        TIMEOUT: 1500
+        DD_TRACE_OTEL_ENABLED: '1',
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        TIMEOUT: '1500'
       }
     })
 
@@ -335,10 +335,10 @@ describe('opentelemetry', () => {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_TRACE_OTEL_ENABLED: 1,
+        DD_TRACE_OTEL_ENABLED: '1',
         SERVER_PORT,
         DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net',
-        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: '1'
       }
     })
     await new Promise(resolve => setTimeout(resolve, 1000)) // Adjust the delay as necessary
@@ -408,7 +408,7 @@ describe('opentelemetry', () => {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_TRACE_OTEL_ENABLED: 1,
+        DD_TRACE_OTEL_ENABLED: '1',
         SERVER_PORT,
         DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net'
       }

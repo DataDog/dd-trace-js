@@ -420,12 +420,9 @@ describe('Plugin', () => {
 
           client.getUnary({ first: 'foobar' }, () => {})
 
-          return agent
-            .assertSomeTraces(traces => {
-              assertObjectContains(traces[0][0], {
-                service: 'custom'
-              })
-            })
+          return agent.assertFirstTraceSpan({
+            service: 'custom'
+          })
         })
       })
 

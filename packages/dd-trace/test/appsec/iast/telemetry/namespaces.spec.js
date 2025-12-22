@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 const {
@@ -87,9 +86,9 @@ describe('IAST metric namespaces', () => {
 
     finalizeRequestNamespace(context, rootSpan)
 
-    expect(count).to.be.calledTwice
+    sinon.assert.calledTwice(count)
     assert.deepStrictEqual(count.firstCall.args, [REQUEST_TAINTED, ['tag1:test']])
-    expect(metric.inc).to.be.calledTwice
+    sinon.assert.calledTwice(metric.inc)
     assert.strictEqual(metric.inc.firstCall.args[0], 10)
 
     assert.deepStrictEqual(count.secondCall.args, [EXECUTED_SINK, undefined])
@@ -201,7 +200,7 @@ describe('IastNamespace', () => {
       namespace.getMetric('metric.name', tags)
       namespace.getMetric('metric.name', tags)
 
-      expect(count).to.be.calledOnceWith('metric.name', tags)
+      sinon.assert.calledOnceWithExactly(count, 'metric.name', tags)
     })
 
     it('should reuse a previously created metric', () => {

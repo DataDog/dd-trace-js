@@ -97,7 +97,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   useSandbox(
     [
       `mocha@${MOCHA_VERSION}`,
-      'chai@v4',
       'nyc',
       'mocha-each',
       'workerpool'
@@ -149,7 +148,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
       testSpans.forEach(testSpan => {
         assert.strictEqual(testSpan.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
-        assert.ok(testSpan.metrics[TEST_SOURCE_START] != null)
+        assert.ok(testSpan.metrics[TEST_SOURCE_START])
       })
 
       done()
@@ -212,20 +211,20 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               ]
             )
             assert.strictEqual(suites.length, 2)
-            assert.ok(sessionEventContent != null)
-            assert.ok(moduleEventContent != null)
+            assert.ok(sessionEventContent)
+            assert.ok(moduleEventContent)
 
             tests.forEach(testEvent => {
               assert.strictEqual(
                 testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'),
                 true
               )
-              assert.ok(testEvent.metrics[TEST_SOURCE_START] != null)
+              assert.ok(testEvent.metrics[TEST_SOURCE_START])
               assert.strictEqual(testEvent.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
               // Can read DD_TAGS
               assert.strictEqual(testEvent.meta['test.customtag'], 'customvalue')
               assert.strictEqual(testEvent.meta['test.customtag2'], 'customvalue2')
-              assert.ok(testEvent.metrics[DD_HOST_CPU_COUNT] != null)
+              assert.ok(testEvent.metrics[DD_HOST_CPU_COUNT])
             })
 
             suites.forEach(testSuite => {
@@ -234,7 +233,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 true
               )
               assert.strictEqual(testSuite.metrics[TEST_SOURCE_START], 1)
-              assert.ok(testSuite.metrics[DD_HOST_CPU_COUNT] != null)
+              assert.ok(testSuite.metrics[DD_HOST_CPU_COUNT])
             })
           })
 
@@ -285,7 +284,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               assert.strictEqual(test.parent_id.toString(), '0')
               assert.strictEqual(test.meta[TEST_STATUS], 'pass')
               assert.strictEqual(test.meta[ORIGIN_KEY], CI_APP_ORIGIN)
-              assert.ok(test.meta[TEST_FRAMEWORK_VERSION] != null)
+              assert.ok(test.meta[TEST_FRAMEWORK_VERSION])
               assert.strictEqual(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
               assert.strictEqual(test.meta[LIBRARY_VERSION], ddTraceVersion)
               assert.strictEqual(test.meta[COMPONENT], 'mocha')
@@ -324,8 +323,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/failing.js')
             assert.strictEqual(test.meta[ERROR_TYPE], 'AssertionError')
             assert.strictEqual(test.meta[ERROR_MESSAGE], 'Expected values to be strictly equal:\n\ntrue !== false\n')
-            assert.ok(test.metrics[TEST_SOURCE_START] != null)
-            assert.ok(test.meta[ERROR_STACK] != null)
+            assert.ok(test.metrics[TEST_SOURCE_START])
+            assert.ok(test.meta[ERROR_STACK])
             assert.strictEqual(test.parent_id.toString(), '0')
             assert.strictEqual(test.type, 'test')
             assert.strictEqual(test.name, 'mocha.test')
@@ -435,7 +434,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/done-fail.js')
             assert.strictEqual(test.meta[ERROR_TYPE], 'AssertionError')
             assert.strictEqual(test.meta[ERROR_MESSAGE], 'Expected values to be strictly equal:\n\ntrue !== false\n')
-            assert.ok(test.meta[ERROR_STACK] != null)
+            assert.ok(test.meta[ERROR_STACK])
           })
 
         childProcess = exec(
@@ -500,7 +499,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/promise-fail.js')
             assert.strictEqual(test.meta[ERROR_TYPE], 'AssertionError')
             assert.strictEqual(test.meta[ERROR_MESSAGE], 'Expected values to be strictly equal:\n\ntrue !== false\n')
-            assert.ok(test.meta[ERROR_STACK] != null)
+            assert.ok(test.meta[ERROR_STACK])
           })
 
         childProcess = exec(
@@ -565,7 +564,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/async-fail.js')
             assert.strictEqual(test.meta[ERROR_TYPE], 'AssertionError')
             assert.strictEqual(test.meta[ERROR_MESSAGE], 'Expected values to be strictly equal:\n\ntrue !== false\n')
-            assert.ok(test.meta[ERROR_STACK] != null)
+            assert.ok(test.meta[ERROR_STACK])
           })
 
         childProcess = exec(
@@ -599,7 +598,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/timeout-fail.js')
             assert.strictEqual(test.meta[ERROR_TYPE], 'Error')
             assert.match(test.meta[ERROR_MESSAGE], /Timeout/)
-            assert.ok(test.meta[ERROR_STACK] != null)
+            assert.ok(test.meta[ERROR_STACK])
           })
 
         childProcess = exec(
@@ -663,7 +662,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[TEST_SUITE], 'ci-visibility/mocha-plugin-tests/parameterized.js')
             assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/parameterized.js')
             assert.strictEqual(test.meta[TEST_PARAMETERS], JSON.stringify({ arguments: [1, 2, 3], metadata: {} }))
-            assert.ok(test.metrics[TEST_SOURCE_START] != null)
+            assert.ok(test.metrics[TEST_SOURCE_START])
             assert.strictEqual(test.parent_id.toString(), '0')
             assert.strictEqual(test.type, 'test')
             assert.strictEqual(test.name, 'mocha.test')
@@ -695,7 +694,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const [testSpan] = tests
 
             const httpSpan = spans.find(span => span.name === 'http.request')
-            assert.ok(httpSpan != null)
+            assert.ok(httpSpan)
 
             // Test span assertions
             assert.strictEqual(testSpan.meta[COMPONENT], 'mocha')
@@ -705,7 +704,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(testSpan.meta[TEST_SUITE], 'ci-visibility/mocha-plugin-tests/integration.js')
             assert.strictEqual(testSpan.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/integration.js')
             assert.strictEqual(testSpan.meta[ORIGIN_KEY], CI_APP_ORIGIN)
-            assert.ok(testSpan.metrics[TEST_SOURCE_START] != null)
+            assert.ok(testSpan.metrics[TEST_SOURCE_START])
             assert.strictEqual(testSpan.parent_id.toString(), '0')
 
             // HTTP span assertions
@@ -747,7 +746,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 .includes('mocha-fail-hook-sync "before each" hook for "will not run but be reported as failed":')
             )
             assert.match(test.meta[ERROR_MESSAGE], /Cannot set /)
-            assert.ok(test.meta[ERROR_STACK] != null)
+            assert.ok(test.meta[ERROR_STACK])
           })
 
         childProcess = exec(
@@ -834,13 +833,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
             testNames.forEach(({ name, status, errorMsg }) => {
               const test = tests.find(t => t.meta[TEST_NAME] === name)
-              assert.ok(test != null)
+              assert.ok(test)
               assert.strictEqual(test.meta[TEST_STATUS], status)
               assert.strictEqual(test.meta[COMPONENT], 'mocha')
               if (errorMsg) {
                 assert.strictEqual(test.meta[ERROR_MESSAGE].startsWith(errorMsg), true)
                 assert.strictEqual(test.meta[ERROR_TYPE], 'Error')
-                assert.ok(test.meta[ERROR_STACK] != null)
+                assert.ok(test.meta[ERROR_STACK])
               }
             })
           })
@@ -872,7 +871,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[TEST_STATUS], 'fail')
             assert.strictEqual(test.meta[ERROR_TYPE], 'AssertionError')
             assert.strictEqual(test.meta[ERROR_MESSAGE], 'Expected values to be strictly equal:\n\ntrue !== false\n')
-            assert.ok(test.meta[ERROR_STACK] != null)
+            assert.ok(test.meta[ERROR_STACK])
           })
 
         childProcess = exec(
@@ -953,7 +952,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
             testNames.forEach(({ name, status }) => {
               const test = tests.find(t => t.meta[TEST_NAME] === name)
-              assert.ok(test != null)
+              assert.ok(test)
               assert.strictEqual(test.meta[TEST_STATUS], status)
               assert.strictEqual(test.meta[COMPONENT], 'mocha')
             })
@@ -1001,8 +1000,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const testModuleEvent = events.find(event => event.type === 'test_module_end')?.content
             const testSuiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
 
-            assert.ok(testSessionEvent != null)
-            assert.ok(testModuleEvent != null)
+            assert.ok(testSessionEvent)
+            assert.ok(testModuleEvent)
             assert.strictEqual(testSuiteEvents.length, 4, 'Should have 4 test suite events')
 
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
@@ -1206,7 +1205,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       cwd,
       env: {
         ...restEnvVars,
-        DD_TRACE_DEBUG: 1,
+        DD_TRACE_DEBUG: '1',
         DD_TRACE_LOG_LEVEL: 'error',
         DD_SITE: '= invalid = url'
       },
@@ -1254,9 +1253,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           test_module_id: testModuleId,
           test_session_id: testSessionId
         }) => {
-          assert.ok(meta[TEST_COMMAND] != null)
-          assert.ok(meta[TEST_MODULE] != null)
-          assert.ok(testSuiteId != null)
+          assert.ok(meta[TEST_COMMAND])
+          assert.ok(meta[TEST_MODULE])
+          assert.ok(testSuiteId)
           assert.strictEqual(testModuleId.toString(10), moduleEventContent.test_module_id.toString(10))
           assert.strictEqual(testSessionId.toString(10), moduleEventContent.test_session_id.toString(10))
         })
@@ -1268,13 +1267,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           test_module_id: testModuleId,
           test_session_id: testSessionId
         }) => {
-          assert.ok(meta[TEST_COMMAND] != null)
-          assert.ok(meta[TEST_MODULE] != null)
-          assert.ok(testSuiteId != null)
+          assert.ok(meta[TEST_COMMAND])
+          assert.ok(meta[TEST_MODULE])
+          assert.ok(testSuiteId)
           assert.strictEqual(testModuleId.toString(10), moduleEventContent.test_module_id.toString(10))
           assert.strictEqual(testSessionId.toString(10), moduleEventContent.test_session_id.toString(10))
           assert.strictEqual(meta[MOCHA_IS_PARALLEL], 'true')
-          assert.ok(metrics[TEST_SOURCE_START] != null)
+          assert.ok(metrics[TEST_SOURCE_START])
         })
       })
 
@@ -1283,7 +1282,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       env: {
         ...getCiVisAgentlessConfig(receiver.port),
         RUN_IN_PARALLEL: true,
-        DD_TRACE_DEBUG: 1,
+        DD_TRACE_DEBUG: '1',
         DD_TRACE_LOG_LEVEL: 'warn',
         DD_TEST_SESSION_NAME: 'my-test-session'
       },
@@ -1393,7 +1392,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     childProcess = fork(startupTestFile, {
       cwd,
       env: {
-        DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
+        DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
         NODE_OPTIONS: '-r dd-trace/ci/init'
       },
       stdio: 'pipe'
@@ -1531,11 +1530,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         )
 
         const [coveragePayload] = codeCovRequest.payload
-        assert.ok(coveragePayload.content.coverages[0].test_session_id != null)
-        assert.ok(coveragePayload.content.coverages[0].test_suite_id != null)
+        assert.ok(coveragePayload.content.coverages[0].test_session_id)
+        assert.ok(coveragePayload.content.coverages[0].test_suite_id)
 
         const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
-        assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT] != null)
+        assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
 
         const eventTypes = eventsRequest.payload.events.map(event => event.type)
         assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
@@ -1583,7 +1582,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
         assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
         assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
-        assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT] != null)
+        assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
         const testModule = payload.events.find(event => event.type === 'test_module_end').content
         assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
         assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
@@ -3070,7 +3069,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             TESTS_TO_RUN: JSON.stringify([
               './test-flaky-test-retries/eventually-passing-test.js'
             ]),
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
@@ -3302,7 +3301,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
 
-          assert.ok(retriedTest.meta[snapshotIdKey] != null)
+          assert.ok(retriedTest.meta[snapshotIdKey])
 
           snapshotIdByTest = retriedTest.meta[snapshotIdKey]
           spanIdByTest = retriedTest.span_id.toString()
@@ -4231,7 +4230,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       execSync('git checkout -b feature-branch', { cwd, stdio: 'ignore' })
       fs.writeFileSync(
         path.join(cwd, 'ci-visibility/test-impacted-test/test-impacted-1.js'),
-        `const { expect } = require('chai')
+        `const assert = require('assert')
          describe('impacted tests', () => {
            it('can pass normally', () => {
              assert.strictEqual(2 + 2, 3)

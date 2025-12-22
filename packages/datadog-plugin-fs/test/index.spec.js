@@ -5,7 +5,6 @@ const os = require('node:os')
 const path = require('node:path')
 const util = require('node:util')
 
-const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const realFS = Object.assign({}, require('node:fs'))
@@ -44,7 +43,7 @@ describe('Plugin', () => {
                 data.forEach((arr) => {
                   arr.forEach((trace) => {
                     if (trace.name === 'fs.operation') {
-                      expect.fail('should not have been any fs traces')
+                      assert.fail('should not have been any fs traces')
                     }
                   })
                 })
@@ -98,7 +97,7 @@ describe('Plugin', () => {
       describe('open', () => {
         it('should not be instrumented', (done) => {
           agent.assertSomeTraces(() => {
-            expect.fail('should not have been any traces')
+            assert.fail('should not have been any traces')
           }).catch(done)
 
           setTimeout(done, 1500) // allow enough time to ensure no traces happened

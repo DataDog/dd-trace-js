@@ -93,7 +93,7 @@ describe('sendTelemetry', () => {
     }
 
     function assertStdinMetadata (expected) {
-      assert.ok(capturedStdinData != null)
+      assert.ok(capturedStdinData)
       const parsed = JSON.parse(capturedStdinData)
       assert.strictEqual(parsed.metadata.result, expected.result)
       assert.strictEqual(parsed.metadata.result_class, expected.result_class)

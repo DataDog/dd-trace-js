@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 
 const axios = require('axios')
-const { expect } = require('chai')
+
 const { after, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -63,7 +63,7 @@ describe('set_user', () => {
         getRootSpan.returns(undefined)
 
         setUser(tracer, { id: 'user' })
-        expect(getRootSpan).to.be.calledOnceWithExactly(tracer)
+        sinon.assert.calledOnceWithExactly(getRootSpan, tracer)
         sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Root span not available in setUser')
         sinon.assert.notCalled(rootSpan.setTag)
         sinon.assert.notCalled(waf.run)
@@ -80,11 +80,11 @@ describe('set_user', () => {
         setUser(tracer, user)
         sinon.assert.notCalled(log.warn)
         assert.strictEqual(rootSpan.setTag.callCount, 5)
-        expect(rootSpan.setTag.getCall(0)).to.have.been.calledWithExactly('usr.id', '123')
-        expect(rootSpan.setTag.getCall(1)).to.have.been.calledWithExactly('usr.email', 'a@b.c')
-        expect(rootSpan.setTag.getCall(2)).to.have.been.calledWithExactly('usr.custom', 'hello')
-        expect(rootSpan.setTag.getCall(3)).to.have.been.calledWithExactly('usr.session_id', '133769')
-        expect(rootSpan.setTag.getCall(4)).to.have.been.calledWithExactly('_dd.appsec.user.collection_mode', 'sdk')
+        assert.strictEqual(rootSpan.setTag.getCall(0).calledWithExactly('usr.id', '123'), true)
+        assert.strictEqual(rootSpan.setTag.getCall(1).calledWithExactly('usr.email', 'a@b.c'), true)
+        assert.strictEqual(rootSpan.setTag.getCall(2).calledWithExactly('usr.custom', 'hello'), true)
+        assert.strictEqual(rootSpan.setTag.getCall(3).calledWithExactly('usr.session_id', '133769'), true)
+        assert.strictEqual(rootSpan.setTag.getCall(4).calledWithExactly('_dd.appsec.user.collection_mode', 'sdk'), true)
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             'usr.id': '123',

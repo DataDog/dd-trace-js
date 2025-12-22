@@ -63,14 +63,14 @@ describe('FlaggingProvider', () => {
     it('should create exposure channel', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      assert.ok(provider != null)
+      assert.ok(provider)
       sinon.assert.calledWith(channelStub, 'ffe:exposure:submit')
     })
 
     it('should log debug message on creation', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      assert.ok(provider != null)
+      assert.ok(provider)
       sinon.assert.calledWith(log.debug, 'FlaggingProvider created with timeout: 30000ms')
     })
   })
