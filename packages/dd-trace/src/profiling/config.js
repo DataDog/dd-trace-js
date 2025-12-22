@@ -8,7 +8,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { getIsAzureFunction } = require('../serverless')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
-const { getEnvironmentVariables } = require('../config-helper')
+const { getEnvironmentVariables, getValueFromEnvSources: getEnvValue } = require('../config-helper')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
@@ -18,13 +18,64 @@ const EventsProfiler = require('./profilers/events')
 const { oomExportStrategies, snapshotKinds } = require('./constants')
 const { tagger } = require('./tagger')
 
+function getProfilingEnvValues () {
+  return {
+    DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED:
+      getEnvValue('DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED'),
+    DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED:
+      getEnvValue('DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED'),
+    DD_PROFILING_CODEHOTSPOTS_ENABLED:
+      getEnvValue('DD_PROFILING_CODEHOTSPOTS_ENABLED'),
+    DD_PROFILING_CPU_ENABLED:
+      getEnvValue('DD_PROFILING_CPU_ENABLED'),
+    DD_PROFILING_DEBUG_SOURCE_MAPS:
+      getEnvValue('DD_PROFILING_DEBUG_SOURCE_MAPS'),
+    DD_PROFILING_DEBUG_UPLOAD_COMPRESSION:
+      getEnvValue('DD_PROFILING_DEBUG_UPLOAD_COMPRESSION'),
+    DD_PROFILING_ENDPOINT_COLLECTION_ENABLED:
+      getEnvValue('DD_PROFILING_ENDPOINT_COLLECTION_ENABLED'),
+    DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES:
+      getEnvValue('DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES'),
+    DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE:
+      getEnvValue('DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE'),
+    DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT:
+      getEnvValue('DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT'),
+    DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED:
+      getEnvValue('DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED'),
+    DD_PROFILING_HEAP_ENABLED:
+      getEnvValue('DD_PROFILING_HEAP_ENABLED'),
+    DD_PROFILING_HEAP_SAMPLING_INTERVAL:
+      getEnvValue('DD_PROFILING_HEAP_SAMPLING_INTERVAL'),
+    DD_PROFILING_PPROF_PREFIX:
+      getEnvValue('DD_PROFILING_PPROF_PREFIX'),
+    DD_PROFILING_PROFILERS:
+      getEnvValue('DD_PROFILING_PROFILERS'),
+    DD_PROFILING_TIMELINE_ENABLED:
+      getEnvValue('DD_PROFILING_TIMELINE_ENABLED'),
+    DD_PROFILING_UPLOAD_PERIOD:
+      getEnvValue('DD_PROFILING_UPLOAD_PERIOD'),
+    DD_PROFILING_UPLOAD_TIMEOUT:
+      getEnvValue('DD_PROFILING_UPLOAD_TIMEOUT'),
+    DD_PROFILING_V8_PROFILER_BUG_WORKAROUND:
+      getEnvValue('DD_PROFILING_V8_PROFILER_BUG_WORKAROUND'),
+    DD_PROFILING_WALLTIME_ENABLED:
+      getEnvValue('DD_PROFILING_WALLTIME_ENABLED'),
+    DD_TAGS:
+      getEnvValue('DD_TAGS')
+  }
+}
+
 class Config {
   constructor (options = {}) {
     // TODO: Remove entries that were already resolved in config.
     // For the others, move them over to config.
     const {
       AWS_LAMBDA_FUNCTION_NAME: functionname,
-      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED, // used for testing
+      NODE_OPTIONS
+    } = getEnvironmentVariables()
+
+    const {
+      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED,
       DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_CPU_ENABLED,
@@ -44,9 +95,8 @@ class Config {
       DD_PROFILING_UPLOAD_TIMEOUT,
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
       DD_PROFILING_WALLTIME_ENABLED,
-      DD_TAGS,
-      NODE_OPTIONS
-    } = getEnvironmentVariables()
+      DD_TAGS
+    } = getProfilingEnvValues()
 
     const host = os.hostname()
     // Must be longer than one minute so pad with five seconds
