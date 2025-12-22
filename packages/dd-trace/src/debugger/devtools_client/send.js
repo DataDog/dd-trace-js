@@ -9,8 +9,8 @@ const request = require('../../exporters/common/request')
 const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags')
 const log = require('./log')
 const { version } = require('../../../../../package.json')
-const { pruneSnapshot } = require('./snapshot-pruner')
 const { getValueFromEnvSources } = require('../../config-helper')
+const { pruneSnapshot } = require('./snapshot-pruner')
 
 module.exports = send
 

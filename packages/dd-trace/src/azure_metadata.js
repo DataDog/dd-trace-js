@@ -4,7 +4,11 @@
 
 const os = require('os')
 const { getIsAzureFunction, getIsFlexConsumptionAzureFunction } = require('./serverless')
-const { getEnvironmentVariable, getEnvironmentVariables } = require('../../dd-trace/src/config-helper')
+const {
+  getEnvironmentVariable,
+  getEnvironmentVariables,
+  getValueFromEnvSources
+} = require('../../dd-trace/src/config-helper')
 
 function extractSubscriptionID (ownerName) {
   if (ownerName !== undefined) {
@@ -37,9 +41,6 @@ function trimObject (obj) {
 function buildMetadata () {
   const {
     COMPUTERNAME,
-    // Pull this out for resolved env
-    DD_AAS_DOTNET_EXTENSION_VERSION,
-    DD_AZURE_RESOURCE_GROUP,
     FUNCTIONS_EXTENSION_VERSION,
     FUNCTIONS_WORKER_RUNTIME,
     FUNCTIONS_WORKER_RUNTIME_VERSION,
@@ -49,6 +50,9 @@ function buildMetadata () {
     WEBSITE_RESOURCE_GROUP,
     WEBSITE_SITE_NAME
   } = getEnvironmentVariables()
+
+  const DD_AAS_DOTNET_EXTENSION_VERSION = getValueFromEnvSources('DD_AAS_DOTNET_EXTENSION_VERSION')
+  const DD_AZURE_RESOURCE_GROUP = getValueFromEnvSources('DD_AZURE_RESOURCE_GROUP')
 
   const subscriptionID = extractSubscriptionID(WEBSITE_OWNER_NAME)
 
