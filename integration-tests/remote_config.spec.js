@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { assertObjectContains } = require('./helpers')
 
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('./helpers')
 const path = require('path')

@@ -295,7 +295,7 @@ function buildExpressServer (agent) {
 
   app.post('/v0.7/config', (req, res) => {
     const {
-      client: { products, state, client_tracer: clientTracer },
+      client: { products, state },
       cached_target_files: cachedTargetFiles
     } = req.body
 
