@@ -9,7 +9,6 @@ const { getIsAzureFunction } = require('../serverless')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
 const { getEnvironmentVariables } = require('../config-helper')
-const defaults = require('../config_defaults')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
@@ -25,8 +24,6 @@ class Config {
     // For the others, move them over to config.
     const {
       AWS_LAMBDA_FUNCTION_NAME: functionname,
-      DD_AGENT_HOST,
-      DD_ENV,
       DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED, // used for testing
       DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
@@ -42,40 +39,32 @@ class Config {
       DD_PROFILING_HEAP_SAMPLING_INTERVAL,
       DD_PROFILING_PPROF_PREFIX,
       DD_PROFILING_PROFILERS,
-      DD_PROFILING_SOURCE_MAP,
       DD_PROFILING_TIMELINE_ENABLED,
       DD_PROFILING_UPLOAD_PERIOD,
       DD_PROFILING_UPLOAD_TIMEOUT,
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
       DD_PROFILING_WALLTIME_ENABLED,
-      DD_SERVICE,
       DD_TAGS,
-      DD_TRACE_AGENT_PORT,
-      DD_TRACE_AGENT_URL,
-      DD_VERSION,
       NODE_OPTIONS
     } = getEnvironmentVariables()
 
-    const env = options.env ?? DD_ENV
-    const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
-    const version = options.version ?? DD_VERSION
     // Must be longer than one minute so pad with five seconds
     const flushInterval = options.interval ?? (Number(DD_PROFILING_UPLOAD_PERIOD) * 1000 || 65 * 1000)
     const uploadTimeout = options.uploadTimeout ?? (Number(DD_PROFILING_UPLOAD_TIMEOUT) || 60 * 1000)
-    const sourceMap = options.sourceMap ?? DD_PROFILING_SOURCE_MAP ?? true
+    const sourceMap = options.sourceMap
     const pprofPrefix = options.pprofPrefix ?? DD_PROFILING_PPROF_PREFIX ?? ''
 
-    this.service = service
-    this.env = env
+    this.service = options.service || 'node'
+    this.env = options.env
     this.host = host
     this.functionname = functionname
 
-    this.version = version
+    this.version = options.version
     this.tags = Object.assign(
       tagger.parse(DD_TAGS),
       tagger.parse(options.tags),
-      tagger.parse({ env, host, service, version, functionname }),
+      tagger.parse({ env: options.env, host, service: this.service, version: this.version, functionname }),
       getAzureTagsFromMetadata(getIsAzureFunction() ? getAzureFunctionMetadata() : getAzureAppMetadata())
     )
 
@@ -115,12 +104,10 @@ class Config {
     this.pprofPrefix = pprofPrefix
     this.v8ProfilerBugWorkaroundEnabled = isTrue(options.v8ProfilerBugWorkaround ??
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND ?? true)
-    const hostname = (options.hostname ?? DD_AGENT_HOST) || defaults.hostname
-    const port = (options.port ?? DD_TRACE_AGENT_PORT) || defaults.port
-    this.url = new URL(options.url ?? DD_TRACE_AGENT_URL ?? format({
+    this.url = new URL(options.url || format({
       protocol: 'http:',
-      hostname,
-      port
+      hostname: options.hostname,
+      port: options.port
     }))
 
     this.libraryInjected = options.libraryInjected
