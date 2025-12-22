@@ -216,7 +216,7 @@ session.on('Debugger.paused', async ({ params }) => {
       language: 'javascript'
     }
 
-    if (config.propagateProcessTags?.enabled) {
+    if (config.propagateProcessTags.enabled) {
       snapshot[processTags.DYNAMIC_INSTRUMENTATION_FIELD_NAME] = processTags.tagsObject
     }
 
