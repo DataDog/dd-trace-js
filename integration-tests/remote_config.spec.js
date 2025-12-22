@@ -56,7 +56,7 @@ describe('Remote config client id', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          DD_REMOTE_CONFIGURATION_ENABLED: false
+          DD_REMOTE_CONFIGURATION_ENABLED: 'false'
         }
       })
       axios = Axios.create({ baseURL: proc.url })

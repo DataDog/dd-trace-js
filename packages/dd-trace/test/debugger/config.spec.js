@@ -21,6 +21,7 @@ describe('getDebuggerConfig', function () {
       'hostname',
       'logLevel',
       'port',
+      'propagateProcessTags',
       'repositoryUrl',
       'runtimeId',
       'service',

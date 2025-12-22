@@ -101,7 +101,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
   useSandbox([
     `jest@${JEST_VERSION}`,
-    'chai@v4',
     `jest-jasmine2@${JEST_VERSION}`,
     // jest-environment-jsdom is included in older versions of jest
     JEST_VERSION === 'latest' && `jest-environment-jsdom@${JEST_VERSION}`,
@@ -2792,7 +2791,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port), // use agentless for this test, just for variety
             TESTS_TO_RUN: 'test/ci-visibility-test',
             ENABLE_JSDOM: true,
-            DD_TRACE_DEBUG: 1,
+            DD_TRACE_DEBUG: '1',
             DD_TRACE_LOG_LEVEL: 'warn'
           },
           stdio: 'inherit'
@@ -3386,7 +3385,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
             TESTS_TO_RUN: 'jest-flaky/flaky-',
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
@@ -4801,7 +4800,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
       fs.writeFileSync(
         path.join(cwd, 'ci-visibility/test-impacted-test/test-impacted-1.js'),
-        `const { expect } = require('chai')
+        `const assert = require('assert')
 
          describe('impacted tests', () => {
           it('can pass normally', () => {

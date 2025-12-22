@@ -12,6 +12,7 @@ const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
 const log = require('./log')
 const { version } = require('../../../../../package.json')
 const { NODE_MAJOR } = require('../../../../../version')
+const processTags = require('../../process-tags')
 
 require('./remote_config')
 
@@ -213,6 +214,10 @@ session.on('Debugger.paused', async ({ params }) => {
       },
       stack,
       language: 'javascript'
+    }
+
+    if (config.propagateProcessTags?.enabled) {
+      snapshot[processTags.DYNAMIC_INSTRUMENTATION_FIELD_NAME] = processTags.tagsObject
     }
 
     if (probe.captureSnapshot) {

@@ -2012,7 +2012,7 @@ moduleTypes.forEach(({
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1,
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
               SPEC_PATTERN: specToRun
             },
             stdio: 'pipe'
@@ -2302,7 +2302,7 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               CYPRESS_BASE_URL_SECOND: `http://localhost:${secondWebAppPort}`,
               SPEC_PATTERN: specToRun,
-              DD_TRACE_DEBUG: true
+              DD_TRACE_DEBUG: 'true'
             },
             stdio: 'pipe'
           }

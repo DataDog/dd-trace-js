@@ -390,7 +390,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
-              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1,
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
             },
             stdio: 'pipe'

@@ -114,6 +114,7 @@ module.exports = {
   isFlakyTestRetriesEnabled: false,
   flakyTestRetriesCount: 5,
   isGCPFunction: false,
+  isGCPPubSubPushSubscriptionEnabled: true,
   isGitUploadEnabled: false,
   isIntelligentTestRunnerEnabled: false,
   isManualApiEnabled: false,
