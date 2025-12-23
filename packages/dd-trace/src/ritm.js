@@ -1,13 +1,16 @@
 'use strict'
 
 const path = require('path')
-const Module = require('module')
-const parse = require('../../../vendor/dist/module-details-from-path')
-const dc = require('dc-polyfill')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 const fs = require('fs')
-const origRequire = Module.prototype.require
+const Module = require('module')
 
+const dc = require('dc-polyfill')
+
+const parse = require('../../../vendor/dist/module-details-from-path')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { isRelativeRequire } = require('../../datadog-instrumentations/src/helpers/shared-utils')
+
+const origRequire = Module.prototype.require
 // derived from require-in-the-middle@3 with tweaks
 
 module.exports = Hook
@@ -103,7 +106,7 @@ function Hook (modules, options, onrequire) {
     // The module has already been loaded,
     // so the patching mark can be cleaned up.
     delete patching[filename]
-    const isRelativeHook = isFilePath(request) && moduleHooks[request]
+
     if (core) {
       hooks = moduleHooks[filename]
       if (!hooks) return exports // abort if module name isn't on whitelist
@@ -123,28 +126,7 @@ function Hook (modules, options, onrequire) {
 
         hooks = moduleHooks[name]
         if (!hooks) return exports // abort if module name isn't on whitelist
-      } else {
-        // check if the full filename if the filename was registered, if not then prefix matching will be done
-        hooks = moduleHooks[filename]
 
-        if (!hooks && isRelativeHook) {
-          hooks = moduleHooks[request]
-          name = request
-          basedir = findProjectRoot(filename)
-        }
-
-        if (!hooks) return exports // abort if filename isn't on whitelist
-
-        if (!name) {
-          name = filename
-          basedir = path.dirname(filename)
-        }
-      }
-
-      // figure out if this is the main module file, or a file inside the module
-      // Skip this for paths since it's intended for node_modules paths
-
-      if (!isRelativeHook) {
         const paths = Module._resolveLookupPaths(name, this, true)
         if (!paths) {
           // abort if _resolveLookupPaths return null
@@ -164,6 +146,14 @@ function Hook (modules, options, onrequire) {
           // use the module-relative path to the file, prefixed by original module name
           name = name + path.sep + path.relative(basedir, filename)
         }
+      } else {
+        if (isRelativeRequire(request) && moduleHooks[request]) {
+          hooks = moduleHooks[request]
+          name = request
+          basedir = findProjectRoot(filename)
+        }
+
+        if (!hooks) return exports
       }
     }
 
@@ -186,18 +176,6 @@ Hook.reset = function () {
   patching = Object.create(null)
   cache = Object.create(null)
   moduleHooks = Object.create(null)
-}
-
-function isFilePath (moduleName) {
-  if (moduleName.startsWith('./') || moduleName.startsWith('../') || moduleName.startsWith('/')) {
-    return true
-  }
-
-  if (moduleName.includes('/') && !moduleName.includes('node_modules/') && !moduleName.startsWith('@')) {
-    return true
-  }
-
-  return false
 }
 
 function findProjectRoot (startDir) {

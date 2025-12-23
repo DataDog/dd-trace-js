@@ -113,9 +113,9 @@ describe('esm', () => {
             const fs = require('fs')
             const path = require('path')
             const distPath = path.join(cwd, 'dist')
-            if (!fs.existsSync(distPath)) {
+            try {
               fs.mkdirSync(distPath, { recursive: true })
-            }
+            } catch {}
             const distPkgJsonPath = path.join(distPath, 'package.json')
             fs.writeFileSync(distPkgJsonPath, JSON.stringify({ type: 'module' }, null, 2))
           }

@@ -4,15 +4,14 @@ const assert = require('node:assert/strict')
 const { execSync } = require('node:child_process')
 const fs = require('node:fs/promises')
 const path = require('node:path')
-
 const { after, before, beforeEach, describe, it } = require('mocha')
 const semifies = require('semifies')
-const semver = require('semver')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+
 const {
   PRISMA_CLIENT_OUTPUT_RELATIVE,
   SCHEMA_FIXTURES,
@@ -114,7 +113,7 @@ describe('Plugin', () => {
 
     prismaClients.forEach(config => {
       // Prisma 7.0.0+ is not supported in Node.js < 20.19.0
-      if (config.v7 && !semifies(semver.clean(process.version), '>=20.19.0')) return
+      if (config.v7 && !semifies(process.version.slice(1), '>=20.19.0')) return
 
       let supportedRange = config.v7 ? '>=7.0.0' : '<7.0.0'
       // prisma-generator is only available starting prisma >= 6.16.0
@@ -149,28 +148,24 @@ describe('Plugin', () => {
 
           it('should do automatic instrumentation', async () => {
             const tracingPromise = agent.assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].resource, 'queryRaw')
-              assert.strictEqual(traces[0][0].meta['prisma.type'], 'client')
-              assert.strictEqual(traces[0][0].meta['prisma.method'], 'queryRaw')
-              assert.strictEqual(traces[0][0].name, expectedSchema.client.opName)
-              assert.strictEqual(traces[0][0].service, expectedSchema.client.serviceName)
-
-              // grabbing actual db query span
-              if (config.v7) {
-                const pgSpan = traces[0].find(span => span.name === 'pg.query')
-                assert.strictEqual(pgSpan.resource, 'SELECT 1')
-                assert.strictEqual(pgSpan.type, 'sql')
-                assert.strictEqual(pgSpan.meta['span.kind'], 'client')
-                assert.strictEqual(pgSpan.name, 'pg.query')
-                assert.strictEqual(pgSpan.service, 'test-postgres')
-              } else {
-                const engineDBSpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
-                assert.strictEqual(engineDBSpan.resource, 'SELECT 1')
-                assert.strictEqual(engineDBSpan.type, 'sql')
-                assert.strictEqual(engineDBSpan.meta['span.kind'], 'client')
-                assert.strictEqual(engineDBSpan.name, expectedSchema.engine.opName)
-                assert.strictEqual(engineDBSpan.service, expectedSchema.engine.serviceName)
-              }
+              assertObjectContains(traces, [[{
+                resource: 'queryRaw',
+                meta: {
+                  'prisma.type': 'client',
+                  'prisma.method': 'queryRaw'
+                },
+                name: expectedSchema.client.opName,
+                service: expectedSchema.client.serviceNam
+              },
+              {
+                resource: 'SELECT 1',
+                type: 'sql',
+                meta: {
+                  'span.kind': 'client'
+                },
+                name: config.v7 ? 'pg.query' : expectedSchema.engine.opName,
+                service: config.v7 ? 'test-postgres' : expectedSchema.engine.serviceName
+              }]])
             })
 
             await Promise.all([

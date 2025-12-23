@@ -9,7 +9,7 @@ const exec = require('./helpers/exec')
 const externals = require('../packages/dd-trace/test/plugins/externals.json')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
-const { isFilePath } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
+const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
@@ -113,7 +113,7 @@ async function assertFolder (name, version) {
  */
 async function assertPackage (name, version, dependencyVersionRange, external) {
   // Early return to prevent filePaths from being installed, their non path counterpars should suffice
-  if (isFilePath(name)) return
+  if (isRelativeRequire(name)) return
   const dependencies = {
     [name]: getCappedRange(name, dependencyVersionRange)
   }

@@ -3,7 +3,7 @@ import * as iitm from 'import-in-the-middle/hook.mjs'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config-helper.js'
 import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
-import { isFilePath } from './packages/datadog-instrumentations/src/helpers/shared-utils.js'
+import { isRelativeRequire } from './packages/datadog-instrumentations/src/helpers/shared-utils.js'
 
 const regexpEscape = regexpEscapeModule.default
 
@@ -29,7 +29,7 @@ function addInstrumentations (data) {
   const instrumentations = Object.keys(hooks)
 
   for (const moduleName of instrumentations) {
-    if (isFilePath(moduleName)) {
+    if (isRelativeRequire(moduleName)) {
       continue
     } else {
       data.include.push(new RegExp(`node_modules/${moduleName}/(?!node_modules).+`), moduleName)
