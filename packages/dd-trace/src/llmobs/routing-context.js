@@ -20,13 +20,17 @@ function withRoutingContext (options, fn) {
   return storage.run(store, fn)
 }
 
-function getCurrentRouting (defaultApiKey, defaultSite) {
+function getCurrentRouting () {
   const store = storage.getStore()
   const routing = store?.routingContext
 
+  if (!routing) {
+    return null
+  }
+
   return {
-    apiKey: routing?.apiKey || defaultApiKey,
-    site: routing?.site || defaultSite
+    apiKey: routing.apiKey,
+    site: routing.site
   }
 }
 
