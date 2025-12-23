@@ -199,6 +199,40 @@ describe('Tagging orchestration', () => {
     assert.strictEqual(tags[`${PAYLOAD_TAG_RESPONSE_PREFIX}.request`], 'foo')
   })
 
+  it('should not fail if the response config contains invalid config', () => {
+    const config = {
+      request: ['invalid,request'],
+      response: ['invalid,$.foo,$.response'],
+      expand: []
+    }
+    const input = {
+      request: 'foo',
+      response: 'bar',
+    }
+    const tags = computeTags(config, input, { maxDepth: 10, prefix: PAYLOAD_TAG_RESPONSE_PREFIX })
+    assert.strictEqual(tags[`${PAYLOAD_TAG_RESPONSE_PREFIX}.response`], 'redacted')
+    assert.strictEqual(tags[`${PAYLOAD_TAG_RESPONSE_PREFIX}.request`], 'foo')
+  })
+
+  it('should apply expansion rules with dollar identical to an empty input', () => {
+    const config = {
+      request: ['$'],
+      response: ['$'],
+      expand: ['$.request', '$.response', '$.invalid'],
+    }
+    const input = {
+      request: '{ "foo": "bar" }',
+      response: '{ "baz": "quux" }',
+      invalid: '{ invalid JSON }',
+      untargeted: '{ "foo": "bar" }',
+    }
+    const tags = computeTags(config, input, { maxDepth: 10, prefix: 'foo' })
+    assert.strictEqual(tags['foo.request.foo'], 'bar')
+    assert.strictEqual(tags['foo.response.baz'], 'quux')
+    assert.strictEqual(tags['foo.invalid'], '{ invalid JSON }')
+    assert.strictEqual(tags['foo.untargeted'], '{ "foo": "bar" }')
+  })
+
   it('should apply expansion rules', () => {
     const config = {
       request: [],
