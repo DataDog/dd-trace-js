@@ -42,7 +42,7 @@ class LLMObsSpanWriter extends BaseWriter {
     const routingKey = this._getRoutingKey(routing)
     const buffer = this._getOrCreateBuffer(routingKey, routing)
 
-    if (buffer.size + eventSizeBytes > EVP_PAYLOAD_SIZE_LIMIT) {
+    if (buffer.size + processedEventSizeBytes > EVP_PAYLOAD_SIZE_LIMIT) {
       logger.debug('Flushing queue because queuing next event will exceed EvP payload limit')
       this.flush()
     }
