@@ -187,7 +187,7 @@ function validateNamingVersion (versionString) {
  * @param {string | string[]} input
  */
 function splitJSONPathRules (input) {
-  if (!input) return
+  if (!input || input === '$') return
   if (Array.isArray(input)) return input
   if (input === 'all') return []
   return input.split(',')
