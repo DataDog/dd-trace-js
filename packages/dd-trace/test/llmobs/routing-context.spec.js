@@ -60,26 +60,25 @@ describe('routing-context', () => {
     it('handles optional ddSite', () => {
       let capturedRouting
       withRoutingContext({ ddApiKey: 'key-only' }, () => {
-        capturedRouting = getCurrentRouting('default-key', 'default-site')
+        capturedRouting = getCurrentRouting()
       })
 
       assert.strictEqual(capturedRouting.apiKey, 'key-only')
-      assert.strictEqual(capturedRouting.site, 'default-site')
+      assert.strictEqual(capturedRouting.site, undefined)
     })
   })
 
   describe('getCurrentRouting', () => {
-    it('returns defaults when not in a routing context', () => {
-      const routing = getCurrentRouting('default-key', 'default-site')
+    it('returns null when not in a routing context', () => {
+      const routing = getCurrentRouting()
 
-      assert.strictEqual(routing.apiKey, 'default-key')
-      assert.strictEqual(routing.site, 'default-site')
+      assert.strictEqual(routing, null)
     })
 
-    it('returns context values over defaults when in a routing context', () => {
+    it('returns context values when in a routing context', () => {
       let routing
       withRoutingContext({ ddApiKey: 'context-key', ddSite: 'context-site' }, () => {
-        routing = getCurrentRouting('default-key', 'default-site')
+        routing = getCurrentRouting()
       })
 
       assert.strictEqual(routing.apiKey, 'context-key')
