@@ -36,5 +36,8 @@ module.exports = {
   CACHE_WRITE_INPUT_TOKENS_METRIC_KEY: 'cache_write_input_tokens',
   REASONING_OUTPUT_TOKENS_METRIC_KEY: 'reasoning_output_tokens',
 
-  DROPPED_IO_COLLECTION_ERROR: 'dropped_io'
+  DROPPED_IO_COLLECTION_ERROR: 'dropped_io',
+
+  ROUTING_API_KEY: '_dd.llmobs.routing.api_key',
+  ROUTING_SITE: '_dd.llmobs.routing.site'
 }
