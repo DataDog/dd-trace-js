@@ -5,282 +5,6 @@
   },
   "rules": [
     {
-      "id": "stripe-001",
-      "name": "Stripe Payment Creation",
-      "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt",
-        "module": "business_logic"
-      },
-      "min_version": "1.25.0",
-      "conditions": [
-        {
-          "operator": "equals",
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.business_logic.payment.creation",
-                "key_path": [
-                  "integration"
-                ]
-              }
-            ],
-            "type": "string",
-            "value": "stripe"
-          }
-        }
-      ],
-      "output": {
-        "event": false,
-        "keep": false,
-        "attributes": {
-          "appsec.events.payments.integration": {
-            "value": "stripe"
-          },
-          "appsec.events.payments.creation.id": {
-            "address": "server.business_logic.payment.creation",
-            "key_path": ["id"]
-          },
-          "appsec.events.payments.creation.amount_total": {
-            "address": "server.business_logic.payment.creation",
-            "key_path": ["amount_total"]
-          },
-          "appsec.events.payments.creation.client_reference_id": {
-            "address": "server.business_logic.payment.creation",
-            "key_path": ["client_reference_id"]
-          },
-          "appsec.events.payments.creation.currency": {
-            "address": "server.business_logic.payment.creation",
-            "key_path": ["currency"]
-          },
-          "appsec.events.payments.creation.customer_email": {
-            "address": "server.business_logic.payment.creation",
-            "key_path": ["customer_email"]
-          },
-          "appsec.events.payments.creation.discounts.coupon": {
-            "address": "server.business_logic.payment.creation",
-            "key_path": ["discounts.coupon"]
-          },
-          "appsec.events.payments.creation.discounts.promotion_code": {
-            "address": "server.business_logic.payment.creation",
-            "key_path": ["discounts.promotion_code"]
-          },
-          "appsec.events.payments.creation.livemode": {
-            "address": "server.business_logic.payment.creation",
-            "key_path": ["livemode"]
-          },
-          "appsec.events.payments.creation.total_details.amount_discount": {
-            "address": "server.business_logic.payment.creation",
-            "key_path": ["total_details.amount_discount"]
-          },
-          "appsec.events.payments.creation.total_details.amount_shipping": {
-            "address": "server.business_logic.payment.creation",
-            "key_path": ["total_details.amount_shipping"]
-          },
-          "appsec.events.payments.creation.amount": {
-            "address": "server.business_logic.payment.creation",
-            "key_path": ["amount"]
-          },
-          "appsec.events.payments.creation.payment_method": {
-            "address": "server.business_logic.payment.creation",
-            "key_path": ["payment_method"]
-          },
-          "appsec.events.payments.creation.receipt_email": {
-            "address": "server.business_logic.payment.creation",
-            "key_path": ["receipt_email"]
-          }
-        }
-      }
-    },
-    {
-      "id": "stripe-002",
-      "name": "Stripe Payment Success",
-      "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt",
-        "module": "business_logic"
-      },
-      "min_version": "1.25.0",
-      "conditions": [
-        {
-          "operator": "equals",
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.business_logic.payment.success",
-                "key_path": [
-                  "integration"
-                ]
-              }
-            ],
-            "type": "string",
-            "value": "stripe"
-          }
-        }
-      ],
-      "output": {
-        "event": false,
-        "keep": true,
-        "attributes": {
-          "appsec.events.payments.integration": {
-            "value": "stripe"
-          },
-          "appsec.events.payments.success.id": {
-            "address": "server.business_logic.payment.success",
-            "key_path": ["id"]
-          },
-          "appsec.events.payments.success.amount": {
-            "address": "server.business_logic.payment.success",
-            "key_path": ["amount"]
-          },
-          "appsec.events.payments.success.currency": {
-            "address": "server.business_logic.payment.success",
-            "key_path": ["currency"]
-          },
-          "appsec.events.payments.success.livemode": {
-            "address": "server.business_logic.payment.success",
-            "key_path": ["livemode"]
-          },
-          "appsec.events.payments.success.payment_method": {
-            "address": "server.business_logic.payment.success",
-            "key_path": ["payment_method"]
-          }
-        }
-      }
-    },
-    {
-      "id": "stripe-003",
-      "name": "Stripe Payment Failure",
-      "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt",
-        "module": "waf"
-      },
-      "min_version": "1.25.0",
-      "conditions": [
-        {
-          "operator": "equals",
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.business_logic.payment.failure",
-                "key_path": [
-                  "integration"
-                ]
-              }
-            ],
-            "type": "string",
-            "value": "stripe"
-          }
-        }
-      ],
-      "output": {
-        "event": false,
-        "keep": true,
-        "attributes": {
-          "appsec.events.payments.integration": {
-            "value": "stripe"
-          },
-          "appsec.events.payments.failure.id": {
-            "address": "server.business_logic.payment.failure",
-            "key_path": ["id"]
-          },
-          "appsec.events.payments.failure.amount": {
-            "address": "server.business_logic.payment.failure",
-            "key_path": ["amount"]
-          },
-          "appsec.events.payments.failure.currency": {
-            "address": "server.business_logic.payment.failure",
-            "key_path": ["currency"]
-          },
-          "appsec.events.payments.failure.last_payment_error.code": {
-            "address": "server.business_logic.payment.failure",
-            "key_path": ["last_payment_error.code"]
-          },
-          "appsec.events.payments.failure.last_payment_error.decline_code": {
-            "address": "server.business_logic.payment.failure",
-            "key_path": ["last_payment_error.decline_code"]
-          },
-          "appsec.events.payments.failure.last_payment_error.payment_method.id": {
-            "address": "server.business_logic.payment.failure",
-            "key_path": ["last_payment_error.payment_method.id"]
-          },
-          "appsec.events.payments.failure.last_payment_error.payment_method.billing_details.email": {
-            "address": "server.business_logic.payment.failure",
-            "key_path": ["last_payment_error.payment_method.billing_details.email"]
-          },
-          "appsec.events.payments.failure.last_payment_error.payment_method.type": {
-            "address": "server.business_logic.payment.failure",
-            "key_path": ["last_payment_error.payment_method.type"]
-          },
-          "appsec.events.payments.failure.livemode": {
-            "address": "server.business_logic.payment.failure",
-            "key_path": ["livemode"]
-          }
-        }
-      }
-    },
-    {
-      "id": "stripe-004",
-      "name": "Stripe Payment Cancellation",
-      "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt",
-        "module": "waf"
-      },
-      "min_version": "1.25.0",
-      "conditions": [
-        {
-          "operator": "equals",
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.business_logic.payment.cancellation",
-                "key_path": [
-                  "integration"
-                ]
-              }
-            ],
-            "type": "string",
-            "value": "stripe"
-          }
-        }
-      ],
-      "output": {
-        "event": false,
-        "keep": true,
-        "attributes": {
-          "appsec.events.payments.integration": {
-            "value": "stripe"
-          },
-          "appsec.events.payments.cancellation.id": {
-            "address": "server.business_logic.payment.cancellation",
-            "key_path": ["id"]
-          },
-          "appsec.events.payments.cancellation.amount": {
-            "address": "server.business_logic.payment.cancellation",
-            "key_path": ["amount"]
-          },
-          "appsec.events.payments.cancellation.cancellation_reason": {
-            "address": "server.business_logic.payment.cancellation",
-            "key_path": ["cancellation_reason"]
-          },
-          "appsec.events.payments.cancellation.currency": {
-            "address": "server.business_logic.payment.cancellation",
-            "key_path": ["currency"]
-          },
-          "appsec.events.payments.cancellation.livemode": {
-            "address": "server.business_logic.payment.cancellation",
-            "key_path": ["livemode"]
-          },
-          "appsec.events.payments.cancellation.receipt_email": {
-            "address": "server.business_logic.payment.cancellation",
-            "key_path": ["receipt_email"]
-          }
-        }
-      }
-    },
-    {
       "id": "blk-001-001",
       "name": "Block IP Addresses",
       "tags": {
@@ -9363,6 +9087,282 @@
         "attributes": {
           "_dd.appsec.api.jwt.none_alg": {
             "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "stripe-001",
+      "name": "Stripe Payment Creation",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "module": "business_logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "operator": "equals",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.business_logic.payment.creation",
+                "key_path": [
+                  "integration"
+                ]
+              }
+            ],
+            "type": "string",
+            "value": "stripe"
+          }
+        }
+      ],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "appsec.events.payments.integration": {
+            "value": "stripe"
+          },
+          "appsec.events.payments.creation.id": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": ["id"]
+          },
+          "appsec.events.payments.creation.amount_total": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": ["amount_total"]
+          },
+          "appsec.events.payments.creation.client_reference_id": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": ["client_reference_id"]
+          },
+          "appsec.events.payments.creation.currency": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": ["currency"]
+          },
+          "appsec.events.payments.creation.customer_email": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": ["customer_email"]
+          },
+          "appsec.events.payments.creation.discounts.coupon": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": ["discounts.coupon"]
+          },
+          "appsec.events.payments.creation.discounts.promotion_code": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": ["discounts.promotion_code"]
+          },
+          "appsec.events.payments.creation.livemode": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": ["livemode"]
+          },
+          "appsec.events.payments.creation.total_details.amount_discount": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": ["total_details.amount_discount"]
+          },
+          "appsec.events.payments.creation.total_details.amount_shipping": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": ["total_details.amount_shipping"]
+          },
+          "appsec.events.payments.creation.amount": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": ["amount"]
+          },
+          "appsec.events.payments.creation.payment_method": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": ["payment_method"]
+          },
+          "appsec.events.payments.creation.receipt_email": {
+            "address": "server.business_logic.payment.creation",
+            "key_path": ["receipt_email"]
+          }
+        }
+      }
+    },
+    {
+      "id": "stripe-002",
+      "name": "Stripe Payment Success",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "module": "business_logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "operator": "equals",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.business_logic.payment.success",
+                "key_path": [
+                  "integration"
+                ]
+              }
+            ],
+            "type": "string",
+            "value": "stripe"
+          }
+        }
+      ],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "appsec.events.payments.integration": {
+            "value": "stripe"
+          },
+          "appsec.events.payments.success.id": {
+            "address": "server.business_logic.payment.success",
+            "key_path": ["id"]
+          },
+          "appsec.events.payments.success.amount": {
+            "address": "server.business_logic.payment.success",
+            "key_path": ["amount"]
+          },
+          "appsec.events.payments.success.currency": {
+            "address": "server.business_logic.payment.success",
+            "key_path": ["currency"]
+          },
+          "appsec.events.payments.success.livemode": {
+            "address": "server.business_logic.payment.success",
+            "key_path": ["livemode"]
+          },
+          "appsec.events.payments.success.payment_method": {
+            "address": "server.business_logic.payment.success",
+            "key_path": ["payment_method"]
+          }
+        }
+      }
+    },
+    {
+      "id": "stripe-003",
+      "name": "Stripe Payment Failure",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "operator": "equals",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.business_logic.payment.failure",
+                "key_path": [
+                  "integration"
+                ]
+              }
+            ],
+            "type": "string",
+            "value": "stripe"
+          }
+        }
+      ],
+      "output": {
+        "event": false,
+        "keep": true,
+        "attributes": {
+          "appsec.events.payments.integration": {
+            "value": "stripe"
+          },
+          "appsec.events.payments.failure.id": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": ["id"]
+          },
+          "appsec.events.payments.failure.amount": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": ["amount"]
+          },
+          "appsec.events.payments.failure.currency": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": ["currency"]
+          },
+          "appsec.events.payments.failure.last_payment_error.code": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": ["last_payment_error.code"]
+          },
+          "appsec.events.payments.failure.last_payment_error.decline_code": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": ["last_payment_error.decline_code"]
+          },
+          "appsec.events.payments.failure.last_payment_error.payment_method.id": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": ["last_payment_error.payment_method.id"]
+          },
+          "appsec.events.payments.failure.last_payment_error.payment_method.billing_details.email": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": ["last_payment_error.payment_method.billing_details.email"]
+          },
+          "appsec.events.payments.failure.last_payment_error.payment_method.type": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": ["last_payment_error.payment_method.type"]
+          },
+          "appsec.events.payments.failure.livemode": {
+            "address": "server.business_logic.payment.failure",
+            "key_path": ["livemode"]
+          }
+        }
+      }
+    },
+    {
+      "id": "stripe-004",
+      "name": "Stripe Payment Cancellation",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "module": "waf"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "operator": "equals",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.business_logic.payment.cancellation",
+                "key_path": [
+                  "integration"
+                ]
+              }
+            ],
+            "type": "string",
+            "value": "stripe"
+          }
+        }
+      ],
+      "output": {
+        "event": false,
+        "keep": true,
+        "attributes": {
+          "appsec.events.payments.integration": {
+            "value": "stripe"
+          },
+          "appsec.events.payments.cancellation.id": {
+            "address": "server.business_logic.payment.cancellation",
+            "key_path": ["id"]
+          },
+          "appsec.events.payments.cancellation.amount": {
+            "address": "server.business_logic.payment.cancellation",
+            "key_path": ["amount"]
+          },
+          "appsec.events.payments.cancellation.cancellation_reason": {
+            "address": "server.business_logic.payment.cancellation",
+            "key_path": ["cancellation_reason"]
+          },
+          "appsec.events.payments.cancellation.currency": {
+            "address": "server.business_logic.payment.cancellation",
+            "key_path": ["currency"]
+          },
+          "appsec.events.payments.cancellation.livemode": {
+            "address": "server.business_logic.payment.cancellation",
+            "key_path": ["livemode"]
+          },
+          "appsec.events.payments.cancellation.receipt_email": {
+            "address": "server.business_logic.payment.cancellation",
+            "key_path": ["receipt_email"]
           }
         }
       }
