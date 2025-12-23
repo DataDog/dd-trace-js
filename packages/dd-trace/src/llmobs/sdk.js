@@ -18,6 +18,7 @@ const { getEnvironmentVariable } = require('../config-helper')
 const telemetry = require('./telemetry')
 
 const LLMObsTagger = require('./tagger')
+const { withRoutingContext } = require('./routing-context')
 
 // communicating with writer
 const { channel } = require('dc-polyfill')
@@ -445,6 +446,22 @@ class LLMObs extends NoopLLMObs {
     }
 
     return storage.run(store, fn)
+  }
+
+  /**
+   * Execute a function within a routing context, directing all LLMObs spans
+   * created within to a specific Datadog organization.
+   *
+   * @param {Object} options - Routing options
+   * @param {string} options.ddApiKey - The Datadog API key for the target org
+   * @param {string} [options.ddSite] - The Datadog site (e.g., 'datadoghq.eu')
+   * @param {Function} fn - The function to execute within the routing context
+   * @returns {*} The return value of fn
+   */
+  withRoutingContext (options, fn) {
+    if (!this.enabled) return fn()
+
+    return withRoutingContext(options, fn)
   }
 
   flush () {
