@@ -103,6 +103,29 @@ describe('routing-context', () => {
     })
   })
 
+  describe('nested contexts', () => {
+    it('allows nested routing contexts where inner overrides outer', () => {
+      let outerRouting, innerRouting, afterInnerRouting
+
+      withRoutingContext({ ddApiKey: 'outer-key', ddSite: 'outer-site' }, () => {
+        outerRouting = getCurrentRouting()
+
+        withRoutingContext({ ddApiKey: 'inner-key', ddSite: 'inner-site' }, () => {
+          innerRouting = getCurrentRouting()
+        })
+
+        afterInnerRouting = getCurrentRouting()
+      })
+
+      assert.strictEqual(outerRouting.apiKey, 'outer-key')
+      assert.strictEqual(outerRouting.site, 'outer-site')
+      assert.strictEqual(innerRouting.apiKey, 'inner-key')
+      assert.strictEqual(innerRouting.site, 'inner-site')
+      assert.strictEqual(afterInnerRouting.apiKey, 'outer-key')
+      assert.strictEqual(afterInnerRouting.site, 'outer-site')
+    })
+  })
+
   describe('concurrent contexts', () => {
     it('isolates routing between concurrent contexts', async () => {
       const results = []

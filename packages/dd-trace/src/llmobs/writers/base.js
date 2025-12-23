@@ -53,6 +53,8 @@ class BaseLLMObsWriter {
     return protocol + '://' + path.join(rest, endpoint)
   }
 
+  // Backward compatibility: existing tests access _buffer and _bufferSize directly.
+  // These getters/setters operate on the default buffer (no routing override).
   get _buffer () {
     const defaultKey = this._getRoutingKey()
     const buffer = this._buffers.get(defaultKey)
