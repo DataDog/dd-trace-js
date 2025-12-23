@@ -28,9 +28,12 @@ const {
   REASONING_OUTPUT_TOKENS_METRIC_KEY,
   INTEGRATION,
   DECORATOR,
-  PROPAGATED_ML_APP_KEY
+  PROPAGATED_ML_APP_KEY,
+  ROUTING_API_KEY,
+  ROUTING_SITE
 } = require('./constants/tags')
 const { storage } = require('./storage')
+const { getCurrentRouting } = require('./routing-context')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
@@ -110,6 +113,15 @@ class LLMObsTagger {
     // apply annotation context name
     const annotationContextName = annotationContext?.name
     if (annotationContextName) this._setTag(span, NAME, annotationContextName)
+
+    // capture routing context at span creation time
+    const routing = getCurrentRouting(this._config.apiKey, this._config.site)
+    if (routing.apiKey) {
+      this._setTag(span, ROUTING_API_KEY, routing.apiKey)
+    }
+    if (routing.site) {
+      this._setTag(span, ROUTING_SITE, routing.site)
+    }
   }
 
   // TODO: similarly for the following `tag` methods,

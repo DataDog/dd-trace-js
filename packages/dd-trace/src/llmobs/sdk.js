@@ -15,6 +15,7 @@ const {
 const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
+const { withRoutingContext } = require('./routing-context')
 
 // communicating with writer
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -438,6 +439,12 @@ class LLMObs extends NoopLLMObs {
     }
 
     return storage.run(store, fn)
+  }
+
+  withRoutingContext (options, fn) {
+    if (!this.enabled) return fn()
+
+    return withRoutingContext(options, fn)
   }
 
   flush () {

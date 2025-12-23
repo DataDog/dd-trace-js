@@ -81,6 +81,8 @@ class NoopLLMObs {
   deregisterProcessor () {}
 
   annotationContext (options, fn) { return fn() }
+
+  withRoutingContext (options, fn) { return fn() }
 }
 
 module.exports = NoopLLMObs
