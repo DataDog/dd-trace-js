@@ -18,6 +18,7 @@ const { getEnvironmentVariable } = require('../config-helper')
 const telemetry = require('./telemetry')
 
 const LLMObsTagger = require('./tagger')
+const { withRoutingContext } = require('./routing-context')
 
 // communicating with writer
 const { channel } = require('dc-polyfill')
@@ -445,6 +446,12 @@ class LLMObs extends NoopLLMObs {
     }
 
     return storage.run(store, fn)
+  }
+
+  withRoutingContext (options, fn) {
+    if (!this.enabled) return fn()
+
+    return withRoutingContext(options, fn)
   }
 
   flush () {
