@@ -22,16 +22,7 @@ function withRoutingContext (options, fn) {
 
 function getCurrentRouting () {
   const store = storage.getStore()
-  const routing = store?.routingContext
-
-  if (!routing) {
-    return null
-  }
-
-  return {
-    apiKey: routing.apiKey,
-    site: routing.site
-  }
+  return store?.routingContext || null
 }
 
 module.exports = { withRoutingContext, getCurrentRouting }
