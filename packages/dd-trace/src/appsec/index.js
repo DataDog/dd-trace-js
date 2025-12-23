@@ -138,6 +138,7 @@ function onPaymentIntentCreate (payload) {
   waf.run({
     persistent: {
       'server.business_logic.payment.creation': {
+        integration: 'stripe',
         id: payload.id,
         amount: payload.amount,
         currency: payload.currency,
@@ -157,6 +158,7 @@ function onConstructEvent (payload) {
   switch (payload.type) {
     case 'payment_intent.succeeded':
       wafPayload.persistent['server.business_logic.payment.success'] = {
+        integration: 'stripe',
         id: object.id,
         amount: object.amount,
         currency: object.currency,
@@ -167,6 +169,7 @@ function onConstructEvent (payload) {
 
     case 'payment_intent.payment_failed':
       wafPayload.persistent['server.business_logic.payment.failure'] = {
+        integration: 'stripe',
         id: object.id,
         amount: object.amount_total,
         currency: object.currency,
@@ -182,6 +185,7 @@ function onConstructEvent (payload) {
 
     case 'payment_intent.canceled':
       wafPayload.persistent['server.business_logic.payment.cancellation'] = {
+        integration: 'stripe',
         id: object.id,
         amount: object.amount,
         cancellation_reason: object.cancellation_reason,
