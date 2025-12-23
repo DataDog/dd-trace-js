@@ -19,6 +19,12 @@ describe('routing-context', () => {
       }, /ddApiKey is required/)
     })
 
+    it('throws if ddApiKey is empty string', () => {
+      assert.throws(() => {
+        withRoutingContext({ ddApiKey: '' }, () => {})
+      }, /ddApiKey is required/)
+    })
+
     it('executes the function with routing context', () => {
       let capturedRouting
       withRoutingContext({ ddApiKey: 'test-key', ddSite: 'test-site' }, () => {
