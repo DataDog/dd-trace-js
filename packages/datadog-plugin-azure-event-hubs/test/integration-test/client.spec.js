@@ -45,7 +45,9 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'azure.eventhubs.send'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, undefined, spawnEnv, nodeOptions)
+      proc = await spawnPluginIntegrationTestProc(
+        sandboxCwd(), 'server.mjs', agent.port, undefined, spawnEnv, nodeOptions
+      )
       await res
     }).timeout(20000)
 
@@ -112,7 +114,9 @@ describe('esm', () => {
         assert.strictEqual(parseLinks(payload[4][0]).length, 2)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, undefined, spawnEnv, nodeOptions)
+      proc = await spawnPluginIntegrationTestProc(
+        sandboxCwd(), 'server.mjs', agent.port, undefined, spawnEnv, nodeOptions
+      )
       await res
     }).timeout(60000)
 
@@ -121,7 +125,9 @@ describe('esm', () => {
         assert.ok(!('_dd.span_links' in payload[2][0]))
       })
       const envVar = { DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: 'false', ...spawnEnv }
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, undefined, envVar, nodeOptions)
+      proc = await spawnPluginIntegrationTestProc(
+        sandboxCwd(), 'server.mjs', agent.port, undefined, envVar, nodeOptions
+      )
       await res
     }).timeout(60000)
   })
