@@ -919,7 +919,7 @@ describe('integrations', () => {
                 'Image reference 2: file-BCuhT1HQ24kmtsuuzF1mh2\n\n' +
                 'Please provide a comprehensive analysis.'
             }
-          ])
+          ], { promptMultimodal: true })
         })
 
         it('submits a response span with prompt tracking - mixed input types (url preserved)', async function () {
@@ -969,7 +969,7 @@ describe('integrations', () => {
                 'Image reference 2: file-BCuhT1HQ24kmtsuuzF1mh2\n\n' +
                 'Please provide a comprehensive analysis.'
             }
-          ])
+          ], { promptMultimodal: true })
         })
       })
 
