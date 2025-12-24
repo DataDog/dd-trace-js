@@ -155,7 +155,7 @@ describe('Plugin', () => {
                   'prisma.method': 'queryRaw'
                 },
                 name: expectedSchema.client.opName,
-                service: expectedSchema.client.serviceNam
+                service: expectedSchema.client.serviceName
               },
               {
                 resource: 'SELECT 1',
