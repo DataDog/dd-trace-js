@@ -563,6 +563,8 @@ function checkSpansForServiceName (spans, name) {
  * @param {string} serverFile
  * @param {string|number} agentPort
  * @param {Record<string, string|undefined>} [additionalEnvArgs]
+ * @param {string} [additionalNodeOptions] [additionalNodeOptions]
+ *
  */
 /**
  * @param {string} cwd
@@ -570,15 +572,17 @@ function checkSpansForServiceName (spans, name) {
  * @param {string|number} agentPort
  * @param {(data: Buffer) => void} [stdioHandler]
  * @param {Record<string, string|undefined>} [additionalEnvArgs]
+ * @param {string} [additionalNodeOptions]
  */
-async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
+async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs, additionalNodeOptions) {
   if (typeof stdioHandler !== 'function' && !additionalEnvArgs) {
     additionalEnvArgs = stdioHandler
     stdioHandler = undefined
   }
   additionalEnvArgs = additionalEnvArgs || {}
+  additionalNodeOptions = additionalNodeOptions || ''
   let env = /** @type {Record<string, string|undefined>} */ ({
-    NODE_OPTIONS: `--loader=${hookFile}`,
+    NODE_OPTIONS: `--loader=${hookFile} ${additionalNodeOptions}`,
     DD_TRACE_AGENT_PORT: String(agentPort),
     DD_TRACE_FLUSH_INTERVAL: '0'
   })
