@@ -64,7 +64,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
 
   if (expectedSource) {
     assert.match(out, new RegExp(`instrumentation source: ${expectedSource}`),
-    `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
+      `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
   }
   return pid
 }
@@ -87,9 +87,9 @@ async function runAndCheckWithTelemetry (filename, expectedOut, expectedTelemetr
   const msgs = await cleanup()
   if (expectedTelemetryPoints.length === 0) {
     // assert no telemetry sent
-    assert.strictEqual(msgs.length, 0, `Expected no telemetry, but got:\n${
-      msgs.map(msg => JSON.stringify(msg[1].points)).join('\n')
-    }`)
+    assert.strictEqual(
+      msgs.length, 0, `Expected no telemetry, but got:\n${msgs.map(msg => JSON.stringify(msg[1].points)).join('\n')}`
+    )
   } else {
     assertTelemetryPoints(pid, msgs, expectedTelemetryPoints)
   }
@@ -292,7 +292,7 @@ async function createSandbox (
     execHelper('yarn link')
     execHelper('yarn link dd-trace')
     // ... run the tests in the current directory.
-    return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
+    return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => { } }
   }
   const folder = path.join(sandboxRoot, id().toString())
   const out = path.join(sandboxRoot, 'dd-trace.tgz')
@@ -574,7 +574,9 @@ function checkSpansForServiceName (spans, name) {
  * @param {Record<string, string|undefined>} [additionalEnvArgs]
  * @param {string} [additionalNodeOptions]
  */
-async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs, additionalNodeOptions) {
+async function spawnPluginIntegrationTestProc (
+  cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs, additionalNodeOptions
+) {
   if (typeof stdioHandler !== 'function' && !additionalEnvArgs) {
     additionalEnvArgs = stdioHandler
     stdioHandler = undefined
