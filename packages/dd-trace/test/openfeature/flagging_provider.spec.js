@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -56,22 +56,22 @@ describe('FlaggingProvider', () => {
     it('should initialize with tracer and config', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      expect(provider._tracer).to.equal(mockTracer)
-      expect(provider._config).to.equal(mockConfig)
+      assert.strictEqual(provider._tracer, mockTracer)
+      assert.strictEqual(provider._config, mockConfig)
     })
 
     it('should create exposure channel', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      expect(provider).to.exist
-      expect(channelStub).to.have.been.calledWith('ffe:exposure:submit')
+      assert.ok(provider)
+      sinon.assert.calledWith(channelStub, 'ffe:exposure:submit')
     })
 
     it('should log debug message on creation', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      expect(provider).to.exist
-      expect(log.debug).to.have.been.calledWith('FlaggingProvider created with timeout: 30000ms')
+      assert.ok(provider)
+      sinon.assert.calledWith(log.debug, 'FlaggingProvider created with timeout: 30000ms')
     })
   })
 
@@ -83,15 +83,15 @@ describe('FlaggingProvider', () => {
 
       provider._setConfiguration(ufc)
 
-      expect(setConfigSpy).to.have.been.calledOnceWith(ufc)
-      expect(log.debug).to.have.been.calledWith('FlaggingProvider provider configuration updated')
+      sinon.assert.calledOnceWithExactly(setConfigSpy, ufc)
+      sinon.assert.calledWith(log.debug, 'FlaggingProvider provider configuration updated')
     })
 
     it('should handle null/undefined configuration gracefully', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      expect(() => provider._setConfiguration(null)).to.not.throw()
-      expect(() => provider._setConfiguration(undefined)).to.not.throw()
+      assert.doesNotThrow(() => provider._setConfiguration(null))
+      assert.doesNotThrow(() => provider._setConfiguration(undefined))
     })
   })
 
@@ -100,7 +100,7 @@ describe('FlaggingProvider', () => {
       const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      expect(provider).to.be.instanceOf(DatadogNodeServerProvider)
+      assert.ok(provider instanceof DatadogNodeServerProvider)
     })
   })
 })

@@ -1,6 +1,7 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -32,13 +33,13 @@ describe('span-stats exporter', () => {
   it('should flush immediately on export', () => {
     exporter = new Exporter({ url })
 
-    expect(writer.append).to.have.not.been.called
-    expect(writer.flush).to.have.not.been.called
+    sinon.assert.notCalled(writer.append)
+    sinon.assert.notCalled(writer.flush)
 
     exporter.export('')
 
-    expect(writer.append).to.have.been.called
-    expect(writer.flush).to.have.been.called
+    sinon.assert.called(writer.append)
+    sinon.assert.called(writer.flush)
   })
 
   it('should set url from hostname and port', () => {
@@ -48,8 +49,8 @@ describe('span-stats exporter', () => {
 
     exporter = new Exporter({ hostname, port })
 
-    expect(exporter._url).to.be.deep.equal(url)
-    expect(Writer).to.have.been.calledWith({
+    assert.deepStrictEqual(exporter._url, url)
+    sinon.assert.calledWith(Writer, {
       url: exporter._url,
       tags: undefined
     })
@@ -60,7 +61,7 @@ describe('span-stats exporter', () => {
 
     exporter = new Exporter({ url, tags })
 
-    expect(Writer).to.have.been.calledWith({
+    sinon.assert.calledWith(Writer, {
       url: exporter._url,
       tags
     })

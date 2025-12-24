@@ -1,9 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const axios = require('axios').create({ validateStatus: null })
-const { expect } = require('chai')
+
 const dc = require('dc-polyfill')
-const { describe, it, beforeEach, before, after } = require('mocha')
+const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -94,7 +95,7 @@ withVersions('passport-http', 'passport-http', version => {
       passportVerifyChannel.subscribe((data) => subscriberStub(data))
 
       server = app.listen(0, () => {
-        port = server.address().port
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         done()
       })
     })
@@ -116,8 +117,8 @@ withVersions('passport-http', 'passport-http', version => {
         }
       })
 
-      expect(res.status).to.equal(500)
-      expect(subscriberStub).to.not.be.called
+      assert.strictEqual(res.status, 500)
+      sinon.assert.notCalled(subscriberStub)
     })
 
     it('should call subscriber with proper arguments on success', async () => {
@@ -128,9 +129,9 @@ withVersions('passport-http', 'passport-http', version => {
         }
       })
 
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Granted')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'Granted')
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-basic',
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
@@ -147,9 +148,9 @@ withVersions('passport-http', 'passport-http', version => {
         }
       })
 
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Granted')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'Granted')
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-basic',
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
@@ -166,9 +167,9 @@ withVersions('passport-http', 'passport-http', version => {
         }
       })
 
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Denied')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'Denied')
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-basic',
         login: 'test',
         user: false,
@@ -190,9 +191,9 @@ withVersions('passport-http', 'passport-http', version => {
         }
       })
 
-      expect(res.status).to.equal(403)
-      expect(res.data).to.equal('Blocked')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      assert.strictEqual(res.status, 403)
+      assert.strictEqual(res.data, 'Blocked')
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-basic',
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },

@@ -65,7 +65,7 @@ function assertWithMockValues (actual, expected, key) {
     for (let i = 0; i < expected.length; i++) {
       assertWithMockValues(actual[i], expected[i], `${key}.${i}`)
     }
-  } else if (typeof expected === 'object') {
+  } else if (typeof expected === 'object' && expected !== null) {
     if (typeof actual !== 'object') {
       assert.fail(`${actualWithName} is not an object`)
     }
@@ -359,8 +359,54 @@ function getLlmObsSpansFromRequests (llmobsSpanEventsRequests) {
     .map(request => request.spans[0])
 }
 
+/**
+ * Verifies prompt tracking metadata in span events.
+ * Note: Prompt IDs (pmpt_*) are real reusable prompts created on "Datadog Staging" OpenAI's dashboard for testing.
+ *
+ * @param {object} spanEvent - The LLMObs span event to verify
+ * @param {object} expectedPrompt - Expected prompt metadata (id, version, variables, chat_template)
+ * @param {Array<{role: string, content: string}>} expectedInputMessages - Expected input messages
+ * @param {object} options - Optional configuration
+ * @param {string} options.promptTrackingInstrumentationMethod - Expected prompt tracking instrumentation method
+ * ('auto' or 'manual'), defaults to 'auto'
+ * @param {boolean} options.promptMultimodal - Whether prompt contains multimodal inputs,
+ *   defaults to false
+ */
+function assertPromptTracking (
+  spanEvent,
+  expectedPrompt,
+  expectedInputMessages,
+  { promptTrackingInstrumentationMethod = 'auto', promptMultimodal = false } = {}
+) {
+  // Verify input messages are captured from instructions
+  assert(spanEvent.meta.input.messages, 'Input messages should be present')
+  assert(Array.isArray(spanEvent.meta.input.messages), 'Input messages should be an array')
+
+  for (const expected of expectedInputMessages) {
+    const message = spanEvent.meta.input.messages.find(m => m.role === expected.role)
+    assert(message, `Should have a ${expected.role} message`)
+    assert.strictEqual(message.content, expected.content)
+  }
+
+  // Verify prompt metadata
+  assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
+  const prompt = spanEvent.meta.input.prompt
+  assert.strictEqual(prompt.id, expectedPrompt.id)
+  assert.strictEqual(prompt.version, expectedPrompt.version)
+  assert.deepStrictEqual(prompt.variables, expectedPrompt.variables)
+  assert.deepStrictEqual(prompt.chat_template, expectedPrompt.chat_template)
+
+  // Verify tags
+  assert(spanEvent.tags, 'Span event should include tags')
+  assert(spanEvent.tags.includes(`prompt_tracking_instrumentation_method:${promptTrackingInstrumentationMethod}`))
+  if (promptMultimodal) {
+    assert(spanEvent.tags.includes('prompt_multimodal:true'))
+  }
+}
+
 module.exports = {
   assertLlmObsSpanEvent,
+  assertPromptTracking,
   useLlmObs,
   MOCK_NOT_NULLISH,
   MOCK_NUMBER,

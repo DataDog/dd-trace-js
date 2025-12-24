@@ -1,6 +1,6 @@
 import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from "http";
 import { LookupFunction } from 'net';
-import * as opentracing from "opentracing";
+import * as opentracing from "./vendor/dist/opentracing";
 import * as otel from "@opentelemetry/api";
 
 /**
@@ -207,6 +207,7 @@ interface Plugins {
   "generic-pool": tracer.plugins.generic_pool;
   "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
   "google-cloud-vertexai": tracer.plugins.google_cloud_vertexai;
+  "google-genai": tracer.plugins.google_genai;
   "graphql": tracer.plugins.graphql;
   "grpc": tracer.plugins.grpc;
   "hapi": tracer.plugins.hapi;
@@ -542,6 +543,12 @@ declare namespace tracer {
     }
 
     /**
+     * Whether to add an auto-generated `runtime-id` tag to metrics.
+     * @default false
+     */
+    runtimeMetricsRuntimeId?: boolean
+
+    /**
      * Custom function for DNS lookups when sending requests to the agent.
      * @default dns.lookup()
      */
@@ -577,13 +584,6 @@ declare namespace tracer {
      */
     experimental?: {
       b3?: boolean
-      traceparent?: boolean
-
-      /**
-       * Whether to add an auto-generated `runtime-id` tag to metrics.
-       * @default false
-       */
-      runtimeId?: boolean
 
       /**
        * Whether to write traces to log output or agentless, rather than send to an agent
@@ -688,13 +688,6 @@ declare namespace tracer {
     tags?: { [key: string]: any };
 
     /**
-     * Specifies which scope implementation to use. The default is to use the best
-     * implementation for the runtime. Only change this if you know what you are
-     * doing.
-     */
-    scope?: 'async_hooks' | 'async_local_storage' | 'async_resource' | 'sync' | 'noop'
-
-    /**
      * Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.
      * @default false
      */
@@ -705,13 +698,6 @@ declare namespace tracer {
      * @default 'debug'
      */
     logLevel?: 'error' | 'debug'
-
-    /**
-     * If false, require a parent in order to trace.
-     * @default true
-     * @deprecated since version 4.0
-     */
-    orphanable?: boolean
 
     /**
      * Enables DBM to APM link using tag injection.
@@ -919,7 +905,7 @@ declare namespace tracer {
     /**
      * The selection and priority order of context propagation injection and extraction mechanisms.
      */
-    propagationStyle?: string[] | PropagationStyle
+    tracePropagationStyle?: string[] | PropagationStyle
 
     /**
      * Cloud payload report as tags
@@ -1334,6 +1320,10 @@ declare namespace tracer {
        * Human-readable explanation for why this action was chosen.
        */
       reason: string;
+      /**
+       * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
+       */
+      tags: string[];
     }
 
     /**
@@ -1345,6 +1335,10 @@ declare namespace tracer {
        * Human-readable explanation from AI Guard describing why the conversation was blocked.
        */
       reason: string;
+      /**
+       * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
+       */
+      tags: string[];
     }
 
     /**
@@ -1862,19 +1856,25 @@ declare namespace tracer {
     /**
      * This plugin automatically instruments the
      * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
-     */
-    interface google_cloud_vertexai extends Integration {}
+    */
+   interface google_cloud_vertexai extends Integration {}
 
-    /** @hidden */
-    interface ExecutionArgs {
-      schema: any,
-      document: any,
-      rootValue?: any,
-      contextValue?: any,
-      variableValues?: any,
-      operationName?: string,
-      fieldResolver?: any,
-      typeResolver?: any,
+   /**
+    * This plugin automatically instruments the
+    * [@google-genai](https://github.com/googleapis/js-genai) module.
+    */
+   interface google_genai extends Integration {}
+
+   /** @hidden */
+   interface ExecutionArgs {
+     schema: any,
+     document: any,
+     rootValue?: any,
+     contextValue?: any,
+     variableValues?: any,
+     operationName?: string,
+     fieldResolver?: any,
+     typeResolver?: any,
     }
 
     /**

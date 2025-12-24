@@ -1,0 +1,42 @@
+{
+  "license": "(Apache-2.0 OR BSD-3-Clause)",
+  "scripts": {
+    "postinstall": "node rspack"
+  },
+  "dependencies": {
+    "@datadog/sketches-js": "2.1.1",
+    "@datadog/source-map": "npm:source-map@^0.6.0",
+    "@isaacs/ttlcache": "^2.1.3",
+    "@opentelemetry/core": ">=1.14.0 <1.31.0",
+    "@opentelemetry/resources": ">=1.0.0 <1.31.0",
+    "astring": "^1.9.0",
+    "crypto-randomuuid": "^1.0.0",
+    "escape-string-regexp": "^5.0.0",
+    "esquery": "^1.6.0",
+    "ignore": "^7.0.5",
+    "istanbul-lib-coverage": "^3.2.2",
+    "jest-docblock": "^29.7.0",
+    "jsonpath-plus": "^10.3.0",
+    "limiter": "^1.1.5",
+    "lodash.sortby": "^4.7.0",
+    "lru-cache": "^10.4.3",
+    "meriyah": "^6.1.4",
+    "module-details-from-path": "^1.0.4",
+    "mutexify": "^1.4.0",
+    "opentracing": ">=0.14.7",
+    "path-to-regexp": "^0.1.12",
+    "pprof-format": "^2.1.1",
+    "protobufjs": "^7.5.3",
+    "retry": "^0.13.1",
+    "rfdc": "^1.4.1",
+    "semifies": "^1.0.0",
+    "shell-quote": "^1.8.2",
+    "source-map": "^0.7.4",
+    "tlhunter-sorted-set": "^0.1.0",
+    "ttl-set": "^1.0.0"
+  },
+  "devDependencies": {
+    "@rspack/core": "^1.6.4",
+    "license-webpack-plugin": "^4.0.2"
+  }
+}

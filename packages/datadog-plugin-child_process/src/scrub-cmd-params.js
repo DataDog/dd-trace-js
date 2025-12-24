@@ -1,6 +1,6 @@
 'use strict'
 
-const shellParser = require('shell-quote/parse')
+const shellParser = require('../../../vendor/dist/shell-quote').parse
 
 const ALLOWED_ENV_VARIABLES = new Set(['LD_PRELOAD', 'LD_LIBRARY_PATH', 'PATH'])
 const PROCESS_DENYLIST = new Set(['md5'])

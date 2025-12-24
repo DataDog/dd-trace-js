@@ -1,8 +1,9 @@
 'use strict'
 
-const { sanitizeAttributes } = require('@opentelemetry/core')
+const { sanitizeAttributes } = require('../../../../../vendor/dist/@opentelemetry/core')
 const { context } = require('@opentelemetry/api')
-const packageVersion = require('../../../../../package.json').version
+const { VERSION: packageVersion } = require('../../../../../version')
+
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
  * @typedef {import('@opentelemetry/api-logs').LoggerProvider} LoggerProvider
