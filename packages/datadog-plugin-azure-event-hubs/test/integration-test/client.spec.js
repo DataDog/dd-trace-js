@@ -13,7 +13,11 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
-const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000' }
+const spawnEnv = {
+  DD_TRACE_FLUSH_INTERVAL: '2000',
+}
+
+const nodeOptions = '--experimental-global-webcrypto'
 
 // TODO: Fix this test / esm issue
 describe('esm', () => {
@@ -41,7 +45,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'azure.eventhubs.send'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, spawnEnv)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, undefined, spawnEnv, nodeOptions)
       await res
     }).timeout(20000)
 
@@ -108,7 +112,7 @@ describe('esm', () => {
         assert.strictEqual(parseLinks(payload[4][0]).length, 2)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, spawnEnv)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, undefined, spawnEnv, nodeOptions)
       await res
     }).timeout(60000)
 
@@ -117,7 +121,7 @@ describe('esm', () => {
         assert.ok(!('_dd.span_links' in payload[2][0]))
       })
       const envVar = { DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: 'false', ...spawnEnv }
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, envVar)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, undefined, envVar, nodeOptions)
       await res
     }).timeout(60000)
   })
