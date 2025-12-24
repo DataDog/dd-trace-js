@@ -10,8 +10,8 @@ const {
   assertObjectContains,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
-} = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+} = require('../../../../../integration-tests/helpers')
+const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
 const spawnEnv = {
   DD_TRACE_FLUSH_INTERVAL: '2000',
@@ -26,7 +26,7 @@ describe('esm', () => {
 
   withVersions('azure-event-hubs', '@azure/event-hubs', version => {
     useSandbox([`'@azure/event-hubs@${version}'`], false, [
-      './packages/datadog-plugin-azure-event-hubs/test/integration-test/*'])
+      './packages/datadog-plugin-azure-event-hubs/test/integration-test/core-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
