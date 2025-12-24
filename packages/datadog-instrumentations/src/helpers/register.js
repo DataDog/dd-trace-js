@@ -10,6 +10,7 @@ const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
 const { getEnvironmentVariables } = require('../../../dd-trace/src/config-helper')
+const { isRelativeRequire } = require('./shared-utils')
 const rewriter = require('./rewriter')
 
 const envs = getEnvironmentVariables()
@@ -103,6 +104,8 @@ for (const packageName of names) {
       // Maybe it is also not important to know what name was actually used?
       hook[HOOK_SYMBOL] ??= new WeakSet()
       let matchesFile = moduleName === fullFilename
+
+      if (!matchesFile && isRelativeRequire(name)) matchesFile = true
 
       if (fullFilePattern) {
         // Some libraries include a hash in their filenames when installed,
@@ -219,7 +222,6 @@ function parseHookInstrumentationFileName (packageName) {
     hook = hook.fn
   }
   const hookString = hook.toString()
-
   const regex = /require\('([^']*)'\)/
   const match = hookString.match(regex)
 
