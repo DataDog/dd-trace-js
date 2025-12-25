@@ -203,9 +203,13 @@ function isBinary (val) {
   return val && val._bsontype === 'Binary'
 }
 
-function isHeartbeat (ops, config) {
-  // Check if it's a heartbeat command hello: 1 or helloOk: 1
-  return ops && typeof ops === 'object' && (ops.hello === 1 || ops.helloOk === true)
+function isHeartbeat(ops, config) {
+  // Check if it's a heartbeat command https://github.com/mongodb/specifications/blob/master/source/mongodb-handshake/handshake.md
+  return (
+    ops &&
+    typeof ops === "object" &&
+    (ops.hello === 1 || ops.helloOk === true || ops.ismaster === 1 || ops.isMaster === 1)
+  );
 }
 
 module.exports = MongodbCorePlugin
