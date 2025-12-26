@@ -11,7 +11,7 @@ const {
   SPAN_POINTER_DIRECTION,
   SPAN_POINTER_DIRECTION_NAME
 } = require('../../dd-trace/src/constants')
-
+const log = require('../../dd-trace/src/log')
 class WSProducerPlugin extends TracingPlugin {
   static get id () { return 'ws' }
   static get prefix () { return 'tracing:ws:send' }
@@ -49,6 +49,10 @@ class WSProducerPlugin extends TracingPlugin {
   }
 
   bindAsyncStart (ctx) {
+    if (!ctx.span) {
+      log.warn('bindAsyncStart: cannot find span')
+      return
+    }
     ctx.span.finish()
     return ctx.parentStore
   }
