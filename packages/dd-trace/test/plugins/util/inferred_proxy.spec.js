@@ -1,16 +1,16 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, afterEach } = require('tap').mocha
-const axios = require('axios')
 const { Agent } = require('node:http')
+// Create axios instance with no connection pooling
+
+const { describe, it, afterEach } = require('mocha')
+const axios = require('axios')
 
 require('../../setup/core')
-
 const agent = require('../agent')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
-// Create axios instance with no connection pooling
 const httpClient = axios.create({
   httpAgent: new Agent({ keepAlive: false }),
   timeout: 5000

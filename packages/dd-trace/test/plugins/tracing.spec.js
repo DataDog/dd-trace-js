@@ -1,12 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, before, after } = require('tap').mocha
+
+const { describe, it, before, after } = require('mocha')
 const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
 
 require('../setup/core')
-
 const TracingPlugin = require('../../src/plugins/tracing')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')

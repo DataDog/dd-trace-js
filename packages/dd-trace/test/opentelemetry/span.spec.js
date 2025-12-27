@@ -1,10 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { describe, it } = require('tap').mocha
-const sinon = require('sinon')
 const { performance } = require('perf_hooks')
+
+const { describe, it } = require('mocha')
+const sinon = require('sinon')
+
 const { timeOrigin } = performance
 const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 

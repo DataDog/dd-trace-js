@@ -1,11 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const { executionAsyncResource } = require('async_hooks')
 
-require('../../dd-trace/test/setup/core')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 
+require('../../dd-trace/test/setup/core')
 const { storage } = require('../src/storage')
 
 describe('storage', () => {

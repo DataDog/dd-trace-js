@@ -1,10 +1,9 @@
 'use strict'
 
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 require('../setup/core')
-
 const Scheduler = require('../../src/remote_config/scheduler')
 
 const INTERVAL = 5e3

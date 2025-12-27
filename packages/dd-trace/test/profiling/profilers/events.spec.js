@@ -1,11 +1,11 @@
 'use strict'
 
 const assert = require('node:assert')
-const { describe, it } = require('tap').mocha
+
+const { describe, it } = require('mocha')
 const dc = require('dc-polyfill')
 
 require('../../setup/core')
-
 const { storage } = require('../../../../datadog-core')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../../../src/profiling/libuv-size')
 const EventsProfiler = require('../../../src/profiling/profilers/events')

@@ -1,11 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const path = require('node:path')
 const dc = require('dc-polyfill')
 
 require('../setup/core')

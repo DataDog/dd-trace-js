@@ -2,10 +2,9 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it } = require('tap').mocha
+const { describe, it } = require('mocha')
 
 require('../../setup/core')
-
 const FormData = require('../../../src/exporters/common/form-data')
 
 async function streamToString (stream) {

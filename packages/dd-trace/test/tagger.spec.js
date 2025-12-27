@@ -1,10 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach } = require('tap').mocha
+
+const { describe, it, beforeEach } = require('mocha')
 
 const constants = require('../src/constants')
 require('./setup/core')
+
 const ERROR_MESSAGE = constants.ERROR_MESSAGE
 const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE

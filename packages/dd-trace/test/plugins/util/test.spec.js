@@ -1,12 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, context } = require('tap').mocha
 const path = require('node:path')
-const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
+
+const { describe, it, beforeEach } = require('mocha')
+const context = describe
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
 require('../../setup/core')
 
 const {

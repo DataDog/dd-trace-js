@@ -1,12 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach } = require('tap').mocha
+
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
+
 const { Span } = require('../../../vendor/dist/opentracing')
-
 require('./setup/core')
-
 const Scope = require('../src/scope')
 
 describe('Scope', () => {

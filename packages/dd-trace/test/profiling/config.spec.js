@@ -1,15 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const os = require('node:os')
 const path = require('node:path')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const satisfies = require('semifies')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
-
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
 const WallProfiler = require('../../src/profiling/profilers/wall')

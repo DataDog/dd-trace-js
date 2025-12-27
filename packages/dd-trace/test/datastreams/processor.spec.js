@@ -1,14 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { describe, it, beforeEach } = require('tap').mocha
-const sinon = require('sinon')
 const { hostname } = require('node:os')
+
+const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
-
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075

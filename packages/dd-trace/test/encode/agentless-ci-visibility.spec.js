@@ -2,16 +2,15 @@
 
 const assert = require('node:assert/strict')
 
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
-
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const msgpack = require('@msgpack/msgpack')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
-
 const id = require('../../src/id')
+
 const {
   MAX_META_KEY_LENGTH,
   MAX_META_VALUE_LENGTH,

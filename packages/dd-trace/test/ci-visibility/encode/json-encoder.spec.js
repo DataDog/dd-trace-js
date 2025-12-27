@@ -1,13 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../../../dd-trace/test/setup/core')
-
 const { JSONEncoder } = require('../../../src/ci-visibility/encode/json-encoder')
 
 describe('CI Visibility JSON encoder', () => {

@@ -1,13 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const nock = require('nock')
 
 require('../setup/core')
-
 const tracerLogger = require('../../src/log')
 
 describe('External Logger', () => {
