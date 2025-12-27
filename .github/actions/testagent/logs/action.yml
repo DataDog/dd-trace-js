@@ -28,7 +28,7 @@ runs:
       shell: bash
     - name: Archive Test Agent Logs
       if:  runner.debug == '1' # only create test agent log artifacts if the github action has been re-run with debug mode
-      uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
       with:
         name: "test_agent_logs_${{ inputs.suffix }}"
         path: "./artifacts/logs"
@@ -48,7 +48,7 @@ runs:
         rm "$headers"
       shell: bash
     - name: Archive Test Agent Tested Versions Artifacts
-      uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
       with:
         name: supported-integrations-${{ inputs.suffix }}
         path: ./artifacts
