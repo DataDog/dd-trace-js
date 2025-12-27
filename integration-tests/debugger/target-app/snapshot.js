@@ -19,7 +19,7 @@ fastify.get('/:name', function handler (request) {
   const lstr = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.'
   const sym = Symbol('foo')
   const regex = /bar/i
-  const arr = [1, 2, 3, 4, 5]
+  const arr = Array.from({ length: 200 }, (_, i) => i + 1)
   const obj = {
     foo: {
       baz: 42,
