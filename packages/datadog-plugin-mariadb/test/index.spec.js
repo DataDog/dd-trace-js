@@ -10,8 +10,8 @@ const semver = require('semver')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 // https://github.com/mariadb-corporation/mariadb-connector-nodejs/commit/0a90b71ab20ab4e8b6a86a77ba291bba8ba6a34e
 const range = semver.gte(process.version, '15.0.0') ? '>=2.5.1' : '>=2'
@@ -105,20 +105,20 @@ describe('Plugin', () => {
         })
 
         it('should do automatic instrumentation', done => {
-          agent
-            .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-              assert.strictEqual(traces[0][0].resource, 'SELECT 1 + 1 AS solution')
-              assert.strictEqual(traces[0][0].type, 'sql')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta['db.name'], 'db')
-              assert.strictEqual(traces[0][0].meta['db.user'], 'root')
-              assert.strictEqual(traces[0][0].meta['db.type'], 'mariadb')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta.component, 'mariadb')
-              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'mariadb')
-            })
+          agent.assertFirstTraceSpan({
+            name: expectedSchema.outbound.opName,
+            service: expectedSchema.outbound.serviceName,
+            resource: 'SELECT 1 + 1 AS solution',
+            type: 'sql',
+            meta: {
+              'span.kind': 'client',
+              'db.name': 'db',
+              'db.user': 'root',
+              'db.type': 'mariadb',
+              component: 'mariadb',
+              '_dd.integration': 'mariadb'
+            }
+          })
             .then(done)
             .catch(done)
 
@@ -129,19 +129,19 @@ describe('Plugin', () => {
 
         if (semver.intersects(version, '>=3')) {
           it('should support prepared statement shorthand', done => {
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-                assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-                assert.strictEqual(traces[0][0].resource, 'SELECT ? + ? AS solution')
-                assert.strictEqual(traces[0][0].type, 'sql')
-                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                assert.strictEqual(traces[0][0].meta['db.name'], 'db')
-                assert.strictEqual(traces[0][0].meta['db.user'], 'root')
-                assert.strictEqual(traces[0][0].meta['db.type'], 'mariadb')
-                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                assert.strictEqual(traces[0][0].meta.component, 'mariadb')
-              })
+            agent.assertFirstTraceSpan({
+              name: expectedSchema.outbound.opName,
+              service: expectedSchema.outbound.serviceName,
+              resource: 'SELECT ? + ? AS solution',
+              type: 'sql',
+              meta: {
+                'span.kind': 'client',
+                'db.name': 'db',
+                'db.user': 'root',
+                'db.type': 'mariadb',
+                component: 'mariadb'
+              }
+            })
               .then(done)
               .catch(done)
 
@@ -151,19 +151,19 @@ describe('Plugin', () => {
           })
 
           it('should support prepared statements', done => {
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-                assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-                assert.strictEqual(traces[0][0].resource, 'SELECT ? + ? AS solution')
-                assert.strictEqual(traces[0][0].type, 'sql')
-                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                assert.strictEqual(traces[0][0].meta['db.name'], 'db')
-                assert.strictEqual(traces[0][0].meta['db.user'], 'root')
-                assert.strictEqual(traces[0][0].meta['db.type'], 'mariadb')
-                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                assert.strictEqual(traces[0][0].meta.component, 'mariadb')
-              })
+            agent.assertFirstTraceSpan({
+              name: expectedSchema.outbound.opName,
+              service: expectedSchema.outbound.serviceName,
+              resource: 'SELECT ? + ? AS solution',
+              type: 'sql',
+              meta: {
+                'span.kind': 'client',
+                'db.name': 'db',
+                'db.user': 'root',
+                'db.type': 'mariadb',
+                component: 'mariadb'
+              }
+            })
               .then(done)
               .catch(done)
 
@@ -184,10 +184,12 @@ describe('Plugin', () => {
 
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
-              assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
-              assert.strictEqual(traces[0][0].meta.component, 'mariadb')
+              assertObjectContains(traces[0][0].meta, {
+                [ERROR_TYPE]: error.name,
+                [ERROR_MESSAGE]: error.message,
+                [ERROR_STACK]: error.stack,
+                component: 'mariadb'
+              })
             })
             .then(done)
             .catch(done)
@@ -344,18 +346,18 @@ describe('Plugin', () => {
         })
 
         it('should do automatic instrumentation', done => {
-          agent
-            .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-              assert.strictEqual(traces[0][0].resource, 'SELECT 1 + 1 AS solution')
-              assert.strictEqual(traces[0][0].type, 'sql')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta['db.user'], 'root')
-              assert.strictEqual(traces[0][0].meta['db.type'], 'mariadb')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta.component, 'mariadb')
-            })
+          agent.assertFirstTraceSpan({
+            name: expectedSchema.outbound.opName,
+            service: expectedSchema.outbound.serviceName,
+            resource: 'SELECT 1 + 1 AS solution',
+            type: 'sql',
+            meta: {
+              'span.kind': 'client',
+              'db.user': 'root',
+              'db.type': 'mariadb',
+              component: 'mariadb'
+            }
+          })
             .then(done)
             .catch(done)
 

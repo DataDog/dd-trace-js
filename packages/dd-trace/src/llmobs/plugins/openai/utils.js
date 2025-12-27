@@ -1,7 +1,11 @@
 'use strict'
 
-const IMAGE_FALLBACK = '[image]'
-const FILE_FALLBACK = '[file]'
+const {
+  INPUT_TYPE_IMAGE,
+  INPUT_TYPE_FILE,
+  IMAGE_FALLBACK,
+  FILE_FALLBACK
+} = require('./constants')
 
 const REGEX_SPECIAL_CHARS = /[.*+?^${}()|[\]\\]/g
 
@@ -77,11 +81,11 @@ function extractTextFromContentItem (contentItem) {
   }
 
   // For image/file items, extract the actual reference value
-  if (contentItem.type === 'input_image') {
+  if (contentItem.type === INPUT_TYPE_IMAGE) {
     return contentItem.image_url || contentItem.file_id || IMAGE_FALLBACK
   }
 
-  if (contentItem.type === 'input_file') {
+  if (contentItem.type === INPUT_TYPE_FILE) {
     return contentItem.file_id || contentItem.file_url || contentItem.filename || FILE_FALLBACK
   }
 
@@ -107,8 +111,16 @@ function normalizePromptVariables (variables) {
   )
 }
 
+function hasMultimodalInputs (variables) {
+  if (!variables) return false
+  return Object.values(variables).some(value =>
+    value?.type === INPUT_TYPE_IMAGE || value?.type === INPUT_TYPE_FILE
+  )
+}
+
 module.exports = {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
-  extractTextFromContentItem
+  extractTextFromContentItem,
+  hasMultimodalInputs
 }

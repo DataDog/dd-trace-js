@@ -265,7 +265,7 @@ describe('sdk', () => {
         it.skip('starts a span with a distinct trace id', () => {
           llmobs.trace({ kind: 'workflow', name: 'test' }, span => {
             const traceId = LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id']
-            assert.ok(traceId != null)
+            assert.ok(traceId)
             assert.notStrictEqual(traceId, span.context().toTraceId(true))
           })
         })
@@ -578,7 +578,7 @@ describe('sdk', () => {
 
           const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
           wrappedMyWorkflow('input', (err, res) => {
-            assert.ok(err != null)
+            assert.ok(err)
             assert.strictEqual(res, 'output')
           })
 
@@ -670,7 +670,7 @@ describe('sdk', () => {
             const span = llmobs._active()
 
             const traceId = span.context()._tags['_ml_obs.trace_id']
-            assert.ok(traceId != null)
+            assert.ok(traceId)
             assert.notStrictEqual(traceId, span.context().toTraceId(true))
           })
 

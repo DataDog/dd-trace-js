@@ -8,6 +8,7 @@ const http = require('node:http')
 require('../../setup/core')
 
 const { extractIp } = require('../../../src/plugins/util/ip_extractor')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 describe('ip extractor', () => {
   let port, appListener, controller
@@ -193,7 +194,7 @@ describe('ip extractor', () => {
     controller = function (req) {
       const ip = extractIp({}, req)
       try {
-        assert.ok(['::1', '127.0.0.1'].includes(ip))
+        assertObjectContains(['::1', '127.0.0.1'], [ip])
         done()
       } catch (e) {
         done(e)
@@ -219,7 +220,7 @@ describe('ip extractor', () => {
     controller = function (req) {
       const ip = extractIp({}, req)
       try {
-        assert.ok(['::1', '127.0.0.1'].includes(ip))
+        assertObjectContains(['::1', '127.0.0.1'], [ip])
         done()
       } catch (e) {
         done(e)

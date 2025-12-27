@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 
 const axios = require('axios')
-const { expect } = require('chai')
+
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -170,7 +170,7 @@ describe('IAST Index', () => {
       it('should enable AppsecFsPlugin', () => {
         mockIast.enable(config)
         sinon.assert.calledOnceWithExactly(appsecFsPlugin.enable, IAST_MODULE)
-        expect(analyzers.enableAllAnalyzers).to.have.been.calledAfter(appsecFsPlugin.enable)
+        assert.strictEqual(analyzers.enableAllAnalyzers.calledAfter(appsecFsPlugin.enable), true)
       })
     })
 
@@ -205,7 +205,7 @@ describe('IAST Index', () => {
       it('should not finish global context if not enabled before ', () => {
         mockIast.disable(config)
 
-        expect(mockOverheadController.finishGlobalContext).to.have.been.not.called
+        sinon.assert.notCalled(mockOverheadController.finishGlobalContext)
       })
     })
 

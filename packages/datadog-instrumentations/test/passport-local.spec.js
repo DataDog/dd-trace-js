@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const dc = require('dc-polyfill')
 const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -122,7 +121,7 @@ withVersions('passport-local', 'passport-local', version => {
 
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.data, 'Granted')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-local',
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
@@ -136,7 +135,7 @@ withVersions('passport-local', 'passport-local', version => {
 
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.data, 'Granted')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-local',
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
@@ -150,7 +149,7 @@ withVersions('passport-local', 'passport-local', version => {
 
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.data, 'Denied')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-local',
         login: 'test',
         user: false,
@@ -169,7 +168,7 @@ withVersions('passport-local', 'passport-local', version => {
 
       assert.strictEqual(res.status, 403)
       assert.strictEqual(res.data, 'Blocked')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-local',
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },

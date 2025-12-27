@@ -17,7 +17,7 @@ describe('Dynamic Instrumentation', function () {
           assert.ok(payloadSize < 1024 * 1024) // 1MB
 
           const capturesJson = JSON.stringify(payload.debugger.snapshot.captures)
-          assert.ok(capturesJson.includes('"pruned":true'))
+          assert.match(capturesJson, /"pruned":true/)
 
           done()
         })
