@@ -58,11 +58,11 @@ module.exports.TRACING_FIELD_NAME = '_dd.tags.process'
 module.exports.DSM_FIELD_NAME = 'ProcessTags'
 module.exports.PROFILING_FIELD_NAME = 'process_tags'
 module.exports.DYNAMIC_INSTRUMENTATION_FIELD_NAME = 'process_tags'
+module.exports.TELEMETRY_FIELD_NAME = 'process_tags'
+module.exports.REMOTE_CONFIG_FIELD_NAME = 'process_tags'
+module.exports.CRASH_TRACKING_FIELD_NAME = 'process_tags'
 
-// TODO: CRASH_TRACKING_FIELD_NAME /process_tags /application/process_tags
-// TODO: TELEMETRY_FIELD_NAME /application/process_tags
 // TODO: CLIENT_TRACE_STATISTICS_FIELD_NAME process_tags
-// TODO: REMOTE_CONFIG_FIELD_NAME process_tags
 
 function serialize (tags) {
   const intermediary = []

@@ -813,7 +813,6 @@ describe('Dynamic Instrumentation', function () {
           const snapshot = payload[0].debugger.snapshot
 
           // Assert that process_tags are present
-          assert.ok(snapshot.process_tags)
           assert.strictEqual(typeof snapshot.process_tags, 'object')
 
           // Check for expected process tags keys
