@@ -4,6 +4,7 @@ const {
   channel,
   addHook
 } = require('./helpers/instrument')
+const { storage } = require('../../datadog-core')
 
 const prismaEngineStart = channel('apm:prisma:engine:start')
 const tracingChannel = require('dc-polyfill').tracingChannel
@@ -23,7 +24,29 @@ class TracingHelper {
 
   // needs a sampled tracecontext to generate engine spans
   getTraceParent (context) {
-    return '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01' // valid sampled traceparent
+    // try to get span from current async storage context
+    const store = storage('legacy').getStore()
+    const span = store && store.span
+
+    if (span && typeof span.context === 'function') {
+      const spanContext = span.context()
+      if (spanContext && typeof spanContext.toTraceparent === 'function') {
+        let traceparent = spanContext.toTraceparent()
+
+        // force the sampled flag to '01' for Prisma's engine span generation
+        // prisma only generates engine spans when the traceparent indicates the trace is sampled
+        // this ensures engine spans are created and dispatched to dd-trace, which will then
+        // apply its own sampling decision when recording/sending spans
+        // the trace IDs and span IDs remain correct for DBM correlation
+        traceparent = traceparent.replace(/-0[01]$/, '-01')
+
+        return traceparent
+      }
+    }
+
+    // fallback to a valid sampled traceparent if no active span.
+    // this ensures Prisma can generate engine spans even when there's no active dd-trace context
+    return '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01'
   }
 
   dispatchEngineSpans (spans) {
