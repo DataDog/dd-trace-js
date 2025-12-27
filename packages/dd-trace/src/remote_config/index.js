@@ -88,6 +88,7 @@ function enableOrDisableAppsec (action, rcConfig, config, appsec) {
 function enableWafUpdate (appsecConfig) {
   if (rc && appsecConfig && !appsecConfig.rules) {
     // dirty require to make startup faster for serverless
+    const { ASM_WAF_PRODUCTS } = require('../appsec/rc-products')
     const RuleManager = require('../appsec/rule_manager')
 
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
@@ -119,17 +120,14 @@ function enableWafUpdate (appsecConfig) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_CMDI, true)
     }
 
-    // TODO: delete noop handlers and kPreUpdate and replace with batched handlers
-    rc.setProductHandler('ASM_DATA', noop)
-    rc.setProductHandler('ASM_DD', noop)
-    rc.setProductHandler('ASM', noop)
-
-    rc.on(RemoteConfigManager.kPreUpdate, RuleManager.updateWafFromRC)
+    rc.subscribeProducts(...ASM_WAF_PRODUCTS)
+    rc.setBatchHandler(ASM_WAF_PRODUCTS, RuleManager.updateWafFromRC)
   }
 }
 
 function disableWafUpdate () {
   if (rc) {
+    const { ASM_WAF_PRODUCTS } = require('../appsec/rc-products')
     const RuleManager = require('../appsec/rule_manager')
 
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, false)
@@ -158,15 +156,10 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SHI, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_CMDI, false)
 
-    rc.removeProductHandler('ASM_DATA')
-    rc.removeProductHandler('ASM_DD')
-    rc.removeProductHandler('ASM')
-
-    rc.off(RemoteConfigManager.kPreUpdate, RuleManager.updateWafFromRC)
+    rc.unsubscribeProducts(...ASM_WAF_PRODUCTS)
+    rc.removeBatchHandler(RuleManager.updateWafFromRC)
   }
 }
-
-function noop () {}
 
 module.exports = {
   enable,
