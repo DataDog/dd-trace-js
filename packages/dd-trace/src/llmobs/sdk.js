@@ -14,7 +14,7 @@ const Span = require('../opentracing/span')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getValueFromEnvSources } = require('../config-helper')
 const telemetry = require('./telemetry')
 
 const LLMObsTagger = require('./tagger')
@@ -55,7 +55,7 @@ class LLMObs extends NoopLLMObs {
 
     const { mlApp, agentlessEnabled } = options
 
-    const DD_LLMOBS_ENABLED = getEnvironmentVariable('DD_LLMOBS_ENABLED')
+    const DD_LLMOBS_ENABLED = getValueFromEnvSources('DD_LLMOBS_ENABLED')
 
     const llmobsConfig = {
       mlApp,
@@ -411,7 +411,7 @@ class LLMObs extends NoopLLMObs {
       }
 
       // When OTel tracing is enabled, add source:otel tag to allow backend to wait for OTel span conversion
-      if (isTrue(getEnvironmentVariable('DD_TRACE_OTEL_ENABLED'))) {
+      if (isTrue(getValueFromEnvSources('DD_TRACE_OTEL_ENABLED'))) {
         evaluationTags.source = 'otel'
       }
 

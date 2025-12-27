@@ -34,7 +34,80 @@ for (const deprecation of Object.keys(deprecations)) {
   )
 }
 
+let localStableConfig = {}
+let fleetStableConfig = {}
+let stableConfigWarnings = []
+let hasLoadedStableConfig = false
+
+// Test-only helper to reset stable config state between test cases.
+// Not intended for production use.
+function _resetStableConfigForTesting () {
+  localStableConfig = {}
+  fleetStableConfig = {}
+  stableConfigWarnings = []
+  hasLoadedStableConfig = false
+}
+
+function loadStableConfigOnce () {
+  if (hasLoadedStableConfig) return
+
+  hasLoadedStableConfig = true
+
+  let isInServerlessEnvironment
+  try {
+    // Lazy require to avoid circular dependency at module load time.
+    ({ isInServerlessEnvironment } = require('./serverless'))
+  } catch {
+    // If serverless detection is unavailable for some reason, assume
+    // non-serverless and continue loading stable config.
+    // OR, should we NOT load stable config in this case?
+  }
+
+  if (isInServerlessEnvironment && isInServerlessEnvironment()) {
+    // Stable config is not supported in serverless environments.
+    return
+  }
+
+  try {
+    const StableConfig = require('./config_stable')
+    const instance = new StableConfig()
+    localStableConfig = instance.localEntries ?? {}
+    fleetStableConfig = instance.fleetEntries ?? {}
+    stableConfigWarnings = instance.warnings ?? []
+  } catch {
+    // Stable config is optional, continue without it.
+  }
+}
+
+function getValueFromSource (name, source) {
+  const value = source[name]
+
+  if (value === undefined && aliases[name]) {
+    for (const alias of aliases[name]) {
+      if (source[alias] !== undefined) {
+        return source[alias]
+      }
+    }
+  }
+
+  return value
+}
+
 module.exports = {
+  /**
+   * Expose raw stable config maps and warnings for consumers that need
+   * per-source access (e.g. telemetry in Config).
+   *
+   * @returns {{ localStableConfig: object, fleetStableConfig: object, stableConfigWarnings: string[] }}
+   */
+  getStableConfigSources () {
+    loadStableConfigOnce()
+    return {
+      localStableConfig,
+      fleetStableConfig,
+      stableConfigWarnings
+    }
+  },
   /**
    * Returns the environment variables that are supported by the tracer
    * (including all non-Datadog/OTEL specific environment variables).
@@ -46,6 +119,7 @@ module.exports = {
   getEnvironmentVariables () {
     const configs = {}
     for (const [key, value] of Object.entries(process.env)) {
+      // TODO(BridgeAR): Handle telemetry reporting for aliases.
       if (key.startsWith('DD_') || key.startsWith('OTEL_') || aliasToCanonical[key]) {
         if (supportedConfigurations[key]) {
           configs[key] = value
@@ -72,28 +146,43 @@ module.exports = {
     return configs
   },
 
+  getEnvironmentVariable (name) {
+    if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
+      !supportedConfigurations[name]) {
+      throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
+    }
+    return getValueFromSource(name, process.env)
+  },
+
   /**
-   * Returns the environment variable, if it's supported or a non Datadog
-   * configuration. Otherwise, it throws an error.
+   * Returns the value stored at the given name, assumed to be in environment variable format,
+   * from the supported env sources (process.env, local stable config, fleet stable config).
+   * Falls back to aliases if the canonical name is not set.
    *
    * @param {string} name Environment variable name
    * @returns {string|undefined}
    * @throws {Error} if the configuration is not supported
    */
-  // This method, and callers of this method, need to be updated to check for declarative config sources as well.
-  getEnvironmentVariable (name) {
+  getValueFromEnvSources (name) {
     if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
-        !supportedConfigurations[name]) {
+      !supportedConfigurations[name]) {
       throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
     }
-    const config = process.env[name]
-    if (config === undefined && aliases[name]) {
-      for (const alias of aliases[name]) {
-        if (process.env[alias] !== undefined) {
-          return process.env[alias]
-        }
-      }
+    loadStableConfigOnce()
+
+    const fromFleet = getValueFromSource(name, fleetStableConfig)
+    if (fromFleet !== undefined) {
+      return fromFleet
     }
-    return config
-  }
+
+    const fromEnv = getValueFromSource(name, process.env)
+    if (fromEnv !== undefined) {
+      return fromEnv
+    }
+
+    return getValueFromSource(name, localStableConfig)
+  },
+
+  // Exported only for tests to allow resetting stable config state
+  _resetStableConfigForTesting
 }

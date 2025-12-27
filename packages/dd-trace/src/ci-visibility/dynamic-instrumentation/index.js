@@ -66,6 +66,10 @@ class TestVisDynamicInstrumentation {
     const probeChannel = new MessageChannel() // mock channel
     const configChannel = new MessageChannel() // mock channel
 
+    // NOTE: We intentionally use `getEnvironmentVariables()` here (raw env)
+    // instead of stable-config resolution helpers. The DI worker is a forked
+    // process that should see exactly the parent process's environment, and
+    // we explicitly override a few DD_ vars below to disable tracing/DI there.
     this.worker = new Worker(
       join(__dirname, 'worker', 'index.js'),
       {
