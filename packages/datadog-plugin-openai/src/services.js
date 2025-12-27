@@ -35,7 +35,7 @@ module.exports.init = function (tracerConfig) {
 
   interval = setInterval(() => {
     metrics.flush()
-  }, FLUSH_INTERVAL).unref()
+  }, FLUSH_INTERVAL).unref?.()
 
   return { metrics, logger }
 }

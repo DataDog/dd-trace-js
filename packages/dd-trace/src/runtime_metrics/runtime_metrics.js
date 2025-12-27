@@ -92,7 +92,7 @@ module.exports = {
       }, INTERVAL)
     }
 
-    interval.unref()
+    interval.unref?.()
   },
 
   stop () {

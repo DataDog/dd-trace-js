@@ -36,7 +36,7 @@ class SSIHeuristics {
     setTimeout(() => {
       this.shortLived = false
       this._maybeTriggered()
-    }, this.longLivedThreshold).unref()
+    }, this.longLivedThreshold).unref?.()
 
     this._onSpanCreated = this._onSpanCreated.bind(this)
     dc.subscribe('dd-trace:span:start', this._onSpanCreated)
