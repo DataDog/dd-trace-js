@@ -34,49 +34,26 @@ for (const deprecation of Object.keys(deprecations)) {
   )
 }
 
-let localStableConfig = {}
-let fleetStableConfig = {}
-let stableConfigWarnings = []
-let hasLoadedStableConfig = false
+let localStableConfig
+let fleetStableConfig
+let stableConfigWarnings
+let stableConfigLoaded = false
 
-// Test-only helper to reset stable config state between test cases.
-// Not intended for production use.
-function _resetStableConfigForTesting () {
-  localStableConfig = {}
-  fleetStableConfig = {}
-  stableConfigWarnings = []
-  hasLoadedStableConfig = false
-}
+function loadStableConfig () {
+  stableConfigLoaded = true
 
-function loadStableConfigOnce () {
-  if (hasLoadedStableConfig) return
-
-  hasLoadedStableConfig = true
-
-  let isInServerlessEnvironment
-  try {
-    // Lazy require to avoid circular dependency at module load time.
-    ({ isInServerlessEnvironment } = require('./serverless'))
-  } catch {
-    // If serverless detection is unavailable for some reason, assume
-    // non-serverless and continue loading stable config.
-    // OR, should we NOT load stable config in this case?
-  }
-
+  // Lazy require to avoid circular dependency at module load time.
+  const { isInServerlessEnvironment } = require('./serverless')
   if (isInServerlessEnvironment && isInServerlessEnvironment()) {
     // Stable config is not supported in serverless environments.
     return
   }
 
-  try {
-    const StableConfig = require('./config_stable')
-    const instance = new StableConfig()
-    localStableConfig = instance.localEntries ?? {}
-    fleetStableConfig = instance.fleetEntries ?? {}
-    stableConfigWarnings = instance.warnings ?? []
-  } catch {
-    // Stable config is optional, continue without it.
-  }
+  const StableConfig = require('./config_stable')
+  const instance = new StableConfig()
+  localStableConfig = instance.localEntries
+  fleetStableConfig = instance.fleetEntries
+  stableConfigWarnings = instance.warnings
 }
 
 function getValueFromSource (name, source) {
@@ -101,11 +78,13 @@ module.exports = {
    * @returns {{ localStableConfig: object, fleetStableConfig: object, stableConfigWarnings: string[] }}
    */
   getStableConfigSources () {
-    loadStableConfigOnce()
+    if (!stableConfigLoaded) {
+      loadStableConfig()
+    }
     return {
-      localStableConfig,
-      fleetStableConfig,
-      stableConfigWarnings
+      localStableConfig: localStableConfig ?? {},
+      fleetStableConfig: fleetStableConfig ?? {},
+      stableConfigWarnings: stableConfigWarnings ?? []
     }
   },
   /**
@@ -168,11 +147,16 @@ module.exports = {
       !supportedConfigurations[name]) {
       throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
     }
-    loadStableConfigOnce()
 
-    const fromFleet = getValueFromSource(name, fleetStableConfig)
-    if (fromFleet !== undefined) {
-      return fromFleet
+    if (!stableConfigLoaded) {
+      loadStableConfig()
+    }
+
+    if (fleetStableConfig !== undefined) {
+      const fromFleet = getValueFromSource(name, fleetStableConfig)
+      if (fromFleet !== undefined) {
+        return fromFleet
+      }
     }
 
     const fromEnv = getValueFromSource(name, process.env)
@@ -180,9 +164,8 @@ module.exports = {
       return fromEnv
     }
 
-    return getValueFromSource(name, localStableConfig)
+    if (localStableConfig !== undefined) {
+      return getValueFromSource(name, localStableConfig)
+    }
   },
-
-  // Exported only for tests to allow resetting stable config state
-  _resetStableConfigForTesting
 }

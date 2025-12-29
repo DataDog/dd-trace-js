@@ -122,7 +122,7 @@ function describeWriter (protocolVersion) {
             'Content-Type': 'application/msgpack',
             'Datadog-Meta-Lang': 'nodejs',
             'Datadog-Meta-Lang-Version': process.version,
-            'Datadog-Meta-Lang-Interpreter': 'v8',
+            'Datadog-Meta-Lang-Interpreter': 'V8',
             'Datadog-Meta-Tracer-Version': 'tracerVersion',
             'X-Datadog-Trace-Count': '2'
           },
@@ -145,7 +145,7 @@ function describeWriter (protocolVersion) {
           'Content-Type': 'application/msgpack',
           'Datadog-Meta-Lang': 'nodejs',
           'Datadog-Meta-Lang-Version': process.version,
-          'Datadog-Meta-Lang-Interpreter': 'v8',
+          'Datadog-Meta-Lang-Interpreter': 'V8',
           'Datadog-Meta-Tracer-Version': 'tracerVersion',
           'X-Datadog-Trace-Count': '2'
         })

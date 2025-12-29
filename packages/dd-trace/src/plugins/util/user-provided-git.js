@@ -21,16 +21,15 @@ const {
 const { normalizeRef } = require('./ci')
 const { filterSensitiveInfoFromRepository } = require('./url')
 
-function removeEmptyValues (tags) {
-  return Object.keys(tags).reduce((filteredTags, tag) => {
-    if (!tags[tag]) {
-      return filteredTags
+function removeEmptyValues (tagsAndValues) {
+  const filteredTags = {}
+  for (let i = 0; i < tagsAndValues.length; i += 2) {
+    const value = tagsAndValues[i + 1]
+    if (value) {
+      filteredTags[tagsAndValues[i]] = value
     }
-    return {
-      ...filteredTags,
-      [tag]: tags[tag]
-    }
-  }, {})
+  }
+  return filteredTags
 }
 
 // The regex is inspired by
@@ -66,26 +65,27 @@ function getUserProviderGitMetadata () {
   let tag = normalizeRef(DD_GIT_TAG)
 
   // if DD_GIT_BRANCH is a tag, we associate its value to TAG too
-  if ((DD_GIT_BRANCH || '').includes('origin/tags') || (DD_GIT_BRANCH || '').includes('refs/heads/tags')) {
+  if ((DD_GIT_BRANCH ?? '').includes('origin/tags') || (DD_GIT_BRANCH ?? '').includes('refs/heads/tags')) {
     tag = normalizeRef(DD_GIT_BRANCH)
   }
 
-  return removeEmptyValues({
-    [GIT_COMMIT_SHA]: DD_GIT_COMMIT_SHA,
-    [GIT_BRANCH]: branch,
-    [GIT_REPOSITORY_URL]: filterSensitiveInfoFromRepository(DD_GIT_REPOSITORY_URL),
-    [GIT_TAG]: tag,
-    [GIT_COMMIT_MESSAGE]: DD_GIT_COMMIT_MESSAGE,
-    [GIT_COMMIT_COMMITTER_NAME]: DD_GIT_COMMIT_COMMITTER_NAME,
-    [GIT_COMMIT_COMMITTER_DATE]: DD_GIT_COMMIT_COMMITTER_DATE,
-    [GIT_COMMIT_COMMITTER_EMAIL]: DD_GIT_COMMIT_COMMITTER_EMAIL,
-    [GIT_COMMIT_AUTHOR_NAME]: DD_GIT_COMMIT_AUTHOR_NAME,
-    [GIT_COMMIT_AUTHOR_EMAIL]: DD_GIT_COMMIT_AUTHOR_EMAIL,
-    [GIT_COMMIT_AUTHOR_DATE]: DD_GIT_COMMIT_AUTHOR_DATE,
-    [GIT_PULL_REQUEST_BASE_BRANCH]: DD_GIT_PULL_REQUEST_BASE_BRANCH,
-    [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA,
-    [GIT_COMMIT_HEAD_SHA]: DD_GIT_COMMIT_HEAD_SHA
-  })
+  // Key value pairs are grouped in pairs of two
+  return removeEmptyValues([
+    GIT_COMMIT_SHA, DD_GIT_COMMIT_SHA,
+    GIT_BRANCH, branch,
+    GIT_REPOSITORY_URL, filterSensitiveInfoFromRepository(DD_GIT_REPOSITORY_URL),
+    GIT_TAG, tag,
+    GIT_COMMIT_MESSAGE, DD_GIT_COMMIT_MESSAGE,
+    GIT_COMMIT_COMMITTER_NAME, DD_GIT_COMMIT_COMMITTER_NAME,
+    GIT_COMMIT_COMMITTER_DATE, DD_GIT_COMMIT_COMMITTER_DATE,
+    GIT_COMMIT_COMMITTER_EMAIL, DD_GIT_COMMIT_COMMITTER_EMAIL,
+    GIT_COMMIT_AUTHOR_NAME, DD_GIT_COMMIT_AUTHOR_NAME,
+    GIT_COMMIT_AUTHOR_EMAIL, DD_GIT_COMMIT_AUTHOR_EMAIL,
+    GIT_COMMIT_AUTHOR_DATE, DD_GIT_COMMIT_AUTHOR_DATE,
+    GIT_PULL_REQUEST_BASE_BRANCH, DD_GIT_PULL_REQUEST_BASE_BRANCH,
+    GIT_PULL_REQUEST_BASE_BRANCH_SHA, DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+    GIT_COMMIT_HEAD_SHA, DD_GIT_COMMIT_HEAD_SHA
+  ])
 }
 
 module.exports = { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha }
