@@ -27,9 +27,9 @@ function detectTestWorkerType () {
   if (getEnvironmentVariable('JEST_WORKER_ID')) return 'jest'
   if (getEnvironmentVariable('CUCUMBER_WORKER_ID')) return 'cucumber'
   if (getEnvironmentVariable('MOCHA_WORKER_ID')) return 'mocha'
-  if (getEnvironmentVariable('DD_PLAYWRIGHT_WORKER')) return 'playwright'
+  if (getValueFromEnvSources('DD_PLAYWRIGHT_WORKER')) return 'playwright'
   if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) return 'vitest'
-  if (getEnvironmentVariable('DD_VITEST_WORKER')) return 'vitest'
+  if (getValueFromEnvSources('DD_VITEST_WORKER')) return 'vitest'
   return null
 }
 

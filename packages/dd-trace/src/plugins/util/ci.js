@@ -135,7 +135,7 @@ module.exports = {
         [GIT_COMMIT_SHA]: JENKINS_GIT_COMMIT,
         [GIT_REPOSITORY_URL]: JENKINS_GIT_REPOSITORY_URL || JENKINS_GIT_REPOSITORY_URL_1,
         [CI_WORKSPACE_PATH]: WORKSPACE,
-        [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID }), // TODO: Get resolved for this
+        [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID }),
         [CI_NODE_NAME]: NODE_NAME,
         [PR_NUMBER]: CHANGE_ID,
         [GIT_PULL_REQUEST_BASE_BRANCH]: CHANGE_TARGET
@@ -689,16 +689,13 @@ module.exports = {
     }
 
     if (env.CODEBUILD_INITIATOR?.startsWith('codepipeline/')) {
-      const {
-        CODEBUILD_BUILD_ARN,
-        DD_ACTION_EXECUTION_ID,
-        DD_PIPELINE_EXECUTION_ID
-      } = env
+      const DD_ACTION_EXECUTION_ID = getValueFromEnvSources('DD_ACTION_EXECUTION_ID')
+      const DD_PIPELINE_EXECUTION_ID = getValueFromEnvSources('DD_PIPELINE_EXECUTION_ID')
       tags = {
         [CI_PROVIDER_NAME]: 'awscodepipeline',
         [CI_PIPELINE_ID]: DD_PIPELINE_EXECUTION_ID,
         [CI_ENV_VARS]: JSON.stringify({
-          CODEBUILD_BUILD_ARN,
+          CODEBUILD_BUILD_ARN: env.CODEBUILD_BUILD_ARN,
           DD_PIPELINE_EXECUTION_ID,
           DD_ACTION_EXECUTION_ID
         }),

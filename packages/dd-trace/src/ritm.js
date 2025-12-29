@@ -63,6 +63,7 @@ function Hook (modules, options, onrequire) {
     */
     let filename
     try {
+      // @ts-expect-error Module._resolveFilename is not typed
       filename = Module._resolveFilename(request, this)
     } catch {
       return _origRequire.apply(this, arguments)
@@ -71,9 +72,10 @@ function Hook (modules, options, onrequire) {
     let name, basedir, hooks
     // return known patched modules immediately
     if (cache[filename]) {
+      const externalCacheEntry = require.cache[filename]
       // require.cache was potentially altered externally
-      if (require.cache[filename] && require.cache[filename].exports !== cache[filename].original) {
-        return require.cache[filename].exports
+      if (externalCacheEntry && externalCacheEntry.exports !== cache[filename].original) {
+        return externalCacheEntry.exports
       }
 
       return cache[filename].exports
@@ -127,6 +129,7 @@ function Hook (modules, options, onrequire) {
         hooks = moduleHooks[name]
         if (!hooks) return exports // abort if module name isn't on whitelist
 
+        // @ts-expect-error Module._resolveLookupPaths is not typed
         const paths = Module._resolveLookupPaths(name, this, true)
         if (!paths) {
           // abort if _resolveLookupPaths return null
@@ -135,6 +138,7 @@ function Hook (modules, options, onrequire) {
 
         let res
         try {
+          // @ts-expect-error Module._findPath is not typed
           res = Module._findPath(name, [basedir, ...paths])
         } catch {
           // case where the file specified in package.json "main" doesn't exist

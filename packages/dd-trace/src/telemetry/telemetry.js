@@ -13,22 +13,119 @@ const { sendData } = require('./send-data')
 const { manager: metricsManager } = require('./metrics')
 const telemetryLogger = require('./logs')
 
+/**
+ * @typedef {Record<string, unknown>} TelemetryPayloadObject
+ */
+/**
+ * @typedef {string | number | boolean | null | undefined | URL | Record<string, unknown> | unknown[]} ConfigValue
+ */
+/**
+ * @typedef {{
+ *   name: string,
+ *   enabled: boolean,
+ *   auto_enabled: boolean,
+ *   process_tags: typeof processTags.tagsObject
+ * }} Integration
+ */
+/**
+ * @typedef {{ _enabled: boolean }} Plugin
+ */
+/**
+ * @typedef {{ _pluginsByName: Record<string, Plugin> }} PluginManager
+ */
+/**
+ * @typedef {{
+ *   service_name: string | undefined,
+ *   env: string | undefined,
+ *   service_version: string | undefined,
+ *   tracer_version: string,
+ *   language_name: 'nodejs',
+ *   language_version: string
+ *   process_tags: typeof processTags.tagsObject
+ * }} TelemetryApplication
+ */
+/**
+ * @typedef {{
+ *   hostname: string,
+ *   os: string,
+ *   architecture: string,
+ *   os_version?: string,
+ *   kernel_version?: string,
+ *   kernel_release?: string,
+ *   kernel_name?: string
+ * }} TelemetryHost
+ */
+/**
+ * @typedef {{
+ *   telemetry: {
+ *     enabled: boolean,
+ *     heartbeatInterval: number,
+ *     debug?: boolean,
+ *     dependencyCollection?: boolean,
+ *     logCollection?: boolean
+ *   },
+ *   service: string | undefined,
+ *   env: string | undefined,
+ *   version: string | undefined,
+ *   tags: Record<string, string>,
+ *   url?: string | URL,
+ *   hostname?: string,
+ *   port?: string | number,
+ *   site?: string,
+ *   apiKey?: string,
+ *   isCiVisibility?: boolean,
+ *   spanAttributeSchema?: string,
+ *   installSignature?: { id?: string, time?: string, type?: string },
+ *   sca?: { enabled?: boolean },
+ *   appsec: { enabled: boolean, apiSecurity?: {
+ *     endpointCollectionEnabled?: boolean,
+ *     endpointCollectionMessageLimit?: number
+ *   } },
+ *   profiling: { enabled: boolean | 'true' | 'false' | 'auto' }
+ * }} TelemetryConfig
+ */
+
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
 const telemetryAppClosingChannel = dc.channel('datadog:telemetry:app-closing')
 
+/** @type {TelemetryConfig | undefined} */
 let config
+
+/** @type {PluginManager} */
 let pluginManager
 
+/** @type {TelemetryApplication} */
 let application
-let host
-let heartbeatTimeout
+
+/** @type {TelemetryHost} */
+const host = createHostObject()
+
+/** @type {ReturnType<typeof setInterval> | undefined} */
 let heartbeatInterval
+
+/** @type {ReturnType<typeof setInterval> | undefined} */
 let extendedInterval
+
+/** @type {Integration[]} */
 let integrations
+
+/** @type {Map<string, { name: string, value: ConfigValue, origin: string, seq_id: number }>} */
 const configWithOrigin = new Map()
+
+/**
+ * Retry information that `telemetry.js` keeps in-memory to be merged into the next payload.
+ *
+ * @typedef {{ payload: TelemetryPayloadObject, reqType: string }} RetryData
+ */
+/** @type {{ payload: TelemetryPayloadObject, reqType: string } | null} */
 let retryData = null
-const extendedHeartbeatPayload = {}
+
+/** @type {TelemetryPayloadObject[]} */
+let heartbeatFailedIntegrations = []
+
+/** @type {TelemetryPayloadObject[]} */
+let heartbeatFailedDependencies = []
 
 const sentIntegrations = new Set()
 
@@ -38,59 +135,58 @@ function getRetryData () {
   return retryData
 }
 
+/**
+ * @param {Error | null | undefined} error
+ * @param {import('./send-data').SendDataRetryObject} retryObj
+ */
 function updateRetryData (error, retryObj) {
-  if (error) {
-    if (retryObj.reqType === 'message-batch') {
-      const payload = retryObj.payload[0].payload
-      const reqType = retryObj.payload[0].request_type
-      retryData = { payload, reqType }
-
-      // Since this payload failed twice it now gets save in to the extended heartbeat
-      const failedPayload = retryObj.payload[1].payload
-      const failedReqType = retryObj.payload[1].request_type
-
-      // save away the dependencies and integration request for extended heartbeat.
-      if (failedReqType === 'app-integrations-change') {
-        if (extendedHeartbeatPayload.integrations) {
-          extendedHeartbeatPayload.integrations.push(failedPayload)
-        } else {
-          extendedHeartbeatPayload.integrations = [failedPayload]
-        }
-      }
-      if (failedReqType === 'app-dependencies-loaded') {
-        if (extendedHeartbeatPayload.dependencies) {
-          extendedHeartbeatPayload.dependencies.push(failedPayload)
-        } else {
-          extendedHeartbeatPayload.dependencies = [failedPayload]
-        }
-      }
-    } else {
-      retryData = retryObj
-    }
-  } else {
+  if (!error) {
     retryData = null
+    return
+  }
+  if (retryObj.reqType !== 'message-batch') {
+    retryData = retryObj
+    return
+  }
+
+  retryData = {
+    payload: retryObj.payload[0].payload,
+    reqType: retryObj.payload[0].request_type,
+  }
+
+  // Since this payload failed twice it now gets save in to the extended heartbeat
+  const failedPayload = retryObj.payload[1].payload
+  const failedReqType = retryObj.payload[1].request_type
+
+  // save away the dependencies and integration request for extended heartbeat.
+  if (failedReqType === 'app-integrations-change') {
+    heartbeatFailedIntegrations.push(failedPayload)
+  } else if (failedReqType === 'app-dependencies-loaded') {
+    heartbeatFailedDependencies.push(failedPayload)
   }
 }
 
 function getIntegrations () {
-  const newIntegrations = []
-  for (const pluginName in pluginManager._pluginsByName) {
-    if (sentIntegrations.has(pluginName)) {
-      continue
+  const newIntegrations = /** @type {Integration[]} */ ([])
+  for (const pluginName of Object.keys(pluginManager._pluginsByName ?? {})) {
+    if (!sentIntegrations.has(pluginName)) {
+      newIntegrations.push({
+        name: pluginName,
+        enabled: pluginManager._pluginsByName[pluginName]._enabled,
+        auto_enabled: true,
+        [processTags.TELEMETRY_FIELD_NAME]: processTags.tagsObject
+      })
+      sentIntegrations.add(pluginName)
     }
-    newIntegrations.push({
-      name: pluginName,
-      enabled: pluginManager._pluginsByName[pluginName]._enabled,
-      auto_enabled: true,
-      [processTags.TELEMETRY_FIELD_NAME]: processTags.tagsObject
-    })
-    sentIntegrations.add(pluginName)
   }
   return newIntegrations
 }
 
+/**
+ * @param {TelemetryConfig} config
+ */
 function getProducts (config) {
-  const products = {
+  return {
     appsec: {
       enabled: config.appsec.enabled
     },
@@ -99,13 +195,11 @@ function getProducts (config) {
       enabled: profilingEnabledToBoolean(config.profiling.enabled)
     }
   }
-  if (errors.profilingError) {
-    products.profiler.error = errors.profilingError
-    errors.profilingError = {}
-  }
-  return products
 }
 
+/**
+ * @param {TelemetryConfig} config
+ */
 function getInstallSignature (config) {
   const { installSignature: sig } = config
   if (sig && (sig.id || sig.time || sig.type)) {
@@ -117,6 +211,9 @@ function getInstallSignature (config) {
   }
 }
 
+/**
+ * @param {TelemetryConfig} config
+ */
 function appStarted (config) {
   const app = {
     products: getProducts(config),
@@ -126,11 +223,10 @@ function appStarted (config) {
   if (installSignature) {
     app.install_signature = installSignature
   }
-  // TODO: add app.error with correct error codes
-  // if (errors.agentError) {
-  //   app.error = errors.agentError
-  //   errors.agentError = {}
-  // }
+  if (errors.agentError) {
+    app.error = errors.agentError
+    errors.agentError = undefined
+  }
   return app
 }
 
@@ -147,6 +243,10 @@ function appClosing () {
   telemetryLogger.send(config, application, host)
 }
 
+/**
+ * @param {TelemetryConfig} config
+ * @returns {TelemetryApplication}
+ */
 function createAppObject (config) {
   return {
     service_name: config.service,
@@ -159,50 +259,55 @@ function createAppObject (config) {
   }
 }
 
+/**
+ * @returns {TelemetryHost}
+ */
 function createHostObject () {
   const osName = os.type()
-
-  if (osName === 'Linux' || osName === 'Darwin') {
-    return {
-      hostname: os.hostname(),
-      os: osName,
-      architecture: os.arch(),
-      kernel_version: os.version(),
-      kernel_release: os.release(),
-      kernel_name: osName
-    }
+  const base = {
+    hostname: os.hostname(), // TODO is os.hostname() enough?
+    os: osName,
+    architecture: os.arch(),
   }
 
-  if (osName === 'Windows_NT') {
-    return {
-      hostname: os.hostname(),
-      os: osName,
-      architecture: os.arch(),
-      os_version: os.version()
-    }
+  if (os.platform() === 'win32') {
+    base.os_version = os.version() // Optional
+  } else {
+    base.kernel_version = os.version()
+    base.kernel_release = os.release()
+    base.kernel_name = osName
   }
 
-  return {
-    hostname: os.hostname(), // TODO is this enough?
-    os: osName
-  }
+  return base
 }
 
 function getTelemetryData () {
-  return { config, application, host, heartbeatInterval }
+  return { config, application, host, heartbeatInterval: config?.telemetry.heartbeatInterval }
 }
 
+/**
+ * @param {{ reqType: string, payload: TelemetryPayloadObject }[]} payload
+ */
 function createBatchPayload (payload) {
-  const batchPayload = payload.map(item => {
+  return payload.map(item => {
     return {
       request_type: item.reqType,
       payload: item.payload
     }
   })
-
-  return batchPayload
 }
 
+/**
+ * @param {import('./send-data').NonBatchTelemetryRequestType} currReqType
+ * @param {TelemetryPayloadObject} [currPayload]
+ * @returns {{
+ *   reqType: 'message-batch',
+ *   payload: import('./send-data').MessageBatchPayload
+ * } | {
+ *   reqType: import('./send-data').NonBatchTelemetryRequestType,
+ *   payload: TelemetryPayloadObject
+ * }}
+ */
 function createPayload (currReqType, currPayload = {}) {
   if (getRetryData()) {
     const payload = { reqType: currReqType, payload: currPayload }
@@ -213,31 +318,42 @@ function createPayload (currReqType, currPayload = {}) {
   return { reqType: currReqType, payload: currPayload }
 }
 
-function heartbeat (config, application, host) {
-  heartbeatTimeout = setTimeout(() => {
+/**
+ * @param {TelemetryConfig} config
+ * @param {TelemetryApplication} application
+ */
+function heartbeat (config, application) {
+  heartbeatInterval = setInterval(() => {
     metricsManager.send(config, application, host)
     telemetryLogger.send(config, application, host)
 
     const { reqType, payload } = createPayload('app-heartbeat')
     sendData(config, application, host, reqType, payload, updateRetryData)
-    heartbeat(config, application, host)
-  }, heartbeatInterval).unref()
-  return heartbeatTimeout
+  }, config.telemetry.heartbeatInterval).unref()
 }
 
+/**
+ * @param {TelemetryConfig} config
+ */
 function extendedHeartbeat (config) {
   extendedInterval = setInterval(() => {
     const appPayload = appStarted(config)
-    const payload = {
-      ...appPayload,
-      ...extendedHeartbeatPayload
+    if (heartbeatFailedIntegrations.length > 0) {
+      appPayload.integrations = heartbeatFailedIntegrations
+      heartbeatFailedIntegrations = []
     }
-    sendData(config, application, host, 'app-extended-heartbeat', payload)
-    Object.keys(extendedHeartbeatPayload).forEach(key => delete extendedHeartbeatPayload[key])
+    if (heartbeatFailedDependencies.length > 0) {
+      appPayload.dependencies = heartbeatFailedDependencies
+      heartbeatFailedDependencies = []
+    }
+    sendData(config, application, host, 'app-extended-heartbeat', appPayload)
   }, 1000 * 60 * 60 * 24).unref()
-  return extendedInterval
 }
 
+/**
+ * @param {TelemetryConfig} aConfig
+ * @param {PluginManager} thePluginManager
+ */
 function start (aConfig, thePluginManager) {
   if (!aConfig.telemetry.enabled) {
     if (aConfig.sca?.enabled) {
@@ -249,8 +365,6 @@ function start (aConfig, thePluginManager) {
   config = aConfig
   pluginManager = thePluginManager
   application = createAppObject(config)
-  host = createHostObject()
-  heartbeatInterval = config.telemetry.heartbeatInterval
   integrations = getIntegrations()
 
   dependencies.start(config, application, host, getRetryData, updateRetryData)
@@ -264,7 +378,7 @@ function start (aConfig, thePluginManager) {
       { integrations }, updateRetryData)
   }
 
-  heartbeat(config, application, host)
+  heartbeat(config, application)
 
   extendedHeartbeat(config)
 
@@ -277,7 +391,7 @@ function stop () {
     return
   }
   clearInterval(extendedInterval)
-  clearTimeout(heartbeatTimeout)
+  clearInterval(heartbeatInterval)
   globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(appClosing)
 
   telemetryStopChannel.publish(getTelemetryData())
@@ -300,6 +414,9 @@ function updateIntegrations () {
   sendData(config, application, host, reqType, payload, updateRetryData)
 }
 
+/**
+ * @param {Record<string, string | number | boolean> | null | undefined} map
+ */
 function formatMapForTelemetry (map) {
   // format from an object to a string map in order for
   // telemetry intake to accept the configuration
@@ -354,6 +471,10 @@ const nameMapping = {
 
 const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
 
+/**
+ * @param {{ name: string, value: ConfigValue, origin: string }[]} changes
+ * @param {TelemetryConfig} config
+ */
 function updateConfig (changes, config) {
   if (!config.telemetry.enabled) return
   if (changes.length === 0) return
@@ -361,7 +482,6 @@ function updateConfig (changes, config) {
   logger.trace(changes)
 
   const application = createAppObject(config)
-  const host = createHostObject()
 
   const changed = configWithOrigin.size > 0
 
@@ -370,15 +490,16 @@ function updateConfig (changes, config) {
     const { origin, value } = change
     const entry = { name, value, origin, seq_id: seqId++ }
 
-    if (namesNeedFormatting.has(entry.name)) {
-      entry.value = formatMapForTelemetry(entry.value)
-    } else if (entry.name === 'url') {
-      if (entry.value) {
-        entry.value = entry.value.toString()
+    if (namesNeedFormatting.has(name)) {
+      // @ts-expect-error entry.value is known to be a map for these config names
+      entry.value = formatMapForTelemetry(value)
+    } else if (name === 'url') {
+      if (value) {
+        entry.value = value.toString()
       }
-    } else if (entry.name === 'DD_TRACE_SAMPLING_RULES') {
-      entry.value = JSON.stringify(entry.value)
-    } else if (Array.isArray(entry.value)) {
+    } else if (name === 'DD_TRACE_SAMPLING_RULES') {
+      entry.value = JSON.stringify(value)
+    } else if (Array.isArray(value)) {
       entry.value = value.join(',')
     }
 
@@ -395,6 +516,9 @@ function updateConfig (changes, config) {
   }
 }
 
+/**
+ * @param {TelemetryConfig['profiling']['enabled']} profilingEnabled
+ */
 function profilingEnabledToBoolean (profilingEnabled) {
   if (typeof profilingEnabled === 'boolean') {
     return profilingEnabled

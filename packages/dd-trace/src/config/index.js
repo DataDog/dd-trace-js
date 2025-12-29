@@ -276,7 +276,6 @@ class Config {
 
   constructor (options = {}) {
     if (!isInServerlessEnvironment()) {
-      // Bail out early if we're in a serverless environment, stable config isn't supported
       const configEnvSources = getStableConfigSources()
       this.stableConfig = {
         fleetEntries: configEnvSources.fleetStableConfig,

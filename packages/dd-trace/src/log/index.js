@@ -1,11 +1,7 @@
 'use strict'
 const { inspect } = require('util')
 const { isTrue } = require('../util')
-<<<<<<< HEAD
-const { getEnvironmentVariable } = require('../config/helper')
-=======
 const { getValueFromEnvSources } = require('../config/helper')
->>>>>>> 4f819c0a29 (Create ConfigEnvSources and tests)
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
 const { Log, LogConfig, NoTransmitError } = require('./log')

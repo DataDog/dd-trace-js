@@ -37,7 +37,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 require('dd-trace/init');
-// @ts-ignore - fastify will be available at runtime
+// @ts-expect-error - fastify will be available at runtime
 var fastify_1 = require("fastify");
 var app = (0, fastify_1.default)({
     logger: true
