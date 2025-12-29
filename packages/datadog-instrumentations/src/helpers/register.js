@@ -12,6 +12,7 @@ const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless'
 const { isRelativeRequire } = require('./shared-utils')
 const rewriter = require('./rewriter')
 const { getValueFromEnvSources } = require('../../../dd-trace/src/config-helper')
+const rewriter = require('./rewriter')
 
 const DD_TRACE_DISABLED_INSTRUMENTATIONS = getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS') || ''
 const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG') || ''

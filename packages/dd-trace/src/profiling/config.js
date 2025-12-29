@@ -16,7 +16,7 @@ const { getIsAzureFunction } = require('../serverless')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
-const { getEnvironmentVariables, getValueFromEnvSources } = require('../config-helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../config-helper')
 
 function getProfilingEnvValues () {
   return {
@@ -69,10 +69,8 @@ class Config {
   constructor (options = {}) {
     // TODO: Remove entries that were already resolved in config.
     // For the others, move them over to config.
-    const {
-      AWS_LAMBDA_FUNCTION_NAME: functionname,
-      NODE_OPTIONS
-    } = getEnvironmentVariables()
+    const AWS_LAMBDA_FUNCTION_NAME = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
+    const NODE_OPTIONS = getEnvironmentVariable('NODE_OPTIONS')
 
     // TODO: Move initialization of these values to packages/dd-trace/src/config.js, and just read from config
     const {
@@ -109,13 +107,19 @@ class Config {
     this.service = options.service || 'node'
     this.env = options.env
     this.host = host
-    this.functionname = functionname
+    this.functionname = AWS_LAMBDA_FUNCTION_NAME
 
     this.version = options.version
     this.tags = Object.assign(
       tagger.parse(DD_TAGS),
       tagger.parse(options.tags),
-      tagger.parse({ env: options.env, host, service: this.service, version: this.version, functionname }),
+      tagger.parse({
+        env: options.env,
+        host,
+        service: this.service,
+        version: this.version,
+        functionname: AWS_LAMBDA_FUNCTION_NAME
+      }),
       getAzureTagsFromMetadata(getIsAzureFunction() ? getAzureFunctionMetadata() : getAzureAppMetadata())
     )
 

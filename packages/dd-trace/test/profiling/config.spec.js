@@ -562,9 +562,7 @@ describe('config', () => {
         if (isSupported) {
           this.skip()
         } else {
-          const config = new Config({
-            url: 'http://127.0.0.1:8126'
-          })
+          const config = new Config({})
           assert.strictEqual(config.asyncContextFrameEnabled, false)
         }
       })
@@ -575,9 +573,7 @@ describe('config', () => {
         } else {
           process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = '1'
           try {
-            const config = new Config({
-              url: 'http://127.0.0.1:8126'
-            })
+            const config = new Config()
             assert.strictEqual(config.asyncContextFrameEnabled, false)
           } finally {
             delete process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
