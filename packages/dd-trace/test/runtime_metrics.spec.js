@@ -135,7 +135,7 @@ function createGarbage (count = 50) {
         sinon.assert.notCalled(runtimeMetrics.decrement)
         sinon.assert.calledOnce(runtimeMetrics.stop)
       })
-    }, { skip: isWindows && !nativeMetrics })
+    })
 
     describe('runtimeMetrics', () => {
       let runtimeMetrics
@@ -788,6 +788,6 @@ function createGarbage (count = 50) {
           })
         })
       })
-    }, { skip: isWindows && !nativeMetrics })
+    })
   })
 })

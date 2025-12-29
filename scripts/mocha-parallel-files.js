@@ -75,14 +75,7 @@ function parseArgs (argv) {
 }
 
 function stableUnique (items) {
-  const seen = new Set()
-  const out = []
-  for (const item of items) {
-    if (seen.has(item)) continue
-    seen.add(item)
-    out.push(item)
-  }
-  return out
+  return [...new Set(items)]
 }
 
 function ensureDir (dir) {

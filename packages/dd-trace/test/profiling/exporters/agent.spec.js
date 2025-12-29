@@ -438,7 +438,7 @@ describe('exporters/agent', function () {
     })
   })
 
-  describe('using UDS', () => {
+  ;(os.platform() === 'win32' ? describe.skip : describe)('using UDS', () => {
     let listener
 
     beforeEach(done => {
@@ -486,7 +486,7 @@ describe('exporters/agent', function () {
         exporter.export({ profiles, start, end, tags }).catch(reject)
       }))
     })
-  }, { skip: os.platform() === 'win32' })
+  })
 })
 
 function assertIsProfile (obj, msg) {
