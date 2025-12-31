@@ -640,8 +640,26 @@ function setShouldKill (value) {
   })
 }
 
-// we use our own assertObjectContains, to account for any types
-const assertObjectContains = function assertObjectContains (actual, expected, msg) {
+// Check if value contains any asymmetric matchers (ANY_STRING, ANY_NUMBER, ANY_VALUE)
+function containsAsymmetricMatchers (value) {
+  if (value === ANY_STRING || value === ANY_NUMBER || value === ANY_VALUE) {
+    return true
+  }
+  if (value !== null && typeof value === 'object') {
+    for (const val of Object.values(value)) {
+      if (containsAsymmetricMatchers(val)) return true
+    }
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (containsAsymmetricMatchers(item)) return true
+    }
+  }
+  return false
+}
+
+// Custom assertObjectContains that supports asymmetric matchers (ANY_STRING, ANY_NUMBER, ANY_VALUE)
+function assertObjectContainsWithMatchers (actual, expected, msg) {
   if (Array.isArray(expected)) {
     assert.ok(Array.isArray(actual), `${msg ?? ''}Expected array but got ${inspect(actual)}`)
     let startIndex = 0
@@ -651,7 +669,7 @@ const assertObjectContains = function assertObjectContains (actual, expected, ms
         const actualItem = actual[i]
         try {
           if (expectedItem !== null && typeof expectedItem === 'object') {
-            assertObjectContains(actualItem, expectedItem, msg)
+            assertObjectContainsWithMatchers(actualItem, expectedItem)
           } else {
             assert.strictEqual(actualItem, expectedItem, msg)
           }
@@ -676,15 +694,38 @@ const assertObjectContains = function assertObjectContains (actual, expected, ms
     } else if (val === ANY_VALUE) {
       assert.ok(actual[key] !== undefined, `Expected ${key} to be present but it was undefined`)
     } else if (val !== null && typeof val === 'object') {
-      assert.ok(Object.hasOwn(actual, key))
-      assert.notStrictEqual(actual[key], null)
-      assert.strictEqual(typeof actual[key], 'object')
-      assertObjectContains(actual[key], val)
+      assert.ok(Object.hasOwn(actual, key), `Expected object to have key '${key}'`)
+      assert.notStrictEqual(actual[key], null, `Expected ${key} to not be null`)
+      assert.strictEqual(typeof actual[key], 'object', `Expected ${key} to be an object but got ${typeof actual[key]}`)
+      assertObjectContainsWithMatchers(actual[key], val)
     } else {
       assert.ok(actual, msg)
-      assert.strictEqual(actual[key], expected[key], msg)
+      assert.strictEqual(actual[key], expected[key], `Expected ${key} to be ${expected[key]} but got ${actual[key]}`)
     }
   }
+}
+
+// Use native partialDeepStrictEqual when available and no asymmetric matchers,
+// otherwise fall back to custom implementation for better asymmetric matcher support
+// @ts-expect-error assert.partialDeepStrictEqual does not exist on older Node.js versions
+// eslint-disable-next-line n/no-unsupported-features/node-builtins
+const nativePartialDeepStrictEqual = assert.partialDeepStrictEqual
+
+const assertObjectContains = function assertObjectContains (actual, expected, msg) {
+  // If expected contains asymmetric matchers, use our custom implementation
+  if (containsAsymmetricMatchers(expected)) {
+    assertObjectContainsWithMatchers(actual, expected, msg)
+    return
+  }
+
+  // Use native partialDeepStrictEqual if available (better error output)
+  if (nativePartialDeepStrictEqual) {
+    nativePartialDeepStrictEqual(actual, expected, msg)
+    return
+  }
+
+  // Fallback for older Node.js versions without asymmetric matchers
+  assertObjectContainsWithMatchers(actual, expected, msg)
 }
 
 /**
