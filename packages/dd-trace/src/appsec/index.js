@@ -113,8 +113,8 @@ function enable (_config) {
   }
 }
 
-
 function onCheckoutSessionCreate (payload) {
+  if (payload.mode !== 'payment') return
   waf.run({
     persistent: {
       'server.business_logic.payment.creation': {
@@ -171,15 +171,14 @@ function onConstructEvent (payload) {
       wafPayload.persistent['server.business_logic.payment.failure'] = {
         integration: 'stripe',
         id: object.id,
-        amount: object.amount_total,
+        amount: object.amount,
         currency: object.currency,
         'last_payment_error.code': object.last_payment_error?.code,
         'last_payment_error.decline_code': object.last_payment_error?.decline_code,
         'last_payment_error.payment_method.id': object.last_payment_error?.payment_method?.id,
         'last_payment_error.payment_method.billing_details.email': object.last_payment_error?.payment_method?.billing_details?.email,
         'last_payment_error.payment_method.type': object.last_payment_error?.payment_method?.type,
-        livemode: object,
-
+        livemode: object.livemode,
       }
       break
 
@@ -201,8 +200,6 @@ function onConstructEvent (payload) {
 
   waf.run(wafPayload)
 }
-
-
 
 function onRequestBodyParsed ({ req, res, body, abortController }) {
   if (body === undefined || body === null) return
