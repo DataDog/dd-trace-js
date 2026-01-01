@@ -104,6 +104,8 @@ function enable (_config) {
   }
 }
 
+const analyzedBodies = new WeakSet()
+
 function onRequestBodyParsed ({ req, res, body, abortController }) {
   if (body === undefined || body === null) return
 
@@ -120,14 +122,20 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
     storedBodies.set(req, body)
   }
 
+  if (!Object.keys(body).length) return
+
   const results = waf.run({
     persistent: {
       [addresses.HTTP_INCOMING_BODY]: body
     }
   }, req)
 
+  analyzedBodies.add(body)
+
   handleResults(results?.actions, req, res, rootSpan, abortController)
 }
+
+const analyzedCookies = new WeakSet()
 
 function onRequestCookieParser ({ req, res, abortController, cookies }) {
   if (!cookies || typeof cookies !== 'object') return
@@ -135,11 +143,15 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
+  if (!Object.keys(cookies).length) return
+
   const results = waf.run({
     persistent: {
       [addresses.HTTP_INCOMING_COOKIES]: cookies
     }
   }, req)
+
+  analyzedCookies.add(cookies)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
 }
@@ -178,19 +190,18 @@ function incomingHttpEndTranslator ({ req, res }) {
   const persistent = {}
 
   // we need to keep this to support other body parsers
-  // TODO: no need to analyze it if it was already done by the body-parser hook
-  if (req.body !== undefined && req.body !== null) {
+  if (req.body !== undefined && req.body !== null && !analyzedBodies.has(req.body) && Object.keys(req.cookies).length) {
     persistent[addresses.HTTP_INCOMING_BODY] = req.body
   }
 
   // we need to keep this to support other cookie parsers
-  if (req.cookies !== null && typeof req.cookies === 'object') {
+  if (req.cookies !== null && typeof req.cookies === 'object' && !analyzedCookies.has(req.cookies) && Object.keys(req.cookies).length) {
     persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
   // we need to keep this to support nextjs
   const query = req.query
-  if (query !== null && typeof query === 'object') {
+  if (query !== null && typeof query === 'object' && Object.keys(query).length) {
     persistent[addresses.HTTP_INCOMING_QUERY] = query
   }
 
@@ -272,6 +283,8 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
 
   const rootSpan = web.root(req)
   if (!rootSpan) return
+
+  if (!Object.keys(query).length) return
 
   const results = waf.run({
     persistent: {
