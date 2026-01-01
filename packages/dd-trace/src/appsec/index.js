@@ -190,7 +190,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   const persistent = {}
 
   // we need to keep this to support other body parsers
-  if (req.body !== undefined && req.body !== null && !analyzedBodies.has(req.body) && Object.keys(req.cookies).length) {
+  if (req.body !== undefined && req.body !== null && !analyzedBodies.has(req.body) && Object.keys(req.body).length) {
     persistent[addresses.HTTP_INCOMING_BODY] = req.body
   }
 
