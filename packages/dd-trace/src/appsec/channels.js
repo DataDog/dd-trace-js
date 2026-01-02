@@ -45,5 +45,5 @@ module.exports = {
   stripeCheckoutSessionCreate: dc.channel('datadog:stripe:checkoutSession:create:finish'),
   stripeConstructEvent: dc.channel('datadog:stripe:constructEvent:finish')
   stripePaymentIntentCreate: dc.channel('datadog:stripe:paymentIntent:create:finish'),
-  wafRunFinished: dc.channel('datadog:waf:run:finish'),
+  wafRunFinished: dc.channel('datadog:waf:run:finish')
 }
