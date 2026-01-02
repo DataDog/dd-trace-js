@@ -25,10 +25,9 @@ const {
   routerParam,
   fastifyResponseChannel,
   fastifyPathParams,
-
-  checkoutSessionCreate,
-  paymentIntentCreate,
-  constructEvent
+  stripeCheckoutSessionCreate,
+  stripePaymentIntentCreate,
+  stripeConstructEvent
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -96,11 +95,9 @@ function enable (_config) {
     fastifyResponseChannel.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
     responseSetHeader.subscribe(onResponseSetHeader)
-
-    checkoutSessionCreate.subscribe(onCheckoutSessionCreate)
-    paymentIntentCreate.subscribe(onPaymentIntentCreate)
-    constructEvent.subscribe(onConstructEvent)
-
+    stripeCheckoutSessionCreate.subscribe(onStripeCheckoutSessionCreate)
+    stripePaymentIntentCreate.subscribe(onStripePaymentIntentCreate)
+    stripeConstructEvent.subscribe(onStripeConstructEvent)
 
     isEnabled = true
     config = _config
@@ -113,7 +110,7 @@ function enable (_config) {
   }
 }
 
-function onCheckoutSessionCreate (payload) {
+function onStripeCheckoutSessionCreate (payload) {
   if (payload.mode !== 'payment') return
   waf.run({
     persistent: {
@@ -134,7 +131,7 @@ function onCheckoutSessionCreate (payload) {
   })
 }
 
-function onPaymentIntentCreate (payload) {
+function onStripePaymentIntentCreate (payload) {
   waf.run({
     persistent: {
       'server.business_logic.payment.creation': {
@@ -150,7 +147,7 @@ function onPaymentIntentCreate (payload) {
   })
 }
 
-function onConstructEvent (payload) {
+function onStripeConstructEvent (payload) {
   const wafPayload = { persistent: {} }
 
   const object = payload.data.object
