@@ -71,7 +71,7 @@ function enable (_config) {
 
     Reporter.init(_config.appsec)
 
-    //apiSecuritySampler.configure(_config)
+    apiSecuritySampler.configure(_config)
 
     UserTracking.setCollectionMode(_config.appsec.eventTracking.mode, false)
 
