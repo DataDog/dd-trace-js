@@ -9,15 +9,16 @@ const constructEventFinishCh = channel('datadog:stripe:constructEvent:finish')
 
 function wrapSessionCreate (create) {
   return function wrappedSessionCreate () {
-    let promise = create.apply(this, arguments)
+    const promise = create.apply(this, arguments)
 
-    if (checkoutSessionCreateFinishCh.hasSubscribers) {
-      promise = promise.then((result) => {
+    if (!checkoutSessionCreateFinishCh.hasSubscribers) return promise
+
+    return new Promise((resolve, reject) => {
+      promise.then((result) => {
         checkoutSessionCreateFinishCh.publish(result)
-      })
-    }
-
-    return promise
+        resolve(result)
+      }).catch(reject)
+    })
   }
 }
 
@@ -31,15 +32,16 @@ addHook({
 
 function wrapPaymentIntentCreate (create) {
   return function wrappedPaymentIntentCreate () {
-    let promise = create.apply(this, arguments)
+    const promise = create.apply(this, arguments)
 
-    if (paymentIntentCreateFinishCh.hasSubscribers) {
-      promise = promise.then((result) => {
+    if (!paymentIntentCreateFinishCh.hasSubscribers) return
+
+    return new Promise((resolve, reject) => {
+      promise.then((result) => {
         paymentIntentCreateFinishCh.publish(result)
-      })
-    }
-
-    return promise
+        resolve(result)
+      }).catch(reject)
+    })
   }
 }
 
