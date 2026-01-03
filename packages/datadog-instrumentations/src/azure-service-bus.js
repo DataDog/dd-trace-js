@@ -38,7 +38,7 @@ addHook({ name: '@azure/service-bus', versions: ['>=7.9.2'] }, (obj) => {
           shimmer.wrap(batch, 'tryAddMessage', tryAddMessage => function (msg) {
             const functionName = tryAddMessage.name
             const config = this._context.config
-            return producerCh.tracePromise(
+            return producerCh.traceSync(
               tryAddMessage, { config, functionName, batch, msg }, this, ...arguments)
           })
           return batch

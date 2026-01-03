@@ -366,8 +366,18 @@ function getLlmObsSpansFromRequests (llmobsSpanEventsRequests) {
  * @param {object} spanEvent - The LLMObs span event to verify
  * @param {object} expectedPrompt - Expected prompt metadata (id, version, variables, chat_template)
  * @param {Array<{role: string, content: string}>} expectedInputMessages - Expected input messages
+ * @param {object} options - Optional configuration
+ * @param {string} options.promptTrackingInstrumentationMethod - Expected prompt tracking instrumentation method
+ * ('auto' or 'manual'), defaults to 'auto'
+ * @param {boolean} options.promptMultimodal - Whether prompt contains multimodal inputs,
+ *   defaults to false
  */
-function assertPromptTracking (spanEvent, expectedPrompt, expectedInputMessages) {
+function assertPromptTracking (
+  spanEvent,
+  expectedPrompt,
+  expectedInputMessages,
+  { promptTrackingInstrumentationMethod = 'auto', promptMultimodal = false } = {}
+) {
   // Verify input messages are captured from instructions
   assert(spanEvent.meta.input.messages, 'Input messages should be present')
   assert(Array.isArray(spanEvent.meta.input.messages), 'Input messages should be an array')
@@ -385,6 +395,13 @@ function assertPromptTracking (spanEvent, expectedPrompt, expectedInputMessages)
   assert.strictEqual(prompt.version, expectedPrompt.version)
   assert.deepStrictEqual(prompt.variables, expectedPrompt.variables)
   assert.deepStrictEqual(prompt.chat_template, expectedPrompt.chat_template)
+
+  // Verify tags
+  assert(spanEvent.tags, 'Span event should include tags')
+  assert(spanEvent.tags.includes(`prompt_tracking_instrumentation_method:${promptTrackingInstrumentationMethod}`))
+  if (promptMultimodal) {
+    assert(spanEvent.tags.includes('prompt_multimodal:true'))
+  }
 }
 
 module.exports = {
