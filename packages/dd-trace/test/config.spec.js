@@ -2491,8 +2491,13 @@ describe('Config', () => {
       it('should be used when no options and no env vars', () => {
         const config = getConfig()
 
-        assert.strictEqual(existsSyncParam, os.type() === 'Windows_NT' ? undefined : '/var/run/datadog/apm.socket')
-        assert.strictEqual(config.url.toString(), 'unix:///var/run/datadog/apm.socket')
+        if (os.type() === 'Windows_NT') {
+          assert.strictEqual(existsSyncParam, undefined)
+          assert.strictEqual(config.url, undefined)
+        } else {
+          assert.strictEqual(existsSyncParam, '/var/run/datadog/apm.socket')
+          assert.strictEqual(config.url.toString(), 'unix:///var/run/datadog/apm.socket')
+        }
       })
 
       it('should not be used when DD_TRACE_AGENT_URL provided', () => {
