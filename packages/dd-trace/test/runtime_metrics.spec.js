@@ -15,8 +15,6 @@ require('./setup/core')
 
 const { DogStatsDClient } = require('../src/dogstatsd')
 
-const isWindows = os.platform() === 'win32'
-
 function createGarbage (count = 50) {
   let last = {}
   const obj = last
@@ -181,6 +179,13 @@ function createGarbage (count = 50) {
           proxiedObject['@datadog/native-metrics'] = {
             start () {
               throw new Error('Native metrics are not supported in this environment')
+            },
+          }
+        } else {
+          // The log is called in case native metrics fail to load.
+          proxiedObject['../log'] = {
+            error () {
+              throw new Error('Native metrics should load properly')
             },
           }
         }
