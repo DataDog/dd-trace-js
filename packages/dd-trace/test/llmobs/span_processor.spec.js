@@ -280,7 +280,7 @@ describe('span processor', () => {
 
       assert.strictEqual(payload.meta['error.message'], 'error message')
       assert.strictEqual(payload.meta['error.type'], 'Error')
-      assert.ok(payload.meta['error.stack'] != null)
+      assert.ok(payload.meta['error.stack'])
       assert.strictEqual(payload.status, 'error')
 
       assertObjectContains(payload.tags, ['error_type:Error'])

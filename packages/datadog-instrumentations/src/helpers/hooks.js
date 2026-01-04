@@ -83,6 +83,7 @@ module.exports = {
   kafkajs: () => require('../kafkajs'),
   langchain: () => require('../langchain'),
   ldapjs: () => require('../ldapjs'),
+  'light-my-request': () => require('../light-my-request'),
   'limitd-client': () => require('../limitd-client'),
   lodash: () => require('../lodash'),
   mariadb: () => require('../mariadb'),

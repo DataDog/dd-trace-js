@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -163,8 +162,14 @@ describe('dependencies', () => {
           { name: request, version: packageVersion }
         ]
       }
-      expect(sendData)
-        .to.have.been.calledOnceWith(config, application, host, 'app-dependencies-loaded', expectedDependencies)
+      sinon.assert.calledOnceWithMatch(
+        sendData,
+        config,
+        application,
+        host,
+        'app-dependencies-loaded',
+        expectedDependencies
+      )
     })
 
     it('should call sendData with computed request from file path when it does not come in message', () => {
@@ -178,8 +183,14 @@ describe('dependencies', () => {
           { name: request, version: packageVersion }
         ]
       }
-      expect(sendData)
-        .to.have.been.calledOnceWith(config, application, host, 'app-dependencies-loaded', expectedDependencies)
+      sinon.assert.calledOnceWithMatch(
+        sendData,
+        config,
+        application,
+        host,
+        'app-dependencies-loaded',
+        expectedDependencies
+      )
     })
 
     it('should call sendData with computed request from filename with scope when it does not come in message', () => {
@@ -194,8 +205,14 @@ describe('dependencies', () => {
           { name: request, version: packageVersion }
         ]
       }
-      expect(sendData)
-        .to.have.been.calledOnceWith(config, application, host, 'app-dependencies-loaded', expectedDependencies)
+      sinon.assert.calledOnceWithMatch(
+        sendData,
+        config,
+        application,
+        host,
+        'app-dependencies-loaded',
+        expectedDependencies
+      )
     })
 
     it('should only include one copy of each dependency, regardless of how many of its files are loaded', () => {
@@ -211,8 +228,14 @@ describe('dependencies', () => {
           { name: moduleName, version: packageVersion }
         ]
       }
-      expect(sendData)
-        .to.have.been.calledOnceWith(config, application, host, 'app-dependencies-loaded', expectedDependencies)
+      sinon.assert.calledOnceWithMatch(
+        sendData,
+        config,
+        application,
+        host,
+        'app-dependencies-loaded',
+        expectedDependencies
+      )
     })
 
     it('should include two dependencies when they are in different paths', () => {
@@ -246,11 +269,23 @@ describe('dependencies', () => {
       }
       sinon.assert.calledTwice(sendData)
 
-      expect(sendData.firstCall)
-        .to.have.been.calledWith(config, application, host, 'app-dependencies-loaded', expectedDependencies1)
+      sinon.assert.calledWith(
+        sendData.firstCall,
+        config,
+        application,
+        host,
+        'app-dependencies-loaded',
+        expectedDependencies1
+      )
 
-      expect(sendData.secondCall)
-        .to.have.been.calledWith(config, application, host, 'app-dependencies-loaded', expectedDependencies2)
+      sinon.assert.calledWith(
+        sendData.secondCall,
+        config,
+        application,
+        host,
+        'app-dependencies-loaded',
+        expectedDependencies2
+      )
     })
 
     it('should include only one dependency when they are in different paths but the version number is the same', () => {
@@ -276,8 +311,14 @@ describe('dependencies', () => {
           { name: moduleName, version: packageVersion }
         ]
       }
-      expect(sendData).to.have.been
-        .calledOnceWith(config, application, host, 'app-dependencies-loaded', expectedDependencies)
+      sinon.assert.calledOnceWithMatch(
+        sendData,
+        config,
+        application,
+        host,
+        'app-dependencies-loaded',
+        expectedDependencies
+      )
     })
 
     it('should call sendData only once with duplicated dependency', () => {

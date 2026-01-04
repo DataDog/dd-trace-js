@@ -135,16 +135,15 @@ describe('Plugin', () => {
                 })
 
                 client.getUnary({ first: 'foobar' }, () => {})
-                return agent
-                  .assertSomeTraces(traces => {
-                    assertObjectContains(traces[0][0].meta, {
-                      'network.destination.ip': '127.0.0.1',
-                      'network.destination.port': port.toString(),
-                      'rpc.service': 'test.TestService',
-                      'span.kind': 'client',
-                      component: 'grpc'
-                    })
-                  })
+                return agent.assertFirstTraceSpan({
+                  meta: {
+                    'network.destination.ip': '127.0.0.1',
+                    'network.destination.port': port.toString(),
+                    'rpc.service': 'test.TestService',
+                    'span.kind': 'client',
+                    component: 'grpc'
+                  }
+                })
               })
             }
 
@@ -336,19 +335,22 @@ describe('Plugin', () => {
 
               return agent
                 .assertSomeTraces(traces => {
-                  assert.strictEqual(traces[0][0].error, 1)
-                  assertObjectContains(traces[0][0].meta, {
-                    [ERROR_MESSAGE]: '2 UNKNOWN: foobar',
-                    [ERROR_TYPE]: 'Error',
-                    'grpc.method.name': 'getUnary',
-                    'grpc.method.service': 'TestService',
-                    'grpc.method.package': 'test',
-                    'grpc.method.path': '/test.TestService/getUnary',
-                    'grpc.method.kind': 'unary',
-                    'rpc.service': 'test.TestService',
-                    'span.kind': 'client',
-                    component: 'grpc'
+                  assertObjectContains(traces[0][0], {
+                    error: 1,
+                    meta: {
+                      [ERROR_MESSAGE]: '2 UNKNOWN: foobar',
+                      [ERROR_TYPE]: 'Error',
+                      'grpc.method.name': 'getUnary',
+                      'grpc.method.service': 'TestService',
+                      'grpc.method.package': 'test',
+                      'grpc.method.path': '/test.TestService/getUnary',
+                      'grpc.method.kind': 'unary',
+                      'rpc.service': 'test.TestService',
+                      'span.kind': 'client',
+                      component: 'grpc'
+                    }
                   })
+
                   assert.ok(Object.hasOwn(traces[0][0].meta, ERROR_STACK))
                   assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 2)
                 })
@@ -382,18 +384,21 @@ describe('Plugin', () => {
 
               return agent
                 .assertSomeTraces(traces => {
-                  assert.strictEqual(traces[0][0].error, 1)
-                  assertObjectContains(traces[0][0].meta, {
-                    [ERROR_TYPE]: 'Error',
-                    'grpc.method.name': 'getUnary',
-                    'grpc.method.service': 'TestService',
-                    'grpc.method.package': 'test',
-                    'grpc.method.path': '/test.TestService/getUnary',
-                    'grpc.method.kind': 'unary',
-                    'rpc.service': 'test.TestService',
-                    'span.kind': 'client',
-                    component: 'grpc'
+                  assertObjectContains(traces[0][0], {
+                    error: 1,
+                    meta: {
+                      [ERROR_TYPE]: 'Error',
+                      'grpc.method.name': 'getUnary',
+                      'grpc.method.service': 'TestService',
+                      'grpc.method.package': 'test',
+                      'grpc.method.path': '/test.TestService/getUnary',
+                      'grpc.method.kind': 'unary',
+                      'rpc.service': 'test.TestService',
+                      'span.kind': 'client',
+                      component: 'grpc'
+                    }
                   })
+
                   assert.ok(Object.hasOwn(traces[0][0].meta, ERROR_STACK))
                   assert.match(traces[0][0].meta[ERROR_MESSAGE], /^13 INTERNAL:.+$/m)
                   assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 13)
@@ -560,12 +565,9 @@ describe('Plugin', () => {
 
               client.getUnary({ first: 'foobar' }, () => {})
 
-              return agent
-                .assertSomeTraces(traces => {
-                  assertObjectContains(traces[0][0], {
-                    service: 'custom'
-                  })
-                })
+              return agent.assertFirstTraceSpan({
+                service: 'custom'
+              })
             })
           })
 
@@ -656,18 +658,17 @@ describe('Plugin', () => {
 
               client.getUnary({ first: 'foobar' }, metadata, () => {})
 
-              return agent
-                .assertSomeTraces(traces => {
-                  assertObjectContains(traces[0][0].meta, {
-                    'grpc.method.name': 'getUnary',
-                    'grpc.method.service': 'TestService',
-                    'grpc.method.path': '/test.TestService/getUnary',
-                    'grpc.method.kind': 'unary',
-                    'grpc.request.metadata.foo': 'bar',
-                    'rpc.service': 'test.TestService',
-                    'span.kind': 'client'
-                  })
-                })
+              return agent.assertFirstTraceSpan({
+                meta: {
+                  'grpc.method.name': 'getUnary',
+                  'grpc.method.service': 'TestService',
+                  'grpc.method.path': '/test.TestService/getUnary',
+                  'grpc.method.kind': 'unary',
+                  'grpc.request.metadata.foo': 'bar',
+                  'rpc.service': 'test.TestService',
+                  'span.kind': 'client'
+                }
+              })
             })
 
             it('should handle response metadata', async () => {
