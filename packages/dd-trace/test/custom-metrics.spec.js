@@ -6,7 +6,6 @@ const path = require('node:path')
 const os = require('node:os')
 const { exec } = require('node:child_process')
 
-/* eslint-disable no-console */
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
 require('./setup/core')
@@ -52,7 +51,9 @@ describe('Custom Metrics', () => {
       }
     }, (err, stdout, stderr) => {
       if (err) return done(err)
+      // eslint-disable-next-line no-console
       if (stdout) console.log(stdout)
+      // eslint-disable-next-line no-console
       if (stderr) console.error(stderr)
 
       assert.strictEqual(metricsData.split('#')[0], 'page.views.data:1|c|')

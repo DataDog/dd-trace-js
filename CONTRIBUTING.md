@@ -288,14 +288,14 @@ Please refer to [the "Install" section](https://github.com/brianc/node-postgres/
 
 When developing, it's often faster to run individual test files rather than entire test suites. **Never run `yarn test` directly** as it requires too much setup and takes too long.
 
-To target specific tests, use the `--grep` flag with mocha or tap to match test names:
+To target specific tests, use the `--grep` flag with mocha to match test names:
 
 ```sh
 yarn test:debugger --grep "test name pattern"
 yarn test:appsec --grep "specific test"
 ```
 
-**Note:** This project uses a mix of tap and mocha for testing. However, new tests should be written using mocha, not tap.
+**This project uses mocha for testing.**
 
 ### Test Assertions
 

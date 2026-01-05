@@ -1,12 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-/**
- * @typedef {{
- *   version: number,
- *   coverages: { test_session_id: number, test_suite_id: number, files: { filename: string }[] }[] }
- * } CoverageObject
- */
 
 const { describe, it, beforeEach } = require('mocha')
 const msgpack = require('@msgpack/msgpack')
@@ -16,6 +10,13 @@ const proxyquire = require('proxyquire')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 const id = require('../../src/id')
+
+/**
+ * @typedef {{
+ *   version: number,
+ *   coverages: { test_session_id: number, test_suite_id: number, files: { filename: string }[] }[] }
+ * } CoverageObject
+ */
 
 describe('coverage-ci-visibility', () => {
   let encoder

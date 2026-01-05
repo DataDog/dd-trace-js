@@ -148,12 +148,12 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
     it('should compute peer service', async () => {
       const useCallback = spanGenerationFn.length === 1
       const spanGenerationPromise = useCallback
-        ? new Promise((resolve, reject) => {
-          const result = spanGenerationFn((err) => err ? reject(err) : resolve(undefined))
+        ? new Promise(/** @type {() => void} */ (resolve, reject) => {
+          const result = spanGenerationFn((err) => err ? reject(err) : resolve())
           // Some callback based methods are a mixture of callback and promise,
           // depending on the module version. Await the promises as well.
           if (util.types.isPromise(result)) {
-            result.then?.(() => resolve(undefined), reject)
+            result.then?.(resolve, reject)
           }
         })
         : spanGenerationFn()
@@ -238,9 +238,7 @@ function withVersions (plugin, modules, range, cb) {
       for (const version of versions) {
         if (process.env.RANGE && !semver.subset(version, process.env.RANGE)) continue
         if (version !== '*') {
-          const result = semver.coerce(version)
-          if (!result) throw new Error(`Invalid version: ${version}`)
-          const min = result.version
+          const min = semver.coerce(version)?.version
           if (!min) throw new Error(`Invalid version: ${version}`)
           testVersions.set(min, { versionRange: version, versionKey: min, resolvedVersion: min })
         }

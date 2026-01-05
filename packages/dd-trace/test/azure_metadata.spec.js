@@ -24,7 +24,7 @@ describe('Azure metadata', () => {
     'WEBSITE_SKU'
   ]
 
-  const initialAzureEnv = Object.fromEntries(AZURE_ENV_KEYS.map(k => [k, process.env[k]]))
+  const initialAzureEnv = Object.fromEntries(AZURE_ENV_KEYS.map(key => [key, process.env[key]]))
 
   afterEach(() => {
     for (const key of AZURE_ENV_KEYS) {
@@ -53,11 +53,6 @@ describe('Azure metadata', () => {
   })
 
   it('provided completely with minimum vars', () => {
-    delete process.env.WEBSITE_RESOURCE_GROUP
-    delete process.env.WEBSITE_OS
-    delete process.env.FUNCTIONS_EXTENSION_VERSION
-    delete process.env.FUNCTIONS_WORKER_RUNTIME
-    delete process.env.FUNCTIONS_WORKER_RUNTIME_VERSION
     process.env.COMPUTERNAME = 'boaty_mcboatface'
     process.env.WEBSITE_SITE_NAME = 'website_name'
     process.env.WEBSITE_OWNER_NAME = 'subscription_id+resource_group-regionwebspace'
@@ -110,11 +105,6 @@ describe('Azure metadata', () => {
   })
 
   it('tags are correctly generated from vars', () => {
-    delete process.env.WEBSITE_RESOURCE_GROUP
-    delete process.env.WEBSITE_OS
-    delete process.env.FUNCTIONS_EXTENSION_VERSION
-    delete process.env.FUNCTIONS_WORKER_RUNTIME
-    delete process.env.FUNCTIONS_WORKER_RUNTIME_VERSION
     process.env.COMPUTERNAME = 'boaty_mcboatface'
     process.env.WEBSITE_SITE_NAME = 'website_name'
     process.env.WEBSITE_OWNER_NAME = 'subscription_id+resource_group-regionwebspace'
@@ -137,9 +127,6 @@ describe('Azure metadata', () => {
   })
 
   it('uses DD_AZURE_RESOURCE_GROUP for Flex Consumption Azure Functions', () => {
-    delete process.env.WEBSITE_RESOURCE_GROUP
-    delete process.env.WEBSITE_OS
-    delete process.env.DD_AAS_DOTNET_EXTENSION_VERSION
     process.env.COMPUTERNAME = 'flex_function'
     process.env.WEBSITE_SITE_NAME = 'flex_function_app'
     process.env.WEBSITE_OWNER_NAME = 'subscription_id+flex-regionwebspace'

@@ -2,17 +2,15 @@
 
 const assert = require('node:assert')
 const os = require('node:os')
+const { performance } = require('node:perf_hooks')
+const { setImmediate, setTimeout } = require('node:timers/promises')
+const util = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const performance = require('node:perf_hooks').performance
-const { setImmediate, setTimeout } = require('node:timers/promises')
-const util = require('node:util')
-
 require('./setup/core')
-
 const { DogStatsDClient } = require('../src/dogstatsd')
 
 function createGarbage (count = 50) {
