@@ -140,6 +140,7 @@ describe('Inferred Proxy Spans', function () {
         assert.strictEqual(spans[0].type, 'web')
         assertObjectContains(spans[0], {
           meta: {
+            'span.kind': 'server',
             'http.url': 'example.com/test',
             'http.method': 'GET',
             'http.status_code': '200',
@@ -188,6 +189,7 @@ describe('Inferred Proxy Spans', function () {
         assert.strictEqual(spans[0].type, 'web')
         assertObjectContains(spans[0], {
           meta: {
+            'span.kind': 'server',
             'http.url': 'example.com/test',
             'http.method': 'GET',
             'http.status_code': '200',
@@ -238,6 +240,7 @@ describe('Inferred Proxy Spans', function () {
           resource: 'GET /test',
           type: 'web',
           meta: {
+            'span.kind': 'server',
             'http.url': 'example.com/test',
             'http.method': 'GET',
             'http.status_code': '500',
