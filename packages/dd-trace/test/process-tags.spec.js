@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { getConfigFresh } = require('./helpers/config')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 
 require('./setup/core')
@@ -311,7 +312,6 @@ describe('process-tags', () => {
 
   describe('DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED', () => {
     let env
-    let getConfig
     let SpanProcessor
 
     beforeEach(() => {
@@ -321,7 +321,6 @@ describe('process-tags', () => {
 
     afterEach(() => {
       process.env = env
-      delete require.cache[require.resolve('../src/config')]
       delete require.cache[require.resolve('../src/span_processor')]
       delete require.cache[require.resolve('../src/process-tags')]
     })
@@ -330,11 +329,9 @@ describe('process-tags', () => {
       process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'true'
 
       // Need to reload config first, then process-tags (which reads from config)
-      delete require.cache[require.resolve('../src/config')]
       delete require.cache[require.resolve('../src/process-tags')]
 
-      getConfig = require('../src/config')
-      const config = getConfig()
+      const config = getConfigFresh()
 
       assert.ok(config.propagateProcessTags)
       assert.strictEqual(config.propagateProcessTags.enabled, true)
@@ -349,8 +346,7 @@ describe('process-tags', () => {
     it('should disable process tags propagation when set to false', () => {
       process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'false'
 
-      getConfig = require('../src/config')
-      const config = getConfig()
+      const config = getConfigFresh()
 
       assert.ok(config.propagateProcessTags)
       assert.strictEqual(config.propagateProcessTags.enabled, false)
@@ -364,8 +360,7 @@ describe('process-tags', () => {
     it('should disable process tags propagation when not set', () => {
       // Don't set the environment variable
 
-      getConfig = require('../src/config')
-      const config = getConfig()
+      const config = getConfigFresh()
 
       assert.notStrictEqual(config.propagateProcessTags?.enabled, true)
 
