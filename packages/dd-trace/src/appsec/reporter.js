@@ -362,6 +362,14 @@ function reportAttack ({ events: attackData, actions }) {
 
   rootSpan.addTags(newTags)
 
+  // Add _dd.appsec.json tag to inferred proxy span
+  const context = web.getContext(req)
+  if (context?.inferredProxySpan) {
+    context.inferredProxySpan.addTags({
+      '_dd.appsec.json': newTags['_dd.appsec.json']
+    })
+  }
+
   // TODO this should be deleted in a major
   if (config.raspBodyCollection && isRaspAttack(attackData)) {
     reportRequestBody(rootSpan, req.body, true)

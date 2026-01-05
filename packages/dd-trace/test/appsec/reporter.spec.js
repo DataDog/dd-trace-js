@@ -52,6 +52,7 @@ describe('reporter', () => {
 
     web = {
       root: sinon.stub().returns(span),
+      getContext: sinon.stub().returns({}),
     }
 
     telemetry = {
@@ -483,6 +484,46 @@ describe('reporter', () => {
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
         'network.client.ip': '8.8.8.8',
+      })
+    })
+
+    it('should propagate _dd.appsec.json to inferred proxy span when present', () => {
+      const inferredProxySpan = {
+        addTags: sinon.stub()
+      }
+      web.getContext.returns({ inferredProxySpan })
+
+      Reporter.reportAttack({
+        events: [
+          {
+            rule: {},
+            rule_matches: [{}]
+          }
+        ]
+      })
+
+      sinon.assert.calledOnceWithExactly(inferredProxySpan.addTags, {
+        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}'
+      })
+    })
+
+    it('should not fail when inferred proxy span is not present', () => {
+      web.getContext.returns({})
+
+      Reporter.reportAttack({
+        events: [
+          {
+            rule: {},
+            rule_matches: [{}]
+          }
+        ]
+      })
+
+      sinon.assert.calledOnceWithExactly(span.addTags, {
+        'appsec.event': 'true',
+        '_dd.origin': 'appsec',
+        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
+        'network.client.ip': '8.8.8.8'
       })
     })
 
