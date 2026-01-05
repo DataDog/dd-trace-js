@@ -85,6 +85,13 @@ class BaseLLMObsWriter {
     return `${apiKey}:${site}`
   }
 
+  _getMaskedRoutingKey (routing) {
+    const apiKey = routing?.apiKey || this._config.apiKey || ''
+    const site = routing?.site || this._config.site || ''
+    const maskedKey = apiKey ? `****${apiKey.slice(-4)}` : ''
+    return `${maskedKey}:${site}`
+  }
+
   _getOrCreateBuffer (routingKey, routing) {
     if (!this._buffers.has(routingKey)) {
       this._buffers.set(routingKey, {
@@ -121,7 +128,7 @@ class BaseLLMObsWriter {
       return
     }
 
-    for (const [routingKey, buffer] of this._buffers) {
+    for (const [, buffer] of this._buffers) {
       if (buffer.events.length === 0) continue
 
       const events = buffer.events
@@ -132,7 +139,7 @@ class BaseLLMObsWriter {
       const options = this._getOptions(buffer.routing)
       const url = this._getUrlForRouting(buffer.routing)
 
-      log.debug('Encoded LLMObs payload for %s: %s', routingKey, payload)
+      log.debug('Encoded LLMObs payload for %s: %s', this._getMaskedRoutingKey(buffer.routing), payload)
 
       request(payload, options, (err, resp, code) => {
         parseResponseAndLog(err, code, events.length, url, this._eventType)
