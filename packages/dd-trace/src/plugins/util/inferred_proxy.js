@@ -8,6 +8,7 @@ const SPAN_TYPE = tags.SPAN_TYPE
 const SPAN_KIND = tags.SPAN_KIND
 const HTTP_URL = tags.HTTP_URL
 const HTTP_METHOD = tags.HTTP_METHOD
+const HTTP_ROUTE = tags.HTTP_ROUTE
 
 const PROXY_HEADER_SYSTEM = 'x-dd-proxy'
 const PROXY_HEADER_START_TIME_MS = 'x-dd-proxy-request-time-ms'
@@ -15,6 +16,7 @@ const PROXY_HEADER_PATH = 'x-dd-proxy-path'
 const PROXY_HEADER_HTTPMETHOD = 'x-dd-proxy-httpmethod'
 const PROXY_HEADER_DOMAIN = 'x-dd-proxy-domain-name'
 const PROXY_HEADER_STAGE = 'x-dd-proxy-stage'
+const PROXY_HEADER_RESOURCE_PATH = 'x-dd-proxy-resource-path'
 
 const supportedProxies = {
   'aws-apigateway': {
@@ -58,7 +60,8 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
       [SPAN_KIND]: 'server',
       [HTTP_METHOD]: proxyContext.method,
       [HTTP_URL]: 'https://' + proxyContext.domainName + proxyContext.path,
-      stage: proxyContext.stage
+      stage: proxyContext.stage,
+      ...(proxyContext.resourcePath && { [HTTP_ROUTE]: proxyContext.resourcePath })
     }
   }, traceCtx, config)
 
@@ -96,7 +99,8 @@ function extractInferredProxyContext (headers) {
     path: headers[PROXY_HEADER_PATH],
     stage: headers[PROXY_HEADER_STAGE],
     domainName: headers[PROXY_HEADER_DOMAIN],
-    proxySystemName: headers[PROXY_HEADER_SYSTEM]
+    proxySystemName: headers[PROXY_HEADER_SYSTEM],
+    resourcePath: headers[PROXY_HEADER_RESOURCE_PATH]
   }
 }
 
