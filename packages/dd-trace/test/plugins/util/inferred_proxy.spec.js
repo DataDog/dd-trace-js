@@ -244,6 +244,7 @@ describe('Inferred Proxy Spans', function () {
 
         assert.strictEqual(spans[0].name, 'aws.apigateway')
         assert.strictEqual(spans[0].service, 'example.com')
+        assert.strictEqual(spans[0].resource, 'GET /users/{id}')
         assert.strictEqual(spans[0].type, 'web')
         assertObjectContains(spans[0], {
           meta: {
