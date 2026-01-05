@@ -95,7 +95,7 @@ class SpanStatsEncoder extends AgentEncoder {
   }
 
   _encode (bytes, stats) {
-    this._encodeMapPrefix(bytes, 8)
+    this._encodeMapPrefix(bytes, stats.ProcessTags ? 9 : 8)
 
     this._encodeString(bytes, 'Hostname')
     this._encodeString(bytes, stats.Hostname)
@@ -123,6 +123,11 @@ class SpanStatsEncoder extends AgentEncoder {
 
     this._encodeString(bytes, 'Sequence')
     this._encodeLong(bytes, stats.Sequence)
+
+    if (stats.ProcessTags) {
+      this._encodeString(bytes, 'ProcessTags')
+      this._encodeString(bytes, stats.ProcessTags)
+    }
   }
 }
 
