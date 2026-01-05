@@ -114,7 +114,6 @@ class LLMObsTagger {
     const annotationContextName = annotationContext?.name
     if (annotationContextName) this._setTag(span, NAME, annotationContextName)
 
-    // capture routing context at span creation time (only if in a routing context)
     const routing = getCurrentRouting()
     if (routing) {
       if (routing.apiKey) {
