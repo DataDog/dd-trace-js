@@ -79,11 +79,11 @@ describe('process-tags', () => {
     })
 
     it('should set sensible values', () => {
-      const basedirTag = processTags.tags.find(([name]) => name === 'entrypoint.basedir')
-      const nameTag = processTags.tags.find(([name]) => name === 'entrypoint.name')
-      const typeTag = processTags.tags.find(([name]) => name === 'entrypoint.type')
-      const workdirTag = processTags.tags.find(([name]) => name === 'entrypoint.workdir')
-      const packageNameTag = processTags.tags.find(([name]) => name === 'package.json.name')
+      const basedirTag = processTags.tags[0]
+      const nameTag = processTags.tags[1]
+      const typeTag = processTags.tags[2]
+      const workdirTag = processTags.tags[3]
+      const packageNameTag = processTags.tags[4]
 
       // Entrypoint values should be set (may vary depending on test runner)
       assert.ok(basedirTag)
