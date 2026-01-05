@@ -174,7 +174,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           assertObjectContains(spans[0], {
             meta: {
               'span.kind': 'server',
-            'http.url': config.expectedUrl,
+              'http.url': config.expectedUrl,
               'http.method': 'GET',
               'http.status_code': '200',
               component: config.expectedComponent,
@@ -223,7 +223,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         assertObjectContains(spans[0], {
           meta: {
             'span.kind': 'server',
-            'http.url': 'example.com/test',
+            'http.url': 'https://example.com/test',
             'http.method': 'GET',
             'http.status_code': '200',
             component: 'aws-httpapi',

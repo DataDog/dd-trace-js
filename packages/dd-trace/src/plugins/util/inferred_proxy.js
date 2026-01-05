@@ -62,7 +62,7 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
       [SPAN_TYPE]: 'web',
       [SPAN_KIND]: 'server',
       [HTTP_METHOD]: proxyContext.method,
-      [HTTP_URL]: proxyContext.domainName + proxyContext.path,
+      [HTTP_URL]: 'https://' + proxyContext.domainName + proxyContext.path,
       stage: proxyContext.stage,
       region: proxyContext.region,
     },
