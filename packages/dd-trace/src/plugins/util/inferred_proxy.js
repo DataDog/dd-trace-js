@@ -19,6 +19,10 @@ const supportedProxies = {
   'aws-apigateway': {
     spanName: 'aws.apigateway',
     component: 'aws-apigateway'
+  },
+  'aws-httpapi': {
+    spanName: 'aws.httpapi',
+    component: 'aws-httpapi'
   }
 }
 
