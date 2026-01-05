@@ -516,6 +516,12 @@
       "versions": ["^5.0.8"]
     }
   ],
+  "stripe": [
+    {
+      "name": "express",
+      "versions": ["^4"]
+    }
+  ],
   "ws": [
     {
       "name":"ws",
