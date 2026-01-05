@@ -13,19 +13,17 @@ function wrapSessionCreate (create) {
 
     if (!checkoutSessionCreateFinishCh.hasSubscribers) return promise
 
-    return new Promise((resolve, reject) => {
-      promise.then((result) => {
-        checkoutSessionCreateFinishCh.publish(result)
-        resolve(result)
-      }).catch(reject)
+    return promise.then((result) => {
+      checkoutSessionCreateFinishCh.publish(result)
+      return result
     })
   }
 }
 
 addHook({
   name: 'stripe',
-  file: 'cjs/resources/Checkout/Sessions.js',
-  versions: ['>=18']
+  file: 'cjs/resources/Checkout/Sessions.js', // TODO: esm files ?
+  versions: ['>=18'] // TODO: version ?
 }, Sessions => {
   shimmer.wrap(Sessions.Sessions.prototype, 'create', wrapSessionCreate)
 })
@@ -34,13 +32,11 @@ function wrapPaymentIntentCreate (create) {
   return function wrappedPaymentIntentCreate () {
     const promise = create.apply(this, arguments)
 
-    if (!paymentIntentCreateFinishCh.hasSubscribers) return
+    if (!paymentIntentCreateFinishCh.hasSubscribers) return promise
 
-    return new Promise((resolve, reject) => {
-      promise.then((result) => {
-        paymentIntentCreateFinishCh.publish(result)
-        resolve(result)
-      }).catch(reject)
+    return promise.then((result) => {
+      paymentIntentCreateFinishCh.publish(result)
+      return result
     })
   }
 }
@@ -63,14 +59,27 @@ function wrapConstructEvent (constructEvent) {
   }
 }
 
+function wrapConstructEventAsync (constructEventAsync) {
+  return function wrappedConstructEventAsync () {
+    const promise = constructEventAsync.apply(this, arguments)
+
+    if (!constructEventFinishCh.hasSubscribers) return promise
+
+    return promise.then((result) => {
+      constructEventFinishCh.publish(result)
+      return result
+    })
+  }
+}
+
 function wrapCreateWebhooks (createWebhooks) {
   return function wrappedCreateWebhooks () {
-    const result = createWebhooks.apply(this, arguments)
+    const Webhook = createWebhooks.apply(this, arguments)
 
-    shimmer.wrap(result, 'constructEvent', wrapConstructEvent)
-    // constructEventAsync
+    shimmer.wrap(Webhook, 'constructEvent', wrapConstructEvent)
+    shimmer.wrap(Webhook, 'constructEventAsync', wrapConstructEventAsync)
 
-    return result
+    return Webhook
   }
 }
 
