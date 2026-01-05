@@ -18,7 +18,11 @@ const PROXY_HEADER_STAGE = 'x-dd-proxy-stage'
 const supportedProxies = {
   'aws-apigateway': {
     spanName: 'aws.apigateway',
-    component: 'aws-apigateway',
+    component: 'aws-apigateway'
+  },
+  'aws-httpapi': {
+    spanName: 'aws.httpapi',
+    component: 'aws-httpapi'
   },
 }
 
