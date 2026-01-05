@@ -188,6 +188,7 @@
     "sharedb": "5.2.2",
     "sinon": "21.0.0",
     "sqlite3": "5.1.7",
+    "stripe": "20.1.0",
     "tedious": "19.1.0",
     "tinypool": "2.0.0",
     "typescript": "5.9.3",
