@@ -2,7 +2,9 @@
 
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+
 const spanContexts = new WeakMap()
+
 class AzureEventHubsProducerPlugin extends ProducerPlugin {
   static get id () { return 'azure-event-hubs' }
   static get operation () { return 'send' }
@@ -71,11 +73,11 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
   }
 
   asyncEnd (ctx) {
-    super.finish()
+    super.finish(ctx)
   }
 
   end (ctx) {
-    super.finish()
+    super.finish(ctx)
   }
 }
 

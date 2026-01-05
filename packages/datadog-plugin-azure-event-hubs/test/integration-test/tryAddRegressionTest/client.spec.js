@@ -9,8 +9,7 @@ const {
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 const assert = require('assert')
 
-const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000' }
-const nodeOptions = '--experimental-global-webcrypto'
+const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000', NODE_OPTIONS: '--experimental-global-webcrypto' }
 
 describe('esm', () => {
   let agent
@@ -42,7 +41,7 @@ describe('esm', () => {
 
       // This test file will throw an error if tryAdd returns a Promise instead of a boolean
       proc = await spawnPluginIntegrationTestProc(
-        sandboxCwd(), 'server.mjs', agent.port, undefined, spawnEnv, nodeOptions
+        sandboxCwd(), 'server.mjs', agent.port, undefined, spawnEnv
       )
 
       await res
