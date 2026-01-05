@@ -102,11 +102,13 @@ describe('process-tags', () => {
     })
 
     it('should sort tags alphabetically', () => {
-      assert.strictEqual(processTags.tags[0][0], 'entrypoint.basedir')
-      assert.strictEqual(processTags.tags[1][0], 'entrypoint.name')
-      assert.strictEqual(processTags.tags[2][0], 'entrypoint.type')
-      assert.strictEqual(processTags.tags[3][0], 'entrypoint.workdir')
-      assert.strictEqual(processTags.tags[4][0], 'package.json.name')
+      assertObjectContains(processTags.tags, [
+        ['entrypoint.basedir'],
+        ['entrypoint.name'],
+        ['entrypoint.type'],
+        ['entrypoint.workdir'],
+        ['package.json.name']
+      ])
     })
 
     it('should serialize tags correctly', () => {
