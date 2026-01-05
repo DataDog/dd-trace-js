@@ -141,7 +141,7 @@ describe('Inferred Proxy Spans', function () {
         assertObjectContains(spans[0], {
           meta: {
             'span.kind': 'server',
-            'http.url': 'example.com/test',
+            'http.url': 'https://example.com/test',
             'http.method': 'GET',
             'http.status_code': '200',
             component: 'aws-apigateway',
@@ -190,7 +190,7 @@ describe('Inferred Proxy Spans', function () {
         assertObjectContains(spans[0], {
           meta: {
             'span.kind': 'server',
-            'http.url': 'example.com/test',
+            'http.url': 'https://example.com/test',
             'http.method': 'GET',
             'http.status_code': '200',
             component: 'aws-httpapi',
@@ -241,7 +241,7 @@ describe('Inferred Proxy Spans', function () {
           type: 'web',
           meta: {
             'span.kind': 'server',
-            'http.url': 'example.com/test',
+            'http.url': 'https://example.com/test',
             'http.method': 'GET',
             'http.status_code': '500',
             component: 'aws-apigateway'
