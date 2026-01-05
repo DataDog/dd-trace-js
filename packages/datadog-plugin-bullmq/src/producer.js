@@ -15,7 +15,7 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
 
   bindStart (ctx) {
     const { resource, meta } = this.getSpanData(ctx)
-    const span = this.startSpan(`bullmq.${this.constructor.spanOperation}`, {
+    const span = this.startSpan({
       resource,
       meta: {
         component: 'bullmq',
@@ -59,7 +59,6 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
 }
 
 class QueueAddPlugin extends BaseBullmqProducerPlugin {
-  static spanOperation = 'add'
   static prefix = 'tracing:orchestrion:bullmq:Queue_add'
 
   getSpanData (ctx) {
@@ -91,8 +90,11 @@ class QueueAddPlugin extends BaseBullmqProducerPlugin {
 }
 
 class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
-  static spanOperation = 'addBulk'
   static prefix = 'tracing:orchestrion:bullmq:Queue_addBulk'
+
+  operationName () {
+    return 'bullmq.addBulk'
+  }
 
   getSpanData (ctx) {
     const queueName = ctx.self?.name || 'bullmq'
@@ -147,7 +149,6 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
 }
 
 class FlowProducerAddPlugin extends BaseBullmqProducerPlugin {
-  static spanOperation = 'add'
   static prefix = 'tracing:orchestrion:bullmq:FlowProducer_add'
 
   getSpanData (ctx) {

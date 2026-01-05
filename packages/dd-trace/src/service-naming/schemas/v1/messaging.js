@@ -46,7 +46,7 @@ const messaging = {
       serviceName: identityService
     },
     bullmq: {
-      opName: () => 'bullmq.send',
+      opName: () => 'bullmq.add',
       serviceName: identityService
     }
   },
@@ -71,7 +71,7 @@ const messaging = {
       serviceName: identityService
     },
     bullmq: {
-      opName: () => 'bullmq.process',
+      opName: () => 'bullmq.processJob',
       serviceName: identityService
     }
   },

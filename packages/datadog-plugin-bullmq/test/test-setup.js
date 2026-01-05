@@ -11,6 +11,9 @@ class BullmqTestSetup {
     this.flowProducer = new module.FlowProducer({ connection })
     this.queueEvents = new module.QueueEvents('test-queue', { connection })
     this.worker = new module.Worker('test-queue', async (job) => {
+      if (job.data.shouldFail) {
+        throw new Error('Intentional job failure for testing')
+      }
       return { processed: true, jobId: job.id }
     }, { connection })
 

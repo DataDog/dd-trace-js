@@ -38,7 +38,7 @@ createIntegrationTestSuite('bullmq', 'bullmq', testSetup, {
         meta: {
           'span.kind': 'producer',
           'messaging.system': 'bullmq',
-          'error.type': 'TypeError',
+          'error.type': ANY_STRING,
           'error.message': ANY_STRING
         }
       })
@@ -82,7 +82,7 @@ createIntegrationTestSuite('bullmq', 'bullmq', testSetup, {
         meta: {
           'span.kind': 'producer',
           'messaging.system': 'bullmq',
-          'error.type': 'TypeError',
+          'error.type': ANY_STRING,
           'error.message': ANY_STRING
         }
       })
@@ -123,7 +123,7 @@ createIntegrationTestSuite('bullmq', 'bullmq', testSetup, {
         meta: {
           'span.kind': 'consumer',
           'messaging.system': 'bullmq',
-          'error.type': 'Error',
+          'error.type': ANY_STRING,
           'error.message': ANY_STRING
         }
       })

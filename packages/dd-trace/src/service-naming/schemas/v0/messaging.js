@@ -49,7 +49,7 @@ const messaging = {
       serviceName: awsServiceV0
     },
     bullmq: {
-      opName: () => 'bullmq.send',
+      opName: () => 'bullmq.add',
       serviceName: ({ tracerService }) => `${tracerService}-bullmq`
     }
   },
@@ -83,7 +83,7 @@ const messaging = {
       serviceName: awsServiceV0
     },
     bullmq: {
-      opName: () => 'bullmq.receive',
+      opName: () => 'bullmq.processJob',
       serviceName: ({ tracerService }) => `${tracerService}-bullmq`
     }
   },

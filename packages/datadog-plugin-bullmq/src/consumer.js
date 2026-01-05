@@ -5,7 +5,7 @@ const { getMessageSize } = require('../../dd-trace/src/datastreams')
 
 class BullmqConsumerPlugin extends ConsumerPlugin {
   static id = 'bullmq'
-  static prefix = 'tracing:orchestrion:bullmq:Worker_processJob'
+  static prefix = 'tracing:orchestrion:bullmq:Worker_callProcessJob'
 
   asyncEnd (ctx) {
     const span = ctx.currentStore?.span
@@ -24,7 +24,7 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
       childOf = this.tracer.extract('text_map', datadogContext)
     }
 
-    const span = this.startSpan('bullmq.processJob', {
+    const span = this.startSpan({
       childOf,
       resource: queueName,
       meta: {
