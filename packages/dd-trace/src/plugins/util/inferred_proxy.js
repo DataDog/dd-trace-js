@@ -82,7 +82,8 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
 }
 
 function setInferredProxySpanTags (span, proxyContext) {
-  span.setTag(RESOURCE_NAME, `${proxyContext.method} ${proxyContext.path}`)
+  const resourcePath = proxyContext.resourcePath || proxyContext.path
+  span.setTag(RESOURCE_NAME, `${proxyContext.method} ${resourcePath}`)
   span.setTag('_dd.inferred_span', 1)
   return span
 }
