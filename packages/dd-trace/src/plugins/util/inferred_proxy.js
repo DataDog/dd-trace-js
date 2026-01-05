@@ -19,7 +19,11 @@ const PROXY_HEADER_REGION = 'x-dd-proxy-region'
 const supportedProxies = {
   'aws-apigateway': {
     spanName: 'aws.apigateway',
-    component: 'aws-apigateway',
+    component: 'aws-apigateway'
+  },
+  'aws-httpapi': {
+    spanName: 'aws.httpapi',
+    component: 'aws-httpapi'
   },
   'azure-apim': {
     spanName: 'azure.apim',
