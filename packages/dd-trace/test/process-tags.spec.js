@@ -10,6 +10,20 @@ describe('process-tags', () => {
   const processTags = require('../src/process-tags')
   const { serialize, sanitize } = require('../src/process-tags')
 
+  describe('field name constants', () => {
+    it('should define field names for different subsystems', () => {
+      assertObjectContains(processTags, {
+        TRACING_FIELD_NAME: '_dd.tags.process',
+        DSM_FIELD_NAME: 'ProcessTags',
+        PROFILING_FIELD_NAME: 'process_tags',
+        DYNAMIC_INSTRUMENTATION_FIELD_NAME: 'process_tags',
+        TELEMETRY_FIELD_NAME: 'process_tags',
+        REMOTE_CONFIG_FIELD_NAME: 'process_tags',
+        CRASH_TRACKING_FIELD_NAME: 'process_tags'
+      })
+    })
+  })
+
   describe('processTags', () => {
     it('should return an object with tags, serialized, and tagsObject properties', () => {
       assert.ok(Object.hasOwn(processTags, 'tags'))
