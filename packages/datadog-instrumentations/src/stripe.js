@@ -20,14 +20,6 @@ function wrapSessionCreate (create) {
   }
 }
 
-addHook({
-  name: 'stripe',
-  file: 'cjs/resources/Checkout/Sessions.js', // TODO: esm files ?
-  versions: ['>=18'] // TODO: version ?
-}, Sessions => {
-  shimmer.wrap(Sessions.Sessions.prototype, 'create', wrapSessionCreate)
-})
-
 function wrapPaymentIntentCreate (create) {
   return function wrappedPaymentIntentCreate () {
     const promise = create.apply(this, arguments)
@@ -40,14 +32,6 @@ function wrapPaymentIntentCreate (create) {
     })
   }
 }
-
-addHook({
-  name: 'stripe',
-  file: 'cjs/resources/PaymentIntents.js',
-  versions: ['>=18']
-}, PaymentIntents => {
-  shimmer.wrap(PaymentIntents.PaymentIntents.prototype, 'create', wrapPaymentIntentCreate)
-})
 
 function wrapConstructEvent (constructEvent) {
   return function wrappedConstructEvent () {
@@ -72,21 +56,34 @@ function wrapConstructEventAsync (constructEventAsync) {
   }
 }
 
-function wrapCreateWebhooks (createWebhooks) {
-  return function wrappedCreateWebhooks () {
-    const Webhook = createWebhooks.apply(this, arguments)
+function wrapStripe (Stripe) {
+  return function wrappedStripe () {
+    let stripe = Stripe.apply(this, arguments)
 
-    shimmer.wrap(Webhook, 'constructEvent', wrapConstructEvent)
-    shimmer.wrap(Webhook, 'constructEventAsync', wrapConstructEventAsync)
+    if (this instanceof Stripe) {
+      stripe = this
+    }
 
-    return Webhook
+    if (typeof stripe.checkout?.sessions?.create === 'function') {
+      shimmer.wrap(stripe.checkout.sessions, 'create', wrapSessionCreate)
+    }
+    if (typeof stripe.paymentIntents?.create === 'function') {
+      shimmer.wrap(stripe.paymentIntents, 'create', wrapPaymentIntentCreate)
+    }
+    if (typeof stripe.webhooks?.constructEvent === 'function') {
+      shimmer.wrap(stripe.webhooks, 'constructEvent', wrapConstructEvent)
+    }
+    if (typeof stripe.webhooks?.constructEventAsync === 'function') {
+      shimmer.wrap(stripe.webhooks, 'constructEventAsync', wrapConstructEventAsync)
+    }
+
+    return stripe
   }
 }
 
 addHook({
   name: 'stripe',
-  file: 'cjs/Webhooks.js',
-  versions: ['>=18']
-}, Webhooks => {
-  shimmer.wrap(Webhooks, 'createWebhooks', wrapCreateWebhooks)
+  versions: ['>=7.0.0']
+}, Stripe => {
+  return shimmer.wrapFunction(Stripe, wrapStripe)
 })
