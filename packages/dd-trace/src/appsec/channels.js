@@ -43,7 +43,7 @@ module.exports = {
   setUncaughtExceptionCaptureCallbackStart: dc.channel('datadog:process:setUncaughtExceptionCaptureCallback:start'),
   startGraphqlResolve: dc.channel('datadog:graphql:resolver:start'),
   stripeCheckoutSessionCreate: dc.channel('datadog:stripe:checkoutSession:create:finish'),
-  stripeConstructEvent: dc.channel('datadog:stripe:constructEvent:finish')
+  stripeConstructEvent: dc.channel('datadog:stripe:constructEvent:finish'),
   stripePaymentIntentCreate: dc.channel('datadog:stripe:paymentIntent:create:finish'),
   wafRunFinished: dc.channel('datadog:waf:run:finish')
 }
