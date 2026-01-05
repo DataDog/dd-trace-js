@@ -173,7 +173,8 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           assert.strictEqual(spans[0].type, 'web')
           assertObjectContains(spans[0], {
             meta: {
-              'http.url': config.expectedUrl,
+              'span.kind': 'server',
+            'http.url': config.expectedUrl,
               'http.method': 'GET',
               'http.status_code': '200',
               component: config.expectedComponent,
@@ -221,6 +222,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         assert.strictEqual(spans[0].type, 'web')
         assertObjectContains(spans[0], {
           meta: {
+            'span.kind': 'server',
             'http.url': 'example.com/test',
             'http.method': 'GET',
             'http.status_code': '200',
@@ -271,6 +273,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
             resource: 'GET /test',
             type: 'web',
             meta: {
+              'span.kind': 'server',
               'http.url': config.expectedUrl,
               'http.method': 'GET',
               'http.status_code': '500',
