@@ -97,8 +97,19 @@ describe('Inferred Proxy Spans', function () {
     await agent.close()
   }
 
+  // API Gateway v1 headers
   const inferredHeaders = {
     'x-dd-proxy': 'aws-apigateway',
+    'x-dd-proxy-request-time-ms': '1729780025473',
+    'x-dd-proxy-path': '/test',
+    'x-dd-proxy-httpmethod': 'GET',
+    'x-dd-proxy-domain-name': 'example.com',
+    'x-dd-proxy-stage': 'dev'
+  }
+
+  // API Gateway v2 headers
+  const inferredHeadersV2 = {
+    'x-dd-proxy': 'aws-httpapi',
     'x-dd-proxy-request-time-ms': '1729780025473',
     'x-dd-proxy-path': '/test',
     'x-dd-proxy-httpmethod': 'GET',
@@ -134,6 +145,54 @@ describe('Inferred Proxy Spans', function () {
             'http.status_code': '200',
             component: 'aws-apigateway',
             '_dd.integration': 'aws-apigateway'
+          },
+          metrics: {
+            '_dd.inferred_span': 1
+          }
+        })
+        assert.strictEqual(spans[0].start.toString(), '1729780025472999936')
+
+        assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
+
+        assertObjectContains(spans[1], {
+          name: 'web.request',
+          service: 'aws-server',
+          type: 'web',
+          resource: 'GET',
+          meta: {
+            component: 'http',
+            'span.kind': 'server',
+            'http.url': `http://127.0.0.1:${port}/`,
+            'http.method': 'GET',
+            'http.status_code': '200'
+          }
+        })
+      })
+    })
+
+    it('should create a parent span with aws.httpapi for API Gateway v2', async () => {
+      await loadTest({})
+
+      await httpClient.get(`http://127.0.0.1:${port}/`, {
+        headers: inferredHeadersV2
+      })
+
+      await agent.assertSomeTraces(traces => {
+        const spans = traces[0]
+
+        assert.strictEqual(spans.length, 2)
+
+        assert.strictEqual(spans[0].name, 'aws.httpapi')
+        assert.strictEqual(spans[0].service, 'example.com')
+        assert.strictEqual(spans[0].resource, 'GET /test')
+        assert.strictEqual(spans[0].type, 'web')
+        assertObjectContains(spans[0], {
+          meta: {
+            'http.url': 'example.com/test',
+            'http.method': 'GET',
+            'http.status_code': '200',
+            component: 'aws-httpapi',
+            '_dd.integration': 'aws-httpapi'
           },
           metrics: {
             '_dd.inferred_span': 1
