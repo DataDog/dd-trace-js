@@ -19,6 +19,8 @@ const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 
 const samplingContextsAvailable = process.platform !== 'win32'
 const oomMonitoringSupported = process.platform !== 'win32'
+const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
+const zstdOrGzip = isAtLeast24 ? 'zstd' : 'gzip'
 
 describe('config', () => {
   let Config
@@ -60,7 +62,7 @@ describe('config', () => {
     assert.strictEqual(config.profilers[1].codeHotspotsEnabled(), samplingContextsAvailable)
     assert.strictEqual(config.v8ProfilerBugWorkaroundEnabled, true)
     assert.strictEqual(config.cpuProfilingEnabled, samplingContextsAvailable)
-    assert.strictEqual(config.uploadCompression.method, 'gzip')
+    assert.strictEqual(config.uploadCompression.method, zstdOrGzip)
     assert.strictEqual(config.uploadCompression.level, undefined)
   })
 
@@ -510,7 +512,7 @@ describe('config', () => {
   }
 
   describe('async context', () => {
-    const isSupported = samplingContextsAvailable && satisfies(process.versions.node, '>=24.0.0')
+    const isSupported = samplingContextsAvailable && isAtLeast24
     describe('where supported', () => {
       it('should be on by default', function () {
         if (!isSupported) {
@@ -590,15 +592,15 @@ describe('config', () => {
     }
 
     it('should accept known methods', () => {
-      expectConfig(undefined, 'gzip', undefined)
+      expectConfig(undefined, zstdOrGzip, undefined)
       expectConfig('off', 'off', undefined)
-      expectConfig('on', 'gzip', undefined)
+      expectConfig('on', zstdOrGzip, undefined)
       expectConfig('gzip', 'gzip', undefined)
       expectConfig('zstd', 'zstd', undefined)
     })
 
     it('should reject unknown methods', () => {
-      expectConfig('foo', 'gzip', undefined, 'Invalid profile upload compression method "foo". Will use "on".')
+      expectConfig('foo', zstdOrGzip, undefined, 'Invalid profile upload compression method "foo". Will use "on".')
     })
 
     it('should accept supported compression levels in methods that support levels', () => {
@@ -618,7 +620,7 @@ describe('config', () => {
 
     it('should reject compression levels in methods that do not support levels', () => {
       ['on', 'off'].forEach((method) => {
-        const effectiveMethod = method === 'on' ? 'gzip' : method
+        const effectiveMethod = method === 'on' ? zstdOrGzip : method
         expectConfig(`${method}-3`, effectiveMethod, undefined,
           `Compression levels are not supported for "${method}".`)
         expectConfig(`${method}-foo`, effectiveMethod, undefined,
