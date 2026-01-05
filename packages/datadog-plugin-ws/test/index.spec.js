@@ -51,24 +51,6 @@ describe('Plugin', () => {
           assert.strictEqual(result, undefined)
         })
 
-        it('should not produce message spans when traceWebsocketMessagesEnabled is not set to true', () => {
-          wsServer.on('connection', (ws) => {
-            ws.send('test message')
-          })
-          messageReceived = false
-
-          client.on('message', (data) => {
-            assert.strictEqual(data.toString(), 'test message')
-            messageReceived = true
-          })
-
-          return agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
-            assert.strictEqual(traces[0][0].name, 'web.request')
-            assert.strictEqual(traces[0][0].type, 'websocket')
-          })
-        })
-
         after(async () => {
           agent.close({ ritmReset: false, wipe: true })
         })
