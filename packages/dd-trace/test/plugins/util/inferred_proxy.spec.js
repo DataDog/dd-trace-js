@@ -150,6 +150,16 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
     'x-dd-proxy-stage': 'dev'
   }
 
+  const inferredHeadersWithRoute = {
+    'x-dd-proxy': 'aws-apigateway',
+    'x-dd-proxy-request-time-ms': '1729780025473',
+    'x-dd-proxy-path': '/users/123',
+    'x-dd-proxy-httpmethod': 'GET',
+    'x-dd-proxy-domain-name': 'example.com',
+    'x-dd-proxy-stage': 'dev',
+    'x-dd-proxy-resource-path': '/users/{id}'
+  }
+
   afterEach(async () => {
     await cleanupTest()
   })
@@ -253,8 +263,39 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
       })
     })
 
-      it('should create a parent span and a child span for an error', async () => {
-        await loadTest({})
+      it('should include http.route when x-dd-proxy-resource-path header is present', async () => {
+      await loadTest({})
+
+      await httpClient.get(`http://127.0.0.1:${port}/`, {
+        headers: inferredHeadersWithRoute
+      })
+
+      await agent.assertSomeTraces(traces => {
+        const spans = traces[0]
+
+        assert.strictEqual(spans.length, 2)
+
+        assert.strictEqual(spans[0].name, 'aws.apigateway')
+        assert.strictEqual(spans[0].service, 'example.com')
+        assert.strictEqual(spans[0].type, 'web')
+        assertObjectContains(spans[0], {
+          meta: {
+            'span.kind': 'server',
+            'http.url': 'https://example.com/users/123',
+            'http.method': 'GET',
+            'http.route': '/users/{id}',
+            'http.status_code': '200',
+            component: 'aws-apigateway'
+          },
+          metrics: {
+            '_dd.inferred_span': 1
+          }
+        })
+      })
+    })
+
+    it('should create a parent span and a child span for an error', async () => {
+      await loadTest({})
 
         await httpClient.get(`http://127.0.0.1:${port}/error`, {
           headers: config.headers,
