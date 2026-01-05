@@ -11,6 +11,7 @@ const {
   SPAN_POINTER_DIRECTION,
   SPAN_POINTER_DIRECTION_NAME
 } = require('../../dd-trace/src/constants')
+const log = require('../../dd-trace/src/log')
 
 class WSClosePlugin extends TracingPlugin {
   static get id () { return 'ws' }
@@ -19,15 +20,25 @@ class WSClosePlugin extends TracingPlugin {
   static get kind () { return 'close' }
 
   bindStart (ctx) {
+    const { code, data, isPeerClose } = ctx
+    log.debug('[WS-CLOSE] bindStart called, code: %s, isPeerClose: %s', code, isPeerClose)
+
     const {
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces
     } = this.config
-    if (!traceWebsocketMessagesEnabled) return
+    if (!traceWebsocketMessagesEnabled) {
+      log.debug('[WS-CLOSE] bindStart: messages not enabled, returning early')
+      return
+    }
 
-    const { code, data, socket, isPeerClose } = ctx
-    if (!socket?.spanContext) return
+    const { socket } = ctx
+    if (!socket?.spanContext) {
+      log.warn('[WS-CLOSE] bindStart: socket.spanContext missing, code: %s, isPeerClose: %s',
+        code, isPeerClose)
+      return
+    }
 
     const spanKind = isPeerClose ? 'consumer' : 'producer'
     const spanTags = socket.spanContext.spanTags
@@ -46,6 +57,7 @@ class WSClosePlugin extends TracingPlugin {
 
     if (data?.toString().length > 0) {
       span.setTag('websocket.close.reason', data.toString())
+      log.debug('[WS-CLOSE] bindStart: close reason: %s', data.toString())
     }
 
     if (isPeerClose && traceWebsocketMessagesInheritSampling && traceWebsocketMessagesSeparateTraces) {
@@ -55,20 +67,48 @@ class WSClosePlugin extends TracingPlugin {
     }
 
     ctx.span = span
+    const spanId = ctx.span?._spanContext?._spanId?.toString()
+    log.debug('[WS-CLOSE] bindStart: span created, spanId: %s, code: %s, isPeerClose: %s',
+      spanId, code, isPeerClose)
     return ctx.currentStore
   }
 
   bindAsyncStart (ctx) {
-    if (!ctx.isPeerClose) ctx.span.finish()
+    const spanId = ctx.span?._spanContext?._spanId?.toString()
+    log.debug('[WS-CLOSE] bindAsyncStart called, spanId: %s, isPeerClose: %s', spanId, ctx.isPeerClose)
+
+    if (!ctx.span) {
+      log.warn('[WS-CLOSE] bindAsyncStart: ctx.span is undefined!')
+      return ctx.parentStore
+    }
+
+    if (!ctx.isPeerClose) {
+      ctx.span.finish()
+      log.debug('[WS-CLOSE] bindAsyncStart: span finished (self-initiated close), spanId: %s', spanId)
+    }
     return ctx.parentStore
   }
 
   asyncStart (ctx) {
+    const spanId = ctx.span?._spanContext?._spanId?.toString()
+    log.debug('[WS-CLOSE] asyncStart called, spanId: %s', spanId)
+
+    if (!ctx.span) {
+      log.warn('[WS-CLOSE] asyncStart: ctx.span is undefined!')
+      return
+    }
     ctx.span.finish()
+    log.debug('[WS-CLOSE] asyncStart: span finished, spanId: %s', spanId)
   }
 
   end (ctx) {
-    if (!Object.hasOwn(ctx, 'result') || !ctx.span) return
+    const spanId = ctx.span?._spanContext?._spanId?.toString()
+    log.debug('[WS-CLOSE] end called, spanId: %s, hasResult: %s', spanId, Object.hasOwn(ctx, 'result'))
+
+    if (!Object.hasOwn(ctx, 'result') || !ctx.span) {
+      log.debug('[WS-CLOSE] end: returning early, no result or no span')
+      return
+    }
 
     if (ctx.socket.spanContext) {
       const linkAttributes = {}
@@ -118,6 +158,7 @@ class WSClosePlugin extends TracingPlugin {
     }
 
     ctx.span.finish()
+    log.debug('[WS-CLOSE] end: span finished, spanId: %s', spanId)
   }
 }
 

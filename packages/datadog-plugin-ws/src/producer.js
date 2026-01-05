@@ -12,6 +12,7 @@ const {
   SPAN_POINTER_DIRECTION_NAME
 } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
+
 class WSProducerPlugin extends TracingPlugin {
   static get id () { return 'ws' }
   static get prefix () { return 'tracing:ws:send' }
@@ -19,11 +20,19 @@ class WSProducerPlugin extends TracingPlugin {
   static get kind () { return 'producer' }
 
   bindStart (ctx) {
+    log.debug('[WS-PRODUCER] bindStart called')
+
     const messagesEnabled = this.config.traceWebsocketMessagesEnabled
-    if (!messagesEnabled) return
+    if (!messagesEnabled) {
+      log.debug('[WS-PRODUCER] bindStart: messages not enabled, returning early')
+      return
+    }
 
     const { byteLength, socket, binary } = ctx
-    if (!socket.spanContext) return
+    if (!socket.spanContext) {
+      log.warn('[WS-PRODUCER] bindStart: socket.spanContext is missing! Socket may not have completed handshake.')
+      return
+    }
 
     const spanTags = socket.spanContext.spanTags
     const path = spanTags['resource.name'].split(' ')[1]
@@ -45,24 +54,44 @@ class WSProducerPlugin extends TracingPlugin {
     }, ctx)
 
     ctx.span = span
+    const spanId = ctx.span?._spanContext?._spanId?.toString()
+    log.debug('[WS-PRODUCER] bindStart: span created, spanId: %s, path: %s, byteLength: %d', spanId, path, byteLength)
     return ctx.currentStore
   }
 
   bindAsyncStart (ctx) {
+    const spanId = ctx.span?._spanContext?._spanId?.toString()
+    log.debug('[WS-PRODUCER] bindAsyncStart called, spanId: %s', spanId)
+
     if (!ctx.span) {
-      log.warn('bindAsyncStart: cannot find span')
+      log.warn('[WS-PRODUCER] bindAsyncStart: ctx.span is undefined!')
       return
     }
     ctx.span.finish()
+    log.debug('[WS-PRODUCER] bindAsyncStart: span finished, spanId: %s', spanId)
     return ctx.parentStore
   }
 
   asyncStart (ctx) {
+    const spanId = ctx.span?._spanContext?._spanId?.toString()
+    log.debug('[WS-PRODUCER] asyncStart called, spanId: %s', spanId)
+
+    if (!ctx.span) {
+      log.warn('[WS-PRODUCER] asyncStart: ctx.span is undefined!')
+      return
+    }
     ctx.span.finish()
+    log.debug('[WS-PRODUCER] asyncStart: span finished, spanId: %s', spanId)
   }
 
   end (ctx) {
-    if (!Object.hasOwn(ctx, 'result') || !ctx.span) return
+    const spanId = ctx.span?._spanContext?._spanId?.toString()
+    log.debug('[WS-PRODUCER] end called, spanId: %s, hasResult: %s', spanId, Object.hasOwn(ctx, 'result'))
+
+    if (!Object.hasOwn(ctx, 'result') || !ctx.span) {
+      log.debug('[WS-PRODUCER] end: returning early, no result or no span')
+      return
+    }
 
     if (ctx.socket.spanContext) {
       const linkAttributes = { 'dd.kind': 'resuming' }
@@ -100,6 +129,7 @@ class WSProducerPlugin extends TracingPlugin {
     }
 
     ctx.span.finish()
+    log.debug('[WS-PRODUCER] end: span finished, spanId: %s', spanId)
     return ctx.parentStore
   }
 }

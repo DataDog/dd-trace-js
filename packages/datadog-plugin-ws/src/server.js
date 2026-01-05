@@ -4,6 +4,7 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 const tags = require('../../../ext/tags.js')
 const { initWebSocketMessageCounters } = require('./util')
 const { FORMAT_HTTP_HEADERS } = require('../../../ext/formats')
+const log = require('../../dd-trace/src/log')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 
@@ -15,6 +16,7 @@ class WSServerPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const req = ctx.req
+    log.debug('[WS-SERVER] bindStart called, url: %s', req?.url)
 
     const options = {}
     const headers = Object.entries(req.headers)
@@ -32,6 +34,7 @@ class WSServerPlugin extends TracingPlugin {
 
     // Extract distributed tracing context from request headers
     const childOf = this.tracer.extract(FORMAT_HTTP_HEADERS, req.headers)
+    log.debug('[WS-SERVER] bindStart: extracted childOf context: %s', childOf ? 'yes' : 'no')
 
     const service = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
@@ -50,6 +53,9 @@ class WSServerPlugin extends TracingPlugin {
     }, ctx)
     ctx.span = span
 
+    const spanId = ctx.span?._spanContext?._spanId?.toString()
+    log.debug('[WS-SERVER] bindStart: span created, spanId: %s, uri: %s', spanId, uri)
+
     ctx.socket.spanContext = ctx.span._spanContext
     ctx.socket.spanContext.spanTags = ctx.span._spanContext._tags
     // Store the handshake span for use in message span pointers
@@ -60,17 +66,35 @@ class WSServerPlugin extends TracingPlugin {
     // Initialize message counters for span pointers
     initWebSocketMessageCounters(ctx.socket)
 
+    log.debug('[WS-SERVER] bindStart: socket context initialized, spanId: %s', spanId)
     return ctx.currentStore
   }
 
   bindAsyncStart (ctx) {
+    const spanId = ctx.span?._spanContext?._spanId?.toString()
+    log.debug('[WS-SERVER] bindAsyncStart called, spanId: %s, resStatus: %s', spanId, ctx.req?.resStatus)
+
+    if (!ctx.span) {
+      log.warn('[WS-SERVER] bindAsyncStart: ctx.span is undefined!')
+      return ctx.parentStore
+    }
+
     ctx.span.setTag(HTTP_STATUS_CODE, ctx.req.resStatus)
 
     return ctx.parentStore
   }
 
   asyncStart (ctx) {
+    const spanId = ctx.span?._spanContext?._spanId?.toString()
+    log.debug('[WS-SERVER] asyncStart called, spanId: %s', spanId)
+
+    if (!ctx.span) {
+      log.warn('[WS-SERVER] asyncStart: ctx.span is undefined!')
+      return
+    }
+
     ctx.span.finish()
+    log.debug('[WS-SERVER] asyncStart: span finished, spanId: %s', spanId)
   }
 }
 
