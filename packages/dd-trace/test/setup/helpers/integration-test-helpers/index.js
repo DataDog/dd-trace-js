@@ -1,8 +1,8 @@
 'use strict'
 
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-const { expect } = require('chai')
 const agent = require('../../../plugins/agent')
+const assert = require('node:assert/strict')
 const { withVersions } = require('../../mocha')
 
 function createIntegrationTestSuite (pluginName, packageName, testSetup, options, testCallback) {
@@ -48,7 +48,7 @@ function createVersionedTests (pluginName, packageName, testSetup, options = {},
         testSetup,
         agent,
         tracer,
-        expect,
+        assert,
         describe,
         it,
         beforeEach,
