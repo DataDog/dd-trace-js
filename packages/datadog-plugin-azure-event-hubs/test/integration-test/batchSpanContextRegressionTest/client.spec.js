@@ -9,11 +9,10 @@ const {
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 const assert = require('assert')
 
-const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000', NODE_OPTIONS: '--experimental-global-webcrypto' }
-
 describe('esm', () => {
   let agent
   let proc
+  let spawnEnv
 
   withVersions('azure-event-hubs', '@azure/event-hubs', version => {
     useSandbox([`'@azure/event-hubs@${version}'`], false, [
@@ -22,6 +21,7 @@ describe('esm', () => {
     beforeEach(async () => {
       agent = await new FakeAgent().start()
       process.env.DD_TRACE_DISABLED_PLUGINS = 'amqplib,amqp10,rhea,net'
+      spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000', NODE_OPTIONS: '--experimental-global-webcrypto' }
     })
 
     afterEach(async () => {
