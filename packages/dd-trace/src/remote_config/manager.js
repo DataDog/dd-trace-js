@@ -89,7 +89,7 @@ class RemoteConfigManager extends EventEmitter {
           app_version: config.version,
           extra_services: [],
           tags: Object.entries(tags).map((pair) => pair.join(':')),
-          [processTags.REMOTE_CONFIG_FIELD_NAME]: processTags.tagsObject
+          [processTags.REMOTE_CONFIG_FIELD_NAME]: processTags.tagsArray
         },
         capabilities: DEFAULT_CAPABILITY // updated by `updateCapabilities()`
       },
