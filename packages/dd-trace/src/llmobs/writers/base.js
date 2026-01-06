@@ -53,6 +53,7 @@ class BaseLLMObsWriter {
     return this.#getUrlForRouting()
   }
 
+  // Backward-compatible getters - only access default routing buffer.
   get _buffer () {
     const defaultKey = this._getRoutingKey()
     const buffer = this.#buffers.get(defaultKey)
