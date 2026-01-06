@@ -56,22 +56,17 @@ describe('Remote config client id', () => {
 
           const processTags = client.client_tracer.process_tags
 
-          // Verify process_tags is an object
-          assert.strictEqual(typeof processTags, 'object')
+          // Verify process_tags is an array of strings
+          assert.ok(Array.isArray(processTags), 'process_tags should be an array')
 
           // Verify required process tags are present
-          assert.ok('entrypoint.basedir' in processTags)
-          assert.ok('entrypoint.name' in processTags)
-          assert.ok('entrypoint.type' in processTags)
-          assert.ok('entrypoint.workdir' in processTags)
+          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.basedir:')))
+          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.name:')))
+          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.type:')))
+          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.workdir:')))
 
           // Verify entrypoint.type has the expected value
-          assert.strictEqual(processTags['entrypoint.type'], 'script')
-
-          // Verify values are strings (not undefined)
-          assert.strictEqual(typeof processTags['entrypoint.name'], 'string')
-          assert.strictEqual(typeof processTags['entrypoint.workdir'], 'string')
-          assert.strictEqual(typeof processTags['entrypoint.basedir'], 'string')
+          assert.ok(processTags.some(tag => tag === 'entrypoint.type:script'))
           done()
         } catch (err) {
           done(err)
