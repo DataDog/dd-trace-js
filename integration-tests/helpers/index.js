@@ -64,7 +64,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
 
   if (expectedSource) {
     assert.match(out, new RegExp(`instrumentation source: ${expectedSource}`),
-      `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
+    `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
   }
   return pid
 }
@@ -87,9 +87,9 @@ async function runAndCheckWithTelemetry (filename, expectedOut, expectedTelemetr
   const msgs = await cleanup()
   if (expectedTelemetryPoints.length === 0) {
     // assert no telemetry sent
-    assert.strictEqual(
-      msgs.length, 0, `Expected no telemetry, but got:\n${msgs.map(msg => JSON.stringify(msg[1].points)).join('\n')}`
-    )
+    assert.strictEqual(msgs.length, 0, `Expected no telemetry, but got:\n${
+      msgs.map(msg => JSON.stringify(msg[1].points)).join('\n')
+    }`)
   } else {
     assertTelemetryPoints(pid, msgs, expectedTelemetryPoints)
   }
@@ -292,7 +292,7 @@ async function createSandbox (
     execHelper('yarn link')
     execHelper('yarn link dd-trace')
     // ... run the tests in the current directory.
-    return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => { } }
+    return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
   const folder = path.join(sandboxRoot, id().toString())
   const out = path.join(sandboxRoot, 'dd-trace.tgz')
@@ -563,33 +563,21 @@ function checkSpansForServiceName (spans, name) {
  * @param {string} serverFile
  * @param {string|number} agentPort
  * @param {Record<string, string|undefined>} [additionalEnvArgs]
- *
- */
 /**
  * @param {string} cwd
  * @param {string} serverFile
  * @param {string|number} agentPort
  * @param {(data: Buffer) => void} [stdioHandler]
  * @param {Record<string, string|undefined>} [additionalEnvArgs]
- *
  */
-async function spawnPluginIntegrationTestProc (
-  cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
+async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
   if (typeof stdioHandler !== 'function' && !additionalEnvArgs) {
     additionalEnvArgs = stdioHandler
     stdioHandler = undefined
   }
   additionalEnvArgs = additionalEnvArgs || {}
-
-  // must delete the node options from the additional env args or it breaks spawnProc
-  let additionalNodeOptions = ''
-  if (additionalEnvArgs.NODE_OPTIONS !== undefined) {
-    additionalNodeOptions = additionalEnvArgs.NODE_OPTIONS
-    delete additionalEnvArgs.NODE_OPTIONS
-  }
-
   let env = /** @type {Record<string, string|undefined>} */ ({
-    NODE_OPTIONS: `--loader=${hookFile} ${additionalNodeOptions}`,
+    NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: String(agentPort),
     DD_TRACE_FLUSH_INTERVAL: '0'
   })
