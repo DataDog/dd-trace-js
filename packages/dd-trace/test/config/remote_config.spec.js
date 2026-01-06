@@ -11,17 +11,16 @@ require('../setup/core')
 describe('Tracing Remote Config', () => {
   let rc
   let config
-  let updateTracing
-  let updateDebugger
-  let handlers
+  let onConfigUpdated
+  let batchHandlers
 
   beforeEach(() => {
-    handlers = new Map()
+    batchHandlers = new Map()
 
     rc = {
       updateCapabilities: sinon.spy(),
-      setProductHandler: sinon.spy((product, handler) => {
-        handlers.set(product, handler)
+      setBatchHandler: sinon.spy((products, handler) => {
+        batchHandlers.set(products[0], handler)
       })
     }
 
@@ -31,13 +30,12 @@ describe('Tracing Remote Config', () => {
       updateRemoteConfig: sinon.spy()
     }
 
-    updateTracing = sinon.spy()
-    updateDebugger = sinon.spy()
+    onConfigUpdated = sinon.spy()
   })
 
   describe('enable', () => {
     it('should register all APM tracing capabilities', () => {
-      enable(rc, config, updateTracing, updateDebugger)
+      enable(rc, config, onConfigUpdated)
 
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_CUSTOM_TAGS, true)
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_HTTP_HEADER_TAGS, true)
@@ -48,59 +46,99 @@ describe('Tracing Remote Config', () => {
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_MULTICONFIG, true)
     })
 
-    it('should register APM_TRACING product handler', () => {
-      enable(rc, config, updateTracing, updateDebugger)
+    it('should register APM_TRACING batch handler', () => {
+      enable(rc, config, onConfigUpdated)
 
-      sinon.assert.calledOnceWithExactly(rc.setProductHandler, 'APM_TRACING', sinon.match.func)
+      sinon.assert.calledOnceWithExactly(rc.setBatchHandler, ['APM_TRACING'], sinon.match.func)
     })
 
     describe('APM_TRACING handler', () => {
       it('should configure tracer on apply action', () => {
-        enable(rc, config, updateTracing, updateDebugger)
+        enable(rc, config, onConfigUpdated)
 
-        const handler = handlers.get('APM_TRACING')
+        const handler = batchHandlers.get('APM_TRACING')
         const libConfig = { service: 'test-service' }
 
-        handler('apply', { lib_config: libConfig }, 'config-1')
+        const transaction = createTransaction([
+          { id: 'config-1', file: { lib_config: libConfig } }
+        ])
+
+        handler(transaction)
 
         sinon.assert.calledOnceWithExactly(config.updateRemoteConfig, libConfig)
-        sinon.assert.calledWithExactly(updateTracing, config, rc)
+        sinon.assert.calledOnce(onConfigUpdated)
       })
 
       it('should reset config on unapply action', () => {
-        enable(rc, config, updateTracing, updateDebugger)
+        enable(rc, config, onConfigUpdated)
 
-        const handler = handlers.get('APM_TRACING')
+        const handler = batchHandlers.get('APM_TRACING')
 
-        handler('apply', { lib_config: { service: 'test' } }, 'config-1')
+        // First apply a config
+        let transaction = createTransaction([
+          { id: 'config-1', file: { lib_config: { service: 'test' } } }
+        ])
+        handler(transaction)
+
         config.updateRemoteConfig.resetHistory()
-        updateTracing.resetHistory()
+        onConfigUpdated.resetHistory()
 
-        handler('unapply', {}, 'config-1')
+        // Then unapply it
+        transaction = createTransaction([], [], [
+          { id: 'config-1', file: {} }
+        ])
+        handler(transaction)
 
         // When all configs are removed, null is passed to reset
         sinon.assert.calledWithExactly(config.updateRemoteConfig, null)
-        sinon.assert.calledWithExactly(updateTracing, config, rc)
+        sinon.assert.calledOnce(onConfigUpdated)
+      })
+
+      it('should call updateRemoteConfig only once per batch', () => {
+        enable(rc, config, onConfigUpdated)
+
+        const handler = batchHandlers.get('APM_TRACING')
+
+        // Apply multiple configs in a single batch
+        const transaction = createTransaction([
+          { id: 'config-1', file: { lib_config: { tracing_sampling_rate: 0.5 } } },
+          { id: 'config-2', file: { lib_config: { log_injection_enabled: true } } },
+          { id: 'config-3', file: { lib_config: { tracing_enabled: true } } }
+        ])
+
+        handler(transaction)
+
+        // Should be called exactly once, not three times
+        sinon.assert.calledOnce(config.updateRemoteConfig)
+        sinon.assert.calledOnce(onConfigUpdated)
       })
     })
   })
 
   describe('APM_TRACING multiconfig', () => {
     it('should merge multiple configs by priority', () => {
-      enable(rc, config, updateTracing, updateDebugger)
-      const handler = handlers.get('APM_TRACING')
+      enable(rc, config, onConfigUpdated)
+      const handler = batchHandlers.get('APM_TRACING')
 
-      // Apply org-level config
-      handler('apply', {
-        service_target: { service: '*', env: '*' },
-        lib_config: { tracing_sampling_rate: 0.5 }
-      }, 'config-org')
+      // Apply both an org-level and a service-level config in one batch
+      const transaction = createTransaction([
+        {
+          id: 'config-org',
+          file: {
+            service_target: { service: '*', env: '*' },
+            lib_config: { tracing_sampling_rate: 0.5 }
+          }
+        },
+        {
+          id: 'config-service',
+          file: {
+            service_target: { service: 'test-service', env: '*' },
+            lib_config: { tracing_sampling_rate: 0.8 }
+          }
+        }
+      ])
 
-      // Apply service-specific config (higher priority)
-      handler('apply', {
-        service_target: { service: 'test-service', env: '*' },
-        lib_config: { tracing_sampling_rate: 0.8 }
-      }, 'config-service')
+      handler(transaction)
 
       // Service config should win
       const lastCall = config.updateRemoteConfig.lastCall
@@ -108,22 +146,30 @@ describe('Tracing Remote Config', () => {
     })
 
     it('should handle config removal', () => {
-      enable(rc, config, updateTracing, updateDebugger)
-      const handler = handlers.get('APM_TRACING')
+      enable(rc, config, onConfigUpdated)
+      const handler = batchHandlers.get('APM_TRACING')
 
       // Add two configs
-      handler('apply', {
-        service_target: { service: '*', env: '*' },
-        lib_config: { tracing_sampling_rate: 0.5 }
-      }, 'config-1')
-
-      handler('apply', {
-        service_target: { service: 'test-service', env: '*' },
-        lib_config: { tracing_sampling_rate: 0.8 }
-      }, 'config-2')
+      let transaction = createTransaction([{
+        id: 'config-1',
+        file: {
+          service_target: { service: '*', env: '*' },
+          lib_config: { tracing_sampling_rate: 0.5 }
+        }
+      }, {
+        id: 'config-2',
+        file: {
+          service_target: { service: 'test-service', env: '*' },
+          lib_config: { tracing_sampling_rate: 0.8 }
+        }
+      }])
+      handler(transaction)
 
       // Remove higher priority config
-      handler('unapply', {}, 'config-2')
+      transaction = createTransaction([], [], [
+        { id: 'config-2', file: {} }
+      ])
+      handler(transaction)
 
       // Lower priority should now apply
       const lastCall = config.updateRemoteConfig.lastCall
@@ -131,39 +177,49 @@ describe('Tracing Remote Config', () => {
     })
 
     it('should filter configs by service/env', () => {
-      enable(rc, config, updateTracing, updateDebugger)
-      const handler = handlers.get('APM_TRACING')
+      enable(rc, config, onConfigUpdated)
+      const handler = batchHandlers.get('APM_TRACING')
 
       // Apply config for different service
-      handler('apply', {
-        service_target: { service: 'other-service', env: '*' },
-        lib_config: { tracing_sampling_rate: 0.9 }
-      }, 'config-other')
+      const transaction = createTransaction([{
+        id: 'config-other',
+        file: {
+          service_target: { service: 'other-service', env: '*' },
+          lib_config: { tracing_sampling_rate: 0.9 }
+        }
+      }])
+
+      handler(transaction)
 
       // Should be ignored, so null is passed to reset all RC fields
       sinon.assert.calledWith(config.updateRemoteConfig, null)
     })
 
     it('should merge fields from multiple configs', () => {
-      enable(rc, config, updateTracing, updateDebugger)
-      const handler = handlers.get('APM_TRACING')
+      enable(rc, config, onConfigUpdated)
+      const handler = batchHandlers.get('APM_TRACING')
 
-      // Apply org-level config with sampling rate
-      handler('apply', {
-        service_target: { service: '*', env: '*' },
-        lib_config: {
-          tracing_sampling_rate: 0.5,
-          log_injection_enabled: true
+      // Apply both an org-level and a service-level config in one batch
+      const transaction = createTransaction([{
+        id: 'config-org',
+        file: {
+          service_target: { service: '*', env: '*' },
+          lib_config: {
+            tracing_sampling_rate: 0.5,
+            log_injection_enabled: true
+          }
         }
-      }, 'config-org')
+      }, {
+        id: 'config-service',
+        file: {
+          service_target: { service: 'test-service', env: '*' },
+          lib_config: {
+            tracing_sampling_rate: 0.8
+          }
+        }
+      }])
 
-      // Apply service-specific config with only sampling rate (higher priority)
-      handler('apply', {
-        service_target: { service: 'test-service', env: '*' },
-        lib_config: {
-          tracing_sampling_rate: 0.8
-        }
-      }, 'config-service')
+      handler(transaction)
 
       // Service config sampling rate should win, but log_injection should come from org
       const lastCall = config.updateRemoteConfig.lastCall
@@ -173,13 +229,33 @@ describe('Tracing Remote Config', () => {
       })
     })
 
-    it('should call updateDebugger', () => {
-      enable(rc, config, updateTracing, updateDebugger)
-      const handler = handlers.get('APM_TRACING')
+    it('should call onConfigUpdated callback', () => {
+      enable(rc, config, onConfigUpdated)
+      const handler = batchHandlers.get('APM_TRACING')
 
-      handler('apply', { lib_config: {} }, 'config-1')
+      const transaction = createTransaction([
+        { id: 'config-1', file: { lib_config: {} } }
+      ])
 
-      sinon.assert.calledOnceWithExactly(updateDebugger, config, rc)
+      handler(transaction)
+
+      sinon.assert.calledOnce(onConfigUpdated)
     })
   })
 })
+
+function createTransaction (toApply = [], toModify = [], toUnapply = []) {
+  const addDefaults = (item) => ({
+    product: 'APM_TRACING',
+    path: `datadog/1/APM_TRACING/${item.id}`,
+    ...item
+  })
+
+  return {
+    toApply: toApply.map(addDefaults),
+    toModify: toModify.map(addDefaults),
+    toUnapply: toUnapply.map(addDefaults),
+    ack: () => {},
+    error: () => {}
+  }
+}
