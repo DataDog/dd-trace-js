@@ -34,10 +34,10 @@ function loadRules (config) {
 /**
  * Apply ASM remote-config updates to the WAF in a single batch.
  *
- * @param {import('../remote_config/manager').RcBatchUpdateTx} tx
+ * @param {import('../remote_config/manager').RcBatchUpdateTransaction} transaction
  */
-function updateWafFromRC (tx) {
-  const { toUnapply, toApply, toModify } = tx
+function updateWafFromRC (transaction) {
+  const { toUnapply, toApply, toModify } = transaction
 
   const newActions = new SpyMap(appliedActions)
 
@@ -50,7 +50,7 @@ function updateWafFromRC (tx) {
     try {
       waf.removeConfig(item.path)
 
-      tx.ack(item.path)
+      transaction.ack(item.path)
       wafUpdated = true
 
       // ASM actions
@@ -58,7 +58,7 @@ function updateWafFromRC (tx) {
         newActions.delete(item.id)
       }
     } catch (e) {
-      tx.error(item.path, e)
+      transaction.error(item.path, e)
       wafUpdatedFailed = true
     }
   }
@@ -69,7 +69,7 @@ function updateWafFromRC (tx) {
     try {
       waf.updateConfig(item.product, item.id, item.path, item.file)
 
-      tx.ack(item.path)
+      transaction.ack(item.path)
       wafUpdated = true
 
       // ASM actions
@@ -77,7 +77,8 @@ function updateWafFromRC (tx) {
         newActions.set(item.id, item.file.actions)
       }
     } catch (e) {
-      tx.error(item.path, e instanceof waf.WafUpdateError ? JSON.stringify(extractErrors(e.diagnosticErrors)) : e)
+      const error = e instanceof waf.WafUpdateError ? JSON.stringify(extractErrors(e.diagnosticErrors)) : e
+      transaction.error(item.path, error)
       wafUpdatedFailed = true
     }
   }

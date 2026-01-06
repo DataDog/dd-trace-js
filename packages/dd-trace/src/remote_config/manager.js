@@ -192,7 +192,7 @@ class RemoteConfigManager {
    * This does **not** implicitly subscribe to the products; call `subscribeProducts()` separately.
    *
    * @param {string[]} products
-   * @param {(tx: RcBatchUpdateTx) => void} handler
+   * @param {(transaction: RcBatchUpdateTransaction) => void} handler
    */
   setBatchHandler (products, handler) {
     this.#batchHandlers.set(handler, new Set(products))
@@ -324,11 +324,11 @@ class RemoteConfigManager {
     }
 
     if (toUnapply.length || toApply.length || toModify.length) {
-      const tx = createUpdateTransaction({ toUnapply, toApply, toModify }, txHandledPaths, txOutcomes)
+      const transaction = createUpdateTransaction({ toUnapply, toApply, toModify }, txHandledPaths, txOutcomes)
 
       if (this.#batchHandlers.size) {
         for (const [handler, products] of this.#batchHandlers) {
-          const txView = filterTransactionByProducts(tx, products)
+          const txView = filterTransactionByProducts(transaction, products)
           if (txView.toUnapply.length || txView.toApply.length || txView.toModify.length) {
             handler(txView)
           }
@@ -465,7 +465,7 @@ class RemoteConfigManager {
  * Remote Config batch update transaction passed to batch handlers registered via
  * `RemoteConfigManager.setBatchHandler()`.
  *
- * @typedef {Object} RcBatchUpdateTx
+ * @typedef {Object} RcBatchUpdateTransaction
  * @property {RcConfigDescriptor[]} toUnapply
  * @property {RcConfigDescriptor[]} toApply
  * @property {RcConfigDescriptor[]} toModify
@@ -476,12 +476,12 @@ class RemoteConfigManager {
  */
 
 /**
- * Create an immutable “view” of the batch changes and attach explicit outcome reporting.
+ * Create an immutable "view" of the batch changes and attach explicit outcome reporting.
  *
  * @param {{toUnapply: RcConfigState[], toApply: RcConfigState[], toModify: RcConfigState[]}} changes
  * @param {Set<string>} handledPaths
  * @param {Map<string, {state: number, error: string}>} outcomes
- * @returns {RcBatchUpdateTx}
+ * @returns {RcBatchUpdateTransaction}
  */
 function createUpdateTransaction ({ toUnapply, toApply, toModify }, handledPaths, outcomes) {
   const descriptors = {
@@ -491,7 +491,7 @@ function createUpdateTransaction ({ toUnapply, toApply, toModify }, handledPaths
   }
 
   // Expose descriptors directly for ease-of-use, and also under `changes` for clarity.
-  const tx = {
+  const transaction = {
     ...descriptors,
     changes: descriptors,
     markHandled (path) {
@@ -510,44 +510,42 @@ function createUpdateTransaction ({ toUnapply, toApply, toModify }, handledPaths
     }
   }
 
-  return tx
+  return transaction
 }
 
 /**
- * Create a filtered “view” of the transaction for a given product set, while preserving
+ * Create a filtered "view" of the transaction for a given product set, while preserving
  * the outcome methods (ack/error/markHandled).
  *
- * @param {RcBatchUpdateTx} tx
+ * @param {RcBatchUpdateTransaction} transaction
  * @param {Set<string>} products
- * @returns {RcBatchUpdateTx}
+ * @returns {RcBatchUpdateTransaction}
  */
-function filterTransactionByProducts (tx, products) {
+function filterTransactionByProducts (transaction, products) {
   const toUnapply = []
   const toApply = []
   const toModify = []
 
-  for (const item of tx.toUnapply) {
+  for (const item of transaction.toUnapply) {
     if (products.has(item.product)) toUnapply.push(item)
   }
 
-  for (const item of tx.toApply) {
+  for (const item of transaction.toApply) {
     if (products.has(item.product)) toApply.push(item)
   }
 
-  for (const item of tx.toModify) {
+  for (const item of transaction.toModify) {
     if (products.has(item.product)) toModify.push(item)
   }
-
-  const changes = { toUnapply, toApply, toModify }
 
   return {
     toUnapply,
     toApply,
     toModify,
-    changes,
-    markHandled: tx.markHandled,
-    ack: tx.ack,
-    error: tx.error
+    changes: { toUnapply, toApply, toModify },
+    markHandled: transaction.markHandled,
+    ack: transaction.ack,
+    error: transaction.error
   }
 }
 

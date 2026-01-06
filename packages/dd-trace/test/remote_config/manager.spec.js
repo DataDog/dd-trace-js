@@ -621,9 +621,9 @@ describe('RemoteConfigManager', () => {
       rc.setProductHandler('ASM', handler)
 
       // Batch hook will handle the unapply and report success.
-      rc.setBatchHandler(['ASM'], (tx) => {
-        for (const item of tx.toUnapply) {
-          tx.ack(item.path)
+      rc.setBatchHandler(['ASM'], (transaction) => {
+        for (const item of transaction.toUnapply) {
+          transaction.ack(item.path)
         }
       })
 
