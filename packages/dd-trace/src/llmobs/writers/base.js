@@ -19,7 +19,7 @@ const { parseResponseAndLog } = require('./util')
 class BaseLLMObsWriter {
   #destroyer
   #buffers = new Map()
-  #originalEndpoint
+  #endpoint
 
   constructor ({ interval, timeout, eventType, config, endpoint, intake }) {
     this._interval = interval ?? getEnvironmentVariable('_DD_LLMOBS_FLUSH_INTERVAL') ?? 1000 // 1s
@@ -29,8 +29,7 @@ class BaseLLMObsWriter {
     this._bufferLimit = 1000
 
     this._config = config
-    this.#originalEndpoint = endpoint
-    this._endpoint = endpoint
+    this.#endpoint = endpoint
     this._intake = intake
 
     this._periodic = setInterval(() => {
@@ -43,16 +42,15 @@ class BaseLLMObsWriter {
     this.#destroyer = destroyer
   }
 
+  #getUrlForRouting (routing) {
+    const { url, endpoint } = this._getUrlAndPath(routing)
+    const [protocol, rest] = url.href.split('://')
+    return protocol + '://' + path.join(rest, endpoint)
+  }
+
   get url () {
     if (this._agentless == null) return null
-
-    const baseUrl = this._baseUrl.href
-    const endpoint = this._endpoint
-
-    // Split on protocol separator to preserve it
-    // path.join will remove some slashes unnecessarily
-    const [protocol, rest] = baseUrl.split('://')
-    return protocol + '://' + path.join(rest, endpoint)
+    return this.#getUrlForRouting()
   }
 
   get _buffer () {
@@ -171,11 +169,6 @@ class BaseLLMObsWriter {
 
   setAgentless (agentless) {
     this._agentless = agentless
-    const { url, endpoint } = this._getUrlAndPath()
-
-    this._baseUrl = url
-    this._endpoint = endpoint
-
     logger.debug(`Configuring ${this.constructor.name} to ${this.url}`)
   }
 
@@ -187,7 +180,7 @@ class BaseLLMObsWriter {
           protocol: 'https:',
           hostname: `${this._intake}.${site}`
         })),
-        endpoint: this.#originalEndpoint
+        endpoint: this.#endpoint
       }
     }
 
@@ -204,14 +197,8 @@ class BaseLLMObsWriter {
 
     return {
       url: base,
-      endpoint: path.join(EVP_PROXY_AGENT_BASE_PATH, this.#originalEndpoint)
+      endpoint: path.join(EVP_PROXY_AGENT_BASE_PATH, this.#endpoint)
     }
-  }
-
-  #getUrlForRouting (routing) {
-    const { url, endpoint } = this._getUrlAndPath(routing)
-    const [protocol, rest] = url.href.split('://')
-    return protocol + '://' + path.join(rest, endpoint)
   }
 
   _getOptions (routing) {
