@@ -40,8 +40,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'azure.eventhubs.send'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(
-        sandboxCwd(), 'server.mjs', agent.port, undefined, spawnEnv)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, spawnEnv)
       await res
     }).timeout(20000)
 
