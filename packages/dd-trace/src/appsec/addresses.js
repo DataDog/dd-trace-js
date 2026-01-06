@@ -36,5 +36,10 @@ module.exports = {
   SHELL_COMMAND: 'server.sys.shell.cmd',
 
   LOGIN_SUCCESS: 'server.business_logic.users.login.success',
-  LOGIN_FAILURE: 'server.business_logic.users.login.failure'
+  LOGIN_FAILURE: 'server.business_logic.users.login.failure',
+
+  PAYMENT_CREATION: 'server.business_logic.payment.creation',
+  PAYMENT_SUCCESS: 'server.business_logic.payment.success',
+  PAYMENT_FAILURE: 'server.business_logic.payment.failure',
+  PAYMENT_CANCELLATION: 'server.business_logic.payment.cancellation'
 }
