@@ -78,7 +78,6 @@ describe('AppSec Rule Manager', () => {
     function createTransaction (changes) {
       return {
         ...changes,
-        changes,
         ack: sinon.spy(),
         error: sinon.spy()
       }
