@@ -581,7 +581,7 @@ async function spawnPluginIntegrationTestProc (
 
   let NODE_OPTIONS = `--loader=${hookFile}`
   if (additionalEnvArgs.NODE_OPTIONS !== undefined) {
-    if (additionalEnvArgs.NODE_OPTIONS.includes('--loader=')) {
+    if (/--(loader|import)/.test(additionalEnvArgs.NODE_OPTIONS ?? '')) {
       NODE_OPTIONS = additionalEnvArgs.NODE_OPTIONS
     } else {
       NODE_OPTIONS += ` ${additionalEnvArgs.NODE_OPTIONS}`

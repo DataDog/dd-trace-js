@@ -40,8 +40,7 @@ describe('esm', () => {
       })
 
       // This test file will throw an error if tryAdd returns a Promise instead of a boolean
-      proc = await spawnPluginIntegrationTestProc(
-        sandboxCwd(), 'server.mjs', agent.port, undefined, spawnEnv)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, spawnEnv)
       await res
     }).timeout(60000)
   })
