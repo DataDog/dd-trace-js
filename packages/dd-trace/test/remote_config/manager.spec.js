@@ -132,16 +132,16 @@ describe('RemoteConfigManager', () => {
     const clientTracer = rc.state.client.client_tracer
 
     assert.ok(clientTracer.process_tags, 'process_tags should exist')
-    assert.strictEqual(typeof clientTracer.process_tags, 'object')
+    assert.ok(Array.isArray(clientTracer.process_tags), 'process_tags should be an array')
 
     // Verify expected process tag keys are present
-    assert.ok('entrypoint.basedir' in clientTracer.process_tags)
-    assert.ok('entrypoint.name' in clientTracer.process_tags)
-    assert.ok('entrypoint.type' in clientTracer.process_tags)
-    assert.ok('entrypoint.workdir' in clientTracer.process_tags)
+    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.basedir:')))
+    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.name:')))
+    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.type:')))
+    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.workdir:')))
 
     // Verify entrypoint.type has expected value
-    assert.strictEqual(clientTracer.process_tags['entrypoint.type'], 'script')
+    assert.ok(clientTracer.process_tags.some(tag => tag === 'entrypoint.type:script'))
   })
 
   it('should add git metadata to tags if present', () => {
