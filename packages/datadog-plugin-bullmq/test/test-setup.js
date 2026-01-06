@@ -89,9 +89,13 @@ class BullmqTestSetup {
   }
 
   async flowProducerAddError () {
+    // Pass circular reference to trigger JSON serialization error
+    const circularData = { test: true }
+    circularData.self = circularData
     await this.flowProducer.add({
       name: 'invalid-flow',
-      data: { test: true }
+      queueName: 'test-queue',
+      data: circularData
     })
   }
 

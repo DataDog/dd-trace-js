@@ -38,8 +38,9 @@ createIntegrationTestSuite('bullmq', 'bullmq', testSetup, {
         meta: {
           'span.kind': 'producer',
           'messaging.system': 'bullmq',
-          'error.type': ANY_STRING,
-          'error.message': ANY_STRING
+          'error.type': 'Error',
+          'error.message': 'Validation error, cannot resolve alias "inv"',
+          'error.stack': ANY_STRING
         }
       })
 
@@ -82,8 +83,9 @@ createIntegrationTestSuite('bullmq', 'bullmq', testSetup, {
         meta: {
           'span.kind': 'producer',
           'messaging.system': 'bullmq',
-          'error.type': ANY_STRING,
-          'error.message': ANY_STRING
+          'error.type': 'ReplyError',
+          'error.message': ANY_STRING, // this bullmq error message includes a hash that may change, use ANY_STRING
+          'error.stack': ANY_STRING
         }
       })
 
@@ -123,8 +125,9 @@ createIntegrationTestSuite('bullmq', 'bullmq', testSetup, {
         meta: {
           'span.kind': 'consumer',
           'messaging.system': 'bullmq',
-          'error.type': ANY_STRING,
-          'error.message': ANY_STRING
+          'error.type': 'Error',
+          'error.message': 'Intentional job failure for testing',
+          'error.stack': ANY_STRING
         }
       })
 
@@ -151,15 +154,18 @@ createIntegrationTestSuite('bullmq', 'bullmq', testSetup, {
       return traceAssertion
     })
 
-    // FlowProducer.add may complete without error even for invalid input
-    // since BullMQ validates asynchronously. Just verify span is created.
     it('should generate span with error tags (error path)', async function () {
       this.timeout(10000)
       const traceAssertion = agent.assertFirstTraceSpan({
         name: 'bullmq.add',
+        error: 1,
         meta: {
           'span.kind': 'producer',
-          'messaging.system': 'bullmq'
+          'messaging.system': 'bullmq',
+          'error.type': 'TypeError',
+          'error.message': 'Converting circular structure to JSON\n    --> ' +
+           "starting at object with constructor 'Object'\n    --- property 'self' closes the circle",
+          'error.stack': ANY_STRING
         }
       })
 
