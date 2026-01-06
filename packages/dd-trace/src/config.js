@@ -1319,12 +1319,8 @@ class Config {
 
     const opts = this.#remote
 
-    if ('dynamic_instrumentation_enabled' in options || 'live_debugging_enabled' in options) {
-      this.#setBoolean(
-        opts,
-        'dynamicInstrumentation.enabled',
-        options.dynamic_instrumentation_enabled ?? options.live_debugging_enabled
-      )
+    if ('dynamic_instrumentation_enabled' in options) {
+      this.#setBoolean(opts, 'dynamicInstrumentation.enabled', options.dynamic_instrumentation_enabled)
     }
     if ('code_origin_enabled' in options) {
       this.#setBoolean(opts, 'codeOriginForSpans.enabled', options.code_origin_enabled)

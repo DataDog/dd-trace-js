@@ -130,7 +130,10 @@ class Tracer extends NoopProxy {
         const rc = new RemoteConfig(config)
 
         const tracingRemoteConfig = require('./config/remote_config')
-        tracingRemoteConfig.enable(rc, config, this._updateTracing.bind(this), this._updateDebugger.bind(this))
+        tracingRemoteConfig.enable(rc, config, () => {
+          this._updateTracing(config, rc)
+          this._updateDebugger(config, rc)
+        })
 
         rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
           if (!conf?.name?.startsWith('flare-log-level.')) return
