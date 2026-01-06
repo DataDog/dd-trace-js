@@ -15,6 +15,11 @@ const { ASM_WAF_PRODUCTS_SET } = require('./rc-products')
 let appliedActions = new Map()
 
 /**
+ * @typedef {object} AsmConfigFile
+ * @property {Array<Record<string, any>>} [actions]
+ */
+
+/**
  * @typedef {import('./waf').WAFConfig & { rules?: string }} AppSecConfig
  */
 
@@ -73,8 +78,11 @@ function updateWafFromRC (transaction) {
       wafUpdated = true
 
       // ASM actions
-      if (item.product === 'ASM' && item.file?.actions?.length) {
-        newActions.set(item.id, item.file.actions)
+      if (item.product === 'ASM') {
+        const asmFile = /** @type {AsmConfigFile} */ (item.file)
+        if (asmFile?.actions?.length) {
+          newActions.set(item.id, asmFile.actions)
+        }
       }
     } catch (e) {
       const error = e instanceof waf.WafUpdateError ? JSON.stringify(extractErrors(e.diagnosticErrors)) : e
