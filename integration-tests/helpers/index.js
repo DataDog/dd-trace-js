@@ -24,6 +24,11 @@ const { DEBUG } = process.env
 // This is set by the setShouldKill function
 let shouldKill
 
+// Symbol constants for dynamic value matching in assertObjectContains
+const ANY_STRING = Symbol.for('test.ANY_STRING')
+const ANY_NUMBER = Symbol.for('test.ANY_NUMBER')
+const ANY_VALUE = Symbol.for('test.ANY_VALUE')
+
 /**
  * @param {string} filename
  * @param {string} cwd
@@ -635,14 +640,8 @@ function setShouldKill (value) {
   })
 }
 
-// @ts-expect-error assert.partialDeepStrictEqual does not exist on older Node.js versions
-// eslint-disable-next-line n/no-unsupported-features/node-builtins
-const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected, msg) {
-  if (expected === null || typeof expected !== 'object') {
-    assert.strictEqual(actual, expected, msg)
-    return
-  }
-
+// Internal implementation that handles asymmetric matchers (ANY_STRING, ANY_NUMBER, ANY_VALUE)
+function assertObjectContainsWithMatchers (actual, expected, msg) {
   if (Array.isArray(expected)) {
     assert.ok(Array.isArray(actual), `${msg ?? ''}Expected array but got ${inspect(actual)}`)
     let startIndex = 0
@@ -652,7 +651,55 @@ const assertObjectContains = assert.partialDeepStrictEqual || function assertObj
         const actualItem = actual[i]
         try {
           if (expectedItem !== null && typeof expectedItem === 'object') {
-            assertObjectContains(actualItem, expectedItem, msg)
+            assertObjectContainsWithMatchers(actualItem, expectedItem, msg)
+          } else {
+            assert.strictEqual(actualItem, expectedItem, msg)
+          }
+          startIndex = i + 1
+          found = true
+          break
+        } catch {
+          continue
+        }
+      }
+      assert.ok(found, `${msg ?? ''}Expected array ${inspect(actual)} to contain ${inspect(expectedItem)}`)
+    }
+    return
+  }
+
+  for (const [key, val] of Object.entries(expected)) {
+    assert.ok(Object.hasOwn(actual, key), msg)
+    if (val === ANY_STRING) {
+      assert.strictEqual(typeof actual[key], 'string', `Expected ${key} to be a string but got ${typeof actual[key]}`)
+    } else if (val === ANY_NUMBER) {
+      assert.strictEqual(typeof actual[key], 'number', `Expected ${key} to be a number but got ${typeof actual[key]}`)
+    } else if (val === ANY_VALUE) {
+      assert.ok(actual[key] !== undefined, `Expected ${key} to be present but it was undefined`)
+    } else if (val !== null && typeof val === 'object') {
+      assert.ok(Object.hasOwn(actual, key))
+      assert.notStrictEqual(actual[key], null)
+      assert.strictEqual(typeof actual[key], 'object')
+      assertObjectContainsWithMatchers(actual[key], val)
+    } else {
+      assert.ok(actual, msg)
+      assert.strictEqual(actual[key], expected[key], `Expected ${key} to be ${expected[key]} but got ${actual[key]}`)
+    }
+  }
+}
+
+// No asymmetric matcher checks
+// @ts-expect-error assert.partialDeepStrictEqual does not exist on older Node.js versions
+function assertObjectContainsStrict (actual, expected, msg) {
+  if (Array.isArray(expected)) {
+    assert.ok(Array.isArray(actual), `${msg ?? ''}Expected array but got ${inspect(actual)}`)
+    let startIndex = 0
+    for (const expectedItem of expected) {
+      let found = false
+      for (let i = startIndex; i < actual.length; i++) {
+        const actualItem = actual[i]
+        try {
+          if (expectedItem !== null && typeof expectedItem === 'object') {
+            assertObjectContainsStrict(actualItem, expectedItem, msg)
           } else {
             assert.strictEqual(actualItem, expectedItem, msg)
           }
@@ -671,10 +718,25 @@ const assertObjectContains = assert.partialDeepStrictEqual || function assertObj
   for (const [key, val] of Object.entries(expected)) {
     assert.ok(Object.hasOwn(actual, key), msg)
     if (val !== null && typeof val === 'object') {
-      assertObjectContains(actual[key], val, msg)
+      assertObjectContainsStrict(actual[key], val)
     } else {
       assert.ok(actual, msg)
       assert.strictEqual(actual[key], expected[key], msg)
+    }
+  }
+}
+
+// Main assertObjectContains: tries fast path first, falls back to matcher-aware path if needed
+const assertObjectContains = function assertObjectContains (actual, expected, msg) {
+  try {
+    assertObjectContainsStrict(actual, expected, msg)
+  } catch (originalError) {
+    // Fast path failed, retry with asymmetric matcher support
+    // If this also throws, throw the original error
+    try {
+      assertObjectContainsWithMatchers(actual, expected, msg)
+    } catch {
+      throw originalError
     }
   }
 }
@@ -688,6 +750,9 @@ function assertUUID (actual, msg = 'not a valid UUID') {
 }
 
 module.exports = {
+  ANY_NUMBER,
+  ANY_STRING,
+  ANY_VALUE,
   FakeAgent,
   hookFile,
   assertObjectContains,
