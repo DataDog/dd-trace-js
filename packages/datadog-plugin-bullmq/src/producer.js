@@ -7,10 +7,7 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
   static id = 'bullmq'
 
   asyncEnd (ctx) {
-    const span = ctx.currentStore?.span
-    if (span) {
-      span.finish()
-    }
+    ctx.currentStore?.span?.finish()
   }
 
   bindStart (ctx) {
