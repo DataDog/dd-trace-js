@@ -563,6 +563,7 @@ function checkSpansForServiceName (spans, name) {
  * @param {string} serverFile
  * @param {string|number} agentPort
  * @param {Record<string, string|undefined>} [additionalEnvArgs]
+ */
 /**
  * @param {string} cwd
  * @param {string} serverFile
