@@ -1,12 +1,22 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert')
+
 const { describe, it, after } = require('tap').mocha
 const { channel } = require('dc-polyfill')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 require('../setup/core')
 
-const Plugin = require('../../src/plugins/plugin')
+const log = {
+  error: sinon.stub(),
+  info: sinon.stub()
+}
+
+const Plugin = proxyquire('../../src/plugins/plugin', {
+  '../log': log
+})
 const { storage } = require('../../../datadog-core')
 
 describe('Plugin', () => {
@@ -34,7 +44,7 @@ describe('Plugin', () => {
     }
 
     start () {
-      //
+      assert.strictEqual(this, plugin)
     }
   }
 
@@ -46,22 +56,25 @@ describe('Plugin', () => {
     plugin = new BadPlugin()
     plugin.configure({ enabled: true })
 
-    expect(plugin._enabled).to.be.true
+    assert.strictEqual(plugin._enabled, true)
 
     channel('apm:badPlugin:start').publish({ foo: 'bar' })
 
-    expect(plugin._enabled).to.be.false
+    sinon.assert.calledWith(log.error, 'Error in plugin handler:', sinon.match.instanceOf(Error))
+    sinon.assert.calledWith(log.info, 'Disabling plugin: %s', 'BadPlugin')
+
+    assert.strictEqual(plugin._enabled, false)
   })
 
   it('should not disable with no error', () => {
     plugin = new GoodPlugin()
     plugin.configure({ enabled: true })
 
-    expect(plugin._enabled).to.be.true
+    assert.strictEqual(plugin._enabled, true)
 
     channel('apm:goodPlugin:start').publish({ foo: 'bar' })
 
-    expect(plugin._enabled).to.be.true
+    assert.strictEqual(plugin._enabled, true)
   })
 
   it('should run binding transforms with an undefined current store', () => {
@@ -79,7 +92,7 @@ describe('Plugin', () => {
 
     storage('legacy').run({ noop: true }, () => {
       channel('apm:test:start').runStores({ currentStore: undefined }, () => {
-        expect(storage('legacy').getStore()).to.equal(undefined)
+        assert.strictEqual(storage('legacy').getStore(), undefined)
       })
     })
   })

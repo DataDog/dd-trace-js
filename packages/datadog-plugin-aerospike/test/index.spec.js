@@ -1,13 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, before, after } = require('mocha')
+const assert = require('node:assert/strict')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
+const { after, before, beforeEach, describe, it } = require('mocha')
+
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let aerospike
@@ -246,7 +247,7 @@ describe('Plugin', () => {
             aerospike.connect(config).then(client => {
               tracer.scope().activate(obj, () => {
                 client.put(key, { i: 123 }, () => {
-                  expect(tracer.scope().active()).to.equal(obj)
+                  assert.strictEqual(tracer.scope().active(), obj)
                   client.close(false)
                   done()
                 })

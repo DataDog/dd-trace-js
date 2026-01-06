@@ -171,7 +171,8 @@ module.exports = class FakeAgent extends EventEmitter {
    * @param {number} [timeout=30_000] - The timeout in milliseconds.
    * @param {number} [expectedMessageCount=1] - The number of messages to expect.
    * @returns {Promise<void>} A promise that resolves when the telemetry message of type `requestType` is received.
-   *
+   */
+  /**
    * @overload
    * @param {Function} fn - The function to call with the telemetry message of type `requestType`.
    * @param {string} requestType - The request type to assert.
@@ -298,6 +299,9 @@ function buildExpressServer (agent) {
       cached_target_files: cachedTargetFiles
     } = req.body
 
+    // Emit the remote config request payload for testing
+    agent.emit('remote-config-request', req.body)
+
     if (state.has_error) {
       // Print the error sent by the client in case it's useful in debugging tests
       console.error(state.error) // eslint-disable-line no-console
@@ -317,7 +321,7 @@ function buildExpressServer (agent) {
     }
 
     res.on('close', () => {
-      agent.emit('remote-confg-responded')
+      agent.emit('remote-config-responded')
     })
 
     if (agent._rcTargetsVersion === state.targets_version) {

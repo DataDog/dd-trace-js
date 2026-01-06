@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('tap').mocha
 
 require('./setup/core')
@@ -19,16 +19,16 @@ describe('NoopTracer', () => {
   describe('trace', () => {
     it('should provide a span and done function', () => {
       tracer.trace('test', {}, (span, done) => {
-        expect(span).to.be.instanceof(Span)
-        expect(done).to.be.a('function')
-        expect(done).to.not.throw()
+        assert.ok(span instanceof Span)
+        assert.strictEqual(typeof done, 'function')
+        assert.doesNotThrow(done)
       })
     })
 
     it('should return the return value of the function', () => {
       const result = tracer.trace('test', {}, () => 'test')
 
-      expect(result).to.equal('test')
+      assert.strictEqual(result, 'test')
     })
   })
 
@@ -36,7 +36,7 @@ describe('NoopTracer', () => {
     it('should return the function', () => {
       const fn = () => {}
 
-      expect(tracer.wrap('test', {}, fn)).to.equal(fn)
+      assert.strictEqual(tracer.wrap('test', {}, fn), fn)
     })
   })
 
@@ -44,10 +44,10 @@ describe('NoopTracer', () => {
     it('should return a span with a valid context', () => {
       const span = tracer.startSpan()
 
-      expect(span.context().toTraceId).to.be.a('function')
-      expect(span.context().toTraceId()).to.match(/^\d+$/)
-      expect(span.context().toSpanId).to.be.a('function')
-      expect(span.context().toSpanId()).to.match(/^\d+$/)
+      assert.strictEqual(typeof span.context().toTraceId, 'function')
+      assert.match(span.context().toTraceId(), /^\d+$/)
+      assert.strictEqual(typeof span.context().toSpanId, 'function')
+      assert.match(span.context().toSpanId(), /^\d+$/)
     })
   })
 })

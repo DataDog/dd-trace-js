@@ -1,6 +1,6 @@
 'use strict'
 const { AgentEncoder } = require('./0.4')
-const { Chunk } = require('../msgpack')
+const { MsgpackChunk } = require('../msgpack')
 
 const {
   distributionMetric,
@@ -15,7 +15,7 @@ const COVERAGE_KEYS_LENGTH = 2
 class CoverageCIVisibilityEncoder extends AgentEncoder {
   constructor () {
     super(...arguments)
-    this._coverageBytes = new Chunk()
+    this._coverageBytes = new MsgpackChunk()
     this.form = new FormData()
     this._coveragesCount = 0
     this.reset()

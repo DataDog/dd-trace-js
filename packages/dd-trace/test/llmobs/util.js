@@ -39,8 +39,8 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
 
 /**
  *
+ * @param {object} actual
  * @param {ExpectedLLMObsSpanEvent} expected
- * @param {*} actual
  * @param {string} key name to associate with the assertion
  */
 function assertWithMockValues (actual, expected, key) {
@@ -65,7 +65,7 @@ function assertWithMockValues (actual, expected, key) {
     for (let i = 0; i < expected.length; i++) {
       assertWithMockValues(actual[i], expected[i], `${key}.${i}`)
     }
-  } else if (typeof expected === 'object') {
+  } else if (typeof expected === 'object' && expected !== null) {
     if (typeof actual !== 'object') {
       assert.fail(`${actualWithName} is not an object`)
     }
@@ -74,7 +74,9 @@ function assertWithMockValues (actual, expected, key) {
     const expectedKeys = Object.keys(expected)
     if (actualKeys.length !== expectedKeys.length) {
       assert.fail(
-        `${actualWithName} has different length than expected (${actualKeys.length} !== ${expectedKeys.length})`
+        `
+        ${actualWithName} has different length than expected (${actualKeys.length} !== ${expectedKeys.length}).
+        Diff: ${util.inspect(actualKeys)} !== ${util.inspect(expectedKeys)}`
       )
     }
 
@@ -96,10 +98,10 @@ function assertWithMockValues (actual, expected, key) {
  *
  * Dynamic fields, like metrics, metadata, tags, traceId, and output can be asserted with mock values.
  * All other fields are asserted in a larger diff assertion.
+ * @param {object} actual
  * @param {ExpectedLLMObsSpanEvent} expected
- * @param {*} actual
  */
-function assertLlmObsSpanEvent (actual, expected = {}) {
+function assertLlmObsSpanEvent (actual, expected) {
   const {
     spanKind,
     name,
@@ -302,21 +304,11 @@ function useLlmObs ({
   /** @type {Promise<Array<Array<Object>>>} */
   let apmTracesPromise
 
-  /** @type {Promise<Array<Array<Object>>>} */
-  let llmobsTracesPromise
-
   const resetTracesPromises = () => {
     apmTracesPromise = agent.assertSomeTraces(apmTraces => {
       return apmTraces
         .flatMap(trace => trace)
         .sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0))
-    })
-
-    llmobsTracesPromise = agent.useLlmobsTraces(llmobsTraces => {
-      return llmobsTraces
-        .flatMap(trace => trace)
-        .map(trace => trace.spans[0])
-        .sort((a, b) => a.start_ns - b.start_ns)
     })
   }
 
@@ -340,16 +332,81 @@ function useLlmObs ({
     return agent.close({ ritmReset: false, ...closeOptions })
   })
 
-  return async function () {
-    const [apmSpans, llmobsSpans] = await Promise.all([apmTracesPromise, llmobsTracesPromise])
+  return async function (numLlmObsSpans = 1) {
+    // get apm spans from the agent
+    const apmSpans = await apmTracesPromise
     resetTracesPromises()
 
-    return { apmSpans, llmobsSpans }
+    // get llmobs span events requests from the agent
+    // because llmobs process spans on span finish and submits periodically,
+    // we need to aggregate all of the span events
+    // tests should know how many spans they expect to see, otherwise tests will timeout
+    const llmobsSpans = []
+
+    while (llmobsSpans.length < numLlmObsSpans) {
+      await new Promise(resolve => setImmediate(resolve))
+      const llmobsSpanEventsRequests = agent.getLlmObsSpanEventsRequests(true)
+      llmobsSpans.push(...getLlmObsSpansFromRequests(llmobsSpanEventsRequests))
+    }
+
+    return { apmSpans, llmobsSpans: llmobsSpans.sort((a, b) => a.start_ns - b.start_ns) }
+  }
+}
+
+function getLlmObsSpansFromRequests (llmobsSpanEventsRequests) {
+  return llmobsSpanEventsRequests
+    .flatMap(request => request)
+    .map(request => request.spans[0])
+}
+
+/**
+ * Verifies prompt tracking metadata in span events.
+ * Note: Prompt IDs (pmpt_*) are real reusable prompts created on "Datadog Staging" OpenAI's dashboard for testing.
+ *
+ * @param {object} spanEvent - The LLMObs span event to verify
+ * @param {object} expectedPrompt - Expected prompt metadata (id, version, variables, chat_template)
+ * @param {Array<{role: string, content: string}>} expectedInputMessages - Expected input messages
+ * @param {object} options - Optional configuration
+ * @param {string} options.promptTrackingInstrumentationMethod - Expected prompt tracking instrumentation method
+ * ('auto' or 'manual'), defaults to 'auto'
+ * @param {boolean} options.promptMultimodal - Whether prompt contains multimodal inputs,
+ *   defaults to false
+ */
+function assertPromptTracking (
+  spanEvent,
+  expectedPrompt,
+  expectedInputMessages,
+  { promptTrackingInstrumentationMethod = 'auto', promptMultimodal = false } = {}
+) {
+  // Verify input messages are captured from instructions
+  assert(spanEvent.meta.input.messages, 'Input messages should be present')
+  assert(Array.isArray(spanEvent.meta.input.messages), 'Input messages should be an array')
+
+  for (const expected of expectedInputMessages) {
+    const message = spanEvent.meta.input.messages.find(m => m.role === expected.role)
+    assert(message, `Should have a ${expected.role} message`)
+    assert.strictEqual(message.content, expected.content)
+  }
+
+  // Verify prompt metadata
+  assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
+  const prompt = spanEvent.meta.input.prompt
+  assert.strictEqual(prompt.id, expectedPrompt.id)
+  assert.strictEqual(prompt.version, expectedPrompt.version)
+  assert.deepStrictEqual(prompt.variables, expectedPrompt.variables)
+  assert.deepStrictEqual(prompt.chat_template, expectedPrompt.chat_template)
+
+  // Verify tags
+  assert(spanEvent.tags, 'Span event should include tags')
+  assert(spanEvent.tags.includes(`prompt_tracking_instrumentation_method:${promptTrackingInstrumentationMethod}`))
+  if (promptMultimodal) {
+    assert(spanEvent.tags.includes('prompt_multimodal:true'))
   }
 }
 
 module.exports = {
   assertLlmObsSpanEvent,
+  assertPromptTracking,
   useLlmObs,
   MOCK_NOT_NULLISH,
   MOCK_NUMBER,

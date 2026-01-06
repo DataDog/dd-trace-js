@@ -1,9 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
+const assert = require('node:assert/strict')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 const overheadController = require('../../../../src/appsec/iast/overhead-controller')
 const {
   HTTP_REQUEST_HEADER_VALUE,
@@ -99,64 +100,65 @@ describe('unvalidated-redirect-analyzer', () => {
   unvalidatedRedirectAnalyzer.configure(true)
 
   it('should subscribe to set-header:finish channel', () => {
-    expect(unvalidatedRedirectAnalyzer._subscriptions).to.have.lengthOf(2)
-    expect(unvalidatedRedirectAnalyzer._subscriptions[0]._channel.name).to
-      .equals('datadog:http:server:response:set-header:finish')
-    expect(unvalidatedRedirectAnalyzer._subscriptions[1]._channel.name).to
-      .equals('datadog:fastify:set-header:finish')
+    assert.strictEqual(unvalidatedRedirectAnalyzer._subscriptions.length, 2)
+    assert.strictEqual(
+      unvalidatedRedirectAnalyzer._subscriptions[0]._channel.name,
+      'datadog:http:server:response:set-header:finish'
+    )
+    assert.strictEqual(unvalidatedRedirectAnalyzer._subscriptions[1]._channel.name, 'datadog:fastify:set-header:finish')
   })
 
   it('should not report headers other than Location', () => {
     unvalidatedRedirectAnalyzer.analyze('X-test', NOT_TAINTED_LOCATION)
 
-    expect(report).not.to.be.called
+    sinon.assert.notCalled(report)
   })
 
   it('should not report Location header with non string values', () => {
     unvalidatedRedirectAnalyzer.analyze('X-test', [TAINTED_LOCATION])
 
-    expect(report).not.to.be.called
+    sinon.assert.notCalled(report)
   })
 
   it('should not report Location header with not tainted string value', () => {
     unvalidatedRedirectAnalyzer.analyze('Location', NOT_TAINTED_LOCATION)
 
-    expect(report).not.to.be.called
+    sinon.assert.notCalled(report)
   })
 
   it('should report Location header with tainted string value', () => {
     unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_LOCATION)
 
-    expect(report).to.be.called
+    sinon.assert.called(report)
   })
 
   it('should not report if tainted origin is referer header exclusively', () => {
     unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_HEADER_REFERER_ONLY)
 
-    expect(report).not.to.be.called
+    sinon.assert.notCalled(report)
   })
 
   it('should not report if tainted origin is path param exclusively', () => {
     unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_PATH_PARAMS_ONLY)
 
-    expect(report).not.to.be.called
+    sinon.assert.notCalled(report)
   })
 
   it('should not report if tainted origin is url exclusively', () => {
     unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_URL_ONLY)
 
-    expect(report).not.to.be.called
+    sinon.assert.notCalled(report)
   })
 
   it('should not report if all tainted origin are safe', () => {
     unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_SAFE_RANGES)
 
-    expect(report).not.to.be.called
+    sinon.assert.notCalled(report)
   })
 
   it('should report if tainted origin contains referer header among others', () => {
     unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_SAFE_RANGES_AMONG_OTHERS)
 
-    expect(report).to.be.called
+    sinon.assert.called(report)
   })
 })

@@ -1,6 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+
 const { describe, it } = require('tap').mocha
 const { channel } = require('dc-polyfill')
 
@@ -42,11 +44,11 @@ describe('LogPlugin', () => {
     testLogChannel.publish(data)
     const { message } = data
 
-    expect(message.dd).to.deep.equal(config)
+    assert.deepStrictEqual(message.dd, config)
 
     // Should not have trace/span data when none is active
-    expect(message.dd).to.not.have.property('trace_id')
-    expect(message.dd).to.not.have.property('span_id')
+    assert.ok(!('trace_id' in message.dd))
+    assert.ok(!('span_id' in message.dd))
   })
 
   it('should include trace_id and span_id when a span is active', () => {
@@ -57,11 +59,11 @@ describe('LogPlugin', () => {
       testLogChannel.publish(data)
       const { message } = data
 
-      expect(message.dd).to.contain(config)
+      assertObjectContains(message.dd, config)
 
       // Should have trace/span data when none is active
-      expect(message.dd).to.have.property('trace_id', span.context().toTraceId(true))
-      expect(message.dd).to.have.property('span_id', span.context().toSpanId())
+      assert.strictEqual(message.dd.trace_id, span.context().toTraceId(true))
+      assert.strictEqual(message.dd.span_id, span.context().toSpanId())
     })
   })
 })

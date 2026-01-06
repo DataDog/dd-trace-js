@@ -1,8 +1,10 @@
 'use strict'
 
+// @ts-expect-error This code is running in a sandbox where dd-trace is available
 require('dd-trace/init')
 
 const { randomBytes } = require('crypto')
+// @ts-expect-error This code is running in a sandbox where fastify is available
 const Fastify = require('fastify')
 
 const fastify = Fastify({ logger: { level: 'error' } })

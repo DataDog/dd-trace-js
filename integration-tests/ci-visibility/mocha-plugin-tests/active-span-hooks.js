@@ -1,16 +1,15 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('assert')
 let currentTestTraceId
 
 describe('mocha-active-span-in-hooks', function () {
   before(() => {
-    expect(global._ddtrace.scope().active()).to.equal(null)
+    assert.strictEqual(global._ddtrace.scope().active(), null)
   })
 
   after(() => {
-    expect(global._ddtrace.scope().active()).to.equal(null)
+    assert.strictEqual(global._ddtrace.scope().active(), null)
   })
 
   beforeEach(() => {
@@ -18,14 +17,14 @@ describe('mocha-active-span-in-hooks', function () {
   })
 
   afterEach(() => {
-    expect(currentTestTraceId).to.equal(global._ddtrace.scope().active().context().toTraceId())
+    assert.strictEqual(currentTestTraceId, global._ddtrace.scope().active().context().toTraceId())
   })
 
   it('first test', () => {
-    expect(currentTestTraceId).to.equal(global._ddtrace.scope().active().context().toTraceId())
+    assert.strictEqual(currentTestTraceId, global._ddtrace.scope().active().context().toTraceId())
   })
 
   it('second test', () => {
-    expect(currentTestTraceId).to.equal(global._ddtrace.scope().active().context().toTraceId())
+    assert.strictEqual(currentTestTraceId, global._ddtrace.scope().active().context().toTraceId())
   })
 })

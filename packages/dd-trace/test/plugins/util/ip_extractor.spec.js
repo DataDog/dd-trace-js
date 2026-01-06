@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, before, after } = require('tap').mocha
 const axios = require('axios')
 const http = require('node:http')
@@ -8,6 +8,7 @@ const http = require('node:http')
 require('../../setup/core')
 
 const { extractIp } = require('../../../src/plugins/util/ip_extractor')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 describe('ip extractor', () => {
   let port, appListener, controller
@@ -20,7 +21,7 @@ describe('ip extractor', () => {
     })
     appListener = server
       .listen(0, 'localhost', () => {
-        port = server.address().port
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         done()
       })
   })
@@ -33,7 +34,7 @@ describe('ip extractor', () => {
     controller = function (req) {
       const ip = extractIp({}, req)
       try {
-        expect(ip).to.be.equal(expected)
+        assert.strictEqual(ip, expected)
         done()
       } catch (e) {
         done(e)
@@ -74,7 +75,7 @@ describe('ip extractor', () => {
     controller = function (req) {
       const ip = extractIp({ clientIpHeader }, req)
       try {
-        expect(ip).to.be.equal(expectedIp)
+        assert.strictEqual(ip, expectedIp)
         done()
       } catch (e) {
         done(e)
@@ -93,7 +94,7 @@ describe('ip extractor', () => {
     controller = function (req) {
       const ip = extractIp({ clientIpHeader }, req)
       try {
-        expect(ip).to.be.equal(expectedIp)
+        assert.strictEqual(ip, expectedIp)
         done()
       } catch (e) {
         done(e)
@@ -112,7 +113,7 @@ describe('ip extractor', () => {
     controller = function (req) {
       const ip = extractIp({ clientIpHeader }, req)
       try {
-        expect(ip).to.be.undefined
+        assert.strictEqual(ip, undefined)
         done()
       } catch (e) {
         done(e)
@@ -193,7 +194,7 @@ describe('ip extractor', () => {
     controller = function (req) {
       const ip = extractIp({}, req)
       try {
-        expect(['::1', '127.0.0.1']).to.include(ip)
+        assertObjectContains(['::1', '127.0.0.1'], [ip])
         done()
       } catch (e) {
         done(e)
@@ -219,7 +220,7 @@ describe('ip extractor', () => {
     controller = function (req) {
       const ip = extractIp({}, req)
       try {
-        expect(['::1', '127.0.0.1']).to.include(ip)
+        assertObjectContains(['::1', '127.0.0.1'], [ip])
         done()
       } catch (e) {
         done(e)

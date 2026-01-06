@@ -1,19 +1,19 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const { prepareTestServerForIast } = require('../utils')
+const { afterEach, beforeEach, describe } = require('mocha')
+
 const { storage } = require('../../../../../datadog-core')
-const { withVersions } = require('../../../setup/mocha')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
 const agent = require('../../../plugins/agent')
-
+const { withVersions } = require('../../../setup/mocha')
+const { prepareTestServerForIast } = require('../utils')
 const base = 'dc=example,dc=org'
 
 describe('ldap-injection-analyzer with ldapjs', () => {
@@ -95,7 +95,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
               searchRes.on('end', () => {
                 const storeEnd = storage('legacy').getStore()
                 const iastCtxEnd = iastContextFunctions.getIastContext(storeEnd)
-                expect(iastCtxEnd).to.not.be.undefined
+                assert.notStrictEqual(iastCtxEnd, undefined)
 
                 resolve()
               }).on('error', reject)
@@ -125,7 +125,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
                   .emit('end')
 
                 // if .off method wouldn't work the test will never reach this lines because it will loop forever :S
-                expect(searchResOnEndInvocations).to.be.eq(1)
+                assert.strictEqual(searchResOnEndInvocations, 1)
                 resolve()
               }
 
@@ -155,7 +155,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
                   searchRes.on('end', () => {
                     const storeEnd = storage('legacy').getStore()
                     const iastCtxEnd = iastContextFunctions.getIastContext(storeEnd)
-                    expect(iastCtxEnd).to.not.be.undefined
+                    assert.notStrictEqual(iastCtxEnd, undefined)
 
                     resolve()
                   }).on('error', reject)

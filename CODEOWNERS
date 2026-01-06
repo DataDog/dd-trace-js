@@ -77,6 +77,12 @@
 /packages/dd-trace/src/llmobs/ @DataDog/ml-observability
 /packages/dd-trace/test/llmobs/ @DataDog/ml-observability
 
+# Data Streams Monitoring
+/packages/dd-trace/src/datastreams/ @DataDog/data-streams-monitoring
+/packages/dd-trace/test/datastreams/ @DataDog/data-streams-monitoring
+/packages/**/dsm.spec.js @DataDog/data-streams-monitoring
+/packages/**/*.dsm.spec.js @DataDog/data-streams-monitoring
+
 # API SDK
 /packages/dd-trace/src/telemetry/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/telemetry/ @DataDog/apm-sdk-capabilities-js
@@ -97,6 +103,11 @@
 /packages/dd-trace/test/sampling_rule.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/span_sampler.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/span_sampler.spec.js @DataDog/apm-sdk-capabilities-js
+
+# Feature Flagging
+/integration-tests/openfeature/ @DataDog/feature-flagging
+/packages/dd-trace/src/openfeature/ @DataDog/feature-flagging
+/packages/dd-trace/test/openfeature/ @DataDog/feature-flagging
 
 # CI
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js

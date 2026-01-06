@@ -1,19 +1,18 @@
 'use strict'
 
-const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, before, after } = require('mocha')
-
-const util = require('node:util')
+const assert = require('node:assert/strict')
 const { setTimeout: wait } = require('node:timers/promises')
+const util = require('node:util')
 
+const axios = require('axios')
+const { after, before, beforeEach, describe, it } = require('mocha')
+
+const { DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { setup } = require('./spec_helpers')
-const { DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
 const DynamoDb = require('../src/services/dynamodb')
 const { generatePointerHash } = require('../src/util')
-
+const { setup } = require('./spec_helpers')
 /* eslint-disable no-console */
 async function resetLocalStackDynamo () {
   try {
@@ -159,18 +158,16 @@ describe('Plugin', () => {
 
         describe('with payload tagging', () => {
           it('adds request and response payloads as flattened tags for putItem', async () => {
-            const agentPromise = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              expect(span.resource).to.equal(`putItem ${oneKeyTableName}`)
-              expect(span.meta).to.include({
+            const agentPromise = agent.assertFirstTraceSpan({
+              resource: `putItem ${oneKeyTableName}`,
+              meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
                 'aws.request.body.Item.name': 'redacted',
                 'aws.request.body.Item.data.S': 'test-data'
-              })
+              }
             })
 
             const operation = () => promisify(dynamo.putItem)({
@@ -185,18 +182,16 @@ describe('Plugin', () => {
           })
 
           it('adds request and response payloads as flattened tags for updateItem', async () => {
-            const agentPromise = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              expect(span.resource).to.equal(`updateItem ${oneKeyTableName}`)
-              expect(span.meta).to.include({
+            const agentPromise = agent.assertFirstTraceSpan({
+              resource: `updateItem ${oneKeyTableName}`,
+              meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
                 'aws.request.body.Key.name.S': 'test-name',
                 'aws.request.body.AttributeUpdates.data.Value.S': 'updated-data'
-              })
+              }
             })
 
             const operation = () => promisify(dynamo.updateItem)({
@@ -216,17 +211,15 @@ describe('Plugin', () => {
           })
 
           it('adds request and response payloads as flattened tags for deleteItem', async () => {
-            const agentPromise = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              expect(span.resource).to.equal(`deleteItem ${oneKeyTableName}`)
-              expect(span.meta).to.include({
+            const agentPromise = agent.assertFirstTraceSpan({
+              resource: `deleteItem ${oneKeyTableName}`,
+              meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
                 'aws.request.body.Key.name.S': 'test-name'
-              })
+              }
             })
 
             const operation = () => promisify(dynamo.deleteItem)({
@@ -252,11 +245,9 @@ describe('Plugin', () => {
             // Wait a bit to ensure the put completes
             await wait(100)
 
-            const agentPromise = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              expect(span.resource).to.equal(`getItem ${oneKeyTableName}`)
-              expect(span.meta).to.include({
+            const agentPromise = agent.assertFirstTraceSpan({
+              resource: `getItem ${oneKeyTableName}`,
+              meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
@@ -264,7 +255,7 @@ describe('Plugin', () => {
                 'aws.request.body.Key.name.S': 'test-get-name',
                 'aws.response.body.Item.name.S': 'test-get-name',
                 'aws.response.body.Item.data': 'redacted'
-              })
+              }
             })
 
             const operation = () => promisify(dynamo.getItem)({
@@ -302,15 +293,15 @@ describe('Plugin', () => {
               const span = traces[0][0]
               const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
 
-              expect(links).to.have.lengthOf(expectedLength)
+              assert.strictEqual(links.length, expectedLength)
 
               if (expectedHashes) {
                 if (Array.isArray(expectedHashes)) {
                   expectedHashes.forEach((hash, i) => {
-                    expect(links[i].attributes['ptr.hash']).to.equal(hash)
+                    assert.strictEqual(links[i].attributes['ptr.hash'], hash)
                   })
                 } else {
-                  expect(links[0].attributes).to.deep.equal({
+                  assert.deepStrictEqual(links[0].attributes, {
                     'ptr.kind': DYNAMODB_PTR_KIND,
                     'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
                     'ptr.hash': expectedHashes,
@@ -698,12 +689,12 @@ describe('Plugin', () => {
         dynamoDbInstance.dynamoPrimaryKeyConfig = cachedConfig
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
-        expect(result).to.equal(cachedConfig)
+        assert.strictEqual(result, cachedConfig)
       })
 
       it('should return undefined when config str is missing', () => {
         const result = dynamoDbInstance.getPrimaryKeyConfig()
-        expect(result).to.be.undefined
+        assert.strictEqual(result, undefined)
       })
 
       it('should parse valid config with single table', () => {
@@ -711,7 +702,7 @@ describe('Plugin', () => {
         dynamoDbInstance._tracerConfig = { trace: { dynamoDb: { tablePrimaryKeys: configStr } } }
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
-        expect(result).to.deep.equal({
+        assert.deepStrictEqual(result, {
           Table1: ['key1', 'key2']
         })
       })
@@ -721,7 +712,7 @@ describe('Plugin', () => {
         dynamoDbInstance._tracerConfig = { trace: { dynamoDb: { tablePrimaryKeys: configStr } } }
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
-        expect(result).to.deep.equal({
+        assert.deepStrictEqual(result, {
           Table1: ['key1'],
           Table2: ['key2', 'key3']
         })
@@ -732,7 +723,7 @@ describe('Plugin', () => {
         dynamoDbInstance._tracerConfig = { trace: { dynamoDb: { tablePrimaryKeys: configStr } } }
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
-        expect(result).to.deep.equal({
+        assert.deepStrictEqual(result, {
           Table42: ['key1']
         })
       })
@@ -746,7 +737,7 @@ describe('Plugin', () => {
 
         const actualHash = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
         const expectedHash = generatePointerHash([tableName, 'userId', 'user123', '', ''])
-        expect(actualHash).to.equal(expectedHash)
+        assert.strictEqual(actualHash, expectedHash)
       })
 
       it('generates correct hash for single number key', () => {
@@ -756,7 +747,7 @@ describe('Plugin', () => {
 
         const actualHash = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
         const expectedHash = generatePointerHash([tableName, 'orderId', '98765', '', ''])
-        expect(actualHash).to.equal(expectedHash)
+        assert.strictEqual(actualHash, expectedHash)
       })
 
       it('generates correct hash for single binary key', () => {
@@ -767,7 +758,7 @@ describe('Plugin', () => {
 
         const actualHash = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
         const expectedHash = generatePointerHash([tableName, 'binaryId', binaryData, '', ''])
-        expect(actualHash).to.equal(expectedHash)
+        assert.strictEqual(actualHash, expectedHash)
       })
 
       it('generates correct hash for string-string key', () => {
@@ -781,7 +772,7 @@ describe('Plugin', () => {
 
         const actualHash = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
         const expectedHash = generatePointerHash([tableName, 'email', 'test@example.com', 'userId', 'user123'])
-        expect(actualHash).to.equal(expectedHash)
+        assert.strictEqual(actualHash, expectedHash)
       })
 
       it('generates correct hash for string-number key', () => {
@@ -795,7 +786,7 @@ describe('Plugin', () => {
 
         const actualHash = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
         const expectedHash = generatePointerHash([tableName, 'timestamp', '1234567', 'userId', 'user123'])
-        expect(actualHash).to.equal(expectedHash)
+        assert.strictEqual(actualHash, expectedHash)
       })
 
       it('generates correct hash for binary-binary key', () => {
@@ -811,7 +802,7 @@ describe('Plugin', () => {
 
         const actualHash = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
         const expectedHash = generatePointerHash([tableName, 'key1', binary1, 'key2', binary2])
-        expect(actualHash).to.equal(expectedHash)
+        assert.strictEqual(actualHash, expectedHash)
       })
 
       it('generates unique hashes for different tables', () => {
@@ -823,7 +814,7 @@ describe('Plugin', () => {
 
         const hash1 = DynamoDb.calculatePutItemHash('Table1', item, keyConfig)
         const hash2 = DynamoDb.calculatePutItemHash('Table2', item, keyConfig)
-        expect(hash1).to.not.equal(hash2)
+        assert.notStrictEqual(hash1, hash2)
       })
 
       describe('edge cases', () => {
@@ -833,7 +824,7 @@ describe('Plugin', () => {
           const keyConfig = { KnownTable: ['userId'] }
 
           const result = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
-          expect(result).to.be.undefined
+          assert.strictEqual(result, undefined)
         })
 
         it('returns undefined for empty primary key config', () => {
@@ -841,7 +832,7 @@ describe('Plugin', () => {
           const item = { userId: { S: 'user123' } }
 
           const result = DynamoDb.calculatePutItemHash(tableName, item, {})
-          expect(result).to.be.undefined
+          assert.strictEqual(result, undefined)
         })
 
         it('returns undefined when missing attributes in item', () => {
@@ -850,17 +841,17 @@ describe('Plugin', () => {
           const keyConfig = { UserTable: ['userId'] }
 
           const actualHash = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
-          expect(actualHash).to.be.undefined
+          assert.strictEqual(actualHash, undefined)
         })
 
         it('returns undefined for empty keyConfig', () => {
           const result = DynamoDb.calculatePutItemHash('TestTable', {}, {})
-          expect(result).to.be.undefined
+          assert.strictEqual(result, undefined)
         })
 
         it('returns undefined for undefined keyConfig', () => {
           const result = DynamoDb.calculatePutItemHash('TestTable', {}, undefined)
-          expect(result).to.be.undefined
+          assert.strictEqual(result, undefined)
         })
       })
     })
@@ -871,7 +862,7 @@ describe('Plugin', () => {
         const keys = { userId: { S: 'user123' } }
         const actualHash = DynamoDb.calculateHashWithKnownKeys(tableName, keys)
         const expectedHash = generatePointerHash([tableName, 'userId', 'user123', '', ''])
-        expect(actualHash).to.equal(expectedHash)
+        assert.strictEqual(actualHash, expectedHash)
       })
 
       it('generates correct hash for single number key', () => {
@@ -879,7 +870,7 @@ describe('Plugin', () => {
         const keys = { orderId: { N: '98765' } }
         const actualHash = DynamoDb.calculateHashWithKnownKeys(tableName, keys)
         const expectedHash = generatePointerHash([tableName, 'orderId', '98765', '', ''])
-        expect(actualHash).to.equal(expectedHash)
+        assert.strictEqual(actualHash, expectedHash)
       })
 
       it('generates correct hash for single binary key', () => {
@@ -888,7 +879,7 @@ describe('Plugin', () => {
         const keys = { binaryId: { B: binaryData } }
         const actualHash = DynamoDb.calculateHashWithKnownKeys(tableName, keys)
         const expectedHash = generatePointerHash([tableName, 'binaryId', binaryData, '', ''])
-        expect(actualHash).to.equal(expectedHash)
+        assert.strictEqual(actualHash, expectedHash)
       })
 
       it('generates correct hash for string-string key', () => {
@@ -899,7 +890,7 @@ describe('Plugin', () => {
         }
         const actualHash = DynamoDb.calculateHashWithKnownKeys(tableName, keys)
         const expectedHash = generatePointerHash([tableName, 'email', 'test@example.com', 'userId', 'user123'])
-        expect(actualHash).to.equal(expectedHash)
+        assert.strictEqual(actualHash, expectedHash)
       })
 
       it('generates correct hash for string-number key', () => {
@@ -910,7 +901,7 @@ describe('Plugin', () => {
         }
         const actualHash = DynamoDb.calculateHashWithKnownKeys(tableName, keys)
         const expectedHash = generatePointerHash([tableName, 'timestamp', '1234567', 'userId', 'user123'])
-        expect(actualHash).to.equal(expectedHash)
+        assert.strictEqual(actualHash, expectedHash)
       })
 
       it('generates correct hash for binary-binary key', () => {
@@ -923,38 +914,38 @@ describe('Plugin', () => {
         }
         const actualHash = DynamoDb.calculateHashWithKnownKeys(tableName, keys)
         const expectedHash = generatePointerHash([tableName, 'key1', binary1, 'key2', binary2])
-        expect(actualHash).to.equal(expectedHash)
+        assert.strictEqual(actualHash, expectedHash)
       })
 
       it('generates unique hashes', () => {
         const keys = { userId: { S: 'user123' } }
         const hash1 = DynamoDb.calculateHashWithKnownKeys('Table1', keys)
         const hash2 = DynamoDb.calculateHashWithKnownKeys('Table2', keys)
-        expect(hash1).to.not.equal(hash2)
+        assert.notStrictEqual(hash1, hash2)
       })
 
       describe('edge cases', () => {
         it('handles empty keys object', () => {
           const tableName = 'UserTable'
           const hash = DynamoDb.calculateHashWithKnownKeys(tableName, {})
-          expect(hash).to.be.undefined
+          assert.strictEqual(hash, undefined)
         })
 
         it('handles invalid key types', () => {
           const tableName = 'UserTable'
           const keys = { userId: { INVALID: 'user123' } }
           const hash = DynamoDb.calculateHashWithKnownKeys(tableName, keys)
-          expect(hash).to.be.undefined
+          assert.strictEqual(hash, undefined)
         })
 
         it('handles null keys object', () => {
           const hash = DynamoDb.calculateHashWithKnownKeys('TestTable', null)
-          expect(hash).to.be.undefined
+          assert.strictEqual(hash, undefined)
         })
 
         it('handles undefined keys object', () => {
           const hash = DynamoDb.calculateHashWithKnownKeys('TestTable', undefined)
-          expect(hash).to.be.undefined
+          assert.strictEqual(hash, undefined)
         })
 
         it('handles mixed valid and invalid key types', () => {
@@ -963,7 +954,7 @@ describe('Plugin', () => {
             invalidKey: { INVALID: 'value' }
           }
           const hash = DynamoDb.calculateHashWithKnownKeys('TestTable', keys)
-          expect(hash).to.be.undefined
+          assert.strictEqual(hash, undefined)
         })
       })
     })

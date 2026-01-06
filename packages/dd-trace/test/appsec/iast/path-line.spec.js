@@ -1,11 +1,12 @@
 'use strict'
 
-const proxyquire = require('proxyquire')
-const path = require('path')
+const assert = require('node:assert/strict')
 const os = require('os')
-const { expect } = require('chai')
-const { getCallsiteFrames } = require('../../../src/appsec/stack_trace')
+const path = require('path')
 
+const proxyquire = require('proxyquire')
+
+const { getCallsiteFrames } = require('../../../src/appsec/stack_trace')
 class CallSiteMock {
   constructor (fileName, lineNumber, columnNumber = 0) {
     this.file = fileName
@@ -45,17 +46,17 @@ describe('path-line', function () {
     describe('does not fail', () => {
       it('with null parameter', () => {
         const result = pathLine.getNonDDCallSiteFrames(null)
-        expect(result).to.be.an('array').that.is.empty
+        assert.deepStrictEqual(result, [])
       })
 
       it('with empty list parameter', () => {
         const result = pathLine.getNonDDCallSiteFrames([])
-        expect(result).to.be.an('array').that.is.empty
+        assert.deepStrictEqual(result, [])
       })
 
       it('without parameter', () => {
         const result = pathLine.getNonDDCallSiteFrames()
-        expect(result).to.be.an('array').that.is.empty
+        assert.deepStrictEqual(result, [])
       })
     })
 
@@ -92,15 +93,15 @@ describe('path-line', function () {
 
         const results = pathLine.getNonDDCallSiteFrames(callsites)
 
-        expect(results).to.have.lengthOf(2)
+        assert.strictEqual(results.length, 2)
 
-        expect(results[0].path).to.be.equals(expectedFilePaths[0])
-        expect(results[0].line).to.be.equals(13)
-        expect(results[0].column).to.be.equals(42)
+        assert.strictEqual(results[0].path, expectedFilePaths[0])
+        assert.strictEqual(results[0].line, 13)
+        assert.strictEqual(results[0].column, 42)
 
-        expect(results[1].path).to.be.equals(expectedFilePaths[1])
-        expect(results[1].line).to.be.equals(20)
-        expect(results[1].column).to.be.equals(15)
+        assert.strictEqual(results[1].path, expectedFilePaths[1])
+        assert.strictEqual(results[1].line, 20)
+        assert.strictEqual(results[1].column, 15)
       })
 
       it('should return an empty array when all stack frames are in dd trace', () => {
@@ -110,7 +111,7 @@ describe('path-line', function () {
         callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'another', 'file', 'in', 'dd.js'), 5))
 
         const results = pathLine.getNonDDCallSiteFrames(callsites)
-        expect(results).to.be.an('array').that.is.empty
+        assert.deepStrictEqual(results, [])
       })
 
       DIAGNOSTICS_CHANNEL_PATHS.forEach((dcPath) => {
@@ -125,11 +126,11 @@ describe('path-line', function () {
           callsites.push(new CallSiteMock(firstFileOutOfDD, 13, 42))
 
           const results = pathLine.getNonDDCallSiteFrames(callsites)
-          expect(results).to.have.lengthOf(1)
+          assert.strictEqual(results.length, 1)
 
-          expect(results[0].path).to.be.equals(expectedFilePath)
-          expect(results[0].line).to.be.equals(13)
-          expect(results[0].column).to.be.equals(42)
+          assert.strictEqual(results[0].path, expectedFilePath)
+          assert.strictEqual(results[0].line, 13)
+          assert.strictEqual(results[0].column, 42)
         })
       })
     })
@@ -167,15 +168,15 @@ describe('path-line', function () {
         callsites.push(new CallSiteMock(secondFileOutOfDD, 20, 15))
 
         const results = pathLine.getNonDDCallSiteFrames(callsites)
-        expect(results).to.have.lengthOf(2)
+        assert.strictEqual(results.length, 2)
 
-        expect(results[0].path).to.be.equals(expectedFilePaths[0])
-        expect(results[0].line).to.be.equals(13)
-        expect(results[0].column).to.be.equals(42)
+        assert.strictEqual(results[0].path, expectedFilePaths[0])
+        assert.strictEqual(results[0].line, 13)
+        assert.strictEqual(results[0].column, 42)
 
-        expect(results[1].path).to.be.equals(expectedFilePaths[1])
-        expect(results[1].line).to.be.equals(20)
-        expect(results[1].column).to.be.equals(15)
+        assert.strictEqual(results[1].path, expectedFilePaths[1])
+        assert.strictEqual(results[1].line, 20)
+        assert.strictEqual(results[1].column, 15)
       })
     })
 
@@ -230,15 +231,15 @@ describe('path-line', function () {
           callsites.push(new CallSiteMock(path.join(PROJECT_PATH, bundleOutFile), 4, 71))
 
           const results = pathLine.getNonDDCallSiteFrames(callsites)
-          expect(results).to.have.lengthOf(2)
+          assert.strictEqual(results.length, 2)
 
-          expect(results[0].path).to.be.equals('file.js')
-          expect(results[0].line).to.be.equals(2)
-          expect(results[0].column).to.be.equals(14)
+          assert.strictEqual(results[0].path, 'file.js')
+          assert.strictEqual(results[0].line, 2)
+          assert.strictEqual(results[0].column, 14)
 
-          expect(results[1].path).to.be.equals('file.js')
-          expect(results[1].line).to.be.equals(4)
-          expect(results[1].column).to.be.equals(71)
+          assert.strictEqual(results[1].path, 'file.js')
+          assert.strictEqual(results[1].line, 4)
+          assert.strictEqual(results[1].column, 71)
         })
       })
 
@@ -275,21 +276,21 @@ describe('path-line', function () {
           callsites.push(new CallSiteMock(path.join(OUT_BUILD_PATH, bundleOutFile), 2, 71))
 
           const results = pathLine.getNonDDCallSiteFrames(callsites)
-          expect(results).to.have.lengthOf(4)
+          assert.strictEqual(results.length, 4)
 
-          expect(results[0].path).to.be.equals(bundleOutFile)
-          expect(results[0].line).to.be.equals(11)
+          assert.strictEqual(results[0].path, bundleOutFile)
+          assert.strictEqual(results[0].line, 11)
 
-          expect(results[1].path).to.be.equals(bundleOutFile)
-          expect(results[1].line).to.be.equals(42)
+          assert.strictEqual(results[1].path, bundleOutFile)
+          assert.strictEqual(results[1].line, 42)
 
-          expect(results[2].path).to.be.equals(bundleOutFile)
-          expect(results[2].line).to.be.equals(3)
-          expect(results[2].column).to.be.equals(14)
+          assert.strictEqual(results[2].path, bundleOutFile)
+          assert.strictEqual(results[2].line, 3)
+          assert.strictEqual(results[2].column, 14)
 
-          expect(results[3].path).to.be.equals(bundleOutFile)
-          expect(results[3].line).to.be.equals(2)
-          expect(results[3].column).to.be.equals(71)
+          assert.strictEqual(results[3].path, bundleOutFile)
+          assert.strictEqual(results[3].line, 2)
+          assert.strictEqual(results[3].column, 71)
         })
       })
     })
@@ -322,7 +323,7 @@ describe('path-line', function () {
       const expectedPath = path.join('node_modules', firstNonDDPath.path)
       const nodeModulesPaths = pathLine.getNodeModulesPaths(firstNonDDPath.path)
 
-      expect(nodeModulesPaths[0]).to.equal(expectedPath)
+      assert.strictEqual(nodeModulesPaths[0], expectedPath)
 
       pathLine.ddBasePath = basePath
     })
@@ -332,14 +333,14 @@ describe('path-line', function () {
       const dirParts = dirname.split(path.sep)
       const paths = pathLine.getNodeModulesPaths(dirParts.join('/'))
 
-      expect(paths[0]).to.equals(path.join('node_modules', dirname))
+      assert.strictEqual(paths[0], path.join('node_modules', dirname))
     })
 
     it('should return multiple paths', () => {
       const paths = pathLine.getNodeModulesPaths('/this/is/a/path', '/another/path')
 
-      expect(paths.length).to.equals(2)
-      expect(paths[0].startsWith('node_modules')).to.true
+      assert.strictEqual(paths.length, 2)
+      assert.strictEqual(paths[0].startsWith('node_modules'), true)
     })
   })
 })

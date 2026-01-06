@@ -25,7 +25,7 @@ import {
   SPAN_TYPE,
 } from '../ext/tags'
 import { HTTP, WEB } from '../ext/types'
-import * as opentracing from 'opentracing';
+import * as opentracing from '../vendor/dist/opentracing';
 import { IncomingMessage, OutgoingMessage } from 'http';
 
 opentracing.initGlobalTracer(tracer);
@@ -53,7 +53,6 @@ tracer.init({
   experimental: {
     iast: true,
     b3: true,
-    runtimeId: true,
     exporter: 'log'
   },
   hostname: 'agent',
@@ -333,6 +332,7 @@ tracer.use('fetch', httpClientOptions);
 tracer.use('generic-pool');
 tracer.use('google-cloud-pubsub');
 tracer.use('google-cloud-vertexai');
+tracer.use('google-genai');
 tracer.use('graphql');
 tracer.use('graphql', graphqlOptions);
 tracer.use('graphql', { variables: ['foo', 'bar'] });
@@ -715,7 +715,7 @@ const aiguard = tracer.aiguard
 aiguard.evaluate([
   { role: 'user', content: 'What is 2 + 2' },
 ]).then(result => {
-  result.action && result.reason
+  result.action && result.reason && result.tags
 })
 
 aiguard.evaluate([
@@ -729,11 +729,11 @@ aiguard.evaluate([
     ],
   }
 ]).then(result => {
-  result.action && result.reason
+  result.action && result.reason && result.tags
 })
 
 aiguard.evaluate([
   { role: 'tool', tool_call_id: 'call_1', content: '5' },
 ]).then(result => {
-  result.action && result.reason
+  result.action && result.reason && result.tags
 })
