@@ -45,6 +45,46 @@ describe('Remote config client id', () => {
         assert.ok(payload[0][0].meta['_dd.rc.client_id'])
       })
     })
+
+    it('should include process tags in remote config requests', (done) => {
+      const handleRemoteConfigRequest = (payload) => {
+        try {
+          const { client } = payload
+          assert.ok(client, 'client should exist in remote config request')
+          assert.ok(client.client_tracer, 'client_tracer should exist')
+          assert.ok(client.client_tracer.process_tags, 'process_tags should exist')
+
+          const processTags = client.client_tracer.process_tags
+
+          // Verify process_tags is an object
+          assert.strictEqual(typeof processTags, 'object')
+
+          // Verify required process tags are present
+          assert.ok('entrypoint.basedir' in processTags)
+          assert.ok('entrypoint.name' in processTags)
+          assert.ok('entrypoint.type' in processTags)
+          assert.ok('entrypoint.workdir' in processTags)
+
+          // Verify entrypoint.type has the expected value
+          assert.strictEqual(processTags['entrypoint.type'], 'script')
+
+          // Verify values are strings (not undefined)
+          assert.strictEqual(typeof processTags['entrypoint.name'], 'string')
+          assert.strictEqual(typeof processTags['entrypoint.workdir'], 'string')
+          assert.strictEqual(typeof processTags['entrypoint.basedir'], 'string')
+          done()
+        } catch (err) {
+          done(err)
+        } finally {
+          agent.removeListener('remote-config-request', handleRemoteConfigRequest)
+        }
+      }
+
+      agent.on('remote-config-request', handleRemoteConfigRequest)
+
+      // Trigger a request to ensure remote config is polled
+      axios.get('/').catch(() => {})
+    })
   })
 
   describe('disabled', () => {

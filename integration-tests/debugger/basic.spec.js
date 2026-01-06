@@ -812,10 +812,6 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-input', ({ payload }) => {
           const snapshot = payload[0].debugger.snapshot
 
-          // Assert that process_tags are present
-          assert.ok(snapshot.process_tags)
-          assert.strictEqual(typeof snapshot.process_tags, 'object')
-
           // Check for expected process tags keys
           assert.ok(snapshot.process_tags['entrypoint.name'])
           assert.ok(snapshot.process_tags['entrypoint.type'])
