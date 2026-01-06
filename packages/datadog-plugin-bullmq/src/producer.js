@@ -70,7 +70,7 @@ class QueueAddPlugin extends BaseBullmqProducerPlugin {
 
   injectTraceContext (span, ctx) {
     const data = ctx.arguments?.[1]
-    if (data && typeof data === 'object') {
+    if (data?.constructor?.name === 'Object') {
       data._datadog = data._datadog || {}
       this.tracer.inject(span, 'text_map', data._datadog)
     }
@@ -109,7 +109,7 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
     const jobs = ctx.arguments?.[0]
     if (!Array.isArray(jobs)) return
     for (const job of jobs) {
-      if (!job.data || typeof job.data !== 'object') continue
+      if (job?.data?.constructor?.name !== 'Object') continue
       job.data._datadog = job.data._datadog || {}
       this.tracer.inject(span, 'text_map', job.data._datadog)
     }
@@ -133,7 +133,7 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
     const edgeTags = ['direction:out', `topic:${queueName}`, 'type:bullmq']
 
     for (const job of jobs) {
-      if (job?.data && job.data !== null && typeof job.data === 'object') {
+      if (job?.data && job.data !== null && job.data.constructor.name === 'Object') {
         const payloadSize = getMessageSize(job.data)
         const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
         job.data._datadog = job.data._datadog || {}
@@ -159,7 +159,7 @@ class FlowProducerAddPlugin extends BaseBullmqProducerPlugin {
 
   injectTraceContext (span, ctx) {
     const flow = ctx.arguments?.[0]
-    if (flow && flow.data && typeof flow.data === 'object') {
+    if (flow?.data?.constructor?.name === 'Object') {
       flow.data._datadog = flow.data._datadog || {}
       this.tracer.inject(span, 'text_map', flow.data._datadog)
     }
