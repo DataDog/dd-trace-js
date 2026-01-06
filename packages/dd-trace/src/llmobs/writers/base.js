@@ -19,6 +19,7 @@ const { parseResponseAndLog } = require('./util')
 class BaseLLMObsWriter {
   #destroyer
   #buffers = new Map()
+  #originalEndpoint
 
   constructor ({ interval, timeout, eventType, config, endpoint, intake }) {
     this._interval = interval ?? getEnvironmentVariable('_DD_LLMOBS_FLUSH_INTERVAL') ?? 1000 // 1s
@@ -28,7 +29,7 @@ class BaseLLMObsWriter {
     this._bufferLimit = 1000
 
     this._config = config
-    this._originalEndpoint = endpoint
+    this.#originalEndpoint = endpoint
     this._endpoint = endpoint
     this._intake = intake
 
@@ -186,7 +187,7 @@ class BaseLLMObsWriter {
           protocol: 'https:',
           hostname: `${this._intake}.${site}`
         })),
-        endpoint: this._originalEndpoint
+        endpoint: this.#originalEndpoint
       }
     }
 
@@ -203,7 +204,7 @@ class BaseLLMObsWriter {
 
     return {
       url: base,
-      endpoint: path.join(EVP_PROXY_AGENT_BASE_PATH, this._originalEndpoint)
+      endpoint: path.join(EVP_PROXY_AGENT_BASE_PATH, this.#originalEndpoint)
     }
   }
 
