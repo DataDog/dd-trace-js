@@ -107,8 +107,7 @@ describe('esm', () => {
         assert.strictEqual(parseLinks(payload[4][0]).length, 2)
       })
 
-      proc = await spawnPluginIntegrationTestProc(
-        sandboxCwd(), 'server.mjs', agent.port, undefined, spawnEnv)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, spawnEnv)
       await res
     }).timeout(60000)
 
