@@ -78,14 +78,14 @@ jobs:
       PLUGINS: ldapjs
     services:
       openldap:
-        image: cleanstart/openldap:latest
+        image: registry.opensuse.org/opensuse/openldap
         ports:
           - '1389:389'
           - '1636:636'
         env:
           LDAP_DOMAIN: 'example.org'
           LDAP_ADMIN_PASSWORD: 'adminpassword'
-          LDAP_ORGANISATION: 'Example Inc'
+          LDAP_CONFIG_PASSWORD: 'adminpassword'
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
