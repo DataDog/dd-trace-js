@@ -469,7 +469,6 @@ class RemoteConfigManager {
  * @property {RcConfigDescriptor[]} toUnapply
  * @property {RcConfigDescriptor[]} toApply
  * @property {RcConfigDescriptor[]} toModify
- * @property {{toUnapply: RcConfigDescriptor[], toApply: RcConfigDescriptor[], toModify: RcConfigDescriptor[]}} changes
  * @property {(path: string) => void} markHandled
  * @property {(path: string) => void} ack
  * @property {(path: string, err: unknown) => void} error
@@ -484,16 +483,10 @@ class RemoteConfigManager {
  * @returns {RcBatchUpdateTransaction}
  */
 function createUpdateTransaction ({ toUnapply, toApply, toModify }, handledPaths, outcomes) {
-  const descriptors = {
+  return {
     toUnapply: toUnapply.map(toDescriptor),
     toApply: toApply.map(toDescriptor),
-    toModify: toModify.map(toDescriptor)
-  }
-
-  // Expose descriptors directly for ease-of-use, and also under `changes` for clarity.
-  const transaction = {
-    ...descriptors,
-    changes: descriptors,
+    toModify: toModify.map(toDescriptor),
     markHandled (path) {
       if (typeof path !== 'string') return
       handledPaths.add(path)
@@ -509,8 +502,6 @@ function createUpdateTransaction ({ toUnapply, toApply, toModify }, handledPaths
       handledPaths.add(path)
     }
   }
-
-  return transaction
 }
 
 /**
@@ -542,7 +533,6 @@ function filterTransactionByProducts (transaction, products) {
     toUnapply,
     toApply,
     toModify,
-    changes: { toUnapply, toApply, toModify },
     markHandled: transaction.markHandled,
     ack: transaction.ack,
     error: transaction.error
