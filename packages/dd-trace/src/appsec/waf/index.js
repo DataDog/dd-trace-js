@@ -24,6 +24,10 @@ let limiter = new Limiter(100)
 /** @type {typeof import('./waf_manager') | null} */
 let WAFManager = null
 
+/**
+ * @typedef {import('./waf_manager').WAFManagerConfig & { rateLimit: number }} WAFConfig
+ */
+
 const waf = {
   /** @type {WAFManager | null} */
   wafManager: null,
@@ -37,6 +41,10 @@ const waf = {
   WafUpdateError
 }
 
+/**
+ * @param {object} rules
+ * @param {WAFConfig} config
+ */
 function init (rules, config) {
   destroy()
 

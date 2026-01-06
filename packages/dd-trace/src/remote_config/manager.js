@@ -22,6 +22,10 @@ const kSupportsAckCallback = Symbol('kSupportsAckCallback')
 // There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
 // with their own separated Client.ClientState.
 class RemoteConfigManager {
+  #handlers = new Map()
+  #products = new Set()
+  #batchHandlers = new Map()
+
   constructor (config) {
     const pollInterval = Math.floor(config.remoteConfig.pollInterval * 1000)
 
@@ -43,9 +47,6 @@ class RemoteConfigManager {
         }
       : config.tags
 
-    this._handlers = new Map()
-    this._products = new Set()
-    this._batchHandlers = new Map()
     const appliedConfigs = this.appliedConfigs = new Map()
 
     this.scheduler = new Scheduler((cb) => this.poll(cb), pollInterval)
@@ -125,7 +126,7 @@ class RemoteConfigManager {
    * @param {Function} handler
    */
   setProductHandler (product, handler) {
-    this._handlers.set(product, handler)
+    this.#handlers.set(product, handler)
     this.subscribeProducts(product)
   }
 
@@ -138,7 +139,7 @@ class RemoteConfigManager {
    * @param {string} product
    */
   removeProductHandler (product) {
-    this._handlers.delete(product)
+    this.#handlers.delete(product)
     this.unsubscribeProducts(product)
   }
 
@@ -150,12 +151,12 @@ class RemoteConfigManager {
    * @param {...string} products
    */
   subscribeProducts (...products) {
-    const hadProducts = this._products.size > 0
+    const hadProducts = this.#products.size > 0
     for (const product of products) {
-      this._products.add(product)
+      this.#products.add(product)
     }
     this.updateProducts()
-    if (!hadProducts && this._products.size > 0) {
+    if (!hadProducts && this.#products.size > 0) {
       this.scheduler.start()
     }
   }
@@ -169,18 +170,18 @@ class RemoteConfigManager {
    * @param {...string} products
    */
   unsubscribeProducts (...products) {
-    const hadProducts = this._products.size > 0
+    const hadProducts = this.#products.size > 0
     for (const product of products) {
-      this._products.delete(product)
+      this.#products.delete(product)
     }
     this.updateProducts()
-    if (hadProducts && this._products.size === 0) {
+    if (hadProducts && this.#products.size === 0) {
       this.scheduler.stop()
     }
   }
 
   updateProducts () {
-    this.state.client.products = [...this._products]
+    this.state.client.products = [...this.#products]
   }
 
   /**
@@ -194,7 +195,7 @@ class RemoteConfigManager {
    * @param {(tx: RcBatchUpdateTx) => void} handler
    */
   setBatchHandler (products, handler) {
-    this._batchHandlers.set(handler, new Set(products))
+    this.#batchHandlers.set(handler, new Set(products))
   }
 
   /**
@@ -203,7 +204,7 @@ class RemoteConfigManager {
    * @param {Function} handler
    */
   removeBatchHandler (handler) {
-    this._batchHandlers.delete(handler)
+    this.#batchHandlers.delete(handler)
   }
 
   getPayload () {
@@ -325,8 +326,8 @@ class RemoteConfigManager {
     if (toUnapply.length || toApply.length || toModify.length) {
       const tx = createUpdateTransaction({ toUnapply, toApply, toModify }, txHandledPaths, txOutcomes)
 
-      if (this._batchHandlers.size) {
-        for (const [handler, products] of this._batchHandlers) {
+      if (this.#batchHandlers.size) {
+        for (const [handler, products] of this.#batchHandlers) {
           const txView = filterTransactionByProducts(tx, products)
           if (txView.toUnapply.length || txView.toApply.length || txView.toModify.length) {
             handler(txView)
@@ -386,7 +387,7 @@ class RemoteConfigManager {
     // in case the item was already handled by a batch hook
     if (item.apply_state !== UNACKNOWLEDGED && action !== 'unapply') return
 
-    const handler = this._handlers.get(item.product)
+    const handler = this.#handlers.get(item.product)
 
     if (!handler) return
 
@@ -494,14 +495,18 @@ function createUpdateTransaction ({ toUnapply, toApply, toModify }, handledPaths
     ...descriptors,
     changes: descriptors,
     markHandled (path) {
-      if (typeof path === 'string') handledPaths.add(path)
+      if (typeof path !== 'string') return
+      handledPaths.add(path)
     },
     ack (path) {
-      if (typeof path === 'string') outcomes.set(path, { state: ACKNOWLEDGED, error: '' })
+      if (typeof path !== 'string') return
+      outcomes.set(path, { state: ACKNOWLEDGED, error: '' })
+      handledPaths.add(path)
     },
     error (path, err) {
       if (typeof path !== 'string') return
       outcomes.set(path, { state: ERROR, error: err ? err.toString() : 'Error' })
+      handledPaths.add(path)
     }
   }
 
@@ -551,14 +556,13 @@ function filterTransactionByProducts (tx, products) {
  * @returns {RcConfigDescriptor}
  */
 function toDescriptor (conf) {
-  const desc = {
+  return {
     path: conf.path,
     product: conf.product,
     id: conf.id,
     version: conf.version,
     file: conf.file
   }
-  return Object.freeze(desc)
 }
 
 function applyOutcomes (byPath, outcomes) {

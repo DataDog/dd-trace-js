@@ -76,12 +76,13 @@ describe('AppSec Rule Manager', () => {
 
   describe('updateWafFromRC', () => {
     function createTx (changes) {
+      const markHandled = sinon.spy()
       return {
         ...changes,
         changes,
-        ack: sinon.spy(),
-        error: sinon.spy(),
-        markHandled: sinon.spy()
+        ack: sinon.spy((path) => markHandled(path)),
+        error: sinon.spy((path) => markHandled(path)),
+        markHandled
       }
     }
 

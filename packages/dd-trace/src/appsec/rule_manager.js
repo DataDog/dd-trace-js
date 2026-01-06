@@ -15,7 +15,11 @@ const { ASM_WAF_PRODUCTS_SET } = require('./rc-products')
 let appliedActions = new Map()
 
 /**
- * @param {{ rules?: string, [key: string]: any }} config
+ * @typedef {import('./waf').WAFConfig & { rules?: string }} AppSecConfig
+ */
+
+/**
+ * @param {AppSecConfig} config
  */
 function loadRules (config) {
   const defaultRules = config.rules
@@ -47,7 +51,6 @@ function updateWafFromRC (tx) {
       waf.removeConfig(item.path)
 
       tx.ack(item.path)
-      tx.markHandled(item.path)
       wafUpdated = true
 
       // ASM actions
@@ -56,7 +59,6 @@ function updateWafFromRC (tx) {
       }
     } catch (e) {
       tx.error(item.path, e)
-      tx.markHandled(item.path)
       wafUpdatedFailed = true
     }
   }
@@ -68,7 +70,6 @@ function updateWafFromRC (tx) {
       waf.updateConfig(item.product, item.id, item.path, item.file)
 
       tx.ack(item.path)
-      tx.markHandled(item.path)
       wafUpdated = true
 
       // ASM actions
@@ -77,7 +78,6 @@ function updateWafFromRC (tx) {
       }
     } catch (e) {
       tx.error(item.path, e instanceof waf.WafUpdateError ? JSON.stringify(extractErrors(e.diagnosticErrors)) : e)
-      tx.markHandled(item.path)
       wafUpdatedFailed = true
     }
   }

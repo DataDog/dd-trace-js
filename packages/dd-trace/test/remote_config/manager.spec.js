@@ -624,7 +624,6 @@ describe('RemoteConfigManager', () => {
       rc.setBatchHandler(['ASM'], (tx) => {
         for (const item of tx.toUnapply) {
           tx.ack(item.path)
-          tx.markHandled(item.path)
         }
       })
 
