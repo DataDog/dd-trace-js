@@ -35,19 +35,23 @@ function getProcessTags () {
     ['package.json.name', pkg.name || undefined]
   ]
 
-  const serialized = serialize(tags)
+  const tagsArray = []
+  const tagsObject = {}
 
-  const tagsObject = tags.reduce((acc, [key, value]) => {
+  for (const [key, value] of tags) {
     if (value !== undefined) {
-      acc[key] = value
+      tagsArray.push(`${key}:${sanitize(value)}`)
+      tagsObject[key] = value
     }
-    return acc
-  }, {})
+  }
+
+  const serialized = tagsArray.join(',')
 
   return {
     tags,
     serialized,
-    tagsObject
+    tagsObject,
+    tagsArray
   }
 }
 
