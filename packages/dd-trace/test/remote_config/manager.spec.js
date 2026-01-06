@@ -647,7 +647,7 @@ describe('RemoteConfigManager', () => {
       assert.strictEqual(rc.appliedConfigs.has(unapplyPath), false)
     })
 
-    it('should call per-product handlers when batch handlers do not markHandled (including unapply)', () => {
+    it('should call per-product handlers when batch handlers do not ack/error (including unapply)', () => {
       const unapplyPath = 'datadog/42/ASM/confId/config'
       const conf = {
         path: unapplyPath,
@@ -665,7 +665,7 @@ describe('RemoteConfigManager', () => {
       const handler = sinon.spy()
       rc.setProductHandler('ASM', handler)
 
-      // Batch hook does nothing (does not markHandled), so per-product handler should run.
+      // Batch hook does nothing (does not ack/error), so per-product handler should run.
       rc.setBatchHandler(['ASM'], () => {})
 
       // This test needs the real dispatch path in order to verify handler invocation.

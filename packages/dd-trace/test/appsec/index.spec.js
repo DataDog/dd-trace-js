@@ -1334,8 +1334,7 @@ describe('IP blocking', function () {
       ...changes,
       changes,
       ack: sinon.spy(),
-      error: sinon.spy(),
-      markHandled: sinon.spy()
+      error: sinon.spy()
     }
   }
 

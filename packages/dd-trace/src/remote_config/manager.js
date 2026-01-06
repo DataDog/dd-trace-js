@@ -469,7 +469,6 @@ class RemoteConfigManager {
  * @property {RcConfigDescriptor[]} toUnapply
  * @property {RcConfigDescriptor[]} toApply
  * @property {RcConfigDescriptor[]} toModify
- * @property {(path: string) => void} markHandled
  * @property {(path: string) => void} ack
  * @property {(path: string, err: unknown) => void} error
  */
@@ -487,10 +486,6 @@ function createUpdateTransaction ({ toUnapply, toApply, toModify }, handledPaths
     toUnapply: toUnapply.map(toDescriptor),
     toApply: toApply.map(toDescriptor),
     toModify: toModify.map(toDescriptor),
-    markHandled (path) {
-      if (typeof path !== 'string') return
-      handledPaths.add(path)
-    },
     ack (path) {
       if (typeof path !== 'string') return
       outcomes.set(path, { state: ACKNOWLEDGED, error: '' })
@@ -506,7 +501,7 @@ function createUpdateTransaction ({ toUnapply, toApply, toModify }, handledPaths
 
 /**
  * Create a filtered "view" of the transaction for a given product set, while preserving
- * the outcome methods (ack/error/markHandled).
+ * the outcome methods (ack/error).
  *
  * @param {RcBatchUpdateTransaction} transaction
  * @param {Set<string>} products
@@ -533,7 +528,6 @@ function filterTransactionByProducts (transaction, products) {
     toUnapply,
     toApply,
     toModify,
-    markHandled: transaction.markHandled,
     ack: transaction.ack,
     error: transaction.error
   }

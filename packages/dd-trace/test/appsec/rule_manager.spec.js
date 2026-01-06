@@ -76,13 +76,11 @@ describe('AppSec Rule Manager', () => {
 
   describe('updateWafFromRC', () => {
     function createTransaction (changes) {
-      const markHandled = sinon.spy()
       return {
         ...changes,
         changes,
-        ack: sinon.spy((path) => markHandled(path)),
-        error: sinon.spy((path) => markHandled(path)),
-        markHandled
+        ack: sinon.spy(),
+        error: sinon.spy()
       }
     }
 
@@ -210,7 +208,6 @@ describe('AppSec Rule Manager', () => {
 
       sinon.assert.notCalled(transaction.ack)
       sinon.assert.notCalled(transaction.error)
-      sinon.assert.notCalled(transaction.markHandled)
 
       sinon.assert.notCalled(waf.updateConfig)
       sinon.assert.notCalled(waf.removeConfig)
@@ -251,17 +248,14 @@ describe('AppSec Rule Manager', () => {
         changes.toModify[0].path
       ].sort())
 
-      // Should ack and markHandled for each ASM product config.
+      // Should ack for each ASM product config.
       sinon.assert.calledWithExactly(transaction.ack, changes.toUnapply[0].path)
       sinon.assert.calledWithExactly(transaction.ack, changes.toApply[0].path)
       sinon.assert.calledWithExactly(transaction.ack, changes.toModify[0].path)
-      sinon.assert.calledWithExactly(transaction.markHandled, changes.toUnapply[0].path)
-      sinon.assert.calledWithExactly(transaction.markHandled, changes.toApply[0].path)
-      sinon.assert.calledWithExactly(transaction.markHandled, changes.toModify[0].path)
       sinon.assert.notCalled(transaction.error)
     })
 
-    it('should ack and markHandled on successful apply', () => {
+    it('should ack on successful apply', () => {
       waf.updateConfig.callThrough()
       waf.removeConfig.callThrough()
 
@@ -273,9 +267,6 @@ describe('AppSec Rule Manager', () => {
       sinon.assert.calledWithExactly(transaction.ack, changes.toUnapply[0].path)
       sinon.assert.calledWithExactly(transaction.ack, changes.toApply[0].path)
       sinon.assert.calledWithExactly(transaction.ack, changes.toModify[0].path)
-      sinon.assert.calledWithExactly(transaction.markHandled, changes.toUnapply[0].path)
-      sinon.assert.calledWithExactly(transaction.markHandled, changes.toApply[0].path)
-      sinon.assert.calledWithExactly(transaction.markHandled, changes.toModify[0].path)
       sinon.assert.notCalled(transaction.error)
     })
 
@@ -289,7 +280,6 @@ describe('AppSec Rule Manager', () => {
       RuleManager.updateWafFromRC(transaction)
 
       sinon.assert.calledWithMatch(transaction.error, changes.toUnapply[0].path, removeConfigError)
-      sinon.assert.calledWithExactly(transaction.markHandled, changes.toUnapply[0].path)
     })
 
     it('should call transaction.error on failed config update', () => {
@@ -351,8 +341,6 @@ describe('AppSec Rule Manager', () => {
 
       sinon.assert.calledWithExactly(transaction.error, toApply[0].path, JSON.stringify(expectedApplyError))
       sinon.assert.calledWithExactly(transaction.error, toModify[0].path, JSON.stringify(expectedApplyError))
-      sinon.assert.calledWithExactly(transaction.markHandled, toApply[0].path)
-      sinon.assert.calledWithExactly(transaction.markHandled, toModify[0].path)
     })
 
     it('should report successful waf update', () => {
