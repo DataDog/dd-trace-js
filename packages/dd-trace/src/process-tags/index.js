@@ -68,17 +68,6 @@ module.exports.CRASH_TRACKING_FIELD_NAME = 'process_tags'
 
 // TODO: CLIENT_TRACE_STATISTICS_FIELD_NAME process_tags
 
-function serialize (tags) {
-  const intermediary = []
-  for (const [name, value] of tags) {
-    if (value === undefined) continue
-    intermediary.push(`${name}:${sanitize(value)}`)
-  }
-  return intermediary.join(',')
-}
-
-module.exports.serialize = serialize
-
 /**
  * Sanitize a process tag value
  *
