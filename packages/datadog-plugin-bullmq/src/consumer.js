@@ -8,10 +8,7 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
   static prefix = 'tracing:orchestrion:bullmq:Worker_callProcessJob'
 
   asyncEnd (ctx) {
-    const span = ctx.currentStore?.span
-    if (span) {
-      span.finish()
-    }
+    ctx.currentStore?.span?.finish()
   }
 
   bindStart (ctx) {
