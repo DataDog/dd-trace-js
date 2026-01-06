@@ -64,7 +64,6 @@ function destroy () {
     waf.wafManager.destroy()
     waf.wafManager = null
   }
-  WAFManager = null
 
   waf.run = noop
   waf.disposeContext = noop
