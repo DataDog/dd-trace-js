@@ -29,9 +29,9 @@ function addInstrumentations (data) {
   const instrumentations = Object.keys(hooks)
 
   for (const moduleName of instrumentations) {
-    if (isRelativeRequire(moduleName)) {
-      continue
-    } else {
+    // Skip instrumentation hooks with relative module names
+    // since there is no current business need of instrumenting imports outside of the node_modules folder
+    if (!isRelativeRequire(moduleName)) {
       data.include.push(new RegExp(`node_modules/${moduleName}/(?!node_modules).+`), moduleName)
     }
   }
