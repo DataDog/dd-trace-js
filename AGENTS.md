@@ -115,6 +115,11 @@ assertObjectContains(response, { status: 200, body: { user: { name: 'Alice' } } 
 - Files: kebab-case
 - JSDoc: TypeScript-compatible syntax (`@param {string}`, `@returns {Promise<void>}`, `@typedef`)
 
+### Class Properties and Methods
+- Use `#privateField` syntax for private properties and methods in new code
+- Do not use underscore prefix (`_property`) for new private members
+- Existing underscore properties may remain for backward compatibility
+
 ### Import Ordering
 
 Separate groups with empty line, sort alphabetically within each:

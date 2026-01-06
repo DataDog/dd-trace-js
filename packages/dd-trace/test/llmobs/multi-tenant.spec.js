@@ -9,164 +9,107 @@ describe('Multi-Tenant Routing', () => {
   let BaseLLMObsWriter
   let request
   let logger
+  let writer
+
+  const config = {
+    site: 'default-site.com',
+    hostname: 'localhost',
+    port: 8126,
+    apiKey: 'default-key'
+  }
 
   beforeEach(() => {
     request = sinon.stub()
-    logger = {
-      debug: sinon.stub(),
-      warn: sinon.stub(),
-      error: sinon.stub()
-    }
+    logger = { debug: sinon.stub(), warn: sinon.stub(), error: sinon.stub() }
+
     BaseLLMObsWriter = proxyquire('../../src/llmobs/writers/base', {
       '../../exporters/common/request': request,
       '../../log': logger,
-      './util': proxyquire('../../src/llmobs/writers/util', {
-        '../../log': logger
-      })
+      './util': proxyquire('../../src/llmobs/writers/util', { '../../log': logger })
     })
+
+    writer = new BaseLLMObsWriter({ endpoint: '/endpoint', intake: 'intake', config })
+    writer.setAgentless(true)
+    writer.makePayload = (events) => ({ events })
   })
 
   afterEach(() => {
+    writer.destroy()
     process.removeAllListeners('beforeExit')
   })
 
-  describe('multi-buffer routing', () => {
-    let writer
-    const config = {
-      site: 'default-site.com',
-      hostname: 'localhost',
-      port: 8126,
-      apiKey: 'default-key'
-    }
+  it('routes events to correct endpoints with correct API keys', () => {
+    writer.append({ id: 1 }, { apiKey: 'key-a', site: 'site-a.com' })
+    writer.append({ id: 2 }, { apiKey: 'key-b', site: 'site-b.com' })
+    writer.append({ id: 3 }) // default routing
 
-    beforeEach(() => {
-      writer = new BaseLLMObsWriter({
-        endpoint: '/endpoint',
-        intake: 'intake',
-        config
-      })
-      writer.setAgentless(true)
-      writer.makePayload = (events) => ({ events })
-    })
+    writer.flush()
 
-    afterEach(() => {
-      writer.destroy()
-    })
+    assert.strictEqual(request.callCount, 3)
 
-    it('routes events to different buffers based on routing key', () => {
-      writer.append({ id: 1 }, { apiKey: 'key-a', site: 'site-a.com' })
-      writer.append({ id: 2 }, { apiKey: 'key-b', site: 'site-b.com' })
-      writer.append({ id: 3 }, { apiKey: 'key-a', site: 'site-a.com' })
+    const calls = request.getCalls()
+    const byKey = (key) => calls.find(c => c.args[1].headers['DD-API-KEY'] === key)
 
-      assert.strictEqual(writer._buffers.size, 2)
+    const callA = byKey('key-a')
+    const callB = byKey('key-b')
+    const callDefault = byKey('default-key')
 
-      const bufferA = writer._buffers.get('key-a:site-a.com')
-      const bufferB = writer._buffers.get('key-b:site-b.com')
-
-      assert.strictEqual(bufferA.events.length, 2)
-      assert.strictEqual(bufferB.events.length, 1)
-      assert.deepStrictEqual(bufferA.events.map(e => e.id), [1, 3])
-      assert.deepStrictEqual(bufferB.events.map(e => e.id), [2])
-    })
-
-    it('uses default routing when no routing is provided', () => {
-      writer.append({ id: 1 })
-      writer.append({ id: 2 }, null)
-
-      const defaultKey = `${config.apiKey}:${config.site}`
-      assert.strictEqual(writer._buffers.size, 1)
-      assert.strictEqual(writer._buffers.get(defaultKey).events.length, 2)
-    })
-
-    it('flushes each buffer to its corresponding endpoint', () => {
-      writer.append({ id: 1 }, { apiKey: 'key-a', site: 'site-a.com' })
-      writer.append({ id: 2 }, { apiKey: 'key-b', site: 'site-b.com' })
-
-      writer.flush()
-
-      assert.strictEqual(request.callCount, 2)
-
-      const calls = request.getCalls()
-      const options = calls.map(c => c.args[1])
-
-      const optionsA = options.find(o => o.headers['DD-API-KEY'] === 'key-a')
-      const optionsB = options.find(o => o.headers['DD-API-KEY'] === 'key-b')
-
-      assert.ok(optionsA, 'Should have request with key-a')
-      assert.ok(optionsB, 'Should have request with key-b')
-
-      assert.strictEqual(optionsA.url.href, 'https://intake.site-a.com/')
-      assert.strictEqual(optionsB.url.href, 'https://intake.site-b.com/')
-    })
-
-    it('clears buffers after flush', () => {
-      writer.append({ id: 1 }, { apiKey: 'key-a', site: 'site-a.com' })
-
-      assert.strictEqual(writer._buffers.get('key-a:site-a.com').events.length, 1)
-
-      writer.flush()
-
-      assert.strictEqual(writer._buffers.size, 0)
-    })
-
-    it('maintains separate buffer limits per routing key', () => {
-      const routing = { apiKey: 'key-a', site: 'site-a.com' }
-
-      for (let i = 0; i < 1000; i++) {
-        writer.append({ id: i }, routing)
-      }
-
-      writer.append({ id: 'overflow' }, routing)
-
-      const buffer = writer._buffers.get('key-a:site-a.com')
-      assert.strictEqual(buffer.events.length, 1000)
-
-      sinon.assert.calledWith(logger.warn,
-        'BaseLLMObsWriter event buffer full (limit is 1000), dropping event'
-      )
-    })
-
-    it('does not mix events between routing keys', () => {
-      const routingA = { apiKey: 'key-a', site: 'site-a.com' }
-      const routingB = { apiKey: 'key-b', site: 'site-b.com' }
-
-      writer.append({ tenant: 'A', data: 'secret-A' }, routingA)
-      writer.append({ tenant: 'B', data: 'secret-B' }, routingB)
-
-      writer.flush()
-
-      const calls = request.getCalls()
-      const payloads = calls.map(c => JSON.parse(c.args[0]))
-
-      const payloadA = payloads.find(p => p.events[0].tenant === 'A')
-      const payloadB = payloads.find(p => p.events[0].tenant === 'B')
-
-      assert.strictEqual(payloadA.events.length, 1)
-      assert.strictEqual(payloadA.events[0].data, 'secret-A')
-
-      assert.strictEqual(payloadB.events.length, 1)
-      assert.strictEqual(payloadB.events[0].data, 'secret-B')
-    })
+    assert.strictEqual(callA.args[1].url.href, 'https://intake.site-a.com/')
+    assert.strictEqual(callB.args[1].url.href, 'https://intake.site-b.com/')
+    assert.strictEqual(callDefault.args[1].url.href, 'https://intake.default-site.com/')
   })
 
-  describe('security', () => {
-    it('does not include API key in payload', () => {
-      const writer = new BaseLLMObsWriter({
-        endpoint: '/endpoint',
-        intake: 'intake',
-        config: { site: 'site.com', apiKey: 'secret-key', hostname: 'localhost', port: 8126 }
-      })
-      writer.setAgentless(true)
-      writer.makePayload = (events) => ({ events })
+  it('isolates events between tenants', () => {
+    writer.append({ tenant: 'A', secret: 'A-data' }, { apiKey: 'key-a', site: 'site-a.com' })
+    writer.append({ tenant: 'B', secret: 'B-data' }, { apiKey: 'key-b', site: 'site-b.com' })
 
-      writer.append({ data: 'test' }, { apiKey: 'tenant-secret-key', site: 'tenant.com' })
-      writer.flush()
+    writer.flush()
 
-      const payload = request.getCall(0).args[0]
-      assert.ok(!payload.includes('tenant-secret-key'), 'Payload should not contain API key')
-      assert.ok(!payload.includes('secret-key'), 'Payload should not contain default API key')
+    const payloads = request.getCalls().map(c => ({
+      apiKey: c.args[1].headers['DD-API-KEY'],
+      events: JSON.parse(c.args[0]).events
+    }))
 
-      writer.destroy()
-    })
+    const payloadA = payloads.find(p => p.apiKey === 'key-a')
+    const payloadB = payloads.find(p => p.apiKey === 'key-b')
+
+    assert.strictEqual(payloadA.events.length, 1)
+    assert.strictEqual(payloadA.events[0].secret, 'A-data')
+    assert.strictEqual(payloadB.events.length, 1)
+    assert.strictEqual(payloadB.events[0].secret, 'B-data')
+  })
+
+  it('enforces buffer limit per routing key', () => {
+    const routing = { apiKey: 'key-a', site: 'site-a.com' }
+
+    for (let i = 0; i < 1001; i++) {
+      writer.append({ id: i }, routing)
+    }
+
+    writer.flush()
+
+    const payload = JSON.parse(request.getCall(0).args[0])
+    assert.strictEqual(payload.events.length, 1000)
+    sinon.assert.calledOnce(logger.warn)
+  })
+
+  it('clears buffers after flush', () => {
+    writer.append({ id: 1 }, { apiKey: 'key-a', site: 'site-a.com' })
+
+    writer.flush()
+    assert.strictEqual(request.callCount, 1)
+
+    writer.flush()
+    assert.strictEqual(request.callCount, 1) // no new requests
+  })
+
+  it('does not include API key in payload body', () => {
+    writer.append({ data: 'test' }, { apiKey: 'secret-tenant-key', site: 'tenant.com' })
+
+    writer.flush()
+
+    const payload = request.getCall(0).args[0]
+    assert.ok(!payload.includes('secret-tenant-key'))
+    assert.ok(!payload.includes('default-key'))
   })
 })
