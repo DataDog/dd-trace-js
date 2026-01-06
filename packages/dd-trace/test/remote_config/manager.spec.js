@@ -360,8 +360,7 @@ describe('RemoteConfigManager', () => {
 
     it('should do nothing if passed an empty payload', () => {
       payload = {}
-
-      assert.doesNotThrow(parsePayload)
+      parsePayload()
       sinon.assert.notCalled(rc.dispatch)
       assert.deepStrictEqual(rc.state, previousState)
     })

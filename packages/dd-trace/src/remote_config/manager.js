@@ -264,14 +264,14 @@ class RemoteConfigManager {
     const toUnapply = /** @type {RcConfigState[]} */ ([])
     const toApply = /** @type {RcConfigState[]} */ ([])
     const toModify = /** @type {RcConfigState[]} */ ([])
-    const txByPath = new Map()
-    const txHandledPaths = new Set()
-    const txOutcomes = new Map()
+    const transactionByPath = new Map()
+    const transactionHandledPaths = new Set()
+    const transactionOutcomes = new Map()
 
     for (const appliedConfig of this.appliedConfigs.values()) {
       if (!clientConfigs.includes(appliedConfig.path)) {
         toUnapply.push(appliedConfig)
-        txByPath.set(appliedConfig.path, appliedConfig)
+        transactionByPath.set(appliedConfig.path, appliedConfig)
       }
     }
 
@@ -316,7 +316,7 @@ class RemoteConfigManager {
           hashes: meta.hashes,
           file: fromBase64JSON(file.raw)
         })
-        txByPath.set(path, newConf)
+        transactionByPath.set(path, newConf)
       }
 
       this.state.client.state.targets_version = targets.signed.version
@@ -324,22 +324,26 @@ class RemoteConfigManager {
     }
 
     if (toUnapply.length || toApply.length || toModify.length) {
-      const transaction = createUpdateTransaction({ toUnapply, toApply, toModify }, txHandledPaths, txOutcomes)
+      const transaction = createUpdateTransaction(
+        { toUnapply, toApply, toModify },
+        transactionHandledPaths,
+        transactionOutcomes
+      )
 
       if (this.#batchHandlers.size) {
         for (const [handler, products] of this.#batchHandlers) {
-          const txView = filterTransactionByProducts(transaction, products)
-          if (txView.toUnapply.length || txView.toApply.length || txView.toModify.length) {
-            handler(txView)
+          const transactionView = filterTransactionByProducts(transaction, products)
+          if (transactionView.toUnapply.length || transactionView.toApply.length || transactionView.toModify.length) {
+            handler(transactionView)
           }
         }
       }
 
-      applyOutcomes(txByPath, txOutcomes)
+      applyOutcomes(transactionByPath, transactionOutcomes)
 
-      this.dispatch(toUnapply, 'unapply', txHandledPaths)
-      this.dispatch(toApply, 'apply', txHandledPaths)
-      this.dispatch(toModify, 'modify', txHandledPaths)
+      this.dispatch(toUnapply, 'unapply', transactionHandledPaths)
+      this.dispatch(toApply, 'apply', transactionHandledPaths)
+      this.dispatch(toModify, 'modify', transactionHandledPaths)
 
       this.state.cached_target_files = /** @type {RcCachedTargetFile[]} */ ([])
 
@@ -368,7 +372,7 @@ class RemoteConfigManager {
   dispatch (list, action, handledPaths) {
     for (const item of list) {
       if (!handledPaths.has(item.path)) {
-        this._callHandlerFor(action, item)
+        this.#callHandlerFor(action, item)
       }
 
       if (action === 'unapply') {
@@ -383,7 +387,7 @@ class RemoteConfigManager {
    * @param {'apply' | 'modify' | 'unapply'} action
    * @param {RcConfigState} item
    */
-  _callHandlerFor (action, item) {
+  #callHandlerFor (action, item) {
     // in case the item was already handled by a batch hook
     if (item.apply_state !== UNACKNOWLEDGED && action !== 'unapply') return
 
@@ -453,22 +457,13 @@ class RemoteConfigManager {
  */
 
 /**
- * @typedef {Object} RcConfigDescriptor
- * @property {string} path
- * @property {string} product
- * @property {string} id
- * @property {number} version
- * @property {unknown} file
- */
-
-/**
  * Remote Config batch update transaction passed to batch handlers registered via
  * `RemoteConfigManager.setBatchHandler()`.
  *
  * @typedef {Object} RcBatchUpdateTransaction
- * @property {RcConfigDescriptor[]} toUnapply
- * @property {RcConfigDescriptor[]} toApply
- * @property {RcConfigDescriptor[]} toModify
+ * @property {RcConfigState[]} toUnapply
+ * @property {RcConfigState[]} toApply
+ * @property {RcConfigState[]} toModify
  * @property {(path: string) => void} ack
  * @property {(path: string, err: unknown) => void} error
  */
@@ -483,9 +478,9 @@ class RemoteConfigManager {
  */
 function createUpdateTransaction ({ toUnapply, toApply, toModify }, handledPaths, outcomes) {
   return {
-    toUnapply: toUnapply.map(toDescriptor),
-    toApply: toApply.map(toDescriptor),
-    toModify: toModify.map(toDescriptor),
+    toUnapply,
+    toApply,
+    toModify,
     ack (path) {
       if (typeof path !== 'string') return
       outcomes.set(path, { state: ACKNOWLEDGED, error: '' })
@@ -533,26 +528,13 @@ function filterTransactionByProducts (transaction, products) {
   }
 }
 
-/**
- * @param {RcConfigState} conf
- * @returns {RcConfigDescriptor}
- */
-function toDescriptor (conf) {
-  return {
-    path: conf.path,
-    product: conf.product,
-    id: conf.id,
-    version: conf.version,
-    file: conf.file
-  }
-}
-
 function applyOutcomes (byPath, outcomes) {
   for (const [path, outcome] of outcomes) {
     const item = byPath.get(path)
-    if (!item) continue
-    item.apply_state = outcome.state
-    item.apply_error = outcome.error
+    if (item) {
+      item.apply_state = outcome.state
+      item.apply_error = outcome.error
+    }
   }
 }
 

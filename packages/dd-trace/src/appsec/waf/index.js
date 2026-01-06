@@ -50,7 +50,7 @@ function init (rules, config) {
 
   limiter = new Limiter(config.rateLimit)
 
-  // dirty require to make startup faster for serverless
+  // Lazy loading improves the startup time
   WAFManager = require('./waf_manager')
 
   waf.wafManager = new WAFManager(rules, config)
@@ -111,7 +111,6 @@ function removeConfig (configPath) {
 }
 
 function run (data, req, raspRule) {
-  if (!waf.wafManager) return
   if (!req) {
     const store = storage('legacy').getStore()
     if (!store || !store.req) {
@@ -138,7 +137,6 @@ function run (data, req, raspRule) {
 }
 
 function disposeContext (req) {
-  if (!waf.wafManager) return
   const wafContext = waf.wafManager.getWAFContext(req)
 
   if (wafContext && !wafContext.ddwafContext.disposed) {

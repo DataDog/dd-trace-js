@@ -16,7 +16,7 @@ let appliedActions = new Map()
 
 /**
  * @typedef {object} AsmConfigFile
- * @property {Array<Record<string, any>>} [actions]
+ * @property {Array<Record<string, unknown>>} [actions]
  */
 
 /**
@@ -93,7 +93,7 @@ function updateWafFromRC (transaction) {
 
   waf.checkAsmDdFallback()
 
-  if (wafUpdated && waf.wafManager) {
+  if (wafUpdated) {
     Reporter.reportWafUpdate(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion, !wafUpdatedFailed)
   }
 
