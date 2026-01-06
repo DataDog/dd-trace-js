@@ -55,30 +55,30 @@ class BaseLLMObsWriter {
   }
 
   get _buffer () {
-    const defaultKey = this.#getRoutingKey()
+    const defaultKey = this._getRoutingKey()
     const buffer = this.#buffers.get(defaultKey)
     return buffer?.events || []
   }
 
   set _buffer (events) {
-    const defaultKey = this.#getRoutingKey()
-    const buffer = this.#getOrCreateBuffer(defaultKey)
+    const defaultKey = this._getRoutingKey()
+    const buffer = this._getOrCreateBuffer(defaultKey)
     buffer.events = events
   }
 
   get _bufferSize () {
-    const defaultKey = this.#getRoutingKey()
+    const defaultKey = this._getRoutingKey()
     const buffer = this.#buffers.get(defaultKey)
     return buffer?.size || 0
   }
 
   set _bufferSize (size) {
-    const defaultKey = this.#getRoutingKey()
-    const buffer = this.#getOrCreateBuffer(defaultKey)
+    const defaultKey = this._getRoutingKey()
+    const buffer = this._getOrCreateBuffer(defaultKey)
     buffer.size = size
   }
 
-  #getRoutingKey (routing) {
+  _getRoutingKey (routing) {
     const apiKey = routing?.apiKey || this._config.apiKey || ''
     const site = routing?.site || this._config.site || ''
     return `${apiKey}:${site}`
@@ -91,7 +91,7 @@ class BaseLLMObsWriter {
     return `${maskedKey}:${site}`
   }
 
-  #getOrCreateBuffer (routingKey, routing) {
+  _getOrCreateBuffer (routingKey, routing) {
     if (!this.#buffers.has(routingKey)) {
       this.#buffers.set(routingKey, {
         events: [],
@@ -106,8 +106,8 @@ class BaseLLMObsWriter {
   }
 
   append (event, routing, byteLength) {
-    const routingKey = this.#getRoutingKey(routing)
-    const buffer = this.#getOrCreateBuffer(routingKey, routing)
+    const routingKey = this._getRoutingKey(routing)
+    const buffer = this._getOrCreateBuffer(routingKey, routing)
 
     if (buffer.events.length >= this._bufferLimit) {
       logger.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
