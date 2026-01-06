@@ -107,13 +107,11 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
 
   injectTraceContext (span, ctx) {
     const jobs = ctx.arguments?.[0]
-    if (Array.isArray(jobs)) {
-      for (const job of jobs) {
-        if (job.data && typeof job.data === 'object') {
-          job.data._datadog = job.data._datadog || {}
-          this.tracer.inject(span, 'text_map', job.data._datadog)
-        }
-      }
+    if (!Array.isArray(jobs)) return
+    for (const job of jobs) {
+      if (!job.data || typeof job.data !== 'object') continue
+      job.data._datadog = job.data._datadog || {}
+      this.tracer.inject(span, 'text_map', job.data._datadog)
     }
   }
 
