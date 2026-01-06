@@ -1329,7 +1329,7 @@ describe('IP blocking', function () {
 
   let http, appListener, port
 
-  function createTx (changes) {
+  function createTransaction (changes) {
     return {
       ...changes,
       changes,
@@ -1367,7 +1367,7 @@ describe('IP blocking', function () {
       }
     }))
 
-    RuleManager.updateWafFromRC(createTx({ toUnapply: [], toApply: [], toModify }))
+    RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply: [], toModify }))
   })
 
   afterEach(() => {
@@ -1469,7 +1469,7 @@ describe('IP blocking', function () {
       }]
 
       beforeEach(() => {
-        RuleManager.updateWafFromRC(createTx({
+        RuleManager.updateWafFromRC(createTransaction({
           toUnapply: [],
           toApply: [],
           toModify: [...toModify, ...toModifyCustomActions]
@@ -1530,7 +1530,7 @@ describe('IP blocking', function () {
       }]
 
       beforeEach(() => {
-        RuleManager.updateWafFromRC(createTx({
+        RuleManager.updateWafFromRC(createTransaction({
           toUnapply: [],
           toApply: [],
           toModify: [...toModify, ...toModifyCustomActions]
