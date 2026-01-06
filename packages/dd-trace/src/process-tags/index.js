@@ -41,7 +41,7 @@ function getProcessTags () {
   for (const [key, value] of tags) {
     if (value !== undefined) {
       tagsArray.push(`${key}:${sanitize(value)}`)
-      tagsObject[key] = value
+      tagsObject[key] = sanitize(value)
     }
   }
 
