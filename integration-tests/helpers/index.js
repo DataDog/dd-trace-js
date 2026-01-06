@@ -577,17 +577,20 @@ async function spawnPluginIntegrationTestProc (
     additionalEnvArgs = stdioHandler
     stdioHandler = undefined
   }
-  additionalEnvArgs = additionalEnvArgs || {}
+  additionalEnvArgs = { ...additionalEnvArgs }
 
-  // must delete the node options from the additional env args or it breaks spawnProc
-  let additionalNodeOptions = ''
+  let NODE_OPTIONS = `--loader=${hookFile}`
   if (additionalEnvArgs.NODE_OPTIONS !== undefined) {
-    additionalNodeOptions = additionalEnvArgs.NODE_OPTIONS
+    if (additionalEnvArgs.NODE_OPTIONS.includes('--loader=')) {
+      NODE_OPTIONS = additionalEnvArgs.NODE_OPTIONS
+    } else {
+      NODE_OPTIONS += ` ${additionalEnvArgs.NODE_OPTIONS}`
+    }
     delete additionalEnvArgs.NODE_OPTIONS
   }
 
   let env = /** @type {Record<string, string|undefined>} */ ({
-    NODE_OPTIONS: `--loader=${hookFile} ${additionalNodeOptions}`,
+    NODE_OPTIONS,
     DD_TRACE_AGENT_PORT: String(agentPort),
     DD_TRACE_FLUSH_INTERVAL: '0'
   })
