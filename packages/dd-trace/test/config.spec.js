@@ -3603,25 +3603,10 @@ rules:
       assert.strictEqual(config.dynamicInstrumentation.enabled, true)
     })
 
-    it('should map live_debugging_enabled to dynamicInstrumentation.enabled', () => {
-      const config = getConfig()
-      config.updateRemoteConfig({ live_debugging_enabled: true })
-      assert.strictEqual(config.dynamicInstrumentation.enabled, true)
-    })
-
     it('should map code_origin_enabled to codeOriginForSpans.enabled', () => {
       const config = getConfig()
       config.updateRemoteConfig({ code_origin_enabled: true })
       assert.strictEqual(config.codeOriginForSpans.enabled, true)
-    })
-
-    it('should prioritize dynamic_instrumentation_enabled over live_debugging_enabled', () => {
-      const config = getConfig()
-      config.updateRemoteConfig({
-        dynamic_instrumentation_enabled: true,
-        live_debugging_enabled: false
-      })
-      assert.strictEqual(config.dynamicInstrumentation.enabled, true)
     })
 
     it('should handle false values correctly', () => {

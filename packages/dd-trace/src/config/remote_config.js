@@ -10,7 +10,6 @@ module.exports = {
 /**
  * @typedef {object} RemoteConfigOptions
  * @property {boolean} [dynamic_instrumentation_enabled] - Enable Dynamic Instrumentation
- * @property {boolean} [live_debugging_enabled] - Enable Live Debugging (deprecated alias)
  * @property {boolean} [code_origin_enabled] - Enable code origin tagging for spans
  * @property {Array<{header: string, tag_name?: string}>} [tracing_header_tags] - HTTP headers to tag
  * @property {Array<string>} [tracing_tags] - Global tags (format: "key:value")
@@ -173,12 +172,9 @@ class RCClientLibConfigManager {
  *
  * @param {import('../remote_config')} rc - RemoteConfig instance
  * @param {Config} config - Tracer config
- * @param {(config: Config, rc: import('../remote_config')) => void} updateTracing - Function to update tracing state
- *   based on config
- * @param {(config: Config, rc: import('../remote_config')) => void} updateDebugger - Function to update debugger state
- *   based on config
+ * @param {() => void} onConfigUpdated - Function to call when config is updated
  */
-function enable (rc, config, updateTracing, updateDebugger) {
+function enable (rc, config, onConfigUpdated) {
   // This tracer supports receiving config subsets via the APM_TRACING product handler.
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_MULTICONFIG, true)
 
@@ -194,7 +190,6 @@ function enable (rc, config, updateTracing, updateDebugger) {
 
   // Debugger
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING, true)
 
   // Code Origin
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN, true)
@@ -212,8 +207,6 @@ function enable (rc, config, updateTracing, updateDebugger) {
     const mergedLibConfig = rcClientLibConfigManager.getMergedLibConfig()
     config.updateRemoteConfig(mergedLibConfig)
 
-    // Update features based on merged config
-    updateTracing(config, rc)
-    updateDebugger(config, rc)
+    onConfigUpdated()
   })
 }
