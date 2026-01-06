@@ -196,11 +196,19 @@ function enable (rc, config, onConfigUpdated) {
 
   const rcClientLibConfigManager = new RCClientLibConfigManager(config.service, config.env)
 
-  rc.setProductHandler('APM_TRACING', (action, conf, configId) => {
-    if (action === 'unapply') {
-      rcClientLibConfigManager.removeConfig(configId)
-    } else { // apply or modify
-      rcClientLibConfigManager.addConfig(configId, conf)
+  // Use a batch handler to process all changes before updating the config. This is important in case there's
+  // conflicting configs between, for example, the org and service level.
+  rc.setBatchHandler(['APM_TRACING'], (transaction) => {
+    const { toUnapply, toApply, toModify } = transaction
+
+    for (const item of toUnapply) {
+      rcClientLibConfigManager.removeConfig(item.id)
+      transaction.ack(item.path)
+    }
+
+    for (const item of [...toApply, ...toModify]) {
+      rcClientLibConfigManager.addConfig(item.id, item.file)
+      transaction.ack(item.path)
     }
 
     // Get merged config and apply it
