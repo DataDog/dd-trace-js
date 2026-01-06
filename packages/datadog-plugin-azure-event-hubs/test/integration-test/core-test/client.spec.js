@@ -117,8 +117,7 @@ describe('esm', () => {
         assert.ok(!('_dd.span_links' in payload[2][0]))
       })
       const envVar = { DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: 'false', ...spawnEnv }
-      proc = await spawnPluginIntegrationTestProc(
-        sandboxCwd(), 'server.mjs', agent.port, undefined, envVar)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, envVar)
       await res
     }).timeout(60000)
   })
