@@ -144,6 +144,11 @@ Never use the `doesNotThrow()` assertion. Instead, execute the method directly.
 - Only define types inside of a method, if it can not be inferred otherwise
 - Only rewrite code for better types in case it was explicitly requested by the user
 
+### Class Properties and Methods
+- Use `#privateField` syntax for private properties and methods in new code
+- Do not use underscore prefix (`_property`) for new private members
+- Existing underscore properties may remain for backward compatibility
+
 ### Import Ordering
 
 Separate groups with empty line, sort alphabetically within each:

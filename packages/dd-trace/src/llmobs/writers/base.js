@@ -18,12 +18,13 @@ const { parseResponseAndLog } = require('./util')
 
 class BaseLLMObsWriter {
   #destroyer
+  #buffers = new Map()
+
   constructor ({ interval, timeout, eventType, config, endpoint, intake }) {
     this._interval = interval ?? getEnvironmentVariable('_DD_LLMOBS_FLUSH_INTERVAL') ?? 1000 // 1s
     this._timeout = timeout ?? getEnvironmentVariable('_DD_LLMOBS_TIMEOUT') ?? 5000 // 5s
     this._eventType = eventType
 
-    this._buffers = new Map()
     this._bufferLimit = 1000
 
     this._config = config
@@ -54,45 +55,45 @@ class BaseLLMObsWriter {
   }
 
   get _buffer () {
-    const defaultKey = this._getRoutingKey()
-    const buffer = this._buffers.get(defaultKey)
+    const defaultKey = this.#getRoutingKey()
+    const buffer = this.#buffers.get(defaultKey)
     return buffer?.events || []
   }
 
   set _buffer (events) {
-    const defaultKey = this._getRoutingKey()
-    const buffer = this._getOrCreateBuffer(defaultKey)
+    const defaultKey = this.#getRoutingKey()
+    const buffer = this.#getOrCreateBuffer(defaultKey)
     buffer.events = events
   }
 
   get _bufferSize () {
-    const defaultKey = this._getRoutingKey()
-    const buffer = this._buffers.get(defaultKey)
+    const defaultKey = this.#getRoutingKey()
+    const buffer = this.#buffers.get(defaultKey)
     return buffer?.size || 0
   }
 
   set _bufferSize (size) {
-    const defaultKey = this._getRoutingKey()
-    const buffer = this._getOrCreateBuffer(defaultKey)
+    const defaultKey = this.#getRoutingKey()
+    const buffer = this.#getOrCreateBuffer(defaultKey)
     buffer.size = size
   }
 
-  _getRoutingKey (routing) {
+  #getRoutingKey (routing) {
     const apiKey = routing?.apiKey || this._config.apiKey || ''
     const site = routing?.site || this._config.site || ''
     return `${apiKey}:${site}`
   }
 
-  _getMaskedRoutingKey (routing) {
+  #getMaskedRoutingKey (routing) {
     const apiKey = routing?.apiKey || this._config.apiKey || ''
     const site = routing?.site || this._config.site || ''
     const maskedKey = apiKey ? `****${apiKey.slice(-4)}` : ''
     return `${maskedKey}:${site}`
   }
 
-  _getOrCreateBuffer (routingKey, routing) {
-    if (!this._buffers.has(routingKey)) {
-      this._buffers.set(routingKey, {
+  #getOrCreateBuffer (routingKey, routing) {
+    if (!this.#buffers.has(routingKey)) {
+      this.#buffers.set(routingKey, {
         events: [],
         size: 0,
         routing: {
@@ -101,12 +102,12 @@ class BaseLLMObsWriter {
         }
       })
     }
-    return this._buffers.get(routingKey)
+    return this.#buffers.get(routingKey)
   }
 
   append (event, routing, byteLength) {
-    const routingKey = this._getRoutingKey(routing)
-    const buffer = this._getOrCreateBuffer(routingKey, routing)
+    const routingKey = this.#getRoutingKey(routing)
+    const buffer = this.#getOrCreateBuffer(routingKey, routing)
 
     if (buffer.events.length >= this._bufferLimit) {
       logger.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
@@ -126,7 +127,7 @@ class BaseLLMObsWriter {
       return
     }
 
-    for (const [, buffer] of this._buffers) {
+    for (const [, buffer] of this.#buffers) {
       if (buffer.events.length === 0) continue
 
       const events = buffer.events
@@ -135,22 +136,22 @@ class BaseLLMObsWriter {
 
       const payload = this._encode(this.makePayload(events))
       const options = this._getOptions(buffer.routing)
-      const url = this._getUrlForRouting(buffer.routing)
+      const url = this.#getUrlForRouting(buffer.routing)
 
-      log.debug('Encoded LLMObs payload for %s: %s', this._getMaskedRoutingKey(buffer.routing), payload)
+      log.debug('Encoded LLMObs payload for %s: %s', this.#getMaskedRoutingKey(buffer.routing), payload)
 
       request(payload, options, (err, resp, code) => {
         parseResponseAndLog(err, code, events.length, url, this._eventType)
       })
     }
 
-    this._cleanupEmptyBuffers()
+    this.#cleanupEmptyBuffers()
   }
 
-  _cleanupEmptyBuffers () {
-    for (const [key, buffer] of this._buffers) {
+  #cleanupEmptyBuffers () {
+    for (const [key, buffer] of this.#buffers) {
       if (buffer.events.length === 0) {
-        this._buffers.delete(key)
+        this.#buffers.delete(key)
       }
     }
   }
@@ -206,7 +207,7 @@ class BaseLLMObsWriter {
     }
   }
 
-  _getUrlForRouting (routing) {
+  #getUrlForRouting (routing) {
     const { url, endpoint } = this._getUrlAndPath(routing)
     const [protocol, rest] = url.href.split('://')
     return protocol + '://' + path.join(rest, endpoint)
