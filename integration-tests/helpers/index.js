@@ -25,9 +25,9 @@ const { DEBUG } = process.env
 let shouldKill
 
 // Symbol constants for dynamic value matching in assertObjectContains
-const ANY_STRING = Symbol.for('test.ANY_STRING')
-const ANY_NUMBER = Symbol.for('test.ANY_NUMBER')
-const ANY_VALUE = Symbol.for('test.ANY_VALUE')
+const ANY_STRING = Symbol('test.ANY_STRING')
+const ANY_NUMBER = Symbol('test.ANY_NUMBER')
+const ANY_VALUE = Symbol('test.ANY_VALUE')
 
 /**
  * @param {string} filename
