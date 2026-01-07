@@ -4,7 +4,7 @@ const { describe, before, after } = require('mocha')
 const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../mocha')
 
-function createIntegrationTestSuite (pluginName, packageName, testSetup, options, testCallback) {
+function createIntegrationTestSuite (pluginName, packageName, options, testCallback) {
   describe('Plugin', () => {
     describe(pluginName, () => {
       withVersions(pluginName, packageName, version => {
@@ -26,17 +26,9 @@ function createIntegrationTestSuite (pluginName, packageName, testSetup, options
             tracer = require('../../../../../dd-trace').init()
             mod = require(`../../../../../../versions/${packageName}@${version}`)
             mod = options.subModule ? mod.get(options.subModule) : mod.get()
-            await testSetup.setup(mod)
-          })
-
-          after(async () => {
-            if (testSetup?.teardown) {
-              await testSetup.teardown()
-            }
           })
 
           testCallback({
-            testSetup,
             agent,
             tracer,
             mod
