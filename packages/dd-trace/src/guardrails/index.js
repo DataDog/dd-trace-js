@@ -6,6 +6,7 @@ var isTrue = require('./util').isTrue
 var log = require('./log')
 var telemetry = require('./telemetry')
 var nodeVersion = require('../../../../version')
+var runtime = require('../utils/runtime')
 
 var NODE_MAJOR = nodeVersion.NODE_MAJOR
 
@@ -18,6 +19,31 @@ function guard (fn) {
   var minMajor = versions[1]
   var nextMajor = versions[2]
   var version = process.versions.node
+
+ if (runtime.isBun && !forced) {
+    telemetry(
+      [
+        { name: 'abort', tags: ['reason:incompatible_runtime'] },
+        { name: 'abort.runtime', tags: ['runtime:' + runtime.runtimeName] }
+      ],
+      undefined,
+      {
+        result: 'abort',
+        result_class: 'incompatible_runtime',
+        result_reason: 'Bun runtime detected. Some features may not work. Use DD_INJECT_FORCE=true to proceed.'
+      }
+    )
+    log.warn(
+      'Bun runtime detected. Some dd-trace features are not yet fully supported.'
+    )
+    log.warn(
+      'Manual tracing should work. Profiling, runtime metrics, and auto-instrumentation may be limited.'
+    )
+    // Still allow initialization but with warnings
+    log.info(
+      'Continuing with limited functionality. Use DD_INJECT_FORCE=true to suppress warnings.'
+    )
+  }
 
   if (process.env.DD_INJECTION_ENABLED) {
     // If we're running via single-step install, and we're in the app's
@@ -33,7 +59,9 @@ function guard (fn) {
       // TODO: There's also the possibility that this version of Node.js doesn't have Module.createRequire (pre v12.2.0)
     }
     if (resolvedInApp) {
-      var ourselves = path.normalize(path.join(__dirname, '..', '..', '..', '..', 'index.js'))
+      var ourselves = path.normalize(
+        path.join(__dirname, '..', '..', '..', '..', 'index.js')
+      )
       if (ourselves !== resolvedInApp) {
         clobberBailout = true
       }
@@ -44,29 +72,49 @@ function guard (fn) {
   // should not initialize the tracer.
   if (!clobberBailout && (NODE_MAJOR < minMajor || NODE_MAJOR >= nextMajor)) {
     initBailout = true
-    telemetry([
-      { name: 'abort', tags: ['reason:incompatible_runtime'] },
-      { name: 'abort.runtime', tags: [] }
-    ], undefined, {
-      result: 'abort',
-      result_class: 'incompatible_runtime',
-      result_reason: 'Incompatible runtime Node.js ' + version + ', supported runtimes: Node.js ' + engines.node
-    })
-    log.info('Aborting application instrumentation due to incompatible_runtime.')
-    log.info('Found incompatible runtime Node.js %s, Supported runtimes: Node.js %s.', version, engines.node)
+    telemetry(
+      [
+        { name: 'abort', tags: ['reason:incompatible_runtime'] },
+        { name: 'abort.runtime', tags: [] },
+      ],
+      undefined,
+      {
+        result: 'abort',
+        result_class: 'incompatible_runtime',
+        result_reason:
+          'Incompatible runtime Node.js ' +
+          version +
+          ', supported runtimes: Node.js ' +
+          engines.node,
+      }
+    )
+    log.info(
+      'Aborting application instrumentation due to incompatible_runtime.'
+    )
+    log.info(
+      'Found incompatible runtime Node.js %s, Supported runtimes: Node.js %s.',
+      version,
+      engines.node
+    )
     if (forced) {
-      log.info('DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.')
+      log.info(
+        'DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.'
+      )
     }
   }
 
   if (!clobberBailout && (!initBailout || forced)) {
     // Ensure the instrumentation source is set for the current process and potential child processes.
     var result = fn()
-    telemetry('complete', ['injection_forced:' + (forced && initBailout ? 'true' : 'false')], {
-      result: 'success',
-      result_class: 'success',
-      result_reason: 'Successfully configured ddtrace package'
-    })
+    telemetry(
+      'complete',
+      ['injection_forced:' + (forced && initBailout ? 'true' : 'false')],
+      {
+        result: 'success',
+        result_class: 'success',
+        result_reason: 'Successfully configured ddtrace package',
+      }
+    )
     log.info('Application instrumentation bootstrapping complete')
     return result
   }
