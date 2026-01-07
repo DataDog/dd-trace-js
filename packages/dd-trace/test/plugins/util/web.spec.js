@@ -164,7 +164,7 @@ describe('plugins/util/web', () => {
         config.service = 'custom'
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          assert.strictEqual(span.context()._tags[SERVICE_NAME], 'custom')
+          assert.strictEqual(span.context().getTags()[SERVICE_NAME], 'custom')
         })
       })
 
@@ -182,7 +182,7 @@ describe('plugins/util/web', () => {
         res.statusCode = '200'
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
+          const tags = span.context().getTags()
 
           res.end()
 
@@ -203,7 +203,7 @@ describe('plugins/util/web', () => {
 
         web.normalizeConfig(config)
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
+          const tags = span.context().getTags()
 
           res.end()
 
@@ -221,7 +221,7 @@ describe('plugins/util/web', () => {
 
         web.normalizeConfig(config)
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
+          const tags = span.context().getTags()
 
           res.end()
 
@@ -238,7 +238,7 @@ describe('plugins/util/web', () => {
 
         web.normalizeConfig(config)
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
+          const tags = span.context().getTags()
 
           res.end()
 
@@ -253,7 +253,7 @@ describe('plugins/util/web', () => {
 
         web.normalizeConfig(config)
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
+          const tags = span.context().getTags()
 
           res.end()
 
@@ -267,7 +267,7 @@ describe('plugins/util/web', () => {
         config.clientIpEnabled = true
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
+          const tags = span.context().getTags()
 
           span.setTag(HTTP_CLIENT_IP, '1.1.1.1')
 
@@ -283,7 +283,7 @@ describe('plugins/util/web', () => {
         config.clientIpEnabled = true
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
+          const tags = span.context().getTags()
 
           res.end()
 
@@ -298,7 +298,7 @@ describe('plugins/util/web', () => {
         config = web.normalizeConfig(config)
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
+          const tags = span.context().getTags()
 
           res.end()
 
@@ -332,8 +332,8 @@ describe('plugins/util/web', () => {
           config.service = 'test2'
           web.instrument(tracer, config, req, res, 'test.request')
 
-          assert.ok('service.name' in span.context()._tags)
-          assert.strictEqual(span.context()._tags['service.name'], 'test2')
+          assert.ok('service.name' in span.context().getTags())
+          assert.strictEqual(span.context().getTags()['service.name'], 'test2')
         })
       })
 
@@ -354,7 +354,7 @@ describe('plugins/util/web', () => {
 
         web.instrument(tracer, config, req, res, 'test.request', () => {
           web.instrument(tracer, override, req, res, 'test.request', span => {
-            const tags = span.context()._tags
+            const tags = span.context().getTags()
 
             res.end()
 
@@ -375,7 +375,7 @@ describe('plugins/util/web', () => {
         res.statusCode = '200'
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
+          const tags = span.context().getTags()
 
           res.end()
 
@@ -467,7 +467,7 @@ describe('plugins/util/web', () => {
         req.socket = { encrypted: true }
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
+          const tags = span.context().getTags()
 
           res.end()
 
@@ -495,7 +495,7 @@ describe('plugins/util/web', () => {
         res.statusCode = '200'
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
+          const tags = span.context().getTags()
 
           res.end()
 
@@ -526,7 +526,7 @@ describe('plugins/util/web', () => {
       beforeEach(() => {
         web.instrument(tracer, config, req, res, 'test.request', reqSpan => {
           span = reqSpan
-          tags = span.context()._tags
+          tags = span.context().getTags()
         })
       })
 
@@ -660,7 +660,7 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', () => {
         span = tracer.scope().active()
-        tags = span.context()._tags
+        tags = span.context().getTags()
       })
     })
 
@@ -692,7 +692,7 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', reqSpan => {
         span = reqSpan
-        tags = span.context()._tags
+        tags = span.context().getTags()
       })
     })
 
@@ -713,7 +713,7 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', () => {
         span = tracer.scope().active()
-        tags = span.context()._tags
+        tags = span.context().getTags()
       })
     })
 
@@ -732,7 +732,7 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', () => {
         span = tracer.scope().active()
-        tags = span.context()._tags
+        tags = span.context().getTags()
       })
     })
 
@@ -754,7 +754,7 @@ describe('plugins/util/web', () => {
     it('should add an error if provided', (done) => {
       const fn = () => {
         const span = tracer.scope().active()
-        const tags = span.context()._tags
+        const tags = span.context().getTags()
         const error = new Error('boom')
 
         sinon.spy(span, 'finish')
@@ -815,7 +815,7 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', () => {
         span = tracer.scope().active()
-        tags = span.context()._tags
+        tags = span.context().getTags()
       })
     })
 
@@ -848,7 +848,7 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', () => {
         span = tracer.scope().active()
-        tags = span.context()._tags
+        tags = span.context().getTags()
       })
     })
 
@@ -945,7 +945,7 @@ describe('plugins/util/web', () => {
 
       web.instrument(tracer, config, req, res, 'test.request', () => {
         span = tracer.scope().active()
-        tags = span.context()._tags
+        tags = span.context().getTags()
       })
 
       res.statusCode = 200
@@ -962,7 +962,7 @@ describe('plugins/util/web', () => {
 
       web.instrument(tracer, config, req, res, 'test.request', () => {
         span = tracer.scope().active()
-        tags = span.context()._tags
+        tags = span.context().getTags()
       })
 
       res.statusCode = 200

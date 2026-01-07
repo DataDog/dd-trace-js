@@ -40,8 +40,8 @@ class NativeSpanContext extends DatadogSpanContext {
    * @param {*} value - Tag value
    */
   setTag (key, value) {
-    // Store in JS cache
-    this._tags[key] = value
+    // Store in JS cache via parent
+    super.setTag(key, value)
 
     // Symbol keys are for internal JS use only (e.g., IGNORE_OTEL_ERROR)
     // They should not be synced to native storage

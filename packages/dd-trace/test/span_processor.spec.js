@@ -33,12 +33,17 @@ describe('SpanProcessor', () => {
       finished: [],
     }
 
+    let tags = {}
     const span = {
       tracer: sinon.stub().returns(tracer),
       context: sinon.stub().returns({
         _trace: trace,
         _sampling: {},
-        _tags: {},
+        getTags: () => tags,
+        getTag: (key) => tags[key],
+        setTag: (key, value) => { tags[key] = value },
+        hasTag: (key) => key in tags,
+        clearTags: () => { tags = Object.create(null) },
       }),
     }
 
@@ -93,8 +98,7 @@ describe('SpanProcessor', () => {
     assert.deepStrictEqual(trace.started, [])
     assert.ok('finished' in trace)
     assert.deepStrictEqual(trace.finished, [])
-    assert.ok('_tags' in finishedSpan.context())
-    assert.deepStrictEqual(finishedSpan.context()._tags, {})
+    assert.deepStrictEqual(finishedSpan.context().getTags(), Object.create(null))
   })
 
   it('should not flush a partial trace below the flushMinSpans threshold', () => {
@@ -173,8 +177,7 @@ describe('SpanProcessor', () => {
     assert.deepStrictEqual(trace.started, [])
     assert.ok('finished' in trace)
     assert.deepStrictEqual(trace.finished, [])
-    assert.ok('_tags' in finishedSpan.context())
-    assert.deepStrictEqual(finishedSpan.context()._tags, {})
+    assert.deepStrictEqual(finishedSpan.context().getTags(), Object.create(null))
     sinon.assert.notCalled(exporter.export)
   })
 

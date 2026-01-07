@@ -305,7 +305,7 @@ class SpanProcessor {
     }
 
     for (const span of trace.finished) {
-      span.context()._tags = {}
+      span.context().clearTags()
     }
 
     trace.started = active

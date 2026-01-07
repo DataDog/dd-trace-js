@@ -26,12 +26,12 @@ function configure (config) {
 }
 
 function onSpanStart ({ span, fields }) {
-  const tags = span.context?.()?._tags
-  if (!tags) return
+  const context = span.context?.()
+  if (!context) return
 
   const { parent } = fields
   if (!parent || parent._isRemote) {
-    tags[APM_TRACING_ENABLED_KEY] = 0
+    context.setTag(APM_TRACING_ENABLED_KEY, 0)
   }
 }
 

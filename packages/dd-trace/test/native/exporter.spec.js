@@ -157,7 +157,7 @@ describe('NativeExporter', () => {
 
       exporter.flush(() => {
         // Trace tags should be synced to span tags
-        assert.ok(span.context()._tags['_dd.p.tid'])
+        assert.ok(span.context().getTag('_dd.p.tid'))
         done()
       })
     })
