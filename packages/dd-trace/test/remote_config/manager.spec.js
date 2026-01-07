@@ -341,12 +341,13 @@ describe('RemoteConfigManager', () => {
 
   describe('parseConfig', () => {
     let payload
-    const func = () => rc.parseConfig(payload)
+    const parsePayload = () => rc.parseConfig(payload)
     let previousState
 
     beforeEach(() => {
       sinon.stub(rc, 'dispatch').callsFake((list, action) => {
-        for (const item of list) {
+        const items = /** @type {Array<{path: string, apply_state: number}>} */ (list)
+        for (const item of items) {
           item.apply_state = ACKNOWLEDGED
 
           if (action === 'unapply') rc.appliedConfigs.delete(item.path)
@@ -359,8 +360,7 @@ describe('RemoteConfigManager', () => {
 
     it('should do nothing if passed an empty payload', () => {
       payload = {}
-
-      assert.doesNotThrow(func)
+      parsePayload()
       sinon.assert.notCalled(rc.dispatch)
       assert.deepStrictEqual(rc.state, previousState)
     })
@@ -377,7 +377,7 @@ describe('RemoteConfigManager', () => {
         })
       }
 
-      assert.throws(func, { message: 'Unable to find target for path datadog/42/PRODUCT/confId/config' })
+      assert.throws(parsePayload, { message: 'Unable to find target for path datadog/42/PRODUCT/confId/config' })
       sinon.assert.notCalled(rc.dispatch)
       assert.deepStrictEqual(rc.state, previousState)
     })
@@ -398,7 +398,7 @@ describe('RemoteConfigManager', () => {
         })
       }
 
-      assert.throws(func, { message: 'Unable to find file for path datadog/42/PRODUCT/confId/config' })
+      assert.throws(parsePayload, { message: 'Unable to find file for path datadog/42/PRODUCT/confId/config' })
       sinon.assert.notCalled(rc.dispatch)
       assert.deepStrictEqual(rc.state, previousState)
     })
@@ -423,7 +423,7 @@ describe('RemoteConfigManager', () => {
         }]
       }
 
-      assert.throws(func, { message: 'Unable to parse path datadog/42/confId/config' })
+      assert.throws(parsePayload, { message: 'Unable to parse path datadog/42/confId/config' })
       sinon.assert.notCalled(rc.dispatch)
       assert.deepStrictEqual(rc.state, previousState)
     })
@@ -518,14 +518,14 @@ describe('RemoteConfigManager', () => {
         ]
       }
 
-      // Calling func should not throw.
-      func()
+      // Calling parsePayload should not throw.
+      parsePayload()
 
       assert.strictEqual(rc.state.client.state.targets_version, 12345)
       assert.strictEqual(rc.state.client.state.backend_client_state, 'opaquestateinbase64')
 
       sinon.assert.calledThrice(rc.dispatch)
-      sinon.assert.calledWithExactly(rc.dispatch.firstCall, [{
+      sinon.assert.calledWithMatch(rc.dispatch.firstCall, [{
         path: 'datadog/42/UNAPPLY/confId/config',
         product: 'UNAPPLY',
         id: 'confId',
@@ -535,8 +535,8 @@ describe('RemoteConfigManager', () => {
         length: 147,
         hashes: { sha256: 'anotherHash' },
         file: { asm: { enabled: true } }
-      }], 'unapply')
-      sinon.assert.calledWithExactly(rc.dispatch.secondCall, [{
+      }], 'unapply', sinon.match.instanceOf(Set))
+      sinon.assert.calledWithMatch(rc.dispatch.secondCall, [{
         path: 'datadog/42/APPLY/confId/config',
         product: 'APPLY',
         id: 'confId',
@@ -546,8 +546,8 @@ describe('RemoteConfigManager', () => {
         length: 0,
         hashes: { sha256: 'haaaxx' },
         file: null
-      }], 'apply')
-      sinon.assert.calledWithExactly(rc.dispatch.thirdCall, [{
+      }], 'apply', sinon.match.instanceOf(Set))
+      sinon.assert.calledWithMatch(rc.dispatch.thirdCall, [{
         path: 'datadog/42/MODIFY/confId/config',
         product: 'MODIFY',
         id: 'confId',
@@ -557,7 +557,7 @@ describe('RemoteConfigManager', () => {
         length: 147,
         hashes: { sha256: 'newHash' },
         file: { config: 'newConf' }
-      }], 'modify')
+      }], 'modify', sinon.match.instanceOf(Set))
 
       assert.deepStrictEqual(rc.state.client.state.config_states, [
         {
@@ -600,14 +600,101 @@ describe('RemoteConfigManager', () => {
         }
       ])
     })
+
+    it('should allow batch handlers to ack + handle items and skip per-product handlers (including unapply)', () => {
+      // Arrange: two configs already applied, one will be unapplied.
+      const unapplyPath = 'datadog/42/ASM/confId/config'
+      rc.appliedConfigs.set(unapplyPath, {
+        path: unapplyPath,
+        product: 'ASM',
+        id: 'confId',
+        version: 1,
+        apply_state: ACKNOWLEDGED,
+        apply_error: '',
+        length: 1,
+        hashes: { sha256: 'oldHash' },
+        file: { a: 1 }
+      })
+
+      const handler = sinon.spy()
+      rc.setProductHandler('ASM', handler)
+
+      // Batch hook will handle the unapply and report success.
+      rc.setBatchHandler(['ASM'], (transaction) => {
+        for (const item of transaction.toUnapply) {
+          transaction.ack(item.path)
+        }
+      })
+
+      payload = {
+        client_configs: [],
+        targets: toBase64({
+          signed: {
+            custom: { opaque_backend_state: 'state' },
+            targets: {},
+            version: 2
+          }
+        }),
+        target_files: []
+      }
+
+      // Act
+      parsePayload()
+
+      // Assert: handler should not be invoked, but state should be updated (unapplied).
+      sinon.assert.notCalled(handler)
+      assert.strictEqual(rc.appliedConfigs.has(unapplyPath), false)
+    })
+
+    it('should call per-product handlers when batch handlers do not ack/error (including unapply)', () => {
+      const unapplyPath = 'datadog/42/ASM/confId/config'
+      const conf = {
+        path: unapplyPath,
+        product: 'ASM',
+        id: 'confId',
+        version: 1,
+        apply_state: ACKNOWLEDGED,
+        apply_error: '',
+        length: 1,
+        hashes: { sha256: 'oldHash' },
+        file: { a: 1 }
+      }
+      rc.appliedConfigs.set(unapplyPath, conf)
+
+      const handler = sinon.spy()
+      rc.setProductHandler('ASM', handler)
+
+      // Batch hook does nothing (does not ack/error), so per-product handler should run.
+      rc.setBatchHandler(['ASM'], () => {})
+
+      // This test needs the real dispatch path in order to verify handler invocation.
+      rc.dispatch.restore()
+
+      payload = {
+        client_configs: [],
+        targets: toBase64({
+          signed: {
+            custom: { opaque_backend_state: 'state' },
+            targets: {},
+            version: 2
+          }
+        }),
+        target_files: []
+      }
+
+      parsePayload()
+
+      sinon.assert.calledOnceWithExactly(handler, 'unapply', conf.file, conf.id)
+      assert.strictEqual(rc.appliedConfigs.has(unapplyPath), false)
+    })
   })
 
   describe('dispatch', () => {
     it('should call registered handler for each config, catch errors, and update the state', (done) => {
       const syncGoodNonAckHandler = sinon.spy()
-      const syncBadNonAckHandler = sinon.spy(() => { throw new Error('sync fn') })
-      const asyncGoodHandler = sinon.spy(async () => {})
-      const asyncBadHandler = sinon.spy(async () => { throw new Error('async fn') })
+      const syncBadNonAckHandler = sinon.spy((action, conf, id) => { throw new Error('sync fn') })
+      const asyncGoodHandler = sinon.spy(async (action, conf, id) => {})
+      const asyncBadHandler = sinon.spy(async (action, conf, id) => { throw new Error('async fn') })
       const syncGoodAckHandler = sinon.spy((action, conf, id, ack) => { ack() })
       const syncBadAckHandler = sinon.spy((action, conf, id, ack) => { ack(new Error('sync ack fn')) })
       const asyncGoodAckHandler = sinon.spy((action, conf, id, ack) => { setImmediate(ack) })
@@ -638,7 +725,7 @@ describe('RemoteConfigManager', () => {
         }
       }
 
-      rc.dispatch(list, 'apply')
+      rc.dispatch(list, 'apply', new Set())
 
       sinon.assert.calledOnceWithExactly(syncGoodNonAckHandler, 'apply', list[0].file, list[0].id)
       sinon.assert.calledOnceWithExactly(syncBadNonAckHandler, 'apply', list[1].file, list[1].id)
@@ -707,7 +794,7 @@ describe('RemoteConfigManager', () => {
         file: { asm: { enabled: true } }
       })
 
-      rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply')
+      rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply', new Set())
 
       sinon.assert.calledOnceWithExactly(handler, 'unapply', { asm: { enabled: true } }, 'asm_data')
       assert.strictEqual(rc.appliedConfigs.size, 0)
