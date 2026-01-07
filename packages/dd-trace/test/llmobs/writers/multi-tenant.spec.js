@@ -115,10 +115,14 @@ describe('Multi-Tenant Routing', () => {
 
   describe('routing context behavior', () => {
     const { storage } = require('../../../src/llmobs/storage')
+    let sdkLogger
 
     function withRoutingContext (options, fn) {
       if (!options?.ddApiKey) throw new Error('ddApiKey is required')
       const currentStore = storage.getStore()
+      if (currentStore?.routingContext && sdkLogger) {
+        sdkLogger.warn('Nested routing context detected')
+      }
       const store = { ...currentStore, routingContext: { apiKey: options.ddApiKey, site: options.ddSite } }
       return storage.run(store, fn)
     }
@@ -127,7 +131,8 @@ describe('Multi-Tenant Routing', () => {
       return storage.getStore()?.routingContext || null
     }
 
-    it('nested contexts override outer and restore after', () => {
+    it('nested contexts override outer and restore after, and logs warning', () => {
+      sdkLogger = { warn: sinon.stub() }
       let outerRouting, innerRouting, afterInnerRouting
 
       withRoutingContext({ ddApiKey: 'outer-key', ddSite: 'outer-site' }, () => {
@@ -141,6 +146,8 @@ describe('Multi-Tenant Routing', () => {
       assert.strictEqual(outerRouting.apiKey, 'outer-key')
       assert.strictEqual(innerRouting.apiKey, 'inner-key')
       assert.strictEqual(afterInnerRouting.apiKey, 'outer-key')
+      sinon.assert.calledOnce(sdkLogger.warn)
+      sinon.assert.calledWith(sdkLogger.warn, 'Nested routing context detected')
     })
 
     it('concurrent contexts are isolated', async () => {

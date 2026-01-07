@@ -46,14 +46,14 @@ class BaseLLMObsWriter {
 
   // Split on protocol separator to preserve it
   // path.join will remove some slashes unnecessarily
-  _buildUrl (baseUrl, endpoint) {
+  #buildUrl (baseUrl, endpoint) {
     const [protocol, rest] = baseUrl.split('://')
     return protocol + '://' + path.join(rest, endpoint)
   }
 
   get url () {
     if (this._agentless == null) return null
-    return this._buildUrl(this._baseUrl.href, this._endpoint)
+    return this.#buildUrl(this._baseUrl.href, this._endpoint)
   }
 
   _getBuffer (routing) {
@@ -123,7 +123,7 @@ class BaseLLMObsWriter {
 
       const payload = this._encode(this.makePayload(events))
       const options = this._getOptions(buffer.routing)
-      const url = this._getUrlForRouting(buffer.routing)
+      const url = this.#getUrlForRouting(buffer.routing)
       const maskedApiKey = apiKey ? `****${apiKey.slice(-4)}` : ''
 
       log.debug('Encoding and flushing multi-tenant buffer for %s', maskedApiKey)
@@ -134,15 +134,15 @@ class BaseLLMObsWriter {
       })
     }
 
-    this._cleanupEmptyBuffers()
+    this.#cleanupEmptyBuffers()
   }
 
-  _getUrlForRouting (routing) {
+  #getUrlForRouting (routing) {
     const { url, endpoint } = this._getUrlAndPath(routing)
-    return this._buildUrl(url.href, endpoint)
+    return this.#buildUrl(url.href, endpoint)
   }
 
-  _cleanupEmptyBuffers () {
+  #cleanupEmptyBuffers () {
     for (const [key, buffer] of this.#multiTenantBuffers) {
       if (buffer.events.length === 0) {
         this.#multiTenantBuffers.delete(key)
