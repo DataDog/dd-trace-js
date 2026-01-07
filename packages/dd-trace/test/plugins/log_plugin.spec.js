@@ -1,13 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
-const { describe, it } = require('tap').mocha
+const { describe, it } = require('mocha')
 const { channel } = require('dc-polyfill')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
-
 const LogPlugin = require('../../src/plugins/log_plugin')
 const Tracer = require('../../src/tracer')
 const getConfig = require('../../src/config')

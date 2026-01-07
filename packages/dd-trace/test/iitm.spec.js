@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, before, after } = require('tap').mocha
+
+const { describe, it, before, after } = require('mocha')
 const sinon = require('sinon')
 const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')

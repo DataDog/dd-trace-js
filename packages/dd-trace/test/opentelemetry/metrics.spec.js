@@ -2,13 +2,15 @@
 
 process.setMaxListeners(50)
 
-require('../setup/core')
 const assert = require('assert')
 const http = require('http')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { metrics } = require('@opentelemetry/api')
+
+require('../setup/core')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')

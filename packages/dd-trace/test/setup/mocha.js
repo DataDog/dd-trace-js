@@ -15,6 +15,7 @@ const externals = require('../plugins/externals.json')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
+const extraServices = require('../../src/service-naming/extra-services')
 const { storage } = require('../../../datadog-core')
 const { getInstrumentation } = require('./helpers/load-inst')
 
@@ -147,7 +148,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
     it('should compute peer service', async () => {
       const useCallback = spanGenerationFn.length === 1
       const spanGenerationPromise = useCallback
-        ? new Promise((resolve, reject) => {
+        ? new Promise(/** @type {() => void} */ (resolve, reject) => {
           const result = spanGenerationFn((err) => err ? reject(err) : resolve())
           // Some callback based methods are a mixture of callback and promise,
           // depending on the module version. Await the promises as well.
@@ -237,9 +238,8 @@ function withVersions (plugin, modules, range, cb) {
       for (const version of versions) {
         if (process.env.RANGE && !semver.subset(version, process.env.RANGE)) continue
         if (version !== '*') {
-          const result = semver.coerce(version)
-          if (!result) throw new Error(`Invalid version: ${version}`)
-          const min = result.version
+          const min = semver.coerce(version)?.version
+          if (!min) throw new Error(`Invalid version: ${version}`)
           testVersions.set(min, { versionRange: version, versionKey: min, resolvedVersion: min })
         }
 
@@ -360,5 +360,7 @@ exports.mochaHooks = {
     agent.reset()
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
+    storage('baggage').enterWith(undefined)
+    extraServices.clear()
   }
 }

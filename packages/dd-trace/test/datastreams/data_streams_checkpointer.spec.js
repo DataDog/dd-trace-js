@@ -2,11 +2,10 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it, before, after } = require('tap').mocha
+const { describe, it, before, after } = require('mocha')
 const sinon = require('sinon')
 
 require('../setup/core')
-
 const agent = require('../plugins/agent')
 
 const expectedProducerHash = '6359420180750536220'

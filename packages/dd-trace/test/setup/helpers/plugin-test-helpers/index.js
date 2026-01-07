@@ -8,8 +8,7 @@ function createIntegrationTestSuite (pluginName, packageName, options, testCallb
   describe('Plugin', () => {
     describe(pluginName, () => {
       withVersions(pluginName, packageName, version => {
-        let tracer = null
-        let mod = null
+        const meta = { agent, tracer: null, mod: null }
 
         describe('without configuration', () => {
           before(async () => {
@@ -23,16 +22,12 @@ function createIntegrationTestSuite (pluginName, packageName, options, testCallb
           })
 
           before(async () => {
-            tracer = require('../../../../../dd-trace').init()
-            mod = require(`../../../../../../versions/${packageName}@${version}`)
-            mod = options.subModule ? mod.get(options.subModule) : mod.get()
+            meta.tracer = require('../../../../../dd-trace').init()
+            const mod = require(`../../../../../../versions/${packageName}@${version}`)
+            meta.mod = options.subModule ? mod.get(options.subModule) : mod.get()
           })
 
-          testCallback({
-            agent,
-            tracer,
-            mod
-          })
+          testCallback(meta)
         })
       })
     })
