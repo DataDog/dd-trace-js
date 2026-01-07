@@ -22,10 +22,10 @@ describe('Multi-Tenant Routing', () => {
     request = sinon.stub()
     logger = { debug: sinon.stub(), warn: sinon.stub(), error: sinon.stub() }
 
-    BaseLLMObsWriter = proxyquire('../../src/llmobs/writers/base', {
+    BaseLLMObsWriter = proxyquire('../../../src/llmobs/writers/base', {
       '../../exporters/common/request': request,
       '../../log': logger,
-      './util': proxyquire('../../src/llmobs/writers/util', { '../../log': logger })
+      './util': proxyquire('../../../src/llmobs/writers/util', { '../../log': logger })
     })
 
     writer = new BaseLLMObsWriter({ endpoint: '/endpoint', intake: 'intake', config })
@@ -111,5 +111,57 @@ describe('Multi-Tenant Routing', () => {
     const payload = request.getCall(0).args[0]
     assert.ok(!payload.includes('secret-tenant-key'))
     assert.ok(!payload.includes('default-key'))
+  })
+
+  describe('routing context behavior', () => {
+    const { storage } = require('../../../src/llmobs/storage')
+
+    function withRoutingContext (options, fn) {
+      if (!options?.ddApiKey) throw new Error('ddApiKey is required')
+      const currentStore = storage.getStore()
+      const store = { ...currentStore, routingContext: { apiKey: options.ddApiKey, site: options.ddSite } }
+      return storage.run(store, fn)
+    }
+
+    function getCurrentRouting () {
+      return storage.getStore()?.routingContext || null
+    }
+
+    it('nested contexts override outer and restore after', () => {
+      let outerRouting, innerRouting, afterInnerRouting
+
+      withRoutingContext({ ddApiKey: 'outer-key', ddSite: 'outer-site' }, () => {
+        outerRouting = getCurrentRouting()
+        withRoutingContext({ ddApiKey: 'inner-key', ddSite: 'inner-site' }, () => {
+          innerRouting = getCurrentRouting()
+        })
+        afterInnerRouting = getCurrentRouting()
+      })
+
+      assert.strictEqual(outerRouting.apiKey, 'outer-key')
+      assert.strictEqual(innerRouting.apiKey, 'inner-key')
+      assert.strictEqual(afterInnerRouting.apiKey, 'outer-key')
+    })
+
+    it('concurrent contexts are isolated', async () => {
+      const results = []
+
+      await Promise.all([
+        withRoutingContext({ ddApiKey: 'key-a' }, async () => {
+          await new Promise(resolve => setTimeout(resolve, 10))
+          results.push({ context: 'A', routing: getCurrentRouting() })
+        }),
+        withRoutingContext({ ddApiKey: 'key-b' }, async () => {
+          await new Promise(resolve => setTimeout(resolve, 5))
+          results.push({ context: 'B', routing: getCurrentRouting() })
+        })
+      ])
+
+      const resultA = results.find(r => r.context === 'A')
+      const resultB = results.find(r => r.context === 'B')
+
+      assert.strictEqual(resultA.routing.apiKey, 'key-a')
+      assert.strictEqual(resultB.routing.apiKey, 'key-b')
+    })
   })
 })
