@@ -1,10 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, afterEach } = require('tap').mocha
+
+const { describe, it, afterEach } = require('mocha')
 
 require('../../setup/core')
-
 const { ddBasePath } = require('../../../src/util')
 
 const EOL = '\n'
