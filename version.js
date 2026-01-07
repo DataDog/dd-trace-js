@@ -22,7 +22,7 @@ module.exports = {
   NODE_PATCH: parseInt(nodeMatches[3]),
   NODE_VERSION: nodeMatches[0],
   RUNTIME: runtime.runtimeName,
-  RUNTIME_MAJOR: parseInt(runtimeVersion[1]), // in case it breaks downstream consumer 
+  RUNTIME_MAJOR: parseInt(runtimeVersion[1]), // in case it breaks downstream consumer
   RUNTIME_MINOR: parseInt(runtimeVersion[2]),
   RUNTIME_PATCH: parseInt(runtimeVersion[3]),
   RUNTIME_VERSION: runtime.runtimeVersion
