@@ -456,6 +456,17 @@ class LLMObs extends NoopLLMObs {
       throw new Error('ddApiKey is required for routing context')
     }
     const currentStore = storage.getStore()
+    if (currentStore?.routingContext) {
+      const outerKey = currentStore.routingContext.apiKey
+      const innerKey = options.ddApiKey
+      const maskedOuter = outerKey ? `****${outerKey.slice(-4)}` : ''
+      const maskedInner = innerKey ? `****${innerKey.slice(-4)}` : ''
+      logger.warn(
+        'Nested routing context detected. Inner context (%s) will override outer context (%s). ' +
+        'Spans created in the inner context will only be sent to the inner context.',
+        maskedInner, maskedOuter
+      )
+    }
     const store = {
       ...currentStore,
       routingContext: {
