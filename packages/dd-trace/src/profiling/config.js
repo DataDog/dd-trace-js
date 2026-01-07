@@ -78,7 +78,6 @@ class Config {
       return
     }
 
-
     this.version = version
     this.tags = Object.assign(
       tagger.parse(DD_TAGS),
