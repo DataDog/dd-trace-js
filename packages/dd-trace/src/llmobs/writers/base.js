@@ -45,14 +45,14 @@ class BaseLLMObsWriter {
 
   // Split on protocol separator to preserve it
   // path.join will remove some slashes unnecessarily
-  #buildUrl (baseUrl, endpoint) {
+  _buildUrl (baseUrl, endpoint) {
     const [protocol, rest] = baseUrl.split('://')
     return protocol + '://' + path.join(rest, endpoint)
   }
 
   get url () {
     if (this._agentless == null) return null
-    return this.#buildUrl(this._baseUrl.href, this._endpoint)
+    return this._buildUrl(this._baseUrl.href, this._endpoint)
   }
 
   _getBuffer (routing) {
@@ -122,7 +122,7 @@ class BaseLLMObsWriter {
 
       const payload = this._encode(this.makePayload(events))
       const options = this._getOptions(buffer.routing)
-      const url = this.#getUrlForRouting(buffer.routing)
+      const url = this._getUrlForRouting(buffer.routing)
       const maskedApiKey = apiKey ? `****${apiKey.slice(-4)}` : ''
 
       log.debug('Encoding and flushing multi-tenant buffer for %s', maskedApiKey)
@@ -133,15 +133,15 @@ class BaseLLMObsWriter {
       })
     }
 
-    this.#cleanupEmptyBuffers()
+    this._cleanupEmptyBuffers()
   }
 
-  #getUrlForRouting (routing) {
+  _getUrlForRouting (routing) {
     const { url, endpoint } = this._getUrlAndPath(routing)
-    return this.#buildUrl(url.href, endpoint)
+    return this._buildUrl(url.href, endpoint)
   }
 
-  #cleanupEmptyBuffers () {
+  _cleanupEmptyBuffers () {
     for (const [key, buffer] of this.#multiTenantBuffers) {
       if (buffer.events.length === 0) {
         this.#multiTenantBuffers.delete(key)
@@ -201,14 +201,18 @@ class BaseLLMObsWriter {
   }
 
   _getOptions (routing) {
+    const { url, endpoint } = routing
+      ? this._getUrlAndPath(routing)
+      : { url: this._baseUrl, endpoint: this._endpoint }
+
     const options = {
       headers: {
         'Content-Type': 'application/json'
       },
       method: 'POST',
       timeout: this._timeout,
-      url: routing ? this._getUrlAndPath(routing).url : this._baseUrl,
-      path: routing ? this._getUrlAndPath(routing).endpoint : this._endpoint
+      url,
+      path: endpoint
     }
 
     if (this._agentless) {
