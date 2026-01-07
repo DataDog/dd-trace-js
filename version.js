@@ -8,7 +8,9 @@ var /** @type {RegExpMatchArray} */ ddMatches =
     version.match(/^(\d+)\.(\d+)\.(\d+)/)
 // @ts-expect-error
 var /** @type {RegExpMatchArray} */ nodeMatches =
-    process.versions.node.match(/^(\d+)\.(\d+)\.(\d+)/)
+  process.versions.node.match(/^(\d+)\.(\d+)\.(\d+)/)
+// @ts-expect-error
+var /** @type {RegExpMatchArray} */ runtimeVersion = runtime.runtimeVersion.match(/^(\d+)\.(\d+)\.(\d+)/)
 
 module.exports = {
   VERSION: version,
@@ -20,5 +22,8 @@ module.exports = {
   NODE_PATCH: parseInt(nodeMatches[3]),
   NODE_VERSION: nodeMatches[0],
   RUNTIME: runtime.runtimeName,
+  RUNTIME_MAJOR: parseInt(runtimeVersion[1]),
+  RUNTIME_MINOR: parseInt(runtimeVersion[2]),
+  RUNTIME_PATCH: parseInt(runtimeVersion[3]),
   RUNTIME_VERSION: runtime.runtimeVersion
 }
