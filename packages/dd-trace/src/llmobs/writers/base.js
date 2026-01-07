@@ -18,7 +18,9 @@ const { parseResponseAndLog } = require('./util')
 
 class BaseLLMObsWriter {
   #destroyer
-  #buffers = new Map()
+  _buffer = []
+  _bufferSize = 0
+  #multiTenantBuffers = new Map()
   #endpoint
 
   constructor ({ interval, timeout, eventType, config, endpoint, intake }) {
@@ -50,84 +52,80 @@ class BaseLLMObsWriter {
 
   get url () {
     if (this._agentless == null) return null
-    return this.#getUrlForRouting()
+    const { url, endpoint } = this._getUrlAndPath()
+    const [protocol, rest] = url.href.split('://')
+    return protocol + '://' + path.join(rest, endpoint)
   }
 
-  // Backward-compatible getters - only access default routing buffer.
-  get _buffer () {
-    const defaultKey = this._getRoutingKey()
-    const buffer = this.#buffers.get(defaultKey)
-    return buffer?.events || []
-  }
-
-  set _buffer (events) {
-    const defaultKey = this._getRoutingKey()
-    const buffer = this._getOrCreateBuffer(defaultKey)
-    buffer.events = events
-  }
-
-  get _bufferSize () {
-    const defaultKey = this._getRoutingKey()
-    const buffer = this.#buffers.get(defaultKey)
-    return buffer?.size || 0
-  }
-
-  set _bufferSize (size) {
-    const defaultKey = this._getRoutingKey()
-    const buffer = this._getOrCreateBuffer(defaultKey)
-    buffer.size = size
-  }
-
-  _getRoutingKey (routing) {
-    const apiKey = routing?.apiKey || this._config.apiKey || ''
-    const site = routing?.site || this._config.site || ''
+  #getMultiTenantRoutingKey (routing) {
+    const apiKey = routing?.apiKey || ''
+    const site = routing?.site || ''
     return `${apiKey}:${site}`
   }
 
-  #getMaskedRoutingKey (routing) {
-    const apiKey = routing?.apiKey || this._config.apiKey || ''
-    const site = routing?.site || this._config.site || ''
-    const maskedKey = apiKey ? `****${apiKey.slice(-4)}` : ''
-    return `${maskedKey}:${site}`
-  }
-
-  _getOrCreateBuffer (routingKey, routing) {
-    if (!this.#buffers.has(routingKey)) {
-      this.#buffers.set(routingKey, {
+  #getOrCreateMultiTenantBuffer (routingKey, routing) {
+    if (!this.#multiTenantBuffers.has(routingKey)) {
+      this.#multiTenantBuffers.set(routingKey, {
         events: [],
         size: 0,
         routing: {
-          apiKey: routing?.apiKey || this._config.apiKey,
-          site: routing?.site || this._config.site
+          apiKey: routing?.apiKey,
+          site: routing?.site
         }
       })
     }
-    return this.#buffers.get(routingKey)
+    return this.#multiTenantBuffers.get(routingKey)
   }
 
   append (event, routing, byteLength) {
-    const routingKey = this._getRoutingKey(routing)
-    const buffer = this._getOrCreateBuffer(routingKey, routing)
-
-    if (buffer.events.length >= this._bufferLimit) {
-      logger.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
-      telemetry.recordDroppedPayload(1, this._eventType, 'buffer_full')
-      return
-    }
-
     const eventSize = byteLength || Buffer.byteLength(JSON.stringify(event))
-    buffer.size += eventSize
-    buffer.events.push(event)
+
+    if (routing) {
+      const routingKey = this.#getMultiTenantRoutingKey(routing)
+      const buffer = this.#getOrCreateMultiTenantBuffer(routingKey, routing)
+
+      if (buffer.events.length >= this._bufferLimit) {
+        logger.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
+        telemetry.recordDroppedPayload(1, this._eventType, 'buffer_full')
+        return
+      }
+
+      buffer.size += eventSize
+      buffer.events.push(event)
+    } else {
+      if (this._buffer.length >= this._bufferLimit) {
+        logger.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
+        telemetry.recordDroppedPayload(1, this._eventType, 'buffer_full')
+        return
+      }
+
+      this._bufferSize += eventSize
+      this._buffer.push(event)
+    }
   }
 
   flush () {
-    const noAgentStrategy = this._agentless == null
-
-    if (noAgentStrategy) {
+    if (this._agentless == null) {
       return
     }
 
-    for (const [, buffer] of this.#buffers) {
+    if (this._buffer.length > 0) {
+      const events = this._buffer
+      this._buffer = []
+      this._bufferSize = 0
+
+      const payload = this._encode(this.makePayload(events))
+      const options = this._getOptions()
+      const url = this.url
+
+      log.debug('Encoded LLMObs payload: %s', payload)
+
+      request(payload, options, (err, resp, code) => {
+        parseResponseAndLog(err, code, events.length, url, this._eventType)
+      })
+    }
+
+    for (const [, buffer] of this.#multiTenantBuffers) {
       if (buffer.events.length === 0) continue
 
       const events = buffer.events
@@ -137,8 +135,10 @@ class BaseLLMObsWriter {
       const payload = this._encode(this.makePayload(events))
       const options = this._getOptions(buffer.routing)
       const url = this.#getUrlForRouting(buffer.routing)
+      const site = buffer.routing?.site || ''
+      const maskedApiKey = buffer.routing?.apiKey ? `****${buffer.routing.apiKey.slice(-4)}` : ''
 
-      log.debug('Encoded LLMObs payload for %s: %s', this.#getMaskedRoutingKey(buffer.routing), payload)
+      log.debug('Encoding and flushing multi-tenant buffer for %s with %s', site, maskedApiKey)
 
       request(payload, options, (err, resp, code) => {
         parseResponseAndLog(err, code, events.length, url, this._eventType)
@@ -149,9 +149,9 @@ class BaseLLMObsWriter {
   }
 
   #cleanupEmptyBuffers () {
-    for (const [key, buffer] of this.#buffers) {
+    for (const [key, buffer] of this.#multiTenantBuffers) {
       if (buffer.events.length === 0) {
-        this.#buffers.delete(key)
+        this.#multiTenantBuffers.delete(key)
       }
     }
   }

@@ -33,7 +33,6 @@ const {
   ROUTING_SITE
 } = require('./constants/tags')
 const { storage } = require('./storage')
-const { getCurrentRouting } = require('./routing-context')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
@@ -114,11 +113,9 @@ class LLMObsTagger {
     const annotationContextName = annotationContext?.name
     if (annotationContextName) this._setTag(span, NAME, annotationContextName)
 
-    const routing = getCurrentRouting()
+    const routing = storage.getStore()?.routingContext
     if (routing) {
-      if (routing.apiKey) {
-        this._setTag(span, ROUTING_API_KEY, routing.apiKey)
-      }
+      this._setTag(span, ROUTING_API_KEY, routing.apiKey)
       if (routing.site) {
         this._setTag(span, ROUTING_SITE, routing.site)
       }
