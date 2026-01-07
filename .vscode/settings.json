@@ -1,4 +1,19 @@
 {
+  // Use the workspace version of TypeScript instead of VSCode's bundled version
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "cSpell.words": [
+    "aerospike",
+    "appsec",
+    "backportability",
+    "kafkajs",
+    "llmobs",
+    "microbenchmarks",
+    "oracledb",
+    "rabbitmq",
+    "rspack",
+    "sirun"
+  ],
   "editor.defaultFormatter": "dbaeumer.vscode-eslint",
   "editor.formatOnSave": true,
   "eslint.format.enable": true,
@@ -15,3 +30,5 @@
     }
   }
 }
+
+
