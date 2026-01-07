@@ -7,12 +7,20 @@ const TestSetup = require('./test-setup')
 
 const testSetup = new TestSetup()
 
-createIntegrationTestSuite('bullmq', 'bullmq', testSetup, {
+createIntegrationTestSuite('bullmq', 'bullmq', {
   category: 'messaging'
 }, (meta) => {
-  const { agent } = meta
+  const { agent, mod } = meta
 
   describe('Queue.add() - bullmq.add', () => {
+    before(async () => {
+      await testSetup.setup(mod)
+    })
+
+    after(async () => {
+      await testSetup.teardown()
+    })
+
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertFirstTraceSpan({
         name: 'bullmq.add',
