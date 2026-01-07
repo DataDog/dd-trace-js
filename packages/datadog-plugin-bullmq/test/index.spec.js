@@ -12,15 +12,15 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
 }, (meta) => {
   const { agent } = meta
 
+  before(async () => {
+    await testSetup.setup(meta.mod)
+  })
+
+  after(async () => {
+    await testSetup.teardown()
+  })
+
   describe('Queue.add() - bullmq.add', () => {
-    before(async () => {
-      await testSetup.setup(meta.mod)
-    })
-
-    after(async () => {
-      await testSetup.teardown()
-    })
-
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertFirstTraceSpan({
         name: 'bullmq.add',
