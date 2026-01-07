@@ -9,6 +9,7 @@ const proxyquire = require('proxyquire')
 const getConfig = require('../../src/config')
 const RuleManager = require('../../src/appsec/rule_manager')
 const RemoteConfigCapabilities = require('../../src/remote_config/capabilities')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 require('../setup/core')
 
@@ -165,27 +166,33 @@ describe('AppSec Remote Config', () => {
           listener('apply', rcConfigAsmEnabling)
 
           sinon.assert.calledOnce(telemetry.updateConfig)
-          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].name, 'appsec.enabled')
-          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].origin, 'remote_config')
-          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].value, rcConfigAsmEnabling.asm.enabled)
+          assertObjectContains(telemetry.updateConfig.firstCall.args, [[{
+            name: 'appsec.enabled',
+            origin: 'remote_config',
+            value: rcConfigAsmEnabling.asm.enabled
+          }]])
         })
 
         it('should update appsec.enabled when modifying asm enabling by RC', () => {
           listener('modify', rcConfigAsmDisabling)
 
           sinon.assert.calledOnce(telemetry.updateConfig)
-          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].name, 'appsec.enabled')
-          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].origin, 'remote_config')
-          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].value, rcConfigAsmDisabling.asm.enabled)
+          assertObjectContains(telemetry.updateConfig.firstCall.args, [[{
+            name: 'appsec.enabled',
+            origin: 'remote_config',
+            value: rcConfigAsmDisabling.asm.enabled
+          }]])
         })
 
         it('should update when unapplying asm enabling by RC', () => {
           listener('unapply', { asm: { enabled: true } })
 
           sinon.assert.calledOnce(telemetry.updateConfig)
-          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].name, 'appsec.enabled')
-          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].origin, 'default')
-          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].value, config.appsec.enabled)
+          assertObjectContains(telemetry.updateConfig.firstCall.args, [[{
+            name: 'appsec.enabled',
+            origin: 'default',
+            value: config.appsec.enabled
+          }]])
         })
       })
 
