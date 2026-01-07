@@ -1,10 +1,14 @@
 'use strict'
 
 var version = require('./package.json').version
+var runtime = require('./packages/dd-trace/src/utils/runtime')
+
 // @ts-expect-error
-var /** @type {RegExpMatchArray} */ ddMatches = version.match(/^(\d+)\.(\d+)\.(\d+)/)
+var /** @type {RegExpMatchArray} */ ddMatches =
+    version.match(/^(\d+)\.(\d+)\.(\d+)/)
 // @ts-expect-error
-var /** @type {RegExpMatchArray} */ nodeMatches = process.versions.node.match(/^(\d+)\.(\d+)\.(\d+)/)
+var /** @type {RegExpMatchArray} */ nodeMatches =
+    process.versions.node.match(/^(\d+)\.(\d+)\.(\d+)/)
 
 module.exports = {
   VERSION: version,
@@ -14,5 +18,7 @@ module.exports = {
   NODE_MAJOR: parseInt(nodeMatches[1]),
   NODE_MINOR: parseInt(nodeMatches[2]),
   NODE_PATCH: parseInt(nodeMatches[3]),
-  NODE_VERSION: nodeMatches[0]
+  NODE_VERSION: nodeMatches[0],
+  RUNTIME: runtime.runtimeName,
+  RUNTIME_VERSION: runtime.runtimeVersion
 }
