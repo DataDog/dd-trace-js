@@ -240,9 +240,11 @@ DD_TRACE_DEBUG=true node your-app.js
 DD_TRACE_DEBUG=true yarn test:debugger
 ```
 
-### Documentation
+### JSDoc
 
 Document all APIs with TypeScript-compatible JSDoc to ensure proper types without using TypeScript. This enables type checking and IDE autocompletion while maintaining the JavaScript codebase. Use TypeScript type syntax in JSDoc annotations (e.g., `@param {string}`, `@returns {Promise<void>}`).
+
+Never use the type `any` - be specific.
 
 ## Adding New Configuration Options
 

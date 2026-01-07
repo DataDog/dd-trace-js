@@ -10,7 +10,7 @@ require('./setup/core')
 
 describe('process-tags', () => {
   const processTags = require('../src/process-tags')
-  const { serialize, sanitize } = require('../src/process-tags')
+  const { sanitize } = require('../src/process-tags')
 
   describe('field name constants', () => {
     it('should define field names for different subsystems', () => {
@@ -123,88 +123,6 @@ describe('process-tags', () => {
           assert.doesNotMatch(part, /undefined/)
         })
       }
-    })
-  })
-
-  describe('serialize', () => {
-    it('should serialize tags as name:value pairs joined by commas', () => {
-      const tags = [
-        ['tag1', 'value1'],
-        ['tag2', 'value2'],
-        ['tag3', 'value3']
-      ]
-
-      const result = serialize(tags)
-
-      assert.strictEqual(result, 'tag1:value1,tag2:value2,tag3:value3')
-    })
-
-    it('should filter out tags with undefined values', () => {
-      const tags = [
-        ['tag1', 'value1'],
-        ['tag2', undefined],
-        ['tag3', 'value3'],
-        ['tag4', undefined]
-      ]
-
-      const result = serialize(tags)
-
-      assert.strictEqual(result, 'tag1:value1,tag3:value3')
-      assert.doesNotMatch(result, /undefined/)
-    })
-
-    it('should sanitize tag values', () => {
-      const tags = [
-        ['tag1', 'Value With Spaces'],
-        ['tag2', 'UPPERCASE'],
-        ['tag3', 'special@chars!']
-      ]
-
-      const result = serialize(tags)
-
-      assert.strictEqual(result, 'tag1:value_with_spaces,tag2:uppercase,tag3:special_chars_')
-    })
-
-    it('should return empty string when all values are undefined', () => {
-      const tags = [
-        ['tag1', undefined],
-        ['tag2', undefined]
-      ]
-
-      const result = serialize(tags)
-
-      assert.strictEqual(result, '')
-    })
-
-    it('should handle empty tags array', () => {
-      const result = serialize([])
-
-      assert.strictEqual(result, '')
-    })
-
-    it('should handle numeric values', () => {
-      const tags = [
-        ['tag1', 123],
-        ['tag2', 456]
-      ]
-
-      const result = serialize(tags)
-
-      assert.strictEqual(result, 'tag1:123,tag2:456')
-    })
-
-    it('should handle mixed defined and undefined values', () => {
-      const tags = [
-        ['tag1', 'value1'],
-        ['tag2', undefined],
-        ['tag3', 'value3'],
-        ['tag4', undefined],
-        ['tag5', 'value5']
-      ]
-
-      const result = serialize(tags)
-
-      assert.strictEqual(result, 'tag1:value1,tag3:value3,tag5:value5')
     })
   })
 

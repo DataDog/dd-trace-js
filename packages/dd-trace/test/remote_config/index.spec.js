@@ -10,7 +10,6 @@ require('../setup/core')
 const getConfig = require('../../src/config')
 const RuleManager = require('../../src/appsec/rule_manager')
 const RemoteConfigCapabilities = require('../../src/remote_config/capabilities')
-const { kPreUpdate } = require('../../src/remote_config/manager')
 
 let config
 let rc
@@ -34,10 +33,12 @@ describe('Remote Config index', () => {
 
     rc = {
       updateCapabilities: sinon.spy(),
-      on: sinon.spy(),
-      off: sinon.spy(),
+      setBatchHandler: sinon.spy(),
+      removeBatchHandler: sinon.spy(),
       setProductHandler: sinon.spy(),
-      removeProductHandler: sinon.spy()
+      removeProductHandler: sinon.spy(),
+      subscribeProducts: sinon.spy(),
+      unsubscribeProducts: sinon.spy()
     }
 
     RemoteConfigManager = sinon.stub().returns(rc)
@@ -233,6 +234,11 @@ describe('Remote Config index', () => {
   })
 
   describe('enableWafUpdate', () => {
+    const assertCalledWithAllProducts = (spy, products) => {
+      const calls = spy.getCalls()
+      assert.ok(calls.some(call => products.every(p => call.args.includes(p))))
+    }
+
     const expectCapabilitiesCalledWith = (capabilityList, expectedValue) => {
       capabilityList.forEach(capability => {
         sinon.assert.calledWithExactly(rc.updateCapabilities, capability, expectedValue)
@@ -301,10 +307,8 @@ describe('Remote Config index', () => {
 
         expectCapabilitiesCalledWith(ALL_ASM_CAPABILITIES, true)
 
-        sinon.assert.calledWith(rc.setProductHandler, 'ASM_DATA')
-        sinon.assert.calledWith(rc.setProductHandler, 'ASM_DD')
-        sinon.assert.calledWith(rc.setProductHandler, 'ASM')
-        sinon.assert.calledWithExactly(rc.on, kPreUpdate, RuleManager.updateWafFromRC)
+        assertCalledWithAllProducts(rc.subscribeProducts, ['ASM', 'ASM_DD', 'ASM_DATA'])
+        sinon.assert.calledWithExactly(rc.setBatchHandler, ['ASM', 'ASM_DD', 'ASM_DATA'], RuleManager.updateWafFromRC)
       })
 
       it('should activate if appsec is manually enabled', () => {
@@ -314,10 +318,8 @@ describe('Remote Config index', () => {
 
         expectCapabilitiesCalledWith(ALL_ASM_CAPABILITIES, true)
 
-        sinon.assert.calledWith(rc.setProductHandler, 'ASM_DATA')
-        sinon.assert.calledWith(rc.setProductHandler, 'ASM_DD')
-        sinon.assert.calledWith(rc.setProductHandler, 'ASM')
-        sinon.assert.calledWithExactly(rc.on, kPreUpdate, RuleManager.updateWafFromRC)
+        assertCalledWithAllProducts(rc.subscribeProducts, ['ASM', 'ASM_DD', 'ASM_DATA'])
+        sinon.assert.calledWithExactly(rc.setBatchHandler, ['ASM', 'ASM_DD', 'ASM_DATA'], RuleManager.updateWafFromRC)
       })
 
       it('should activate if appsec enabled is not defined', () => {
@@ -350,10 +352,8 @@ describe('Remote Config index', () => {
 
         expectCapabilitiesCalledWith(ALL_ASM_CAPABILITIES, false)
 
-        sinon.assert.calledWith(rc.removeProductHandler, 'ASM_DATA')
-        sinon.assert.calledWith(rc.removeProductHandler, 'ASM_DD')
-        sinon.assert.calledWith(rc.removeProductHandler, 'ASM')
-        sinon.assert.calledWithExactly(rc.off, kPreUpdate, RuleManager.updateWafFromRC)
+        assertCalledWithAllProducts(rc.unsubscribeProducts, ['ASM', 'ASM_DD', 'ASM_DATA'])
+        sinon.assert.calledWithExactly(rc.removeBatchHandler, RuleManager.updateWafFromRC)
       })
     })
   })

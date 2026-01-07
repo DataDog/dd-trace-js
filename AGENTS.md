@@ -24,6 +24,14 @@ dd-trace is the Datadog client library for Node.js.
 - `integration-tests/` - E2E integration tests
 - `benchmark/` - Performance benchmarks
 
+**Package Structure:**
+
+Each package follows a consistent structure:
+- `src/` - Source code for the package
+- `test/` - Unit tests for the package
+- Unit test files always follow the `*.spec.js` naming convention
+- Test directories may also contain helper files (e.g., `naming.js`, `helpers.js`, `suite.js`) and integration test subdirectories
+
 ## Testing Instructions
 
 ### Testing Workflow
@@ -106,7 +114,10 @@ assertObjectContains(response, { status: 200, body: { user: { name: 'Alice' } } 
 ### Linting & Naming
 - Lint: `yarn lint` / `yarn lint:fix`
 - Files: kebab-case
-- JSDoc: TypeScript-compatible syntax (`@param {string}`, `@returns {Promise<void>}`, `@typedef`)
+
+### JSDoc
+- Use TypeScript-compatible syntax (`@param {string}`, `@returns {Promise<void>}`, `@typedef`)
+- Never use `any` (be specific or use `unknown` if type is truly unknown)
 
 ### Import Ordering
 
@@ -136,7 +147,6 @@ const log = require('../log')
   const { NODE_MAJOR } = require('./version')
   if (NODE_MAJOR >= 20) { /* Use Node.js 20+ API */ }
   ```
-- **Prefix Node.js core modules with `node:`** (e.g., `require('node:assert')`)
 
 ### Performance and Memory
 
