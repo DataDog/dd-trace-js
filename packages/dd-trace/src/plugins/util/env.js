@@ -1,16 +1,16 @@
-"use strict";
+'use strict'
 
-const os = require("os");
-const { runtimeName, runtimeVersion } = require("../../utils/runtime");
+const os = require('os')
+const { runtimeName, runtimeVersion } = require('../../utils/runtime')
 
-const OS_PLATFORM = "os.platform";
-const OS_VERSION = "os.version";
-const OS_ARCHITECTURE = "os.architecture";
-const RUNTIME_NAME = "runtime.name";
-const RUNTIME_VERSION = "runtime.version";
-const DD_HOST_CPU_COUNT = "_dd.host.vcpu_count";
+const OS_PLATFORM = 'os.platform'
+const OS_VERSION = 'os.version'
+const OS_ARCHITECTURE = 'os.architecture'
+const RUNTIME_NAME = 'runtime.name'
+const RUNTIME_VERSION = 'runtime.version'
+const DD_HOST_CPU_COUNT = '_dd.host.vcpu_count'
 
-function getRuntimeAndOSMetadata() {
+function getRuntimeAndOSMetadata () {
   return {
     [RUNTIME_VERSION]: runtimeVersion,
     [OS_ARCHITECTURE]: process.arch,
