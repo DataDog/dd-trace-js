@@ -29,7 +29,7 @@ const ADVANCED_USER_SCHEMA_DEF = JSON.parse(
 const BASIC_USER_SCHEMA_ID = '1605040621379664412'
 const ADVANCED_USER_SCHEMA_ID = '919692610494986520'
 function compareJson (expected, span) {
-  const actual = JSON.parse(span.context()._tags[SCHEMA_DEFINITION])
+  const actual = JSON.parse(span.context().getTag(SCHEMA_DEFINITION))
   return JSON.stringify(actual) === JSON.stringify(expected)
 }
 
@@ -82,11 +82,11 @@ describe('Plugin', () => {
             assert.strictEqual(span._name, 'user.serialize')
 
             assert.strictEqual(compareJson(BASIC_USER_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.avro.User')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], BASIC_USER_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'avro')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'example.avro.User')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'serialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], BASIC_USER_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -113,11 +113,11 @@ describe('Plugin', () => {
             assert.strictEqual(span._name, 'advanced_user.serialize')
 
             assert.strictEqual(compareJson(ADVANCED_USER_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.avro.AdvancedUser')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], ADVANCED_USER_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'avro')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'example.avro.AdvancedUser')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'serialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], ADVANCED_USER_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -134,11 +134,11 @@ describe('Plugin', () => {
             assert.strictEqual(span._name, 'user.deserialize')
 
             assert.strictEqual(compareJson(BASIC_USER_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.avro.User')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], BASIC_USER_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'avro')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'example.avro.User')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], BASIC_USER_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -166,11 +166,11 @@ describe('Plugin', () => {
             assert.strictEqual(span._name, 'advanced_user.deserialize')
 
             assert.strictEqual(compareJson(ADVANCED_USER_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.avro.AdvancedUser')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], ADVANCED_USER_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'avro')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'example.avro.AdvancedUser')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], ADVANCED_USER_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
       })

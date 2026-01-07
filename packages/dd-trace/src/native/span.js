@@ -436,7 +436,7 @@ class NativeDatadogSpan {
         parentId: existingContext._parentId,
         sampling: existingContext._sampling,
         baggageItems: { ...existingContext._baggageItems },
-        tags: { ...existingContext._tags },
+        tags: { ...existingContext.getTags() },
         trace: existingContext._trace,
         tracestate: existingContext._tracestate
       })

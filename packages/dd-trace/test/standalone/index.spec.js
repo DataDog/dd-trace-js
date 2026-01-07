@@ -133,7 +133,7 @@ describe('Disabled APM Tracing or Standalone', () => {
         operationName: 'operation'
       })
 
-      assert.ok(!(APM_TRACING_ENABLED_KEY in span.context()._tags))
+      assert.ok(!span.context().hasTag(APM_TRACING_ENABLED_KEY))
     })
 
     it('should add _dd.apm.enabled tag when standalone is enabled', () => {
@@ -143,7 +143,7 @@ describe('Disabled APM Tracing or Standalone', () => {
         operationName: 'operation'
       })
 
-      assert.ok(Object.hasOwn(span.context()._tags, APM_TRACING_ENABLED_KEY))
+      assert.ok(span.context().hasTag(APM_TRACING_ENABLED_KEY))
     })
 
     it('should not add _dd.apm.enabled tag in child spans with local parent', () => {
@@ -153,14 +153,14 @@ describe('Disabled APM Tracing or Standalone', () => {
         operationName: 'operation'
       })
 
-      assert.strictEqual(parent.context()._tags[APM_TRACING_ENABLED_KEY], 0)
+      assert.strictEqual(parent.context().getTag(APM_TRACING_ENABLED_KEY), 0)
 
       const child = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation',
         parent
       })
 
-      assert.ok(!(APM_TRACING_ENABLED_KEY in child.context()._tags))
+      assert.ok(!child.context().hasTag(APM_TRACING_ENABLED_KEY))
     })
 
     it('should add _dd.apm.enabled tag in child spans with remote parent', () => {
@@ -177,7 +177,7 @@ describe('Disabled APM Tracing or Standalone', () => {
         parent
       })
 
-      assert.strictEqual(child.context()._tags[APM_TRACING_ENABLED_KEY], 0)
+      assert.strictEqual(child.context().getTag(APM_TRACING_ENABLED_KEY), 0)
     })
   })
 

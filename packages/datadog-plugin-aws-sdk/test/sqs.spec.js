@@ -268,7 +268,7 @@ describe('Plugin', () => {
               const span = tracer.scope().active()
 
               assert.notStrictEqual(span, beforeSpan)
-              assert.strictEqual(span.context()._tags['aws.operation'], 'receiveMessage')
+              assert.strictEqual(span.context().getTag('aws.operation'), 'receiveMessage')
 
               done()
             })

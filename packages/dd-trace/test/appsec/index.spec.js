@@ -735,10 +735,17 @@ describe('AppSec Index', function () {
     beforeEach(() => {
       sinon.stub(waf, 'run')
 
+      const rootSpanTags = {}
       rootSpan = {
         setTag: sinon.stub(),
-        _tags: {},
-        context: () => ({ _tags: rootSpan._tags })
+        _tags: rootSpanTags,
+        context: () => ({
+          _tags: rootSpanTags,
+          getTags () { return rootSpanTags },
+          getTag (key) { return rootSpanTags[key] },
+          setTag (key, value) { rootSpanTags[key] = value },
+          hasTag (key) { return key in rootSpanTags }
+        })
       }
       web.root.returns(rootSpan)
 

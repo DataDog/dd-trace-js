@@ -220,7 +220,7 @@ describe('Native Spans Smoke Tests', () => {
 
       // With flushInterval: 0, should flush immediately and sync tags
       setTimeout(() => {
-        assert.strictEqual(mockSpan.context()._tags['_dd.p.tid'], 'abc123')
+        assert.strictEqual(mockSpan.context().getTag('_dd.p.tid'), 'abc123')
         done()
       }, 10)
     })
@@ -246,9 +246,9 @@ describe('Native Spans Smoke Tests', () => {
       })
 
       // 2. Set span properties
-      spanContext._tags['service.name'] = 'test-service'
-      spanContext._tags['resource.name'] = 'GET /api/users'
-      spanContext._tags['span.type'] = 'web'
+      spanContext.setTag('service.name', 'test-service')
+      spanContext.setTag('resource.name', 'GET /api/users')
+      spanContext.setTag('span.type', 'web')
       spanContext._syncNameToNative('http.request')
 
       // 3. Queue start time

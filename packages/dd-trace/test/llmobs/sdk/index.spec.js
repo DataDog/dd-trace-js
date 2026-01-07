@@ -278,8 +278,8 @@ describe('sdk', () => {
                 outerLLMSpan.context().toSpanId()
               )
               // TODO: need to implement custom trace IDs
-              // expect(innerLLMSpan.context()._tags['_ml_obs.trace_id'])
-              //   .to.equal(outerLLMSpan.context()._tags['_ml_obs.trace_id'])
+              // expect(innerLLMSpan.context().getTag('_ml_obs.trace_id'))
+              //   .to.equal(outerLLMSpan.context().getTag('_ml_obs.trace_id'))
             })
           })
         })
@@ -312,11 +312,11 @@ describe('sdk', () => {
           tracer.trace('apmRootSpan', apmRootSpan => {
             apmTraceId = apmRootSpan.context().toTraceId(true)
             llmobs.trace('workflow', llmobsSpan1 => {
-              traceId1 = llmobsSpan1.context()._tags['_ml_obs.trace_id']
+              traceId1 = llmobsSpan1.context().getTag('_ml_obs.trace_id')
             })
 
             llmobs.trace('workflow', llmobsSpan2 => {
-              traceId2 = llmobsSpan2.context()._tags['_ml_obs.trace_id']
+              traceId2 = llmobsSpan2.context().getTag('_ml_obs.trace_id')
             })
           })
 
@@ -669,7 +669,7 @@ describe('sdk', () => {
           const fn = llmobs.wrap('workflow', { name: 'test' }, () => {
             const span = llmobs._active()
 
-            const traceId = span.context()._tags['_ml_obs.trace_id']
+            const traceId = span.context().getTag('_ml_obs.trace_id')
             assert.ok(traceId != null)
             assert.notStrictEqual(traceId, span.context().toTraceId(true))
           })
@@ -692,8 +692,8 @@ describe('sdk', () => {
               outerLLMSpan.context().toSpanId()
             )
             // TODO: need to implement custom trace IDs
-            // expect(innerLLMSpan.context()._tags['_ml_obs.trace_id'])
-            //   .to.equal(outerLLMSpan.context()._tags['_ml_obs.trace_id'])
+            // expect(innerLLMSpan.context().getTag('_ml_obs.trace_id'))
+            //   .to.equal(outerLLMSpan.context().getTag('_ml_obs.trace_id'))
           }
 
           const outerWrapped = llmobs.wrap({ kind: 'workflow' }, outer)
@@ -723,8 +723,8 @@ describe('sdk', () => {
               outerLLMObsSpan.context().toSpanId()
             )
             // TODO: need to implement custom trace IDs
-            // expect(innerLLMObsSpan.context()._tags['_ml_obs.trace_id'])
-            //   .to.equal(outerLLMObsSpan.context()._tags['_ml_obs.trace_id'])
+            // expect(innerLLMObsSpan.context().getTag('_ml_obs.trace_id'))
+            //   .to.equal(outerLLMObsSpan.context().getTag('_ml_obs.trace_id'))
           }
 
           const outerWrapped = llmobs.wrap({ kind: 'workflow' }, outerLLMObs)

@@ -41,11 +41,17 @@ describe('reporter', () => {
       setPriority: sinon.stub()
     }
 
+    const spanTags = {}
+    const spanContext = {
+      _tags: spanTags,
+      getTags () { return this._tags },
+      getTag (key) { return this._tags[key] },
+      setTag (key, value) { this._tags[key] = value },
+      hasTag (key) { return key in this._tags }
+    }
     span = {
       _prioritySampler: prioritySampler,
-      context: sinon.stub().returns({
-        _tags: {}
-      }),
+      context: sinon.stub().returns(spanContext),
       addTags: sinon.stub(),
       setTag: sinon.stub(),
       keep: sinon.stub()

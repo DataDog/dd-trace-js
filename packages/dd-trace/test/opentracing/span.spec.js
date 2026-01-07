@@ -417,7 +417,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.setTag('foo', 'bar')
 
-      sinon.assert.calledWith(tagger.add, span.context()._tags, { foo: 'bar' })
+      sinon.assert.calledWith(tagger.add, span.context().getTags(), { foo: 'bar' })
     })
   })
 
@@ -431,7 +431,7 @@ describe('Span', () => {
 
       span.addTags(tags)
 
-      sinon.assert.calledWith(tagger.add, span.context()._tags, tags)
+      sinon.assert.calledWith(tagger.add, span.context().getTags(), tags)
     })
 
     it('should sample based on the tags', () => {
@@ -478,7 +478,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.finish()
 
-      assertObjectContains(span._spanContext._tags, { '_dd.integration': 'opentracing' })
+      assertObjectContains(span._spanContext.getTags(), { '_dd.integration': 'opentracing' })
     })
 
     describe('tracePropagationBehaviorExtract and Baggage', () => {

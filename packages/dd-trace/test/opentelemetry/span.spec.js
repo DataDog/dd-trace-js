@@ -43,7 +43,7 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
 
     const context = span._ddSpan.context()
-    assert.strictEqual(context._tags[SERVICE_NAME], tracer._tracer._service)
+    assert.strictEqual(context.getTag(SERVICE_NAME), tracer._tracer._service)
     assert.strictEqual(context._hostname, tracer._hostname)
   })
 
@@ -234,14 +234,14 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
 
     const context = span._ddSpan.context()
-    assert.strictEqual(context._tags[RESOURCE_NAME], 'name')
+    assert.strictEqual(context.getTag(RESOURCE_NAME), 'name')
   })
 
   it('should copy span kind to span.kind', () => {
     const span = makeSpan('name', { kind: api.SpanKind.CONSUMER })
 
     const context = span._ddSpan.context()
-    assert.strictEqual(context._tags[SPAN_KIND], kinds.CONSUMER)
+    assert.strictEqual(context.getTag(SPAN_KIND), kinds.CONSUMER)
   })
 
   it('should expose span context', () => {
@@ -293,32 +293,32 @@ describe('OTel Span', () => {
   it('should set attributes', () => {
     const span = makeSpan('name')
 
-    const { _tags } = span._ddSpan.context()
+    const context = span._ddSpan.context()
 
     span.setAttribute('foo', 'bar')
-    assert.strictEqual(_tags.foo, 'bar')
+    assert.strictEqual(context.getTag('foo'), 'bar')
 
     span.setAttributes({ baz: 'buz' })
-    assert.strictEqual(_tags.baz, 'buz')
+    assert.strictEqual(context.getTag('baz'), 'buz')
   })
 
   describe('should remap http.response.status_code', () => {
     it('should remap when setting attributes', () => {
       const span = makeSpan('name')
 
-      const { _tags } = span._ddSpan.context()
+      const context = span._ddSpan.context()
 
       span.setAttributes({ 'http.response.status_code': 200 })
-      assert.strictEqual(_tags['http.status_code'], '200')
+      assert.strictEqual(context.getTag('http.status_code'), '200')
     })
 
     it('should remap when setting singular attribute', () => {
       const span = makeSpan('name')
 
-      const { _tags } = span._ddSpan.context()
+      const context = span._ddSpan.context()
 
       span.setAttribute('http.response.status_code', 200)
-      assert.strictEqual(_tags['http.status_code'], '200')
+      assert.strictEqual(context.getTag('http.status_code'), '200')
     })
   })
 
@@ -367,19 +367,19 @@ describe('OTel Span', () => {
     const unset = makeSpan('name')
     const unsetCtx = unset._ddSpan.context()
     unset.setStatus({ code: 0, message: 'unset' })
-    assert.ok(!(ERROR_MESSAGE in unsetCtx._tags))
+    assert.ok(!unsetCtx.hasTag(ERROR_MESSAGE))
 
     const ok = makeSpan('name')
     const okCtx = ok._ddSpan.context()
     ok.setStatus({ code: 1, message: 'ok' })
-    assert.ok(!(ERROR_MESSAGE in okCtx._tags))
-    assert.ok(!(IGNORE_OTEL_ERROR in okCtx._tags))
+    assert.ok(!okCtx.hasTag(ERROR_MESSAGE))
+    assert.ok(!okCtx.hasTag(IGNORE_OTEL_ERROR))
 
     const error = makeSpan('name')
     const errorCtx = error._ddSpan.context()
     error.setStatus({ code: 2, message: 'error' })
-    assert.strictEqual(errorCtx._tags[ERROR_MESSAGE], 'error')
-    assert.strictEqual(errorCtx._tags[IGNORE_OTEL_ERROR], false)
+    assert.strictEqual(errorCtx.getTag(ERROR_MESSAGE), 'error')
+    assert.strictEqual(errorCtx.getTag(IGNORE_OTEL_ERROR), false)
   })
 
   it('should record exceptions', () => {
@@ -391,11 +391,11 @@ describe('OTel Span', () => {
     const datenow = Date.now()
     span.recordException(error, datenow)
 
-    const { _tags } = span._ddSpan.context()
-    assert.strictEqual(_tags[ERROR_TYPE], error.name)
-    assert.strictEqual(_tags[ERROR_MESSAGE], error.message)
-    assert.strictEqual(_tags[ERROR_STACK], error.stack)
-    assert.strictEqual(_tags[IGNORE_OTEL_ERROR], true)
+    const context = span._ddSpan.context()
+    assert.strictEqual(context.getTag(ERROR_TYPE), error.name)
+    assert.strictEqual(context.getTag(ERROR_MESSAGE), error.message)
+    assert.strictEqual(context.getTag(ERROR_STACK), error.stack)
+    assert.strictEqual(context.getTag(IGNORE_OTEL_ERROR), true)
 
     const events = span._ddSpan._events
     assert.strictEqual(events.length, 1)
@@ -443,10 +443,10 @@ describe('OTel Span', () => {
     const error = new TestError()
     span.recordException(error)
 
-    const { _tags } = span._ddSpan.context()
-    assert.strictEqual(_tags[ERROR_TYPE], error.name)
-    assert.strictEqual(_tags[ERROR_MESSAGE], error.message)
-    assert.strictEqual(_tags[ERROR_STACK], error.stack)
+    const context = span._ddSpan.context()
+    assert.strictEqual(context.getTag(ERROR_TYPE), error.name)
+    assert.strictEqual(context.getTag(ERROR_MESSAGE), error.message)
+    assert.strictEqual(context.getTag(ERROR_STACK), error.stack)
 
     const events = span._ddSpan._events
     assert.strictEqual(events.length, 1)
@@ -465,10 +465,10 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
     span.end()
 
-    const { _tags } = span._ddSpan.context()
+    const context = span._ddSpan.context()
 
     span.setStatus({ code: 2, message: 'error' })
-    assert.ok(!(ERROR_MESSAGE in _tags) || _tags[ERROR_MESSAGE] !== 'error')
+    assert.ok(!context.hasTag(ERROR_MESSAGE) || context.getTag(ERROR_MESSAGE) !== 'error')
   })
 
   it('should mark ended and expose recording state', () => {

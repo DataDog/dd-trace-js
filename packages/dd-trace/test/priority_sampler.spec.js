@@ -53,7 +53,9 @@ describe('PrioritySampler', () => {
         tags: {}
       },
       getTags () { return this._tags },
-      getTag (key) { return this._tags[key] }
+      getTag (key) { return this._tags[key] },
+      setTag (key, value) { this._tags[key] = value },
+      hasTag (key) { return key in this._tags }
     }
 
     span = {

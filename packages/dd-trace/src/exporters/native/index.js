@@ -148,8 +148,8 @@ class NativeExporter {
     for (const [key, value] of Object.entries(traceTags)) {
       if (value !== undefined && value !== null) {
         // Don't overwrite existing span tags
-        if (!(key in context._tags)) {
-          context._tags[key] = value
+        if (!context.hasTag(key)) {
+          context.setTag(key, value)
         }
       }
     }

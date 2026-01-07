@@ -66,7 +66,7 @@ module.exports.startScrubber = function () {
       if (!gc) continue // everything after this point is related to manual GC
 
       // TODO: what else can we do to alleviate memory usage
-      span.context()._tags = Object.create(null)
+      span.context().clearTags()
     }
 
     console.log('expired spans:' +

@@ -20,15 +20,19 @@ describe('tagger', () => {
   let util
 
   beforeEach(() => {
+    const tags = {}
     spanContext = {
-      _tags: {},
-      _trace: { tags: {} }
+      _trace: { tags: {} },
+      getTags () { return tags },
+      getTag (key) { return tags[key] },
+      setTag (key, value) { tags[key] = value },
+      hasTag (key) { return key in tags }
     }
 
     span = {
       context () { return spanContext },
       setTag (k, v) {
-        this.context()._tags[k] = v
+        this.context().setTag(k, v)
       }
     }
 

@@ -79,7 +79,7 @@ class DatadogSpan {
 
     this._spanContext = this._createContext(parent, fields)
     this._spanContext._name = operationName
-    this._spanContext._tags = tags
+    Object.assign(this._spanContext.getTags(), tags)
     this._spanContext._hostname = hostname
 
     this._spanContext._trace.started.push(this)
@@ -129,7 +129,7 @@ class DatadogSpan {
 
   toString () {
     const spanContext = this.context()
-    const resourceName = spanContext._tags['resource.name'] || ''
+    const resourceName = spanContext.getTag('resource.name') || ''
     const resource = resourceName.length > 100
       ? `${resourceName.slice(0, 97)}...`
       : resourceName
@@ -137,7 +137,7 @@ class DatadogSpan {
       traceId: spanContext._traceId,
       spanId: spanContext._spanId,
       parentId: spanContext._parentId,
-      service: spanContext._tags['service.name'],
+      service: spanContext.getTag('service.name'),
       name: spanContext._name,
       resource
     })
@@ -249,12 +249,12 @@ class DatadogSpan {
       return
     }
 
-    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true' && !this._spanContext._tags['service.name']) {
+    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true' && !this._spanContext.getTag('service.name')) {
       log.error('Finishing invalid span: %s', this)
     }
 
     getIntegrationCounter('spans_finished', this._integrationName).inc()
-    this._spanContext._tags['_dd.integration'] = this._integrationName
+    this._spanContext.setTag('_dd.integration', this._integrationName)
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.decrement('runtime.node.spans.unfinished')
@@ -394,7 +394,7 @@ class DatadogSpan {
   }
 
   _addTags (keyValuePairs) {
-    tagger.add(this._spanContext._tags, keyValuePairs)
+    tagger.add(this._spanContext.getTags(), keyValuePairs)
 
     this._prioritySampler.sample(this, false)
   }
