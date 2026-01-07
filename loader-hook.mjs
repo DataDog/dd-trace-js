@@ -1,7 +1,11 @@
-import regexpEscape from 'escape-string-regexp'
+import regexpEscapeModule from './vendor/dist/escape-string-regexp/index.js'
 import * as iitm from 'import-in-the-middle/hook.mjs'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config-helper.js'
+import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
+import { isRelativeRequire } from './packages/datadog-instrumentations/src/helpers/shared-utils.js'
+
+const regexpEscape = regexpEscapeModule.default
 
 // For some reason `getEnvironmentVariable` is not otherwise available to ESM.
 const env = configHelper.getEnvironmentVariable
@@ -17,11 +21,19 @@ function initialize (data = {}) {
   return iitm.initialize(data)
 }
 
+function load (url, context, nextLoad) {
+  return rewriterLoader.load(url, context, (url, context) => iitm.load(url, context, nextLoad))
+}
+
 function addInstrumentations (data) {
   const instrumentations = Object.keys(hooks)
 
   for (const moduleName of instrumentations) {
-    data.include.push(new RegExp(`node_modules/${moduleName}/(?!node_modules).+`), moduleName)
+    // Skip instrumentation hooks with relative module names
+    // since there is no current business need of instrumenting imports outside of the node_modules folder
+    if (!isRelativeRequire(moduleName)) {
+      data.include.push(new RegExp(`node_modules/${moduleName}/(?!node_modules).+`), moduleName)
+    }
   }
 }
 
@@ -48,5 +60,5 @@ function addExclusions (data) {
   )
 }
 
-export { initialize }
-export { load, getFormat, resolve, getSource } from 'import-in-the-middle/hook.mjs'
+export { initialize, load }
+export { getFormat, resolve, getSource } from 'import-in-the-middle/hook.mjs'

@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.15.1"
+    "rules_version": "1.16.1"
   },
   "rules": [
     {
@@ -4376,7 +4376,7 @@
                 "address": "graphql.server.resolver"
               }
             ],
-            "regex": "java\\.lang\\.(?:runtime|processbuilder)",
+            "regex": "\\bjava\\.lang\\.(?:runtime|processbuilder)\\b",
             "options": {
               "case_sensitive": true,
               "min_length": 17
@@ -8989,7 +8989,7 @@
         "event": false,
         "keep": false,
         "attributes": {
-          "_dd.appsec.api.jwt_alg": {
+          "api.security.jwt.alg": {
             "address": "server.request.jwt",
             "key_path": [
               "header",
@@ -9086,6 +9086,233 @@
         "keep": true,
         "attributes": {
           "_dd.appsec.api.jwt.none_alg": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "api-010-100",
+      "name": "Monitor redirections to GET targets",
+      "tags": {
+        "type": "api10",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.io.net.response.status"
+              }
+            ],
+            "list": [
+              "301",
+              "302"
+            ]
+          },
+          "operator": "exact_match"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "api.security.redirection.move_target": {
+            "address": "server.io.net.response.headers",
+            "key_path": [
+              "Location"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "api-010-110",
+      "name": "Monitor redirections to POST targets",
+      "tags": {
+        "type": "api10",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.io.net.response.status"
+              }
+            ],
+            "list": [
+              "307",
+              "308"
+            ]
+          },
+          "operator": "exact_match"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "api.security.redirection.redirect_target": {
+            "address": "server.io.net.response.headers",
+            "key_path": [
+              "Location"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "api-010-200",
+      "name": "Large response bodies in downstream network calls",
+      "tags": {
+        "type": "api10",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.io.net.response.headers",
+                "key_path": [
+                  "content-length"
+                ]
+              }
+            ],
+            "regex": "\\d{7,}",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 7
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "api.security.large_response.length": {
+            "address": "server.io.net.response.headers",
+            "key_path": [
+              "content-length"
+            ]
+          },
+          "api.security.large_response.url": {
+            "address": "server.io.net.url"
+          }
+        }
+      }
+    },
+    {
+      "id": "api-010-300",
+      "name": "Secrets transmitted in downstream URL parameters",
+      "tags": {
+        "type": "api10",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.io.net.url"
+              }
+            ],
+            "regex": "[?&](?:(?:api|access)?(_)?(?:key|secret|token|password|passwd|pwd))=",
+            "options": {
+              "case_sensitive": false
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "api.security.secret.disclosed_in_url_params": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "api-010-400",
+      "name": "Unauthenticated MCP access",
+      "tags": {
+        "type": "api10",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.io.net.url"
+              }
+            ],
+            "regex": "/mcp/(?:tools|resources)/",
+            "options": {
+              "case_sensitive": false
+            }
+          },
+          "operator": "match_regex"
+        },
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.io.net.request.headers",
+                "key_path": [
+                  "authorization"
+                ]
+              }
+            ]
+          },
+          "operator": "!exists"
+        },
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.io.net.response.status"
+              }
+            ],
+            "list": [
+              "401"
+            ]
+          },
+          "operator": "!exact_match"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "api.security.mcp.broken_auth": {
             "value": 1
           }
         }

@@ -2,7 +2,16 @@
 
 const { performance, constants, PerformanceObserver } = require('perf_hooks')
 const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL, encodeProfileAsync } = require('./shared')
-const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
+const {
+  Function,
+  Label,
+  Line,
+  Location,
+  Profile,
+  Sample,
+  StringTable,
+  ValueType
+} = require('../../../../../vendor/dist/pprof-format')
 const PoissonProcessSamplingFilter = require('./poisson')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../libuv-size')
 // perf_hooks uses millis, with fractional part representing nanos. We emit nanos into the pprof file.

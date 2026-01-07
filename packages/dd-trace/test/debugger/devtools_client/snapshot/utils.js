@@ -47,6 +47,10 @@ function getTargetCodePath (caller) {
 }
 
 /**
+ * @typedef {Promise<string> & { resolve: (value: string) => void }} PromiseWithResolve
+ */
+
+/**
  * @param {string} caller - The filename of the calling spec file (hint: `__filename`)
  */
 function enable (caller) {
@@ -56,11 +60,11 @@ function enable (caller) {
   return async () => {
     // The scriptIds are resolved asynchronously, so to ensure we have an easy way to get them for each script, we
     // store a promise on the script that will resolve to its id once it's emitted by Debugger.scriptParsed.
-    let pResolve = null
-    const p = new Promise((resolve) => {
+    let pResolve
+    const p = /** @type {PromiseWithResolve} */ (new Promise((resolve) => {
       pResolve = resolve
-    })
-    p.resolve = pResolve
+    }))
+    p.resolve = /** @type {(value: string) => void} */ (/** @type {unknown} */ (pResolve))
     require(path).scriptId = p
 
     session.on('Debugger.scriptParsed', ({ params }) => {
@@ -99,8 +103,8 @@ function assertOnBreakpoint (done, snapshotConfig, callback) {
   session.once('Debugger.paused', ({ params }) => {
     assert.strictEqual(params.hitBreakpoints.length, 1)
 
-    getLocalStateForCallFrame(params.callFrames[0], snapshotConfig).then((process) => {
-      callback(process())
+    getLocalStateForCallFrame(params.callFrames[0], snapshotConfig).then(({ processLocalState }) => {
+      callback(processLocalState())
       done()
     }).catch(done)
   })

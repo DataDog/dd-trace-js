@@ -1,4 +1,5 @@
 'use strict'
+
 // Move this file to temp dir before requiring to force a rewriting
 // because the files into the tracer are not rewritten
 

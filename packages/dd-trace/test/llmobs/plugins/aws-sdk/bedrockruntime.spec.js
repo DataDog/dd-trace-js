@@ -62,8 +62,7 @@ describe('Plugin', () => {
             const command = new AWS.InvokeModelCommand(request)
             await bedrockRuntimeClient.send(command)
 
-            const expectedOutput = { content: model.response.text }
-            if (model.outputRole) expectedOutput.role = model.outputRole
+            const expectedOutput = { content: model.response.text, role: model.outputRole ?? '' }
 
             const { apmSpans, llmobsSpans } = await getEvents()
             assertLlmObsSpanEvent(llmobsSpans[0], {
@@ -76,7 +75,7 @@ describe('Plugin', () => {
                     { content: model.userPrompt, role: 'user' }
                   ]
                 : [
-                    { content: model.userPrompt }
+                    { content: model.userPrompt, role: '' }
                   ],
               outputMessages: [expectedOutput],
               metrics: {
@@ -125,7 +124,7 @@ describe('Plugin', () => {
                     { content: model.userPrompt, role: 'user' }
                   ]
                 : [
-                    { content: model.userPrompt }
+                    { content: model.userPrompt, role: '' }
                   ],
               outputMessages: [{ content: expectedResponseObject.text, role: 'assistant' }],
               metrics: {
@@ -171,7 +170,9 @@ describe('Plugin', () => {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'bedrock-runtime.command',
-            inputMessages: [{ content: 'You are a geography expert'.repeat(200) + cacheWriteRequest.userPrompt }],
+            inputMessages: [
+              { content: 'You are a geography expert'.repeat(200) + cacheWriteRequest.userPrompt, role: '' }
+            ],
             outputMessages: [expectedOutput],
             metrics: {
               input_tokens: cacheWriteRequest.response.inputTokens,
@@ -214,7 +215,9 @@ describe('Plugin', () => {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'bedrock-runtime.command',
-            inputMessages: [{ content: 'You are a geography expert'.repeat(200) + cacheWriteRequest.userPrompt }],
+            inputMessages: [
+              { content: 'You are a geography expert'.repeat(200) + cacheWriteRequest.userPrompt, role: '' }
+            ],
             outputMessages: [expectedOutput],
             metrics: {
               input_tokens: cacheWriteRequest.response.inputTokens,
@@ -260,7 +263,9 @@ describe('Plugin', () => {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'bedrock-runtime.command',
-            inputMessages: [{ content: 'You are a geography expert'.repeat(200) + cacheReadRequest.userPrompt }],
+            inputMessages: [
+              { content: 'You are a geography expert'.repeat(200) + cacheReadRequest.userPrompt, role: '' }
+            ],
             outputMessages: [expectedOutput],
             metrics: {
               input_tokens: cacheReadRequest.response.inputTokens,
@@ -303,7 +308,9 @@ describe('Plugin', () => {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'bedrock-runtime.command',
-            inputMessages: [{ content: 'You are a geography expert'.repeat(200) + cacheReadRequest.userPrompt }],
+            inputMessages: [
+              { content: 'You are a geography expert'.repeat(200) + cacheReadRequest.userPrompt, role: '' }
+            ],
             outputMessages: [expectedOutput],
             metrics: {
               input_tokens: cacheReadRequest.response.inputTokens,

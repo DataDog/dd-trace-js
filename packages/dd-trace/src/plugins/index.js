@@ -1,6 +1,6 @@
 'use strict'
 
-module.exports = {
+const plugins = {
   get '@anthropic-ai/sdk' () { return require('../../../datadog-plugin-anthropic/src') },
   get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo/src') },
   get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
@@ -13,6 +13,7 @@ module.exports = {
   get '@elastic/transport' () { return require('../../../datadog-plugin-elasticsearch/src') },
   get '@google-cloud/pubsub' () { return require('../../../datadog-plugin-google-cloud-pubsub/src') },
   get '@google-cloud/vertexai' () { return require('../../../datadog-plugin-google-cloud-vertexai/src') },
+  get '@google/genai' () { return require('../../../datadog-plugin-google-genai/src') },
   get '@grpc/grpc-js' () { return require('../../../datadog-plugin-grpc/src') },
   get '@hapi/hapi' () { return require('../../../datadog-plugin-hapi/src') },
   get '@happy-dom/jest-environment' () { return require('../../../datadog-plugin-jest/src') },
@@ -25,6 +26,7 @@ module.exports = {
   get '@node-redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@opensearch-project/opensearch' () { return require('../../../datadog-plugin-opensearch/src') },
   get '@prisma/client' () { return require('../../../datadog-plugin-prisma/src') },
+  get './runtime/library.js' () { return require('../../../datadog-plugin-prisma/src') },
   get '@redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@smithy/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@vitest/runner' () { return require('../../../datadog-plugin-vitest/src') },
@@ -109,3 +111,5 @@ module.exports = {
   get winston () { return require('../../../datadog-plugin-winston/src') },
   get ws () { return require('../../../datadog-plugin-ws/src') }
 }
+
+module.exports = plugins

@@ -1,6 +1,7 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+
 const { describe, it } = require('mocha')
 
 const { storage } = require('../../../datadog-core')
@@ -11,7 +12,7 @@ describe('helpers/instrument', () => {
     it('should bind statically', () => {
       storage('legacy').run('test1', () => {
         const tested = AsyncResource.bind(() => {
-          expect(storage('legacy').getStore()).to.equal('test1')
+          assert.strictEqual(storage('legacy').getStore(), 'test1')
         })
 
         storage('legacy').run('test2', () => {
@@ -24,8 +25,8 @@ describe('helpers/instrument', () => {
       const self = 'test'
 
       const tested = AsyncResource.bind(function (a, b, c) {
-        expect(this).to.equal(self)
-        expect(tested).to.have.length(3)
+        assert.strictEqual(this, self)
+        assert.strictEqual(tested.length, 3)
       }, 'test', self)
 
       tested()
@@ -37,8 +38,8 @@ describe('helpers/instrument', () => {
 
         storage('legacy').run('test2', () => {
           const tested = asyncResource.bind((a, b, c) => {
-            expect(storage('legacy').getStore()).to.equal('test1')
-            expect(tested).to.have.length(3)
+            assert.strictEqual(storage('legacy').getStore(), 'test1')
+            assert.strictEqual(tested.length, 3)
           })
 
           tested()
@@ -51,7 +52,7 @@ describe('helpers/instrument', () => {
 
       const asyncResource = new AsyncResource('test')
       const tested = asyncResource.bind(function () {
-        expect(this).to.equal(self)
+        assert.strictEqual(this, self)
       }, self)
 
       tested()

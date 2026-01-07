@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, before } = require('tap').mocha
 const fs = require('node:fs')
 const path = require('node:path')
@@ -74,7 +74,7 @@ describe('Plugin Structure Validation', () => {
       const pluginId = Plugin.id
 
       it('should have an id that matches the directory name', () => {
-        expect(pluginId).to.equal(expectedId)
+        assert.strictEqual(pluginId, expectedId)
       })
 
       it('should have a corresponding instrumentation file', () => {
@@ -82,8 +82,7 @@ describe('Plugin Structure Validation', () => {
           return
         }
 
-        expect(instrumentationFiles.has(pluginId))
-          .to.equal(true, `Missing instrumentation file: ${pluginId}.js`)
+        assert.strictEqual(instrumentationFiles.has(pluginId), true, `Missing instrumentation file: ${pluginId}.js`)
       })
     })
   })
@@ -97,7 +96,7 @@ describe('Plugin Structure Validation', () => {
       }
     })
 
-    expect(missingInstrumentations).to.be.empty
+    assert.strictEqual(missingInstrumentations.length, 0)
   })
 
   it('should have all plugins accounted for with a hook', () => {
@@ -123,6 +122,6 @@ describe('Plugin Structure Validation', () => {
       }
     })
 
-    expect(missingHooks).to.deep.equal(missingInstrumentationHooks)
+    assert.deepStrictEqual(missingHooks, missingInstrumentationHooks)
   })
 })

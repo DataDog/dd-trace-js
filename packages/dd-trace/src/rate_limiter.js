@@ -1,6 +1,6 @@
 'use strict'
 
-const limiter = require('limiter')
+const limiter = require('../../../vendor/dist/limiter')
 
 class RateLimiter {
   /**

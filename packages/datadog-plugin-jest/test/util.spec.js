@@ -1,30 +1,32 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it } = require('mocha')
-
+const assert = require('node:assert/strict')
 const path = require('node:path')
 
-const { getFormattedJestTestParameters, getJestSuitesToRun } = require('../src/util')
+const { describe, it } = require('mocha')
 
+const { getFormattedJestTestParameters, getJestSuitesToRun } = require('../src/util')
 describe('getFormattedJestTestParameters', () => {
   it('returns formatted parameters for arrays', () => {
     const result = getFormattedJestTestParameters([[[1, 2], [3, 4]]])
-    expect(result).to.eql([[1, 2], [3, 4]])
+    assert.deepStrictEqual(result, [[1, 2], [3, 4]])
   })
 
   it('returns formatted parameters for strings', () => {
     const result = getFormattedJestTestParameters([['\n    a    | b    | expected\n    '], 1, 2, 3, 3, 5, 8, 0, 1, 1])
-    expect(result).to.eql([{ a: 1, b: 2, expected: 3 }, { a: 3, b: 5, expected: 8 }, { a: 0, b: 1, expected: 1 }])
+    assert.deepStrictEqual(
+      result,
+      [{ a: 1, b: 2, expected: 3 }, { a: 3, b: 5, expected: 8 }, { a: 0, b: 1, expected: 1 }]
+    )
   })
 
   it('does not crash for invalid inputs', () => {
     const resultUndefined = getFormattedJestTestParameters(undefined)
     const resultEmptyArray = getFormattedJestTestParameters([])
     const resultObject = getFormattedJestTestParameters({})
-    expect(resultEmptyArray).to.eql(undefined)
-    expect(resultUndefined).to.eql(undefined)
-    expect(resultObject).to.eql(undefined)
+    assert.deepStrictEqual(resultEmptyArray, undefined)
+    assert.deepStrictEqual(resultUndefined, undefined)
+    assert.deepStrictEqual(resultObject, undefined)
   })
 })
 
@@ -42,7 +44,7 @@ describe('getJestSuitesToRun', () => {
     const rootDir = '/workspace/dd-trace-js'
 
     const { suitesToRun } = getJestSuitesToRun(skippableSuites, tests, rootDir)
-    expect(suitesToRun).to.eql([{ path: '/workspace/dd-trace-js/src/e2e.spec.js' }])
+    assert.deepStrictEqual(suitesToRun, [{ path: '/workspace/dd-trace-js/src/e2e.spec.js' }])
   })
 
   it('returns filtered suites when paths are windows like', () => {
@@ -58,7 +60,7 @@ describe('getJestSuitesToRun', () => {
     const rootDir = `C:${path.sep}temp${path.sep}dd-trace-js`
 
     const { suitesToRun } = getJestSuitesToRun(skippableSuites, tests, rootDir)
-    expect(suitesToRun).to.eql([
+    assert.deepStrictEqual(suitesToRun, [
       { path: `C:${path.sep}temp${path.sep}dd-trace-js${path.sep}src${path.sep}e2e.spec.js` }
     ])
   })
@@ -76,7 +78,7 @@ describe('getJestSuitesToRun', () => {
     const rootDir = '/workspace/dd-trace-js/config/root-config'
 
     const { suitesToRun } = getJestSuitesToRun(skippableSuites, tests, rootDir)
-    expect(suitesToRun).to.eql([
+    assert.deepStrictEqual(suitesToRun, [
       { path: '/workspace/dd-trace-js/src/e2e.spec.js' }
     ])
   })
@@ -95,7 +97,7 @@ describe('getJestSuitesToRun', () => {
     const rootDir = '/workspace/dd-trace-js'
 
     const { skippedSuites } = getJestSuitesToRun(skippableSuites, tests, rootDir)
-    expect(skippedSuites).to.eql([
+    assert.deepStrictEqual(skippedSuites, [
       'src/unit.spec.js',
       'src/integration.spec.js'
     ])
@@ -114,7 +116,7 @@ describe('getJestSuitesToRun', () => {
     const rootDir = __dirname
 
     const { suitesToRun, skippedSuites } = getJestSuitesToRun(skippableSuites, tests, rootDir)
-    expect(suitesToRun).to.eql([
+    assert.deepStrictEqual(suitesToRun, [
       {
         path: path.join(__dirname, './fixtures/test-to-run.js')
       },
@@ -122,7 +124,7 @@ describe('getJestSuitesToRun', () => {
         path: path.join(__dirname, './fixtures/test-unskippable.js')
       }
     ])
-    expect(skippedSuites).to.eql([
+    assert.deepStrictEqual(skippedSuites, [
       'fixtures/test-to-skip.js'
     ])
   })
@@ -139,8 +141,8 @@ describe('getJestSuitesToRun', () => {
     const rootDir = __dirname
 
     const { hasUnskippableSuites, hasForcedToRunSuites } = getJestSuitesToRun(skippableSuites, tests, rootDir)
-    expect(hasUnskippableSuites).to.equal(true)
-    expect(hasForcedToRunSuites).to.equal(false)
+    assert.strictEqual(hasUnskippableSuites, true)
+    assert.strictEqual(hasForcedToRunSuites, false)
   })
 
   it('returns hasForcedToRunSuites if there is a forced to run suite', () => {
@@ -155,8 +157,8 @@ describe('getJestSuitesToRun', () => {
     const rootDir = __dirname
 
     const { hasUnskippableSuites, hasForcedToRunSuites } = getJestSuitesToRun(skippableSuites, tests, rootDir)
-    expect(hasUnskippableSuites).to.equal(true)
-    expect(hasForcedToRunSuites).to.equal(true)
+    assert.strictEqual(hasUnskippableSuites, true)
+    assert.strictEqual(hasForcedToRunSuites, true)
   })
 
   it('adds extra `testEnvironmentOptions` if suite is unskippable or forced to run', () => {
@@ -176,9 +178,13 @@ describe('getJestSuitesToRun', () => {
     const rootDir = __dirname
 
     getJestSuitesToRun(skippableSuites, tests, rootDir)
-    expect(globalConfig.testEnvironmentOptions._ddUnskippable)
-      .to.eql(JSON.stringify({ 'fixtures/test-unskippable.js': true }))
-    expect(globalConfig.testEnvironmentOptions._ddForcedToRun)
-      .to.eql(JSON.stringify({ 'fixtures/test-unskippable.js': true }))
+    assert.deepStrictEqual(
+      globalConfig.testEnvironmentOptions._ddUnskippable,
+      JSON.stringify({ 'fixtures/test-unskippable.js': true })
+    )
+    assert.deepStrictEqual(
+      globalConfig.testEnvironmentOptions._ddForcedToRun,
+      JSON.stringify({ 'fixtures/test-unskippable.js': true })
+    )
   })
 })

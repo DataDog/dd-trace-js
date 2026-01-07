@@ -201,6 +201,12 @@
       "versions": ["3.5.7"]
     }
   ],
+  "genai": [
+    {
+      "name": "@google/genai",
+      "versions": [">=1.19.0"]
+    }
+  ],
   "graphql": [
     {
       "name": "apollo-server-core",
@@ -476,6 +482,17 @@
     {
       "name": "prisma",
       "dep": "@prisma/client"
+    },
+    {
+      "name": "typescript",
+      "dep": true,
+      "versions": [">=5.4.0"]
+    },
+    {
+      "name": "@prisma/adapter-pg",
+      "dep": "@prisma/adapter-pg",
+      "versions": [">=7.0.0"],
+      "node": ">=20"
     }
   ],
   "q": [

@@ -1,7 +1,7 @@
 'use strict'
 
 const { URL, format } = require('url')
-const uuid = require('crypto-randomuuid')
+const uuid = require('../../../../vendor/dist/crypto-randomuuid')
 const { EventEmitter } = require('events')
 const tracerVersion = require('../../../../package.json').version
 const request = require('../exporters/common/request')
@@ -12,6 +12,7 @@ const Scheduler = require('./scheduler')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const tagger = require('../tagger')
 const defaults = require('../config_defaults')
+const processTags = require('../process-tags')
 
 const clientId = uuid()
 
@@ -87,7 +88,8 @@ class RemoteConfigManager extends EventEmitter {
           env: config.env,
           app_version: config.version,
           extra_services: [],
-          tags: Object.entries(tags).map((pair) => pair.join(':'))
+          tags: Object.entries(tags).map((pair) => pair.join(':')),
+          [processTags.REMOTE_CONFIG_FIELD_NAME]: processTags.tagsArray
         },
         capabilities: DEFAULT_CAPABILITY // updated by `updateCapabilities()`
       },
