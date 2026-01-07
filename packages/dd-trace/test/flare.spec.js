@@ -5,14 +5,12 @@ const http = require('node:http')
 
 const { channel } = require('dc-polyfill')
 const express = require('express')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
-
 const upload = require('multer')()
 const proxyquire = require('proxyquire').noCallThru()
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
-
 const { getConfigFresh } = require('./helpers/config')
 
 const debugChannel = channel('datadog:log:debug')

@@ -1,15 +1,15 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
-const sinon = require('sinon')
-const nock = require('nock')
 const http = require('node:http')
 const zlib = require('node:zlib')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+const nock = require('nock')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
-
 const FormData = require('../../../src/exporters/common/form-data')
 
 const initHTTPServer = () => {

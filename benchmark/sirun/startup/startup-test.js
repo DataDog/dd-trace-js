@@ -68,7 +68,6 @@ if (Number(process.env.EVERYTHING)) {
     'shell-quote',
     'sinon',
     'source-map',
-    'tap',
     'tiktoken',
     'tlhunter-sorted-set',
     'ttl-set',

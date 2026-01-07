@@ -1,18 +1,17 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-
-const { describe, it, beforeEach, afterEach, context } = require('tap').mocha
-const sinon = require('sinon')
-const nock = require('nock')
 const cp = require('node:child_process')
 const fs = require('node:fs')
 const zlib = require('node:zlib')
 
-require('../../../../dd-trace/test/setup/core')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const context = describe
+const sinon = require('sinon')
+const nock = require('nock')
 
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+require('../../../../dd-trace/test/setup/core')
 const CiVisibilityExporter = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
 
 describe('CI Visibility Exporter', () => {

@@ -407,11 +407,11 @@ export default [
       'n/no-restricted-require': ['error', [
         {
           name: 'diagnostics_channel',
-          message: 'Please use dc-polyfill instead.'
+          message: 'Please use `dc-polyfill` instead.'
         },
         {
           name: 'semver',
-          message: 'Please use semifies instead.'
+          message: 'Please use `semifies` instead.'
         },
         {
           name: 'get-port',
@@ -419,12 +419,20 @@ export default [
         },
         {
           name: 'rimraf',
-          message: 'Please use fs.rm(path, { recursive: true, force: true }) instead.'
+          message: 'Please use `fs.rm(path, { recursive: true, force: true })` instead.'
         },
         {
           name: 'koalas',
           message: 'Please use nullish coalescing operator (??) instead.'
-        }
+        },
+        {
+          name: 'chai',
+          message: 'Please use `node:assert/strict` instead.'
+        },
+        {
+          name: 'tap',
+          message: 'Please use `mocha` instead.'
+        },
       ]],
 
       'no-await-in-loop': 'error',

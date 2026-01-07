@@ -1,14 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const URL = require('url').URL
 
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
-
-const URL = require('url').URL
 
 describe('span-stats exporter', () => {
   let url
