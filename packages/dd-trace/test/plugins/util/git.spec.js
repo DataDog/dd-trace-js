@@ -1,19 +1,19 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-
-const { describe, it, afterEach, beforeEach } = require('tap').mocha
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
 const { execSync } = require('node:child_process')
 const os = require('node:os')
 const fs = require('node:fs')
 const path = require('node:path')
 
-require('../../setup/core')
+const { describe, it, afterEach, beforeEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+require('../../setup/core')
 const { GIT_REV_LIST_MAX_BUFFER, isGitAvailable } = require('../../../src/plugins/util/git')
+
 const cachedExecStub = sinon.stub().returns('')
 
 const {

@@ -1,17 +1,16 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
-const { describe, it, beforeEach, afterEach, before, after } = require('tap').mocha
-const sinon = require('sinon')
-const proxyquire = require('proxyquire').noPreserveCache()
 const http = require('node:http')
 const { once } = require('node:events')
 const os = require('node:os')
 
-require('../setup/core')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire').noPreserveCache()
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+require('../setup/core')
 const { storage } = require('../../../datadog-core')
 const tracerVersion = require('../../../../package.json').version
 const processTags = require('../../src/process-tags')

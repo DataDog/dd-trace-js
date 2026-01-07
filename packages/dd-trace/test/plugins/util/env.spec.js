@@ -1,11 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('tap').mocha
+const os = require('os')
+
+const { describe, it } = require('mocha')
 
 require('../../setup/core')
 
-const os = require('os')
 const {
   getRuntimeAndOSMetadata,
   OS_ARCHITECTURE,

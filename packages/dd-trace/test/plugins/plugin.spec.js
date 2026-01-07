@@ -2,7 +2,7 @@
 
 const assert = require('node:assert')
 
-const { describe, it, after } = require('tap').mocha
+const { describe, it, after } = require('mocha')
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
