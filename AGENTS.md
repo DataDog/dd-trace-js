@@ -17,7 +17,7 @@
 dd-trace is the Datadog client library for Node.js.
 
 **Key Directories:**
-- `packages/dd-trace/` - Main library (APM, profiling, debugger, appsec, llmobs, CI visibility)
+- `packages/dd-trace/` - Main library (APM, profiling, debugger, appsec, llmobs, CI visibility, etc)
 - `packages/datadog-core/` - Async context storage, shared utilities
 - `packages/datadog-instrumentations/` - Instrumentation implementations
 - `packages/datadog-plugin-*/` - 100+ plugins for third-party integrations
@@ -26,21 +26,13 @@ dd-trace is the Datadog client library for Node.js.
 
 **Package Structure:**
 
-Each package follows a consistent structure:
+Each package under `packages/` follows a consistent structure:
 - `src/` - Source code for the package
 - `test/` - Unit tests for the package
 - Unit test files always follow the `*.spec.js` naming convention
-- Test directories may also contain helper files (e.g., `naming.js`, `helpers.js`, `suite.js`) and integration test subdirectories
+- Test directories may also contain helper files
 
 ## Testing Instructions
-
-### Testing Workflow
-
-When developing a feature or fixing a bug:
-
-1. Start with individual test files to verify things work
-2. Run component tests: `yarn test:<component>` (e.g., `yarn test:debugger`, `yarn test:appsec`)
-3. Run integration tests: `yarn test:integration:<component>` (e.g., `yarn test:integration:debugger`)
 
 ### Running Individual Tests
 
@@ -106,6 +98,7 @@ Use `node:assert/strict` for standard assertions. For partial deep object checks
 
 ```js
 const assert = require('node:assert/strict')
+
 const { assertObjectContains } = require('../helpers')
 
 assert.equal(actual, expected)
@@ -215,6 +208,18 @@ Avoid try/catch in hot paths - validate inputs early
 - **Readable formatting**: Empty lines for grouping, split complex objects, extract variables
 - **Avoid large refactors**: Iterative changes, gradual pattern introduction
 - **Test changes**: Test logic (not mocks), failure cases, edge cases - always update tests
+
+### Implementation and Testing Workflow
+
+**CRITICAL: Always follow this workflow when making code changes:**
+
+1. **Understand** - Read relevant code and tests to understand the current implementation
+2. **Implement** - Make the necessary code changes
+3. **Update Tests** - Modify or add tests to cover the changes
+4. **Run Tests** - Execute the relevant test files to verify everything works
+5. **Verify** - Confirm all tests pass before marking the task as complete
+
+**Never skip step 4 (Run Tests).** Even if you're confident in the changes, always run the tests to catch any issues.
 
 ### Always Consider Backportability
 
