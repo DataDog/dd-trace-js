@@ -39,9 +39,7 @@ class LLMObsSpanWriter extends BaseWriter {
 
     telemetry.recordLLMObsSpanSize(event, processedEventSizeBytes, shouldTruncate)
 
-    const routingKey = this._getRoutingKey(routing)
-    const buffer = this._getOrCreateBuffer(routingKey, routing)
-
+    const buffer = this._getBuffer(routing)
     if (buffer.size + processedEventSizeBytes > EVP_PAYLOAD_SIZE_LIMIT) {
       logger.debug('Flushing queue because queuing next event will exceed EvP payload limit')
       this.flush()
