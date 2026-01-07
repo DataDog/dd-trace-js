@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
-const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/integration-test-helpers')
+const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
 const { ANY_STRING } = require('../../../integration-tests/helpers')
 const TestSetup = require('./test-setup')
 
@@ -10,11 +10,11 @@ const testSetup = new TestSetup()
 createIntegrationTestSuite('bullmq', 'bullmq', {
   category: 'messaging'
 }, (meta) => {
-  const { agent, mod } = meta
+  const { agent } = meta
 
   describe('Queue.add() - bullmq.add', () => {
     before(async () => {
-      await testSetup.setup(mod)
+      await testSetup.setup(meta.mod)
     })
 
     after(async () => {

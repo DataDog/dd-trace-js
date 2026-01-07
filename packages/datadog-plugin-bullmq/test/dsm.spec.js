@@ -5,7 +5,7 @@ process.env.DD_DATA_STREAMS_ENABLED = 'true'
 
 const assert = require('node:assert')
 const sinon = require('sinon')
-const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/integration-test-helpers')
+const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
 const TestSetup = require('./test-setup')
 const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
@@ -19,9 +19,17 @@ const getDsmPathwayHash = (queueName, isProducer, parentHash) => {
   return computePathwayHash('test', 'tester', edgeTags, parentHash)
 }
 
-createIntegrationTestSuite('bullmq', 'bullmq', testSetup, {
+createIntegrationTestSuite('bullmq', 'bullmq', {
   category: 'messaging'
-}, () => {
+}, (meta) => {
+  before(async () => {
+    await testSetup.setup(meta.mod)
+  })
+
+  after(async () => {
+    await testSetup.teardown()
+  })
+
   describe('Data Streams Monitoring (DSM)', () => {
     const queueName = 'test-queue'
     let expectedProducerHash
