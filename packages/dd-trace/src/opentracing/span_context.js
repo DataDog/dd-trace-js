@@ -7,6 +7,8 @@ const { AUTO_KEEP } = require('../../../../ext/priority')
 const TRACE_ID_128 = '_dd.p.tid'
 
 class DatadogSpanContext {
+  #tags
+
   constructor (props) {
     props = props || {}
 
@@ -16,7 +18,7 @@ class DatadogSpanContext {
     this._parentId = props.parentId || null
     this._name = props.name
     this._isFinished = props.isFinished || false
-    this._tags = props.tags || {}
+    this.#tags = props.tags || {}
     this._sampling = props.sampling || {}
     this._spanSampling = undefined
     this._links = props.links || []
@@ -77,7 +79,7 @@ class DatadogSpanContext {
    * @param {*} value - Tag value
    */
   setTag (key, value) {
-    this._tags[key] = value
+    this.#tags[key] = value
   }
 
   /**
@@ -86,7 +88,7 @@ class DatadogSpanContext {
    * @returns {*} Tag value or undefined
    */
   getTag (key) {
-    return this._tags[key]
+    return this.#tags[key]
   }
 
   /**
@@ -95,7 +97,7 @@ class DatadogSpanContext {
    * @returns {boolean}
    */
   hasTag (key) {
-    return key in this._tags
+    return key in this.#tags
   }
 
   /**
@@ -103,7 +105,7 @@ class DatadogSpanContext {
    * @param {string} key - Tag key
    */
   deleteTag (key) {
-    delete this._tags[key]
+    delete this.#tags[key]
   }
 
   /**
@@ -112,7 +114,14 @@ class DatadogSpanContext {
    * @returns {Object}
    */
   getTags () {
-    return this._tags
+    return this.#tags
+  }
+
+  /**
+   * Clear all tags.
+   */
+  clearTags () {
+    this.#tags = Object.create(null)
   }
 }
 
