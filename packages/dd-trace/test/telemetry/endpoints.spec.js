@@ -1,13 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const dc = require('dc-polyfill')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 
 const originalSetImmediate = global.setImmediate
