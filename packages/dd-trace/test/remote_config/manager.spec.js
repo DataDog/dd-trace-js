@@ -117,7 +117,8 @@ describe('RemoteConfigManager', () => {
           env: config.env,
           app_version: config.version,
           extra_services: [],
-          tags: ['runtime-id:runtimeId']
+          tags: ['runtime-id:runtimeId'],
+          process_tags: rc.state.client.client_tracer.process_tags
         },
         capabilities: 'AA=='
       },
@@ -125,6 +126,22 @@ describe('RemoteConfigManager', () => {
     })
 
     assert.ok(rc.appliedConfigs instanceof Map)
+  })
+
+  it('should include process_tags in client_tracer', () => {
+    const clientTracer = rc.state.client.client_tracer
+
+    assert.ok(clientTracer.process_tags, 'process_tags should exist')
+    assert.ok(Array.isArray(clientTracer.process_tags), 'process_tags should be an array')
+
+    // Verify expected process tag keys are present
+    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.basedir:')))
+    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.name:')))
+    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.type:')))
+    assert.ok(clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.workdir:')))
+
+    // Verify entrypoint.type has expected value
+    assert.ok(clientTracer.process_tags.some(tag => tag === 'entrypoint.type:script'))
   })
 
   it('should add git metadata to tags if present', () => {

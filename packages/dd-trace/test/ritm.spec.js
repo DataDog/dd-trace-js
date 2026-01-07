@@ -13,7 +13,7 @@ const Hook = require('../src/ritm')
 
 describe('Ritm', () => {
   let moduleLoadStartChannel, moduleLoadEndChannel, startListener, endListener
-  let utilHook, aHook, bHook, httpHook
+  let utilHook, aHook, bHook, httpHook, relativeHook
 
   before(() => {
     moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
@@ -47,6 +47,10 @@ describe('Ritm', () => {
       exports.foo = 1
       return exports
     })
+    relativeHook = new Hook(['./ritm-tests/relative/module-c'], function onRequire (exports) {
+      exports.foo = 1
+      return exports
+    })
   })
 
   afterEach(() => {
@@ -54,6 +58,7 @@ describe('Ritm', () => {
     aHook.unhook()
     bHook.unhook()
     httpHook.unhook()
+    relativeHook.unhook()
   })
 
   it('should shim util', () => {
@@ -100,5 +105,11 @@ describe('Ritm', () => {
       /Cannot find module 'package-does-not-exist'/,
       'a failing `require(...)` can still throw as expected'
     )
+  })
+
+  it('should hook into registered relative path requires', () => {
+    assert.equal(require('./ritm-tests/relative/module-c').foo, 1)
+    assert.equal(startListener.callCount, 1)
+    assert.equal(endListener.callCount, 1)
   })
 })

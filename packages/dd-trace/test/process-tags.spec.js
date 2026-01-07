@@ -2,13 +2,28 @@
 
 const assert = require('node:assert/strict')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { getConfigFresh } = require('./helpers/config')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 
 require('./setup/core')
 
 describe('process-tags', () => {
   const processTags = require('../src/process-tags')
-  const { serialize, sanitize } = require('../src/process-tags')
+  const { sanitize } = require('../src/process-tags')
+
+  describe('field name constants', () => {
+    it('should define field names for different subsystems', () => {
+      assertObjectContains(processTags, {
+        TRACING_FIELD_NAME: '_dd.tags.process',
+        DSM_FIELD_NAME: 'ProcessTags',
+        PROFILING_FIELD_NAME: 'process_tags',
+        DYNAMIC_INSTRUMENTATION_FIELD_NAME: 'process_tags',
+        TELEMETRY_FIELD_NAME: 'process_tags',
+        REMOTE_CONFIG_FIELD_NAME: 'process_tags',
+        CRASH_TRACKING_FIELD_NAME: 'process_tags'
+      })
+    })
+  })
 
   describe('processTags', () => {
     it('should return an object with tags, serialized, and tagsObject properties', () => {
@@ -64,11 +79,11 @@ describe('process-tags', () => {
     })
 
     it('should set sensible values', () => {
-      const basedirTag = processTags.tags.find(([name]) => name === 'entrypoint.basedir')
-      const nameTag = processTags.tags.find(([name]) => name === 'entrypoint.name')
-      const typeTag = processTags.tags.find(([name]) => name === 'entrypoint.type')
-      const workdirTag = processTags.tags.find(([name]) => name === 'entrypoint.workdir')
-      const packageNameTag = processTags.tags.find(([name]) => name === 'package.json.name')
+      const basedirTag = processTags.tags[0]
+      const nameTag = processTags.tags[1]
+      const typeTag = processTags.tags[2]
+      const workdirTag = processTags.tags[3]
+      const packageNameTag = processTags.tags[4]
 
       // Entrypoint values should be set (may vary depending on test runner)
       assert.ok(basedirTag)
@@ -88,11 +103,13 @@ describe('process-tags', () => {
     })
 
     it('should sort tags alphabetically', () => {
-      assert.strictEqual(processTags.tags[0][0], 'entrypoint.basedir')
-      assert.strictEqual(processTags.tags[1][0], 'entrypoint.name')
-      assert.strictEqual(processTags.tags[2][0], 'entrypoint.type')
-      assert.strictEqual(processTags.tags[3][0], 'entrypoint.workdir')
-      assert.strictEqual(processTags.tags[4][0], 'package.json.name')
+      assertObjectContains(processTags.tags, [
+        ['entrypoint.basedir'],
+        ['entrypoint.name'],
+        ['entrypoint.type'],
+        ['entrypoint.workdir'],
+        ['package.json.name']
+      ])
     })
 
     it('should serialize tags correctly', () => {
@@ -105,88 +122,6 @@ describe('process-tags', () => {
           assert.doesNotMatch(part, /undefined/)
         })
       }
-    })
-  })
-
-  describe('serialize', () => {
-    it('should serialize tags as name:value pairs joined by commas', () => {
-      const tags = [
-        ['tag1', 'value1'],
-        ['tag2', 'value2'],
-        ['tag3', 'value3']
-      ]
-
-      const result = serialize(tags)
-
-      assert.strictEqual(result, 'tag1:value1,tag2:value2,tag3:value3')
-    })
-
-    it('should filter out tags with undefined values', () => {
-      const tags = [
-        ['tag1', 'value1'],
-        ['tag2', undefined],
-        ['tag3', 'value3'],
-        ['tag4', undefined]
-      ]
-
-      const result = serialize(tags)
-
-      assert.strictEqual(result, 'tag1:value1,tag3:value3')
-      assert.doesNotMatch(result, /undefined/)
-    })
-
-    it('should sanitize tag values', () => {
-      const tags = [
-        ['tag1', 'Value With Spaces'],
-        ['tag2', 'UPPERCASE'],
-        ['tag3', 'special@chars!']
-      ]
-
-      const result = serialize(tags)
-
-      assert.strictEqual(result, 'tag1:value_with_spaces,tag2:uppercase,tag3:special_chars_')
-    })
-
-    it('should return empty string when all values are undefined', () => {
-      const tags = [
-        ['tag1', undefined],
-        ['tag2', undefined]
-      ]
-
-      const result = serialize(tags)
-
-      assert.strictEqual(result, '')
-    })
-
-    it('should handle empty tags array', () => {
-      const result = serialize([])
-
-      assert.strictEqual(result, '')
-    })
-
-    it('should handle numeric values', () => {
-      const tags = [
-        ['tag1', 123],
-        ['tag2', 456]
-      ]
-
-      const result = serialize(tags)
-
-      assert.strictEqual(result, 'tag1:123,tag2:456')
-    })
-
-    it('should handle mixed defined and undefined values', () => {
-      const tags = [
-        ['tag1', 'value1'],
-        ['tag2', undefined],
-        ['tag3', 'value3'],
-        ['tag4', undefined],
-        ['tag5', 'value5']
-      ]
-
-      const result = serialize(tags)
-
-      assert.strictEqual(result, 'tag1:value1,tag3:value3,tag5:value5')
     })
   })
 
@@ -295,7 +230,6 @@ describe('process-tags', () => {
 
   describe('DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED', () => {
     let env
-    let getConfig
     let SpanProcessor
 
     beforeEach(() => {
@@ -305,7 +239,6 @@ describe('process-tags', () => {
 
     afterEach(() => {
       process.env = env
-      delete require.cache[require.resolve('../src/config')]
       delete require.cache[require.resolve('../src/span_processor')]
       delete require.cache[require.resolve('../src/process-tags')]
     })
@@ -314,11 +247,9 @@ describe('process-tags', () => {
       process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'true'
 
       // Need to reload config first, then process-tags (which reads from config)
-      delete require.cache[require.resolve('../src/config')]
       delete require.cache[require.resolve('../src/process-tags')]
 
-      getConfig = require('../src/config')
-      const config = getConfig()
+      const config = getConfigFresh()
 
       assert.ok(config.propagateProcessTags)
       assert.strictEqual(config.propagateProcessTags.enabled, true)
@@ -333,8 +264,7 @@ describe('process-tags', () => {
     it('should disable process tags propagation when set to false', () => {
       process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'false'
 
-      getConfig = require('../src/config')
-      const config = getConfig()
+      const config = getConfigFresh()
 
       assert.ok(config.propagateProcessTags)
       assert.strictEqual(config.propagateProcessTags.enabled, false)
@@ -348,8 +278,7 @@ describe('process-tags', () => {
     it('should disable process tags propagation when not set', () => {
       // Don't set the environment variable
 
-      getConfig = require('../src/config')
-      const config = getConfig()
+      const config = getConfigFresh()
 
       assert.notStrictEqual(config.propagateProcessTags?.enabled, true)
 

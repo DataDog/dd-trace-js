@@ -35,19 +35,24 @@ function getProcessTags () {
     ['package.json.name', pkg.name || undefined]
   ]
 
-  const serialized = serialize(tags)
+  const tagsArray = []
+  const tagsObject = {}
 
-  const tagsObject = tags.reduce((acc, [key, value]) => {
+  for (const [key, value] of tags) {
     if (value !== undefined) {
-      acc[key] = value
+      const sanitizedValue = sanitize(value)
+      tagsArray.push(`${key}:${sanitizedValue}`)
+      tagsObject[key] = sanitizedValue
     }
-    return acc
-  }, {})
+  }
+
+  const serialized = tagsArray.join(',')
 
   return {
     tags,
     serialized,
-    tagsObject
+    tagsObject,
+    tagsArray
   }
 }
 
@@ -58,22 +63,11 @@ module.exports.TRACING_FIELD_NAME = '_dd.tags.process'
 module.exports.DSM_FIELD_NAME = 'ProcessTags'
 module.exports.PROFILING_FIELD_NAME = 'process_tags'
 module.exports.DYNAMIC_INSTRUMENTATION_FIELD_NAME = 'process_tags'
+module.exports.TELEMETRY_FIELD_NAME = 'process_tags'
+module.exports.REMOTE_CONFIG_FIELD_NAME = 'process_tags'
+module.exports.CRASH_TRACKING_FIELD_NAME = 'process_tags'
 
-// TODO: CRASH_TRACKING_FIELD_NAME /process_tags /application/process_tags
-// TODO: TELEMETRY_FIELD_NAME /application/process_tags
 // TODO: CLIENT_TRACE_STATISTICS_FIELD_NAME process_tags
-// TODO: REMOTE_CONFIG_FIELD_NAME process_tags
-
-function serialize (tags) {
-  const intermediary = []
-  for (const [name, value] of tags) {
-    if (value === undefined) continue
-    intermediary.push(`${name}:${sanitize(value)}`)
-  }
-  return intermediary.join(',')
-}
-
-module.exports.serialize = serialize
 
 /**
  * Sanitize a process tag value
