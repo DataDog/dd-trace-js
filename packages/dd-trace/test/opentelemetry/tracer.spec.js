@@ -70,7 +70,7 @@ describe('OTel Tracer', () => {
     })
 
     const ddSpanContext = span._ddSpan.context()
-    assert.strictEqual(ddSpanContext._tags.foo, 'bar')
+    assert.strictEqual(ddSpanContext.getTag('foo'), 'bar')
   })
 
   it('should pass through span kind', () => {

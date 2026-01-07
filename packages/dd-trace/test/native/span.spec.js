@@ -362,7 +362,7 @@ describe('NativeDatadogSpan', () => {
 
     it('should set a tag', () => {
       span.setTag('key', 'value')
-      assert.strictEqual(span.context()._tags.key, 'value')
+      assert.strictEqual(span.context().getTags().key, 'value')
     })
 
     it('should return the span for chaining', () => {
@@ -372,8 +372,8 @@ describe('NativeDatadogSpan', () => {
 
     it('should add multiple tags', () => {
       span.addTags({ key1: 'value1', key2: 'value2' })
-      assert.strictEqual(span.context()._tags.key1, 'value1')
-      assert.strictEqual(span.context()._tags.key2, 'value2')
+      assert.strictEqual(span.context().getTags().key1, 'value1')
+      assert.strictEqual(span.context().getTags().key2, 'value2')
     })
   })
 
@@ -500,8 +500,8 @@ describe('NativeDatadogSpan', () => {
       span.addLink({ context: linkContext, attributes: { key: 'value' } })
       span.finish()
 
-      assert.ok(span.context()._tags['_dd.span_links'])
-      const links = JSON.parse(span.context()._tags['_dd.span_links'])
+      assert.ok(span.context().getTags()['_dd.span_links'])
+      const links = JSON.parse(span.context().getTags()['_dd.span_links'])
       assert.strictEqual(links.length, 1)
       assert.strictEqual(links[0].trace_id, '123')
       assert.strictEqual(links[0].span_id, '456')
@@ -519,8 +519,8 @@ describe('NativeDatadogSpan', () => {
       span.addEvent('test-event', { key: 'value' }, 1500000000100)
       span.finish()
 
-      assert.ok(span.context()._tags['_dd.span_events'])
-      const events = JSON.parse(span.context()._tags['_dd.span_events'])
+      assert.ok(span.context().getTags()['_dd.span_events'])
+      const events = JSON.parse(span.context().getTags()['_dd.span_events'])
       assert.strictEqual(events.length, 1)
       assert.strictEqual(events[0].name, 'test-event')
     })

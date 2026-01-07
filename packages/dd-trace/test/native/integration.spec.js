@@ -117,8 +117,8 @@ describe('Native Spans Integration', () => {
         }
       })
 
-      assert.strictEqual(span.context()._tags['custom.tag'], 'custom-value')
-      assert.strictEqual(span.context()._tags['numeric.tag'], 42)
+      assert.strictEqual(span.context().getTags()['custom.tag'], 'custom-value')
+      assert.strictEqual(span.context().getTags()['numeric.tag'], 42)
 
       span.finish()
     })
@@ -130,9 +130,9 @@ describe('Native Spans Integration', () => {
         type: 'web'
       })
 
-      assert.strictEqual(span.context()._tags[SERVICE_NAME], 'custom-service')
-      assert.strictEqual(span.context()._tags[RESOURCE_NAME], 'GET /api/users')
-      assert.strictEqual(span.context()._tags[SPAN_TYPE], 'web')
+      assert.strictEqual(span.context().getTags()[SERVICE_NAME], 'custom-service')
+      assert.strictEqual(span.context().getTags()[RESOURCE_NAME], 'GET /api/users')
+      assert.strictEqual(span.context().getTags()[SPAN_TYPE], 'web')
 
       span.finish()
     })
@@ -161,8 +161,8 @@ describe('Native Spans Integration', () => {
       span.setTag('http.url', 'https://example.com')
       span.setTag('http.status_code', 200)
 
-      assert.strictEqual(span.context()._tags['http.url'], 'https://example.com')
-      assert.strictEqual(span.context()._tags['http.status_code'], 200)
+      assert.strictEqual(span.context().getTags()['http.url'], 'https://example.com')
+      assert.strictEqual(span.context().getTags()['http.status_code'], 200)
     })
 
     it('should set multiple tags via addTags', () => {
@@ -172,9 +172,9 @@ describe('Native Spans Integration', () => {
         'db.statement': 'SELECT * FROM users'
       })
 
-      assert.strictEqual(span.context()._tags['db.type'], 'postgresql')
-      assert.strictEqual(span.context()._tags['db.instance'], 'users')
-      assert.strictEqual(span.context()._tags['db.statement'], 'SELECT * FROM users')
+      assert.strictEqual(span.context().getTags()['db.type'], 'postgresql')
+      assert.strictEqual(span.context().getTags()['db.instance'], 'users')
+      assert.strictEqual(span.context().getTags()['db.statement'], 'SELECT * FROM users')
     })
 
     it('should set and get baggage items', () => {
@@ -307,7 +307,7 @@ describe('Native Spans Integration', () => {
       span.addLink({ context: linkedSpan.context() })
       span.finish()
 
-      const linksTag = span.context()._tags['_dd.span_links']
+      const linksTag = span.context().getTags()['_dd.span_links']
       assert.ok(linksTag, 'should have _dd.span_links tag')
 
       const links = JSON.parse(linksTag)
@@ -334,7 +334,7 @@ describe('Native Spans Integration', () => {
       span.addEvent('test-event', { foo: 'bar' })
       span.finish()
 
-      const eventsTag = span.context()._tags['_dd.span_events']
+      const eventsTag = span.context().getTags()['_dd.span_events']
       assert.ok(eventsTag, 'should have _dd.span_events tag')
 
       const events = JSON.parse(eventsTag)
@@ -384,10 +384,10 @@ describe('Native Spans Integration', () => {
         type: 'option-type',
         tags: { custom: 'tag' }
       }, (span) => {
-        assert.strictEqual(span.context()._tags[SERVICE_NAME], 'option-service')
-        assert.strictEqual(span.context()._tags[RESOURCE_NAME], 'option-resource')
-        assert.strictEqual(span.context()._tags[SPAN_TYPE], 'option-type')
-        assert.strictEqual(span.context()._tags.custom, 'tag')
+        assert.strictEqual(span.context().getTags()[SERVICE_NAME], 'option-service')
+        assert.strictEqual(span.context().getTags()[RESOURCE_NAME], 'option-resource')
+        assert.strictEqual(span.context().getTags()[SPAN_TYPE], 'option-type')
+        assert.strictEqual(span.context().getTags().custom, 'tag')
       })
     })
   })
