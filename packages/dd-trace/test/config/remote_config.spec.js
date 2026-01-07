@@ -241,6 +241,22 @@ describe('Tracing Remote Config', () => {
 
       sinon.assert.calledOnce(onConfigUpdated)
     })
+
+    it('should return null when configs have no lib_config field', () => {
+      enable(rc, config, onConfigUpdated)
+      const handler = batchHandlers.get('APM_TRACING')
+
+      // Apply a config that has lib_config set to null
+      const transaction = createTransaction([
+        { id: 'config-1', file: { service_target: { service: 'test-service', env: '*' }, lib_config: null } }
+      ])
+
+      handler(transaction)
+
+      // Should pass null because no lib_config was found
+      sinon.assert.calledWithExactly(config.updateRemoteConfig, null)
+      sinon.assert.calledOnce(onConfigUpdated)
+    })
   })
 })
 
