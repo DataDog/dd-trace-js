@@ -162,6 +162,11 @@ class RCClientLibConfigManager {
       }
     }
 
+    if (libConfigCount === 0) {
+      // When no configs are present, return null to signal config.js to reset all RC fields
+      return null
+    }
+
     log.debug('[config/remote_config] Merged %d configs into lib_config', libConfigCount)
     return merged
   }
