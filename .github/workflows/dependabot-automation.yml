@@ -22,7 +22,7 @@ jobs:
           policy: dependabot-automation
       - name: Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@08eff52bf64351f401fb50d4972fa95b9f2c2d1b # 2.4.0
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # 2.5.0
         with:
           github-token: "${{ steps.octo-sts.outputs.token }}"
       - name: Enable auto-merge for Dependabot PRs
@@ -47,7 +47,7 @@ jobs:
     steps:
       - name: Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@08eff52bf64351f401fb50d4972fa95b9f2c2d1b # 2.4.0
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # 2.5.0
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         if: steps.metadata.outputs.dependency-group == 'vendor-minor-and-patch-dependencies'
       - run: yarn
