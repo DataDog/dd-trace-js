@@ -12,11 +12,12 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE
 } = require('../telemetry')
+const { withCache } = require('../cache/request-cache')
 
 const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
 const DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD = 30
 
-function getLibraryConfiguration ({
+function getLibraryConfigurationUncached ({
   url,
   isEvpProxy,
   evpProxyPrefix,
@@ -144,5 +145,26 @@ function getLibraryConfiguration ({
     }
   })
 }
+
+// Wrap with cache - cache key based on service, env, repo, sha, and configurations
+const getLibraryConfiguration = withCache(
+  'library-config',
+  getLibraryConfigurationUncached,
+  (params) => ({
+    service: params.service,
+    env: params.env,
+    repositoryUrl: params.repositoryUrl,
+    sha: params.sha,
+    branch: params.branch,
+    tag: params.tag,
+    testLevel: params.testLevel,
+    osVersion: params.osVersion,
+    osPlatform: params.osPlatform,
+    osArchitecture: params.osArchitecture,
+    runtimeName: params.runtimeName,
+    runtimeVersion: params.runtimeVersion,
+    custom: params.custom
+  })
+)
 
 module.exports = { getLibraryConfiguration }
