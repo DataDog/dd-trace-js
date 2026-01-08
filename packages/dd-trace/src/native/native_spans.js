@@ -34,6 +34,16 @@ class NativeSpansInterface {
       throw new Error('Native spans module is not available')
     }
 
+    // Store options for potential re-initialization
+    this._options = {
+      tracerVersion: options.tracerVersion,
+      lang: options.lang || 'nodejs',
+      langVersion: options.langVersion || process.version,
+      langInterpreter: options.langInterpreter || 'v8',
+      pid: options.pid ?? process.pid,
+      tracerService: options.tracerService
+    }
+
     // Allocate shared buffers
     this._changeQueueBuffer = Buffer.alloc(CHANGE_QUEUE_BUFFER_SIZE)
     this._stringTableInputBuffer = Buffer.alloc(STRING_TABLE_INPUT_BUFFER_SIZE)
@@ -52,18 +62,52 @@ class NativeSpansInterface {
     // Initialize the native state
     this._state = new NativeSpanState(
       options.agentUrl,
-      options.tracerVersion,
-      options.lang || 'nodejs',
-      options.langVersion || process.version,
-      options.langInterpreter || 'v8',
+      this._options.tracerVersion,
+      this._options.lang,
+      this._options.langVersion,
+      this._options.langInterpreter,
       this._changeQueueBuffer,
       this._stringTableInputBuffer,
-      options.pid ?? process.pid,
-      options.tracerService,
+      this._options.pid,
+      this._options.tracerService,
       this._samplingBuffer
     )
 
     log.debug('Native spans interface initialized')
+  }
+
+  /**
+   * Update the agent URL by reinitializing the native state.
+   * Warning: This will discard any buffered but unflushed span data.
+   * @param {string} url New agent URL
+   */
+  setAgentUrl (url) {
+    // Flush any pending operations first
+    this.flushChangeQueue()
+
+    // Reset change queue state
+    this._cqbIndex = 8
+    this._cqbCount = 0
+
+    // Reset string table (spans will need to re-register strings)
+    this._stringMap.clear()
+    this._stringIdCounter = 0
+
+    // Reinitialize native state with new URL
+    this._state = new NativeSpanState(
+      url,
+      this._options.tracerVersion,
+      this._options.lang,
+      this._options.langVersion,
+      this._options.langInterpreter,
+      this._changeQueueBuffer,
+      this._stringTableInputBuffer,
+      this._options.pid,
+      this._options.tracerService,
+      this._samplingBuffer
+    )
+
+    log.debug('Native spans interface reinitialized with new URL:', url)
   }
 
   /**

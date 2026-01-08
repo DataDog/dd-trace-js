@@ -68,7 +68,12 @@ class TracerProvider {
       return Promise.reject(new Error('Not started'))
     }
 
-    exporter._writer.flush()
+    // AgentExporter has _writer.flush(), NativeExporter has flush() directly
+    if (exporter._writer) {
+      exporter._writer.flush()
+    } else if (exporter.flush) {
+      exporter.flush()
+    }
     return this._activeProcessor.forceFlush()
   }
 
