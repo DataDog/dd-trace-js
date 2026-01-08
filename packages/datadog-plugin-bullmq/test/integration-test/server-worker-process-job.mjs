@@ -8,20 +8,21 @@ const connection = {
 
 const queueName = 'esm-test-worker-process'
 
-const queue = new Queue(queueName, { connection })
-const queueEvents = new QueueEvents(queueName, { connection })
-
+// Create worker first and wait for it to be ready before creating the queue
+// This ensures the worker is listening before any jobs are added
 const worker = new Worker(queueName, async (job) => {
   return { processed: true, jobId: job.id }
 }, { connection })
 
 await worker.waitUntilReady()
+
+const queue = new Queue(queueName, { connection })
 await queue.waitUntilReady()
+
+const queueEvents = new QueueEvents(queueName, { connection })
 await queueEvents.waitUntilReady()
 
-// Test Worker.callProcessJob() - tests Worker_callProcessJob channel
-// Using waitUntilFinished ensures the entire job lifecycle completes,
-// including the consumer span being finished and flushed
+// Add job and wait for processing to complete
 const job = await queue.add('process-test-job', { message: 'Test job for worker processing' })
 await job.waitUntilFinished(queueEvents)
 

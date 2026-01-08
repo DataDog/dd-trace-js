@@ -78,7 +78,14 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'bullmq.processJob'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server-worker-process-job.mjs', agent.port)
+        proc = await spawnPluginIntegrationTestProc(
+          sandboxCwd(),
+          'server-worker-process-job.mjs',
+          agent.port,
+          undefined,
+          // Disable Redis/ioredis instrumentation to avoid hitting max active requests limit
+          { DD_TRACE_REDIS_ENABLED: 'false', DD_TRACE_IOREDIS_ENABLED: 'false' }
+        )
 
         await res
       }).timeout(60000)
