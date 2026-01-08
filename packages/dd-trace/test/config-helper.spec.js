@@ -71,25 +71,12 @@ describe('config-helper stable config sources', () => {
     const sources = getStableConfigSources()
 
     assert.strictEqual(StableConfigStub.called, false)
-    assert.deepStrictEqual(sources.localStableConfig, {})
-    assert.deepStrictEqual(sources.fleetStableConfig, {})
+    assert.strictEqual(sources.localStableConfig, undefined)
+    assert.strictEqual(sources.fleetStableConfig, undefined)
   })
 
   it('handles empty or missing stable config entries', () => {
-    isInServerlessEnvironmentStub.returns(false)
-
-    StableConfigStub.callsFake(function () {
-      this.localEntries = null
-      this.fleetEntries = undefined
-      this.warnings = []
-    })
-
-    const { getStableConfigSources } = proxyquire('../src/config-helper', {
-      './serverless': {
-        isInServerlessEnvironment: isInServerlessEnvironmentStub
-      },
-      './config_stable': StableConfigStub
-    })
+    const { getStableConfigSources } = require('../src/config-helper')
 
     const sources = getStableConfigSources()
 
