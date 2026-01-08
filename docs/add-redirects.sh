@@ -23,6 +23,7 @@ declare -a plugins=(
   "axios"
   "azure_functions"
   "azure_service_bus"
+  "bullmq"
   "bunyan"
   "cassandra_driver"
   "child_process"
