@@ -11,6 +11,7 @@ const {
   SPAN_POINTER_DIRECTION,
   SPAN_POINTER_DIRECTION_NAME
 } = require('../../dd-trace/src/constants')
+const log = require('../../dd-trace/src/log')
 
 class WSReceiverPlugin extends TracingPlugin {
   static get id () { return 'ws' }
@@ -19,15 +20,23 @@ class WSReceiverPlugin extends TracingPlugin {
   static get kind () { return 'consumer' }
 
   bindStart (ctx) {
+    log.debug('[WS-RECEIVER] bindStart called')
+
     const {
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces
     } = this.config
-    if (!traceWebsocketMessagesEnabled) return
+    if (!traceWebsocketMessagesEnabled) {
+      log.debug('[WS-RECEIVER] bindStart: messages not enabled, returning early')
+      return
+    }
 
     const { byteLength, socket, binary } = ctx
-    if (!socket.spanContext) return
+    if (!socket.spanContext) {
+      log.warn('[WS-RECEIVER] bindStart: socket.spanContext is missing! Socket may not have completed handshake.')
+      return
+    }
 
     const spanTags = socket.spanContext.spanTags
     const path = spanTags['resource.name'].split(' ')[1]
@@ -56,19 +65,41 @@ class WSReceiverPlugin extends TracingPlugin {
     }
 
     ctx.span = span
+    const spanId = ctx.span?._spanContext?._spanId?.toString()
+    log.debug('[WS-RECEIVER] bindStart: span created, spanId: %s, path: %s, byteLength: %d', spanId, path, byteLength)
     return ctx.currentStore
   }
 
   bindAsyncStart (ctx) {
+    const spanId = ctx.span?._spanContext?._spanId?.toString()
+    log.debug('[WS-RECEIVER] bindAsyncStart called, spanId: %s', spanId)
+
+    if (!ctx.span) {
+      log.warn('[WS-RECEIVER] bindAsyncStart: ctx.span is undefined!')
+    }
     return ctx.parentStore
   }
 
   asyncStart (ctx) {
+    const spanId = ctx.span?._spanContext?._spanId?.toString()
+    log.debug('[WS-RECEIVER] asyncStart called, spanId: %s', spanId)
+
+    if (!ctx.span) {
+      log.warn('[WS-RECEIVER] asyncStart: ctx.span is undefined!')
+      return
+    }
     ctx.span.finish()
+    log.debug('[WS-RECEIVER] asyncStart: span finished, spanId: %s', spanId)
   }
 
   end (ctx) {
-    if (!Object.hasOwn(ctx, 'result') || !ctx.span) return
+    const spanId = ctx.span?._spanContext?._spanId?.toString()
+    log.debug('[WS-RECEIVER] end called, spanId: %s, hasResult: %s', spanId, Object.hasOwn(ctx, 'result'))
+
+    if (!Object.hasOwn(ctx, 'result') || !ctx.span) {
+      log.debug('[WS-RECEIVER] end: returning early, no result or no span')
+      return
+    }
 
     if (ctx.socket.spanContext) {
       const linkAttributes = { 'dd.kind': 'executed_by' }
@@ -106,6 +137,7 @@ class WSReceiverPlugin extends TracingPlugin {
     }
 
     ctx.span.finish()
+    log.debug('[WS-RECEIVER] end: span finished, spanId: %s', spanId)
     return ctx.parentStore
   }
 }

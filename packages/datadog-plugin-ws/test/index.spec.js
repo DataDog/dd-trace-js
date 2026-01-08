@@ -40,6 +40,17 @@ describe('Plugin', () => {
           assert.strictEqual(error?.[0]?.message, 'WebSocket was closed before the connection was established')
         })
 
+        it('should not error when bindAsyncStart is called without a span', async () => {
+          const WSProducerPlugin = require('../src/producer')
+          const plugin = new WSProducerPlugin({})
+
+          const ctx = { parentStore: {} }
+
+          const result = plugin.bindAsyncStart(ctx)
+
+          assert.strictEqual(result, undefined)
+        })
+
         after(async () => {
           agent.close({ ritmReset: false, wipe: true })
         })
