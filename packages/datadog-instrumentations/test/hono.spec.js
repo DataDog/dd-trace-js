@@ -1,7 +1,8 @@
 'use strict'
 
+const assert = require('assert/strict')
+
 const axios = require('axios')
-const { expect } = require('chai')
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, before, after } = require('mocha')
 const sinon = require('sinon')
@@ -33,7 +34,7 @@ withVersions('hono', 'hono', version => {
       const app = new Hono()
 
       // Add a middleware
-      app.use(async (_c, next) => {
+      app.use(async function named (_c, next) {
         middlewareCalled()
         await next()
       })
@@ -91,53 +92,37 @@ withVersions('hono', 'hono', version => {
     it('should publish to handleChannel on request', async () => {
       const res = await axios.get(`http://localhost:${port}/test`)
 
-      expect(res.data).to.equal('OK')
+      assert.strictEqual(res.data, 'OK')
       sinon.assert.called(handleChannelCb)
     })
 
-    it('should publish to routeChannel when middleware is invoked', async () => {
+    it('should publish to middleware channels', async () => {
       const res = await axios.get(`http://localhost:${port}/test`)
 
-      expect(res.data).to.equal('OK')
       sinon.assert.called(routeChannelCb)
-      expect(middlewareCalled).to.be.calledOnce
-    })
+      sinon.assert.calledOnce(middlewareCalled)
 
-    it('should publish to enterChannel when middleware starts', async () => {
-      const res = await axios.get(`http://localhost:${port}/test`)
-
-      expect(res.data).to.equal('OK')
+      assert.strictEqual(res.data, 'OK')
       sinon.assert.called(enterChannelCb)
-      const callArgs = enterChannelCb.firstCall.args[0]
-      expect(callArgs).to.have.property('req')
-      expect(callArgs).to.have.property('name')
-    })
+      let callArgs = enterChannelCb.firstCall.args[0]
+      assert.deepStrictEqual(Object.keys(callArgs), ['req', 'name', 'route'])
+      assert.strictEqual(callArgs.req.url, '/test')
+      assert.strictEqual(callArgs.name, 'named')
 
-    it('should publish to exitChannel when middleware exits', async () => {
-      const res = await axios.get(`http://localhost:${port}/test`)
-
-      expect(res.data).to.equal('OK')
-      sinon.assert.called(exitChannelCb)
-      const callArgs = exitChannelCb.firstCall.args[0]
-      expect(callArgs).to.have.property('req')
-    })
-
-    it('should publish to finishChannel when middleware completes', async () => {
-      const res = await axios.get(`http://localhost:${port}/test`)
-
-      expect(res.data).to.equal('OK')
-      sinon.assert.called(finishChannelCb)
-      const callArgs = finishChannelCb.firstCall.args[0]
-      expect(callArgs).to.have.property('req')
-    })
-
-    it('should publish to nextChannel when next() is called', async () => {
-      const res = await axios.get(`http://localhost:${port}/test`)
-
-      expect(res.data).to.equal('OK')
       sinon.assert.called(nextChannelCb)
-      const callArgs = nextChannelCb.firstCall.args[0]
-      expect(callArgs).to.have.property('req')
+      callArgs = nextChannelCb.firstCall.args[0]
+      assert.deepStrictEqual(Object.keys(callArgs), ['req', 'route'])
+      assert.strictEqual(callArgs.req.url, '/test')
+
+      sinon.assert.called(exitChannelCb)
+      callArgs = exitChannelCb.firstCall.args[0]
+      assert.deepStrictEqual(Object.keys(callArgs), ['req', 'route'])
+      assert.strictEqual(callArgs.req.url, '/test')
+
+      sinon.assert.called(finishChannelCb)
+      callArgs = finishChannelCb.firstCall.args[0]
+      assert.deepStrictEqual(Object.keys(callArgs), ['req'])
+      assert.strictEqual(callArgs.req.url, '/test')
     })
 
     it('should publish to errorChannel when middleware throws', async () => {
@@ -149,9 +134,9 @@ withVersions('hono', 'hono', version => {
 
       sinon.assert.called(errorChannelCb)
       const callArgs = errorChannelCb.firstCall.args[0]
-      expect(callArgs).to.have.property('req')
-      expect(callArgs).to.have.property('error')
-      expect(callArgs.error.message).to.equal('test error')
+      assert.deepStrictEqual(Object.keys(callArgs), ['req', 'error'])
+      assert.strictEqual(callArgs.req.url, '/error')
+      assert.strictEqual(callArgs.error.message, 'test error')
     })
   })
 })

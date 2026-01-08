@@ -76,17 +76,17 @@ function wrapMiddleware (middleware, route) {
                 finishChannel.publish({ req })
                 return result
               },
-              (err) => {
-                errorChannel.publish({ req, error: err })
-                throw err
+              (error) => {
+                errorChannel.publish({ req, error })
+                throw error
               }
             )
           }
           finishChannel.publish({ req })
           return result
-        } catch (e) {
-          errorChannel.publish({ req, error: e })
-          throw e
+        } catch (error) {
+          errorChannel.publish({ req, error })
+          throw error
         } finally {
           exitChannel.publish({ req, route })
         }
