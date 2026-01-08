@@ -1156,9 +1156,8 @@ class Config {
     // This is reliant on environment config being set before options.
     // This is to make sure the origins of each value are tracked appropriately for telemetry.
     // We'll only set `llmobs.enabled` on the opts when it's not set on the environment, and options.llmobs is provided.
-    const llmobsEnabledEnv = this.#env['llmobs.enabled']
-    if (llmobsEnabledEnv == null && options.llmobs) {
-      this.#setBoolean(opts, 'llmobs.enabled', !!options.llmobs)
+    if (this.#env['llmobs.enabled'] == null && options.llmobs) {
+      this.#setBoolean(opts, 'llmobs.enabled', true)
     }
   }
 
