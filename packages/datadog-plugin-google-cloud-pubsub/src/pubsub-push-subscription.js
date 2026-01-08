@@ -173,6 +173,12 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       return null
     }
 
+    // Calculate delivery latency (queue time from publish to delivery)
+    if (publishStartTime) {
+      const deliveryDuration = Date.now() - Number(publishStartTime)
+      span.setTag('pubsub.delivery_duration_ms', deliveryDuration)
+    }
+
     this.#addBatchMetadata(span, attrs)
 
     if (linkContext) {
@@ -200,10 +206,8 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     span.setTag('pubsub.batch.message_index', index)
     span.setTag('pubsub.batch.description', `Message ${index + 1} of ${size}`)
 
-    const requestTraceId = attrs['_dd.pubsub_request.trace_id']
     const requestSpanId = attrs['_dd.pubsub_request.span_id']
-    if (requestTraceId && requestSpanId) {
-      span.setTag('pubsub.batch.request_trace_id', requestTraceId)
+    if (requestSpanId) {
       span.setTag('pubsub.batch.request_span_id', requestSpanId)
     }
   }

@@ -134,7 +134,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     }
 
     if (batchRequestTraceId && batchRequestSpanId) {
-      meta['pubsub.batch.request_trace_id'] = batchRequestTraceId
       meta['pubsub.batch.request_span_id'] = batchRequestSpanId
       meta['_dd.pubsub_request.trace_id'] = batchRequestTraceId
       meta['_dd.pubsub_request.span_id'] = batchRequestSpanId
