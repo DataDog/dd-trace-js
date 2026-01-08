@@ -1,9 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { afterEach, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+
+const LLMObsSpanWriter = require('../../../src/llmobs/writers/spans')
+const log = require('../../../src/log')
+const agent = require('../../plugins/agent')
 
 describe('Multi-Tenant Routing', () => {
   let BaseLLMObsWriter
@@ -48,15 +52,11 @@ describe('Multi-Tenant Routing', () => {
     assert.strictEqual(request.callCount, 3)
 
     const calls = request.getCalls()
-    const byKey = (key) => calls.find(c => c.args[1].headers['DD-API-KEY'] === key)
+    const byKey = (key) => calls.find(c => c.args[1].headers['DD-API-KEY'] === key).args[1].url.href
 
-    const callA = byKey('key-a')
-    const callB = byKey('key-b')
-    const callDefault = byKey('default-key')
-
-    assert.strictEqual(callA.args[1].url.href, 'https://intake.site-a.com/')
-    assert.strictEqual(callB.args[1].url.href, 'https://intake.site-b.com/')
-    assert.strictEqual(callDefault.args[1].url.href, 'https://intake.default-site.com/')
+    assert.strictEqual(byKey('key-a'), 'https://intake.site-a.com/')
+    assert.strictEqual(byKey('key-b'), 'https://intake.site-b.com/')
+    assert.strictEqual(byKey('default-key'), 'https://intake.default-site.com/')
   })
 
   it('isolates events between tenants', () => {
@@ -114,70 +114,89 @@ describe('Multi-Tenant Routing', () => {
   })
 
   describe('routing context behavior', () => {
-    const { storage } = require('../../../src/llmobs/storage')
-    let LLMObsSDK
+    let tracer
     let llmobs
-    let sdkLogger
+    let appendSpy
+    let flushStub
+    let logWarnSpy
+
+    before(() => {
+      process.env.DD_API_KEY = 'test-api-key'
+      process.env.DD_SITE = 'datadoghq.com'
+
+      tracer = require('../../../../dd-trace')
+      tracer.init({
+        service: 'service',
+        llmobs: {
+          mlApp: 'mlApp',
+          agentlessEnabled: true
+        }
+      })
+      llmobs = tracer.llmobs
+
+      process.removeAllListeners('beforeExit')
+    })
 
     beforeEach(() => {
-      sdkLogger = { debug: sinon.stub(), warn: sinon.stub(), error: sinon.stub() }
-
-      LLMObsSDK = proxyquire('../../../src/llmobs/sdk', {
-        '../log': sdkLogger
-      })
-
-      llmobs = new LLMObsSDK(null, { disable () {} }, { llmobs: { enabled: true } })
+      appendSpy = sinon.spy(LLMObsSpanWriter.prototype, 'append')
+      flushStub = sinon.stub(LLMObsSpanWriter.prototype, 'flush')
+      logWarnSpy = sinon.spy(log, 'warn')
     })
 
     afterEach(() => {
-      llmobs.disable()
+      appendSpy.restore()
+      flushStub.restore()
+      logWarnSpy.restore()
     })
 
-    function getCurrentRouting () {
-      return storage.getStore()?.routingContext || null
-    }
+    after(() => {
+      delete process.env.DD_API_KEY
+      delete process.env.DD_SITE
+      llmobs.disable()
+      agent.wipe()
+    })
 
-    it('nested contexts override outer and restore after, and logs warning', () => {
-      let outerRouting, innerRouting, afterInnerRouting
+    it('nested contexts route spans correctly and log warning', () => {
+      llmobs.withRoutingContext({ ddApiKey: 'outer-key', ddSite: 'outer-site.com' }, () => {
+        llmobs.trace({ kind: 'workflow', name: 'outer-span' }, () => {})
 
-      llmobs.withRoutingContext({ ddApiKey: 'outer-key', ddSite: 'outer-site' }, () => {
-        outerRouting = getCurrentRouting()
-        llmobs.withRoutingContext({ ddApiKey: 'inner-key', ddSite: 'inner-site' }, () => {
-          innerRouting = getCurrentRouting()
+        llmobs.withRoutingContext({ ddApiKey: 'inner-key', ddSite: 'inner-site.com' }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'inner-span' }, () => {})
         })
-        afterInnerRouting = getCurrentRouting()
+
+        llmobs.trace({ kind: 'workflow', name: 'after-inner-span' }, () => {})
       })
 
-      assert.strictEqual(outerRouting.apiKey, 'outer-key')
-      assert.strictEqual(innerRouting.apiKey, 'inner-key')
-      assert.strictEqual(afterInnerRouting.apiKey, 'outer-key')
-      sinon.assert.calledOnce(sdkLogger.warn)
-      sinon.assert.calledWith(
-        sdkLogger.warn,
-        'Nested routing context detected. Inner context will override outer context. ' +
-        'Spans created in the inner context will only be sent to the inner context.'
-      )
+      const calls = appendSpy.getCalls()
+      assert.strictEqual(calls.length, 3)
+
+      const routingFor = (name) => calls.find(c => c.args[0].name === name).args[1]
+
+      assert.deepStrictEqual(routingFor('outer-span'), { apiKey: 'outer-key', site: 'outer-site.com' })
+      assert.deepStrictEqual(routingFor('inner-span'), { apiKey: 'inner-key', site: 'inner-site.com' })
+      assert.deepStrictEqual(routingFor('after-inner-span'), { apiKey: 'outer-key', site: 'outer-site.com' })
+
+      sinon.assert.calledOnce(logWarnSpy)
+      sinon.assert.calledWith(logWarnSpy, sinon.match(/Nested routing context detected/))
     })
 
     it('concurrent contexts are isolated', async () => {
-      const results = []
-
       await Promise.all([
-        llmobs.withRoutingContext({ ddApiKey: 'key-a' }, async () => {
+        llmobs.withRoutingContext({ ddApiKey: 'key-a', ddSite: 'site-a.com' }, async () => {
           await new Promise(resolve => setTimeout(resolve, 10))
-          results.push({ context: 'A', routing: getCurrentRouting() })
+          llmobs.trace({ kind: 'workflow', name: 'span-a' }, () => {})
         }),
-        llmobs.withRoutingContext({ ddApiKey: 'key-b' }, async () => {
+        llmobs.withRoutingContext({ ddApiKey: 'key-b', ddSite: 'site-b.com' }, async () => {
           await new Promise(resolve => setTimeout(resolve, 5))
-          results.push({ context: 'B', routing: getCurrentRouting() })
+          llmobs.trace({ kind: 'workflow', name: 'span-b' }, () => {})
         })
       ])
 
-      const resultA = results.find(r => r.context === 'A')
-      const resultB = results.find(r => r.context === 'B')
+      const calls = appendSpy.getCalls()
+      const routingFor = (name) => calls.find(c => c.args[0].name === name).args[1]
 
-      assert.strictEqual(resultA.routing.apiKey, 'key-a')
-      assert.strictEqual(resultB.routing.apiKey, 'key-b')
+      assert.deepStrictEqual(routingFor('span-a'), { apiKey: 'key-a', site: 'site-a.com' })
+      assert.deepStrictEqual(routingFor('span-b'), { apiKey: 'key-b', site: 'site-b.com' })
     })
   })
 })
