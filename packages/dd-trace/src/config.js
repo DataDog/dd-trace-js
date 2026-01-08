@@ -353,14 +353,24 @@ class Config {
   }
 
   /**
-   * Updates the configuration with remote config settings.
+   * Set the configuration with remote config settings.
    * Applies remote configuration, recalculates derived values, and merges all configuration sources.
    *
-   * @param {import('./config/remote_config').RemoteConfigOptions|null} options - Remote config
-   *   lib_config object or null to reset all remote configuration
+   * @param {import('./config/remote_config').RemoteConfigOptions|null} options - Configurations received via Remote
+   *   Config or null to reset all remote configuration
    */
-  updateRemoteConfig (options) {
-    this.#applyRemoteConfig(options)
+  setRemoteConfig (options) {
+    // Clear all RC-managed fields to ensure previous values don't persist.
+    // State is instead managed by the `RCClientLibConfigManager` class
+    this.#remote = {}
+    this.#remoteUnprocessed = {}
+
+    // Special case: if options is null, nothing to apply
+    // This happens when all remote configs are removed
+    if (options !== null) {
+      this.#applyRemoteConfig(options)
+    }
+
     this.#applyCalculated()
     this.#merge()
   }
@@ -1317,58 +1327,27 @@ class Config {
   /**
    * Applies remote configuration options from APM_TRACING configs.
    *
-   * This method uses field-guarding to support multi-config merging:
-   * - Only fields present in options are updated
-   * - Missing fields retain their previous values
-   * - Fields with null values are explicitly reset (converted to undefined in merge)
-   * - When options is null, all RC-managed fields are reset to defaults
-   *
-   * @param {import('./config/remote_config').RemoteConfigOptions|null} options - Remote config
-   *   lib_config object or null to reset all
+   * @param {import('./config/remote_config').RemoteConfigOptions} options - Configurations received via Remote Config
    */
   #applyRemoteConfig (options) {
-    // Special case: if options is null, reset all RC-managed fields
-    // This happens when all remote configs are removed
-    if (options === null) {
-      this.#remote = {}
-      return
-    }
-
     const opts = this.#remote
 
-    if ('dynamic_instrumentation_enabled' in options) {
-      this.#setBoolean(opts, 'dynamicInstrumentation.enabled', options.dynamic_instrumentation_enabled)
-    }
-    if ('code_origin_enabled' in options) {
-      this.#setBoolean(opts, 'codeOriginForSpans.enabled', options.code_origin_enabled)
-    }
-    if ('tracing_header_tags' in options) {
-      const headerTags = options.tracing_header_tags
-        ? options.tracing_header_tags.map(tag => {
-          return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
-        })
-        : undefined
-      opts.headerTags = headerTags
-    }
-    if ('tracing_tags' in options) {
-      const tags = {}
-      tagger.add(tags, options.tracing_tags)
-      if (Object.keys(tags).length) tags['runtime-id'] = runtimeId
-      this.#setTags(opts, 'tags', tags)
-    }
-    if ('tracing_sampling_rate' in options) {
-      this.#setUnit(opts, 'sampleRate', options.tracing_sampling_rate)
-    }
-    if ('log_injection_enabled' in options) {
-      this.#setBoolean(opts, 'logInjection', options.log_injection_enabled)
-    }
-    if ('tracing_enabled' in options) {
-      this.#setBoolean(opts, 'tracing', options.tracing_enabled)
-    }
-    if ('tracing_sampling_rules' in options) {
-      this.#remoteUnprocessed['sampler.rules'] = options.tracing_sampling_rules
-      this.#setSamplingRule(opts, 'sampler.rules', this.#reformatTagsFromRC(options.tracing_sampling_rules))
-    }
+    this.#setBoolean(opts, 'dynamicInstrumentation.enabled', options.dynamic_instrumentation_enabled)
+    this.#setBoolean(opts, 'codeOriginForSpans.enabled', options.code_origin_enabled)
+    this.#setUnit(opts, 'sampleRate', options.tracing_sampling_rate)
+    this.#setBoolean(opts, 'logInjection', options.log_injection_enabled)
+    this.#setBoolean(opts, 'tracing', options.tracing_enabled)
+    this.#remoteUnprocessed['sampler.rules'] = options.tracing_sampling_rules
+    this.#setSamplingRule(opts, 'sampler.rules', this.#reformatTagsFromRC(options.tracing_sampling_rules))
+
+    opts.headerTags = options.tracing_header_tags?.map(tag => {
+      return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
+    })
+
+    const tags = {}
+    tagger.add(tags, options.tracing_tags)
+    if (Object.keys(tags).length) tags['runtime-id'] = runtimeId
+    this.#setTags(opts, 'tags', tags)
   }
 
   #reformatTagsFromRC (samplingRules) {

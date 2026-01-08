@@ -27,7 +27,7 @@ describe('Tracing Remote Config', () => {
     config = {
       service: 'test-service',
       env: 'test-env',
-      updateRemoteConfig: sinon.spy()
+      setRemoteConfig: sinon.spy()
     }
 
     onConfigUpdated = sinon.spy()
@@ -65,7 +65,7 @@ describe('Tracing Remote Config', () => {
 
         handler(transaction)
 
-        sinon.assert.calledOnceWithExactly(config.updateRemoteConfig, libConfig)
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, libConfig)
         sinon.assert.calledOnce(onConfigUpdated)
       })
 
@@ -80,7 +80,7 @@ describe('Tracing Remote Config', () => {
         ])
         handler(transaction)
 
-        config.updateRemoteConfig.resetHistory()
+        config.setRemoteConfig.resetHistory()
         onConfigUpdated.resetHistory()
 
         // Then unapply it
@@ -90,11 +90,11 @@ describe('Tracing Remote Config', () => {
         handler(transaction)
 
         // When all configs are removed, null is passed to reset
-        sinon.assert.calledWithExactly(config.updateRemoteConfig, null)
+        sinon.assert.calledWithExactly(config.setRemoteConfig, null)
         sinon.assert.calledOnce(onConfigUpdated)
       })
 
-      it('should call updateRemoteConfig only once per batch', () => {
+      it('should call setRemoteConfig only once per batch', () => {
         enable(rc, config, onConfigUpdated)
 
         const handler = batchHandlers.get('APM_TRACING')
@@ -109,7 +109,7 @@ describe('Tracing Remote Config', () => {
         handler(transaction)
 
         // Should be called exactly once, not three times
-        sinon.assert.calledOnce(config.updateRemoteConfig)
+        sinon.assert.calledOnce(config.setRemoteConfig)
         sinon.assert.calledOnce(onConfigUpdated)
       })
     })
@@ -141,7 +141,7 @@ describe('Tracing Remote Config', () => {
       handler(transaction)
 
       // Service config should win
-      const lastCall = config.updateRemoteConfig.lastCall
+      const lastCall = config.setRemoteConfig.lastCall
       sinon.assert.match(lastCall.args[0], { tracing_sampling_rate: 0.8 })
     })
 
@@ -172,7 +172,7 @@ describe('Tracing Remote Config', () => {
       handler(transaction)
 
       // Lower priority should now apply
-      const lastCall = config.updateRemoteConfig.lastCall
+      const lastCall = config.setRemoteConfig.lastCall
       sinon.assert.match(lastCall.args[0], { tracing_sampling_rate: 0.5 })
     })
 
@@ -192,7 +192,7 @@ describe('Tracing Remote Config', () => {
       handler(transaction)
 
       // Should be ignored, so null is passed to reset all RC fields
-      sinon.assert.calledWith(config.updateRemoteConfig, null)
+      sinon.assert.calledWith(config.setRemoteConfig, null)
     })
 
     it('should merge fields from multiple configs', () => {
@@ -222,7 +222,7 @@ describe('Tracing Remote Config', () => {
       handler(transaction)
 
       // Service config sampling rate should win, but log_injection should come from org
-      const lastCall = config.updateRemoteConfig.lastCall
+      const lastCall = config.setRemoteConfig.lastCall
       sinon.assert.match(lastCall.args[0], {
         tracing_sampling_rate: 0.8,
         log_injection_enabled: true
@@ -254,7 +254,7 @@ describe('Tracing Remote Config', () => {
       handler(transaction)
 
       // Should pass null because no lib_config was found
-      sinon.assert.calledWithExactly(config.updateRemoteConfig, null)
+      sinon.assert.calledWithExactly(config.setRemoteConfig, null)
       sinon.assert.calledOnce(onConfigUpdated)
     })
   })

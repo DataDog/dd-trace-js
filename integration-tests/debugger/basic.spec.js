@@ -101,7 +101,7 @@ describe('Dynamic Instrumentation', function () {
         const triggers = [
           () => {
             t.rcConfig.config.version++
-            t.agent.updateRemoteConfig(t.rcConfig.id, t.rcConfig.config)
+            t.agent.setRemoteConfig(t.rcConfig.id, t.rcConfig.config)
           },
           () => {}
         ]
@@ -510,7 +510,7 @@ describe('Dynamic Instrumentation', function () {
             await t.axios.get(t.breakpoint.url)
             t.rcConfig.config.version++
             t.rcConfig.config.template = 'Hello Updated World!'
-            t.agent.updateRemoteConfig(t.rcConfig.id, t.rcConfig.config)
+            t.agent.setRemoteConfig(t.rcConfig.id, t.rcConfig.config)
           },
           async () => {
             await t.axios.get(t.breakpoint.url)

@@ -2331,7 +2331,7 @@ describe('Config', () => {
   it('should send empty array when remote config is called on empty options', () => {
     const config = getConfig()
 
-    config.updateRemoteConfig({})
+    config.setRemoteConfig({})
 
     sinon.assert.calledTwice(updateConfig)
     assert.deepStrictEqual(updateConfig.getCall(1).args[0], [])
@@ -2340,7 +2340,7 @@ describe('Config', () => {
   it('should send remote config changes to telemetry', () => {
     const config = getConfig()
 
-    config.updateRemoteConfig({
+    config.setRemoteConfig({
       tracing_sampling_rate: 0
     })
 
@@ -2352,7 +2352,7 @@ describe('Config', () => {
   it('should reformat tags from sampling rules when set through remote configuration', () => {
     const config = getConfig()
 
-    config.updateRemoteConfig({
+    config.setRemoteConfig({
       tracing_sampling_rules: [
         {
           resource: '*',
@@ -2381,7 +2381,7 @@ describe('Config', () => {
   it('should have consistent runtime-id after remote configuration updates tags', () => {
     const config = getConfig()
     const runtimeId = config.tags['runtime-id']
-    config.updateRemoteConfig({
+    config.setRemoteConfig({
       tracing_tags: { foo: 'bar' }
     })
 
@@ -3599,81 +3599,100 @@ rules:
   describe('remote config field mapping', () => {
     it('should map dynamic_instrumentation_enabled to dynamicInstrumentation.enabled', () => {
       const config = getConfig()
-      config.updateRemoteConfig({ dynamic_instrumentation_enabled: true })
+      config.setRemoteConfig({ dynamic_instrumentation_enabled: true })
       assert.strictEqual(config.dynamicInstrumentation.enabled, true)
     })
 
     it('should map code_origin_enabled to codeOriginForSpans.enabled', () => {
       const config = getConfig()
-      config.updateRemoteConfig({ code_origin_enabled: true })
+      config.setRemoteConfig({ code_origin_enabled: true })
       assert.strictEqual(config.codeOriginForSpans.enabled, true)
     })
 
     it('should handle false values correctly', () => {
       const config = getConfig()
-      config.updateRemoteConfig({ dynamic_instrumentation_enabled: false })
+      config.setRemoteConfig({ dynamic_instrumentation_enabled: false })
       assert.strictEqual(config.dynamicInstrumentation.enabled, false)
     })
   })
 
-  describe('remote config field guards for multiconfig', () => {
-    it('should only process fields that are present in remote config', () => {
+  describe('remote config application', () => {
+    it('should clear RC fields when setRemoteConfig is called with null', () => {
       const config = getConfig({ logInjection: true, sampleRate: 0.5 })
 
-      // Apply remote config that doesn't include logInjection or sampleRate
-      config.updateRemoteConfig({ tracing_enabled: true })
+      // Apply remote config with tracing_enabled set to false (different from default)
+      config.setRemoteConfig({ tracing_enabled: false })
 
-      // Original values should be preserved since fields weren't in remote config
+      // RC sets tracing to false, but logInjection and sampleRate come from env/options
+      assert.strictEqual(config.tracing, false)
+      assert.strictEqual(config.logInjection, true)
+      assert.strictEqual(config.sampleRate, 0.5)
+
+      // Now clear remote config (all configs removed)
+      config.setRemoteConfig(null)
+
+      // All RC values should be cleared, falling back to env/options/defaults
+      assert.strictEqual(config.tracing, true) // Falls back to default (true)
       assert.strictEqual(config.logInjection, true)
       assert.strictEqual(config.sampleRate, 0.5)
     })
 
-    it('should skip null values per RFC multiconfig rules', () => {
+    it('should treat null values as unset', () => {
       const config = getConfig({ sampleRate: 0.5 })
 
       // Apply remote config with null value (field is present but null)
-      // Per RFC: "use the highest priority non-null value for each flag"
-      config.updateRemoteConfig({ tracing_sampling_rate: null })
+      // Null should be treated as "unset" and not override the env/options value
+      config.setRemoteConfig({ tracing_sampling_rate: null })
 
-      // Null values should be skipped, preserving existing value
+      // Null values should result in undefined, falling back to env value
       assert.strictEqual(config.sampleRate, 0.5)
     })
 
-    it('should preserve higher priority configs when lower priority config lacks fields', () => {
+    it('should replace all RC fields with each update', () => {
       const config = getConfig()
 
-      // First apply a high-priority config with multiple fields
-      config.updateRemoteConfig({
+      // First apply a remote config with multiple fields
+      config.setRemoteConfig({
         tracing_enabled: true,
-        log_injection_enabled: true,
+        log_injection_enabled: false,
         tracing_sampling_rate: 0.8
       })
 
       assert.strictEqual(config.tracing, true)
-      assert.strictEqual(config.logInjection, true)
+      assert.strictEqual(config.logInjection, false)
       assert.strictEqual(config.sampleRate, 0.8)
 
-      // Then apply a lower-priority config with only tracing_enabled
-      // (simulating what happens after multiconfig merge)
-      config.updateRemoteConfig({
+      // Then apply a new merged config with only tracing_enabled
+      // This represents the complete merged config after multiconfig processing
+      config.setRemoteConfig({
         tracing_enabled: false
       })
 
-      // tracing_enabled should update, but other fields should remain
+      // Only tracing_enabled is set by RC now, others fall back to defaults
       assert.strictEqual(config.tracing, false)
-      assert.strictEqual(config.logInjection, true) // Preserved from first config
-      assert.strictEqual(config.sampleRate, 0.8) // Preserved from first config
+      assert.strictEqual(config.logInjection, true) // Falls back to default (true)
+      assert.strictEqual(config.sampleRate, undefined) // Falls back to default (undefined)
     })
 
-    it('should not process tracing_header_tags when not present', () => {
+    it('should clear tracing_header_tags when not in merged config', () => {
       const config = getConfig({
         headerTags: ['x-custom-header:custom.tag']
       })
 
-      // Apply remote config without tracing_header_tags
-      config.updateRemoteConfig({ tracing_enabled: true })
+      // Apply remote config with tracing_header_tags
+      config.setRemoteConfig({
+        tracing_header_tags: [
+          { header: 'x-rc-header', tag_name: 'rc.tag' }
+        ]
+      })
 
-      // Original headerTags should be preserved
+      // RC value should override
+      assert.deepStrictEqual(config.headerTags, ['x-rc-header:rc.tag'])
+
+      // Apply remote config without tracing_header_tags
+      config.setRemoteConfig({ tracing_enabled: true })
+
+      // RC no longer sets headerTags, falls back to env/options
       assert.deepStrictEqual(config.headerTags, ['x-custom-header:custom.tag'])
     })
 
@@ -3683,7 +3702,7 @@ rules:
       })
 
       // Apply remote config with tracing_header_tags
-      config.updateRemoteConfig({
+      config.setRemoteConfig({
         tracing_header_tags: [
           { header: 'x-new-header', tag_name: 'new.tag' }
         ]
@@ -3693,17 +3712,27 @@ rules:
       assert.deepStrictEqual(config.headerTags, ['x-new-header:new.tag'])
     })
 
-    it('should not process tracing_tags when not present', () => {
+    it('should clear tracing_tags when not in merged config', () => {
       const config = getConfig({
         tags: { env: 'production', version: '1.0.0' }
       })
 
-      // Apply remote config without tracing_tags
-      config.updateRemoteConfig({ tracing_enabled: true })
+      // Apply remote config with tracing_tags
+      config.setRemoteConfig({
+        tracing_tags: ['team:backend']
+      })
 
-      // Original tags should be preserved (except runtime-id which is always added)
+      // RC tags should override
+      assert.strictEqual(config.tags.team, 'backend')
+      assert.strictEqual(config.tags.env, undefined) // RC doesn't include env
+
+      // Apply remote config without tracing_tags
+      config.setRemoteConfig({ tracing_enabled: true })
+
+      // RC no longer sets tags, falls back to env/options
       assert.strictEqual(config.tags.env, 'production')
       assert.strictEqual(config.tags.version, '1.0.0')
+      assert.strictEqual(config.tags.team, undefined)
     })
 
     it('should process tracing_tags when present', () => {
@@ -3712,7 +3741,7 @@ rules:
       })
 
       // Apply remote config with tracing_tags
-      config.updateRemoteConfig({
+      config.setRemoteConfig({
         tracing_tags: ['team:backend', 'region:us-east']
       })
 
@@ -3721,15 +3750,23 @@ rules:
       assert.strictEqual(config.tags.region, 'us-east')
     })
 
-    it('should not process tracing_sampling_rules when not present', () => {
+    it('should clear tracing_sampling_rules when not in merged config', () => {
       const config = getConfig()
-      const originalRules = config.sampler?.rules
+      const originalRules = config.sampler.rules
+
+      // Apply remote config with sampling rules
+      config.setRemoteConfig({
+        tracing_sampling_rules: [{ sample_rate: 0.5 }]
+      })
+
+      // Rules should be set from RC
+      assert.deepStrictEqual(config.sampler.rules, [{ sampleRate: 0.5 }])
 
       // Apply remote config without tracing_sampling_rules
-      config.updateRemoteConfig({ tracing_enabled: true })
+      config.setRemoteConfig({ tracing_enabled: true })
 
-      // Rules should remain unchanged
-      assert.deepStrictEqual(config.sampler?.rules, originalRules)
+      // Rules should fall back to original
+      assert.deepStrictEqual(config.sampler.rules, originalRules)
     })
   })
 })

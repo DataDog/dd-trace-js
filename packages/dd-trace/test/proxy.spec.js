@@ -166,7 +166,7 @@ describe('TracerProxy', () => {
       runtimeMetrics: {
         enabled: false
       },
-      updateRemoteConfig: sinon.spy(),
+      setRemoteConfig: sinon.spy(),
       llmobs: {},
       heapSnapshot: {}
     }
@@ -315,7 +315,7 @@ describe('TracerProxy', () => {
 
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config', conf))
 
-        sinon.assert.calledWith(config.updateRemoteConfig, conf)
+        sinon.assert.calledWith(config.setRemoteConfig, conf)
         sinon.assert.calledWith(tracer.configure, config)
         sinon.assert.calledWith(pluginManager.configure, config)
       })
@@ -438,7 +438,7 @@ describe('TracerProxy', () => {
         config.telemetry = {}
         config.appsec.enabled = true
         config.iast.enabled = true
-        config.updateRemoteConfig = conf => {
+        config.setRemoteConfig = conf => {
           config.tracing = conf.tracing_enabled
         }
 
