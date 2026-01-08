@@ -1,10 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
+
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { getConfigFresh } = require('./helpers/config')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
-
 require('./setup/core')
 
 describe('process-tags', () => {

@@ -73,9 +73,6 @@ updates:
         # Thus, we ignore them and update them manually.
       - dependency-name: "@opentelemetry/api"
       - dependency-name: "@opentelemetry/api-logs"
-      - dependency-name: "tap"
-        # Contain breaking changes that are incompatible with our test usage
-        update-types: ["version-update:semver-major"]
     groups:
       dev-minor-and-patch-dependencies:
         dependency-type: "development"

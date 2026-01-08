@@ -10,7 +10,7 @@
 
 - Install dependencies: `yarn install`
 
-**Note:** This project uses yarn, not npm. Always use `yarn` commands instead of `npm` commands.
+**This project uses yarn, not npm. Always use `yarn` commands instead of `npm` commands.**
 
 ## Project Overview
 
@@ -36,16 +36,11 @@ Each package under `packages/` follows a consistent structure:
 
 ### Running Individual Tests
 
-**IMPORTANT**: Never run `yarn test` directly. Use `mocha` or `tap` directly on test files.
+**IMPORTANT**: Never run `yarn test` directly. Use `mocha` directly on test files.
 
 **Mocha unit tests:**
 ```bash
 ./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" path/to/test.spec.js
-```
-
-**Tap unit tests:**
-```bash
-./node_modules/.bin/tap path/to/test.spec.js
 ```
 
 **Integration tests:**
@@ -58,8 +53,6 @@ Each package under `packages/` follows a consistent structure:
 
 **Enable debug logging:**
 - Prefix with `DD_TRACE_DEBUG=true`
-
-**Note**: New tests should be written using mocha, not tap. Existing tap tests use mocha-style `describe` and `it` blocks.
 
 ### Plugin Tests
 

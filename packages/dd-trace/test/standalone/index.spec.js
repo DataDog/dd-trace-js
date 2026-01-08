@@ -1,15 +1,16 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { channel } = require('dc-polyfill')
 
 require('../setup/core')
-
 const standalone = require('../../src/standalone')
 const DatadogSpan = require('../../src/opentracing/span')
+
 const {
   APM_TRACING_ENABLED_KEY,
   SAMPLING_MECHANISM_APPSEC,

@@ -48,6 +48,7 @@ export default [
       '**/versions', // This is effectively a node_modules tree.
       '**/acmeair-nodejs', // We don't own this.
       '**/vendor', // Generally, we didn't author this code.
+      '**/.analysis', // Ignore apm-instrumentation-toolkit analysis results
       'integration-tests/code-origin/typescript.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/bundle.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/hello/world.js', // Generated
@@ -406,11 +407,11 @@ export default [
       'n/no-restricted-require': ['error', [
         {
           name: 'diagnostics_channel',
-          message: 'Please use dc-polyfill instead.'
+          message: 'Please use `dc-polyfill` instead.'
         },
         {
           name: 'semver',
-          message: 'Please use semifies instead.'
+          message: 'Please use `semifies` instead.'
         },
         {
           name: 'get-port',
@@ -418,12 +419,20 @@ export default [
         },
         {
           name: 'rimraf',
-          message: 'Please use fs.rm(path, { recursive: true, force: true }) instead.'
+          message: 'Please use `fs.rm(path, { recursive: true, force: true })` instead.'
         },
         {
           name: 'koalas',
           message: 'Please use nullish coalescing operator (??) instead.'
-        }
+        },
+        {
+          name: 'chai',
+          message: 'Please use `node:assert/strict` instead.'
+        },
+        {
+          name: 'tap',
+          message: 'Please use `mocha` instead.'
+        },
       ]],
 
       'no-await-in-loop': 'error',
