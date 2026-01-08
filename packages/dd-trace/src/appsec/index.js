@@ -48,7 +48,7 @@ const storedBodies = new WeakMap()
 let isEnabled = false
 let config
 
-function enable (_config, rc) {
+function enable (_config) {
   if (isEnabled) return
 
   try {
@@ -63,10 +63,7 @@ function enable (_config, rc) {
 
     RuleManager.loadRules(_config.appsec)
 
-    if (rc) {
-      appsecRemoteConfig.enable(rc, _config, enable, disable)
-      appsecRemoteConfig.enableWafUpdate(_config.appsec)
-    }
+    appsecRemoteConfig.enableWafUpdate(_config.appsec)
 
     Reporter.init(_config.appsec)
 

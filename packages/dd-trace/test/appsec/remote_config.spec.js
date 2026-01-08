@@ -70,7 +70,7 @@ describe('AppSec Remote Config', () => {
     it('should listen to remote config when appsec is not explicitly configured', () => {
       config.appsec.enabled = undefined
 
-      appsecRemoteConfig.enable(rc, config, appsec.enable, appsec.disable)
+      appsecRemoteConfig.enable(rc, config, appsec)
 
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.ASM_ACTIVATION, true)
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
@@ -81,7 +81,7 @@ describe('AppSec Remote Config', () => {
     it('should listen to remote config when appsec is explicitly configured as enabled=true', () => {
       config.appsec.enabled = true
 
-      appsecRemoteConfig.enable(rc, config, appsec.enable, appsec.disable)
+      appsecRemoteConfig.enable(rc, config, appsec)
 
       sinon.assert.neverCalledWith(rc.updateCapabilities, RemoteConfigCapabilities.ASM_ACTIVATION)
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
@@ -92,7 +92,7 @@ describe('AppSec Remote Config', () => {
     it('should not listen to remote config when appsec is explicitly configured as enabled=false', () => {
       config.appsec.enabled = false
 
-      appsecRemoteConfig.enable(rc, config, appsec.enable, appsec.disable)
+      appsecRemoteConfig.enable(rc, config, appsec)
 
       sinon.assert.neverCalledWith(rc.updateCapabilities, RemoteConfigCapabilities.ASM_ACTIVATION, true)
       sinon.assert.neverCalledWith(rc.updateCapabilities, RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
@@ -104,7 +104,7 @@ describe('AppSec Remote Config', () => {
 
       beforeEach(() => {
         config.appsec.enabled = undefined
-        appsecRemoteConfig.enable(rc, config, appsec.enable, appsec.disable)
+        appsecRemoteConfig.enable(rc, config, appsec)
 
         listener = rc.setProductHandler.firstCall.args[1]
       })
@@ -120,7 +120,7 @@ describe('AppSec Remote Config', () => {
       it('should not call enableOrDisableAppsec when activation is not ONECLICK', () => {
         // When config.appsec.enabled is true, activation is not ONECLICK
         config.appsec.enabled = true
-        appsecRemoteConfig.enable(rc, config, appsec.enable, appsec.disable)
+        appsecRemoteConfig.enable(rc, config, appsec)
 
         const listener2 = rc.setProductHandler.secondCall.args[1]
         appsec.enable.resetHistory()
@@ -307,7 +307,7 @@ describe('AppSec Remote Config', () => {
 
       it('should not enable when custom appsec rules are provided', () => {
         config.appsec = { enabled: true, rules: {} }
-        appsecRemoteConfig.enable(rc, config, appsec.enable, appsec.disable)
+        appsecRemoteConfig.enable(rc, config, appsec)
         appsecRemoteConfig.enableWafUpdate(config.appsec)
 
         sinon.assert.neverCalledWith(rc.updateCapabilities, 'ASM_ACTIVATION')
@@ -316,7 +316,7 @@ describe('AppSec Remote Config', () => {
 
       it('should enable when using default rules', () => {
         config.appsec = { enabled: true, rules: null, rasp: { enabled: true } }
-        appsecRemoteConfig.enable(rc, config, appsec.enable, appsec.disable)
+        appsecRemoteConfig.enable(rc, config, appsec)
         appsecRemoteConfig.enableWafUpdate(config.appsec)
 
         expectCapabilitiesCalledWith(ALL_ASM_CAPABILITIES, true)
@@ -327,7 +327,7 @@ describe('AppSec Remote Config', () => {
 
       it('should activate if appsec is manually enabled', () => {
         config.appsec = { enabled: true, rasp: { enabled: true } }
-        appsecRemoteConfig.enable(rc, config, appsec.enable, appsec.disable)
+        appsecRemoteConfig.enable(rc, config, appsec)
         appsecRemoteConfig.enableWafUpdate(config.appsec)
 
         expectCapabilitiesCalledWith(ALL_ASM_CAPABILITIES, true)
@@ -338,7 +338,7 @@ describe('AppSec Remote Config', () => {
 
       it('should activate if appsec enabled is not defined', () => {
         config.appsec = { rasp: { enabled: true } }
-        appsecRemoteConfig.enable(rc, config, appsec.enable, appsec.disable)
+        appsecRemoteConfig.enable(rc, config, appsec)
         appsecRemoteConfig.enableWafUpdate(config.appsec)
 
         expectCapabilitiesCalledWith(ALL_ASM_CAPABILITIES, true)
@@ -346,7 +346,7 @@ describe('AppSec Remote Config', () => {
 
       it('should not activate rasp capabilities if rasp is disabled', () => {
         config.appsec = { rasp: { enabled: false } }
-        appsecRemoteConfig.enable(rc, config, appsec.enable, appsec.disable)
+        appsecRemoteConfig.enable(rc, config, appsec)
         appsecRemoteConfig.enableWafUpdate(config.appsec)
 
         expectCapabilitiesCalledWith(CORE_ASM_CAPABILITIES, true)
@@ -356,7 +356,7 @@ describe('AppSec Remote Config', () => {
 
     describe('disable', () => {
       it('should update capabilities and unsubscribe listener', () => {
-        appsecRemoteConfig.enable(rc, config, appsec.enable, appsec.disable)
+        appsecRemoteConfig.enable(rc, config, appsec)
         rc.updateCapabilities.resetHistory()
         appsecRemoteConfig.disableWafUpdate()
 

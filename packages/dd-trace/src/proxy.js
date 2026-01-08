@@ -125,9 +125,8 @@ class Tracer extends NoopProxy {
         spanleak.startScrubber()
       }
 
-      let rc
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        rc = require('./remote_config').enable(config)
+        const rc = require('./remote_config').enable(config)
 
         rc.setProductHandler('APM_TRACING', (action, conf) => {
           if (action === 'unapply') {
@@ -135,7 +134,7 @@ class Tracer extends NoopProxy {
           } else {
             config.configure(conf.lib_config, true)
           }
-          this._enableOrDisableTracing(config, rc)
+          this._enableOrDisableTracing(config)
         })
 
         rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
@@ -156,6 +155,11 @@ class Tracer extends NoopProxy {
           this._flare.enable(config)
           this._flare.module.send(conf.args)
         })
+
+        if (this._modules.appsec) {
+          const appsecRemoteConfig = require('./appsec/remote_config')
+          appsecRemoteConfig.enable(rc, config, this._modules.appsec)
+        }
 
         if (config.dynamicInstrumentation.enabled) {
           DynamicInstrumentation.start(config, rc)
@@ -190,7 +194,7 @@ class Tracer extends NoopProxy {
         runtimeMetrics.start(config)
       }
 
-      this._enableOrDisableTracing(config, rc)
+      this._enableOrDisableTracing(config)
 
       this._modules.rewriter.enable(config)
 
@@ -249,10 +253,10 @@ class Tracer extends NoopProxy {
     }
   }
 
-  _enableOrDisableTracing (config, rc) {
+  _enableOrDisableTracing (config) {
     if (config.tracing !== false) {
       if (config.appsec.enabled) {
-        this._modules.appsec.enable(config, rc)
+        this._modules.appsec.enable(config)
       }
       if (config.llmobs.enabled) {
         this._modules.llmobs.enable(config)
