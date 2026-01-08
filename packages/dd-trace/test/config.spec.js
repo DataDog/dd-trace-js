@@ -13,10 +13,7 @@ const proxyquire = require('proxyquire')
 
 require('./setup/core')
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
-const {
-  getEnvironmentVariable,
-  getEnvironmentVariables,
-} = require('../src/config-helper')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../version')
 const StableConfig = require('../src/config_stable')

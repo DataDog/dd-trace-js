@@ -268,7 +268,7 @@ function createAppObject (config) {
 function createHostObject () {
   const osName = os.type()
   const base = {
-    hostname: os.hostname(), // TODO is this enough?
+    hostname: os.hostname(), // TODO is os.hostname() enough?
     os: osName,
     architecture: os.arch(),
   }
