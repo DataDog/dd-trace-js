@@ -40,6 +40,7 @@ module.exports = {
   amqplib: () => require('../amqplib'),
   avsc: () => require('../avsc'),
   'aws-sdk': () => require('../aws-sdk'),
+  'bee-queue': () => require('../bee-queue'),
   bluebird: () => require('../bluebird'),
   'body-parser': () => require('../body-parser'),
   bunyan: () => require('../bunyan'),

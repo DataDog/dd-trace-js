@@ -47,6 +47,10 @@ const messaging = {
     sns: {
       opName: () => 'aws.request',
       serviceName: awsServiceV0
+    },
+    'bee-queue': {
+      opName: () => 'bee-queue.send',
+      serviceName: identityService
     }
   },
   consumer: {
@@ -77,6 +81,10 @@ const messaging = {
     sqs: {
       opName: () => 'aws.request',
       serviceName: awsServiceV0
+    },
+    'bee-queue': {
+      opName: () => 'bee-queue.process',
+      serviceName: identityService
     }
   },
   client: {

@@ -1,5 +1,6 @@
 'use strict'
 
 module.exports = [
-  ...require('./langchain')
+  ...require('./langchain'),
+  ...require('./bee-queue')
 ]
