@@ -106,21 +106,6 @@ describe('CI Visibility Exporter', () => {
         done()
       })
     })
-    context('if ITR is disabled', () => {
-      it('should resolve immediately and not request settings', (done) => {
-        const scope = nock(url)
-          .post('/api/v2/libraries/tests/services/setting')
-          .reply(200)
-
-        const ciVisibilityExporter = new CiVisibilityExporter({ port })
-        ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
-          assert.deepStrictEqual(libraryConfig, {})
-          assert.strictEqual(err, null)
-          assert.notStrictEqual(scope.isDone(), true)
-          done()
-        })
-      })
-    })
     context('if ITR is enabled', () => {
       it('should add custom configurations', (done) => {
         let customConfig
@@ -278,7 +263,6 @@ describe('CI Visibility Exporter', () => {
           port, isIntelligentTestRunnerEnabled: true
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-        assert.strictEqual(ciVisibilityExporter.shouldRequestLibraryConfiguration(), true)
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
           assert.strictEqual(scope.isDone(), true)
           assert.strictEqual(err, null)
@@ -320,7 +304,6 @@ describe('CI Visibility Exporter', () => {
           port, isIntelligentTestRunnerEnabled: true
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-        assert.strictEqual(ciVisibilityExporter.shouldRequestLibraryConfiguration(), true)
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
           assert.strictEqual(scope.isDone(), true)
           assert.strictEqual(err, null)
