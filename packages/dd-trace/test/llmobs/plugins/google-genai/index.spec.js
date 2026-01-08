@@ -133,6 +133,7 @@ describe('Plugin', () => {
           modelProvider: 'google',
           inputDocuments: [{ text: 'Hello, world!' }],
           outputValue: MOCK_STRING,
+          metadata: {},
           tags: { ml_app: 'test', integration: 'google_genai' },
         })
       })

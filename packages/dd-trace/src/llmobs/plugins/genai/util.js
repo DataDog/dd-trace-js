@@ -8,6 +8,33 @@ const ROLES = {
   REASONING: 'reasoning'
 }
 
+// Metadata constants
+const METADATA_KEYS = {
+  embedding: {
+    task_type: 'taskType',
+    title: 'title',
+    output_dimensionality: 'outputDimensionality',
+    mime_type: 'mimeType',
+    auto_truncate: 'autoTruncate',
+  },
+  generateContent: {
+    temperature: 'temperature',
+    top_p: 'topP',
+    top_k: 'topK',
+    candidate_count: 'candidateCount',
+    max_output_tokens: 'maxOutputTokens',
+    stop_sequences: 'stopSequences',
+    response_logprobs: 'responseLogprobs',
+    logprobs: 'logprobs',
+    presence_penalty: 'presencePenalty',
+    frequency_penalty: 'frequencyPenalty',
+    seed: 'seed',
+    response_mime_type: 'responseMimeType',
+    safety_settings: 'safetySettings',
+    automatic_function_calling: 'automaticFunctionCalling'
+  },
+}
+
 /**
  * Get the operation type from the method name
  * @param {string} methodName
@@ -26,30 +53,6 @@ function extractTextParts (parts) {
   return parts
     .filter(part => part.text)
     .map(part => part.text)
-}
-
-/**
- * Group parts by role (reasoning vs assistant)
- * @param {Array<{text?: string, thought?: boolean}>} parts
- * @returns {{reasoning: string, assistant: string}}
- */
-function groupPartsByRole (parts) {
-  const grouped = {
-    reasoning: '',
-    assistant: ''
-  }
-
-  for (const part of parts) {
-    if (!part.text) continue
-
-    if (part.thought === true) {
-      grouped.reasoning += part.text
-    } else {
-      grouped.assistant += part.text
-    }
-  }
-
-  return grouped
 }
 
 /**
@@ -125,27 +128,13 @@ function extractMetrics (response) {
 /**
  * Extract metadata from config
  * @param {object} config
+ * @param {'embedding' | 'generateContent'} operation
  * @returns {object}
  */
-function extractMetadata (config) {
+function extractMetadata (config, operation) {
   if (!config) return {}
 
-  const fieldMap = {
-    temperature: 'temperature',
-    top_p: 'topP',
-    top_k: 'topK',
-    candidate_count: 'candidateCount',
-    max_output_tokens: 'maxOutputTokens',
-    stop_sequences: 'stopSequences',
-    response_logprobs: 'responseLogprobs',
-    logprobs: 'logprobs',
-    presence_penalty: 'presencePenalty',
-    frequency_penalty: 'frequencyPenalty',
-    seed: 'seed',
-    response_mime_type: 'responseMimeType',
-    safety_settings: 'safetySettings',
-    automatic_function_calling: 'automaticFunctionCalling'
-  }
+  const fieldMap = METADATA_KEYS[operation]
 
   const metadata = {}
   for (const [metadataKey, configKey] of Object.entries(fieldMap)) {
@@ -327,53 +316,45 @@ function formatNonStreamingCandidate (candidate) {
   const { parts } = content
 
   // Check for function calls
-  const functionCalls = parts.filter(part => part.functionCall)
-  if (functionCalls.length > 0) {
-    messages.push(formatFunctionCallMessage(parts, functionCalls, ROLES.ASSISTANT))
-    return messages
-  }
+  for (const part of parts) {
+    // Check for function calls
+    if (part?.functionCalls?.length > 0) {
+      messages.push(formatFunctionCallMessage(parts, part.functionCalls, ROLES.ASSISTANT))
+    }
 
-  // Check for executable code
-  const executableCode = parts.find(part => part.executableCode)
-  if (executableCode) {
-    messages.push({
-      role: ROLES.ASSISTANT,
-      content: JSON.stringify({
-        language: executableCode.executableCode.language,
-        code: executableCode.executableCode.code
+    // Check for executable code
+    if (part?.executableCode) {
+      messages.push({
+        role: ROLES.ASSISTANT,
+        content: JSON.stringify({
+          language: part.executableCode.language,
+          code: part.executableCode.code
+        })
       })
-    })
-    return messages
-  }
+    }
 
-  // Check for code execution result
-  const codeExecutionResult = parts.find(part => part.codeExecutionResult)
-  if (codeExecutionResult) {
-    messages.push({
-      role: ROLES.ASSISTANT,
-      content: JSON.stringify({
-        outcome: codeExecutionResult.codeExecutionResult.outcome,
-        output: codeExecutionResult.codeExecutionResult.output
+    // Check for code execution result
+    if (part?.codeExecutionResult) {
+      messages.push({
+        role: ROLES.ASSISTANT,
+        content: JSON.stringify({
+          outcome: part.codeExecutionResult.outcome,
+          output: part.codeExecutionResult.output
+        })
       })
-    })
-    return messages
-  }
+    }
 
-  // Regular text content - may contain both reasoning and assistant parts
-  const partsByRole = groupPartsByRole(parts)
-
-  if (partsByRole.reasoning) {
-    messages.push({
-      role: ROLES.REASONING,
-      content: partsByRole.reasoning
-    })
-  }
-
-  if (partsByRole.assistant) {
-    messages.push({
-      role: ROLES.ASSISTANT,
-      content: partsByRole.assistant
-    })
+    if (part?.thought) {
+      messages.push({
+        role: ROLES.REASONING,
+        content: part.text
+      })
+    } else if (part?.text) {
+      messages.push({
+        role: ROLES.ASSISTANT,
+        content: part.text
+      })
+    }
   }
 
   return messages
@@ -400,18 +381,17 @@ function formatStreamingOutput (response) {
       continue
     }
 
-    // Accumulate text parts by role
-    const partsByRole = groupPartsByRole(content.parts)
+    for (const part of content.parts) {
+      if (!part?.text) continue
 
-    for (const [partRole, textContent] of Object.entries(partsByRole)) {
-      if (!textContent) continue
+      const partRole = part?.thought ? ROLES.REASONING : ROLES.ASSISTANT
 
       if (messagesByRole.has(partRole)) {
         const index = messagesByRole.get(partRole)
-        messages[index].content += textContent
+        messages[index].content += part.text
       } else {
         const messageIndex = messages.length
-        messages.push({ role: partRole, content: textContent })
+        messages.push({ role: partRole, content: part.text })
         messagesByRole.set(partRole, messageIndex)
       }
     }
@@ -446,11 +426,7 @@ function formatOutputMessages (response, isStreaming = false) {
     return [{ content: '' }]
   }
 
-  if (isStreaming) {
-    return formatStreamingOutput(response)
-  }
-
-  return formatNonStreamingOutput(response)
+  return isStreaming ? formatStreamingOutput(response) : formatNonStreamingOutput(response)
 }
 
 /**

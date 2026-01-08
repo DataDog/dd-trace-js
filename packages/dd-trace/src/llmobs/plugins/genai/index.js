@@ -72,11 +72,11 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
   }
 
   #tagGenerateContent (span, inputs, response, error, isStreaming = false) {
-    const { config = {} } = inputs
+    const { config } = inputs
 
     const inputMessages = formatInputMessages(inputs.contents)
 
-    const metadata = extractMetadata(config)
+    const metadata = extractMetadata(config, 'generateContent')
     this._tagger.tagMetadata(span, metadata)
 
     if (error) {
@@ -89,7 +89,11 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
   }
 
   #tagEmbedding (span, inputs, response, error) {
+    const { config } = inputs
     const embeddingInput = formatEmbeddingInput(inputs.contents)
+
+    const metadata = extractMetadata(config, 'embedding')
+    this._tagger.tagMetadata(span, metadata)
 
     if (error) {
       this._tagger.tagEmbeddingIO(span, embeddingInput)
