@@ -126,16 +126,11 @@ class Tracer extends NoopProxy {
       }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        const rc = require('./remote_config').enable(config, this._modules.appsec)
+        const RemoteConfig = require('./remote_config')
+        const rc = new RemoteConfig(config)
 
-        rc.setProductHandler('APM_TRACING', (action, conf) => {
-          if (action === 'unapply') {
-            config.configure({}, true)
-          } else {
-            config.configure(conf.lib_config, true)
-          }
-          this._enableOrDisableTracing(config)
-        })
+        const tracingRemoteConfig = require('./config/remote_config')
+        tracingRemoteConfig.enable(rc, config, this._enableOrDisableTracing.bind(this))
 
         rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
           if (!conf?.name?.startsWith('flare-log-level.')) return
@@ -156,18 +151,17 @@ class Tracer extends NoopProxy {
           this._flare.module.send(conf.args)
         })
 
+        if (this._modules.appsec) {
+          const appsecRemoteConfig = require('./appsec/remote_config')
+          appsecRemoteConfig.enable(rc, config, this._modules.appsec)
+        }
+
         if (config.dynamicInstrumentation.enabled) {
           DynamicInstrumentation.start(config, rc)
         }
 
-        if (config.experimental.flaggingProvider.enabled) {
-          rc.setProductHandler('FFE_FLAGS', (action, conf) => {
-            // Feed UFC config directly to OpenFeature provider
-            if (action === 'apply' || action === 'modify') {
-              this.openfeature._setConfiguration(conf)
-            }
-          })
-        }
+        const openfeatureRemoteConfig = require('./openfeature/remote_config')
+        openfeatureRemoteConfig.enable(rc, config, () => this.openfeature)
       }
 
       if (config.profiling.enabled === 'true') {

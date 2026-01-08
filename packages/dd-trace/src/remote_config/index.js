@@ -1,168 +1,579 @@
 'use strict'
 
-const Activation = require('../appsec/activation')
-
-const RemoteConfigManager = require('./manager')
-const RemoteConfigCapabilities = require('./capabilities')
-const { setCollectionMode } = require('../appsec/user_tracking')
+const { URL, format } = require('url')
+const uuid = require('../../../../vendor/dist/crypto-randomuuid')
+const tracerVersion = require('../../../../package.json').version
+const request = require('../exporters/common/request')
 const log = require('../log')
-const { updateConfig } = require('../telemetry')
+const { getExtraServices } = require('../service-naming/extra-services')
+const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
+const Scheduler = require('./scheduler')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
+const tagger = require('../tagger')
+const defaults = require('../config_defaults')
+const processTags = require('../process-tags')
 
-let rc
+const clientId = uuid()
 
-function enable (config, appsec) {
-  rc = new RemoteConfigManager(config)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_CUSTOM_TAGS, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_HTTP_HEADER_TAGS, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RATE, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLED, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RULES, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.FFE_FLAG_CONFIGURATION_RULES, true)
+const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
 
-  const activation = Activation.fromConfig(config)
+const kSupportsAckCallback = Symbol('kSupportsAckCallback')
 
-  if (activation !== Activation.DISABLED) {
-    if (activation === Activation.ONECLICK) {
-      rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+// There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
+// with their own separated Client.ClientState.
+class RemoteConfig {
+  #handlers = new Map()
+  #products = new Set()
+  #batchHandlers = new Map()
+
+  constructor (config) {
+    const pollInterval = Math.floor(config.remoteConfig.pollInterval * 1000)
+
+    this.url = config.url || new URL(format({
+      protocol: 'http:',
+      hostname: config.hostname || defaults.hostname,
+      port: config.port
+    }))
+
+    tagger.add(config.tags, {
+      '_dd.rc.client_id': clientId
+    })
+
+    const tags = config.repositoryUrl
+      ? {
+          ...config.tags,
+          [GIT_REPOSITORY_URL]: config.repositoryUrl,
+          [GIT_COMMIT_SHA]: config.commitSHA
+        }
+      : config.tags
+
+    const appliedConfigs = this.appliedConfigs = new Map()
+
+    this.scheduler = new Scheduler((cb) => this.poll(cb), pollInterval)
+
+    this.state = {
+      client: {
+        state: { // updated by `parseConfig()` and `poll()`
+          root_version: 1,
+          targets_version: 0,
+          // Use getter so `apply_*` can be updated async and still affect the content of `config_states`
+          get config_states () {
+            const configs = []
+            for (const conf of appliedConfigs.values()) {
+              configs.push({
+                id: conf.id,
+                version: conf.version,
+                product: conf.product,
+                apply_state: conf.apply_state,
+                apply_error: conf.apply_error
+              })
+            }
+            return configs
+          },
+          has_error: false,
+          error: '',
+          backend_client_state: ''
+        },
+        id: clientId,
+        products: /** @type {string[]} */ ([]), // updated by `updateProducts()`
+        is_tracer: true,
+        client_tracer: {
+          runtime_id: config.tags['runtime-id'],
+          language: 'node',
+          tracer_version: tracerVersion,
+          service: config.service,
+          env: config.env,
+          app_version: config.version,
+          extra_services: /** @type {string[]} */ ([]),
+          tags: Object.entries(tags).map((pair) => pair.join(':')),
+          [processTags.REMOTE_CONFIG_FIELD_NAME]: processTags.tagsArray
+        },
+        capabilities: DEFAULT_CAPABILITY // updated by `updateCapabilities()`
+      },
+      cached_target_files: /** @type {RcCachedTargetFile[]} */ ([]) // updated by `parseConfig()`
+    }
+  }
+
+  /**
+   * @param {bigint} mask
+   * @param {boolean} value
+   */
+  updateCapabilities (mask, value) {
+    const hex = Buffer.from(this.state.client.capabilities, 'base64').toString('hex')
+
+    let num = BigInt(`0x${hex}`)
+
+    if (value) {
+      num |= mask
+    } else {
+      num &= ~mask
     }
 
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
+    let str = num.toString(16)
 
-    let autoUserInstrumModeId
+    if (str.length % 2) str = `0${str}`
 
-    rc.setProductHandler('ASM_FEATURES', (action, rcConfig, configId) => {
-      if (!rcConfig) return
+    this.state.client.capabilities = Buffer.from(str, 'hex').toString('base64')
+  }
 
-      // this is put before other handlers because it can reject the config
-      if (typeof rcConfig.auto_user_instrum?.mode === 'string') {
-        if (action === 'apply' || action === 'modify') {
-          // check if there is already a config applied with this field
-          if (autoUserInstrumModeId && configId !== autoUserInstrumModeId) {
-            log.error('[RC] Multiple auto_user_instrum received in ASM_FEATURES. Discarding config')
-            // eslint-disable-next-line no-throw-literal
-            throw 'Multiple auto_user_instrum.mode received in ASM_FEATURES'
-          }
+  /**
+   * Subscribe to a product and register a per-config handler.
+   *
+   * This is the common API for products that can be handled one config at a time.
+   * It **implies subscription** (equivalent to calling `subscribeProducts(product)`).
+   *
+   * @param {string} product
+   * @param {Function} handler
+   */
+  setProductHandler (product, handler) {
+    this.#handlers.set(product, handler)
+    this.subscribeProducts(product)
+  }
 
-          setCollectionMode(rcConfig.auto_user_instrum.mode)
-          autoUserInstrumModeId = configId
-        } else if (configId === autoUserInstrumModeId) {
-          setCollectionMode(config.appsec.eventTracking.mode)
-          autoUserInstrumModeId = null
+  /**
+   * Remove the per-config handler for a product and unsubscribe from it.
+   *
+   * If you only want to stop receiving configs (but keep the handler attached for later),
+   * call `unsubscribeProducts(product)` instead.
+   *
+   * @param {string} product
+   */
+  removeProductHandler (product) {
+    this.#handlers.delete(product)
+    this.unsubscribeProducts(product)
+  }
+
+  /**
+   * Subscribe to one or more products with Remote Config (receive configs for them).
+   *
+   * This only affects subscription/polling and does **not** register any handler.
+   *
+   * @param {...string} products
+   */
+  subscribeProducts (...products) {
+    const hadProducts = this.#products.size > 0
+    for (const product of products) {
+      this.#products.add(product)
+    }
+    this.updateProducts()
+    if (!hadProducts && this.#products.size > 0) {
+      this.scheduler.start()
+    }
+  }
+
+  /**
+   * Unsubscribe from one or more products (stop receiving configs for them).
+   *
+   * This does **not** remove registered handlers; use `removeProductHandler(product)`
+   * if you want to detach a handler as well.
+   *
+   * @param {...string} products
+   */
+  unsubscribeProducts (...products) {
+    const hadProducts = this.#products.size > 0
+    for (const product of products) {
+      this.#products.delete(product)
+    }
+    this.updateProducts()
+    if (hadProducts && this.#products.size === 0) {
+      this.scheduler.stop()
+    }
+  }
+
+  updateProducts () {
+    this.state.client.products = [...this.#products]
+  }
+
+  /**
+   * Register a handler that will be invoked once per RC update, with the update batch filtered
+   * down to the specified products. This is useful for consumers that need to process multiple
+   * configs at once (e.g. WAF updates spanning ASM/ASM_DD/ASM_DATA) and then do one-time reconciliation.
+   *
+   * This does **not** implicitly subscribe to the products; call `subscribeProducts()` separately.
+   *
+   * @param {string[]} products
+   * @param {(transaction: RcBatchUpdateTransaction) => void} handler
+   */
+  setBatchHandler (products, handler) {
+    this.#batchHandlers.set(handler, new Set(products))
+  }
+
+  /**
+   * Remove a previously-registered batch handler.
+   *
+   * @param {Function} handler
+   */
+  removeBatchHandler (handler) {
+    this.#batchHandlers.delete(handler)
+  }
+
+  // TODO: Cache the return value of this method, to avoid recomputing it on every poll
+  getPayload () {
+    this.state.client.client_tracer.extra_services = getExtraServices()
+
+    return JSON.stringify(this.state)
+  }
+
+  poll (cb) {
+    const options = {
+      url: this.url,
+      method: 'POST',
+      path: '/v0.7/config',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8'
+      }
+    }
+
+    request(this.getPayload(), options, (err, data, statusCode) => {
+      // 404 means RC is disabled, ignore it
+      if (statusCode === 404) return cb()
+
+      if (err) {
+        log.errorWithoutTelemetry('[RC] Error in request', err)
+        return cb()
+      }
+
+      // if error was just sent, reset the state
+      if (this.state.client.state.has_error) {
+        this.state.client.state.has_error = false
+        this.state.client.state.error = ''
+      }
+
+      if (data && data !== '{}') { // '{}' means the tracer is up to date
+        try {
+          this.parseConfig(JSON.parse(data))
+        } catch (err) {
+          log.error('[RC] Could not parse remote config response', err)
+
+          this.state.client.state.has_error = true
+          this.state.client.state.error = err.toString()
         }
       }
 
-      if (activation === Activation.ONECLICK) {
-        enableOrDisableAppsec(action, rcConfig, config, appsec)
-      }
+      cb()
     })
   }
 
-  return rc
-}
+  // `client_configs` is the list of config paths to have applied
+  // `targets` is the signed index with metadata for config files
+  // `target_files` is the list of config files containing the actual config data
+  parseConfig ({
+    client_configs: clientConfigs = [],
+    targets,
+    target_files: targetFiles = []
+  }) {
+    const toUnapply = /** @type {RcConfigState[]} */ ([])
+    const toApply = /** @type {RcConfigState[]} */ ([])
+    const toModify = /** @type {RcConfigState[]} */ ([])
+    const transactionByPath = new Map()
+    const transactionHandledPaths = new Set()
+    const transactionOutcomes = new Map()
 
-function enableOrDisableAppsec (action, rcConfig, config, appsec) {
-  if (typeof rcConfig.asm?.enabled === 'boolean') {
-    const isRemoteConfigControlling = action === 'apply' || action === 'modify'
-    const shouldEnable = isRemoteConfigControlling
-      ? rcConfig.asm.enabled // take control
-      : config.appsec.enabled // give back control to local config
-
-    if (shouldEnable) {
-      appsec.enable(config)
-    } else {
-      appsec.disable()
-    }
-
-    updateConfig([
-      {
-        name: 'appsec.enabled',
-        origin: isRemoteConfigControlling ? 'remote_config' : config.getOrigin('appsec.enabled'),
-        value: shouldEnable
+    for (const appliedConfig of this.appliedConfigs.values()) {
+      if (!clientConfigs.includes(appliedConfig.path)) {
+        toUnapply.push(appliedConfig)
+        transactionByPath.set(appliedConfig.path, appliedConfig)
       }
-    ], config)
-  }
-}
-
-// TODO: all appsec specific stuff should be moved back in the appsec folder
-function enableWafUpdate (appsecConfig) {
-  if (rc && appsecConfig && !appsecConfig.rules) {
-    // dirty require to make startup faster for serverless
-    const { ASM_WAF_PRODUCTS } = require('../appsec/rc-products')
-    const RuleManager = require('../appsec/rule_manager')
-
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
-    // TODO: we should have a different capability for rule override
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RESPONSE_BLOCKING, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_PROCESSOR_OVERRIDES, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_DATA_SCANNERS, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSION_DATA, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRACE_TAGGING_RULES, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXTENDED_DATA_COLLECTION, true)
-
-    if (appsecConfig.rasp?.enabled) {
-      rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
-      rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, true)
-      rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_LFI, true)
-      rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SHI, true)
-      rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_CMDI, true)
     }
 
-    rc.subscribeProducts(...ASM_WAF_PRODUCTS)
-    rc.setBatchHandler(ASM_WAF_PRODUCTS, RuleManager.updateWafFromRC)
+    targets = fromBase64JSON(targets)
+
+    if (targets) {
+      for (const path of clientConfigs) {
+        const meta = targets.signed.targets[path]
+        if (!meta) throw new Error(`Unable to find target for path ${path}`)
+
+        const current = this.appliedConfigs.get(path)
+
+        const newConf = /** @type {RcConfigState} */ ({})
+
+        if (current) {
+          if (current.hashes.sha256 === meta.hashes.sha256) continue
+
+          toModify.push(newConf)
+        } else {
+          toApply.push(newConf)
+        }
+
+        const file = targetFiles.find(file => file.path === path)
+        if (!file) throw new Error(`Unable to find file for path ${path}`)
+
+        // TODO: verify signatures
+        //       verify length
+        //       verify hash
+        //       verify _type
+        // TODO: new Date(meta.signed.expires) ignore the Targets data if it has expired ?
+
+        const { product, id } = parseConfigPath(path)
+
+        Object.assign(newConf, {
+          path,
+          product,
+          id,
+          version: meta.custom.v,
+          apply_state: UNACKNOWLEDGED,
+          apply_error: '',
+          length: meta.length,
+          hashes: meta.hashes,
+          file: fromBase64JSON(file.raw)
+        })
+        transactionByPath.set(path, newConf)
+      }
+
+      this.state.client.state.targets_version = targets.signed.version
+      this.state.client.state.backend_client_state = targets.signed.custom.opaque_backend_state
+    }
+
+    if (toUnapply.length || toApply.length || toModify.length) {
+      const transaction = createUpdateTransaction(
+        { toUnapply, toApply, toModify },
+        transactionHandledPaths,
+        transactionOutcomes
+      )
+
+      if (this.#batchHandlers.size) {
+        for (const [handler, products] of this.#batchHandlers) {
+          const transactionView = filterTransactionByProducts(transaction, products)
+          if (transactionView.toUnapply.length || transactionView.toApply.length || transactionView.toModify.length) {
+            handler(transactionView)
+          }
+        }
+      }
+
+      applyOutcomes(transactionByPath, transactionOutcomes)
+
+      this.dispatch(toUnapply, 'unapply', transactionHandledPaths)
+      this.dispatch(toApply, 'apply', transactionHandledPaths)
+      this.dispatch(toModify, 'modify', transactionHandledPaths)
+
+      this.state.cached_target_files = /** @type {RcCachedTargetFile[]} */ ([])
+
+      for (const conf of this.appliedConfigs.values()) {
+        const hashes = []
+        for (const hash of Object.entries(conf.hashes)) {
+          hashes.push({ algorithm: hash[0], hash: hash[1] })
+        }
+        this.state.cached_target_files.push({
+          path: conf.path,
+          length: conf.length,
+          hashes
+        })
+      }
+    }
+  }
+
+  /**
+   * Dispatch a list of config changes to per-product handlers, skipping any paths
+   * marked as handled by a batch handler.
+   *
+   * @param {RcConfigState[]} list
+   * @param {'apply' | 'modify' | 'unapply'} action
+   * @param {Set<string>} handledPaths
+   */
+  dispatch (list, action, handledPaths) {
+    for (const item of list) {
+      if (!handledPaths.has(item.path)) {
+        this.#callHandlerFor(action, item)
+      }
+
+      if (action === 'unapply') {
+        this.appliedConfigs.delete(item.path)
+      } else {
+        this.appliedConfigs.set(item.path, item)
+      }
+    }
+  }
+
+  /**
+   * @param {'apply' | 'modify' | 'unapply'} action
+   * @param {RcConfigState} item
+   */
+  #callHandlerFor (action, item) {
+    // in case the item was already handled by a batch hook
+    if (item.apply_state !== UNACKNOWLEDGED && action !== 'unapply') return
+
+    const handler = this.#handlers.get(item.product)
+
+    if (!handler) return
+
+    try {
+      if (supportsAckCallback(handler)) {
+        // If the handler accepts an `ack` callback, expect that to be called and set `apply_state` accordingly
+        // TODO: do we want to pass old and new config ?
+        handler(action, item.file, item.id, (err) => {
+          if (err) {
+            item.apply_state = ERROR
+            item.apply_error = err.toString()
+          } else if (item.apply_state !== ERROR) {
+            item.apply_state = ACKNOWLEDGED
+          }
+        })
+      } else {
+        // If the handler doesn't accept an `ack` callback, assume `apply_state` is `ACKNOWLEDGED`,
+        // unless it returns a promise, in which case we wait for the promise to be resolved or rejected.
+        // TODO: do we want to pass old and new config ?
+        const result = handler(action, item.file, item.id)
+        if (result instanceof Promise) {
+          result.then(
+            () => { item.apply_state = ACKNOWLEDGED },
+            (err) => {
+              item.apply_state = ERROR
+              item.apply_error = err.toString()
+            }
+          )
+        } else {
+          item.apply_state = ACKNOWLEDGED
+        }
+      }
+    } catch (err) {
+      item.apply_state = ERROR
+      item.apply_error = err.toString()
+    }
   }
 }
 
-function disableWafUpdate () {
-  if (rc) {
-    const { ASM_WAF_PRODUCTS } = require('../appsec/rc-products')
-    const RuleManager = require('../appsec/rule_manager')
+/**
+ * Remote Config “applied config” state tracked by the RC manager.
+ * This is the mutable shape stored in `this.appliedConfigs` and passed to per-product handlers.
+ *
+ * @typedef {Object} RcConfigState
+ * @property {string} path
+ * @property {string} product
+ * @property {string} id
+ * @property {number} version
+ * @property {unknown} file
+ * @property {number} apply_state
+ * @property {string} apply_error
+ * @property {number} length
+ * @property {Record<string, string>} hashes
+ */
 
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_USER_BLOCKING, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSIONS, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RESPONSE_BLOCKING, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_PROCESSOR_OVERRIDES, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_DATA_SCANNERS, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSION_DATA, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRACE_TAGGING_RULES, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXTENDED_DATA_COLLECTION, false)
+/**
+ * Target file metadata cached in `state.cached_target_files` and sent back to the agent.
+ *
+ * @typedef {Object} RcCachedTargetFile
+ * @property {string} path
+ * @property {number} length
+ * @property {Array<{algorithm: string, hash: string}>} hashes
+ */
 
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_LFI, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SHI, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_CMDI, false)
+/**
+ * Remote Config batch update transaction passed to batch handlers registered via
+ * `RemoteConfig.setBatchHandler()`.
+ *
+ * @typedef {Object} RcBatchUpdateTransaction
+ * @property {RcConfigState[]} toUnapply
+ * @property {RcConfigState[]} toApply
+ * @property {RcConfigState[]} toModify
+ * @property {(path: string) => void} ack
+ * @property {(path: string, err: unknown) => void} error
+ */
 
-    rc.unsubscribeProducts(...ASM_WAF_PRODUCTS)
-    rc.removeBatchHandler(RuleManager.updateWafFromRC)
+/**
+ * Create an immutable "view" of the batch changes and attach explicit outcome reporting.
+ *
+ * @param {{toUnapply: RcConfigState[], toApply: RcConfigState[], toModify: RcConfigState[]}} changes
+ * @param {Set<string>} handledPaths
+ * @param {Map<string, {state: number, error: string}>} outcomes
+ * @returns {RcBatchUpdateTransaction}
+ */
+function createUpdateTransaction ({ toUnapply, toApply, toModify }, handledPaths, outcomes) {
+  return {
+    toUnapply,
+    toApply,
+    toModify,
+    ack (path) {
+      outcomes.set(path, { state: ACKNOWLEDGED, error: '' })
+      handledPaths.add(path)
+    },
+    error (path, err) {
+      outcomes.set(path, { state: ERROR, error: err ? err.toString() : 'Error' })
+      handledPaths.add(path)
+    }
   }
 }
 
-module.exports = {
-  enable,
-  enableWafUpdate,
-  disableWafUpdate
+/**
+ * Create a filtered "view" of the transaction for a given product set, while preserving
+ * the outcome methods (ack/error).
+ *
+ * @param {RcBatchUpdateTransaction} transaction
+ * @param {Set<string>} products
+ * @returns {RcBatchUpdateTransaction}
+ */
+function filterTransactionByProducts (transaction, products) {
+  const toUnapply = []
+  const toApply = []
+  const toModify = []
+
+  for (const item of transaction.toUnapply) {
+    if (products.has(item.product)) toUnapply.push(item)
+  }
+
+  for (const item of transaction.toApply) {
+    if (products.has(item.product)) toApply.push(item)
+  }
+
+  for (const item of transaction.toModify) {
+    if (products.has(item.product)) toModify.push(item)
+  }
+
+  return {
+    toUnapply,
+    toApply,
+    toModify,
+    ack: transaction.ack,
+    error: transaction.error
+  }
 }
+
+function applyOutcomes (byPath, outcomes) {
+  for (const [path, outcome] of outcomes) {
+    const item = byPath.get(path)
+    if (item) {
+      item.apply_state = outcome.state
+      item.apply_error = outcome.error
+    }
+  }
+}
+
+function fromBase64JSON (str) {
+  if (!str) return null
+
+  return JSON.parse(Buffer.from(str, 'base64').toString())
+}
+
+const configPathRegex = /^(?:datadog\/\d+|employee)\/([^/]+)\/([^/]+)\/[^/]+$/
+
+function parseConfigPath (configPath) {
+  const match = configPathRegex.exec(configPath)
+
+  if (!match || !match[1] || !match[2]) {
+    throw new Error(`Unable to parse path ${configPath}`)
+  }
+
+  return {
+    product: match[1],
+    id: match[2]
+  }
+}
+
+function supportsAckCallback (handler) {
+  if (kSupportsAckCallback in handler) return handler[kSupportsAckCallback]
+
+  const numOfArgs = handler.length
+  let result = false
+
+  if (numOfArgs >= 4) {
+    result = true
+  } else if (numOfArgs !== 0) {
+    const source = handler.toString()
+    result = source.slice(0, source.indexOf(')')).includes('...')
+  }
+
+  handler[kSupportsAckCallback] = result
+
+  return result
+}
+
+module.exports = RemoteConfig
