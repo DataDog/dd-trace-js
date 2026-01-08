@@ -17,6 +17,8 @@ const {
 const { parseResponseAndLog } = require('./util')
 
 class BaseLLMObsWriter {
+  #multiTenantBuffers = new Map()
+
   constructor ({ interval, timeout, eventType, config, endpoint, intake }) {
     this._interval = interval ?? getEnvironmentVariable('_DD_LLMOBS_FLUSH_INTERVAL') ?? 1000 // 1s
     this._timeout = timeout ?? getEnvironmentVariable('_DD_LLMOBS_TIMEOUT') ?? 5000 // 5s
@@ -42,48 +44,110 @@ class BaseLLMObsWriter {
     this._destroyed = false
   }
 
-  get url () {
-    if (this._agentless == null) return null
-
-    const baseUrl = this._baseUrl.href
-    const endpoint = this._endpoint
-
-    // Split on protocol separator to preserve it
-    // path.join will remove some slashes unnecessarily
+  // Split on protocol separator to preserve it
+  // path.join will remove some slashes unnecessarily
+  #buildUrl (baseUrl, endpoint) {
     const [protocol, rest] = baseUrl.split('://')
     return protocol + '://' + path.join(rest, endpoint)
   }
 
-  append (event, byteLength) {
-    if (this._buffer.length >= this._bufferLimit) {
+  get url () {
+    if (this._agentless == null) return null
+    return this.#buildUrl(this._baseUrl.href, this._endpoint)
+  }
+
+  _getBuffer (routing) {
+    if (!routing?.apiKey) {
+      return { events: this._buffer, size: this._bufferSize, isDefault: true }
+    }
+    const apiKey = routing.apiKey
+    if (!this.#multiTenantBuffers.has(apiKey)) {
+      this.#multiTenantBuffers.set(apiKey, {
+        events: [],
+        size: 0,
+        routing
+      })
+    }
+    return this.#multiTenantBuffers.get(apiKey)
+  }
+
+  append (event, routing, byteLength) {
+    const buffer = this._getBuffer(routing)
+
+    if (buffer.events.length >= this._bufferLimit) {
       logger.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
       telemetry.recordDroppedPayload(1, this._eventType, 'buffer_full')
       return
     }
 
-    this._bufferSize += byteLength || Buffer.byteLength(JSON.stringify(event))
-    this._buffer.push(event)
+    const eventSize = byteLength || Buffer.byteLength(JSON.stringify(event))
+
+    if (buffer.isDefault) {
+      this._bufferSize += eventSize
+      this._buffer.push(event)
+    } else {
+      buffer.size += eventSize
+      buffer.events.push(event)
+    }
   }
 
   flush () {
-    const noAgentStrategy = this._agentless == null
-
-    if (this._buffer.length === 0 || noAgentStrategy) {
+    if (this._agentless == null) {
       return
     }
 
-    const events = this._buffer
-    this._buffer = []
-    this._bufferSize = 0
-    const payload = this._encode(this.makePayload(events))
+    // Flush default buffer
+    if (this._buffer.length > 0) {
+      const events = this._buffer
+      this._buffer = []
+      this._bufferSize = 0
 
-    log.debug('Encoded LLMObs payload: %s', payload)
+      const payload = this._encode(this.makePayload(events))
 
-    const options = this._getOptions()
+      log.debug('Encoded LLMObs payload: %s', payload)
 
-    request(payload, options, (err, resp, code) => {
-      parseResponseAndLog(err, code, events.length, this.url, this._eventType)
-    })
+      const options = this._getOptions()
+
+      request(payload, options, (err, resp, code) => {
+        parseResponseAndLog(err, code, events.length, this.url, this._eventType)
+      })
+    }
+
+    // Flush multi-tenant buffers
+    for (const [apiKey, buffer] of this.#multiTenantBuffers) {
+      if (buffer.events.length === 0) continue
+
+      const events = buffer.events
+      buffer.events = []
+      buffer.size = 0
+
+      const payload = this._encode(this.makePayload(events))
+      const options = this._getOptions(buffer.routing)
+      const url = this.#getUrlForRouting(buffer.routing)
+      const maskedApiKey = apiKey ? `****${apiKey.slice(-4)}` : ''
+
+      log.debug('Encoding and flushing multi-tenant buffer for %s', maskedApiKey)
+      log.debug('Encoded LLMObs payload: %s', payload)
+
+      request(payload, options, (err, resp, code) => {
+        parseResponseAndLog(err, code, events.length, url, this._eventType)
+      })
+    }
+
+    this.#cleanupEmptyBuffers()
+  }
+
+  #getUrlForRouting (routing) {
+    const { url, endpoint } = this._getUrlAndPath(routing)
+    return this.#buildUrl(url.href, endpoint)
+  }
+
+  #cleanupEmptyBuffers () {
+    for (const [key, buffer] of this.#multiTenantBuffers) {
+      if (buffer.events.length === 0) {
+        this.#multiTenantBuffers.delete(key)
+      }
+    }
   }
 
   makePayload (events) {}
@@ -108,12 +172,13 @@ class BaseLLMObsWriter {
     logger.debug(`Configuring ${this.constructor.name} to ${this.url}`)
   }
 
-  _getUrlAndPath () {
+  _getUrlAndPath (routing) {
     if (this._agentless) {
+      const site = routing?.site || this._config.site
       return {
         url: new URL(format({
           protocol: 'https:',
-          hostname: `${this._intake}.${this._config.site}`
+          hostname: `${this._intake}.${site}`
         })),
         endpoint: this._endpoint
       }
@@ -136,19 +201,23 @@ class BaseLLMObsWriter {
     }
   }
 
-  _getOptions () {
+  _getOptions (routing) {
+    const { url, endpoint } = routing
+      ? this._getUrlAndPath(routing)
+      : { url: this._baseUrl, endpoint: this._endpoint }
+
     const options = {
       headers: {
         'Content-Type': 'application/json'
       },
       method: 'POST',
       timeout: this._timeout,
-      url: this._baseUrl,
-      path: this._endpoint
+      url,
+      path: endpoint
     }
 
     if (this._agentless) {
-      options.headers['DD-API-KEY'] = this._config.apiKey || ''
+      options.headers['DD-API-KEY'] = routing?.apiKey || this._config.apiKey || ''
     } else {
       options.headers[EVP_SUBDOMAIN_HEADER_NAME] = this._intake
     }
