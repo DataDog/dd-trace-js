@@ -40,7 +40,7 @@ class NativeSpanContext extends DatadogSpanContext {
    * @param {*} value - Tag value
    */
   setTag (key, value) {
-    // Store in JS cache via parent
+    // Store in JS cache via parent (preserve original type)
     super.setTag(key, value)
 
     // Symbol keys are for internal JS use only (e.g., IGNORE_OTEL_ERROR)
@@ -94,6 +94,17 @@ class NativeSpanContext extends DatadogSpanContext {
           OpCode.SetError,
           this._nativeSpanId,
           ['i32', value ? 1 : 0]
+        )
+        return
+
+      // HACK: http.status_code must be stored as string in meta, not number in metrics
+      // This matches the behavior in span_format.js
+      case 'http.status_code':
+        this.#nativeSpans.queueOp(
+          OpCode.SetMetaAttr,
+          this._nativeSpanId,
+          key,
+          String(value)
         )
         return
 
