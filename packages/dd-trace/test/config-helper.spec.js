@@ -2,7 +2,7 @@
 
 const assert = require('assert')
 const sinon = require('sinon')
-const { it, describe, beforeEach, afterEach } = require('tap').mocha
+const { it, describe, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
