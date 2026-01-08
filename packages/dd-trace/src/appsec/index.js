@@ -360,12 +360,11 @@ function onResponseSetHeader ({ res, abortController }) {
   }
 }
 
-
 function onStripeCheckoutSessionCreate (payload) {
   if (payload.mode !== 'payment') return
   waf.run({
     persistent: {
-      'server.business_logic.payment.creation': {
+      [addresses.PAYMENT_CREATION]: {
         integration: 'stripe',
         id: payload.id,
         amount_total: payload.amount_total,
@@ -385,7 +384,7 @@ function onStripeCheckoutSessionCreate (payload) {
 function onStripePaymentIntentCreate (payload) {
   waf.run({
     persistent: {
-      'server.business_logic.payment.creation': {
+      [addresses.PAYMENT_CREATION]: {
         integration: 'stripe',
         id: payload.id,
         amount: payload.amount,
@@ -405,7 +404,7 @@ function onStripeConstructEvent (payload) {
 
   switch (payload.type) {
     case 'payment_intent.succeeded':
-      wafPayload.persistent['server.business_logic.payment.success'] = {
+      wafPayload.persistent[addresses.PAYMENT_SUCCESS] = {
         integration: 'stripe',
         id: object.id,
         amount: object.amount,
@@ -416,7 +415,7 @@ function onStripeConstructEvent (payload) {
       break
 
     case 'payment_intent.payment_failed':
-      wafPayload.persistent['server.business_logic.payment.failure'] = {
+      wafPayload.persistent[addresses.PAYMENT_FAILURE] = {
         integration: 'stripe',
         id: object.id,
         amount: object.amount,
@@ -431,7 +430,7 @@ function onStripeConstructEvent (payload) {
       break
 
     case 'payment_intent.canceled':
-      wafPayload.persistent['server.business_logic.payment.cancellation'] = {
+      wafPayload.persistent[addresses.PAYMENT_CANCELLATION] = {
         integration: 'stripe',
         id: object.id,
         amount: object.amount,
