@@ -211,15 +211,13 @@ Avoid try/catch in hot paths - validate inputs early
 
 ### Implementation and Testing Workflow
 
-**CRITICAL: Always follow this workflow when making code changes:**
+**When making any code or type change, the following MUST be followed:**
 
 1. **Understand** - Read relevant code and tests to understand the current implementation
 2. **Implement** - Make the necessary code changes
 3. **Update Tests** - Modify or add tests to cover the changes
 4. **Run Tests** - Execute the relevant test files to verify everything works
 5. **Verify** - Confirm all tests pass before marking the task as complete
-
-**Never skip step 4 (Run Tests).** Even if you're confident in the changes, always run the tests to catch any issues.
 
 ### Always Consider Backportability
 
