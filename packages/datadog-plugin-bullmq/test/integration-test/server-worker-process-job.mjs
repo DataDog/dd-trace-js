@@ -1,4 +1,4 @@
-import 'dd-trace/init.js'
+import './init.mjs'
 import { Queue, Worker } from 'bullmq'
 
 const connection = {
