@@ -147,7 +147,8 @@ Never use the `doesNotThrow()` assertion. Instead, execute the method directly.
 ### Class Properties and Methods
 - Use `#privateField` syntax for private properties and methods in new code
 - Do not use underscore prefix (`_property`) for new private members
-- Existing underscore properties may remain for backward compatibility
+- Existing underscore properties should be refactored, when a file is touched for other
+   code changes, if no other files rely on these properties (test files do not count).
 
 ### Import Ordering
 
