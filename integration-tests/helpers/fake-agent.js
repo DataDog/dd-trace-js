@@ -86,7 +86,7 @@ module.exports = class FakeAgent extends EventEmitter {
    * @param {string} id - The Remote Config config ID
    * @param {object} config - The Remote Config "file" object
    */
-  updateRemoteConfig (id, config) {
+  setRemoteConfig (id, config) {
     config = JSON.stringify(config)
     config = Object.assign(
       this._rcFiles[id],
