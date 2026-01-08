@@ -11,12 +11,13 @@ let rc
 
 /**
  * Configures remote config handlers for appsec features
- * @param {Object} rcInstance - RemoteConfigManager instance
  *
+ * @param {Object} rcInstance - RemoteConfigManager instance
  * @param {Object} config - Tracer config
- * @param {Object} appsec - Appsec module
+ * @param {(config: Object, rc: Object) => void} enable - Function to enable appsec
+ * @param {() => void} disable - Function to disable appsec
  */
-function enable (rcInstance, config, appsec) {
+function enable (rcInstance, config, enable, disable) {
   rc = rcInstance
   const activation = Activation.fromConfig(config)
 
@@ -49,7 +50,7 @@ function enable (rcInstance, config, appsec) {
       }
 
       if (activation === Activation.ONECLICK) {
-        enableOrDisableAppsec(action, rcConfig, config, appsec)
+        enableOrDisableAppsec(action, rcConfig, config, enable, disable)
       }
     })
   }
@@ -61,9 +62,10 @@ function enable (rcInstance, config, appsec) {
  * @param {string} action - 'apply', 'modify', or 'unapply'
  * @param {Object} rcConfig - Remote config
  * @param {Object} config - Tracer config
- * @param {Object} appsec - Appsec module
+ * @param {(config: Object, rc: Object) => void} enable - Function to enable appsec
+ * @param {() => void} disable - Function to disable appsec
  */
-function enableOrDisableAppsec (action, rcConfig, config, appsec) {
+function enableOrDisableAppsec (action, rcConfig, config, enable, disable) {
   if (typeof rcConfig.asm?.enabled === 'boolean') {
     const isRemoteConfigControlling = action === 'apply' || action === 'modify'
     const shouldEnable = isRemoteConfigControlling
@@ -71,9 +73,9 @@ function enableOrDisableAppsec (action, rcConfig, config, appsec) {
       : config.appsec.enabled // give back control to local config
 
     if (shouldEnable) {
-      appsec.enable(config)
+      enable(config, rc)
     } else {
-      appsec.disable()
+      disable()
     }
 
     updateConfig([

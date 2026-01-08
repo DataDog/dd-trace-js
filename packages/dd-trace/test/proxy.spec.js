@@ -450,7 +450,7 @@ describe('TracerProxy', () => {
         const remoteConfigProxy = new RemoteConfigProxy()
         remoteConfigProxy.init()
 
-        sinon.assert.calledOnceWithExactly(appsec.enable, config)
+        sinon.assert.calledOnceWithExactly(appsec.enable, config, rc)
         sinon.assert.calledOnceWithExactly(iast.enable, config, tracer)
 
         let conf = { tracing_enabled: false }
@@ -461,7 +461,7 @@ describe('TracerProxy', () => {
         conf = { tracing_enabled: true }
         handlers.get('APM_TRACING')('apply', { lib_config: conf })
         sinon.assert.calledTwice(appsec.enable)
-        sinon.assert.calledWithExactly(appsec.enable.secondCall, config)
+        sinon.assert.calledWithExactly(appsec.enable.secondCall, config, rc)
         sinon.assert.calledTwice(iast.enable)
         sinon.assert.calledWithExactly(iast.enable.secondCall, config, tracer)
       })
