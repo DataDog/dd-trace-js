@@ -207,6 +207,7 @@ class RemoteConfig {
     this.#batchHandlers.delete(handler)
   }
 
+  // TODO: Cache the return value of this method, to avoid recomputing it on every poll
   getPayload () {
     this.state.client.client_tracer.extra_services = getExtraServices()
 

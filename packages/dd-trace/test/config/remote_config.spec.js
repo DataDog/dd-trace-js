@@ -1,6 +1,6 @@
 'use strict'
 
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
 const RemoteConfigCapabilities = require('../../src/remote_config/capabilities')
@@ -59,7 +59,7 @@ describe('Tracing Remote Config', () => {
         handler('apply', { lib_config: libConfig })
 
         sinon.assert.calledOnceWithExactly(config.configure, libConfig, true)
-        sinon.assert.calledOnceWithExactly(enableOrDisableTracing, config)
+        sinon.assert.calledOnceWithExactly(enableOrDisableTracing, config, rc)
       })
 
       it('should reset config on unapply action', () => {
@@ -70,7 +70,7 @@ describe('Tracing Remote Config', () => {
         handler('unapply', {})
 
         sinon.assert.calledOnceWithExactly(config.configure, {}, true)
-        sinon.assert.calledOnceWithExactly(enableOrDisableTracing, config)
+        sinon.assert.calledOnceWithExactly(enableOrDisableTracing, config, rc)
       })
     })
   })
