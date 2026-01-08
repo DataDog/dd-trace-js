@@ -191,6 +191,7 @@ interface Plugins {
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
+  "bee-queue": tracer.plugins.bee_queue;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
@@ -1757,6 +1758,12 @@ declare namespace tracer {
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
      * on the tracer.
      */
+    /**
+     * This plugin automatically instruments the
+     * [bee-queue](https://github.com/npmjs/package/bee-queue) message queue library.
+     */
+    interface bee_queue extends Instrumentation {}
+
     interface bunyan extends Integration {}
 
     /**
