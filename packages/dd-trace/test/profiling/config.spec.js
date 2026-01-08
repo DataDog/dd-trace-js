@@ -549,6 +549,7 @@ describe('config', () => {
           process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = '0'
           try {
             const config = new Config({
+              // In production this comes from the tracer Config singleton; we mimic it here.
               url: 'http://127.0.0.1:8126'
             })
             assert.strictEqual(config.asyncContextFrameEnabled, false)

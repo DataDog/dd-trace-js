@@ -2,8 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
-const { getValueFromEnvSources } = require('./config-helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('./config-helper')
 const { isFalse, isTrue, normalizePluginEnvName } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')

@@ -689,16 +689,13 @@ module.exports = {
     }
 
     if (env.CODEBUILD_INITIATOR?.startsWith('codepipeline/')) {
-      const {
-        CODEBUILD_BUILD_ARN,
-      } = env
       const DD_ACTION_EXECUTION_ID = getValueFromEnvSources('DD_ACTION_EXECUTION_ID')
       const DD_PIPELINE_EXECUTION_ID = getValueFromEnvSources('DD_PIPELINE_EXECUTION_ID')
       tags = {
         [CI_PROVIDER_NAME]: 'awscodepipeline',
         [CI_PIPELINE_ID]: DD_PIPELINE_EXECUTION_ID,
         [CI_ENV_VARS]: JSON.stringify({
-          CODEBUILD_BUILD_ARN,
+          CODEBUILD_BUILD_ARN: env.CODEBUILD_BUILD_ARN,
           DD_PIPELINE_EXECUTION_ID,
           DD_ACTION_EXECUTION_ID
         }),

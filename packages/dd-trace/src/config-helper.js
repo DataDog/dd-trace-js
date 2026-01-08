@@ -44,7 +44,7 @@ function loadStableConfig () {
 
   // Lazy require to avoid circular dependency at module load time.
   const { isInServerlessEnvironment } = require('./serverless')
-  if (isInServerlessEnvironment && isInServerlessEnvironment()) {
+  if (isInServerlessEnvironment()) {
     // Stable config is not supported in serverless environments.
     return
   }
@@ -70,6 +70,13 @@ function getValueFromSource (name, source) {
   return value
 }
 
+function validateAccess (name) {
+  if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
+    !supportedConfigurations[name]) {
+    throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
+  }
+}
+
 module.exports = {
   /**
    * Expose raw stable config maps and warnings for consumers that need
@@ -82,9 +89,9 @@ module.exports = {
       loadStableConfig()
     }
     return {
-      localStableConfig: localStableConfig ?? {},
-      fleetStableConfig: fleetStableConfig ?? {},
-      stableConfigWarnings: stableConfigWarnings ?? []
+      localStableConfig,
+      fleetStableConfig,
+      stableConfigWarnings,
     }
   },
   /**
@@ -126,10 +133,7 @@ module.exports = {
   },
 
   getEnvironmentVariable (name) {
-    if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
-      !supportedConfigurations[name]) {
-      throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
-    }
+    validateAccess(name)
     return getValueFromSource(name, process.env)
   },
 
@@ -143,10 +147,7 @@ module.exports = {
    * @throws {Error} if the configuration is not supported
    */
   getValueFromEnvSources (name) {
-    if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
-      !supportedConfigurations[name]) {
-      throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
-    }
+    validateAccess(name)
 
     if (!stableConfigLoaded) {
       loadStableConfig()

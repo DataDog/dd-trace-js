@@ -43,7 +43,7 @@ class StableConfig {
       // eslint-disable-next-line eslint-rules/eslint-process-env
       configurator.set_envp(Object.entries(process.env).map(([key, value]) => `${key}=${value}`))
       configurator.set_args(process.argv)
-      configurator.get_configuration(localConfig.toString(), fleetConfig.toString()).forEach((entry) => {
+      configurator.get_configuration(localConfig, fleetConfig).forEach((entry) => {
         if (entry.source === 'local_stable_config') {
           this.localEntries[entry.name] = entry.value
         } else if (entry.source === 'fleet_stable_config') {
@@ -62,7 +62,7 @@ class StableConfig {
       if (err.code !== 'ENOENT') {
         this.warnings.push(`Error reading config file at ${path}. ${err.code}: ${err.message}`)
       }
-      return '' // Always return a string to avoid undefined.toString() errors
+      return '' // Always return a string for configurator.get_configuration()
     }
   }
 
