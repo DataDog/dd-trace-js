@@ -101,7 +101,7 @@ function getOptions (args) {
 }
 
 function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
-  const events = ['connect', errorMonitor, 'close', 'timeout']
+  const events = [errorMonitor, 'close', 'timeout']
 
   const wrapListener = function (error) {
     if (error) {
@@ -109,27 +109,39 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
       errorCh.publish(ctx)
     }
     finishCh.runStores(ctx, () => {})
+    cleanupListener()
   }
 
-  const localListener = function () {
+  const localListener = function (error) {
     ctx.socket = socket
     connectionCh.publish(ctx)
+    if (error) {
+      ctx.error = error
+      errorCh.publish(ctx)
+    }
+    finishCh.runStores(ctx, () => {})
+    cleanupListener()
   }
 
   const cleanupListener = function () {
     socket.removeListener('connect', localListener)
     events.forEach(event => {
       socket.removeListener(event, wrapListener)
-      socket.removeListener(event, cleanupListener)
     })
+    socket.setMaxListeners(socket.getMaxListeners() - 1)
   }
 
+  // Increase limit by one to prevent warnings when adding new listeners
+  socket.setMaxListeners(socket.getMaxListeners() + 1)
+
+  // TODO: Identify why the connect listener should remove the other listeners.
   if (protocol === 'tcp') {
     socket.once('connect', localListener)
+  } else {
+    events.push('connect')
   }
 
   events.forEach(event => {
     socket.once(event, wrapListener)
-    socket.once(event, cleanupListener)
   })
 }
