@@ -218,7 +218,7 @@ function enable (rc, config, onConfigUpdated) {
 
     // Get merged config and apply it
     const mergedLibConfig = rcClientLibConfigManager.getMergedLibConfig()
-    config.updateRemoteConfig(mergedLibConfig)
+    config.setRemoteConfig(mergedLibConfig)
 
     onConfigUpdated()
   })
