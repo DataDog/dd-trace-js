@@ -115,29 +115,34 @@ describe('Multi-Tenant Routing', () => {
 
   describe('routing context behavior', () => {
     const { storage } = require('../../../src/llmobs/storage')
+    let LLMObsSDK
+    let llmobs
     let sdkLogger
 
-    function withRoutingContext (options, fn) {
-      if (!options?.ddApiKey) throw new Error('ddApiKey is required')
-      const currentStore = storage.getStore()
-      if (currentStore?.routingContext && sdkLogger) {
-        sdkLogger.warn('Nested routing context detected')
-      }
-      const store = { ...currentStore, routingContext: { apiKey: options.ddApiKey, site: options.ddSite } }
-      return storage.run(store, fn)
-    }
+    beforeEach(() => {
+      sdkLogger = { debug: sinon.stub(), warn: sinon.stub(), error: sinon.stub() }
+
+      LLMObsSDK = proxyquire('../../../src/llmobs/sdk', {
+        '../log': sdkLogger
+      })
+
+      llmobs = new LLMObsSDK(null, { disable () {} }, { llmobs: { enabled: true } })
+    })
+
+    afterEach(() => {
+      llmobs.disable()
+    })
 
     function getCurrentRouting () {
       return storage.getStore()?.routingContext || null
     }
 
     it('nested contexts override outer and restore after, and logs warning', () => {
-      sdkLogger = { warn: sinon.stub() }
       let outerRouting, innerRouting, afterInnerRouting
 
-      withRoutingContext({ ddApiKey: 'outer-key', ddSite: 'outer-site' }, () => {
+      llmobs.withRoutingContext({ ddApiKey: 'outer-key', ddSite: 'outer-site' }, () => {
         outerRouting = getCurrentRouting()
-        withRoutingContext({ ddApiKey: 'inner-key', ddSite: 'inner-site' }, () => {
+        llmobs.withRoutingContext({ ddApiKey: 'inner-key', ddSite: 'inner-site' }, () => {
           innerRouting = getCurrentRouting()
         })
         afterInnerRouting = getCurrentRouting()
@@ -147,18 +152,22 @@ describe('Multi-Tenant Routing', () => {
       assert.strictEqual(innerRouting.apiKey, 'inner-key')
       assert.strictEqual(afterInnerRouting.apiKey, 'outer-key')
       sinon.assert.calledOnce(sdkLogger.warn)
-      sinon.assert.calledWith(sdkLogger.warn, 'Nested routing context detected')
+      sinon.assert.calledWith(
+        sdkLogger.warn,
+        'Nested routing context detected. Inner context will override outer context. ' +
+        'Spans created in the inner context will only be sent to the inner context.'
+      )
     })
 
     it('concurrent contexts are isolated', async () => {
       const results = []
 
       await Promise.all([
-        withRoutingContext({ ddApiKey: 'key-a' }, async () => {
+        llmobs.withRoutingContext({ ddApiKey: 'key-a' }, async () => {
           await new Promise(resolve => setTimeout(resolve, 10))
           results.push({ context: 'A', routing: getCurrentRouting() })
         }),
-        withRoutingContext({ ddApiKey: 'key-b' }, async () => {
+        llmobs.withRoutingContext({ ddApiKey: 'key-b' }, async () => {
           await new Promise(resolve => setTimeout(resolve, 5))
           results.push({ context: 'B', routing: getCurrentRouting() })
         })

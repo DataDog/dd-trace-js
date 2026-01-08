@@ -457,14 +457,9 @@ class LLMObs extends NoopLLMObs {
     }
     const currentStore = storage.getStore()
     if (currentStore?.routingContext) {
-      const outerKey = currentStore.routingContext.apiKey
-      const innerKey = options.ddApiKey
-      const maskedOuter = outerKey ? `****${outerKey.slice(-4)}` : ''
-      const maskedInner = innerKey ? `****${innerKey.slice(-4)}` : ''
       logger.warn(
-        'Nested routing context detected. Inner context (%s) will override outer context (%s). ' +
-        'Spans created in the inner context will only be sent to the inner context.',
-        maskedInner, maskedOuter
+        'Nested routing context detected. Inner context will override outer context. ' +
+        'Spans created in the inner context will only be sent to the inner context.'
       )
     }
     const store = {
