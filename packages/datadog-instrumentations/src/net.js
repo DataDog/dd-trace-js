@@ -101,7 +101,7 @@ function getOptions (args) {
 }
 
 function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
-  const events = ['connect', errorMonitor, 'close', 'timeout']
+  const events = [errorMonitor, 'close', 'timeout']
 
   const wrapListener = function (error) {
     if (error) {
@@ -111,9 +111,14 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
     finishCh.runStores(ctx, () => {})
   }
 
-  const localListener = function () {
+  const localListener = function (error) {
     ctx.socket = socket
     connectionCh.publish(ctx)
+    if (error) {
+      ctx.error = error
+      errorCh.publish(ctx)
+    }
+    finishCh.runStores(ctx, () => {})
   }
 
   const cleanupListener = function () {
@@ -124,8 +129,13 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
     })
   }
 
+  // Increase limit by one to prevent warnings when adding new listeners
+  socket.setMaxListeners(socket.getMaxListeners() + 1)
+
   if (protocol === 'tcp') {
     socket.once('connect', localListener)
+  } else {
+    events.push('connect')
   }
 
   events.forEach(event => {
