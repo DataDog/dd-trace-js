@@ -179,15 +179,14 @@ services:
     ports:
       - "127.0.0.1:9201:9200"
   openldap:
-    image: bitnami/openldap:latest
+    image: registry.opensuse.org/opensuse/openldap
     ports:
-      - '127.0.0.1:1389:1389'
-      - '127.0.0.1:1636:1636'
+      - '127.0.0.1:1389:389'
+      - '127.0.0.1:1636:636'
     environment:
-      - LDAP_ADMIN_USERNAME=admin
+      - LDAP_DOMAIN=example.org
       - LDAP_ADMIN_PASSWORD=adminpassword
-      - LDAP_USERS=user01,user02
-      - LDAP_PASSWORDS=password1,password2
+      - LDAP_CONFIG_PASSWORD=adminpassword
 
   testagent:
     image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.33.1
