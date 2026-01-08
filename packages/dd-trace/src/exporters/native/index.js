@@ -49,9 +49,8 @@ class NativeExporter {
   setUrl (url) {
     try {
       this._url = new URL(url)
-      // Note: Native side URL is set at initialization time
-      // Changing URL after init would require re-initialization
-      log.warn('Changing agent URL after initialization is not fully supported in native mode')
+      // Reinitialize native state with new URL
+      this._nativeSpans.setAgentUrl(this._url.toString())
     } catch (e) {
       log.warn(e.stack)
     }
