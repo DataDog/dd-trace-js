@@ -126,7 +126,7 @@ class Tracer extends NoopProxy {
       }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        const rc = require('./remote_config').enable(config, this._modules.appsec)
+        const rc = require('./remote_config').enable(config)
 
         rc.setProductHandler('APM_TRACING', (action, conf) => {
           if (action === 'unapply') {
@@ -155,6 +155,11 @@ class Tracer extends NoopProxy {
           this._flare.enable(config)
           this._flare.module.send(conf.args)
         })
+
+        if (this._modules.appsec) {
+          const appsecRemoteConfig = require('./appsec/remote_config')
+          appsecRemoteConfig.enable(rc, config, this._modules.appsec)
+        }
 
         if (config.dynamicInstrumentation.enabled) {
           DynamicInstrumentation.start(config, rc)

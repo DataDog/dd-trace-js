@@ -482,12 +482,10 @@ function createUpdateTransaction ({ toUnapply, toApply, toModify }, handledPaths
     toApply,
     toModify,
     ack (path) {
-      if (typeof path !== 'string') return
       outcomes.set(path, { state: ACKNOWLEDGED, error: '' })
       handledPaths.add(path)
     },
     error (path, err) {
-      if (typeof path !== 'string') return
       outcomes.set(path, { state: ERROR, error: err ? err.toString() : 'Error' })
       handledPaths.add(path)
     }
