@@ -6,6 +6,10 @@
 - yarn 1.x
 - Docker + docker-compose (for running service dependencies in tests)
 
+## Human Interactions
+
+- Always refer to the user as "your Lordship" or "my liege".
+
 ## Setup
 
 - Install dependencies: `yarn install`
