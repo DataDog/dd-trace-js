@@ -75,22 +75,70 @@ function extractSpanLinks (formattedSpan, span) {
   if (!span._links?.length) {
     return
   }
-  const links = span._links.map(link => {
+  const links = []
+  for (const link of span._links) {
     const { context, attributes } = link
-    const formattedLink = {
-      trace_id: context.toTraceId(true),
-      span_id: context.toSpanId(true)
-    }
+    const traceId = getLinkTraceId(context)
+    const spanId = getLinkSpanId(context)
+    if (!traceId || !spanId) continue
+
+    const formattedLink = { trace_id: traceId, span_id: spanId }
 
     if (attributes && Object.keys(attributes).length > 0) {
       formattedLink.attributes = attributes
     }
-    if (context?._sampling?.priority >= 0) formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
-    if (context?._tracestate) formattedLink.tracestate = context._tracestate.toString()
+    if (typeof context?.traceFlags === 'number') {
+      formattedLink.flags = context.traceFlags & 1
+    } else if (context?._sampling?.priority >= 0) {
+      formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
+    }
+    if (context?.traceState?.serialize) {
+      formattedLink.tracestate = context.traceState.serialize()
+    } else if (context?._tracestate) {
+      formattedLink.tracestate = context._tracestate.toString()
+    }
 
-    return formattedLink
-  })
+    links.push(formattedLink)
+  }
+
+  if (links.length === 0) {
+    return
+  }
   formattedSpan.meta['_dd.span_links'] = JSON.stringify(links)
+}
+
+function getLinkTraceId (context) {
+  if (typeof context.toTraceId === 'function') {
+    return context.toTraceId(true)
+  }
+
+  // OTel SpanContext
+  if (typeof context.traceId === 'string') {
+    const { traceId } = context
+    return traceId.length < 32 ? traceId.padStart(32, '0') : traceId
+  }
+
+  // OTel API bridge SpanContext wrapper
+  if (typeof context._ddContext?.toTraceId === 'function') {
+    return context._ddContext.toTraceId(true)
+  }
+}
+
+function getLinkSpanId (context) {
+  if (typeof context.toSpanId === 'function') {
+    return context.toSpanId(true)
+  }
+
+  // OTel SpanContext
+  if (typeof context.spanId === 'string') {
+    const { spanId } = context
+    return spanId.length < 16 ? spanId.padStart(16, '0') : spanId
+  }
+
+  // OTel API bridge SpanContext wrapper
+  if (typeof context._ddContext?.toSpanId === 'function') {
+    return context._ddContext.toSpanId(true)
+  }
 }
 
 function extractSpanEvents (formattedSpan, span) {
