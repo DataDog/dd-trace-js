@@ -2,7 +2,7 @@
 
 const Plugin = require('../../plugins/plugin')
 const log = require('../../log')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getEnvironmentVariable } = require('../../config/helper')
 
 function getWinstonLogSubmissionParameters (config) {
   const { site, service } = config

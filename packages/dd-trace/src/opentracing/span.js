@@ -12,7 +12,7 @@ const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getEnvironmentVariable } = require('../config/helper')
 const SpanContext = require('./span_context')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')

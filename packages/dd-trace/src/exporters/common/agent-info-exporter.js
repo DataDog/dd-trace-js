@@ -2,7 +2,7 @@
 
 const { URL, format } = require('url')
 
-const defaults = require('../../config_defaults')
+const defaults = require('../../config/defaults')
 const { incrementCountMetric, TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION } = require('../../ci-visibility/telemetry')
 const request = require('./request')
 

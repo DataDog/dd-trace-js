@@ -5,7 +5,7 @@ const path = require('path')
 
 const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
-const { getEnvironmentVariable } = require('../../../config-helper')
+const { getEnvironmentVariable } = require('../../../config/helper')
 
 const log = require('../../../log')
 const { isFalse } = require('../../../util')

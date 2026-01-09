@@ -1,6 +1,6 @@
 'use strict'
 const { JSONEncoder } = require('../../encode/json-encoder')
-const { getEnvironmentVariable } = require('../../../config-helper')
+const { getEnvironmentVariable } = require('../../../config/helper')
 const log = require('../../../log')
 const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
