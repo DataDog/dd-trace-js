@@ -25,7 +25,16 @@ function makeRequest (data, url, cb) {
 
   log.debug('Request to the intake: %j', options)
 
-  request(data, options, (err, res) => {
+  request(data, options, (err, res, status, headers) => {
+    // Capture container tags hash from agent response headers
+    if (headers) {
+      const containerTagsHash = headers['datadog-container-tags']
+      if (containerTagsHash) {
+        const propagationHash = require('../propagation-hash')
+        propagationHash.updateContainerTagsHash(containerTagsHash)
+        log.debug('Updated container tags hash from DSM response: %s', containerTagsHash)
+      }
+    }
     cb(err, res)
   })
 }
