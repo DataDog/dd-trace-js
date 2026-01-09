@@ -173,7 +173,7 @@
     "mocha-multi-reporters": "^1.5.1",
     "multer": "^2.0.2",
     "nock": "^13.5.6",
-    "nyc": "^15.1.0",
+    "nyc": "^17.1.0",
     "octokit": "^5.0.3",
     "opentracing": ">=0.14.7",
     "proxyquire": "^2.1.3",
