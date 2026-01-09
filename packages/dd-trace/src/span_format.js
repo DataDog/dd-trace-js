@@ -108,6 +108,8 @@ function extractSpanLinks (formattedSpan, span) {
 }
 
 function getLinkTraceId (context) {
+  if (!context) return
+
   if (typeof context.toTraceId === 'function') {
     return context.toTraceId(true)
   }
@@ -125,6 +127,8 @@ function getLinkTraceId (context) {
 }
 
 function getLinkSpanId (context) {
+  if (!context) return
+
   if (typeof context.toSpanId === 'function') {
     return context.toSpanId(true)
   }
