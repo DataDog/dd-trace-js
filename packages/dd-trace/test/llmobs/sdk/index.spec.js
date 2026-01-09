@@ -50,7 +50,12 @@ describe('sdk', () => {
     LLMObsSDK = require('../../../src/llmobs/sdk')
 
     // remove max listener warnings, we don't care about the writer anyways
-    process.removeAllListeners('beforeExit')
+    for (const handler of globalThis[Symbol.for('dd-trace')].beforeExitHandlers) {
+      if (handler.name.endsWith('destroy')) {
+        globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(handler)
+        break
+      }
+    }
 
     clock = sinon.useFakeTimers({
       toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
@@ -68,7 +73,12 @@ describe('sdk', () => {
     LLMObsSpanWriter.prototype.append.resetHistory()
     LLMObsSpanWriter.prototype.flush.resetHistory()
 
-    process.removeAllListeners('beforeExit')
+    for (const handler of globalThis[Symbol.for('dd-trace')].beforeExitHandlers) {
+      if (handler.name.endsWith('destroy')) {
+        globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(handler)
+        break
+      }
+    }
   })
 
   after(() => {
