@@ -1,11 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook
 } = require('./helpers/instrument')
-
-const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'sequelize', versions: ['>=4'], file: ['lib/sequelize.js'] }, Sequelize => {
   const startCh = channel('datadog:sequelize:query:start')

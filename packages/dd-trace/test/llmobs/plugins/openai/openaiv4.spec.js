@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert')
 const { describe, it, beforeEach } = require('mocha')
 const semifies = require('semifies')
 
@@ -12,8 +13,6 @@ const {
   MOCK_STRING,
   MOCK_NUMBER
 } = require('../../util')
-
-const assert = require('node:assert')
 
 describe('integrations', () => {
   let openai

@@ -1,9 +1,9 @@
 'use strict'
 
-const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { SeverityNumber } = require('@opentelemetry/api-logs')
-const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { trace } = require('@opentelemetry/api')
+const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
+const { getProtobufTypes } = require('../otlp/protobuf_loader')
 
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
@@ -105,7 +105,7 @@ class OtlpTransformer extends OtlpTransformerBase {
   /**
    * Creates scope logs grouped by instrumentation library.
    * @param {LogRecord[]} logRecords - Array of log records to transform
-   * @returns {Object[]} Array of scope log objects
+   * @returns {object[]} Array of scope log objects
    */
   #transformScope (logRecords) {
     const groupedRecords = this.groupByInstrumentationScope(logRecords)
@@ -131,7 +131,7 @@ class OtlpTransformer extends OtlpTransformerBase {
   /**
    * Transforms a single log record to OTLP format.
    * @param {LogRecord} logRecord - Log record to transform
-   * @returns {Object} OTLP log record object
+   * @returns {object} OTLP log record object
    */
   #transformLogRecord (logRecord) {
     const spanContext = this.#extractSpanContext(logRecord.context)
@@ -176,8 +176,8 @@ class OtlpTransformer extends OtlpTransformerBase {
 
   /**
    * Extracts span context from the log record's context.
-   * @param {Object} logContext - The log record's context
-   * @returns {Object|null} Span context or null if not available
+   * @param {object} logContext - The log record's context
+   * @returns {object | null} Span context or null if not available
    */
   #extractSpanContext (logContext) {
     if (!logContext) return null
@@ -215,7 +215,7 @@ class OtlpTransformer extends OtlpTransformerBase {
   /**
    * Transforms log body to OTLP AnyValue format.
    * @param {any} body - Log body to transform
-   * @returns {Object} OTLP AnyValue object
+   * @returns {object} OTLP AnyValue object
    */
   #transformBody (body) {
     if (typeof body === 'string') {

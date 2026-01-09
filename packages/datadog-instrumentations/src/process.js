@@ -1,7 +1,7 @@
 'use strict'
 
-const shimmer = require('../../datadog-shimmer')
 const { channel } = require('dc-polyfill')
+const shimmer = require('../../datadog-shimmer')
 
 const startSetUncaughtExceptionCaptureCallback = channel('datadog:process:setUncaughtExceptionCaptureCallback:start')
 

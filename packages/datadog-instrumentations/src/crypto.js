@@ -1,10 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 const cryptoHashCh = channel('datadog:crypto:hashing:start')
 const cryptoCipherCh = channel('datadog:crypto:cipher:start')

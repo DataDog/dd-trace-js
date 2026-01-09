@@ -1,8 +1,8 @@
 'use strict'
 
+const dc = require('dc-polyfill')
 const { storage } = require('../../../../datadog-core')
 
-const dc = require('dc-polyfill')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
 const {

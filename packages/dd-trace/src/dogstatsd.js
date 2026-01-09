@@ -4,8 +4,8 @@ const lookup = require('dns').lookup // cache to avoid instrumentation
 const request = require('./exporters/common/request')
 const dgram = require('dgram')
 const isIP = require('net').isIP
-const log = require('./log')
 const { URL, format } = require('url')
+const log = require('./log')
 const Histogram = require('./histogram')
 const defaults = require('./config_defaults')
 

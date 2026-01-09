@@ -2,14 +2,14 @@
 const tracerVersion = require('../../../../package.json').version
 const dc = require('dc-polyfill')
 const os = require('os')
+const { errors } = require('../startup-log')
+const logger = require('../log')
+const processTags = require('../process-tags')
 const dependencies = require('./dependencies')
 const endpoints = require('./endpoints')
 const { sendData } = require('./send-data')
-const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
 const telemetryLogger = require('./logs')
-const logger = require('../log')
-const processTags = require('../process-tags')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')

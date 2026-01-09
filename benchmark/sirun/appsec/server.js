@@ -3,9 +3,8 @@
 // AppSec is enabled from env config
 require('../../..').init()
 
-const { port, reqs } = require('./common')
-
 const http = require('http')
+const { port, reqs } = require('./common')
 
 let connectionsMade = 0
 

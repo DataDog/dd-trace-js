@@ -2,11 +2,11 @@
 
 const path = require('path')
 
-const { _extractModuleNameAndHandlerPath, _extractModuleRootAndHandler, _getLambdaFilePaths } = require('./ritm')
 const { datadog } = require('../handler')
 const { addHook } = require('../../../../datadog-instrumentations/src/helpers/instrument')
 const shimmer = require('../../../../datadog-shimmer')
 const { getEnvironmentVariable } = require('../../config-helper')
+const { _extractModuleNameAndHandlerPath, _extractModuleRootAndHandler, _getLambdaFilePaths } = require('./ritm')
 
 /**
  * Patches a Datadog Lambda module by calling `patchDatadogLambdaHandler`

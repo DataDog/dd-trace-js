@@ -1,8 +1,8 @@
 'use strict'
 
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
-const AnthropicTracingPlugin = require('./tracing')
 const AnthropicLLMObsPlugin = require('../../dd-trace/src/llmobs/plugins/anthropic')
+const AnthropicTracingPlugin = require('./tracing')
 
 class AnthropicPlugin extends CompositePlugin {
   static id = 'anthropic'

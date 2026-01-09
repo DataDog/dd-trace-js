@@ -2,6 +2,10 @@
 
 const assert = require('node:assert/strict')
 
+const path = require('path')
+const { inspect } = require('util')
+const fs = require('fs')
+const semver = require('semver')
 const {
   FakeAgent,
   spawnProc,
@@ -9,10 +13,6 @@ const {
   useSandbox,
   curlAndAssertMessage
 } = require('./helpers')
-const path = require('path')
-const semver = require('semver')
-const { inspect } = require('util')
-const fs = require('fs')
 
 const execArgvs = [
   {

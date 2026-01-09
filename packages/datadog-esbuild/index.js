@@ -3,13 +3,8 @@
 /* eslint-disable no-console */
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
-const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
-const extractPackageAndModulePath = require(
-  '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
-)
 
 const { pathToFileURL, fileURLToPath } = require('url')
-const { processModule, isESMFile } = require('./src/utils.js')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
@@ -41,6 +36,11 @@ const CHANNEL = 'dd-trace:bundler:load'
 const path = require('path')
 const fs = require('fs')
 const { execSync } = require('child_process')
+const extractPackageAndModulePath = require(
+  '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
+)
+const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
+const { processModule, isESMFile } = require('./src/utils.js')
 
 const builtins = new Set()
 

@@ -1,10 +1,10 @@
 'use strict'
 
+const log = require('../../log')
+const { stableStringify } = require('../otlp/otlp_transformer_base')
 const {
   METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE
 } = require('./constants')
-const log = require('../../log')
-const { stableStringify } = require('../otlp/otlp_transformer_base')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
@@ -13,7 +13,7 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  */
 
 /**
- * @typedef {Object} NumberDataPoint
+ * @typedef {object} NumberDataPoint
  * @property {Attributes} attributes - Number data point metric attributes
  * @property {string} attrKey - Stable stringified key for attributes
  * @property {number} timeUnixNano - Timestamp in nanoseconds
@@ -22,7 +22,7 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  */
 
 /**
- * @typedef {Object} HistogramDataPoint
+ * @typedef {object} HistogramDataPoint
  * @property {Attributes} attributes - Histogram data point metric attributes
  * @property {string} attrKey - Stable stringified key for attributes
  * @property {number} timeUnixNano - Timestamp in nanoseconds
@@ -36,7 +36,7 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  */
 
 /**
- * @typedef {Object} AggregatedMetricDataPoint
+ * @typedef {object} AggregatedMetricDataPoint
  * @property {Attributes} attributes - Aggregated metric data point metric attributes
  * @property {string} attrKey - Stable stringified key for attributes
  * @property {number} timeUnixNano - Timestamp in nanoseconds
@@ -50,7 +50,7 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  */
 
 /**
- * @typedef {Object} AggregatedMetric
+ * @typedef {object} AggregatedMetric
  * @property {string} name - Metric name
  * @property {string} description - Metric description
  * @property {string} unit - Metric unit

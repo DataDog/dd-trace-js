@@ -1,5 +1,8 @@
 'use strict'
 
+const ERROR_TYPE = require('../constants')
+
+const telemetryMetrics = require('../telemetry/metrics')
 const {
   SPAN_KIND,
   MODEL_PROVIDER,
@@ -9,10 +12,6 @@ const {
   INTEGRATION,
   DECORATOR
 } = require('./constants/tags')
-
-const ERROR_TYPE = require('../constants')
-
-const telemetryMetrics = require('../telemetry/metrics')
 
 const LLMObsTagger = require('./tagger')
 

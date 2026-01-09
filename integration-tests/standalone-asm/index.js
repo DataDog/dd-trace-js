@@ -20,6 +20,7 @@ if (process.env.AGENT_URL) {
   options.url = process.env.AGENT_URL
 }
 
+const crypto = require('crypto')
 const tracer = require('dd-trace')
 tracer.init(options)
 
@@ -28,7 +29,6 @@ const express = require('express')
 const app = express()
 
 const valueToHash = 'iast-showcase-demo'
-const crypto = require('crypto')
 
 async function makeRequest (url) {
   return new Promise((resolve, reject) => {

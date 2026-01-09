@@ -1,7 +1,7 @@
 'use strict'
 
-const { createWrapRouterMethod } = require('./router')
 const shimmer = require('../../datadog-shimmer')
+const { createWrapRouterMethod } = require('./router')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 const {
   setRouterMountPath,

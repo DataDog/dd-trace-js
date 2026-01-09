@@ -61,7 +61,7 @@ class OtlpTransformerBase {
 
   /**
    * Transforms resource attributes to OTLP resource format.
-   * @returns {Object} OTLP resource object
+   * @returns {object} OTLP resource object
    * @protected
    */
   transformResource () {
@@ -73,8 +73,8 @@ class OtlpTransformerBase {
 
   /**
    * Transforms attributes to OTLP KeyValue format.
-   * @param {Object} attributes - Attributes to transform
-   * @returns {Object[]} Array of OTLP KeyValue objects
+   * @param {object} attributes - Attributes to transform
+   * @returns {object[]} Array of OTLP KeyValue objects
    * @protected
    */
   transformAttributes (attributes) {
@@ -86,8 +86,8 @@ class OtlpTransformerBase {
 
   /**
    * Transforms attributes to JSON format (simplified).
-   * @param {Object} attributes - Attributes to transform
-   * @returns {Object[]} Array of OTLP KeyValue objects with string values
+   * @param {object} attributes - Attributes to transform
+   * @returns {object[]} Array of OTLP KeyValue objects with string values
    * @protected
    */
   attributesToJson (attributes) {
@@ -104,7 +104,7 @@ class OtlpTransformerBase {
    * Supports: strings, numbers (int/double), booleans, arrays.
    * Objects are filtered out by sanitizeAttributes before reaching this method.
    * @param {any} value - Value to transform
-   * @returns {Object} OTLP AnyValue object
+   * @returns {object} OTLP AnyValue object
    * @protected
    */
   transformAnyValue (value) {
@@ -130,8 +130,8 @@ class OtlpTransformerBase {
 
   /**
    * Serializes data to protobuf format.
-   * @param {Object} protoType - Protobuf type from protobuf_loader
-   * @param {Object} data - Data to serialize
+   * @param {object} protoType - Protobuf type from protobuf_loader
+   * @param {object} data - Data to serialize
    * @returns {Buffer} Protobuf-encoded data
    * @protected
    */
@@ -143,7 +143,7 @@ class OtlpTransformerBase {
 
   /**
    * Serializes data to JSON format.
-   * @param {Object} data - Data to serialize
+   * @param {object} data - Data to serialize
    * @returns {Buffer} JSON-encoded data
    * @protected
    */

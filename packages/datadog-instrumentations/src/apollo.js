@@ -1,10 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   addHook,
   channel
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 const tracingChannel = require('dc-polyfill').tracingChannel
 
 const CHANNELS = {

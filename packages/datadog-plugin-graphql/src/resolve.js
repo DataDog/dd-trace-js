@@ -1,7 +1,7 @@
 'use strict'
 
-const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const dc = require('dc-polyfill')
+const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const collapsedPathSym = Symbol('collapsedPaths')
 

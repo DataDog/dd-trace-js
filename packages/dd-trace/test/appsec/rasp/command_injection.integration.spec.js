@@ -2,10 +2,9 @@
 
 const assert = require('node:assert/strict')
 
+const path = require('node:path')
 const Axios = require('axios')
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
-
-const path = require('node:path')
 
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 

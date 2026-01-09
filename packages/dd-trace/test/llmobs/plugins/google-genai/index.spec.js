@@ -1,8 +1,8 @@
 'use strict'
 
+const assert = require('node:assert')
 const { describe, before, it } = require('mocha')
 const { withVersions } = require('../../../setup/mocha')
-const assert = require('node:assert')
 
 const {
   useLlmObs,

@@ -1,9 +1,8 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
 const BaseLLMObsPlugin = require('../base')
 const { getModelProvider } = require('../../../../../datadog-plugin-ai/src/utils')
-
-const { channel } = require('dc-polyfill')
 
 const toolCreationCh = channel('dd-trace:vercel-ai:tool')
 const setAttributesCh = channel('dd-trace:vercel-ai:span:setAttributes')

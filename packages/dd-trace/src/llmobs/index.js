@@ -1,5 +1,6 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
 const log = require('../log')
 const {
   ML_APP,
@@ -11,7 +12,6 @@ const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsSpanProcessor = require('./span_processor')
 
-const { channel } = require('dc-polyfill')
 const spanFinishCh = channel('dd-trace:span:finish')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')

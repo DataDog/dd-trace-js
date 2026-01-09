@@ -1,9 +1,8 @@
 'use strict'
 
-const retry = require('../../../../../vendor/dist/retry')
 const { request: httpRequest } = require('http')
 const { request: httpsRequest } = require('https')
-const { EventSerializer } = require('./event_serializer')
+const retry = require('../../../../../vendor/dist/retry')
 
 // TODO: avoid using dd-trace internals. Make this a separate module?
 const docker = require('../../exporters/common/docker')
@@ -14,6 +13,7 @@ const { urlToHttpOptions } = require('url')
 const perf = require('perf_hooks').performance
 
 const telemetryMetrics = require('../../telemetry/metrics')
+const { EventSerializer } = require('./event_serializer')
 const profilersNamespace = telemetryMetrics.manager.namespace('profilers')
 
 const statusCodeCounters = []

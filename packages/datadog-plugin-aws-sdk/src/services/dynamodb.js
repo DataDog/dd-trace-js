@@ -109,7 +109,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
   /**
    * Parses primary key config from the `DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS` env var.
    * Only runs when needed, and warns when missing or invalid config.
-   * @returns {Object|undefined} Parsed config from env var or undefined if empty/missing/invalid config.
+   * @returns {object | undefined} Parsed config from env var or undefined if empty/missing/invalid config.
    */
   getPrimaryKeyConfig () {
     if (this.dynamoPrimaryKeyConfig) {
@@ -151,7 +151,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
   /**
    * Calculates a hash for DynamoDB PutItem operations using table's configured primary keys.
    * @param {string} tableName - Name of the DynamoDB table.
-   * @param {Object} item - Complete PutItem item parameter to be put.
+   * @param {object} item - Complete PutItem item parameter to be put.
    * @param {Object.<string, Array<string>>} primaryKeyConfig - Mapping of table names to an Array of primary key names
    *                                                         loaded from DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS.
    * @returns {string|undefined} Hash combining table name and primary key/value pairs, or undefined if unable.
@@ -174,7 +174,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
   /**
    * Calculates a hash for DynamoDB operations that have keys provided (UpdateItem, DeleteItem).
    * @param {string} tableName - Name of the DynamoDB table.
-   * @param {Object} keysObject - Object containing primary key/value attributes in DynamoDB format.
+   * @param {object} keysObject - Object containing primary key/value attributes in DynamoDB format.
    *                       (e.g., { userId: { S: "123" }, sortKey: { N: "456" } })
    * @returns {string|undefined} Hash value combining table name and primary key/value pairs, or undefined if unable.
    *

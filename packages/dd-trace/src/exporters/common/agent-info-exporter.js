@@ -2,9 +2,9 @@
 
 const { URL, format } = require('url')
 
-const request = require('./request')
 const defaults = require('../../config_defaults')
 const { incrementCountMetric, TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION } = require('../../ci-visibility/telemetry')
+const request = require('./request')
 
 function fetchAgentInfo (url, callback) {
   request('', {

@@ -1,16 +1,15 @@
 'use strict'
 
+const { isTrue, isError } = require('../util')
+const Span = require('../opentracing/span')
 const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
 
 const {
   getFunctionArguments,
   validateKind
 } = require('./util')
-const { isTrue, isError } = require('../util')
 
 const { storage } = require('./storage')
-
-const Span = require('../opentracing/span')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')

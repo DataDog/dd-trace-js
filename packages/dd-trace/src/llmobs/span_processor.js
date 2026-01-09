@@ -1,6 +1,11 @@
 'use strict'
 
 const {
+  ERROR_MESSAGE,
+  ERROR_TYPE,
+  ERROR_STACK
+} = require('../constants')
+const {
   SPAN_KIND,
   MODEL_NAME,
   MODEL_PROVIDER,
@@ -20,12 +25,6 @@ const {
   NAME
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
-
-const {
-  ERROR_MESSAGE,
-  ERROR_TYPE,
-  ERROR_STACK
-} = require('../constants')
 
 const telemetry = require('./telemetry')
 

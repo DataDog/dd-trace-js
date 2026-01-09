@@ -6,12 +6,12 @@ const net = require('node:net')
 
 const semver = require('semver')
 
+const ddpv = require('mocha/package.json').version
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
-const ddpv = require('mocha/package.json').version
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const clients = {
   pg: pg => pg.Client

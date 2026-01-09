@@ -2,8 +2,8 @@
 
 const assert = require('node:assert/strict')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 const path = require('path')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const ufcPayloads = require('./fixtures/ufc-payloads')
 const RC_PRODUCT = 'FFE_FLAGS'
