@@ -88,13 +88,13 @@ function request (data, options, callback) {
           zlib.gunzip(buffer, (err, result) => {
             if (err) {
               log.error('Could not gunzip response: %s', err.message)
-              callback(null, '', res.statusCode)
+              callback(null, '', res.statusCode, res.headers)
             } else {
-              callback(null, result.toString(), res.statusCode)
+              callback(null, result.toString(), res.statusCode, res.headers)
             }
           })
         } else {
-          callback(null, buffer.toString(), res.statusCode)
+          callback(null, buffer.toString(), res.statusCode, res.headers)
         }
       } else {
         let errorMessage = ''
@@ -115,7 +115,7 @@ function request (data, options, callback) {
         const error = new log.NoTransmitError(errorMessage)
         error.status = res.statusCode
 
-        callback(error, null, res.statusCode)
+        callback(error, null, res.statusCode, res.headers)
       }
     })
   }

@@ -314,6 +314,48 @@ describe('DataStreamsProcessor', () => {
       Tags: ['foo:foovalue', 'bar:barvalue'],
     })
   })
+
+  it('should include ProcessTags when propagation is enabled', () => {
+    const propagationHash = require('../../src/propagation-hash')
+    const processTags = require('../../src/process-tags')
+
+    // Configure and enable the feature
+    propagationHash.configure({ propagateProcessTags: { enabled: true } })
+
+    processor.recordCheckpoint(mockCheckpoint)
+    processor.onInterval()
+
+    const call = writer.flush.getCall(writer.flush.callCount - 1)
+    const payload = call.args[0]
+
+    assert.ok(payload.ProcessTags, 'ProcessTags should be present')
+    assert.deepStrictEqual(
+      payload.ProcessTags,
+      processTags.serialized.split(','),
+      'ProcessTags should match process-tags module as array'
+    )
+
+    // Cleanup
+    propagationHash.configure(null)
+  })
+
+  it('should not include ProcessTags when propagation is disabled', () => {
+    const propagationHash = require('../../src/propagation-hash')
+
+    // Ensure the feature is disabled
+    propagationHash.configure({ propagateProcessTags: { enabled: false } })
+
+    processor.recordCheckpoint(mockCheckpoint)
+    processor.onInterval()
+
+    const call = writer.flush.getCall(writer.flush.callCount - 1)
+    const payload = call.args[0]
+
+    assert.strictEqual(payload.ProcessTags, undefined, 'ProcessTags should not be present')
+
+    // Cleanup
+    propagationHash.configure(null)
+  })
 })
 
 describe('getSizeOrZero', () => {
