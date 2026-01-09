@@ -58,14 +58,15 @@ describe('OpenTelemetry Meter Provider', () => {
 
     httpStub = sinon.stub(http, 'request').callsFake((options, callback) => {
       const baseMockReq = { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
-      const baseMockRes = { statusCode: 200, on: () => {}, setTimeout: () => {} }
+      const baseMockRes = { statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} }
 
       if (options.path && options.path.includes('/v1/metrics')) {
         capturedHeaders = options.headers
         const responseHandlers = {}
         const mockRes = {
           ...baseMockRes,
-          on: (event, handler) => { responseHandlers[event] = handler; return mockRes }
+          on: (event, handler) => { responseHandlers[event] = handler; return mockRes },
+          once: (event, handler) => { responseHandlers[event] = handler; return mockRes }
         }
 
         const mockReq = {
@@ -1024,14 +1025,16 @@ describe('OpenTelemetry Meter Provider', () => {
         requestCount++
         assert(options.headers['Content-Length'] > 0)
 
+        const handler = (event, handler) => {
+          handlers[event] = handler
+          return mockReq
+        }
         const handlers = {}
         const mockReq = {
           write: sinon.stub(),
           end: sinon.stub(),
-          on: (event, handler) => {
-            handlers[event] = handler
-            return mockReq
-          },
+          on: handler,
+          once: handler,
           destroy: sinon.stub(),
           setTimeout: sinon.stub()
         }

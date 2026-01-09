@@ -1,23 +1,8 @@
 'use strict'
 
-const sym = Symbol.for('dd-trace')
+// Use a global symbol to prevent stealthy-require to interfere.
 
-if (!globalThis[sym]) {
-  Object.defineProperty(globalThis, sym, {
-    value: {
-      instrumentations: {},
-      beforeExitHandlers: new Set(),
-    },
-    enumerable: false,
-    configurable: false,
-    writable: false
-  })
-}
+const sym = Symbol.for('_ddtrace_instrumentations')
+globalThis[sym] ??= {}
 
-process.once('beforeExit', () => {
-  for (const handler of globalThis[sym].beforeExitHandlers) {
-    handler()
-  }
-})
-
-module.exports = globalThis[sym].instrumentations
+module.exports = globalThis[sym]

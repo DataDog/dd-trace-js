@@ -50,10 +50,9 @@ const testCases = [
 ]
 
 describe('Expression language', function () {
-  beforeEach(() => {
+  before(() => {
     // Mock the presence of `util.types` as it would be available when DI is active in the tracer
-    globalThis[Symbol.for('dd-trace')] ??= {}
-    globalThis[Symbol.for('dd-trace')].utilTypes = require('util').types
+    globalThis[Symbol.for('dd-trace')].utilTypes ??= require('util').types
   })
 
   describe('condition compilation', function () {
