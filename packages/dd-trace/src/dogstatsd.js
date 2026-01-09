@@ -360,7 +360,6 @@ class CustomMetrics {
     // TODO(bengl) this magic number should be configurable
     setInterval(flush, 10 * 1000).unref()
 
-    // TODO: Check if we should clean up
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(flush)
   }
 

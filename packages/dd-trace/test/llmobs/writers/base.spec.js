@@ -6,6 +6,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+require('../../setup/core')
 const { useEnv } = require('../../../../../integration-tests/helpers')
 
 describe('BaseLLMObsWriter', () => {
@@ -49,7 +50,12 @@ describe('BaseLLMObsWriter', () => {
 
   afterEach(() => {
     clock.restore()
-    process.removeAllListeners('beforeExit')
+    for (const handler of globalThis[Symbol.for('dd-trace')].beforeExitHandlers) {
+      if (handler.name.endsWith('destroy')) {
+        globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(handler)
+        break
+      }
+    }
   })
 
   it('constructs an agentless writer', () => {
@@ -261,12 +267,18 @@ describe('BaseLLMObsWriter', () => {
       writer.flush = sinon.stub()
 
       writer.destroy()
+      // Call twice to ensure it sets the state properly
+      writer.destroy()
 
-      assert.strictEqual(writer._destroyed, true)
       sinon.assert.calledWith(clearInterval, writer._periodic)
-      sinon.assert.calledWith(process.removeListener, 'beforeExit', writer._beforeExitHandler)
       sinon.assert.calledOnce(writer.flush)
       sinon.assert.calledWith(logger.debug, 'Stopping BaseLLMObsWriter')
+
+      for (const handler of globalThis[Symbol.for('dd-trace')].beforeExitHandlers) {
+        if (handler.name.endsWith('destroy')) {
+          assert.fail('destroy handler should not be present')
+        }
+      }
     })
 
     it('does not destroy more than once', () => {

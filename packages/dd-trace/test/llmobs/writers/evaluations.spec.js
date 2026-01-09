@@ -16,7 +16,12 @@ describe('LLMObsEvalMetricsWriter', () => {
   })
 
   afterEach(() => {
-    process.removeAllListeners('beforeExit')
+    for (const handler of globalThis[Symbol.for('dd-trace')].beforeExitHandlers) {
+      if (handler.name.endsWith('destroy')) {
+        globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(handler)
+        break
+      }
+    }
   })
 
   it('constructs the url with the correct values', () => {

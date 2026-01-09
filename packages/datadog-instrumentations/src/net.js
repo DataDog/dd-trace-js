@@ -128,11 +128,7 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
     events.forEach(event => {
       socket.removeListener(event, wrapListener)
     })
-    socket.setMaxListeners(socket.getMaxListeners() - 1)
   }
-
-  // Increase limit by one to prevent warnings when adding new listeners
-  socket.setMaxListeners(socket.getMaxListeners() + 1)
 
   // TODO: Identify why the connect listener should remove the other listeners.
   if (protocol === 'tcp') {

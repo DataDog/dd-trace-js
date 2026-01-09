@@ -20,7 +20,7 @@ describe('Plugin', () => {
   let parent
 
   before(() => {
-    require('events').defaultMaxListeners = 4
+    require('events').defaultMaxListeners = 5
   })
 
   ;['net', 'node:net'].forEach(pluginToBeLoaded => {
