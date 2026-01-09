@@ -21,7 +21,7 @@ if (!globalThis[Symbol.for('dd-trace')]) {
     writable: false,
   })
 
-  process.once('beforeExit', () => {
+  process.once('beforeExit', function testBeforeExit () {
     // Only run the beforeExit handlers if the object is still the same.
     // That way we run the original beforeExit handler if it was added after this one.
     if (globalThis[Symbol.for('dd-trace')] === object) {
@@ -34,7 +34,7 @@ if (!globalThis[Symbol.for('dd-trace')]) {
 
 // Lower max listeners to notice when we add too many listeners early.
 // Override per-test, if absolutely necessary.
-require('events').defaultMaxListeners = 6
+require('events').defaultMaxListeners = 5
 
 process.on('warning', (warning) => {
   if (warning.name === 'MaxListenersExceededWarning' && !warning.message.includes('[Runner]')) {

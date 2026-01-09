@@ -14,11 +14,10 @@ if (!global._ddtrace) {
 
   Object.defineProperty(globalThis, ddTraceSymbol, {
     value: {
-      instrumentations: {},
       beforeExitHandlers: new Set(),
     },
     enumerable: false,
-    configurable: false,
+    configurable: true, // Allow this to be overridden by loading the tracer
     writable: false
   })
 
