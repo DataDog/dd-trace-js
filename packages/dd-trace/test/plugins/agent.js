@@ -699,6 +699,7 @@ module.exports = {
     delete require.cache[require.resolve('../..')]
     delete global._ddtrace
 
+    process.removeAllListeners('exit')
     process.removeAllListeners('beforeExit')
 
     const basedir = path.join(__dirname, '..', '..', '..', '..', 'versions')
