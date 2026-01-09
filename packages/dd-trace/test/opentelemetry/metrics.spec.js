@@ -30,8 +30,11 @@ describe('OpenTelemetry Meter Provider', () => {
     }
     Object.assign(process.env, envOverrides)
 
+    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
+
     const proxy = proxyquire.noPreserveCache()('../../src/proxy', {
       './config': getConfigFresh,
+      './dogstatsd': dogstatsd
     })
     const TracerProxy = proxyquire.noPreserveCache()('../../src', {
       './proxy': proxy

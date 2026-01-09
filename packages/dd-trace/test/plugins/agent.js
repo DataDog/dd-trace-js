@@ -414,8 +414,11 @@ module.exports = {
     currentIntegrationName = getCurrentIntegrationName()
 
     const getConfigFresh = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
+    // Reload dogstatsd to avoid adding new events to the global process object
+    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
     const proxy = proxyquire('../../src/proxy', {
-      './config': getConfigFresh
+      './config': getConfigFresh,
+      './dogstatsd': dogstatsd
     })
     const TracerProxy = proxyquire('../../src', {
       './proxy': proxy

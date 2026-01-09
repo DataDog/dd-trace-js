@@ -1,7 +1,23 @@
 'use strict'
 
-const sym = Symbol.for('_ddtrace_instrumentations')
+const sym = Symbol.for('dd-trace')
 
-global[sym] = global[sym] || {}
+if (!globalThis[sym]) {
+  Object.defineProperty(globalThis, sym, {
+    value: {
+      instrumentations: {},
+      beforeExitHandlers: new Set(),
+    },
+    enumerable: false,
+    configurable: false,
+    writable: false
+  })
+}
 
-module.exports = global[sym]
+process.once('beforeExit', () => {
+  for (const handler of globalThis[sym].beforeExitHandlers) {
+    handler()
+  }
+})
+
+module.exports = globalThis[sym].instrumentations
