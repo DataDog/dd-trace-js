@@ -44,7 +44,7 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
 
         return res
       } catch (err) {
-        err.stack // trigger getting the stack at the original throwing point
+        void err.stack // trigger getting the stack at the original throwing point
         ctx.error = err
         errorCh.publish(ctx)
 

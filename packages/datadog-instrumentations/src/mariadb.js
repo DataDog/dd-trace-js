@@ -66,7 +66,7 @@ function createWrapQuery (options) {
           finishCh.publish(ctx)
           return result
         }, error => {
-          ctx.error
+          ctx.error = error
           errorCh.publish(ctx)
           finishCh.publish(ctx)
           throw error
