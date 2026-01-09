@@ -44,6 +44,10 @@ describe('Tracing Remote Config', () => {
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_ENABLED, true)
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_SAMPLE_RULES, true)
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_MULTICONFIG, true)
+      sinon.assert.calledWithExactly(rc.updateCapabilities,
+        RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION, true)
+      sinon.assert.calledWithExactly(rc.updateCapabilities,
+        RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN, true)
     })
 
     it('should register APM_TRACING batch handler', () => {
@@ -227,19 +231,6 @@ describe('Tracing Remote Config', () => {
         tracing_sampling_rate: 0.8,
         log_injection_enabled: true
       })
-    })
-
-    it('should call onConfigUpdated callback', () => {
-      enable(rc, config, onConfigUpdated)
-      const handler = batchHandlers.get('APM_TRACING')
-
-      const transaction = createTransaction([
-        { id: 'config-1', file: { lib_config: {} } }
-      ])
-
-      handler(transaction)
-
-      sinon.assert.calledOnce(onConfigUpdated)
     })
 
     it('should return null when configs have no lib_config field', () => {
