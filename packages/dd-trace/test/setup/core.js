@@ -34,7 +34,7 @@ if (!globalThis[Symbol.for('dd-trace')]) {
 
 // Lower max listeners to notice when we add too many listeners early.
 // Override per-test, if absolutely necessary.
-require('events').defaultMaxListeners = 5
+require('events').defaultMaxListeners = 6
 
 process.on('warning', (warning) => {
   if (warning.name === 'MaxListenersExceededWarning' && !warning.message.includes('[Runner]')) {
