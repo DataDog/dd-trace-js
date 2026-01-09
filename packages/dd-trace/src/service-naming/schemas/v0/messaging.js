@@ -24,6 +24,14 @@ const messaging = {
       opName: () => 'azure.servicebus.send',
       serviceName: ({ tracerService }) => `${tracerService}-azure-service-bus`
     },
+    'electron:ipc:main:send': {
+      opName: () => 'electron.main.send',
+      serviceName: identityService
+    },
+    'electron:ipc:renderer:send': {
+      opName: () => 'electron.renderer.send',
+      serviceName: identityService
+    },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',
       serviceName: ({ tracerService }) => `${tracerService}-pubsub`
@@ -61,6 +69,14 @@ const messaging = {
     amqp10: {
       opName: () => 'amqp.receive',
       serviceName: amqpServiceName
+    },
+    'electron:ipc:main:receive': {
+      opName: () => 'electron.main.receive',
+      serviceName: identityService
+    },
+    'electron:ipc:renderer:receive': {
+      opName: () => 'electron.renderer.receive',
+      serviceName: identityService
     },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.receive',

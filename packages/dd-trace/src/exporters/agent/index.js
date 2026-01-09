@@ -57,7 +57,7 @@ class AgentExporter {
       this.#timer = setTimeout(() => {
         this._writer.flush()
         this.#timer = undefined
-      }, flushInterval).unref()
+      }, flushInterval).unref?.()
     }
   }
 

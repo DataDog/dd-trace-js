@@ -47,11 +47,11 @@ class CiVisibilityExporter extends AgentInfoExporter {
 
     const gitUploadTimeoutId = setTimeout(() => {
       this._resolveGit(new Error('Timeout while uploading git metadata'))
-    }, GIT_UPLOAD_TIMEOUT).unref()
+    }, GIT_UPLOAD_TIMEOUT).unref?.()
 
     const canUseCiVisProtocolTimeoutId = setTimeout(() => {
       this._resolveCanUseCiVisProtocol(false)
-    }, CAN_USE_CI_VIS_PROTOCOL_TIMEOUT).unref()
+    }, CAN_USE_CI_VIS_PROTOCOL_TIMEOUT).unref?.()
 
     this._gitUploadPromise = new Promise(resolve => {
       this._resolveGit = (err) => {

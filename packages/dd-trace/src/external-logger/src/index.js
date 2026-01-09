@@ -27,7 +27,7 @@ class ExternalLogger {
     }
     this.timer = setInterval(() => {
       this.flush()
-    }, this.interval).unref()
+    }, this.interval).unref?.()
 
     tracerLogger.debug(`started log writer to https://${this.intake}${this.endpoint}`)
   }

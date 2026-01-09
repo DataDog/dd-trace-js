@@ -46,6 +46,7 @@ const plugins = {
   get dns () { return require('../../../datadog-plugin-dns/src') },
   get 'dd-trace-api' () { return require('../../../datadog-plugin-dd-trace-api/src') },
   get elasticsearch () { return require('../../../datadog-plugin-elasticsearch/src') },
+  get electron () { return require('../../../datadog-plugin-electron/src') },
   get express () { return require('../../../datadog-plugin-express/src') },
   get fastify () { return require('../../../datadog-plugin-fastify/src') },
   get 'find-my-way' () { return require('../../../datadog-plugin-find-my-way/src') },

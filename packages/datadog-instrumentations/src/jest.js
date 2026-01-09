@@ -883,7 +883,7 @@ function getCliWrapper (isNewJestVersion) {
       const timeoutPromise = new Promise((resolve) => {
         timeoutId = setTimeout(() => {
           resolve('timeout')
-        }, FLUSH_TIMEOUT).unref()
+        }, FLUSH_TIMEOUT).unref?.()
       })
 
       testSessionFinishCh.publish({
