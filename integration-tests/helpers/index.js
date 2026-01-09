@@ -24,6 +24,11 @@ const { DEBUG } = process.env
 // This is set by the setShouldKill function
 let shouldKill
 
+// Symbol constants for dynamic value matching in assertObjectContains
+const ANY_STRING = Symbol('test.ANY_STRING')
+const ANY_NUMBER = Symbol('test.ANY_NUMBER')
+const ANY_VALUE = Symbol('test.ANY_VALUE')
+
 /**
  * @param {string} filename
  * @param {string} cwd
@@ -566,14 +571,26 @@ function checkSpansForServiceName (spans, name) {
  * @param {(data: Buffer) => void} [stdioHandler]
  * @param {Record<string, string|undefined>} [additionalEnvArgs]
  */
-async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
+async function spawnPluginIntegrationTestProc (
+  cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
   if (typeof stdioHandler !== 'function' && !additionalEnvArgs) {
     additionalEnvArgs = stdioHandler
     stdioHandler = undefined
   }
-  additionalEnvArgs = additionalEnvArgs || {}
+  additionalEnvArgs = { ...additionalEnvArgs }
+
+  let NODE_OPTIONS = `--loader=${hookFile}`
+  if (additionalEnvArgs.NODE_OPTIONS !== undefined) {
+    if (/--(loader|import)/.test(additionalEnvArgs.NODE_OPTIONS ?? '')) {
+      NODE_OPTIONS = additionalEnvArgs.NODE_OPTIONS
+    } else {
+      NODE_OPTIONS += ` ${additionalEnvArgs.NODE_OPTIONS}`
+    }
+    delete additionalEnvArgs.NODE_OPTIONS
+  }
+
   let env = /** @type {Record<string, string|undefined>} */ ({
-    NODE_OPTIONS: `--loader=${hookFile}`,
+    NODE_OPTIONS,
     DD_TRACE_AGENT_PORT: String(agentPort),
     DD_TRACE_FLUSH_INTERVAL: '0'
   })
@@ -635,9 +652,8 @@ function setShouldKill (value) {
   })
 }
 
-// @ts-expect-error assert.partialDeepStrictEqual does not exist on older Node.js versions
-// eslint-disable-next-line n/no-unsupported-features/node-builtins
-const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected, msg) {
+// Implementation with optional matcher support (ANY_STRING, ANY_NUMBER, ANY_VALUE)
+function assertObjectContainsImpl (actual, expected, msg, useMatchers) {
   if (expected === null || typeof expected !== 'object') {
     assert.strictEqual(actual, expected, msg)
     return
@@ -652,7 +668,7 @@ const assertObjectContains = assert.partialDeepStrictEqual || function assertObj
         const actualItem = actual[i]
         try {
           if (expectedItem !== null && typeof expectedItem === 'object') {
-            assertObjectContains(actualItem, expectedItem, msg)
+            assertObjectContainsImpl(actualItem, expectedItem, msg, useMatchers)
           } else {
             assert.strictEqual(actualItem, expectedItem, msg)
           }
@@ -670,11 +686,36 @@ const assertObjectContains = assert.partialDeepStrictEqual || function assertObj
 
   for (const [key, val] of Object.entries(expected)) {
     assert.ok(Object.hasOwn(actual, key), msg)
-    if (val !== null && typeof val === 'object') {
-      assertObjectContains(actual[key], val, msg)
+    if (useMatchers && val === ANY_STRING) {
+      assert.strictEqual(typeof actual[key], 'string', `Expected ${key} to be a string but got ${typeof actual[key]}`)
+    } else if (useMatchers && val === ANY_NUMBER) {
+      assert.strictEqual(typeof actual[key], 'number', `Expected ${key} to be a number but got ${typeof actual[key]}`)
+    } else if (useMatchers && val === ANY_VALUE) {
+      assert.ok(actual[key] !== undefined, `Expected ${key} to be present but it was undefined`)
+    } else if (val !== null && typeof val === 'object') {
+      assertObjectContainsImpl(actual[key], val, msg, useMatchers)
     } else {
       assert.ok(actual, msg)
       assert.strictEqual(actual[key], expected[key], msg)
+    }
+  }
+}
+
+// Main assertObjectContains: tries partialDeepStrictEqual or strict first, falls back to matchers
+const assertObjectContains = function assertObjectContains (actual, expected, msg) {
+  // @ts-expect-error assert.partialDeepStrictEqual does not exist on older Node.js versions
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  const assertionFn = assert.partialDeepStrictEqual ||
+    ((actual, expected, msg) => assertObjectContainsImpl(actual, expected, msg, false))
+
+  try {
+    assertionFn(actual, expected, msg)
+  } catch (originalError) {
+    // First attempt failed, retry with matcher support
+    try {
+      assertObjectContainsImpl(actual, expected, msg, true)
+    } catch {
+      throw originalError
     }
   }
 }
@@ -688,6 +729,9 @@ function assertUUID (actual, msg = 'not a valid UUID') {
 }
 
 module.exports = {
+  ANY_NUMBER,
+  ANY_STRING,
+  ANY_VALUE,
   FakeAgent,
   hookFile,
   assertObjectContains,

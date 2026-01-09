@@ -1,10 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('tap').mocha
+
+const { describe, it } = require('mocha')
 
 require('../../../../dd-trace/test/setup/core')
-
 const parseTags = require('../../../src/utils/src/parse-tags')
 
 describe('parseTags', () => {

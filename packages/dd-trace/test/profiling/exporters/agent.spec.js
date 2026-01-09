@@ -1,19 +1,18 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
-const express = require('express')
-const upload = require('multer')()
-const { Profile } = require('../../../../../vendor/dist/pprof-format')
 const os = require('node:os')
 const path = require('node:path')
 const { request } = require('node:http')
 
-require('../../setup/core')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+const express = require('express')
+const upload = require('multer')()
 
+const { Profile } = require('../../../../../vendor/dist/pprof-format')
+require('../../setup/core')
 const tracer = require('../../../../../init')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
@@ -439,7 +438,7 @@ describe('exporters/agent', function () {
     })
   })
 
-  describe('using UDS', () => {
+  ;(os.platform() === 'win32' ? describe.skip : describe)('using UDS', () => {
     let listener
 
     beforeEach(done => {
@@ -487,7 +486,7 @@ describe('exporters/agent', function () {
         exporter.export({ profiles, start, end, tags }).catch(reject)
       }))
     })
-  }, { skip: os.platform() === 'win32' })
+  })
 })
 
 function assertIsProfile (obj, msg) {

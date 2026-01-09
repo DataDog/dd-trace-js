@@ -1,13 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
-
 const Tracer = require('../src/tracer')
 const Span = require('../src/opentracing/span')
 const getConfig = require('../src/config')

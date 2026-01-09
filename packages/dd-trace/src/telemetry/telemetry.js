@@ -9,6 +9,7 @@ const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
 const telemetryLogger = require('./logs')
 const logger = require('../log')
+const processTags = require('../process-tags')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
@@ -78,7 +79,8 @@ function getIntegrations () {
     newIntegrations.push({
       name: pluginName,
       enabled: pluginManager._pluginsByName[pluginName]._enabled,
-      auto_enabled: true
+      auto_enabled: true,
+      [processTags.TELEMETRY_FIELD_NAME]: processTags.tagsObject
     })
     sentIntegrations.add(pluginName)
   }
@@ -155,7 +157,8 @@ function createAppObject (config) {
     service_version: config.version,
     tracer_version: tracerVersion,
     language_name: 'nodejs',
-    language_version: process.versions.node
+    language_version: process.versions.node,
+    process_tags: processTags.tagsObject
   }
 }
 

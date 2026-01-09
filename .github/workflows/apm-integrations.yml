@@ -152,6 +152,22 @@ jobs:
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
+  bullmq:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.0-alpine
+        ports:
+          - 6379:6379
+    env:
+      PLUGINS: bullmq
+      SERVICES: redis
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
   bunyan:
     runs-on: ubuntu-latest
     env:
@@ -1036,6 +1052,15 @@ jobs:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
   prisma:
+    strategy:
+      matrix:
+        include:
+          - node-version: 18
+            range: '>=6.1.0 <7.0.0'
+            range_clean: gte.6.16.0.and.lt.7.0.0
+          - node-version: 'latest'
+            range: ''
+            range_clean: all
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -1047,11 +1072,26 @@ jobs:
     env:
       PLUGINS: prisma
       SERVICES: prisma
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-      - uses: ./.github/actions/plugins/test
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          version: ${{ matrix.node-version }}
+      - uses: ./.github/actions/install
+      - name: Run tests
+        run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always() && github.actor != 'dependabot[bot]'
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   process:
     runs-on: ubuntu-latest

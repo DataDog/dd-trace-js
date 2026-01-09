@@ -10,42 +10,37 @@
 
 - Install dependencies: `yarn install`
 
-**Note:** This project uses yarn, not npm. Always use `yarn` commands instead of `npm` commands.
+**This project uses yarn, not npm. Always use `yarn` commands instead of `npm` commands.**
 
 ## Project Overview
 
 dd-trace is the Datadog client library for Node.js.
 
 **Key Directories:**
-- `packages/dd-trace/` - Main library (APM, profiling, debugger, appsec, llmobs, CI visibility)
+- `packages/dd-trace/` - Main library (APM, profiling, debugger, appsec, llmobs, CI visibility, etc)
 - `packages/datadog-core/` - Async context storage, shared utilities
 - `packages/datadog-instrumentations/` - Instrumentation implementations
 - `packages/datadog-plugin-*/` - 100+ plugins for third-party integrations
 - `integration-tests/` - E2E integration tests
 - `benchmark/` - Performance benchmarks
 
+**Package Structure:**
+
+Each package under `packages/` follows a consistent structure:
+- `src/` - Source code for the package
+- `test/` - Unit tests for the package
+- Unit test files always follow the `*.spec.js` naming convention
+- Test directories may also contain helper files
+
 ## Testing Instructions
-
-### Testing Workflow
-
-When developing a feature or fixing a bug:
-
-1. Start with individual test files to verify things work
-2. Run component tests: `yarn test:<component>` (e.g., `yarn test:debugger`, `yarn test:appsec`)
-3. Run integration tests: `yarn test:integration:<component>` (e.g., `yarn test:integration:debugger`)
 
 ### Running Individual Tests
 
-**IMPORTANT**: Never run `yarn test` directly. Use `mocha` or `tap` directly on test files.
+**IMPORTANT**: Never run `yarn test` directly. Use `mocha` directly on test files.
 
 **Mocha unit tests:**
 ```bash
 ./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" path/to/test.spec.js
-```
-
-**Tap unit tests:**
-```bash
-./node_modules/.bin/tap path/to/test.spec.js
 ```
 
 **Integration tests:**
@@ -58,8 +53,6 @@ When developing a feature or fixing a bug:
 
 **Enable debug logging:**
 - Prefix with `DD_TRACE_DEBUG=true`
-
-**Note**: New tests should be written using mocha, not tap. Existing tap tests use mocha-style `describe` and `it` blocks.
 
 ### Plugin Tests
 
@@ -98,6 +91,7 @@ Use `node:assert/strict` for standard assertions. For partial deep object checks
 
 ```js
 const assert = require('node:assert/strict')
+
 const { assertObjectContains } = require('../helpers')
 
 assert.equal(actual, expected)
@@ -113,7 +107,10 @@ assertObjectContains(response, { status: 200, body: { user: { name: 'Alice' } } 
 ### Linting & Naming
 - Lint: `yarn lint` / `yarn lint:fix`
 - Files: kebab-case
-- JSDoc: TypeScript-compatible syntax (`@param {string}`, `@returns {Promise<void>}`, `@typedef`)
+
+### JSDoc
+- Use TypeScript-compatible syntax (`@param {string}`, `@returns {Promise<void>}`, `@typedef`)
+- Never use `any` (be specific or use `unknown` if type is truly unknown)
 
 ### Import Ordering
 
@@ -143,7 +140,6 @@ const log = require('../log')
   const { NODE_MAJOR } = require('./version')
   if (NODE_MAJOR >= 20) { /* Use Node.js 20+ API */ }
   ```
-- **Prefix Node.js core modules with `node:`** (e.g., `require('node:assert')`)
 
 ### Performance and Memory
 
@@ -205,6 +201,16 @@ Avoid try/catch in hot paths - validate inputs early
 - **Readable formatting**: Empty lines for grouping, split complex objects, extract variables
 - **Avoid large refactors**: Iterative changes, gradual pattern introduction
 - **Test changes**: Test logic (not mocks), failure cases, edge cases - always update tests
+
+### Implementation and Testing Workflow
+
+**When making any code or type change, the following MUST be followed:**
+
+1. **Understand** - Read relevant code and tests to understand the current implementation
+2. **Implement** - Make the necessary code changes
+3. **Update Tests** - Modify or add tests to cover the changes
+4. **Run Tests** - Execute the relevant test files to verify everything works
+5. **Verify** - Confirm all tests pass before marking the task as complete
 
 ### Always Consider Backportability
 

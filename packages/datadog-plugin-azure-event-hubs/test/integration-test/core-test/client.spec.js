@@ -10,23 +10,22 @@ const {
   assertObjectContains,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
-} = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+} = require('../../../../../integration-tests/helpers')
+const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
-const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000' }
-
-// TODO: Fix this test / esm issue
-describe.skip('esm', () => {
+describe('esm', () => {
   let agent
   let proc
+  let spawnEnv
 
   withVersions('azure-event-hubs', '@azure/event-hubs', version => {
     useSandbox([`'@azure/event-hubs@${version}'`], false, [
-      './packages/datadog-plugin-azure-event-hubs/test/integration-test/*'])
+      './packages/datadog-plugin-azure-event-hubs/test/integration-test/core-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
       process.env.DD_TRACE_DISABLED_PLUGINS = 'amqplib,amqp10,rhea,net'
+      spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000', NODE_OPTIONS: '--experimental-global-webcrypto' }
     })
 
     afterEach(async () => {
