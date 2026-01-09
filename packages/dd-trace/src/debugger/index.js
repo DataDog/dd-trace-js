@@ -84,7 +84,7 @@ function start (config, rc) {
   worker.on('error', (err) => log.error('[debugger] worker thread error', err))
   worker.on('messageerror', (err) => log.error('[debugger] received "messageerror" from worker', err))
 
-  worker.on('exit', (code) => {
+  worker.once('exit', (code) => {
     const error = new Error(`Dynamic Instrumentation worker thread exited unexpectedly with code ${code}`)
 
     log.error('[debugger] worker thread exited unexpectedly', error)
