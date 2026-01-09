@@ -390,7 +390,7 @@ describe('SpanStatsProcessor', () => {
       TracerVersion: pkg.version,
       RuntimeID: processor.tags['runtime-id'],
       Sequence: processor.sequence,
-      ProcessTags: processTags.tagsObject
+      ProcessTags: processTags.serialized
     }))
   })
 
@@ -409,7 +409,7 @@ describe('SpanStatsProcessor', () => {
       TracerVersion: pkg.version,
       RuntimeID: processor.tags['runtime-id'],
       Sequence: processor.sequence,
-      ProcessTags: processTags.tagsObject
+      ProcessTags: processTags.serialized
     }))
   })
 })

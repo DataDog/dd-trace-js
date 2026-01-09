@@ -178,7 +178,7 @@ class SpanStatsProcessor {
       TracerVersion: pkg.version,
       RuntimeID: this.tags['runtime-id'],
       Sequence: ++this.sequence,
-      ProcessTags: processTags.tagsObject
+      ProcessTags: processTags.serialized
     })
   }
 

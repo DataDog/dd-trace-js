@@ -73,7 +73,7 @@ describe('span-stats-encode', () => {
       TracerVersion: '1.2.3',
       RuntimeID: 'some-runtime-id',
       Sequence: 1,
-      ProcessTags: processTags.tagsObject
+      ProcessTags: processTags.serialized
     }
   })
 
