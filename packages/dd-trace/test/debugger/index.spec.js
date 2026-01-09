@@ -73,6 +73,13 @@ describe('debugger/index', () => {
     }
   })
 
+  afterEach(() => {
+    // Clean up any started workers
+    if (DynamicInstrumentation.isStarted()) {
+      DynamicInstrumentation.stop()
+    }
+  })
+
   describe('isStarted', () => {
     it('should return false initially', () => {
       assert.strictEqual(DynamicInstrumentation.isStarted(), false)
@@ -103,9 +110,7 @@ describe('debugger/index', () => {
 
     it('should set product handler for LIVE_DEBUGGING', () => {
       DynamicInstrumentation.start(config, rc)
-
-      sinon.assert.calledOnce(rc.setProductHandler)
-      sinon.assert.calledWith(rc.setProductHandler, 'LIVE_DEBUGGING', sinon.match.func)
+      sinon.assert.calledOnceWithExactly(rc.setProductHandler, 'LIVE_DEBUGGING', sinon.match.func)
     })
 
     it('should unref all handles to prevent keeping process alive', () => {
@@ -117,7 +122,6 @@ describe('debugger/index', () => {
       sinon.assert.calledOnce(worker.unref)
 
       // All message channel ports should be unreffed
-      // We created 3 MessageChannels: probe, log, config
       assert.strictEqual(messageChannels.length, 3)
 
       for (const channel of messageChannels) {
@@ -128,28 +132,34 @@ describe('debugger/index', () => {
   })
 
   describe('stop', () => {
-    it('should do nothing if not started', () => {
+    it('should change isStarted state to false', () => {
+      DynamicInstrumentation.start(config, rc)
+      assert.strictEqual(DynamicInstrumentation.isStarted(), true)
       DynamicInstrumentation.stop()
       assert.strictEqual(DynamicInstrumentation.isStarted(), false)
     })
 
-    it('should terminate worker', () => {
-      DynamicInstrumentation.start(config, rc)
-      const worker = Worker.lastCall.returnValue
-
+    it('should do nothing if not started', () => {
       DynamicInstrumentation.stop()
-
-      sinon.assert.calledOnce(worker.terminate)
       assert.strictEqual(DynamicInstrumentation.isStarted(), false)
+      sinon.assert.notCalled(rc.removeProductHandler)
     })
 
     it('should clean up all resources', () => {
       DynamicInstrumentation.start(config, rc)
       const worker = Worker.lastCall.returnValue
 
+      // Set up some pending ack callbacks to verify they're cleaned up
+      const rcHandler = rc.setProductHandler.firstCall.args[1]
+      const ackCallback1 = sinon.stub()
+      const ackCallback2 = sinon.stub()
+
+      // Simulate remote config sending probes that need acknowledgment
+      rcHandler('apply', { id: 'probe1' }, 'config-id-1', ackCallback1)
+      rcHandler('apply', { id: 'probe2' }, 'config-id-2', ackCallback2)
+
       DynamicInstrumentation.stop()
 
-      // Should remove product handler from RC
       sinon.assert.calledWith(rc.removeProductHandler, 'LIVE_DEBUGGING')
 
       // Should remove all listeners from worker
@@ -158,18 +168,31 @@ describe('debugger/index', () => {
       // Should terminate worker
       sinon.assert.calledOnce(worker.terminate)
 
+      // Should invoke all pending ack callbacks with undefined (graceful shutdown)
+      sinon.assert.calledOnceWithExactly(ackCallback1, undefined)
+      sinon.assert.calledOnceWithExactly(ackCallback2, undefined)
+
       assert.strictEqual(DynamicInstrumentation.isStarted(), false)
     })
 
     it('should handle termination errors gracefully', () => {
       DynamicInstrumentation.start(config, rc)
       const worker = Worker.lastCall.returnValue
-      worker.terminate.throws(new Error('Termination error'))
+      const terminationError = new Error('Termination error')
+      worker.terminate.throws(terminationError)
+
+      // Set up some pending ack callbacks
+      const rcHandler = rc.setProductHandler.firstCall.args[1]
+      const ackCallback = sinon.stub()
+      rcHandler('apply', { id: 'probe1' }, 'config-id-1', ackCallback)
 
       // Should not throw
       DynamicInstrumentation.stop()
 
       assert.strictEqual(DynamicInstrumentation.isStarted(), false)
+
+      // Pending ack callbacks should be invoked with the error
+      sinon.assert.calledOnceWithExactly(ackCallback, terminationError)
     })
   })
 
@@ -181,12 +204,30 @@ describe('debugger/index', () => {
 
     it('should post message to config channel when started', () => {
       DynamicInstrumentation.start(config, rc)
+      const configChannel = messageChannels[2]
+      const configPort = configChannel.port2
+      configPort.postMessage.resetHistory()
 
       DynamicInstrumentation.configure(config)
 
-      // The configure function should have posted a message
-      // We can't directly test this without deeper mocking, but we ensure it doesn't throw
-      assert.strictEqual(DynamicInstrumentation.isStarted(), true)
+      sinon.assert.calledOnce(configPort.postMessage)
+
+      const postedConfig = configPort.postMessage.firstCall.args[0]
+      assert.deepStrictEqual(postedConfig, {
+        commitSHA: 'test-sha',
+        debug: false,
+        dynamicInstrumentation: {
+          enabled: true
+        },
+        hostname: 'test-host',
+        logLevel: 'info',
+        port: 8126,
+        propagateProcessTags: undefined,
+        repositoryUrl: 'https://github.com/test/repo',
+        runtimeId: 'test-runtime-id',
+        service: 'test-service',
+        url: 'http://localhost:8126/'
+      })
     })
   })
 
@@ -242,7 +283,6 @@ describe('debugger/index', () => {
     it('should do nothing when path is not provided', () => {
       // probeFile is undefined by default (not set in config)
       DynamicInstrumentation.start(config, rc)
-
       sinon.assert.notCalled(readFileStub)
     })
 
@@ -497,12 +537,5 @@ describe('debugger/index', () => {
       sinon.assert.calledOnce(ackCallback)
       assert.strictEqual(ackCallback.firstCall.args[0], terminationError)
     })
-  })
-
-  afterEach(() => {
-    // Clean up any started workers
-    if (DynamicInstrumentation.isStarted()) {
-      DynamicInstrumentation.stop()
-    }
   })
 })
