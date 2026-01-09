@@ -309,6 +309,10 @@ async function createSandbox (
     addFlags.push('--prefer-offline')
   }
 
+  if (process.env.OMIT) {
+    addFlags.push(...process.env.OMIT.split(',').map(omit => `--omit=${omit}`))
+  }
+
   if (DEBUG !== 'true') {
     addFlags.push('--silent')
   }
