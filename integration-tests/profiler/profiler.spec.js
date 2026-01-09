@@ -24,6 +24,7 @@ if (process.platform !== 'win32') {
 }
 
 const TIMEOUT = 30000
+const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
 
 function checkProfiles (agent, proc, timeout,
   expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, expectSeq = true
@@ -95,9 +96,9 @@ function processExitPromise (proc, timeout, expectBadExit = false) {
 }
 
 async function getLatestProfile (cwd, pattern) {
-  const pprofGzipped = await readLatestFile(cwd, pattern)
-  const pprofUnzipped = zlib.gunzipSync(pprofGzipped)
-  return { profile: Profile.decode(pprofUnzipped), encoded: pprofGzipped.toString('base64') }
+  const pprofCompressed = await readLatestFile(cwd, pattern)
+  const pprofUncompressed = zlib[isAtLeast24 ? 'zstdDecompressSync' : 'gunzipSync'](pprofCompressed)
+  return { profile: Profile.decode(pprofUncompressed), encoded: pprofCompressed.toString('base64') }
 }
 
 async function readLatestFile (cwd, pattern) {
@@ -360,7 +361,7 @@ describe('profiler', () => {
       const execArgv = []
       if (satisfies(process.versions.node, '>=22.9.0')) {
         env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = 1
-        if (!satisfies(process.versions.node, '>=24.0.0')) {
+        if (!isAtLeast24) {
           // For Node 22.9.0+, use the experimental command line flag for Node to enable
           // async context frame. Node 24 has it enabled by default.
           execArgv.push('--experimental-async-context-frame')
