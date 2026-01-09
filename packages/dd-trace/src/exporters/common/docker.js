@@ -1,7 +1,7 @@
 'use strict'
 
 const fs = require('fs')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getEnvironmentVariable } = require('../../config/helper')
 
 const DD_EXTERNAL_ENV = getEnvironmentVariable('DD_EXTERNAL_ENV')
 

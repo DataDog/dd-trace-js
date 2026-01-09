@@ -16,7 +16,7 @@ const log = require('../../../log')
 const { isMainThread } = require('worker_threads')
 const { LOG_MESSAGE, REWRITTEN_MESSAGE } = require('./constants')
 const orchestrionConfig = require('../../../../../datadog-instrumentations/src/orchestrion-config')
-const { getEnvironmentVariable } = require('../../../config-helper')
+const { getEnvironmentVariable } = require('../../../config/helper')
 
 let config
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')

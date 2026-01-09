@@ -8,7 +8,7 @@ const { ConsoleLogger } = require('./loggers/console')
 const { tagger } = require('./tagger')
 const fs = require('fs')
 const { fileURLToPath } = require('url')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getEnvironmentVariable } = require('../config/helper')
 
 const logger = new ConsoleLogger()
 const timeoutMs = 15 * 1000

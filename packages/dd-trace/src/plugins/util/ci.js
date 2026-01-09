@@ -32,7 +32,7 @@ const {
   GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
-const { getEnvironmentVariable, getEnvironmentVariables } = require('../../config-helper')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../../config/helper')
 
 // Receives a string with the form 'John Doe <john.doe@gmail.com>'
 // and returns { name: 'John Doe', email: 'john.doe@gmail.com' }

@@ -16,8 +16,8 @@ const { getIsAzureFunction } = require('../serverless')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
-const { getEnvironmentVariables } = require('../config-helper')
-const defaults = require('../config_defaults')
+const { getEnvironmentVariables } = require('../config/helper')
+const defaults = require('../config/defaults')
 
 class Config {
   constructor (options = {}) {

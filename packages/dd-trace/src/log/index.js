@@ -5,7 +5,7 @@ const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = r
 const logWriter = require('./writer')
 const { Log, LogConfig, NoTransmitError } = require('./log')
 const { memoize } = require('./utils')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getEnvironmentVariable } = require('../config/helper')
 
 const config = {
   enabled: false,

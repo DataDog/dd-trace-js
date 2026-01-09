@@ -19,7 +19,7 @@ const {
 
 const { normalizeRef } = require('./ci')
 const { filterSensitiveInfoFromRepository } = require('./url')
-const { getEnvironmentVariables } = require('../../config-helper')
+const { getEnvironmentVariables } = require('../../config/helper')
 
 function removeEmptyValues (tags) {
   return Object.keys(tags).reduce((filteredTags, tag) => {

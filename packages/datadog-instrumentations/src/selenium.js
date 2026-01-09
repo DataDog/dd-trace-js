@@ -2,7 +2,7 @@
 
 const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 
 const ciSeleniumDriverGetStartCh = channel('ci:selenium:driver:get')
 

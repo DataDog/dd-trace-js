@@ -4,7 +4,7 @@ const { channel } = require('dc-polyfill')
 const { isFalse, isTrue, normalizePluginEnvName } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 
 // Test optimization plugins that should only be enabled when isCiVisibility is true
 const TEST_OPTIMIZATION_PLUGINS = new Set([
