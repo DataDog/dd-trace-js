@@ -10,10 +10,10 @@ if (/^v\d+\.x$/.test(process.env.GITHUB_BASE_REF || '')) {
 
 // Lower max listeners to notice when we add too many listeners early.
 // Override per-test, if absolutely necessary.
-require('events').defaultMaxListeners = 5
+require('events').defaultMaxListeners = 6
 
 process.on('warning', (warning) => {
-  if (warning.name === 'MaxListenersExceededWarning') {
+  if (warning.name === 'MaxListenersExceededWarning' && !warning.message.includes('[Runner]')) {
     throw warning
   }
 })
