@@ -109,7 +109,7 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
       errorCh.publish(ctx)
     }
     finishCh.runStores(ctx, () => {})
-    cleanupListener()
+    cleanupOtherListeners()
   }
 
   const localListener = function (error) {
@@ -120,10 +120,10 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
       errorCh.publish(ctx)
     }
     finishCh.runStores(ctx, () => {})
-    cleanupListener()
+    cleanupOtherListeners()
   }
 
-  const cleanupListener = function () {
+  const cleanupOtherListeners = function () {
     socket.removeListener('connect', localListener)
     events.forEach(event => {
       socket.removeListener(event, wrapListener)

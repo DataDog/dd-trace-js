@@ -29,7 +29,7 @@ function start (config, rc) {
   const logChannel = new MessageChannel()
   configChannel = new MessageChannel()
 
-  process[Symbol.for('datadog:node:util:types')] = types
+  globalThis[Symbol.for('dd-trace')].utilTypes = types
 
   readProbeFile(config.dynamicInstrumentation.probeFile, (probes) => {
     const action = 'apply'

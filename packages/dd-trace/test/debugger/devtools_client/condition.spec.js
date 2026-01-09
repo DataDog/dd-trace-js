@@ -52,7 +52,8 @@ const testCases = [
 describe('Expression language', function () {
   beforeEach(() => {
     // Mock the presence of `util.types` as it would be available when DI is active in the tracer
-    process[Symbol.for('datadog:node:util:types')] = require('util').types
+    globalThis[Symbol.for('dd-trace')] ??= {}
+    globalThis[Symbol.for('dd-trace')].utilTypes = require('util').types
   })
 
   describe('condition compilation', function () {

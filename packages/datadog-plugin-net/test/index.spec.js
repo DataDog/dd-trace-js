@@ -19,7 +19,11 @@ describe('Plugin', () => {
   let tracer
   let parent
 
-  ['net', 'node:net'].forEach(pluginToBeLoaded => {
+  before(() => {
+    require('events').defaultMaxListeners = 4
+  })
+
+  ;['net', 'node:net'].forEach(pluginToBeLoaded => {
     describe(pluginToBeLoaded, () => {
       afterEach(() => {
         return agent.close()
