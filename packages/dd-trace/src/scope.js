@@ -18,8 +18,10 @@ class Scope {
 
     const oldStore = storage('legacy').getStore()
     const newStore = span ? storage('legacy').getStore(span._store) : oldStore
+    // Don't propagate noop from stored context - activating a span means tracing is wanted
+    const { noop, ...rest } = newStore || {}
 
-    storage('legacy').enterWith({ ...newStore, span })
+    storage('legacy').enterWith({ ...rest, span })
 
     try {
       return callback()

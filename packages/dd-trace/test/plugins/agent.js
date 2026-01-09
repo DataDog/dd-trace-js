@@ -40,6 +40,8 @@ function isMatchingTrace (spans, spanResourceMatch) {
  * Native spans may encode numeric fields as smaller integer types
  * which msgpack decodes as regular numbers instead of BigInt.
  * This ensures start and duration are always BigInt for test consistency.
+ * Also normalizes the error field to 0 if not present (native spans
+ * may omit error:0 to save space, but tests expect it to be present).
  */
 function normalizeSpanFields (traces) {
   if (!Array.isArray(traces)) return
@@ -52,6 +54,10 @@ function normalizeSpanFields (traces) {
         }
         if (typeof span.duration === 'number') {
           span.duration = BigInt(span.duration)
+        }
+        // Native spans may omit error:0, so default to 0
+        if (span.error === undefined) {
+          span.error = 0
         }
       }
     }

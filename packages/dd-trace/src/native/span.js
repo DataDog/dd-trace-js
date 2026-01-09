@@ -124,6 +124,9 @@ class NativeDatadogSpan {
     // Queue the span name to native storage
     this._spanContext._syncNameToNative(operationName)
 
+    // Set default error to 0 (non-error state) to match regular span behavior
+    this._spanContext.setTag('error', 0)
+
     // Add tags using setTag() to sync to native storage
     for (const [key, value] of Object.entries(tags)) {
       this._spanContext.setTag(key, value)

@@ -90,6 +90,13 @@ class NativeSpanContext extends DatadogSpanContext {
         return
 
       case 'error':
+        // fs.operation spans have special handling - errors don't set the span error field
+        // This matches the behavior in span_format.js which skips extractError for fs.operation
+        if (this._name === 'fs.operation') {
+          // Store the error info in meta tags but don't set span.error = 1
+          // The error details are still accessible via meta tags
+          return
+        }
         this.#nativeSpans.queueOp(
           OpCode.SetError,
           this._nativeSpanId,
