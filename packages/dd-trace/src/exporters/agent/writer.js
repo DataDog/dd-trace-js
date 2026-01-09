@@ -6,6 +6,7 @@ const runtimeMetrics = require('../../runtime_metrics')
 const log = require('../../log')
 const tracerVersion = require('../../../../../package.json').version
 const BaseWriter = require('../common/writer')
+const propagationHash = require('../../propagation-hash')
 
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
@@ -26,7 +27,7 @@ class AgentWriter extends BaseWriter {
     runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
 
     const { _headers, _lookup, _protocolVersion, _url } = this
-    makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, true, (err, res, status) => {
+    makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, true, (err, res, status, headers) => {
       if (status) {
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
@@ -48,6 +49,15 @@ class AgentWriter extends BaseWriter {
       }
 
       log.debug('Response from the agent: %s', res)
+
+      // Capture container tags hash from agent response headers
+      if (headers) {
+        const containerTagsHash = headers['datadog-container-tags']
+        if (containerTagsHash) {
+          propagationHash.updateContainerTagsHash(containerTagsHash)
+          log.debug('Updated container tags hash from agent response: %s', containerTagsHash)
+        }
+      }
 
       try {
         this._prioritySampler.update(JSON.parse(res).rate_by_service)
@@ -87,14 +97,14 @@ function makeRequest (version, data, count, url, headers, lookup, needsStartupLo
 
   log.debug('Request to the agent: %j', options)
 
-  request(data, options, (err, res, status) => {
+  request(data, options, (err, res, status, headers) => {
     if (needsStartupLog) {
       // Note that logging will only happen once, regardless of how many times this is called.
       startupLog({
         agentError: status !== 404 && status !== 200 ? err : undefined
       })
     }
-    cb(err, res, status)
+    cb(err, res, status, headers)
   })
 }
 

@@ -26,17 +26,28 @@ function shaHash (checkpointString) {
  * @param {string} env
  * @param {string[]} edgeTags
  * @param {Buffer} parentHash
+ * @param {bigint | null} propagationHashBigInt - Optional propagation hash for process/container tags
  */
-function computeHash (service, env, edgeTags, parentHash) {
+function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt = null) {
   edgeTags.sort()
   const hashableEdgeTags = edgeTags.filter(item => item !== 'manual_checkpoint:true')
 
-  const key = `${service}${env}${hashableEdgeTags.join('')}${parentHash}`
+  // Include propagation hash in cache key if present
+  const propagationPart = propagationHashBigInt ? `:${propagationHashBigInt.toString(16)}` : ''
+  const key = `${service}${env}${hashableEdgeTags.join('')}${parentHash}${propagationPart}`
+
   let value = cache.get(key)
   if (value) {
     return value
   }
-  const currentHash = shaHash(`${service}${env}` + hashableEdgeTags.join(''))
+
+  // Include propagation hash in hash input if present
+  const baseString = `${service}${env}` + hashableEdgeTags.join('')
+  const hashInput = propagationHashBigInt
+    ? `${baseString}:${propagationHashBigInt.toString(16)}`
+    : baseString
+
+  const currentHash = shaHash(hashInput)
   const buf = Buffer.concat([currentHash, parentHash], 16)
   value = shaHash(buf.toString())
   cache.set(key, value)
