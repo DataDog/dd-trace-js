@@ -98,6 +98,9 @@ assert.equal(actual, expected)
 assertObjectContains(response, { status: 200, body: { user: { name: 'Alice' } } })
 ```
 
+When writing assertions, use the minimal amount of individual assertion calls possible.
+So instead of writing multiple assert.strictEqual calls, use a single assert.deepStrictEqual call or assertObjectContains.
+
 ### Time-Based Testing
 
 **Never rely on actual time passing in unit tests.** Use sinon's fake timers to mock time and make tests deterministic and fast.
@@ -111,6 +114,7 @@ assertObjectContains(response, { status: 200, body: { user: { name: 'Alice' } } 
 ### JSDoc
 - Use TypeScript-compatible syntax (`@param {string}`, `@returns {Promise<void>}`, `@typedef`)
 - Never use `any` (be specific or use `unknown` if type is truly unknown)
+- Write the most specific types possible by reading the overall context
 
 ### Import Ordering
 
