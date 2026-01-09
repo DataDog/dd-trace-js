@@ -101,8 +101,8 @@ function patch (http, methodName) {
               case 'response': {
                 const res = arg
                 ctx.res = res
-                res.on('end', finish)
-                res.on(errorMonitor, finish)
+                res.once('end', finish)
+                res.once(errorMonitor, finish)
                 break
               }
               case 'connect':

@@ -17,6 +17,7 @@
 dd-trace is the Datadog client library for Node.js.
 
 **Key Directories:**
+
 - `packages/dd-trace/` - Main library (APM, profiling, debugger, appsec, llmobs, CI visibility, etc)
 - `packages/datadog-core/` - Async context storage, shared utilities
 - `packages/datadog-instrumentations/` - Instrumentation implementations
@@ -27,6 +28,7 @@ dd-trace is the Datadog client library for Node.js.
 **Package Structure:**
 
 Each package under `packages/` follows a consistent structure:
+
 - `src/` - Source code for the package
 - `test/` - Unit tests for the package
 - Unit test files always follow the `*.spec.js` naming convention
@@ -39,24 +41,29 @@ Each package under `packages/` follows a consistent structure:
 **IMPORTANT**: Never run `yarn test` directly. Use `mocha` directly on test files.
 
 **Mocha unit tests:**
+
 ```bash
 ./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" path/to/test.spec.js
 ```
 
 **Integration tests:**
+
 ```bash
 ./node_modules/.bin/mocha --timeout 60000 -r "packages/dd-trace/test/setup/core.js" path/to/test.spec.js
 ```
 
 **Target specific tests:**
+
 - Add `--grep "test name pattern"` flag
 
 **Enable debug logging:**
+
 - Prefix with `DD_TRACE_DEBUG=true`
 
 ### Plugin Tests
 
 **Use `PLUGINS` env var:**
+
 ```bash
 PLUGINS="amqplib" yarn test:plugins
 PLUGINS="amqplib|bluebird" yarn test:plugins  # pipe-delimited for multiple
@@ -64,6 +71,7 @@ PLUGINS="amqplib|bluebird" yarn test:plugins  # pipe-delimited for multiple
 ```
 
 **With external services** (check `.github/workflows/apm-integrations.yml` for `SERVICES`):
+
 ```bash
 export SERVICES="rabbitmq" PLUGINS="amqplib"
 docker compose up -d $SERVICES
@@ -81,6 +89,7 @@ yarn services && yarn test:plugins
 ```
 
 **Philosophy:**
+
 - Integration tests (running in sandboxes) don't count towards nyc coverage metrics
 - Don't add redundant unit tests solely to improve coverage numbers
 - Focus on covering important production code paths with whichever test type makes sense
@@ -105,16 +114,19 @@ assertObjectContains(response, { status: 200, body: { user: { name: 'Alice' } } 
 ## Code Style & Linting
 
 ### Linting & Naming
+
 - Lint: `yarn lint` / `yarn lint:fix`
 - Files: kebab-case
 
 ### JSDoc
+
 - Use TypeScript-compatible syntax (`@param {string}`, `@returns {Promise<void>}`, `@typedef`)
 - Never use `any` (be specific or use `unknown` if type is truly unknown)
 
 ### Import Ordering
 
 Separate groups with empty line, sort alphabetically within each:
+
 1. Node.js core modules (with `node:` prefix)
 2. Third-party modules
 3. Internal imports (by path proximity, then alpha)
@@ -134,23 +146,34 @@ const log = require('../log')
 ### ECMAScript and Node.js API Standards
 
 **Target Node.js 18.0.0 compatibility:**
+
 - Use modern JS features supported by Node.js (e.g., optional chaining `?.`, nullish coalescing `??`)
 - Guard newer APIs with version checks using [`version.js`](./version.js):
+
   ```js
   const { NODE_MAJOR } = require('./version')
   if (NODE_MAJOR >= 20) { /* Use Node.js 20+ API */ }
   ```
+
+### Event handlers
+
+- Use monitor symbols like `events.errorMonitor` when available
+- Use `.once()` methods instead of `.on()`, if the event is only needed once
+- Limit event additions to the absolute minimum required
+- If new 'beforeExit' events on `process` are needed, add them to globalThis[Symbol.for('dd-trace')].beforeExitHandlers
 
 ### Performance and Memory
 
 **CRITICAL: Tracer runs in application hot paths - every operation counts.**
 
 **Async/Await:**
+
 - Do NOT use `async/await` or promises in production code (npm package)
 - Allowed ONLY in: test files, worker threads (e.g., `packages/dd-trace/src/debugger/devtools_client/`)
 - Use callbacks or synchronous patterns instead
 
 **Memory:**
+
 - Minimize allocations in frequently-called paths
 - Avoid unnecessary objects, closures, arrays
 - Reuse objects and buffers
@@ -159,16 +182,19 @@ const log = require('../log')
 #### Array Iteration
 
 **Prefer `for-of`, `for`, `while` loops over functional methods (`map()`, `forEach()`, `filter()`):**
+
 - Avoid `items.forEach(item => process(item))` → use `for (const item of items) { process(item) }`
 - Avoid chaining `items.filter(...).map(...)` → use single loop with conditional push
 - Functional methods create closures and intermediate arrays
 
 **Functional methods acceptable in:**
+
 - Test files
 - Non-hot-path code where readability benefits
 - One-time initialization code
 
 **Loop selection:**
+
 - `for-of` - Simple iteration
 - `for` with index - Need index or better performance in hot paths
 - `while` - Custom iteration logic
@@ -195,6 +221,7 @@ Avoid try/catch in hot paths - validate inputs early
 ## Development Workflow
 
 ### Core Principles
+
 - **Search first**: Check for existing utilities/patterns before creating new code
 - **Small PRs**: Break large efforts into incremental, reviewable changes
 - **Descriptive code**: Self-documenting with verbs in function names; comment when needed
@@ -215,9 +242,11 @@ Avoid try/catch in hot paths - validate inputs early
 ### Always Consider Backportability
 
 **We always backport `master` to older versions.**
+
 - Keep breaking changes to a minimum
 - Don't use language/runtime features that are too new
 - **Guard breaking changes with version checks** using [`version.js`](./version.js):
+
   ```js
   const { DD_MAJOR } = require('./version')
   if (DD_MAJOR >= 6) {
@@ -248,21 +277,25 @@ Many integrations have corresponding plugins in `packages/datadog-plugin-*/` tha
 ### What Are Plugins?
 
 Plugins are modular code components in `packages/datadog-plugin-*/` directories that:
+
 - Subscribe to diagnostic channels to receive instrumentation events
 - Handle APM tracing logic (spans, metadata, error tracking)
 - Manage feature-specific logic (e.g., code origin tracking, LLM observability)
 
 **Plugin Base Classes:**
+
 - **`Plugin`** - Base class with diagnostic channel subscription, storage binding, enable/disable lifecycle. Use for non-tracing functionality.
 - **`TracingPlugin`** - Extends `Plugin` with APM tracing helpers (`startSpan()`, automatic trace events, `activeSpan` getter). Use for plugins creating trace spans.
 - **`CompositePlugin`** - Extends `Plugin` to compose multiple sub-plugins. Use when one integration needs multiple feature plugins (e.g., `express` combines tracing and code origin plugins).
 
 **Plugin Loading:**
+
 - Plugins load lazily when application `require()`s the corresponding library
 - Disable with `DD_TRACE_DISABLED_PLUGINS` or `DD_TRACE_<PLUGIN>_ENABLED=false`
 - Test framework plugins only load when Test Optimization mode (`isCiVisibility`) is enabled
 
 **When to Create a New Plugin:**
+
 1. Adding support for a new third-party library/framework
 2. Adding a new product feature that integrates with existing libraries (use `CompositePlugin`)
 

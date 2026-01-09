@@ -67,7 +67,7 @@ addHook({
       return run.apply(this, arguments)
     }
     // We flush when the worker ends with its test file (a mocha instance in a worker runs a single test file)
-    this.on('end', () => {
+    this.once('end', () => {
       workerFinishCh.publish()
     })
     this.on('test', getOnTestHandler(false))

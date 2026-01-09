@@ -39,13 +39,13 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
-    proc.on('error', reject)
+    proc.once('error', reject)
     let out = Buffer.alloc(0)
     proc.stdout.on('data', data => {
       out = Buffer.concat([out, data])
     })
     proc.stderr.pipe(process.stdout)
-    proc.on('exit', () => resolve(out.toString('utf8')))
+    proc.once('exit', () => resolve(out.toString('utf8')))
     if (shouldKill) {
       setTimeout(() => {
         if (proc.exitCode === null) proc.kill()
@@ -200,8 +200,8 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
         proc.url = `http://localhost:${port}`
         resolve(proc)
       })
-      .on('error', reject)
-      .on('exit', code => {
+      .once('error', reject)
+      .once('exit', code => {
         if (code !== 0) {
           return reject(new Error(`Process exited with status code ${code}.`))
         }
@@ -493,12 +493,12 @@ async function curl (url) {
     http.get(url, res => {
       const bufs = []
       res.on('data', d => bufs.push(d))
-      res.on('end', () => {
+      res.once('end', () => {
         res.body = Buffer.concat(bufs).toString('utf8')
         resolve(res)
       })
-      res.on('error', reject)
-    }).on('error', reject)
+      res.once('error', reject)
+    }).once('error', reject)
   })
 }
 
