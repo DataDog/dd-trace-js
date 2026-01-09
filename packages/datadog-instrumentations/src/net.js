@@ -109,6 +109,7 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
       errorCh.publish(ctx)
     }
     finishCh.runStores(ctx, () => {})
+    cleanupListener()
   }
 
   const localListener = function (error) {
@@ -119,19 +120,21 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
       errorCh.publish(ctx)
     }
     finishCh.runStores(ctx, () => {})
+    cleanupListener()
   }
 
   const cleanupListener = function () {
     socket.removeListener('connect', localListener)
     events.forEach(event => {
       socket.removeListener(event, wrapListener)
-      socket.removeListener(event, cleanupListener)
     })
+    socket.setMaxListeners(socket.getMaxListeners() - 1)
   }
 
   // Increase limit by one to prevent warnings when adding new listeners
   socket.setMaxListeners(socket.getMaxListeners() + 1)
 
+  // TODO: Identify why the connect listener should remove the other listeners.
   if (protocol === 'tcp') {
     socket.once('connect', localListener)
   } else {
@@ -140,6 +143,5 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
 
   events.forEach(event => {
     socket.once(event, wrapListener)
-    socket.once(event, cleanupListener)
   })
 }
