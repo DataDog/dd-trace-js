@@ -2,16 +2,36 @@
 
 const assert = require('node:assert/strict')
 
+const semver = require('semver')
 const tags = require('../../../ext/tags')
 const { NODE_MAJOR } = require('../../../version')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { rawExpectedSchema } = require('./naming')
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 const SERVICE_NAME = 'test'
+
+// Helper to find an error with a specific type in the caught error's cause chain
+// Different undici versions wrap errors differently, so we need to walk the chain
+// Returns the matching error object, or null if not found
+function findErrorInCauseChain (error, targetErrorType) {
+  let current = error
+  while (current) {
+    if (current.name === targetErrorType) return current
+    // Also check errors array in AggregateError
+    if (current.errors) {
+      for (const e of current.errors) {
+        if (e.name === targetErrorType) return e
+      }
+    }
+    current = current.cause
+  }
+  return null
+}
 
 describe('Plugin', () => {
   let express
@@ -19,7 +39,7 @@ describe('Plugin', () => {
   let appListener
 
   describe('undici-fetch', () => {
-    withVersions('undici', 'undici', NODE_MAJOR < 20 ? '<7.11.0' : '*', (version) => {
+    withVersions('undici', 'undici', NODE_MAJOR < 20 ? '<7.11.0' : '*', (version, moduleName, resolvedVersion) => {
       function server (app, listener) {
         const server = require('http').createServer(app)
         server.listen(0, 'localhost', () => listener(
@@ -200,20 +220,33 @@ describe('Plugin', () => {
         })
 
         it('should handle connection errors', done => {
-          let error
+          let caughtError
 
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message || error.code)
-              assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
-              assert.strictEqual(traces[0][0].meta.component, 'undici')
+              const spanErrorType = traces[0][0].meta[ERROR_TYPE]
+
+              // The error in the span should match either the thrown error or something in its cause chain
+              // For fetch with native DC (>= 4.7.0), the DC error becomes caught.cause
+              // For fetch wrapper (< 4.7.0), it records the thrown error directly
+              const error = findErrorInCauseChain(caughtError, spanErrorType)
+              assert.ok(error, `Error type ${spanErrorType} should match thrown error or be in cause chain`)
+
+              assertObjectContains(traces, [[{
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message || error.code,
+                  [ERROR_STACK]: error.stack,
+                  component: 'undici'
+                }
+              }]])
             })
             .then(done)
             .catch(done)
 
           fetch.fetch('http://localhost:7357/user').catch(err => {
-            error = err
+            caughtError = err
           })
         })
 
@@ -303,6 +336,153 @@ describe('Plugin', () => {
             controller.abort()
           })
         })
+
+        // Tests for undici.request() using native diagnostic channels
+        // Only run for undici >= 4.7.0 where diagnostic channels were added
+        if (semver.satisfies(resolvedVersion, '>=4.7.0')) {
+          it('should do automatic instrumentation for undici.request()', function (done) {
+            const app = express()
+            app.get('/user', (req, res) => {
+              res.status(200).send('OK')
+            })
+            appListener = server(app, port => {
+              agent
+                .assertFirstTraceSpan({
+                  service: 'test',
+                  type: 'http',
+                  resource: 'GET',
+                  meta: {
+                    'span.kind': 'client',
+                    'http.url': `http://localhost:${port}/user`,
+                    'http.method': 'GET',
+                    'http.status_code': '200',
+                    component: 'undici',
+                    'out.host': 'localhost'
+                  }
+                })
+                .then(done)
+                .catch(done)
+
+              fetch.request(`http://localhost:${port}/user`, { method: 'GET' })
+                .then(({ body }) => body.dump())
+                .catch(() => {})
+            })
+          })
+
+          it('should support POST requests with undici.request()', done => {
+            const app = express()
+            app.post('/user', (req, res) => {
+              res.status(201).send('Created')
+            })
+            appListener = server(app, port => {
+              agent
+                .assertFirstTraceSpan({
+                  resource: 'POST',
+                  meta: {
+                    'http.method': 'POST',
+                    'http.status_code': '201'
+                  }
+                })
+                .then(done)
+                .catch(done)
+
+              fetch.request(`http://localhost:${port}/user`, { method: 'POST' })
+                .then(({ body }) => body.dump())
+                .catch(() => {})
+            })
+          })
+
+          it('should inject trace headers in undici.request()', done => {
+            const app = express()
+
+            app.get('/user', (req, res) => {
+              assert.strictEqual(typeof req.get('x-datadog-trace-id'), 'string')
+              assert.strictEqual(typeof req.get('x-datadog-parent-id'), 'string')
+
+              res.status(200).send('OK')
+            })
+
+            appListener = server(app, port => {
+              agent
+                .assertFirstTraceSpan({
+                  meta: {
+                    'http.status_code': '200'
+                  }
+                })
+                .then(done)
+                .catch(done)
+
+              fetch.request(`http://localhost:${port}/user`)
+                .then(({ body }) => body.dump())
+                .catch(() => {})
+            })
+          })
+
+          it('should handle connection errors in undici.request()', done => {
+            let error
+
+            agent
+              .assertSomeTraces(traces => {
+                assertObjectContains(traces[0][0], {
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_STACK]: error.stack,
+                    component: 'undici'
+                  }
+                })
+                assert.ok(traces[0][0].meta[ERROR_MESSAGE])
+              })
+              .then(done)
+              .catch(done)
+
+            fetch.request('http://localhost:7357/user')
+              .catch(err => {
+                error = err
+              })
+          })
+
+          it('should record HTTP 4XX responses as errors in undici.request()', done => {
+            const app = express()
+
+            app.get('/user', (req, res) => {
+              res.status(400).send('Bad Request')
+            })
+
+            appListener = server(app, port => {
+              agent
+                .assertFirstTraceSpan({
+                  error: 1
+                })
+                .then(done)
+                .catch(done)
+
+              fetch.request(`http://localhost:${port}/user`)
+                .then(({ body }) => body.dump())
+                .catch(() => {})
+            })
+          })
+
+          it('should not record HTTP 5XX responses as errors in undici.request()', done => {
+            const app = express()
+
+            app.get('/user', (req, res) => {
+              res.status(500).send('Server Error')
+            })
+
+            appListener = server(app, port => {
+              agent
+                .assertFirstTraceSpan({
+                  error: 0
+                })
+                .then(done)
+                .catch(done)
+
+              fetch.request(`http://localhost:${port}/user`)
+                .then(({ body }) => body.dump())
+                .catch(() => {})
+            })
+          })
+        }
       })
       describe('with service configuration', () => {
         let config
