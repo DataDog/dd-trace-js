@@ -429,6 +429,7 @@ async function main () {
   flushActiveBuffers()
 
   // Print buffered error output (non-warning stderr + mocha failure blocks) after all output has been streamed.
+  let globalFailureIndex = 0
   let hasConsolidatedErrors = false
   for (const entry of entries) {
     const stderrErrors = entry.stderrErrBuf.join('').trim()
@@ -446,7 +447,32 @@ async function main () {
       if (last && !last.endsWith('\n')) process.stdout.write('\n')
     }
     if (hasFailures) {
-      process.stdout.write(entry.failureBuf.join(''))
+      let appendedFilenameToFailingLine = false
+
+      for (const line of entry.failureBuf) {
+        let out = line
+
+        // Print `n failing in <file>` while ensuring the appended filename stays uncolored.
+        if (!appendedFilenameToFailingLine && isFailureStartLine(out)) {
+          appendedFilenameToFailingLine = true
+
+          const hasNewline = out.endsWith('\n')
+          const base = hasNewline ? out.slice(0, -1) : out
+          // Ensure `in <file>` is not red by resetting ANSI styles before printing the filename.
+          // Avoid double-resetting if the line already ends with a reset.
+          const reset = '\u001b[0m'
+          out = (base.endsWith(reset) ? base : base + reset) + ' in ' + entry.file + (hasNewline ? '\n' : '')
+        }
+
+        // Prefix local `n)` failure lines with a deterministic global counter `[n]`.
+        if (/^\s*\d+\)/.test(stripAnsi(out))) {
+          globalFailureIndex++
+          out = `[${globalFailureIndex}] ` + out
+        }
+
+        process.stdout.write(out)
+      }
+
       const last = entry.failureBuf[entry.failureBuf.length - 1]
       if (last && !last.endsWith('\n')) process.stdout.write('\n')
     }
@@ -488,6 +514,7 @@ async function main () {
     for (const { file, code, signal } of failed) {
       process.stdout.write(`- ${file} (exit=${code ?? 'null'} signal=${signal ?? 'null'})\n`)
     }
+    process.stdout.write('Legend: [n] = global failure index across all files; n) = local failure index within a file.\n')
   }
 
   process.exit(failures ? 1 : 0)
