@@ -162,6 +162,10 @@ class DataStreamsProcessor {
   onInterval () {
     const { Stats } = this._serializeBuckets()
     if (Stats.length === 0) return
+
+    const processTags = require('../process-tags')
+    const propagationHashModule = require('../propagation-hash')
+
     const payload = {
       Env: this.env,
       Service: this.service,
@@ -171,6 +175,12 @@ class DataStreamsProcessor {
       Lang: 'javascript',
       Tags: Object.entries(this.tags).map(([key, value]) => `${key}:${value}`)
     }
+
+    // Add ProcessTags only if feature is enabled and process tags exist
+    if (propagationHashModule.isEnabled() && processTags.serialized) {
+      payload.ProcessTags = processTags.serialized
+    }
+
     this.writer.flush(payload)
   }
 
@@ -232,7 +242,12 @@ class DataStreamsProcessor {
         () => `Setting DSM Checkpoint from extracted parent context with hash: ${parentHash} and edge tags: ${edgeTags}`
       )
     }
-    const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
+
+    // Get propagation hash if enabled
+    const propagationHashModule = require('../propagation-hash')
+    const propagationHash = propagationHashModule.isEnabled() ? propagationHashModule.getHash() : null
+
+    const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash, propagationHash)
     const edgeLatencyNs = nowNs - edgeStartNs
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {
