@@ -32,6 +32,20 @@ class NativeSpanContext extends DatadogSpanContext {
 
     this.#nativeSpans = nativeSpans
     this._nativeSpanId = props.spanId.toBigInt()
+
+    // Override _name property with getter/setter to sync name changes to native storage.
+    // This is needed because web.js setFramework() directly sets span.context()._name.
+    // We do this after super() to avoid issues with private field access during construction.
+    let nameValue = this._name // Get the value set by super()
+    Object.defineProperty(this, '_name', {
+      get: () => nameValue,
+      set: (value) => {
+        nameValue = value
+        this._syncNameToNative(value)
+      },
+      configurable: true,
+      enumerable: true
+    })
   }
 
   /**
@@ -102,11 +116,44 @@ class NativeSpanContext extends DatadogSpanContext {
           this._nativeSpanId,
           ['i32', value ? 1 : 0]
         )
+        // If value is an Error object, also extract error.type, error.message, error.stack
+        // This matches the behavior in span_format.js extractError()
+        if (value instanceof Error) {
+          if (value.name) {
+            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, 'error.type', String(value.name))
+          }
+          if (value.message || value.code) {
+            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, 'error.message', String(value.message || value.code))
+          }
+          if (value.stack) {
+            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, 'error.stack', String(value.stack))
+          }
+        }
         return
 
       // HACK: http.status_code must be stored as string in meta, not number in metrics
       // This matches the behavior in span_format.js
       case 'http.status_code':
+        this.#nativeSpans.queueOp(
+          OpCode.SetMetaAttr,
+          this._nativeSpanId,
+          key,
+          String(value)
+        )
+        return
+
+      // When error.type is set, also set span.error = 1
+      // This matches the behavior in span_format.js where ERROR_TYPE triggers formattedSpan.error = 1
+      // (except for fs.operation spans which have special error handling)
+      case 'error.type':
+        if (this._name !== 'fs.operation') {
+          this.#nativeSpans.queueOp(
+            OpCode.SetError,
+            this._nativeSpanId,
+            ['i32', 1]
+          )
+        }
+        // Fall through to add the meta tag
         this.#nativeSpans.queueOp(
           OpCode.SetMetaAttr,
           this._nativeSpanId,
