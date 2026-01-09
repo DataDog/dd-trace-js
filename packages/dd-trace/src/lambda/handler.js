@@ -4,7 +4,7 @@ const log = require('../log')
 const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
 const { ImpendingTimeout } = require('./runtime/errors')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getEnvironmentVariable } = require('../config/helper')
 
 const globalTracer = global._ddtrace
 const tracer = globalTracer._tracer

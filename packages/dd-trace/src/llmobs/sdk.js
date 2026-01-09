@@ -14,7 +14,7 @@ const Span = require('../opentracing/span')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getEnvironmentVariable } = require('../config/helper')
 const telemetry = require('./telemetry')
 
 const LLMObsTagger = require('./tagger')

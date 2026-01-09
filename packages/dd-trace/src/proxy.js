@@ -10,7 +10,7 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const {
   setBaggageItem,
   getBaggageItem,

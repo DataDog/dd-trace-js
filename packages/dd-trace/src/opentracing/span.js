@@ -13,7 +13,7 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const util = require('util')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getEnvironmentVariable } = require('../config/helper')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 

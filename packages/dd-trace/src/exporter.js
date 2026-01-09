@@ -3,7 +3,7 @@
 const exporters = require('../../../ext/exporters')
 const fs = require('fs')
 const constants = require('./constants')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 
 module.exports = function getExporter (name) {
   switch (name) {

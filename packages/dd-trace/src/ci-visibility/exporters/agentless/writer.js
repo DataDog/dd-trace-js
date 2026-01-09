@@ -2,7 +2,7 @@
 const request = require('../../../exporters/common/request')
 const { safeJSONStringify } = require('../../../exporters/common/util')
 const log = require('../../../log')
-const { getEnvironmentVariable } = require('../../../config-helper')
+const { getEnvironmentVariable } = require('../../../config/helper')
 
 const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
 const BaseWriter = require('../../../exporters/common/writer')

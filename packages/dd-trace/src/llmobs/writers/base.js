@@ -1,7 +1,7 @@
 'use strict'
 
 const request = require('../../exporters/common/request')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getEnvironmentVariable } = require('../../config/helper')
 const { URL, format } = require('node:url')
 const path = require('node:path')
 

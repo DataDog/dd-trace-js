@@ -4,7 +4,7 @@
 
 const os = require('os')
 const { getIsAzureFunction, getIsFlexConsumptionAzureFunction } = require('./serverless')
-const { getEnvironmentVariable, getEnvironmentVariables } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../../dd-trace/src/config/helper')
 
 function extractSubscriptionID (ownerName) {
   if (ownerName !== undefined) {

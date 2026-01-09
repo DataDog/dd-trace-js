@@ -2,7 +2,7 @@
 
 const { isTrue } = require('../../dd-trace/src/util')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 
 class MongodbCorePlugin extends DatabasePlugin {
   static id = 'mongodb-core'

@@ -3,7 +3,7 @@
 const { addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const tracer = require('../../dd-trace')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 
 const otelSdkEnabled = getEnvironmentVariable('DD_TRACE_OTEL_ENABLED') ||
 getEnvironmentVariable('OTEL_SDK_DISABLED')

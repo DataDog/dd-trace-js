@@ -1,6 +1,6 @@
 'use strict'
 
-const { getEnvironmentVariable } = require('../config-helper')
+const { getEnvironmentVariable } = require('../config/helper')
 const os = require('node:os')
 
 function getLibuvThreadPoolSize (envVar) {

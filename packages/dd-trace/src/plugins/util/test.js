@@ -4,7 +4,7 @@ const path = require('path')
 const fs = require('fs')
 const { URL } = require('url')
 const log = require('../../log')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getEnvironmentVariable } = require('../../config/helper')
 const satisfies = require('../../../../../vendor/dist/semifies')
 
 const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')

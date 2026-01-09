@@ -4,7 +4,7 @@
 const tracer = require('../packages/dd-trace')
 const { isTrue, isFalse } = require('../packages/dd-trace/src/util')
 const log = require('../packages/dd-trace/src/log')
-const { getEnvironmentVariable } = require('../packages/dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../packages/dd-trace/src/config/helper')
 
 const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
 const DEFAULT_FLUSH_INTERVAL = 5000

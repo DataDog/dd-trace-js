@@ -7,7 +7,7 @@ const Module = require('module')
 const dc = require('dc-polyfill')
 
 const parse = require('../../../vendor/dist/module-details-from-path')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { isRelativeRequire } = require('../../datadog-instrumentations/src/helpers/shared-utils')
 
 const origRequire = Module.prototype.require
