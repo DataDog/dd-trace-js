@@ -6,7 +6,7 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const ddGlobal = globalThis[Symbol.for('dd-trace')] ??= {}
+const ddGlobal = globalThis[Symbol.for('dd-trace')]
 
 /** cached objects */
 

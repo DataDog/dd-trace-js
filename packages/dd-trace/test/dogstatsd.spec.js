@@ -67,7 +67,7 @@ describe('dogstatsd', () => {
       callback(null, hostname, 6)
     })
 
-    const dogstatsd = proxyquire('../src/dogstatsd', {
+    const dogstatsd = proxyquire.noPreserveCache()('../src/dogstatsd', {
       dgram,
       dns
     })

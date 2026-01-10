@@ -156,7 +156,7 @@ class DataStreamsProcessor {
       this.timer = setInterval(this.onInterval.bind(this), flushInterval)
       this.timer.unref()
     }
-    process.once('beforeExit', () => this.onInterval())
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.onInterval.bind(this))
   }
 
   onInterval () {
