@@ -26,6 +26,7 @@ const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./c
 const defaults = require('./config_defaults')
 const path = require('path')
 const { DD_MAJOR } = require('../../../version')
+const { isBun, runtimeName, runtimeVersion } = require('./utils/runtime')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -285,6 +286,39 @@ class Config {
       ...options,
       appsec: options.appsec == null ? options.experimental?.appsec : options.appsec,
       iast: options.iast == null ? options.experimental?.iast : options.iast
+    }
+
+    this.runtime = {
+      name: runtimeName,
+      version: runtimeVersion,
+      isBun,
+      isNode: !isBun,
+    }
+
+    // Disable incompatible features on Bun
+    if (isBun) {
+      // Profiling won't work (V8-specific)
+      if (this.profiling?.enabled !== false) {
+        this.profiling = { ...this.profiling, enabled: false }
+        log.warn(
+          'Profiling is disabled on Bun runtime (requires V8). We are adding support for Bun soon.'
+        )
+      }
+
+      // Runtime metrics won't work (V8-specific)
+      if (this.runtimeMetrics?.enabled !== false) {
+        this.runtimeMetrics = { ...this.runtimeMetrics, enabled: false }
+        log.warn(
+          'Runtime metrics are disabled on Bun runtime (requires V8). We are adding support for Bun soon.'
+        )
+      }
+
+      // Auto-instrumentation may be limited
+      if (this.tracing !== false) {
+        log.warn(
+          'Auto-instrumentation may be limited on Bun runtime. We are adding support for Bun soon.'
+        )
+      }
     }
 
     // Configure the logger first so it can be used to warn about other configs
