@@ -40,7 +40,7 @@ Each package under `packages/` follows a consistent structure:
 
 **Mocha unit tests:**
 ```bash
-./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" path/to/test.spec.js
+./node_modules/.bin/mocha path/to/test.spec.js
 ```
 
 **Integration tests:**
@@ -60,7 +60,7 @@ Each package under `packages/` follows a consistent structure:
 ```bash
 PLUGINS="amqplib" yarn test:plugins
 PLUGINS="amqplib|bluebird" yarn test:plugins  # pipe-delimited for multiple
-./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" packages/datadog-plugin-amqplib/test/index.spec.js
+./node_modules/.bin/mocha packages/datadog-plugin-amqplib/test/index.spec.js
 ```
 
 **With external services** (check `.github/workflows/apm-integrations.yml` for `SERVICES`):
@@ -76,7 +76,7 @@ yarn services && yarn test:plugins
 
 ```bash
 ./node_modules/.bin/nyc --include "packages/dd-trace/src/debugger/**/*.js" \
-  ./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" \
+  ./node_modules/.bin/mocha \
   "packages/dd-trace/test/debugger/**/*.spec.js"
 ```
 
