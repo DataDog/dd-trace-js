@@ -152,7 +152,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
    * Calculates a hash for DynamoDB PutItem operations using table's configured primary keys.
    * @param {string} tableName - Name of the DynamoDB table.
    * @param {object} item - Complete PutItem item parameter to be put.
-   * @param {Object.<string, Array<string>>} primaryKeyConfig - Mapping of table names to an Array of primary key names
+   * @param {Record<string, Array<string>>} primaryKeyConfig - Mapping of table names to an Array of primary key names
    *                                                         loaded from DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS.
    * @returns {string|undefined} Hash combining table name and primary key/value pairs, or undefined if unable.
    */

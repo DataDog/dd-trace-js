@@ -1,10 +1,12 @@
 'use strict'
 
 const dc = require('dc-polyfill')
-const { storage } = require('../../../../datadog-core')
 
+const { storage } = require('../../../../datadog-core')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
+const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
+
 const {
   END_TIMESTAMP_LABEL,
   SPAN_ID_LABEL,
@@ -14,8 +16,6 @@ const {
   encodeProfileAsync
 } = require('./shared')
 const TRACE_ENDPOINT_LABEL = 'trace endpoint'
-
-const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
 
 let beforeCh
 const enterCh = dc.channel('dd-trace:storage:enter')

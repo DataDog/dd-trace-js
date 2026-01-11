@@ -21,7 +21,7 @@ let __lambdaTimeout
  * Publishes to the `apm:aws:lambda:timeout` channel when
  * the AWS Lambda run time is about to end.
  *
- * @param {*} context AWS Lambda context object.
+ * @param {object} context AWS Lambda context object.
  */
 function checkTimeout (context) {
   const remainingTimeInMillis = context.getRemainingTimeInMillis()
@@ -63,7 +63,7 @@ function crashFlush () {
 /**
  * Extracts the context from the given Lambda handler arguments.
  *
- * @param {*} args any amount of arguments
+ * @param {unknown[]} args any amount of arguments
  * @returns the context, if extraction was succesful.
  */
 function extractContext (args) {
@@ -80,7 +80,7 @@ function extractContext (args) {
 /**
  * Patches your AWS Lambda handler function to add some tracing support.
  *
- * @param {*} lambdaHandler a Lambda handler function.
+ * @param {Function} lambdaHandler a Lambda handler function.
  */
 exports.datadog = function datadog (lambdaHandler) {
   return (...args) => {

@@ -2,9 +2,19 @@
 
 /* eslint-disable no-console */
 
+const { execSync } = require('child_process')
+const fs = require('fs')
+const RAW_BUILTINS = require('module').builtinModules
+const path = require('path')
+const { pathToFileURL, fileURLToPath } = require('url')
+
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
 
-const { pathToFileURL, fileURLToPath } = require('url')
+const extractPackageAndModulePath = require(
+  '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
+)
+const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
+const { processModule, isESMFile } = require('./src/utils.js')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
@@ -31,16 +41,7 @@ for (const instrumentation of Object.values(instrumentations)) {
   }
 }
 
-const RAW_BUILTINS = require('module').builtinModules
 const CHANNEL = 'dd-trace:bundler:load'
-const path = require('path')
-const fs = require('fs')
-const { execSync } = require('child_process')
-const extractPackageAndModulePath = require(
-  '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
-)
-const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
-const { processModule, isESMFile } = require('./src/utils.js')
 
 const builtins = new Set()
 

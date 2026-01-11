@@ -2,12 +2,11 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const Readable = require('node:stream').Readable
 
 const { after, afterEach, before, describe, it } = require('mocha')
 const semver = require('semver')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-
-const Readable = require('node:stream').Readable
 
 const loader = require('../../../versions/@grpc/proto-loader').get()
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')

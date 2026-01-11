@@ -1,25 +1,22 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+
 const { isTrue, isError } = require('../util')
+const tracerVersion = require('../../../../package.json').version
+const logger = require('../log')
+const { getEnvironmentVariable } = require('../config-helper')
 const Span = require('../opentracing/span')
 const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
-
 const {
   getFunctionArguments,
   validateKind
 } = require('./util')
-
 const { storage } = require('./storage')
-
-const tracerVersion = require('../../../../package.json').version
-const logger = require('../log')
-const { getEnvironmentVariable } = require('../config-helper')
 const telemetry = require('./telemetry')
-
 const LLMObsTagger = require('./tagger')
 
 // communicating with writer
-const { channel } = require('dc-polyfill')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const registerUserSpanProcessorCh = channel('llmobs:register-processor')

@@ -10,8 +10,8 @@ if (process.env.lOG_INJECTION) {
   options.logInjection = process.env.lOG_INJECTION
 }
 
-const http = require('http')
 const tracer = require('dd-trace').init(options)
+const http = require('http')
 
 const logger = require('pino')()
 

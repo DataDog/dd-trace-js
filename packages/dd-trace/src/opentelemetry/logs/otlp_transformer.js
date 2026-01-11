@@ -2,6 +2,7 @@
 
 const { SeverityNumber } = require('@opentelemetry/api-logs')
 const { trace } = require('@opentelemetry/api')
+
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
 
@@ -214,7 +215,7 @@ class OtlpTransformer extends OtlpTransformerBase {
 
   /**
    * Transforms log body to OTLP AnyValue format.
-   * @param {any} body - Log body to transform
+   * @param {import('@opentelemetry/api-logs').LogBody} body - Log body to transform
    * @returns {object} OTLP AnyValue object
    */
   #transformBody (body) {

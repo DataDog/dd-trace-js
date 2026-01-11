@@ -13,6 +13,31 @@ const {
  */
 
 /**
+ * @typedef {{ value: number, startTime: number }} SumCumulativeState
+ *
+ * @typedef {{
+ *   count: number,
+ *   sum: number,
+ *   min: number,
+ *   max: number,
+ *   bucketCounts: number[],
+ *   startTime: number
+ * }} HistogramCumulativeState
+ *
+ * @typedef {SumCumulativeState | HistogramCumulativeState} CumulativeStateValue
+ *
+ * @typedef {{
+ *   count: number,
+ *   sum: number,
+ *   min?: number,
+ *   max?: number,
+ *   bucketCounts: number[]
+ * }} HistogramLastExportedState
+ *
+ * @typedef {number | HistogramLastExportedState} LastExportedStateValue
+ */
+
+/**
  * @typedef {object} NumberDataPoint
  * @property {Attributes} attributes - Number data point metric attributes
  * @property {string} attrKey - Stable stringified key for attributes
@@ -255,8 +280,8 @@ class MetricAggregator {
    * Aggregates measurements into metrics.
    *
    * @param {Measurement[]} measurements - The measurements to aggregate
-   * @param {Map<string, any>} cumulativeState - The cumulative state of the metrics
-   * @param {Map<string, any>} lastExportedState - The last exported state of the metrics
+   * @param {Map<string, CumulativeStateValue>} cumulativeState - The cumulative state of the metrics
+   * @param {Map<string, LastExportedStateValue>} lastExportedState - The last exported state of the metrics
    * @returns {Iterable<AggregatedMetric>} The aggregated metrics
    */
   aggregate (measurements, cumulativeState, lastExportedState) {
@@ -353,7 +378,7 @@ class MetricAggregator {
    * Applies delta temporality to the metrics.
    *
    * @param {Iterable<AggregatedMetric>} metrics - The metrics to apply delta temporality to
-   * @param {Map<string, any>} lastExportedState - The last exported state of the metrics
+   * @param {Map<string, LastExportedStateValue>} lastExportedState - The last exported state of the metrics
    * @returns {void}
    */
   #applyDeltaTemporality (metrics, lastExportedState) {
@@ -424,7 +449,7 @@ class MetricAggregator {
    * @param {string} attrKey - The attribute key
    * @param {number} timestamp - The timestamp of the measurement
    * @param {string} stateKey - The state key
-   * @param {Map<string, any>} cumulativeState - The cumulative state of the metrics
+   * @param {Map<string, CumulativeStateValue>} cumulativeState - The cumulative state of the metrics
    */
   #aggregateSum (metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState) {
     if (!cumulativeState.has(stateKey)) {
@@ -478,7 +503,7 @@ class MetricAggregator {
    * @param {string} attrKey - The attribute key
    * @param {number} timestamp - The timestamp of the measurement
    * @param {string} stateKey - The state key
-   * @param {Map<string, any>} cumulativeState - The cumulative state of the metrics
+   * @param {Map<string, CumulativeStateValue>} cumulativeState - The cumulative state of the metrics
    * @returns {void}
    */
   #aggregateHistogram (metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState) {

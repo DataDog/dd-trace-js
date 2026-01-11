@@ -4,6 +4,7 @@ const log = require('../../log')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
+ * @typedef {import('@opentelemetry/api').AttributeValue} AttributeValue
  */
 
 /**
@@ -73,7 +74,7 @@ class OtlpTransformerBase {
 
   /**
    * Transforms attributes to OTLP KeyValue format.
-   * @param {object} attributes - Attributes to transform
+   * @param {Attributes} attributes - Attributes to transform
    * @returns {object[]} Array of OTLP KeyValue objects
    * @protected
    */
@@ -103,7 +104,7 @@ class OtlpTransformerBase {
    * Transforms any value to OTLP AnyValue format.
    * Supports: strings, numbers (int/double), booleans, arrays.
    * Objects are filtered out by sanitizeAttributes before reaching this method.
-   * @param {any} value - Value to transform
+   * @param {AttributeValue | null | undefined} value - Value to transform
    * @returns {object} OTLP AnyValue object
    * @protected
    */

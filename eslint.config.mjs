@@ -1,3 +1,4 @@
+import { readFileSync } from 'fs'
 import eslintPluginJs from '@eslint/js'
 import eslintPluginStylistic from '@stylistic/eslint-plugin'
 import eslintPluginCypress from 'eslint-plugin-cypress'
@@ -7,7 +8,6 @@ import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
 import eslintPluginPromise from 'eslint-plugin-promise'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
-import { readFileSync } from 'fs'
 import globals from 'globals'
 
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
@@ -343,7 +343,8 @@ export default [
         // major release line at the same time, we need to specify the lowest version here to ensure backporting will
         // not fail.
         version: '>=18.0.0'
-      }
+      },
+      jsdoc: { mode: 'typescript' }
     },
     rules: {
       '@stylistic/max-len': ['error', { code: 120, tabWidth: 2, ignoreUrls: true, ignoreRegExpLiterals: true }],

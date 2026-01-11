@@ -1,7 +1,7 @@
 'use strict'
 
-const path = require('path')
 const tracer = require('dd-trace')
+const path = require('path')
 
 tracer.init({
   debug: true,

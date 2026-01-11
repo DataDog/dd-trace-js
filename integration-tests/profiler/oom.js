@@ -2,8 +2,8 @@
 
 /* eslint-disable no-console */
 
-const { Worker, isMainThread, threadId } = require('worker_threads')
 const tracer = require('dd-trace').init()
+const { Worker, isMainThread, threadId } = require('worker_threads')
 
 const nworkers = Number(process.argv[2] || 0)
 const workerMaxOldGenerationSizeMb = process.argv[3]

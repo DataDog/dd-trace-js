@@ -1,14 +1,14 @@
 'use strict'
 
+const tracingChannel = require('dc-polyfill').tracingChannel
+
 const shimmer = require('../../datadog-shimmer')
 const {
   addHook
 } = require('./helpers/instrument')
-
-const tracingChannel = require('dc-polyfill').tracingChannel
-const ch = tracingChannel('apm:undici:fetch')
-
 const { createWrapFetch } = require('./helpers/fetch')
+
+const ch = tracingChannel('apm:undici:fetch')
 
 addHook({
   name: 'undici',
