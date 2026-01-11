@@ -220,16 +220,30 @@ export default [
       'import/export': 'error',
       'import/first': 'error',
       'import/no-absolute-path': ['error', { esmodule: true, commonjs: true, amd: false }],
+      'import/no-cycle': 'error',
       'import/no-duplicates': 'error',
       'import/no-named-default': 'error',
+      'import/no-self-import': 'error',
+      'import/order': ['error', {
+        // `dd-trace` must be allowed first (and is often intentionally required before any other module).
+        // eslint-plugin-import defaults can exclude some import types (notably `builtin`) from `pathGroups`,
+        // which would make the `dd-trace` exception below a no-op. Make this explicit.
+        pathGroupsExcludedImportTypes: [],
+        pathGroups: [
+          {
+            pattern: 'dd-trace',
+            group: 'builtin',
+            position: 'before'
+          }
+        ]
+      }],
+      'import/no-useless-path-segments': 'error',
       'import/no-webpack-loader-syntax': 'error',
       'jsdoc/check-tag-names': ['error', { definedTags: ['datadog'] }],
       // TODO: Enable the rules that we want to use.
-      'jsdoc/check-types': 'off', // Should be activated, but it needs a couple of fixes.
       // no-defaults: This should be activated, since the defaults will not be picked up in a description.
       'jsdoc/no-defaults': 'off',
       'jsdoc/no-undefined-types': 'off',
-      'jsdoc/reject-any-type': 'off', // Should be activated, but it needs a couple of fixes.
       'jsdoc/reject-function-type': 'off',
       'jsdoc/require-jsdoc': 'off',
       'jsdoc/require-param-description': 'off', // Having a description is not crucial for now.
