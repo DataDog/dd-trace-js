@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 'use strict'
 
+// eslint-disable-next-line import/order
+const tracer = require('../../').init() // dd-trace
+
 const assert = require('assert')
 const http = require('http')
 const express = require('express')
-const tracer = require('../../').init() // dd-trace
 require('knex') // has dead code paths for multiple instrumented packages
 require('@apollo/server')
 

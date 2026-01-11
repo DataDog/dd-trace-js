@@ -168,7 +168,7 @@ function getToolNameFromTags (tags) {
 /**
  * Get the content of a tool call result.
  * Version 5 of the ai sdk sets this tag as `content.output`, with a `
- * @param {Record<string, any>} content
+ * @param {{ output?: { type: string, value: unknown }, result?: unknown }} content
  * @returns {string}
  */
 function getToolCallResultContent (content) {
