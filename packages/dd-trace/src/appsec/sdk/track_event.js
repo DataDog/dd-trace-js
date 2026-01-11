@@ -1,13 +1,13 @@
 'use strict'
 
 const log = require('../../log')
-const { getRootSpan } = require('./utils')
-const { setUserTags } = require('./set_user')
 const waf = require('../waf')
 const { keepTrace } = require('../../priority_sampler')
 const addresses = require('../addresses')
 const { ASM } = require('../../standalone/product')
 const { incrementSdkEventMetric } = require('../telemetry')
+const { setUserTags } = require('./set_user')
+const { getRootSpan } = require('./utils')
 
 /**
  * @deprecated in favor of trackUserLoginSuccessV2

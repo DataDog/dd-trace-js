@@ -5,6 +5,8 @@ const { execSync } = require('node:child_process')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
+const semifies = require('semifies')
+const semver = require('semver')
 const {
   FakeAgent,
   sandboxCwd,
@@ -15,8 +17,6 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { SCHEMA_FIXTURES, TEST_DATABASE_URL } = require('../prisma-fixtures')
-const semifies = require('semifies')
-const semver = require('semver')
 
 const prismaClientConfigs = [{
   name: 'prisma-generator-js with no output',

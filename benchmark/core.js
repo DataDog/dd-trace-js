@@ -1,6 +1,5 @@
 'use strict'
 
-const benchmark = require('./benchmark')
 const proxyquire = require('proxyquire')
 
 const getConfig = require('../packages/dd-trace/src/config')
@@ -29,6 +28,7 @@ const histogram = new Histogram()
 const runtimeMetrics = require('../packages/dd-trace/src/runtime_metrics')
 const log = require('../packages/dd-trace/src/log')
 const { calculateHttpEndpoint } = require('../packages/dd-trace/src/plugins/util/url')
+const benchmark = require('./benchmark')
 
 const encoder04 = new Agent04Encoder({ flush: () => encoder04.makePayload() })
 const encoder05 = new Agent05Encoder({ flush: () => encoder05.makePayload() })

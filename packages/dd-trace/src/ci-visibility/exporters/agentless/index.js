@@ -1,10 +1,10 @@
 'use strict'
 
 const URL = require('url').URL
-const Writer = require('./writer')
-const CoverageWriter = require('./coverage-writer')
 const CiVisibilityExporter = require('../ci-visibility-exporter')
 const log = require('../../../log')
+const Writer = require('./writer')
+const CoverageWriter = require('./coverage-writer')
 
 class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
   constructor (config) {

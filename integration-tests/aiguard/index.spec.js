@@ -6,9 +6,9 @@ const path = require('path')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { assertObjectContains } = require('../helpers')
 const startApiMock = require('./api-mock')
 const { executeRequest } = require('./util')
-const { assertObjectContains } = require('../helpers')
 
 describe('AIGuard SDK integration tests', () => {
   let cwd, appFile, agent, proc, api, url

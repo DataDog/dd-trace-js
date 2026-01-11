@@ -1,13 +1,13 @@
 'use strict'
 
-const { prepareTestServerForIastInExpress } = require('../utils')
-const axios = require('axios')
-const agent = require('../../../plugins/agent')
-const { withVersions } = require('../../../setup/mocha')
-const semver = require('semver')
 const os = require('os')
 const path = require('path')
 const fs = require('fs')
+const axios = require('axios')
+const semver = require('semver')
+const { prepareTestServerForIastInExpress } = require('../utils')
+const agent = require('../../../plugins/agent')
+const { withVersions } = require('../../../setup/mocha')
 
 describe('nosql injection detection in mongodb - whole feature', () => {
   withVersions('mongoose', 'express', expressVersion => {

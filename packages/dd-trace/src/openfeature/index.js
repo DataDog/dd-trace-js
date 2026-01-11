@@ -1,9 +1,9 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
 const log = require('../log')
 const ExposuresWriter = require('./writers/exposures')
 const { setAgentStrategy } = require('./writers/util')
-const { channel } = require('dc-polyfill')
 
 const exposureSubmitCh = channel('ffe:exposure:submit')
 const flushCh = channel('ffe:writers:flush')
@@ -12,7 +12,7 @@ let exposuresWriter = null
 
 /**
  * @private
- * @param {Object|Array<Object>} exposureEvents - Exposure events channel subscriber
+ * @param {object | Array<object>} exposureEvents - Exposure events channel subscriber
  * @returns {void}
  */
 function _handleExposureSubmit (exposureEvents) {

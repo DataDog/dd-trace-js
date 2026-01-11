@@ -2,9 +2,9 @@
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 const { pgQueryStart, mysql2OuterQueryStart } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
-const proxyquire = require('proxyquire')
 
 describe('RASP - sql_injection', () => {
   let waf, legacyStorage, sqli

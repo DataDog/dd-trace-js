@@ -22,9 +22,9 @@ const tracer = require('dd-trace')
 tracer.init(options)
 
 const http = require('http')
-const express = require('express')
 const childProcess = require('child_process')
 
+const express = require('express')
 const multer = require('multer')
 const uploadToMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200000 } })
 

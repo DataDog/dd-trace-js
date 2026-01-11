@@ -6,10 +6,10 @@
 const fs = require('fs')
 const path = require('path')
 const util = require('util')
-const yaml = require('yaml')
-const semver = require('semver')
 const { execSync } = require('child_process')
 const Module = require('module')
+const yaml = require('yaml')
+const semver = require('semver')
 const { getAllInstrumentations } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 
 function errorMsg (title, ...message) {

@@ -59,7 +59,7 @@
  *   InstanceofExpression|
  *   IsDefinedExpression} Expression
  *
- * @typedef {Object.<string, unknown>} VariableBindings
+ * @typedef {Record<string, unknown>} VariableBindings
  *
  * @typedef {[Expression, VariableBindings, unknown]} TestCaseTuple
  * @typedef {{

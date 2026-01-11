@@ -1,8 +1,8 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
 const { wrapThen } = require('./helpers/promise')
-const shimmer = require('../../datadog-shimmer')
 
 addHook({
   name: 'q',

@@ -1,6 +1,11 @@
 'use strict'
 
 const log = require('../log')
+const web = require('../plugins/util/web')
+const { extractIp } = require('../plugins/util/ip_extractor')
+const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
+const { storage } = require('../../../datadog-core')
+const { isInServerlessEnvironment } = require('../serverless')
 const RuleManager = require('./rule_manager')
 const appsecRemoteConfig = require('./remote_config')
 const {
@@ -31,15 +36,10 @@ const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
 const apiSecuritySampler = require('./api_security_sampler')
-const web = require('../plugins/util/web')
-const { extractIp } = require('../plugins/util/ip_extractor')
-const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { isBlocked, block, callBlockDelegation, setTemplates, getBlockingAction } = require('./blocking')
 const UserTracking = require('./user_tracking')
-const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
-const { isInServerlessEnvironment } = require('../serverless')
 
 const responseAnalyzedSet = new WeakSet()
 const storedResponseHeaders = new WeakMap()

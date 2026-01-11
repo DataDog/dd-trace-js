@@ -2,16 +2,16 @@
 
 const LLMObsPlugin = require('../base')
 const {
+  PROMPT_TRACKING_INSTRUMENTATION_METHOD,
+  PROMPT_MULTIMODAL,
+  INSTRUMENTATION_METHOD_AUTO
+} = require('../../constants/tags')
+const {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractTextFromContentItem,
   hasMultimodalInputs
 } = require('./utils')
-const {
-  PROMPT_TRACKING_INSTRUMENTATION_METHOD,
-  PROMPT_MULTIMODAL,
-  INSTRUMENTATION_METHOD_AUTO
-} = require('../../constants/tags')
 
 const allowedParamKeys = new Set([
   'max_output_tokens',

@@ -1,5 +1,5 @@
-import regexpEscapeModule from './vendor/dist/escape-string-regexp/index.js'
 import * as iitm from 'import-in-the-middle/hook.mjs'
+import regexpEscapeModule from './vendor/dist/escape-string-regexp/index.js'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config-helper.js'
 import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'

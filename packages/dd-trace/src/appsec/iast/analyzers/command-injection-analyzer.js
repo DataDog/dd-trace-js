@@ -1,6 +1,6 @@
 'use strict'
-const InjectionAnalyzer = require('./injection-analyzer')
 const { COMMAND_INJECTION } = require('../vulnerabilities')
+const InjectionAnalyzer = require('./injection-analyzer')
 
 class CommandInjectionAnalyzer extends InjectionAnalyzer {
   constructor () {

@@ -1,11 +1,11 @@
 'use strict'
 
 const dc = require('dc-polyfill')
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 const prepareCh = channel('datadog:mquery:filter:prepare')
 const tracingCh = dc.tracingChannel('datadog:mquery:filter')

@@ -1,8 +1,8 @@
 'use strict'
 
 const dc = require('dc-polyfill')
-const logCollector = require('./log-collector')
 const { sendData } = require('../send-data')
+const logCollector = require('./log-collector')
 
 const telemetryLog = dc.channel('datadog:telemetry:log')
 const errorLog = dc.channel('datadog:log:error')

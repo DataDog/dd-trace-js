@@ -1,11 +1,11 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook,
   AsyncResource
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 function isString (value) {
   // eslint-disable-next-line unicorn/no-instanceof-builtins

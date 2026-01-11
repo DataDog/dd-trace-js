@@ -1,8 +1,8 @@
 'use strict'
 
-const types = require('./types')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
+const types = require('./types')
 
 const patched = new WeakSet()
 const instances = new WeakMap()

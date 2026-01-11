@@ -92,6 +92,7 @@ describe('TextMapPropagator', () => {
     })
 
     it('should inject the span context into the carrier', () => {
+      /** @type {Record<string, unknown>} */
       const carrier = {}
       const spanContext = createContext()
 

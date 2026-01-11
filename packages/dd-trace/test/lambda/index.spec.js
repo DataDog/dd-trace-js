@@ -29,15 +29,14 @@ const restoreEnv = () => {
  * Loads the test agent and makes sure the hook for the
  * AWS Lambda function patch is re-registered.
  *
- * @param {*} exporter defines the type of exporter for the test agent.
  * @returns a promise of the agent to load.
  */
-const loadAgent = ({ exporter = 'agent' } = {}) => {
+const loadAgent = () => {
   // Make sure the hook is re-registered
   require('../../src/lambda')
   return agent.load([], [], {
     experimental: {
-      exporter
+      exporter: 'agent'
     }
   })
 }

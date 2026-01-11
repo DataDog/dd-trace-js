@@ -1,6 +1,33 @@
 'use strict'
 
 const { storage } = require('../../../datadog-core')
+const { COMPONENT } = require('../constants')
+const log = require('../log')
+const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_EVENT_CREATED,
+  TELEMETRY_ITR_SKIPPED
+} = require('../ci-visibility/telemetry')
+const getDiClient = require('../ci-visibility/dynamic-instrumentation')
+const { DD_MAJOR } = require('../../../../version')
+const id = require('../id')
+const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
+const {
+  CI_PROVIDER_NAME,
+  GIT_REPOSITORY_URL,
+  GIT_COMMIT_SHA,
+  GIT_BRANCH,
+  CI_WORKSPACE_PATH,
+  GIT_COMMIT_MESSAGE,
+  GIT_TAG,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_COMMIT_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH,
+  GIT_COMMIT_HEAD_MESSAGE
+} = require('./util/tags')
+const Plugin = require('./plugin')
+const { getRepositoryRoot } = require('./util/git')
 const {
   getTestEnvironmentMetadata,
   getTestSessionName,
@@ -37,33 +64,6 @@ const {
   getPullRequestBaseBranch,
   TEST_IS_TEST_FRAMEWORK_WORKER
 } = require('./util/test')
-const { getRepositoryRoot } = require('./util/git')
-const Plugin = require('./plugin')
-const { COMPONENT } = require('../constants')
-const log = require('../log')
-const {
-  incrementCountMetric,
-  distributionMetric,
-  TELEMETRY_EVENT_CREATED,
-  TELEMETRY_ITR_SKIPPED
-} = require('../ci-visibility/telemetry')
-const {
-  CI_PROVIDER_NAME,
-  GIT_REPOSITORY_URL,
-  GIT_COMMIT_SHA,
-  GIT_BRANCH,
-  CI_WORKSPACE_PATH,
-  GIT_COMMIT_MESSAGE,
-  GIT_TAG,
-  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
-  GIT_COMMIT_HEAD_SHA,
-  GIT_PULL_REQUEST_BASE_BRANCH,
-  GIT_COMMIT_HEAD_MESSAGE
-} = require('./util/tags')
-const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
-const getDiClient = require('../ci-visibility/dynamic-instrumentation')
-const { DD_MAJOR } = require('../../../../version')
-const id = require('../id')
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
   vitest: 'vitest run',

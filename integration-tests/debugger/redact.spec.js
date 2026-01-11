@@ -1,8 +1,8 @@
 'use strict'
 
-const { setup } = require('./utils')
 const { once } = require('node:events')
 const { assertObjectContains } = require('../helpers')
+const { setup } = require('./utils')
 
 // Default settings is tested in unit tests, so we only need to test the env vars here
 describe('Dynamic Instrumentation snapshot PII redaction', function () {

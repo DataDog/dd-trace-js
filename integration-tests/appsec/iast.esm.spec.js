@@ -2,9 +2,9 @@
 
 const assert = require('node:assert/strict')
 
-const { sandboxCwd, useSandbox, spawnProc, FakeAgent } = require('../helpers')
 const path = require('path')
 const Axios = require('axios')
+const { sandboxCwd, useSandbox, spawnProc, FakeAgent } = require('../helpers')
 describe('ESM', () => {
   let axios, cwd, appFile, agent, proc
 

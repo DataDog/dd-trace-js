@@ -1,8 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { useSandbox } = require('./helpers')
 const http = require('http')
+const { useSandbox } = require('./helpers')
 
 describe('OpenTelemetry Logs Integration', () => {
   useSandbox()

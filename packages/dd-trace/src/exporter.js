@@ -1,9 +1,9 @@
 'use strict'
 
-const exporters = require('../../../ext/exporters')
 const fs = require('fs')
-const constants = require('./constants')
+const exporters = require('../../../ext/exporters')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const constants = require('./constants')
 
 module.exports = function getExporter (name) {
   switch (name) {

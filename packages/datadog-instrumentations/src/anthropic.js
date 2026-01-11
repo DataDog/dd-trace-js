@@ -1,8 +1,8 @@
 'use strict'
 
-const { addHook } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 const { channel, tracingChannel } = require('dc-polyfill')
+const shimmer = require('../../datadog-shimmer')
+const { addHook } = require('./helpers/instrument')
 
 const anthropicTracingChannel = tracingChannel('apm:anthropic:request')
 const onStreamedChunkCh = channel('apm:anthropic:request:chunk')

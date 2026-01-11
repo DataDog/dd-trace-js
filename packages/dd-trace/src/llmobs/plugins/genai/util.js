@@ -258,7 +258,7 @@ function formatContentObject (content) {
 
 /**
  * Format input messages from contents
- * @param {*} contents
+ * @param {[string|{text: string}|{parts: Array<string|{text: string}>}]} [contents]
  * @returns {Array}
  */
 function formatInputMessages (contents) {
@@ -285,7 +285,7 @@ function formatInputMessages (contents) {
 
 /**
  * Format embedding input from contents
- * @param {*} contents
+ * @param {[string|{text: string}|{parts: Array<string|{text: string}>}]} [contents]
  * @returns {Array}
  */
 function formatEmbeddingInput (contents) {

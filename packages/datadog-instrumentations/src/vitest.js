@@ -1,12 +1,12 @@
 'use strict'
 
-const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE
 } = require('../../dd-trace/src/plugins/util/test')
+const { addHook, channel } = require('./helpers/instrument')
 
 // test hooks
 const testStartCh = channel('ci:vitest:test:start')

@@ -1,12 +1,12 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
+
+const log = require('../../dd-trace/src/log')
 const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
-
-const log = require('../../dd-trace/src/log')
 
 const producerStartCh = channel('apm:kafkajs:produce:start')
 const producerCommitCh = channel('apm:kafkajs:produce:commit')

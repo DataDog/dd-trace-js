@@ -1,6 +1,9 @@
 'use strict'
 
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+const log = require('../log')
+const telemetryMetrics = require('../telemetry/metrics')
+const tracerVersion = require('../../../../package.json').version
 const NoopAIGuard = require('./noop')
 const executeRequest = require('./client')
 const {
@@ -14,9 +17,6 @@ const {
   AI_GUARD_TELEMETRY_REQUESTS,
   AI_GUARD_TELEMETRY_TRUNCATED
 } = require('./tags')
-const log = require('../log')
-const telemetryMetrics = require('../telemetry/metrics')
-const tracerVersion = require('../../../../package.json').version
 
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 

@@ -1,8 +1,8 @@
 'use strict'
 
-const types = require('./types')
 const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
+const types = require('./types')
 
 const startChannel = channel('apm:grpc:server:request:start')
 const asyncStartChannel = channel('apm:grpc:server:request:asyncStart')

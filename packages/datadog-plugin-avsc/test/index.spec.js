@@ -4,6 +4,7 @@ const fs = require('fs')
 const assert = require('node:assert/strict')
 const path = require('path')
 
+const sinon = require('sinon')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const {
@@ -14,10 +15,9 @@ const {
   SCHEMA_WEIGHT,
   SCHEMA_TYPE
 } = require('../../dd-trace/src/constants')
-const sinon = require('sinon')
-const { loadMessage } = require('./helpers')
 const { SchemaBuilder } = require('../../dd-trace/src/datastreams/schemas/schema_builder')
 const { NODE_MAJOR } = require('../../../version')
+const { loadMessage } = require('./helpers')
 
 const BASIC_USER_SCHEMA_DEF = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'schemas/expected_user_schema.json'), 'utf8')

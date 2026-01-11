@@ -1,6 +1,5 @@
 'use strict'
 
-const Writer = require('./writer')
 const {
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -12,6 +11,7 @@ const {
   VITEST_WORKER_LOGS_PAYLOAD_CODE
 } = require('../../../plugins/util/test')
 const { getEnvironmentVariable } = require('../../../config-helper')
+const Writer = require('./writer')
 
 function getInterprocessTraceCode () {
   if (getEnvironmentVariable('JEST_WORKER_ID')) {

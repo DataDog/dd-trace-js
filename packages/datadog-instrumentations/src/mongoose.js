@@ -1,8 +1,8 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 const { wrapThen } = require('./helpers/promise')
-const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')

@@ -1,13 +1,12 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+const path = require('node:path')
+const zlib = require('node:zlib')
 const Axios = require('axios')
 const semver = require('semver')
 const sinon = require('sinon')
 const { describe, it, before, beforeEach, afterEach, after } = require('mocha')
-
-const assert = require('node:assert/strict')
-const path = require('node:path')
-const zlib = require('node:zlib')
 
 const { NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')

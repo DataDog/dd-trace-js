@@ -1,12 +1,12 @@
 'use strict'
 
+const { URL, format } = require('url')
+const zlib = require('zlib')
 const pkg = require('../../../../package.json')
 const log = require('../log')
 const request = require('../exporters/common/request')
-const { URL, format } = require('url')
 const { MsgpackEncoder } = require('../msgpack')
 const defaults = require('../config_defaults')
-const zlib = require('zlib')
 
 const msgpack = new MsgpackEncoder()
 

@@ -1,16 +1,9 @@
 'use strict'
 
 const assert = require('assert')
-const semver = require('semver')
-const {
-  runAndCheckWithTelemetry: testFile,
-  useEnv,
-  useSandbox,
-  sandboxCwd,
-  setShouldKill
-} = require('./helpers')
 const path = require('path')
 const fs = require('fs')
+const semver = require('semver')
 
 const DD_INJECTION_ENABLED = 'tracing'
 const DD_INJECT_FORCE = 'true'
@@ -22,6 +15,13 @@ const telemetryForced = ['complete', 'injection_forced:true']
 const telemetryGood = ['complete', 'injection_forced:false']
 
 const { engines } = require('../package.json')
+const {
+  runAndCheckWithTelemetry: testFile,
+  useEnv,
+  useSandbox,
+  sandboxCwd,
+  setShouldKill
+} = require('./helpers')
 const supportedRange = engines.node
 const currentVersionIsSupported = semver.satisfies(NODE_VERSION, supportedRange)
 // These are on by default in release tests, so we'll turn them off for

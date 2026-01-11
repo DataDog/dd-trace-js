@@ -1,6 +1,4 @@
 'use strict'
-const { truncateSpan, normalizeSpan } = require('./tags-processors')
-const { AgentEncoder } = require('./0.4')
 const { version: ddTraceVersion } = require('../../../../package.json')
 const { ITR_CORRELATION_ID } = require('../../src/plugins/util/test')
 const id = require('../../src/id')
@@ -9,6 +7,8 @@ const {
   TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
   TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT
 } = require('../ci-visibility/telemetry')
+const { AgentEncoder } = require('./0.4')
+const { truncateSpan, normalizeSpan } = require('./tags-processors')
 
 const ENCODING_VERSION = 1
 const ALLOWED_CONTENT_TYPES = new Set(['test_session_end', 'test_module_end', 'test_suite_end', 'test'])

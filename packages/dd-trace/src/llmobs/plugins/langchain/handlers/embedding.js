@@ -1,8 +1,8 @@
 'use strict'
 
-const LangChainLLMObsHandler = require('.')
 const LLMObsTagger = require('../../../tagger')
 const { spanHasError } = require('../../../util')
+const LangChainLLMObsHandler = require('.')
 
 class LangChainLLMObsEmbeddingHandler extends LangChainLLMObsHandler {
   setMetaTags ({ span, inputs, results }) {

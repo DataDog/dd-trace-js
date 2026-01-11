@@ -5,8 +5,8 @@ const RemoteConfigCapabilities = require('../remote_config/capabilities')
 /**
  * Configures remote config handlers for openfeature feature flagging
  *
- * @param {Object} rc - RemoteConfig instance
- * @param {Object} config - Tracer config
+ * @param {object} rc - RemoteConfig instance
+ * @param {object} config - Tracer config
  * @param {Function} getOpenfeatureProxy - Function that returns the OpenFeature proxy from tracer
  */
 function enable (rc, config, getOpenfeatureProxy) {

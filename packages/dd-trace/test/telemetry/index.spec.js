@@ -106,9 +106,9 @@ describe('telemetry', () => {
       bar2: { _enabled: false }
     }
     /**
-     * @type {Object} CircularObject
+     * @type {object} CircularObject
      * @property {string} field
-     * @property {Object} child
+     * @property {object} child
      * @property {string} child.field
      * @property {CircularObject | null} child.parent
      */

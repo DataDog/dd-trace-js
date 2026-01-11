@@ -1,7 +1,7 @@
 'use strict'
 
-const { channel } = require('./instrument')
 const shimmer = require('../../../datadog-shimmer')
+const { channel } = require('./instrument')
 
 const routerMountPaths = new WeakMap() // to track mount paths for router instances
 const layerMatchers = new WeakMap() // to store layer matchers

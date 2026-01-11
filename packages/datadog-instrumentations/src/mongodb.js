@@ -2,11 +2,11 @@
 
 require('./mongodb-core')
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 // collection methods with filter
 const collectionMethodsWithFilter = [

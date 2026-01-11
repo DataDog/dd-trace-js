@@ -1,10 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 const sanitizeMethodFinished = channel('datadog:express-mongo-sanitize:sanitize:finish')
 const sanitizeMiddlewareFinished = channel('datadog:express-mongo-sanitize:filter:finish')

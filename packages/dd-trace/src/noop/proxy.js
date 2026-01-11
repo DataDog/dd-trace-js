@@ -1,11 +1,11 @@
 'use strict'
 
-const NoopTracer = require('./tracer')
 const NoopAppsecSdk = require('../appsec/sdk/noop')
-const NoopDogStatsDClient = require('./dogstatsd')
 const NoopLLMObsSDK = require('../llmobs/noop')
 const NoopFlaggingProvider = require('../openfeature/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
+const NoopDogStatsDClient = require('./dogstatsd')
+const NoopTracer = require('./tracer')
 
 const noop = new NoopTracer()
 const noopAppsec = new NoopAppsecSdk()

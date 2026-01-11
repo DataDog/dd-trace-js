@@ -1,10 +1,30 @@
 'use strict'
 
 /**
+ * @typedef {Record<string, unknown>} JsonObject
+ *
+ * @typedef {{ function: { arguments: string } }} ToolCall
+ * @typedef {{ content?: string, tool_calls?: ToolCall[] }} ChatDelta
+ *
+ * @typedef {{
+ *   index: number,
+ *   finish_reason?: string | null,
+ *   text?: string,
+ *   delta?: ChatDelta
+ * }} StreamChoice
+ *
+ * @typedef {JsonObject & { choices: StreamChoice[], usage?: unknown }} StreamChunk
+ * @typedef {JsonObject & { choices: Array<StreamChoice | undefined>, usage?: unknown }} StreamResponseBody
+ *
+ * @typedef {JsonObject & { status?: string }} ResponsesApiResponse
+ * @typedef {JsonObject & { response?: ResponsesApiResponse }} ResponsesApiChunk
+ */
+
+/**
  * Combines legacy OpenAI streamed chunks into a single object.
  * These legacy chunks are returned as buffers instead of individual objects.
  * @param {readonly Uint8Array[]} chunks
- * @returns {Array<Record<string, any>>}
+ * @returns {JsonObject[]}
  */
 function convertBuffersToObjects (chunks) {
   return Buffer
@@ -21,10 +41,10 @@ function convertBuffersToObjects (chunks) {
  * The shared logic will add a new choice index entry if it doesn't exist, and otherwise
  * hand off to a onChoice handler to add that choice to the previously stored choice.
  *
- * @param {Array<Record<string, any>>} chunks
+ * @param {StreamChunk[]} chunks
  * @param {number} n
- * @param {function(Record<string, any>, Record<string, any>): void} onChoice
- * @returns {Record<string, any>}
+ * @param {(newChoice: StreamChoice, existingChoice: StreamChoice) => void} onChoice
+ * @returns {StreamResponseBody}
  */
 function constructResponseFromStreamedChunks (chunks, n, onChoice) {
   const body = { ...chunks[0], choices: Array.from({ length: n }) }
@@ -54,9 +74,9 @@ function constructResponseFromStreamedChunks (chunks, n, onChoice) {
 /**
  * Constructs the entire response from a stream of OpenAI completion chunks,
  * mainly combining the text choices of each chunk into a single string per choice.
- * @param {Array<Record<string, any>>} chunks
+ * @param {StreamChunk[]} chunks
  * @param {number} n the number of choices to expect in the response
- * @returns {Record<string, any>}
+ * @returns {StreamResponseBody}
  */
 function constructCompletionResponseFromStreamedChunks (chunks, n) {
   return constructResponseFromStreamedChunks(chunks, n, (choice, oldChoice) => {
@@ -74,9 +94,9 @@ function constructCompletionResponseFromStreamedChunks (chunks, n) {
 /**
  * Constructs the entire response from a stream of OpenAI chat completion chunks,
  * mainly combining the text choices of each chunk into a single string per choice.
- * @param {Array<Record<string, any>>} chunks
+ * @param {StreamChunk[]} chunks
  * @param {number} n the number of choices to expect in the response
- * @returns {Record<string, any>}
+ * @returns {StreamResponseBody}
  */
 function constructChatCompletionResponseFromStreamedChunks (chunks, n) {
   return constructResponseFromStreamedChunks(chunks, n, (choice, oldChoice) => {
@@ -110,8 +130,8 @@ function constructChatCompletionResponseFromStreamedChunks (chunks, n) {
 /**
  * Constructs the entire response from a stream of OpenAI responses chunks.
  * The responses API uses event-based streaming with delta chunks.
- * @param {Array<Record<string, any>>} chunks
- * @returns {Record<string, any>|undefined}
+ * @param {ResponsesApiChunk[]} chunks
+ * @returns {ResponsesApiResponse|undefined}
  */
 function constructResponseResponseFromStreamedChunks (chunks) {
   // The responses API streams events with different types:

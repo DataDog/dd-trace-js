@@ -1,7 +1,7 @@
 'use strict'
 
-const { addHook } = require('./helpers/instrument')
 const { DD_MAJOR } = require('../../../version')
+const { addHook } = require('./helpers/instrument')
 
 // No handler because this is only useful for testing.
 // Cypress plugin does not patch any library.

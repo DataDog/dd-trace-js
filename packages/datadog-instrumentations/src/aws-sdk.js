@@ -1,7 +1,7 @@
 'use strict'
 
-const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { channel, addHook } = require('./helpers/instrument')
 
 const patchedClientConfigProtocols = new WeakSet()
 

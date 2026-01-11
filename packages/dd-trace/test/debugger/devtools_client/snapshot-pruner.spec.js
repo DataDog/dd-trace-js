@@ -434,8 +434,8 @@ describe('snapshot-pruner', function () {
      * Assert that the pruneSnapshot function successfully prunes the snapshot and returns the expected locals.
      * @param {number} maxSize - Used to define the max allowed size of the snapshot. If positive, it's the absolute max
      *   size value. If negative, it's redacted from the actual size.
-     * @param {Object} originalLocals - The locals to use for the snapshot.
-     * @param {Object} expectedLocals - The expected locals after pruning.
+     * @param {object} originalLocals - The locals to use for the snapshot.
+     * @param {object} expectedLocals - The expected locals after pruning.
      */
     function assertPrunedSnapshot (maxSize, originalLocals, expectedLocals) {
       Object.assign(locals, originalLocals)

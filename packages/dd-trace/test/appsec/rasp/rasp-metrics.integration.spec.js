@@ -2,9 +2,9 @@
 
 const assert = require('node:assert/strict')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 const path = require('path')
 const Axios = require('axios')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 describe('RASP metrics', () => {
   let axios, cwd, appFile
 

@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 
+const semver = require('semver')
 const {
   FakeAgent,
   curlAndAssertMessage,
@@ -11,7 +12,6 @@ const {
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const semver = require('semver')
 
 describe('esm', () => {
   withVersions('express', 'express', version => {

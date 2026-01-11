@@ -14,9 +14,8 @@ const hardcodedSecretAnalyzer = require('../../../../src/appsec/iast/analyzers/h
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
 const { getConfigFresh } = require('../../../helpers/config')
 const agent = require('../../../plugins/agent')
-const { suite } = require('./resources/hardcoded-secrets-suite.json')
-
 const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
+const { suite } = require('./resources/hardcoded-secrets-suite.json')
 
 describe('Hardcoded Secret Analyzer', () => {
   describe('unit test', () => {

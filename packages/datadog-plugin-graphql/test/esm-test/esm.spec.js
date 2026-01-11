@@ -2,6 +2,8 @@
 
 const assert = require('node:assert/strict')
 
+const axios = require('axios')
+const semver = require('semver')
 const {
   FakeAgent,
   sandboxCwd,
@@ -10,8 +12,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const axios = require('axios')
-const semver = require('semver')
 
 describe('Plugin (ESM)', () => {
   describe('graphql (ESM)', () => {

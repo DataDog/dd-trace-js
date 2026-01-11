@@ -85,7 +85,7 @@ class OtlpTransformer extends OtlpTransformerBase {
    * Creates scope metrics grouped by instrumentation scope.
    * @param {Iterable<AggregatedMetric>} metrics - Iterable of metrics to transform
    * @param {boolean} isJson - Whether to format for JSON output
-   * @returns {Array<Object>} Array of scope metric objects
+   * @returns {Array<object>} Array of scope metric objects
    *
    */
   #transformScope (metrics, isJson = false) {
@@ -125,7 +125,7 @@ class OtlpTransformer extends OtlpTransformerBase {
    *
    * @param {AggregatedMetric} metric - The metric to transform
    * @param {boolean} isJson - Whether to output JSON format (vs protobuf)
-   * @returns {Object} - The metric transformed to OTLP protobuf or JSON format
+   * @returns {object} - The metric transformed to OTLP protobuf or JSON format
    */
   #transformMetric (metric, isJson = false) {
     const result = {
@@ -176,7 +176,7 @@ class OtlpTransformer extends OtlpTransformerBase {
    *
    * @param {HistogramDataPoint} dp - The histogram data point to transform
    * @param {boolean} isJson - Whether to output JSON format (vs protobuf)
-   * @returns {Object} The histogram data point transformed to OTLP protobuf format
+   * @returns {object} The histogram data point transformed to OTLP protobuf format
    */
   #transformHistogramDataPoint (dp, isJson) {
     const attributes = isJson
@@ -209,7 +209,7 @@ class OtlpTransformer extends OtlpTransformerBase {
    *
    * @param {NumberDataPoint} dataPoint - The number data point to transform
    * @param {boolean} isJson - Whether to output JSON format (vs protobuf)
-   * @returns {Object} The number data point transformed to OTLP protobuf format
+   * @returns {object} The number data point transformed to OTLP protobuf format
    */
   #transformNumberDataPoint (dataPoint, isJson) {
     const attributes = isJson

@@ -16,7 +16,7 @@ module.exports = {
 }
 
 /**
- * @typedef {Object} GetLocalStateForCallFrameOptions
+ * @typedef {object} GetLocalStateForCallFrameOptions
  * @property {number} [maxReferenceDepth] - The maximum depth of the object to traverse. Defaults to
  *   {@link DEFAULT_MAX_REFERENCE_DEPTH}.
  * @property {number} [maxCollectionSize] - The maximum size of a collection to include in the snapshot. Defaults to
@@ -34,7 +34,7 @@ module.exports = {
  *
  * @param {import('inspector').Debugger.CallFrame} callFrame - The call frame to get the local state for
  * @param {GetLocalStateForCallFrameOptions} [opts] - The options for the snapshot
- * @returns {Promise<Object>} The local state for the call frame
+ * @returns {Promise<object>} The local state for the call frame
  */
 async function getLocalStateForCallFrame (
   callFrame,

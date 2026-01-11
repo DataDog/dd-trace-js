@@ -238,7 +238,7 @@ function writeUInt32BE (buffer, value, offset) {
 }
 
 /**
- * @param {string} value
+ * @param {string} [value]
  * @param {number} [radix]
  * @returns {Identifier}
  */

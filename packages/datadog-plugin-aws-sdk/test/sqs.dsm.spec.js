@@ -11,8 +11,8 @@ const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { setup } = require('./spec_helpers')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { setup } = require('./spec_helpers')
 
 const getQueueParams = (queueName) => {
   return {

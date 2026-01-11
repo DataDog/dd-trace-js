@@ -1,10 +1,10 @@
 'use strict'
 
-const Activation = require('./activation')
-const { setCollectionMode } = require('./user_tracking')
 const log = require('../log')
 const { updateConfig } = require('../telemetry')
 const RemoteConfigCapabilities = require('../remote_config/capabilities')
+const { setCollectionMode } = require('./user_tracking')
+const Activation = require('./activation')
 
 let autoUserInstrumModeId
 let rc
@@ -12,9 +12,9 @@ let rc
 /**
  * Configures remote config handlers for appsec features
  *
- * @param {Object} rcInstance - RemoteConfig instance
- * @param {Object} config - Tracer config
- * @param {Object} appsec - Appsec module
+ * @param {object} rcInstance - RemoteConfig instance
+ * @param {object} config - Tracer config
+ * @param {object} appsec - Appsec module
  */
 function enable (rcInstance, config, appsec) {
   rc = rcInstance
@@ -59,9 +59,9 @@ function enable (rcInstance, config, appsec) {
  * Enables or disables appsec based on remote config
  *
  * @param {string} action - 'apply', 'modify', or 'unapply'
- * @param {Object} rcConfig - Remote config
- * @param {Object} config - Tracer config
- * @param {Object} appsec - Appsec module
+ * @param {object} rcConfig - Remote config
+ * @param {object} config - Tracer config
+ * @param {object} appsec - Appsec module
  */
 function enableOrDisableAppsec (action, rcConfig, config, appsec) {
   if (typeof rcConfig.asm?.enabled === 'boolean') {
@@ -89,7 +89,7 @@ function enableOrDisableAppsec (action, rcConfig, config, appsec) {
 /**
  * Enables WAF update capabilities for remote config
  *
- * @param {Object} appsecConfig - Appsec config
+ * @param {object} appsecConfig - Appsec config
  */
 function enableWafUpdate (appsecConfig) {
   if (rc && appsecConfig && !appsecConfig.rules) {

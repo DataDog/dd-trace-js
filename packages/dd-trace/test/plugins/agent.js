@@ -387,7 +387,7 @@ module.exports = {
    * Load the plugin on the tracer with an optional config and start a mock agent.
    *
    * @overload
-   * @param {String|String[]} pluginNames - Name or list of names of plugins to load
+   * @param {string | string[]} pluginNames - Name or list of names of plugins to load
    * @param {Record<string, unknown>} [config]
    * @param {Record<string, unknown>} [tracerConfig={}]
    * @returns Promise<void>
@@ -396,7 +396,7 @@ module.exports = {
    * Load the plugin on the tracer with an optional config and start a mock agent.
    *
    * @overload
-   * @param {String[]} pluginNames - Name or list of names of plugins to load
+   * @param {string[]} pluginNames - Name or list of names of plugins to load
    * @param {Record<string, unknown>[]} config
    * @param {Record<string, unknown>} [tracerConfig={}]
    * @returns Promise<void>
@@ -615,7 +615,7 @@ module.exports = {
   /**
    * Get the LLM Observability span events requests.
    * @param {boolean} clear - Clear the requests after getting them.
-   * @returns {Array<Object>} The LLM Observability span events requests.
+   * @returns {Array<object>} The LLM Observability span events requests.
    */
   getLlmObsSpanEventsRequests (clear = false) {
     const requests = llmobsSpanEventsRequests
@@ -642,7 +642,7 @@ module.exports = {
    * - ritmReset: true
    * - wipe: false
    *
-   * @param {Object} [options]
+   * @param {object} [options]
    * @param {boolean} [options.ritmReset=true] - Resets the Require In The Middle cache. You probably don't need this.
    * @param {boolean} [options.wipe=false] - Wipes tracer and non-native modules from require cache. You probably don't
    *     need this.

@@ -3,8 +3,8 @@
 const os = require('os')
 
 const assert = require('assert')
-const { setup } = require('./utils')
 const { version } = require('../../package.json')
+const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   describe('ddtags', function () {

@@ -6,10 +6,10 @@ process.env.DD_DATA_STREAMS_ENABLED = 'true'
 const assert = require('node:assert')
 const sinon = require('sinon')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
-const TestSetup = require('./test-setup')
 const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const TestSetup = require('./test-setup')
 
 const testSetup = new TestSetup()
 

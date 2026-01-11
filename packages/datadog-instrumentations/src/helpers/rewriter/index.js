@@ -34,11 +34,11 @@ Orchestrion-JS that will need to be backported:
 const { readFileSync } = require('fs')
 const { join } = require('path')
 const semifies = require('../../../../../vendor/dist/semifies')
+const log = require('../../../../dd-trace/src/log')
+const { getEnvironmentVariable } = require('../../../../dd-trace/src/config-helper')
 const transforms = require('./transforms')
 const { generate, parse, traverse } = require('./compiler')
-const log = require('../../../../dd-trace/src/log')
 const instrumentations = require('./instrumentations')
-const { getEnvironmentVariable } = require('../../../../dd-trace/src/config-helper')
 
 const NODE_OPTIONS = getEnvironmentVariable('NODE_OPTIONS')
 

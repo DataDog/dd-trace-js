@@ -1,8 +1,8 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 const { wrapThen } = require('./helpers/promise')
-const shimmer = require('../../datadog-shimmer')
 
 const startRawQueryCh = channel('datadog:knex:raw:start')
 const rawQuerySubscribes = channel('datadog:knex:raw:subscribes')

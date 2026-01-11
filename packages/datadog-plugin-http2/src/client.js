@@ -1,9 +1,9 @@
 'use strict'
 
+const URL = require('url').URL
+
 const { storage } = require('../../datadog-core')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
-
-const URL = require('url').URL
 const log = require('../../dd-trace/src/log')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')

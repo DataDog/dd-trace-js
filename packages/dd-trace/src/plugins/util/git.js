@@ -6,6 +6,14 @@ const fs = require('fs')
 
 const log = require('../../log')
 const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_GIT_COMMAND,
+  TELEMETRY_GIT_COMMAND_MS,
+  TELEMETRY_GIT_COMMAND_ERRORS
+} = require('../../ci-visibility/telemetry')
+const { storage } = require('../../../../datadog-core')
+const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
   GIT_REPOSITORY_URL,
@@ -26,15 +34,7 @@ const {
   GIT_COMMIT_HEAD_COMMITTER_NAME,
   GIT_COMMIT_HEAD_MESSAGE
 } = require('./tags')
-const {
-  incrementCountMetric,
-  distributionMetric,
-  TELEMETRY_GIT_COMMAND,
-  TELEMETRY_GIT_COMMAND_MS,
-  TELEMETRY_GIT_COMMAND_ERRORS
-} = require('../../ci-visibility/telemetry')
 const { filterSensitiveInfoFromRepository } = require('./url')
-const { storage } = require('../../../../datadog-core')
 const { cachedExec } = require('./git-cache')
 
 const GIT_REV_LIST_MAX_BUFFER = 12 * 1024 * 1024 // 12MB

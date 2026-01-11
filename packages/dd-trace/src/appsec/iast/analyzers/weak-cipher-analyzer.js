@@ -1,6 +1,6 @@
 'use strict'
-const Analyzer = require('./vulnerability-analyzer')
 const { WEAK_CIPHER } = require('../vulnerabilities')
+const Analyzer = require('./vulnerability-analyzer')
 
 const INSECURE_CIPHERS = new Set([
   'des', 'des-cbc', 'des-cfb', 'des-cfb1', 'des-cfb8', 'des-ecb', 'des-ede', 'des-ede-cbc', 'des-ede-cfb',

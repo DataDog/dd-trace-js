@@ -4,10 +4,10 @@ const path = require('path')
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { storage } = require('../../datadog-core')
-const services = require('./services')
 const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
 
+const { DD_MAJOR } = require('../../../version')
 const {
   convertBuffersToObjects,
   constructCompletionResponseFromStreamedChunks,
@@ -15,7 +15,7 @@ const {
   constructResponseResponseFromStreamedChunks
 } = require('./stream-helpers')
 
-const { DD_MAJOR } = require('../../../version')
+const services = require('./services')
 
 class OpenAiTracingPlugin extends TracingPlugin {
   static id = 'openai'

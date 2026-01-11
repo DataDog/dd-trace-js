@@ -1,9 +1,9 @@
 'use strict'
 
+const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
 
-const dc = require('dc-polyfill')
 const serializeChannel = dc.channel('apm:avsc:serialize-start')
 const deserializeChannel = dc.channel('apm:avsc:deserialize-end')
 

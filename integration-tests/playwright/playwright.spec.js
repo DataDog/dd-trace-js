@@ -3,9 +3,9 @@
 const assert = require('node:assert')
 const { once } = require('node:events')
 const { exec, execSync } = require('child_process')
-const satisfies = require('semifies')
 const path = require('path')
 const fs = require('fs')
+const satisfies = require('semifies')
 
 const {
   sandboxCwd,

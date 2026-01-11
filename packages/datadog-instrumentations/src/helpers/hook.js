@@ -1,6 +1,6 @@
 'use strict'
-const iitm = require('../../../dd-trace/src/iitm')
 const path = require('path')
+const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
 
 /**

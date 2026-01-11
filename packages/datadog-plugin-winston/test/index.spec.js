@@ -2,15 +2,14 @@
 
 const assert = require('node:assert/strict')
 
+const http = require('node:http')
+const { inspect } = require('node:util')
 const { afterEach, beforeEach, describe, it } = require('mocha')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const proxyquire = require('proxyquire').noPreserveCache()
 const semver = require('semver')
 const sinon = require('sinon')
-
-const http = require('node:http')
-const { inspect } = require('node:util')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')

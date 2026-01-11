@@ -1,10 +1,10 @@
 'use strict'
 
-const benchmark = require('./benchmark')
 const proxyquire = require('proxyquire')
+const getConfig = require('../packages/dd-trace/src/config')
+const benchmark = require('./benchmark')
 const { createSingleExposureEvent, createExposureEventArray } = require('./stubs/exposure-events')
 
-const getConfig = require('../packages/dd-trace/src/config')
 const ExposuresWriter = proxyquire('../packages/dd-trace/src/openfeature/writers/exposures', {
   '../../exporters/common/request': () => {}
 })

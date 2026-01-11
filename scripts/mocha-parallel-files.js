@@ -9,6 +9,22 @@ const { stripVTControlCharacters: stripAnsi } = require('util')
 const { globSync } = require('glob')
 
 /**
+ * @typedef {{
+ *   reporterEnabled: string[],
+ *   xunitReporterOptions?: { output: string }
+ * }} ReporterOptions
+ *
+ * @typedef {{
+ *   type: 'mocha-run-file-result',
+ *   passes?: number,
+ *   failures?: number,
+ *   pending?: number,
+ *   tests?: number,
+ *   duration?: number
+ * }} MochaRunFileResultMessage
+ */
+
+/**
  * @param {string[]} argv
  * @returns {{jobs?: number, timeout?: number, exposeGc: boolean, require: string[], patterns: string[]}}
  */
@@ -126,6 +142,15 @@ function mergeXunitFilesToSingleTestsuite (inputFiles, outputFile) {
   ].join('\n')
 
   fs.writeFileSync(outputFile, merged)
+}
+
+/**
+ * @param {unknown} msg
+ * @returns {msg is MochaRunFileResultMessage}
+ */
+function isMochaRunFileResultMessage (msg) {
+  if (!msg || typeof msg !== 'object') return false
+  return /** @type {Record<string, unknown>} */ (msg).type === 'mocha-run-file-result'
 }
 
 async function main () {
@@ -314,7 +339,7 @@ async function main () {
 
         if (junitShard) junitTmpFiles.push(junitShard)
 
-        /** @type {any} */
+        /** @type {ReporterOptions} */
         const reporterOptions = emitJunit
           ? {
               reporterEnabled: ['spec', 'xunit'],
@@ -363,8 +388,8 @@ async function main () {
         })
 
         child.on('message', (msg) => {
-          const m = /** @type {any} */ (msg)
-          if (m && typeof m === 'object' && m.type === 'mocha-run-file-result') {
+          const m = /** @type {unknown} */ (msg)
+          if (isMochaRunFileResultMessage(m)) {
             entries[entryIndex].stats = {
               passes: m.passes || 0,
               failures: m.failures || 0,

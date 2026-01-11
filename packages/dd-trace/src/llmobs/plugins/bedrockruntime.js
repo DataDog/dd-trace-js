@@ -1,16 +1,16 @@
 'use strict'
 
-const BaseLLMObsPlugin = require('./base')
 const { storage } = require('../../../../datadog-core')
-const llmobsStore = storage('llmobs')
 const telemetry = require('../telemetry')
-
 const {
   extractRequestParams,
   extractTextAndResponseReason,
   parseModelId,
   extractTextAndResponseReasonFromStream
 } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
+const BaseLLMObsPlugin = require('./base')
+
+const llmobsStore = storage('llmobs')
 
 const ENABLED_OPERATIONS = new Set(['invokeModel', 'invokeModelWithResponseStream'])
 

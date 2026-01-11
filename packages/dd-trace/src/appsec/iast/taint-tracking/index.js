@@ -1,5 +1,6 @@
 'use strict'
 
+const kafkaContextPlugin = require('../context/kafka-ctx-plugin')
 const {
   createTransaction,
   removeTransaction,
@@ -10,8 +11,6 @@ const {
 
 const taintTrackingPlugin = require('./plugin')
 const kafkaConsumerPlugin = require('./plugins/kafka')
-
-const kafkaContextPlugin = require('../context/kafka-ctx-plugin')
 
 module.exports = {
   enableTaintTracking (config, telemetryVerbosity) {

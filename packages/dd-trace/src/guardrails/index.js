@@ -2,10 +2,11 @@
 
 var path = require('path')
 var Module = require('module')
+
+var nodeVersion = require('../../../../version')
 var isTrue = require('./util').isTrue
 var log = require('./log')
 var telemetry = require('./telemetry')
-var nodeVersion = require('../../../../version')
 
 var NODE_MAJOR = nodeVersion.NODE_MAJOR
 

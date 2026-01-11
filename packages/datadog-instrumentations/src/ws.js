@@ -1,12 +1,13 @@
 'use strict'
 
+const tracingChannel = require('dc-polyfill').tracingChannel
+
+const shimmer = require('../../datadog-shimmer')
 const {
   addHook,
   channel
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
-const tracingChannel = require('dc-polyfill').tracingChannel
 const serverCh = tracingChannel('ws:server:connect')
 const producerCh = tracingChannel('ws:send')
 const receiverCh = tracingChannel('ws:receive')

@@ -3,14 +3,14 @@
 const assert = require('node:assert/strict')
 
 const { after, before, beforeEach, describe, it } = require('mocha')
+const semifies = require('semifies')
 
 const { assertObjectContains, useEnv } = require('../../../integration-tests/helpers')
 const iastFilter = require('../../dd-trace/src/appsec/iast/taint-tracking/filter')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const isDdTrace = iastFilter.isDdTrace
 
-const semifies = require('semifies')
+const isDdTrace = iastFilter.isDdTrace
 
 describe('Plugin', () => {
   let langchainOpenai

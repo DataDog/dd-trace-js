@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('assert')
 const {
   FakeAgent,
   sandboxCwd,
@@ -7,7 +8,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
-const assert = require('assert')
 
 describe('esm', () => {
   let agent

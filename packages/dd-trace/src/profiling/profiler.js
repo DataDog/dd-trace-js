@@ -1,15 +1,14 @@
 'use strict'
 
 const { EventEmitter } = require('events')
+const { promisify } = require('util')
+const zlib = require('zlib')
+const dc = require('dc-polyfill')
+const crashtracker = require('../crashtracking')
 const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./webspan-utils')
-const dc = require('dc-polyfill')
-const crashtracker = require('../crashtracking')
-
-const { promisify } = require('util')
-const zlib = require('zlib')
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')

@@ -5,8 +5,8 @@
 const fs = require('fs')
 const { spawnSync } = require('child_process')
 
-const ddPlugin = require('../../esbuild') // dd-trace/esbuild
 const esbuild = require('esbuild')
+const ddPlugin = require('../../esbuild') // dd-trace/esbuild
 
 const SCRIPT = './aws-sdk-out.js'
 

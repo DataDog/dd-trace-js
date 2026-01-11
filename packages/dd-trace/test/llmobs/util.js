@@ -1,9 +1,9 @@
 'use strict'
 
-const { before, beforeEach, after } = require('mocha')
 const util = require('node:util')
-const agent = require('../plugins/agent')
 const assert = require('node:assert')
+const { before, beforeEach, after } = require('mocha')
+const agent = require('../plugins/agent')
 const { useEnv } = require('../../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../src/constants')
 
@@ -18,21 +18,21 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
  * @typedef {{
  *   spanKind: 'llm' | 'embedding' | 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval',
  *   name: string,
- *   inputMessages: { [key: string]: any },
- *   outputMessages: { [key: string]: any },
- *   inputDocuments: { [key: string]: any },
- *   outputDocuments: { [key: string]: any },
- *   inputValue: { [key: string]: any },
- *   outputValue: { [key: string]: any },
+ *   inputMessages: Record<string, unknown>,
+ *   outputMessages: Record<string, unknown>,
+ *   inputDocuments: Record<string, unknown>,
+ *   outputDocuments: Record<string, unknown>,
+ *   inputValue: Record<string, unknown>,
+ *   outputValue: Record<string, unknown>,
  *   metrics: { [key: string]: number },
- *   metadata: { [key: string]: any },
+ *   metadata: Record<string, unknown>,
  *   modelName?: string,
  *   modelProvider?: string,
  *   parentId?: string,
  *   error?: { message: string, type: string, stack: string },
  *   span: unknown,
  *   sessionId?: string,
- *   tags: { [key: string]: any },
+ *   tags: Record<string, unknown>,
  *   traceId?: string,
  * }} ExpectedLLMObsSpanEvent
  */
@@ -290,10 +290,10 @@ function fromBuffer (spanProperty, isNumber = false) {
 }
 
 /**
- * @param {Object} options
+ * @param {object} options
  * @param {string} options.plugin
- * @param {Object} options.tracerConfigOptions
- * @param {Object} options.closeOptions
+ * @param {object} options.tracerConfigOptions
+ * @param {object} options.closeOptions
  * @returns {function(): Promise<{ apmSpans: Array, llmobsSpans: Array }>}
  */
 function useLlmObs ({
@@ -301,7 +301,7 @@ function useLlmObs ({
   tracerConfigOptions = {},
   closeOptions = {}
 } = {}) {
-  /** @type {Promise<Array<Array<Object>>>} */
+  /** @type {Promise<Array<Array<object>>>} */
   let apmTracesPromise
 
   const resetTracesPromises = () => {

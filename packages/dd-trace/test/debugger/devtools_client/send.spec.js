@@ -7,9 +7,9 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const { getRequestOptions } = require('./utils')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
 const { version } = require('../../../../../package.json')
+const { getRequestOptions } = require('./utils')
 
 require('../../setup/mocha')
 

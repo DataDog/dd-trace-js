@@ -7,8 +7,8 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 require('../../setup/mocha')
 
-const { getRequestOptions } = require('./utils')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
+const { getRequestOptions } = require('./utils')
 
 const ddsource = 'dd_debugger'
 const service = 'my-service'

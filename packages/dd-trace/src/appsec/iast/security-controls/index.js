@@ -5,10 +5,10 @@ const dc = require('dc-polyfill')
 const { storage } = require('../../../../../datadog-core')
 const shimmer = require('../../../../../datadog-shimmer')
 const log = require('../../../log')
-const { parse, SANITIZER_TYPE } = require('./parser')
 const TaintTrackingOperations = require('../taint-tracking/operations')
 const { getIastContext } = require('../iast-context')
 const { iterateObjectStrings } = require('../utils')
+const { parse, SANITIZER_TYPE } = require('./parser')
 
 // esm
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')

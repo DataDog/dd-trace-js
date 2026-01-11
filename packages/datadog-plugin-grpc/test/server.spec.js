@@ -1,19 +1,17 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const Readable = require('node:stream').Readable
+const path = require('node:path')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const Readable = require('node:stream').Readable
-const path = require('node:path')
-
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_SERVER_ERROR_STATUSES } = require('../../dd-trace/src/constants')
-
 const { NODE_MAJOR } = require('../../../version')
+
 const pkgs = NODE_MAJOR > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
 describe('Plugin', () => {

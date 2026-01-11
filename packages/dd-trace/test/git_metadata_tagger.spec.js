@@ -5,8 +5,8 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
 require('./setup/core')
-const agent = require('./plugins/agent')
 const { SCI_COMMIT_SHA, SCI_REPOSITORY_URL } = require('../src/constants')
+const agent = require('./plugins/agent')
 
 const DUMMY_GIT_SHA = '13851f2b092e97acebab1b73f6c0e7818e795b50'
 const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/sci_git_example.git'

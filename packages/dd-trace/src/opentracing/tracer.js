@@ -1,19 +1,19 @@
 'use strict'
 
 const os = require('os')
-const Span = require('./span')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
+const formats = require('../../../../ext/formats')
+const log = require('../log')
+const runtimeMetrics = require('../runtime_metrics')
+const getExporter = require('../exporter')
+const Span = require('./span')
 const TextMapPropagator = require('./propagation/text_map')
 const DSMTextMapPropagator = require('./propagation/text_map_dsm')
 const HttpPropagator = require('./propagation/http')
 const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
-const formats = require('../../../../ext/formats')
 
-const log = require('../log')
-const runtimeMetrics = require('../runtime_metrics')
-const getExporter = require('../exporter')
 const SpanContext = require('./span_context')
 
 const REFERENCE_CHILD_OF = 'child_of'

@@ -1,5 +1,7 @@
 'use strict'
 
+const path = require('path')
+const { USER_KEEP } = require('../ext/priority')
 const {
   FakeAgent,
   sandboxCwd,
@@ -8,8 +10,6 @@ const {
   curlAndAssertMessage,
   assertObjectContains
 } = require('./helpers')
-const path = require('path')
-const { USER_KEEP } = require('../ext/priority')
 
 describe('Log Injection', () => {
   let agent

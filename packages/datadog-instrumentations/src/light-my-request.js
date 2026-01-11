@@ -11,11 +11,11 @@
  * to route requests between worker threads using Fastify inject().
  */
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 // Reuse the same channels as HTTP server instrumentation
 const startServerCh = channel('apm:http:server:request:start')

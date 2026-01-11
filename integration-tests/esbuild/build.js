@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 'use strict'
 
-const ddPlugin = require('../../esbuild') // dd-trace/esbuild
 const esbuild = require('esbuild')
+const ddPlugin = require('../../esbuild') // dd-trace/esbuild
 
 esbuild.build({
   entryPoints: ['basic-test.js'],

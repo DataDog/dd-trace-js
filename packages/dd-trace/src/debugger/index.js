@@ -4,8 +4,8 @@ const { readFile } = require('fs')
 const { types } = require('util')
 const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
-const getDebuggerConfig = require('./config')
 const log = require('../log')
+const getDebuggerConfig = require('./config')
 
 let worker = null
 let configChannel = null

@@ -5,8 +5,9 @@ tracer.init({
   flushInterval: 1
 })
 
-const express = require('express')
 const childProcess = require('child_process')
+
+const express = require('express')
 
 const app = express()
 

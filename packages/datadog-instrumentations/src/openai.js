@@ -1,9 +1,9 @@
 'use strict'
 
-const { addHook } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
-
 const dc = require('dc-polyfill')
+const shimmer = require('../../datadog-shimmer')
+const { addHook } = require('./helpers/instrument')
+
 const ch = dc.tracingChannel('apm:openai:request')
 const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
 

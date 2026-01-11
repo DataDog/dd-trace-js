@@ -7,11 +7,11 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../setup/mocha')
 
-const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
 const {
   LARGE_OBJECT_SKIP_THRESHOLD,
   DEFAULT_MAX_COLLECTION_SIZE
 } = require('../../../../src/debugger/devtools_client/snapshot/constants')
+const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
 
 const target = getTargetCodePath(__filename)
 

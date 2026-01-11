@@ -1,10 +1,10 @@
 'use strict'
 
-const LLMObsPlugin = require('./base')
 const {
   extractModel,
   extractSystemInstructions
 } = require('../../../../datadog-plugin-google-cloud-vertexai/src/utils')
+const LLMObsPlugin = require('./base')
 
 class VertexAILLMObsPlugin extends LLMObsPlugin {
   static integration = 'vertexai' // used for llmobs telemetry

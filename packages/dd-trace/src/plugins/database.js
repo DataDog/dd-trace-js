@@ -1,7 +1,7 @@
 'use strict'
 
-const StoragePlugin = require('./storage')
 const { PEER_SERVICE_KEY, PEER_SERVICE_SOURCE_KEY } = require('../constants')
+const StoragePlugin = require('./storage')
 
 class DatabasePlugin extends StoragePlugin {
   static operation = 'query'

@@ -2,13 +2,13 @@
 
 const assert = require('node:assert/strict')
 
+const semifies = require('semifies')
 const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const semifies = require('semifies')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 function getOpenaiVersion (realVersion) {

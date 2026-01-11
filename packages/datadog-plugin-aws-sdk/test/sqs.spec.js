@@ -6,9 +6,9 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sqs-naming')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const getQueueParams = (queueName) => {
   return {

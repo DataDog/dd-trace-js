@@ -1,8 +1,7 @@
 'use strict'
 
-const { channel, addHook } = require('./helpers/instrument')
-
 const shimmer = require('../../datadog-shimmer')
+const { channel, addHook } = require('./helpers/instrument')
 
 addHook({ name: 'lodash', versions: ['>=4'] }, lodash => {
   const lodashOperationCh = channel('datadog:lodash:operation')

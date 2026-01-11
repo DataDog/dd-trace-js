@@ -2,8 +2,8 @@
 
 const path = require('path')
 const getDiClient = require('../../../../src/ci-visibility/dynamic-instrumentation')
-const sum = require('./di-dependency')
 const getConfig = require('../../../../src/config')
+const sum = require('./di-dependency')
 
 // keep process alive
 const intervalId = setInterval(() => {}, 5000)

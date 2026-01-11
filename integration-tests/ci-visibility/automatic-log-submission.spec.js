@@ -12,8 +12,8 @@ const {
   assertObjectContains
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
-const webAppServer = require('./web-app-server')
 const { NODE_MAJOR } = require('../../version')
+const webAppServer = require('./web-app-server')
 
 describe('test optimization automatic log submission', () => {
   let cwd, receiver, childProcess, webAppPort

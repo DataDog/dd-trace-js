@@ -5,9 +5,9 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 require('../../../setup/mocha')
 
-const session = require('./stub-session')
 const proxyquire = require('proxyquire')
 const { timeBudgetSym } = require('../../../../src/debugger/devtools_client/snapshot/symbols')
+const session = require('./stub-session')
 
 describe('debugger -> devtools client -> snapshot collector deadline', function () {
   let collectObjectProperties

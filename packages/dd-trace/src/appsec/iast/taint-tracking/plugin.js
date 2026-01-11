@@ -3,6 +3,7 @@
 const { SourceIastPlugin } = require('../iast-plugin')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
+const { EXECUTED_SOURCE } = require('../telemetry/iast-metric')
 const { taintObject, newTaintedString, getRanges, taintQueryWithCache } = require('./operations')
 const {
   HTTP_REQUEST_BODY,
@@ -15,7 +16,6 @@ const {
   HTTP_REQUEST_URI,
   SQL_ROW_VALUE
 } = require('./source-types')
-const { EXECUTED_SOURCE } = require('../telemetry/iast-metric')
 
 const REQ_HEADER_TAGS = EXECUTED_SOURCE.formatTags(HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_HEADER_NAME)
 const REQ_URI_TAGS = EXECUTED_SOURCE.formatTags(HTTP_REQUEST_URI)

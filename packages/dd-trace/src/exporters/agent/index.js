@@ -2,8 +2,8 @@
 
 const { URL, format } = require('url')
 const log = require('../../log')
-const Writer = require('./writer')
 const defaults = require('../../config_defaults')
+const Writer = require('./writer')
 
 class AgentExporter {
   #timer

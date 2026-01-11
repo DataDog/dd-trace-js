@@ -1,10 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'bunyan', versions: ['>=1'] }, Logger => {
   const logCh = channel('apm:bunyan:log')

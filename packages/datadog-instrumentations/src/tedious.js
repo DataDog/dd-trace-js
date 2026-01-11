@@ -1,10 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
   const startCh = channel('apm:tedious:request:start')

@@ -180,7 +180,7 @@ async function processModule ({ path, internal, context, excludeDefault }) {
  *
  * @param {string} fullPathToModule File to analize
  * @param {string} [modulePackageJsonPath] Path of the package.json
- * @param {Object} [packageJson] The content of the module package.json
+ * @param {object} [packageJson] The content of the module package.json
  * @returns {boolean}
  */
 function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {

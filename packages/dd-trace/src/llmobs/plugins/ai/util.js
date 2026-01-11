@@ -11,15 +11,34 @@ const MODEL_METADATA_KEYS = new Set([
 ])
 
 /**
+ * @typedef {import('../../../opentracing/span')} Span
+ *
+ * @typedef {string | number | boolean | null | undefined | string[] | number[] | boolean[]} TagValue
+ * @typedef {Record<string, TagValue>} SpanTags
+ *
+ * @typedef {{ span?: Span }} CurrentStore
+ * @typedef {{ currentStore?: CurrentStore, attributes?: SpanTags }} AiPluginContext
+ */
+
+/**
+ * @typedef {{
+ *   type: string,
+ *   value?: unknown
+ * }} ToolCallOutput
+ *
+ * @typedef {{ output?: ToolCallOutput, result?: unknown } & Record<string, unknown>} ToolCallResultContent
+ */
+
+/**
  * Get the span tags from the context (either the attributes or the span tags).
  *
- * @param {Record<string, any>} ctx
- * @returns {Record<string, any>}
+ * @param {AiPluginContext} ctx
+ * @returns {SpanTags}
  */
 function getSpanTags (ctx) {
   const span = ctx.currentStore?.span
   const carrier = ctx.attributes ?? span?.context()._tags ?? {}
-  return carrier
+  return /** @type {SpanTags} */ (carrier)
 }
 
 /**
@@ -88,10 +107,11 @@ function getJsonStringValue (str, defaultValue) {
 
 /**
  * Get the model metadata from the span tags (top_p, top_k, temperature, etc.)
- * @param {Record<string, unknown>} tags
- * @returns {Record<string, string> | null}
+ * @param {SpanTags} tags
+ * @returns {Record<string, unknown> | null}
  */
 function getModelMetadata (tags) {
+  /** @type {Record<string, unknown>} */
   const modelMetadata = {}
   for (const metadata of MODEL_METADATA_KEYS) {
     const metadataTagKey = `gen_ai.request.${metadata}`
@@ -106,10 +126,11 @@ function getModelMetadata (tags) {
 
 /**
  * Get the generation metadata from the span tags (maxSteps, maxRetries, etc.)
- * @param {Record<string, string>} tags
- * @returns {Record<string, string> | null}
+ * @param {SpanTags} tags
+ * @returns {Record<string, unknown> | null}
  */
 function getGenerationMetadata (tags) {
+  /** @type {Record<string, unknown>} */
   const metadata = {}
 
   for (const tag of Object.keys(tags)) {
@@ -131,7 +152,7 @@ function getGenerationMetadata (tags) {
  * If the tool name is a parsable number, or is not found, null is returned.
  * Older versions of the ai sdk would tag the tool name as its index in the tools array.
  *
- * @param {Record<string, string>} tags
+ * @param {SpanTags} tags
  * @returns {string | null}
  */
 function getToolNameFromTags (tags) {
@@ -147,7 +168,7 @@ function getToolNameFromTags (tags) {
 /**
  * Get the content of a tool call result.
  * Version 5 of the ai sdk sets this tag as `content.output`, with a `
- * @param {Record<string, any>} content
+ * @param {{ output?: { type: string, value: unknown }, result?: unknown }} content
  * @returns {string}
  */
 function getToolCallResultContent (content) {

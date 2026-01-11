@@ -3,7 +3,6 @@
 /* eslint-disable no-console */
 
 const tracer = require('dd-trace').init()
-
 const { Worker, isMainThread, threadId } = require('worker_threads')
 
 const nworkers = Number(process.argv[2] || 0)

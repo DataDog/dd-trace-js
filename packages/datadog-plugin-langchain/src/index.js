@@ -1,8 +1,8 @@
 'use strict'
 
-const langChainTracingPlugins = require('./tracing')
 const langChainLLMObsPlugins = require('../../dd-trace/src/llmobs/plugins/langchain')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
+const langChainTracingPlugins = require('./tracing')
 
 const plugins = {}
 

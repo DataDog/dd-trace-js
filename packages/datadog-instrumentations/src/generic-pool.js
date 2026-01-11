@@ -1,7 +1,7 @@
 'use strict'
 
-const { addHook, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { addHook, AsyncResource } = require('./helpers/instrument')
 
 function createWrapAcquire () {
   return function wrapAcquire (acquire) {

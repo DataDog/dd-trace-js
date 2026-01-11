@@ -1,7 +1,7 @@
 'use strict'
 
-const constants = require('./constants')
 const tags = require('../../../ext/tags')
+const constants = require('./constants')
 const id = require('./id')
 const { isError } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')

@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
-import express from 'express'
 import { URL } from 'node:url'
+import express from 'express'
 import dc from 'dc-polyfill'
 
 const parseFinishChannel = dc.channel('datadog:url:parse:finish')

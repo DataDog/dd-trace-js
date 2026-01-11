@@ -1,8 +1,7 @@
 'use strict'
 
-const tracerLogger = require('../../log')// path to require tracer logger
-
 const https = require('https')
+const tracerLogger = require('../../log')// path to require tracer logger
 
 class ExternalLogger {
   // Note: these attribute names match the corresponding entry in the JSON payload.

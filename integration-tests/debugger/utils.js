@@ -29,7 +29,7 @@ const pollInterval = 0.1
  */
 
 /**
- * @typedef {Object} BreakpointInfo
+ * @typedef {object} BreakpointInfo
  * @property {string} sourceFile
  * @property {string} deployedFile
  * @property {number} line
@@ -51,7 +51,7 @@ const pollInterval = 0.1
  * The live‑debugger integration test harness returned by {@link setup}. Provides the spawned app process, fake agent,
  * axios client, and helpers to generate remote config and trigger breakpoints.
  *
- * @typedef {Object} DebuggerTestEnvironment
+ * @typedef {object} DebuggerTestEnvironment
  * @property {BreakpointInfo} breakpoint - Primary breakpoint metadata.
  * @property {EnrichedBreakpoint[]} breakpoints - All discovered breakpoints with helpers.
  * @property {import('axios').AxiosInstance} axios - HTTP client bound to the test app. Throws if accessed before
@@ -222,7 +222,7 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
 /**
  * Get breakpoint information from a test file by scanning for BREAKPOINT_TOKEN markers.
  *
- * @param {Object} [options] - Options for finding breakpoints.
+ * @param {object} [options] - Options for finding breakpoints.
  * @param {string} [options.deployedFile] - The deployed file path. If not provided, will be inferred from the stack
  *   trace.
  * @param {string} [options.sourceFile] - The source file path. Defaults to `deployedFile` if not provided.

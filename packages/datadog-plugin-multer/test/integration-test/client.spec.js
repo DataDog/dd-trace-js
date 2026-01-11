@@ -1,12 +1,12 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+const axios = require('axios')
 const {
   useSandbox, sandboxCwd, varySandbox,
   FakeAgent, spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const assert = require('node:assert/strict')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const axios = require('axios')
 
 withVersions('multer', 'multer', version => {
   describe('ESM', () => {

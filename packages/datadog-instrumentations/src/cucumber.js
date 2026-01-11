@@ -1,10 +1,20 @@
 'use strict'
-const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
 
-const { addHook, channel } = require('./helpers/instrument')
+const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const {
+  getCoveredFilenamesFromCoverage,
+  resetCoverage,
+  mergeCoverage,
+  fromCoverageMapToCoverage,
+  getTestSuitePath,
+  CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  getIsFaultyEarlyFlakeDetection
+} = require('../../dd-trace/src/plugins/util/test')
+const satisfies = require('../../../vendor/dist/semifies')
+const { addHook, channel } = require('./helpers/instrument')
 
 const testStartCh = channel('ci:cucumber:test:start')
 const testRetryCh = channel('ci:cucumber:test:retry')
@@ -33,17 +43,6 @@ const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
 const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
-
-const {
-  getCoveredFilenamesFromCoverage,
-  resetCoverage,
-  mergeCoverage,
-  fromCoverageMapToCoverage,
-  getTestSuitePath,
-  CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
-  getIsFaultyEarlyFlakeDetection
-} = require('../../dd-trace/src/plugins/util/test')
-const satisfies = require('../../../vendor/dist/semifies')
 
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')

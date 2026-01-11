@@ -1,8 +1,8 @@
 'use strict'
 
+const session = require('../session')
 const { collectionSizeSym, largeCollectionSkipThresholdSym, fieldCountSym, timeBudgetSym } = require('./symbols')
 const { LARGE_OBJECT_SKIP_THRESHOLD } = require('./constants')
-const session = require('../session')
 
 const LEAF_SUBTYPES = new Set(['date', 'regexp'])
 const ITERABLE_SUBTYPES = new Set(['map', 'set', 'weakmap', 'weakset'])
@@ -13,12 +13,12 @@ module.exports = {
 }
 
 /**
- * @typedef {Object} GetObjectOptions
- * @property {Object} maxReferenceDepth - The maximum depth of the object to traverse
+ * @typedef {object} GetObjectOptions
+ * @property {object} maxReferenceDepth - The maximum depth of the object to traverse
  * @property {number} maxCollectionSize - The maximum size of a collection to include in the snapshot
  * @property {number} maxFieldCount - The maximum number of properties on an object to include in the snapshot
  * @property {bigint} deadlineNs - The deadline in nanoseconds compared to `process.hrtime.bigint()`
- * @property {Object} ctx - A context object to track the state/progress of the snapshot collection.
+ * @property {object} ctx - A context object to track the state/progress of the snapshot collection.
  * @property {boolean} ctx.deadlineReached - Will be set to `true` if the deadline has been reached.
  * @property {Error[]} ctx.captureErrors - An array on which errors can be pushed if an issue is detected while
  *   collecting the snapshot.
@@ -34,7 +34,7 @@ module.exports = {
  *   and should not be set by the caller.
  * @param {boolean} [collection=false] - Whether the object is a collection. Only used internally by this module to
  *   track the current object type and should not be set by the caller.
- * @returns {Promise<Object[]>} The properties of the object
+ * @returns {Promise<object[]>} The properties of the object
  */
 async function collectObjectProperties (objectId, opts, depth = 0, collection = false) {
   const { result, privateProperties } = await session.post('Runtime.getProperties', {

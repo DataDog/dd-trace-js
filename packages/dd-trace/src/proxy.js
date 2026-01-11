@@ -1,4 +1,5 @@
 'use strict'
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
@@ -10,7 +11,6 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 const {
   setBaggageItem,
   getBaggageItem,

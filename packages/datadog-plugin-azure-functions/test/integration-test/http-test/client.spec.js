@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 
+const { spawn } = require('child_process')
 const {
   FakeAgent,
   hookFile,
@@ -10,7 +11,6 @@ const {
   curlAndAssertMessage
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
-const { spawn } = require('child_process')
 const { NODE_MAJOR } = require('../../../../../version')
 
 describe('esm', () => {

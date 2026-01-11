@@ -1,10 +1,10 @@
 'use strict'
 
 const { childProcessExecutionTracingChannel } = require('../channels')
-const { RULE_TYPES, handleResult } = require('./utils')
 const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
 const waf = require('../waf')
+const { RULE_TYPES, handleResult } = require('./utils')
 
 let config
 

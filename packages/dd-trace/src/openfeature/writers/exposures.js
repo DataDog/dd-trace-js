@@ -1,6 +1,5 @@
 'use strict'
 
-const BaseFFEWriter = require('./base')
 const {
   EXPOSURES_ENDPOINT,
   EVP_PROXY_AGENT_BASE_PATH,
@@ -9,31 +8,32 @@ const {
   EVP_PAYLOAD_SIZE_LIMIT,
   EVP_EVENT_SIZE_LIMIT
 } = require('../constants/constants')
+const BaseFFEWriter = require('./base')
 
 /**
- * @typedef {Object} ExposureEvent
+ * @typedef {object} ExposureEvent
  * @property {number} timestamp - Unix timestamp in milliseconds
- * @property {Object} allocation - Allocation information
+ * @property {object} allocation - Allocation information
  * @property {string} allocation.key - Allocation key
- * @property {Object} flag - Flag information
+ * @property {object} flag - Flag information
  * @property {string} flag.key - Flag key
- * @property {Object} variant - Variant information
+ * @property {object} variant - Variant information
  * @property {string} variant.key - Variant key
- * @property {Object} subject - Subject (user/entity) information
+ * @property {object} subject - Subject (user/entity) information
  * @property {string} subject.id - Subject identifier
  * @property {string} [subject.type] - Subject type
- * @property {Object} [subject.attributes] - Additional subject attributes
+ * @property {object} [subject.attributes] - Additional subject attributes
  */
 
 /**
- * @typedef {Object} ExposureContext
+ * @typedef {object} ExposureContext
  * @property {string} service - Service name
  * @property {string} [version] - Service version
  * @property {string} [env] - Service environment
  */
 
 /**
- * @typedef {Object} ExposureEventPayload
+ * @typedef {object} ExposureEventPayload
  * @property {ExposureContext} context - Service context metadata
  * @property {ExposureEvent[]} exposures - Formatted exposure events
  */

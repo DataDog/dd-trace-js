@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 
+const http2 = require('http2')
 const {
   FakeAgent,
   spawnPluginIntegrationTestProc,
@@ -9,7 +10,6 @@ const {
   useSandbox,
   varySandbox
 } = require('../../../../integration-tests/helpers')
-const http2 = require('http2')
 
 describe('esm', () => {
   let agent

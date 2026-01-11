@@ -1,8 +1,8 @@
 'use strict'
 
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
-const GenAiTracingPlugin = require('./tracing')
 const GenAiLLMObsPlugin = require('../../dd-trace/src/llmobs/plugins/genai')
+const GenAiTracingPlugin = require('./tracing')
 
 class GenAiPlugin extends CompositePlugin {
   static id = 'google-genai'

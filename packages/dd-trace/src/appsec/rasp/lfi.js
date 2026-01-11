@@ -4,9 +4,9 @@ const { isAbsolute } = require('path')
 
 const { fsOperationStart, incomingHttpRequestStart, expressResponseRenderStart } = require('../channels')
 const { storage } = require('../../../../datadog-core')
-const { enable: enableFsPlugin, disable: disableFsPlugin, RASP_MODULE } = require('./fs-plugin')
 const { FS_OPERATION_PATH } = require('../addresses')
 const waf = require('../waf')
+const { enable: enableFsPlugin, disable: disableFsPlugin, RASP_MODULE } = require('./fs-plugin')
 const { RULE_TYPES, handleResult } = require('./utils')
 
 let config

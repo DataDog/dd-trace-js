@@ -2,9 +2,9 @@
 
 const assert = require('node:assert/strict')
 
+const dc = require('dc-polyfill')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const dc = require('dc-polyfill')
 const clients = {
   pg: pg => pg.Client
 }

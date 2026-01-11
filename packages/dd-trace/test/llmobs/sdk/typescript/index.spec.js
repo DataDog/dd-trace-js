@@ -1,8 +1,8 @@
 'use strict'
 
-const { describe, it, beforeEach, afterEach } = require('mocha')
 const path = require('node:path')
 const { execSync } = require('node:child_process')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 
 const {
   FakeAgent,

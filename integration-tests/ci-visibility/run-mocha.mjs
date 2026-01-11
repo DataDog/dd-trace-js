@@ -1,5 +1,5 @@
-import Mocha from 'mocha'
 import { fileURLToPath } from 'url'
+import Mocha from 'mocha'
 
 const mocha = new Mocha({
   parallel: !!process.env.RUN_IN_PARALLEL

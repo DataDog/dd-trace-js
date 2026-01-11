@@ -3,8 +3,8 @@
 const path = require('path')
 
 const { getNodeModulesPaths } = require('../path-line')
-const Analyzer = require('./vulnerability-analyzer')
 const { WEAK_HASH } = require('../vulnerabilities')
+const Analyzer = require('./vulnerability-analyzer')
 
 const INSECURE_HASH_ALGORITHMS = new Set([
   'md4', 'md4WithRSAEncryption', 'RSA-MD4',

@@ -1,7 +1,7 @@
 'use strict'
 
-const Analyzer = require('./vulnerability-analyzer')
 const { getNodeModulesPaths } = require('../path-line')
+const Analyzer = require('./vulnerability-analyzer')
 
 const EXCLUDED_PATHS = [
   // Express

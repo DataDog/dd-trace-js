@@ -1,11 +1,11 @@
 'use strict'
 
 const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
-const HttpServerPlugin = require('./server')
-const HttpClientPlugin = require('./client')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const { enableGCPPubSubPushSubscription } = require('../../dd-trace/src/serverless')
 const log = require('../../dd-trace/src/log')
+const HttpClientPlugin = require('./client')
+const HttpServerPlugin = require('./server')
 
 /**
  * HTTP Plugin loads server/client plugins with optional GCP Pub/Sub Push support.

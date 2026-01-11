@@ -1,7 +1,7 @@
 'use strict'
 
-const { useEnv } = require('../../../../../../integration-tests/helpers')
 const semifies = require('semifies')
+const { useEnv } = require('../../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../setup/mocha')
 
 const { NODE_MAJOR } = require('../../../../../../version')

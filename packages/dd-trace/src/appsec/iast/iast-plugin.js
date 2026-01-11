@@ -3,13 +3,13 @@
 const { channel } = require('dc-polyfill')
 
 const Plugin = require('../../plugins/plugin')
+const { storage } = require('../../../../datadog-core')
+const instrumentations = require('../../../../datadog-instrumentations/src/helpers/instrumentations')
+const log = require('../../log')
 const iastTelemetry = require('./telemetry')
 const { getInstrumentedMetric, getExecutedMetric, TagKey, EXECUTED_SOURCE, formatTags } =
   require('./telemetry/iast-metric')
-const { storage } = require('../../../../datadog-core')
 const { getIastContext } = require('./iast-context')
-const instrumentations = require('../../../../datadog-instrumentations/src/helpers/instrumentations')
-const log = require('../../log')
 
 /**
  * Used by vulnerability sources and sinks to subscribe diagnostic channel events

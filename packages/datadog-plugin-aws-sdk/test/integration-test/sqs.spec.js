@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert')
 const {
   FakeAgent,
   sandboxCwd,
@@ -8,8 +9,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-
-const assert = require('node:assert')
 
 describe('recursion regression test', () => {
   let agent

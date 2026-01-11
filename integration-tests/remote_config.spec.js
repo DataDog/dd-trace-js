@@ -2,9 +2,9 @@
 
 const assert = require('node:assert/strict')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('./helpers')
 const path = require('path')
 const Axios = require('axios')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('./helpers')
 describe('Remote config client id', () => {
   let axios, cwd, appFile
 

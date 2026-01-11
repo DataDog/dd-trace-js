@@ -1,11 +1,12 @@
 'use strict'
 
+const tracingChannel = require('dc-polyfill').tracingChannel
+
+const shimmer = require('../../datadog-shimmer')
 const {
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
-const tracingChannel = require('dc-polyfill').tracingChannel
 const ch = tracingChannel('apm:aerospike:command')
 
 function wrapCreateCommand (createCommand) {

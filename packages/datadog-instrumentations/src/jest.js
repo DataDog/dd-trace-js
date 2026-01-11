@@ -1,9 +1,8 @@
 'use strict'
 
-const { addHook, channel } = require('./helpers/instrument')
+const path = require('path')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
-const path = require('path')
 const {
   getCoveredFilenamesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -21,6 +20,7 @@ const {
   getJestTestName,
   getJestSuitesToRun
 } = require('../../datadog-plugin-jest/src/util')
+const { addHook, channel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')

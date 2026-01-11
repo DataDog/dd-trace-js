@@ -1,11 +1,11 @@
 'use strict'
 
-const { storage } = require('../../../datadog-core')
 const { trace, ROOT_CONTEXT, propagation } = require('@opentelemetry/api')
+const { storage } = require('../../../datadog-core')
 const DataDogSpanContext = require('../opentracing/span_context')
 
-const SpanContext = require('./span_context')
 const tracer = require('../../')
+const SpanContext = require('./span_context')
 
 class ContextManager {
   constructor () {

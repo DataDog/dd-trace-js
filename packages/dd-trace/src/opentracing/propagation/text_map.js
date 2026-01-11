@@ -1,16 +1,16 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
 const pick = require('../../../../datadog-core/src/utils/src/pick')
 const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
-const TraceState = require('./tracestate')
 const tags = require('../../../../../ext/tags')
-const { channel } = require('dc-polyfill')
 const { setBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../baggage')
 const telemetryMetrics = require('../../telemetry/metrics')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
+const TraceState = require('./tracestate')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 

@@ -1,9 +1,8 @@
 'use strict'
 
+const tracer = require('dd-trace')
 const http = require('http')
 const assert = require('assert')
-
-const tracer = require('dd-trace')
 
 const ENDPOINT_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL ||
   `http://127.0.0.1:${process.env.DD_TRACE_AGENT_PORT}`

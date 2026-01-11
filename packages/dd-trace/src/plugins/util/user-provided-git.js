@@ -1,5 +1,6 @@
 'use strict'
 
+const { getEnvironmentVariables } = require('../../config-helper')
 const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
@@ -19,7 +20,6 @@ const {
 
 const { normalizeRef } = require('./ci')
 const { filterSensitiveInfoFromRepository } = require('./url')
-const { getEnvironmentVariables } = require('../../config-helper')
 
 function removeEmptyValues (tags) {
   return Object.keys(tags).reduce((filteredTags, tag) => {

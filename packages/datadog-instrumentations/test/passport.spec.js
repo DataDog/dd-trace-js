@@ -1,13 +1,12 @@
 'use strict'
 
+const assert = require('node:assert')
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
-const assert = require('node:assert')
-
-const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios').create({ validateStatus: null })
+const agent = require('../../dd-trace/test/plugins/agent')
 const { storage } = require('../../datadog-core')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 

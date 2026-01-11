@@ -22,9 +22,25 @@ describe('breakpoints', function () {
    * @type {{
    *   findScriptFromPartialPath: sinon.SinonStub;
    *   clearState: sinon.SinonStub;
-   *   locationToBreakpoint: Map<any, any>;
-   *   breakpointToProbes: Map<any, any>;
-   *   probeToLocation: Map<any, any>;
+   *   locationToBreakpoint: Map<string, {
+   *     id: string;
+   *     location: { scriptId: string; lineNumber: number; columnNumber: number };
+   *     locationKey: string;
+   *   }>;
+   *   breakpointToProbes: Map<string, Map<string, {
+   *     id: string;
+   *     version: number;
+   *     where: { sourceFile: string; lines: string[] };
+   *     when: { json: { eq: [{ ref: string; value: unknown }]; dsl: string }; dsl: string };
+   *     sampling?: { snapshotsPerSecond: number };
+   *     captureSnapshot: boolean;
+   *     location: { file: string; lines: string[] };
+   *     templateRequiresEvaluation: boolean;
+   *     template: string;
+   *     lastCaptureNs: bigint;
+   *     nsBetweenSampling: bigint;
+   *   }>>;
+   *   probeToLocation: Map<string, string>;
    *   '@noCallThru': boolean;
    * }}
    */
