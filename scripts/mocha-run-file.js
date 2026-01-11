@@ -4,8 +4,6 @@ const path = require('path')
 
 const Mocha = require('mocha')
 
-const mocharc = require('../.mocharc.js')
-
 function parseJson (value, fallback) {
   if (!value) return fallback
   try {
@@ -49,7 +47,7 @@ async function main () {
    *   require?: string[]
    * }}
    */
-  const config = parseJson(process.env.MOCHA_RUN_FILE_CONFIG, mocharc)
+  const config = parseJson(process.env.MOCHA_RUN_FILE_CONFIG, {})
 
   const mocha = new Mocha({
     ui: 'bdd',
@@ -57,7 +55,6 @@ async function main () {
     color: config.color ?? true,
     bail: config.bail ?? false,
     retries: config.retries,
-    require: config.require ?? [],
     fullTrace: config.fullTrace ?? false,
     reporter: config.reporter ?? 'spec',
     reporterOptions: config.reporterOptions
