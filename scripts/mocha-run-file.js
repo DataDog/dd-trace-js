@@ -9,7 +9,11 @@ const mocharc = require('../.mocharc.js')
 function parseJson (value, fallback) {
   if (!value) return fallback
   try {
-    return JSON.parse(value)
+    const parsed = JSON.parse(value)
+    if (fallback.require && parsed.require) {
+      parsed.require.push(...fallback.require)
+    }
+    return { ...fallback, ...parsed }
   } catch {
     return fallback
   }

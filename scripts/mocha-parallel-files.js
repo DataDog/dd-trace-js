@@ -8,6 +8,8 @@ const { stripVTControlCharacters: stripAnsi } = require('util')
 
 const { globSync } = require('glob')
 
+const multiMochaRc = require('../.mochamultireporterrc')
+
 /**
  * @param {string[]} argv
  * @returns {{jobs?: number, timeout?: number, exposeGc: boolean, require: string[], patterns: string[]}}
@@ -167,7 +169,7 @@ async function main () {
   const runFileScript = path.join(repoRoot, 'scripts', 'mocha-run-file.js')
 
   const junitTmpDir = path.join(repoRoot, '.junit-tmp')
-  const junitOutFile = path.join(repoRoot, `node-${process.versions.node}-junit.xml`)
+  const junitOutFile = path.join(repoRoot, multiMochaRc.mochaJunitReporterReporterOptions.mochaFile)
   const junitTmpFiles = []
   const emitJunit = Boolean(process.env.CI)
 
@@ -324,15 +326,21 @@ async function main () {
               reporterEnabled: ['spec']
             }
 
+        const options = {
+          reporterOptions,
+        }
+
+        if (timeout) {
+          options.timeout = timeout
+        }
+
+        if (opts.require.length) {
+          options.require = opts.require
+        }
+
         const childEnv = {
           ...process.env,
-          MOCHA_RUN_FILE_CONFIG: JSON.stringify({
-            timeout,
-            color: true,
-            reporter: 'mocha-multi-reporters',
-            reporterOptions,
-            require: opts.require
-          }),
+          MOCHA_RUN_FILE_CONFIG: JSON.stringify(options),
         }
 
         const nodeArgs = []
