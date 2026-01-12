@@ -127,11 +127,6 @@ class LLMObsSpanProcessor {
       inputType = 'value'
     }
 
-    // Handle prompt metadata for reusable prompts
-    if (mlObsTags['_ml_obs.meta.input.prompt']) {
-      input.prompt = mlObsTags['_ml_obs.meta.input.prompt']
-    }
-
     if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
       llmObsSpan.output = mlObsTags[OUTPUT_MESSAGES]
       outputType = 'messages'
@@ -187,7 +182,7 @@ class LLMObsSpanProcessor {
       if (spanKind === 'llm') {
         meta.input.prompt = prompt
       } else {
-        logger.warning('Dropping prompt on non-LLM span kind, annotating prompts is only supported for LLM span kinds.')
+        logger.warn('Dropping prompt on non-LLM span kind, annotating prompts is only supported for LLM span kinds.')
       }
     }
 

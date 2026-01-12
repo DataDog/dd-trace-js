@@ -418,13 +418,13 @@ describe('end to end sdk integration tests', () => {
 
     it('does not annotate a non-llm span with a prompt', async () => {
       llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {
-        assert.throws(() => llmobs.annotate({
+        llmobs.annotate({
           prompt: {
             id: '123',
             version: '1.0.0',
             template: 'this is a {user_query}. please summarize based on {message_history}',
           }
-        }), { message: 'Prompt can only be annotated on LLM spans.' })
+        })
       })
 
       const { llmobsSpans } = await getEvents()

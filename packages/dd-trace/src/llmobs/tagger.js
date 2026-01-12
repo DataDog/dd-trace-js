@@ -215,12 +215,6 @@ class LLMObsTagger {
       return
     }
 
-    const spanKind = registry.get(span)?.[SPAN_KIND]
-    if (spanKind !== 'llm') {
-      this.#handleFailure('Prompt can only be annotated on LLM spans.', 'invalid_prompt')
-      return
-    }
-
     const mlApp = registry.get(span)?.[ML_APP] // this should be defined at this point
     const {
       id,

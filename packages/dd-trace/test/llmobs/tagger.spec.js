@@ -670,14 +670,6 @@ describe('tagger', () => {
     })
 
     describe('tagPrompt', () => {
-      it('throws if the span kind is not llm', () => {
-        tagger.registerLLMObsSpan(span, { kind: 'workflow' })
-        assert.throws(() => tagger.tagPrompt(span, {
-          template: 'Write a poem about the weather in {city}.',
-          variables: { city: 'San Francisco' }
-        }), { message: 'Prompt can only be annotated on LLM spans.' })
-      })
-
       it('tags a span with a string prompt template', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
         tagger.tagPrompt(span, {
