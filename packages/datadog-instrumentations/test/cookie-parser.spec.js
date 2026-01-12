@@ -1,11 +1,10 @@
 'use strict'
 
+const assert = require('node:assert')
 const axios = require('axios')
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, before, after } = require('mocha')
 const sinon = require('sinon')
-
-const assert = require('node:assert')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')

@@ -11,9 +11,9 @@ const os = require('os')
 const path = require('path')
 const { inspect } = require('util')
 
-const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
+const FakeAgent = require('./fake-agent')
 const { BUN, withBun } = require('./bun')
 
 const sandboxRoot = path.join(os.tmpdir(), id().toString())

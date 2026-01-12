@@ -2,10 +2,10 @@
 
 const path = require('path')
 
-const InjectionAnalyzer = require('./injection-analyzer')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
 const { PATH_TRAVERSAL } = require('../vulnerabilities')
+const InjectionAnalyzer = require('./injection-analyzer')
 
 const ignoredOperations = new Set(['dir.close', 'close'])
 

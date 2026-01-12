@@ -1,10 +1,10 @@
 'use strict'
 
 const { CODE_INJECTION } = require('../vulnerabilities')
-const StoredInjectionAnalyzer = require('./stored-injection-analyzer')
 const { INSTRUMENTED_SINK } = require('../telemetry/iast-metric')
 const { storage } = require('../../../../../datadog-core')
 const { getIastContext } = require('../iast-context')
+const StoredInjectionAnalyzer = require('./stored-injection-analyzer')
 
 class CodeInjectionAnalyzer extends StoredInjectionAnalyzer {
   constructor () {

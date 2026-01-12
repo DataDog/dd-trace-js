@@ -24,7 +24,7 @@ module.exports = {
    * Find the script to inspect based on a partial or absolute path. Handles both Windows and POSIX paths.
    *
    * @param {string} path - Partial or absolute path to match against loaded scripts
-   * @returns {Object | null} - Object containing `url`, `scriptId`, `sourceMapURL`, and `source` - or null if no match
+   * @returns {object | null} - Object containing `url`, `scriptId`, `sourceMapURL`, and `source` - or null if no match
    */
   findScriptFromPartialPath (path) {
     if (!path) return null // This shouldn't happen, but better safe than sorry

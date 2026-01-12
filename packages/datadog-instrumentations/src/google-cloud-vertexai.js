@@ -1,9 +1,8 @@
 'use strict'
 
-const { addHook } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
-
 const vertexaiTracingChannel = require('dc-polyfill').tracingChannel('apm:vertexai:request')
+const shimmer = require('../../datadog-shimmer')
+const { addHook } = require('./helpers/instrument')
 
 function wrapGenerate (generate) {
   return function (request) {

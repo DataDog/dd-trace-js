@@ -2,10 +2,10 @@
 
 const assert = require('node:assert/strict')
 
+const { performance } = require('node:perf_hooks')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const { performance } = require('node:perf_hooks')
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
 
 describe('API Security Sampler', () => {

@@ -1,7 +1,7 @@
 'use strict'
 
-const request = require('./request')
 const log = require('../../log')
+const request = require('./request')
 const { safeJSONStringify } = require('./util')
 
 class Writer {

@@ -1,7 +1,7 @@
 'use strict'
 
-const express = require('express')
 const { execSync } = require('child_process')
+const express = require('express')
 
 const router = express.Router()
 

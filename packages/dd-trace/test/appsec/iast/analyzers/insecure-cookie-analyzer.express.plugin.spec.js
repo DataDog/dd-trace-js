@@ -1,10 +1,10 @@
 'use strict'
 
-const { prepareTestServerForIastInExpress } = require('../utils')
-const { withVersions } = require('../../../setup/mocha')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const { withVersions } = require('../../../setup/mocha')
+const { prepareTestServerForIastInExpress } = require('../utils')
 
 describe('Insecure cookie vulnerability', () => {
   let setCookieFunctions
