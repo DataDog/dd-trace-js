@@ -379,4 +379,91 @@ describe('end to end sdk integration tests', () => {
       assert.equal(llmobsSpans[5].parent_id, llmobsSpans[0].span_id)
     })
   })
+
+  describe('prompts', () => {
+    it('annotates an llm span with a prompt', async () => {
+      llmobs.trace({ kind: 'llm', name: 'myLLM' }, () => {
+        llmobs.annotate({
+          prompt: {
+            id: '123',
+            version: '1.0.0',
+            template: 'this is a {user_query}. please summarize based on {message_history}',
+            variables: {
+              user_query: 'test',
+              message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?'
+            },
+            contextVariables: ['message_history'],
+            queryVariables: ['user_query'],
+          }
+        })
+      })
+
+      const { llmobsSpans } = await getEvents()
+
+      assert.equal(llmobsSpans.length, 1)
+      assert.deepEqual(llmobsSpans[0].meta.input.prompt, {
+        id: '123',
+        version: '1.0.0',
+        chat_template: [
+          { role: 'user', content: 'this is a {user_query}. please summarize based on {message_history}' }
+        ],
+        variables: {
+          user_query: 'test',
+          message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?'
+        },
+        _dd_context_variable_keys: ['message_history'],
+        _dd_query_variable_keys: ['user_query'],
+      })
+    })
+
+    it('does not annotate a non-llm span with a prompt', async () => {
+      llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {
+        assert.throws(() => llmobs.annotate({
+          prompt: {
+            id: '123',
+            version: '1.0.0',
+            template: 'this is a {user_query}. please summarize based on {message_history}',
+          }
+        }), { message: 'Prompt can only be annotated on LLM spans.' })
+      })
+
+      const { llmobsSpans } = await getEvents()
+      assert.equal(llmobsSpans.length, 1)
+      assert.equal(llmobsSpans[0].meta.input.prompt, undefined)
+    })
+
+    it('is respected via annotationContext', async () => {
+      llmobs.annotationContext({
+        prompt: {
+          id: '123',
+          version: '1.0.0',
+          template: 'this is a {user_query}. please summarize based on {message_history}',
+          variables: {
+            user_query: 'test',
+            message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?',
+          },
+          contextVariables: ['message_history'],
+          queryVariables: ['user_query'],
+        }
+      }, () => {
+        llmobs.trace({ kind: 'llm', name: 'myLLM' }, () => {})
+      })
+
+      const { llmobsSpans } = await getEvents()
+      assert.equal(llmobsSpans.length, 1)
+      assert.deepEqual(llmobsSpans[0].meta.input.prompt, {
+        id: '123',
+        version: '1.0.0',
+        chat_template: [
+          { role: 'user', content: 'this is a {user_query}. please summarize based on {message_history}' }
+        ],
+        variables: {
+          user_query: 'test',
+          message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?'
+        },
+        _dd_context_variable_keys: ['message_history'],
+        _dd_query_variable_keys: ['user_query'],
+      })
+    })
+  })
 })

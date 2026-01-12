@@ -669,7 +669,7 @@ describe('tagger', () => {
       })
     })
 
-    describe.only('tagPrompt', () => {
+    describe('tagPrompt', () => {
       it('throws if the span kind is not llm', () => {
         tagger.registerLLMObsSpan(span, { kind: 'workflow' })
         assert.throws(() => tagger.tagPrompt(span, {
