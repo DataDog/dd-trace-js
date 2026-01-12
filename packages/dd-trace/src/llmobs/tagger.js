@@ -204,11 +204,10 @@ class LLMObsTagger {
 
   /**
    * Tags a prompt on an LLMObs span.
-   * @param {*} span
-   * @param {*} prompt
-   * @param {*} strictValidation
+   * @param {import('../opentracing/span')} span
+   * @param {string | Record<string, unknown>} prompt
+   * @param {boolean?} strictValidation
    *   whether to validate the prompt against the strict schema, used for auto-instrumentation
-   * @returns
    */
   tagPrompt (span, prompt, strictValidation = false) {
     if (!prompt || typeof prompt !== 'object') {
