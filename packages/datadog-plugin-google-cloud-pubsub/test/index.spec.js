@@ -26,20 +26,15 @@ describe('Plugin', () => {
     this.timeout(TIMEOUT)
 
     before(() => {
-      console.log('[DEBUG INDEX TEST] Before hook - Setting env vars')
       process.env.PUBSUB_EMULATOR_HOST = 'localhost:8081'
       process.env.DD_DATA_STREAMS_ENABLED = 'true'
       process.env.K_SERVICE = 'test-service'
-      console.log('[DEBUG INDEX TEST] K_SERVICE =', process.env.K_SERVICE)
     })
 
     after(() => {
-      console.log('[DEBUG INDEX TEST] After hook - Deleting env vars')
-      console.log('[DEBUG INDEX TEST] K_SERVICE before delete =', process.env.K_SERVICE)
       delete process.env.PUBSUB_EMULATOR_HOST
       delete process.env.DD_DATA_STREAMS_ENABLED
       delete process.env.K_SERVICE
-      console.log('[DEBUG INDEX TEST] K_SERVICE after delete =', process.env.K_SERVICE)
     })
 
     afterEach(() => {
