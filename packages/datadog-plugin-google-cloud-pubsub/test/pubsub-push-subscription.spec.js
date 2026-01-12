@@ -18,7 +18,6 @@ describe('Push Subscription Plugin', () => {
   })
 
   after(() => {
-    delete process.env.K_SERVICE
     return agent.close({ ritmReset: false })
   })
 
