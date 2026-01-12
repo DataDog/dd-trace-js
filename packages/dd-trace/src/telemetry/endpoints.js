@@ -15,7 +15,7 @@ let updateRetryData
 
 /**
  * Keep track of endpoints that still need to be sent.
- * Map key is `${METHOD} ${PATH}`, value is { method, path }
+ * Map key is `${METHOD} ${PATH}`, value is { method, path, operationName }
  */
 const pendingEndpoints = new Map()
 const wildcardEndpoints = new Set()
@@ -32,11 +32,11 @@ function scheduleFlush () {
   setImmediate(flushAndSend).unref()
 }
 
-function recordEndpoint (method, path) {
+function recordEndpoint (method, path, operationName) {
   const key = endpointKey(method, path)
   if (pendingEndpoints.has(key)) return
 
-  pendingEndpoints.set(key, { method: method.toUpperCase(), path })
+  pendingEndpoints.set(key, { method: method.toUpperCase(), path, operationName })
   scheduleFlush()
 }
 
@@ -46,7 +46,7 @@ function onFastifyRoute (routeData) {
 
   const methods = Array.isArray(routeOptions.method) ? routeOptions.method : [routeOptions.method]
   for (const method of methods) {
-    recordEndpoint(method, routeOptions.path)
+    recordEndpoint(method, routeOptions.path, 'fastify.request')
   }
 }
 
@@ -56,7 +56,7 @@ function onExpressRoute ({ method, path }) {
   // If wildcard already recorded for this path, skip specific methods
   if (wildcardEndpoints.has(path)) return
 
-  recordEndpoint(method, path)
+  recordEndpoint(method, path, 'express.request')
 
   // If this is a wildcard event, record it and mark path as wildcarded
   if (method === '*') {
@@ -66,17 +66,17 @@ function onExpressRoute ({ method, path }) {
 
   // Express automatically adds HEAD support for GET routes
   if (method.toUpperCase() === 'GET') {
-    recordEndpoint('HEAD', path)
+    recordEndpoint('HEAD', path, 'express.request')
   }
 }
 
 function buildEndpointObjects (endpoints) {
-  return endpoints.map(({ method, path }) => {
+  return endpoints.map(({ method, path, operationName }) => {
     return {
       type: 'REST',
       method,
       path,
-      operation_name: 'http.request',
+      operation_name: operationName,
       resource_name: endpointKey(method, path)
     }
   })
