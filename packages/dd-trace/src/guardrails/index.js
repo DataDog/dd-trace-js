@@ -6,6 +6,7 @@ var isTrue = require('./util').isTrue
 var log = require('./log')
 var telemetry = require('./telemetry')
 var nodeVersion = require('../../../../version')
+var runtime = require('../utils/runtime')
 
 var NODE_MAJOR = nodeVersion.NODE_MAJOR
 
@@ -18,6 +19,29 @@ function guard (fn) {
   var minMajor = versions[1]
   var nextMajor = versions[2]
   var version = process.versions.node
+
+  if (runtime.isBun && !forced) {
+    telemetry(
+      [
+        { name: 'abort', tags: ['reason:incompatible_runtime'] },
+        { name: 'abort.runtime', tags: ['runtime:' + runtime.runtimeName] }
+      ], undefined, {
+        result: 'abort',
+        result_class: 'incompatible_runtime',
+        result_reason: 'Bun runtime detected. Some features may not work. Use DD_INJECT_FORCE=true to proceed.'
+      }
+    )
+    log.warn(
+      'Bun runtime detected. Some dd-trace features are not yet fully supported.'
+    )
+    log.warn(
+      'Manual tracing should work. Profiling, runtime metrics, and auto-instrumentation may be limited.'
+    )
+    // Still allow initialization but with warnings
+    log.info(
+      'Continuing with limited functionality. Use DD_INJECT_FORCE=true to suppress warnings.'
+    )
+  }
 
   if (process.env.DD_INJECTION_ENABLED) {
     // If we're running via single-step install, and we're in the app's

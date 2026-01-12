@@ -18,6 +18,7 @@ const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
 const { getEnvironmentVariables } = require('../config-helper')
 const defaults = require('../config_defaults')
+const { isBun } = require('../utils/runtime')
 
 class Config {
   constructor (options = {}) {
@@ -68,6 +69,14 @@ class Config {
     this.env = env
     this.host = host
     this.functionname = functionname
+
+    if (isBun) {
+      this.enabled = false
+      this.logger.warn(
+        'Profiling is not supported on Bun runtime. We are adding support for Bun soon.'
+      )
+      return
+    }
 
     this.version = version
     this.tags = Object.assign(
