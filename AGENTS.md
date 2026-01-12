@@ -23,11 +23,11 @@ nvm use
 yarn install
 
 # Lint
-yarn lint
-yarn lint:fix
+npm run lint
+npm run lint:fix
 
 # Typecheck
-yarn type:check
+npm run type:check
 ```
 
 ## Project Overview
@@ -57,7 +57,6 @@ Each package under `packages/` follows a consistent structure:
 ### Running Individual Tests
 
 **IMPORTANT**: Avoid running the root `npm test` unless you explicitly want the full repo test run. Prefer targeted `npm run test:<area>` scripts or running mocha on specific test files.
-
 
 **Mocha unit tests:**
 
@@ -92,8 +91,8 @@ You can inject mocha options via `MOCHA_RUN_FILE_CONFIG` (JSON), including `requ
 **Use `PLUGINS` env var:**
 
 ```bash
-PLUGINS="amqplib" yarn test:plugins
-PLUGINS="amqplib|bluebird" yarn test:plugins  # pipe-delimited for multiple
+PLUGINS="amqplib" npm run test:plugins
+PLUGINS="amqplib|bluebird" npm run test:plugins  # pipe-delimited for multiple
 ./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" packages/datadog-plugin-amqplib/test/index.spec.js
 ```
 
@@ -106,7 +105,7 @@ PLUGINS="amqplib|bluebird" yarn test:plugins  # pipe-delimited for multiple
 ```bash
 export SERVICES="rabbitmq" PLUGINS="amqplib"
 docker compose up -d $SERVICES
-yarn services && yarn test:plugins
+yarn services && npm run test:plugins
 ```
 
 **ARM64 incompatible:** `aerospike`, `couchbase`, `grpc`, `oracledb`
@@ -151,7 +150,7 @@ Never use a `doesNotThrow()` assertion. Instead, just write execute the method d
 
 ### Linting & Naming
 
-- Lint: `yarn lint` / `yarn lint:fix`
+- Lint: `npm run lint` / `npm run lint:fix`
 - Files: kebab-case
 
 ### JSDoc
@@ -159,6 +158,10 @@ Never use a `doesNotThrow()` assertion. Instead, just write execute the method d
 - Use TypeScript-compatible syntax (`@param {string}`, `@returns {Promise<void>}`, `@typedef`)
 - Never use `any` (be specific or use `unknown` if type is truly unknown)
 - Write the most specific types possible by reading the overall context
+- Always define types for method arguments as method params
+- Never define argument types inside of a method
+- Only define types inside of a method, if it can not be inferred otherwise
+- Only rewrite code for better types in case it was explicitly requested by the user
 
 ### Import Ordering
 
@@ -185,6 +188,7 @@ const log = require('../log')
 **Target Node.js 18.0.0 compatibility:**
 
 - Use modern JS features supported by Node.js (e.g., optional chaining `?.`, nullish coalescing `??`)
+- Use `undefined` over `null`, if not required otherwise
 - Guard newer APIs with version checks using [`version.js`](./version.js):
 
   ```js
@@ -260,17 +264,19 @@ Avoid try/catch in hot paths - validate inputs early
 - **Descriptive code**: Self-documenting with verbs in function names; comment when needed
 - **Readable formatting**: Empty lines for grouping, split complex objects, extract variables
 - **Avoid large refactors**: Iterative changes, gradual pattern introduction
-- **Test changes**: Test logic (not mocks), failure cases, edge cases - always update tests
+- **Test changes**: Test logic (not mocks), failure cases, edge cases - always update tests. Write blackbox tests instead of exporting specific test logic
 
 ### Implementation and Testing Workflow
 
 **When making any code or type change, the following MUST be followed:**
 
 1. **Understand** - Read relevant code and tests to understand the current implementation
-2. **Implement** - Make the necessary code changes
-3. **Update Tests** - Modify or add tests to cover the changes
-4. **Run Tests** - Execute the relevant test files to verify everything works
-5. **Verify** - Confirm all tests pass before marking the task as complete
+2. **Optimize** - Identify the cleanest architectural approach to solve the request
+3. **Ask** - Make a proposal with the two best solutions to the user and let them choose. Explain trade-offs
+4. **Implement** - Make the necessary code changes
+5. **Update Tests** - Modify or add tests to cover the changes
+6. **Run Tests** - Execute the relevant test files to verify everything works
+7. **Verify** - Confirm all tests pass before marking the task as complete
 
 ### Always Consider Backportability
 
@@ -300,6 +306,10 @@ Avoid try/catch in hot paths - validate inputs early
 7. **Add tests** in `packages/dd-trace/test/config.spec.js`
 
 **Naming Convention:** Size/time-based config options should have unit suffixes (e.g., `timeoutMs`, `maxBytes`, `intervalSeconds`).
+
+## Upstream changes
+
+In case an issue is actually happening outside of dd-trace, suggest to fix it upstream instead of creating a work-around.
 
 ## Adding New Instrumentation
 
