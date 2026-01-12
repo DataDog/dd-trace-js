@@ -53,23 +53,20 @@ class LLMObs extends NoopLLMObs {
 
     logger.debug('Enabling LLMObs')
 
-    const { mlApp, agentlessEnabled } = options
-
     const DD_LLMOBS_ENABLED = getEnvironmentVariable('DD_LLMOBS_ENABLED')
 
-    const llmobsConfig = {
-      mlApp,
-      agentlessEnabled
-    }
-
-    const enabled = DD_LLMOBS_ENABLED == null || isTrue(DD_LLMOBS_ENABLED)
-    if (!enabled) {
+    if (DD_LLMOBS_ENABLED != null && !isTrue(DD_LLMOBS_ENABLED)) {
       logger.debug('LLMObs.enable() called when DD_LLMOBS_ENABLED is false. No action taken.')
       return
     }
 
-    this._config.llmobs.enabled = true
-    this._config.configure({ ...this._config, llmobs: llmobsConfig })
+    const llmobs = {
+      mlApp: options.mlApp,
+      agentlessEnabled: options.agentlessEnabled
+    }
+    // TODO: This will update config telemetry with the origin 'code', which is not ideal when `enable()` is called
+    // based on `APM_TRACING` RC product updates.
+    this._config.configure({ llmobs })
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)
@@ -372,7 +369,7 @@ class LLMObs extends NoopLLMObs {
         err = 'invalid_metric_label'
         throw new Error('label must be the specified name of the evaluation metric')
       }
-      if (!metricType || !['categorical', 'score'].includes(metricType)) {
+      if (!metricType || !['categorical', 'score', 'boolean'].includes(metricType)) {
         err = 'invalid_metric_type'
         throw new Error('metricType must be one of "categorical" or "score"')
       }
@@ -383,6 +380,10 @@ class LLMObs extends NoopLLMObs {
       if (metricType === 'score' && typeof value !== 'number') {
         err = 'invalid_metric_value'
         throw new Error('value must be a number for a score metric.')
+      }
+      if (metricType === 'boolean' && typeof value !== 'boolean') {
+        err = 'invalid_metric_value'
+        throw new Error('value must be a boolean for a boolean metric')
       }
 
       const evaluationTags = {
@@ -407,6 +408,11 @@ class LLMObs extends NoopLLMObs {
             throw new Error('Failed to parse tags. Tags for evaluation metrics must be strings')
           }
         }
+      }
+
+      // When OTel tracing is enabled, add source:otel tag to allow backend to wait for OTel span conversion
+      if (isTrue(getEnvironmentVariable('DD_TRACE_OTEL_ENABLED'))) {
+        evaluationTags.source = 'otel'
       }
 
       const payload = {

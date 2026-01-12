@@ -1,12 +1,13 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const path = require('node:path')
 const agent = require('../../plugins/agent')
-const Config = require('../../../src/config')
+const { getConfigFresh } = require('../../helpers/config')
 const appsec = require('../../../src/appsec')
 
 const Axios = require('axios')
-const { assert } = require('chai')
 const { describe, it, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
@@ -21,7 +22,7 @@ describe('RASP - fastify blocking', () => {
     before(async () => {
       await agent.load(['http', 'fastify'], { client: false })
 
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'rasp_rules.json'),

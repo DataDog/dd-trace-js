@@ -1,10 +1,12 @@
 'use strict'
 
 const path = require('path')
+
 const axios = require('axios')
+
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
+const { getConfigFresh } = require('../helpers/config')
 const { withVersions } = require('../setup/mocha')
 
 describe('sequelize', () => {
@@ -16,7 +18,7 @@ describe('sequelize', () => {
         // init tracer
         before(async () => {
           await agent.load(['express', 'http'], { client: false }, { flushInterval: 1 })
-          appsec.enable(new Config({
+          appsec.enable(getConfigFresh({
             appsec: {
               enabled: true,
               rules: path.join(__dirname, 'rules-example.json'),
@@ -70,7 +72,7 @@ describe('sequelize', () => {
           })
 
           server = app.listen(0, () => {
-            port = server.address().port
+            port = (/** @type {import('net').AddressInfo} */ (server.address())).port
             done()
           })
         })

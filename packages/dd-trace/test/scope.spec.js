@@ -1,12 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
-const { Span } = require('opentracing')
 
+const { Span } = require('../../../vendor/dist/opentracing')
 require('./setup/core')
-
 const Scope = require('../src/scope')
 
 describe('Scope', () => {
@@ -20,41 +20,41 @@ describe('Scope', () => {
 
   describe('active()', () => {
     it('should return null by default', () => {
-      expect(scope.active()).to.be.null
+      assert.strictEqual(scope.active(), null)
     })
   })
 
   describe('activate()', () => {
     it('should return the value returned by the callback', () => {
-      expect(scope.activate(span, () => 'test')).to.equal('test')
+      assert.strictEqual(scope.activate(span, () => 'test'), 'test')
     })
 
     it('should preserve the surrounding scope', () => {
-      expect(scope.active()).to.be.null
+      assert.strictEqual(scope.active(), null)
 
       scope.activate(span, () => {})
 
-      expect(scope.active()).to.be.null
+      assert.strictEqual(scope.active(), null)
     })
 
     it('should support an invalid callback', () => {
-      expect(() => { scope.activate(span, 'invalid') }).to.not.throw(Error)
+      assert.doesNotThrow(() => { scope.activate(span, 'invalid') }, Error)
     })
 
     it('should activate the span on the current scope', () => {
-      expect(scope.active()).to.be.null
+      assert.strictEqual(scope.active(), null)
 
       scope.activate(span, () => {
-        expect(scope.active()).to.equal(span)
+        assert.strictEqual(scope.active(), span)
       })
 
-      expect(scope.active()).to.be.null
+      assert.strictEqual(scope.active(), null)
     })
 
     it('should persist through setTimeout', done => {
       scope.activate(span, () => {
         setTimeout(() => {
-          expect(scope.active()).to.equal(span)
+          assert.strictEqual(scope.active(), span)
           done()
         }, 0)
       })
@@ -63,7 +63,7 @@ describe('Scope', () => {
     it('should persist through setImmediate', done => {
       scope.activate(span, () => {
         setImmediate(() => {
-          expect(scope.active()).to.equal(span)
+          assert.strictEqual(scope.active(), span)
           done()
         }, 0)
       })
@@ -74,7 +74,7 @@ describe('Scope', () => {
         let shouldReturn = false
 
         const timer = setInterval(() => {
-          expect(scope.active()).to.equal(span)
+          assert.strictEqual(scope.active(), span)
 
           if (shouldReturn) {
             clearInterval(timer)
@@ -89,7 +89,7 @@ describe('Scope', () => {
     it('should persist through process.nextTick', done => {
       scope.activate(span, () => {
         process.nextTick(() => {
-          expect(scope.active()).to.equal(span)
+          assert.strictEqual(scope.active(), span)
           done()
         }, 0)
       })
@@ -100,7 +100,7 @@ describe('Scope', () => {
 
       return scope.activate(span, () => {
         return promise.then(() => {
-          expect(scope.active()).to.equal(span)
+          assert.strictEqual(scope.active(), span)
         })
       })
     })
@@ -108,7 +108,7 @@ describe('Scope', () => {
     it('should handle concurrency', done => {
       scope.activate(span, () => {
         setImmediate(() => {
-          expect(scope.active()).to.equal(span)
+          assert.strictEqual(scope.active(), span)
           done()
         })
       })
@@ -126,7 +126,7 @@ describe('Scope', () => {
           throw error
         })
       } catch (e) {
-        expect(span.setTag).to.have.been.calledWith('error', e)
+        sinon.assert.calledWith(span.setTag, 'error', e)
       }
     })
   })
@@ -135,7 +135,7 @@ describe('Scope', () => {
     describe('with a function', () => {
       it('should bind the function to the active span', () => {
         let fn = () => {
-          expect(scope.active()).to.equal(span)
+          assert.strictEqual(scope.active(), span)
         }
 
         scope.activate(span, () => {
@@ -147,7 +147,7 @@ describe('Scope', () => {
 
       it('should bind the function to the provided span', () => {
         let fn = () => {
-          expect(scope.active()).to.equal(span)
+          assert.strictEqual(scope.active(), span)
         }
 
         fn = scope.bind(fn, span)
@@ -160,13 +160,13 @@ describe('Scope', () => {
 
         fn = scope.bind(fn)
 
-        expect(fn()).to.equal('test')
+        assert.strictEqual(fn(), 'test')
       })
     })
 
     describe('with an unsupported target', () => {
       it('should return the target', () => {
-        expect(scope.bind('test', span)).to.equal('test')
+        assert.strictEqual(scope.bind('test', span), 'test')
       })
     })
   })

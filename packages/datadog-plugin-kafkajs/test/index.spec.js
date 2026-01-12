@@ -1,9 +1,10 @@
 'use strict'
 
-const { randomUUID } = require('crypto')
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+const { randomUUID } = require('node:crypto')
+
 const dc = require('dc-polyfill')
-const { describe, it, beforeEach, afterEach, before } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
@@ -11,28 +12,11 @@ const { withNamingSchema, withPeerService, withVersions } = require('../../dd-tr
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
-
-const getDsmPathwayHash = (testTopic, clusterIdAvailable, isProducer, parentHash) => {
-  let edgeTags
-  if (isProducer) {
-    edgeTags = ['direction:out', 'topic:' + testTopic, 'type:kafka']
-  } else {
-    edgeTags = ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka']
-  }
-
-  if (clusterIdAvailable) {
-    edgeTags.push(`kafka_cluster_id:${testKafkaClusterId}`)
-  }
-  edgeTags.sort()
-  return computePathwayHash('test', 'tester', edgeTags, parentHash)
-}
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
@@ -49,8 +33,6 @@ describe('Plugin', () => {
       let Kafka
       let Broker
       let clusterIdAvailable
-      let expectedProducerHash
-      let expectedConsumerHash
       let testTopic
 
       describe('without configuration', () => {
@@ -58,7 +40,6 @@ describe('Plugin', () => {
         const messages2 = [{ key: 'key2', value: 'test3' }]
 
         beforeEach(async () => {
-          process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
           await agent.load('kafkajs')
           const lib = require(`../../../versions/kafkajs@${version}`).get()
@@ -79,8 +60,6 @@ describe('Plugin', () => {
             }]
           })
           clusterIdAvailable = semver.intersects(version, '>=1.13')
-          expectedProducerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, true, ENTRY_PARENT_HASH)
-          expectedConsumerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, false, expectedProducerHash)
         })
 
         describe('producer', () => {
@@ -88,7 +67,6 @@ describe('Plugin', () => {
             const meta = {
               'span.kind': 'producer',
               component: 'kafkajs',
-              'pathway.hash': expectedProducerHash.readBigUInt64LE(0).toString(),
               'messaging.destination.name': testTopic,
               'messaging.kafka.bootstrap.servers': '127.0.0.1:9092'
             }
@@ -127,19 +105,17 @@ describe('Plugin', () => {
 
             const expectedSpanPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
-
-              expect(span).to.include({
+              assertObjectContains(span, {
                 name: resourceName,
                 service: expectedSchema.send.serviceName,
                 resource: resourceName,
-                error: 1
-              })
-
-              expect(span.meta).to.include({
-                [ERROR_TYPE]: error.name,
-                [ERROR_MESSAGE]: error.message,
-                [ERROR_STACK]: error.stack,
-                component: 'kafkajs'
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'kafkajs'
+                }
               })
             })
 
@@ -160,7 +136,7 @@ describe('Plugin', () => {
             it('should not extract bootstrap servers when initialized with a function', async () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
-                expect(span.meta).to.not.have.any.keys(['messaging.kafka.bootstrap.servers'])
+                assert.ok(!((['messaging.kafka.bootstrap.servers']).some(k => Object.hasOwn((span.meta), k))))
               })
 
               kafka = new Kafka({
@@ -213,20 +189,16 @@ describe('Plugin', () => {
             })
 
             it('should hit an error for the first send and not inject headers in later sends', async () => {
-              try {
-                await producer.send({ topic: testTopic, messages })
-                expect(true).to.be.false('First producer.send() should have thrown an error')
-              } catch (e) {
-                expect(e).to.equal(error)
-              }
-              expect(messages[0].headers).to.have.property('x-datadog-trace-id')
+              await assert.rejects(producer.send({ topic: testTopic, messages }), error)
+
+              assert.ok(Object.hasOwn(messages[0].headers, 'x-datadog-trace-id'))
 
               // restore the stub to allow the next send to succeed
               sendRequestStub.restore()
 
               const result2 = await producer.send({ topic: testTopic, messages: messages2 })
-              expect(messages2[0].headers).to.be.undefined
-              expect(result2[0].errorCode).to.equal(0)
+              assert.strictEqual(messages2[0].headers, undefined)
+              assert.strictEqual(result2[0].errorCode, 0)
             })
           })
 
@@ -256,7 +228,6 @@ describe('Plugin', () => {
               meta: {
                 'span.kind': 'consumer',
                 component: 'kafkajs',
-                'pathway.hash': expectedConsumerHash.readBigUInt64LE(0).toString(),
                 'messaging.destination.name': testTopic
               },
               resource: testTopic,
@@ -278,8 +249,8 @@ describe('Plugin', () => {
               const currentSpan = tracer.scope().active()
 
               try {
-                expect(currentSpan).to.not.equal(firstSpan)
-                expect(currentSpan.context()._name).to.equal(expectedSchema.receive.opName)
+                assert.notDeepStrictEqual(currentSpan, firstSpan)
+                assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
                 done()
               } catch (e) {
                 done(e)
@@ -297,13 +268,13 @@ describe('Plugin', () => {
             const expectedSpanPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(span).to.include({
+              assertObjectContains(span, {
                 name: 'kafka.consume',
                 service: 'test-kafka',
                 resource: testTopic
               })
 
-              expect(parseInt(span.parent_id.toString())).to.be.gt(0)
+              assert.ok(parseInt(span.parent_id.toString()) > 0)
             })
 
             await consumer.run({ eachMessage: () => {} })
@@ -342,7 +313,7 @@ describe('Plugin', () => {
           it('should run constructor even if no eachMessage supplied', (done) => {
             let eachBatch = async ({ batch }) => {
               try {
-                expect(batch.isEmpty()).to.be.false
+                assert.strictEqual(batch.isEmpty(), false)
                 done()
               } catch (e) {
                 done(e)
@@ -366,25 +337,25 @@ describe('Plugin', () => {
             const afterStart = dc.channel('dd-trace:kafkajs:consumer:afterStart')
 
             const spy = sinon.spy((ctx) => {
-              expect(ctx.currentStore.span).to.not.be.null
+              assert.ok(ctx.currentStore.span)
               afterStart.unsubscribe(spy)
             })
             afterStart.subscribe(spy)
 
             let eachMessage = async ({ topic, partition, message }) => {
               try {
-                expect(spy).to.have.been.calledOnce
+                assert.strictEqual(spy.callCount, 1)
 
                 const channelMsg = spy.firstCall.args[0]
-                expect(channelMsg).to.not.undefined
-                expect(channelMsg.topic).to.eq(testTopic)
-                expect(channelMsg.message.key).to.not.undefined
-                expect(channelMsg.message.key.toString()).to.eq(messages[0].key)
-                expect(channelMsg.message.value).to.not.undefined
-                expect(channelMsg.message.value.toString()).to.eq(messages[0].value)
+                assert.ok(channelMsg)
+                assert.strictEqual(channelMsg.topic, testTopic)
+                assert.ok(channelMsg.message.key)
+                assert.strictEqual(channelMsg.message.key.toString(), messages[0].key)
+                assert.ok(channelMsg.message.value)
+                assert.strictEqual(channelMsg.message.value.toString(), messages[0].value)
 
                 const name = spy.firstCall.args[1]
-                expect(name).to.eq(afterStart.name)
+                assert.strictEqual(name, afterStart.name)
 
                 done()
               } catch (e) {
@@ -402,7 +373,7 @@ describe('Plugin', () => {
             const beforeFinish = dc.channel('dd-trace:kafkajs:consumer:beforeFinish')
 
             const spy = sinon.spy(() => {
-              expect(tracer.scope().active()).to.not.be.null
+              assert.ok(tracer.scope().active())
               beforeFinish.unsubscribe(spy)
             })
             beforeFinish.subscribe(spy)
@@ -410,7 +381,7 @@ describe('Plugin', () => {
             let eachMessage = async ({ topic, partition, message }) => {
               setImmediate(() => {
                 try {
-                  expect(spy).to.have.been.calledOnceWith(undefined, beforeFinish.name)
+                  sinon.assert.calledOnceWithExactly(spy, undefined, beforeFinish.name)
 
                   done()
                 } catch (e) {
@@ -432,169 +403,6 @@ describe('Plugin', () => {
             },
             rawExpectedSchema.receive
           )
-        })
-
-        describe('data stream monitoring', () => {
-          let consumer
-
-          beforeEach(async () => {
-            tracer.init()
-            tracer.use('kafkajs', { dsmEnabled: true })
-            consumer = kafka.consumer({ groupId: 'test-group' })
-            await consumer.connect()
-            await consumer.subscribe({ topic: testTopic })
-          })
-
-          before(() => {
-            clusterIdAvailable = semver.intersects(version, '>=1.13')
-            expectedProducerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, true, ENTRY_PARENT_HASH)
-            expectedConsumerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, false, expectedProducerHash)
-          })
-
-          afterEach(async () => {
-            await consumer.disconnect()
-          })
-
-          describe('checkpoints', () => {
-            let setDataStreamsContextSpy
-
-            beforeEach(() => {
-              setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
-            })
-
-            afterEach(() => {
-              setDataStreamsContextSpy.restore()
-            })
-
-            it('Should set a checkpoint on produce', async () => {
-              const messages = [{ key: 'consumerDSM1', value: 'test2' }]
-              await sendMessages(kafka, testTopic, messages)
-              expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
-            })
-
-            it('Should set a checkpoint on consume (eachMessage)', async () => {
-              const runArgs = []
-              await consumer.run({
-                eachMessage: async () => {
-                  runArgs.push(setDataStreamsContextSpy.lastCall.args[0])
-                }
-              })
-              await sendMessages(kafka, testTopic, messages)
-              await consumer.disconnect()
-              for (const runArg of runArgs) {
-                expect(runArg.hash).to.equal(expectedConsumerHash)
-              }
-            })
-
-            it('Should set a checkpoint on consume (eachBatch)', async () => {
-              const runArgs = []
-              await consumer.run({
-                eachBatch: async () => {
-                  runArgs.push(setDataStreamsContextSpy.lastCall.args[0])
-                }
-              })
-              await sendMessages(kafka, testTopic, messages)
-              await consumer.disconnect()
-              for (const runArg of runArgs) {
-                expect(runArg.hash).to.equal(expectedConsumerHash)
-              }
-            })
-
-            it('Should set a message payload size when producing a message', async () => {
-              const messages = [{ key: 'key1', value: 'test2' }]
-              if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
-                DataStreamsProcessor.prototype.recordCheckpoint.restore()
-              }
-              const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-              await sendMessages(kafka, testTopic, messages)
-              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-              recordCheckpointSpy.restore()
-            })
-
-            it('Should set a message payload size when consuming a message', async () => {
-              const messages = [{ key: 'key1', value: 'test2' }]
-              if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
-                DataStreamsProcessor.prototype.recordCheckpoint.restore()
-              }
-              const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-              await sendMessages(kafka, testTopic, messages)
-              await consumer.run({
-                eachMessage: async () => {
-                  expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-                  recordCheckpointSpy.restore()
-                }
-              })
-            })
-          })
-
-          describe('backlogs', () => {
-            let setOffsetSpy
-
-            beforeEach(() => {
-              setOffsetSpy = sinon.spy(tracer._tracer._dataStreamsProcessor, 'setOffset')
-            })
-
-            afterEach(() => {
-              setOffsetSpy.restore()
-            })
-
-            if (semver.intersects(version, '>=1.10')) {
-              it('Should add backlog on consumer explicit commit', async () => {
-                // Send a message, consume it, and record the last consumed offset
-                let commitMeta
-                const deferred = {}
-                deferred.promise = new Promise((resolve, reject) => {
-                  deferred.resolve = resolve
-                  deferred.reject = reject
-                })
-                await consumer.run({
-                  eachMessage: async payload => {
-                    const { topic, partition, message } = payload
-                    commitMeta = {
-                      topic,
-                      partition,
-                      offset: Number(message.offset)
-                    }
-                    deferred.resolve()
-                  },
-                  autoCommit: false
-                })
-                await sendMessages(kafka, testTopic, messages)
-                await deferred.promise
-                await consumer.disconnect() // Flush ongoing `eachMessage` calls
-                for (const call of setOffsetSpy.getCalls()) {
-                  expect(call.args[0]).to.not.have.property('type', 'kafka_commit')
-                }
-
-                /**
-                   * No choice but to reinitialize everything, because the only way to flush eachMessage
-                   * calls is to disconnect.
-                   */
-                consumer.connect()
-                await sendMessages(kafka, testTopic, messages)
-                await consumer.run({ eachMessage: async () => {}, autoCommit: false })
-                setOffsetSpy.resetHistory()
-                await consumer.commitOffsets([commitMeta])
-                await consumer.disconnect()
-
-                // Check our work
-                const runArg = setOffsetSpy.lastCall.args[0]
-                expect(setOffsetSpy).to.be.calledOnce
-                expect(runArg).to.have.property('offset', commitMeta.offset)
-                expect(runArg).to.have.property('partition', commitMeta.partition)
-                expect(runArg).to.have.property('topic', commitMeta.topic)
-                expect(runArg).to.have.property('type', 'kafka_commit')
-                expect(runArg).to.have.property('consumer_group', 'test-group')
-              })
-            }
-
-            it('Should add backlog on producer response', async () => {
-              await sendMessages(kafka, testTopic, messages)
-              expect(setOffsetSpy).to.be.calledOnce
-              const { topic } = setOffsetSpy.lastCall.args[0]
-              expect(topic).to.equal(testTopic)
-            })
-          })
         })
       })
     })

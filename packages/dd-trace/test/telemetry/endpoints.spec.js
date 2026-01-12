@@ -1,11 +1,13 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const dc = require('dc-polyfill')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 
 const originalSetImmediate = global.setImmediate
@@ -32,14 +34,14 @@ describe('endpoints telemetry', () => {
       const config = { appsec: { apiSecurity: { endpointCollectionEnabled: true } } }
       endpoints.start(config)
 
-      expect(subscribe).to.have.been.calledThrice
+      sinon.assert.calledThrice(subscribe)
     })
 
     it('should not subscribe', () => {
       const config = { appsec: { apiSecurity: { endpointCollectionEnabled: false } } }
       endpoints.start(config)
 
-      expect(subscribe).to.not.have.been.called
+      sinon.assert.notCalled(subscribe)
     })
   })
 
@@ -98,9 +100,9 @@ describe('endpoints telemetry', () => {
 
       scheduledCallbacks.forEach(cb => cb())
 
-      expect(sendData).to.have.been.calledOnce
+      sinon.assert.calledOnce(sendData)
       const payload = sendData.firstCall.args[4]
-      expect(payload.endpoints).to.have.deep.members([
+      assertObjectContains(payload.endpoints, [
         {
           type: 'REST',
           method: 'GET',
@@ -132,12 +134,13 @@ describe('endpoints telemetry', () => {
       fastifyRouteCh.publish({ routeOptions: { method: 'POST', path: '/two' } })
       scheduledCallbacks.forEach(cb => cb())
 
-      expect(sendData.callCount).to.equal(2)
+      assert.strictEqual(sendData.callCount, 2)
       const firstPayload = sendData.firstCall.args[4]
       const secondPayload = sendData.secondCall.args[4]
 
-      expect(firstPayload).to.have.property('is_first', true)
-      expect(Boolean(secondPayload.is_first)).to.equal(false)
+      assert.ok('is_first' in firstPayload)
+      assert.strictEqual(firstPayload.is_first, true)
+      assert.strictEqual(Boolean(secondPayload.is_first), false)
     })
 
     it('should send large amount of endpoints in small batches', () => {
@@ -148,12 +151,12 @@ describe('endpoints telemetry', () => {
       scheduledCallbacks.forEach(cb => cb())
       scheduledCallbacks.forEach(cb => cb())
 
-      expect(sendData.callCount).to.equal(2)
+      assert.strictEqual(sendData.callCount, 2)
       const firstPayload = sendData.firstCall.args[4]
       const secondPayload = sendData.secondCall.args[4]
 
-      expect(firstPayload.endpoints).to.have.length(100)
-      expect(secondPayload.endpoints).to.have.length(50)
+      assert.strictEqual(firstPayload.endpoints.length, 100)
+      assert.strictEqual(secondPayload.endpoints.length, 50)
     })
 
     it('should record express route and add HEAD for GET', () => {
@@ -161,11 +164,10 @@ describe('endpoints telemetry', () => {
 
       scheduledCallbacks.forEach(cb => cb())
 
-      expect(sendData).to.have.been.calledOnce
+      sinon.assert.calledOnce(sendData)
       const payload = sendData.firstCall.args[4]
       const resources = payload.endpoints.map(e => e.resource_name)
-      expect(resources).to.include('GET /test')
-      expect(resources).to.include('HEAD /test')
+      assert.deepStrictEqual(resources, ['GET /test', 'HEAD /test'])
     })
 
     it('should record express wildcard and ignore subsequent specific methods for same path', () => {
@@ -175,10 +177,10 @@ describe('endpoints telemetry', () => {
 
       scheduledCallbacks.forEach(cb => cb())
 
-      expect(sendData).to.have.been.calledOnce
+      sinon.assert.calledOnce(sendData)
       const payload = sendData.firstCall.args[4]
       const resources = payload.endpoints.map(e => e.resource_name)
-      expect(resources).to.deep.equal(['* /all'])
+      assert.deepStrictEqual(resources, ['* /all'])
     })
 
     it('should handle router routes the same way as express routes', () => {
@@ -186,11 +188,10 @@ describe('endpoints telemetry', () => {
 
       scheduledCallbacks.forEach(cb => cb())
 
-      expect(sendData).to.have.been.calledOnce
+      sinon.assert.calledOnce(sendData)
       const payload = sendData.firstCall.args[4]
       const resources = payload.endpoints.map(e => e.resource_name)
-      expect(resources).to.include('GET /router-test')
-      expect(resources).to.include('HEAD /router-test')
+      assert.deepStrictEqual(resources, ['GET /router-test', 'HEAD /router-test'])
     })
 
     describe('on failed request', () => {
@@ -210,9 +211,9 @@ describe('endpoints telemetry', () => {
 
         scheduledCallbacks.forEach(cb => cb())
 
-        expect(getRetryData).to.have.been.calledOnce
-        expect(capturedRequestType).to.equal('app-endpoints')
-        expect(updateRetryData).to.have.been.calledOnce
+        sinon.assert.calledOnce(getRetryData)
+        assert.strictEqual(capturedRequestType, 'app-endpoints')
+        sinon.assert.calledOnce(updateRetryData)
       })
 
       it('should create batch request when retry data exists', () => {
@@ -220,8 +221,8 @@ describe('endpoints telemetry', () => {
 
         scheduledCallbacks.forEach(cb => cb())
 
-        expect(getRetryData).to.have.been.calledOnce
-        expect(capturedRequestType).to.equal('app-endpoints')
+        sinon.assert.calledOnce(getRetryData)
+        assert.strictEqual(capturedRequestType, 'app-endpoints')
 
         getRetryData.returns({
           reqType: 'app-endpoints',
@@ -230,9 +231,9 @@ describe('endpoints telemetry', () => {
 
         fastifyRouteCh.publish({ routeOptions: { method: 'POST', path: '/second' } })
         scheduledCallbacks.forEach(cb => cb())
-        expect(getRetryData).to.have.been.calledTwice
-        expect(capturedRequestType).to.equal('message-batch')
-        expect(updateRetryData).to.have.been.calledTwice
+        sinon.assert.calledTwice(getRetryData)
+        assert.strictEqual(capturedRequestType, 'message-batch')
+        sinon.assert.calledTwice(updateRetryData)
       })
     })
   })

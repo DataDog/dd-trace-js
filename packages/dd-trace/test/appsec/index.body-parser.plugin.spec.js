@@ -1,15 +1,16 @@
 'use strict'
 
-const axios = require('axios')
+const assert = require('node:assert/strict')
 const path = require('node:path')
-const { expect } = require('chai')
-const sinon = require('sinon')
-const agent = require('../plugins/agent')
-const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
-const { json } = require('../../src/appsec/blocked_templates')
-const { withVersions } = require('../setup/mocha')
 
+const axios = require('axios')
+const sinon = require('sinon')
+
+const appsec = require('../../src/appsec')
+const { json } = require('../../src/appsec/blocked_templates')
+const { getConfigFresh } = require('../helpers/config')
+const agent = require('../plugins/agent')
+const { withVersions } = require('../setup/mocha')
 withVersions('body-parser', 'body-parser', version => {
   describe('Suspicious request blocking - body-parser', () => {
     let port, server, requestBody
@@ -30,14 +31,19 @@ withVersions('body-parser', 'body-parser', version => {
       })
 
       server = app.listen(port, () => {
-        port = server.address().port
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         done()
       })
     })
 
     beforeEach(async () => {
       requestBody = sinon.stub()
-      appsec.enable(new Config({ appsec: { enabled: true, rules: path.join(__dirname, 'body-parser-rules.json') } }))
+      appsec.enable(getConfigFresh({
+        appsec: {
+          enabled: true,
+          rules: path.join(__dirname, 'body-parser-rules.json')
+        }
+      }))
     })
 
     afterEach(() => {
@@ -52,8 +58,8 @@ withVersions('body-parser', 'body-parser', version => {
     it('should not block the request without an attack', async () => {
       const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
-      expect(requestBody).to.be.calledOnce
-      expect(res.data).to.be.equal('DONE')
+      sinon.assert.calledOnce(requestBody)
+      assert.strictEqual(res.data, 'DONE')
     })
 
     it('should block the request when attack is detected', async () => {
@@ -62,9 +68,9 @@ withVersions('body-parser', 'body-parser', version => {
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
-        expect(e.response.status).to.be.equals(403)
-        expect(e.response.data).to.be.deep.equal(JSON.parse(json))
-        expect(requestBody).not.to.be.called
+        assert.strictEqual(e.response.status, 403)
+        assert.deepStrictEqual(e.response.data, JSON.parse(json))
+        sinon.assert.notCalled(requestBody)
       }
     })
 
@@ -89,15 +95,15 @@ withVersions('body-parser', 'body-parser', version => {
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
-        expect(e.response.status).to.be.equals(403)
-        expect(e.response.data).to.be.deep.equal(JSON.parse(json))
-        expect(requestBody).not.to.be.called
+        assert.strictEqual(e.response.status, 403)
+        assert.deepStrictEqual(e.response.data, JSON.parse(json))
+        sinon.assert.notCalled(requestBody)
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
-          expect(span.metrics['_dd.appsec.truncated.string_length']).to.equal(5000)
-          expect(span.metrics['_dd.appsec.truncated.container_size']).to.equal(300)
-          expect(span.metrics['_dd.appsec.truncated.container_depth']).to.equal(20)
+          assert.strictEqual(span.metrics['_dd.appsec.truncated.string_length'], 5000)
+          assert.strictEqual(span.metrics['_dd.appsec.truncated.container_size'], 300)
+          assert.strictEqual(span.metrics['_dd.appsec.truncated.container_depth'], 20)
         })
       }
     })

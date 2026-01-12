@@ -1,12 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it } = require('mocha')
 const sinon = require('sinon')
 const nock = require('nock')
 
 require('../../setup/core')
-
 const AgentInfoExporter = require('../../../src/exporters/common/agent-info-exporter')
 
 describe('AgentInfoExporter', () => {
@@ -27,11 +27,11 @@ describe('AgentInfoExporter', () => {
       }))
 
     const agentInfoExporter = new AgentInfoExporter({ port })
-    expect(scope.isDone()).not.to.be.true
-    agentInfoExporter.getAgentInfo((err, { endpoints }) => {
-      expect(err).to.be.null
-      expect(endpoints).to.include('/evp_proxy/v2')
-      expect(scope.isDone()).to.be.true
+    assert.notStrictEqual(scope.isDone(), true)
+    agentInfoExporter.getAgentInfo((err, response) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(response.endpoints, ['/evp_proxy/v2'])
+      assert.strictEqual(scope.isDone(), true)
       done()
     })
   })
@@ -47,10 +47,10 @@ describe('AgentInfoExporter', () => {
 
     agentInfoExporter.export(trace)
 
-    expect(agentInfoExporter.getUncodedTraces()).to.include(trace)
+    assert.deepStrictEqual(agentInfoExporter.getUncodedTraces(), [trace])
 
     agentInfoExporter.getAgentInfo(() => {
-      expect(agentInfoExporter.getUncodedTraces()).to.include(trace)
+      assert.deepStrictEqual(agentInfoExporter.getUncodedTraces(), [trace])
       done()
     })
   })
@@ -69,11 +69,11 @@ describe('AgentInfoExporter', () => {
       agentInfoExporter._writer = writer
       agentInfoExporter._isInitialized = true
       agentInfoExporter.export(trace)
-      expect(writer.append).to.have.been.calledWith(trace)
-      expect(writer.flush).not.to.have.been.called
-      expect(agentInfoExporter.getUncodedTraces()).not.to.include(trace)
+      sinon.assert.calledWith(writer.append, trace)
+      sinon.assert.notCalled(writer.flush)
+      assert.ok(!(agentInfoExporter.getUncodedTraces()).includes(trace))
       setTimeout(() => {
-        expect(writer.flush).to.have.been.called
+        sinon.assert.called(writer.flush)
         done()
       }, flushInterval)
     })

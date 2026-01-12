@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it } = require('mocha')
 
 require('./setup/core')
 
@@ -20,15 +21,15 @@ describe('Payload tagger', () => {
       const belowCap = 200
       const input = { foo: Object.fromEntries([...Array(belowCap).keys()].map(i => [i, i])) }
       const tagCount = Object.entries(tagsFromObject(input, defaultOpts)).length
-      expect(tagCount).to.equal(belowCap)
+      assert.strictEqual(tagCount, belowCap)
     })
 
     it('should stop generating tags once the cap is reached', () => {
       const aboveCap = 759
       const input = { foo: Object.fromEntries([...Array(aboveCap).keys()].map(i => [i, i])) }
       const tagCount = Object.entries(tagsFromObject(input, defaultOpts)).length
-      expect(tagCount).to.not.equal(aboveCap)
-      expect(tagCount).to.equal(758)
+      assert.notStrictEqual(tagCount, aboveCap)
+      assert.strictEqual(tagCount, 758)
     })
   })
 
@@ -49,7 +50,7 @@ describe('Payload tagger', () => {
         }
       }
       const tags = tagsFromObject(input, defaultOpts)
-      expect(tags).to.deep.equal({
+      assert.deepStrictEqual(tags, {
         'http.payload.foo.bar.token': 'redacted',
         'http.payload.foo.bar.authorization': 'redacted',
         'http.payload.foo.bar.valid': 'valid',
@@ -75,7 +76,7 @@ describe('Payload tagger', () => {
         }
       }
       const tags = tagsFromObject(input, defaultOpts)
-      expect(tags).to.deep.equal({
+      assert.deepStrictEqual(tags, {
         'http.payload.foo.authorization': 'redacted',
         'http.payload.foo.baz.password': 'redacted',
         'http.payload.foo.baz.x-authorization': 'redacted',
@@ -88,7 +89,7 @@ describe('Payload tagger', () => {
     it('should escape `.` characters in individual keys', () => {
       const input = { 'foo.bar': { baz: 'quux' } }
       const tags = tagsFromObject(input, defaultOpts)
-      expect(tags).to.deep.equal({
+      assert.deepStrictEqual(tags, {
         'http.payload.foo\\.bar.baz': 'quux'
       })
     })
@@ -98,7 +99,7 @@ describe('Payload tagger', () => {
     it('should transform null values to "null" string', () => {
       const input = { foo: 'bar', baz: null }
       const tags = tagsFromObject(input, defaultOpts)
-      expect(tags).to.deep.equal({
+      assert.deepStrictEqual(tags, {
         'http.payload.foo': 'bar',
         'http.payload.baz': 'null'
       })
@@ -107,7 +108,7 @@ describe('Payload tagger', () => {
     it('should transform undefined values to "undefined" string', () => {
       const input = { foo: 'bar', baz: undefined }
       const tags = tagsFromObject(input, defaultOpts)
-      expect(tags).to.deep.equal({
+      assert.deepStrictEqual(tags, {
         'http.payload.foo': 'bar',
         'http.payload.baz': 'undefined'
       })
@@ -116,7 +117,7 @@ describe('Payload tagger', () => {
     it('should transform boolean values to strings', () => {
       const input = { foo: true, bar: false }
       const tags = tagsFromObject(input, defaultOpts)
-      expect(tags).to.deep.equal({
+      assert.deepStrictEqual(tags, {
         'http.payload.foo': 'true',
         'http.payload.bar': 'false'
       })
@@ -125,7 +126,7 @@ describe('Payload tagger', () => {
     it('should decode buffers as UTF-8', () => {
       const input = { foo: Buffer.from('bar') }
       const tags = tagsFromObject(input, defaultOpts)
-      expect(tags).to.deep.equal({ 'http.payload.foo': 'bar' })
+      assert.deepStrictEqual(tags, { 'http.payload.foo': 'bar' })
     })
 
     it('should provide tags from simple JSON objects, casting to strings where necessary', () => {
@@ -136,7 +137,7 @@ describe('Payload tagger', () => {
         anundefined: undefined
       }
       const tags = tagsFromObject(input, defaultOpts)
-      expect(tags).to.deep.equal({
+      assert.deepStrictEqual(tags, {
         'http.payload.foo.bar.baz': '1',
         'http.payload.foo.bar.quux': '2',
         'http.payload.asimplestring': 'isastring',
@@ -148,7 +149,7 @@ describe('Payload tagger', () => {
     it('should index tags when encountering arrays', () => {
       const input = { foo: { bar: { list: ['v0', 'v1', 'v2'] } } }
       const tags = tagsFromObject(input, defaultOpts)
-      expect(tags).to.deep.equal({
+      assert.deepStrictEqual(tags, {
         'http.payload.foo.bar.list.0': 'v0',
         'http.payload.foo.bar.list.1': 'v1',
         'http.payload.foo.bar.list.2': 'v2'
@@ -160,7 +161,7 @@ describe('Payload tagger', () => {
         1: { 2: { 3: { 4: { 5: { 6: { 7: { 8: { 9: { 10: 11 } } } } } } } } }
       }
       const tags = tagsFromObject(input, defaultOpts)
-      expect(tags).to.deep.equal({ 'http.payload.1.2.3.4.5.6.7.8.9.10': '11' })
+      assert.deepStrictEqual(tags, { 'http.payload.1.2.3.4.5.6.7.8.9.10': '11' })
     })
 
     it('should truncate paths beyond max depth', () => {
@@ -168,7 +169,7 @@ describe('Payload tagger', () => {
         1: { 2: { 3: { 4: { 5: { 6: { 7: { 8: { 9: { 10: { 11: 'too much' } } } } } } } } } }
       }
       const tags = tagsFromObject(input, defaultOpts)
-      expect(tags).to.deep.equal({ 'http.payload.1.2.3.4.5.6.7.8.9.10': 'truncated' })
+      assert.deepStrictEqual(tags, { 'http.payload.1.2.3.4.5.6.7.8.9.10': 'truncated' })
     })
   })
 })
@@ -185,8 +186,8 @@ describe('Tagging orchestration', () => {
       response: 'bar'
     }
     const tags = computeTags(config, input, { maxDepth: 10, prefix: PAYLOAD_TAG_REQUEST_PREFIX })
-    expect(tags).to.have.property(`${PAYLOAD_TAG_REQUEST_PREFIX}.request`, 'redacted')
-    expect(tags).to.have.property(`${PAYLOAD_TAG_REQUEST_PREFIX}.response`, 'bar')
+    assert.strictEqual(tags[`${PAYLOAD_TAG_REQUEST_PREFIX}.request`], 'redacted')
+    assert.strictEqual(tags[`${PAYLOAD_TAG_REQUEST_PREFIX}.response`], 'bar')
   })
 
   it('should use the response config when given the response prefix', () => {
@@ -200,8 +201,8 @@ describe('Tagging orchestration', () => {
       response: 'bar'
     }
     const tags = computeTags(config, input, { maxDepth: 10, prefix: PAYLOAD_TAG_RESPONSE_PREFIX })
-    expect(tags).to.have.property(`${PAYLOAD_TAG_RESPONSE_PREFIX}.response`, 'redacted')
-    expect(tags).to.have.property(`${PAYLOAD_TAG_RESPONSE_PREFIX}.request`, 'foo')
+    assert.strictEqual(tags[`${PAYLOAD_TAG_RESPONSE_PREFIX}.response`], 'redacted')
+    assert.strictEqual(tags[`${PAYLOAD_TAG_RESPONSE_PREFIX}.request`], 'foo')
   })
 
   it('should apply expansion rules', () => {
@@ -217,9 +218,9 @@ describe('Tagging orchestration', () => {
       untargeted: '{ "foo": "bar" }'
     }
     const tags = computeTags(config, input, { maxDepth: 10, prefix: 'foo' })
-    expect(tags).to.have.property('foo.request.foo', 'bar')
-    expect(tags).to.have.property('foo.response.baz', 'quux')
-    expect(tags).to.have.property('foo.invalid', '{ invalid JSON }')
-    expect(tags).to.have.property('foo.untargeted', '{ "foo": "bar" }')
+    assert.strictEqual(tags['foo.request.foo'], 'bar')
+    assert.strictEqual(tags['foo.response.baz'], 'quux')
+    assert.strictEqual(tags['foo.invalid'], '{ invalid JSON }')
+    assert.strictEqual(tags['foo.untargeted'], '{ "foo": "bar" }')
   })
 })

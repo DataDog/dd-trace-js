@@ -1,12 +1,13 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
 const msgpack = require('@msgpack/msgpack')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
-
 const id = require('../../src/id')
 
 function randString (length) {
@@ -52,20 +53,20 @@ describe('encode 0.5', () => {
     const stringMap = decoded[0]
     const trace = decoded[1][0]
 
-    expect(trace).to.be.instanceof(Array)
-    expect(trace[0]).to.be.instanceof(Array)
-    expect(stringMap[trace[0][0]]).to.equal(data[0].service)
-    expect(stringMap[trace[0][1]]).to.equal(data[0].name)
-    expect(stringMap[trace[0][2]]).to.equal(data[0].resource)
-    expect(trace[0][3].toString(16)).to.equal(data[0].trace_id.toString())
-    expect(trace[0][4].toString(16)).to.equal(data[0].span_id.toString())
-    expect(trace[0][5].toString(16)).to.equal(data[0].parent_id.toString())
-    expect(trace[0][6]).to.equal(BigInt(data[0].start))
-    expect(trace[0][7]).to.equal(BigInt(data[0].duration))
-    expect(trace[0][8]).to.equal(0)
-    expect(trace[0][9]).to.deep.equal({ [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
-    expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })
-    expect(stringMap[trace[0][11]]).to.equal('') // unset
+    assert.ok(trace instanceof Array)
+    assert.ok(trace[0] instanceof Array)
+    assert.strictEqual(stringMap[trace[0][0]], data[0].service)
+    assert.strictEqual(stringMap[trace[0][1]], data[0].name)
+    assert.strictEqual(stringMap[trace[0][2]], data[0].resource)
+    assert.strictEqual(trace[0][3].toString(16), data[0].trace_id.toString())
+    assert.strictEqual(trace[0][4].toString(16), data[0].span_id.toString())
+    assert.strictEqual(trace[0][5].toString(16), data[0].parent_id.toString())
+    assert.strictEqual(trace[0][6], BigInt(data[0].start))
+    assert.strictEqual(trace[0][7], BigInt(data[0].duration))
+    assert.strictEqual(trace[0][8], 0)
+    assert.deepStrictEqual(trace[0][9], { [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
+    assert.deepStrictEqual(trace[0][10], { [stringMap.indexOf('example')]: 1 })
+    assert.strictEqual(stringMap[trace[0][11]], '') // unset
   })
 
   it('should encode span events', () => {
@@ -90,9 +91,8 @@ describe('encode 0.5', () => {
     const decoded = msgpack.decode(buffer, { useBigInt64: true })
     const stringMap = decoded[0]
     const trace = decoded[1][0]
-    expect(stringMap).to.include('events')
-    expect(stringMap).to.include(encodedLink)
-    expect(trace[0][9]).to.include({
+    assertObjectContains(stringMap, ['events', encodedLink])
+    assertObjectContains(trace[0][9], {
       [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
       [stringMap.indexOf('events')]: stringMap.indexOf(encodedLink)
     })
@@ -117,25 +117,24 @@ describe('encode 0.5', () => {
     const stringMap = decoded[0]
     const trace = decoded[1][0]
 
-    expect(trace).to.be.instanceof(Array)
-    expect(trace[0]).to.be.instanceof(Array)
-    expect(stringMap[trace[0][0]]).to.equal(data[0].service)
-    expect(stringMap[trace[0][1]]).to.equal(data[0].name)
-    expect(stringMap[trace[0][2]]).to.equal(data[0].resource)
-    expect(stringMap).to.include('_dd.span_links')
-    expect(stringMap).to.include(encodedLink)
-    expect(trace[0][3].toString(16)).to.equal(data[0].trace_id.toString())
-    expect(trace[0][4].toString(16)).to.equal(data[0].span_id.toString())
-    expect(trace[0][5].toString(16)).to.equal(data[0].parent_id.toString())
-    expect(trace[0][6]).to.equal(BigInt(data[0].start))
-    expect(trace[0][7]).to.equal(BigInt(data[0].duration))
-    expect(trace[0][8]).to.equal(0)
-    expect(trace[0][9]).to.deep.equal({
+    assert.ok(trace instanceof Array)
+    assert.ok(trace[0] instanceof Array)
+    assert.strictEqual(stringMap[trace[0][0]], data[0].service)
+    assert.strictEqual(stringMap[trace[0][1]], data[0].name)
+    assert.strictEqual(stringMap[trace[0][2]], data[0].resource)
+    assertObjectContains(stringMap, ['_dd.span_links', encodedLink])
+    assert.strictEqual(trace[0][3].toString(16), data[0].trace_id.toString())
+    assert.strictEqual(trace[0][4].toString(16), data[0].span_id.toString())
+    assert.strictEqual(trace[0][5].toString(16), data[0].parent_id.toString())
+    assert.strictEqual(trace[0][6], BigInt(data[0].start))
+    assert.strictEqual(trace[0][7], BigInt(data[0].duration))
+    assert.strictEqual(trace[0][8], 0)
+    assert.deepStrictEqual(trace[0][9], {
       [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
       [stringMap.indexOf('_dd.span_links')]: stringMap.indexOf(encodedLink)
     })
-    expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })
-    expect(stringMap[trace[0][11]]).to.equal('') // unset
+    assert.deepStrictEqual(trace[0][10], { [stringMap.indexOf('example')]: 1 })
+    assert.strictEqual(stringMap[trace[0][11]], '') // unset
   })
 
   it('should encode span link with just span and trace id', () => {
@@ -151,25 +150,24 @@ describe('encode 0.5', () => {
     const stringMap = decoded[0]
     const trace = decoded[1][0]
 
-    expect(trace).to.be.instanceof(Array)
-    expect(trace[0]).to.be.instanceof(Array)
-    expect(stringMap[trace[0][0]]).to.equal(data[0].service)
-    expect(stringMap[trace[0][1]]).to.equal(data[0].name)
-    expect(stringMap[trace[0][2]]).to.equal(data[0].resource)
-    expect(stringMap).to.include('_dd.span_links')
-    expect(stringMap).to.include(encodedLink)
-    expect(trace[0][3].toString(16)).to.equal(data[0].trace_id.toString())
-    expect(trace[0][4].toString(16)).to.equal(data[0].span_id.toString())
-    expect(trace[0][5].toString(16)).to.equal(data[0].parent_id.toString())
-    expect(trace[0][6]).to.equal(BigInt(data[0].start))
-    expect(trace[0][7]).to.equal(BigInt(data[0].duration))
-    expect(trace[0][8]).to.equal(0)
-    expect(trace[0][9]).to.deep.equal({
+    assert.ok(trace instanceof Array)
+    assert.ok(trace[0] instanceof Array)
+    assert.strictEqual(stringMap[trace[0][0]], data[0].service)
+    assert.strictEqual(stringMap[trace[0][1]], data[0].name)
+    assert.strictEqual(stringMap[trace[0][2]], data[0].resource)
+    assertObjectContains(stringMap, ['_dd.span_links', encodedLink])
+    assert.strictEqual(trace[0][3].toString(16), data[0].trace_id.toString())
+    assert.strictEqual(trace[0][4].toString(16), data[0].span_id.toString())
+    assert.strictEqual(trace[0][5].toString(16), data[0].parent_id.toString())
+    assert.strictEqual(trace[0][6], BigInt(data[0].start))
+    assert.strictEqual(trace[0][7], BigInt(data[0].duration))
+    assert.strictEqual(trace[0][8], 0)
+    assert.deepStrictEqual(trace[0][9], {
       [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
       [stringMap.indexOf('_dd.span_links')]: stringMap.indexOf(encodedLink)
     })
-    expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })
-    expect(stringMap[trace[0][11]]).to.equal('') // unset
+    assert.deepStrictEqual(trace[0][10], { [stringMap.indexOf('example')]: 1 })
+    assert.strictEqual(stringMap[trace[0][11]], '') // unset
   })
 
   it('should truncate long IDs', () => {
@@ -183,21 +181,21 @@ describe('encode 0.5', () => {
     const decoded = msgpack.decode(buffer, { useBigInt64: true })
     const trace = decoded[1][0]
 
-    expect(trace[0][3].toString(16)).to.equal('1234abcd1234abcd')
-    expect(trace[0][4].toString(16)).to.equal('1234abcd1234abcd')
-    expect(trace[0][5].toString(16)).to.equal('1234abcd1234abcd')
+    assert.strictEqual(trace[0][3].toString(16), '1234abcd1234abcd')
+    assert.strictEqual(trace[0][4].toString(16), '1234abcd1234abcd')
+    assert.strictEqual(trace[0][5].toString(16), '1234abcd1234abcd')
   })
 
   it('should report its count', () => {
-    expect(encoder.count()).to.equal(0)
+    assert.strictEqual(encoder.count(), 0)
 
     encoder.encode(data)
 
-    expect(encoder.count()).to.equal(1)
+    assert.strictEqual(encoder.count(), 1)
 
     encoder.encode(data)
 
-    expect(encoder.count()).to.equal(2)
+    assert.strictEqual(encoder.count(), 2)
   })
 
   it('should flush when the payload size limit is reached', function () {
@@ -208,7 +206,7 @@ describe('encode 0.5', () => {
 
     encoder.encode(data)
 
-    expect(writer.flush).to.have.been.called
+    sinon.assert.called(writer.flush)
   })
 
   it('should reset after making a payload', () => {
@@ -217,10 +215,10 @@ describe('encode 0.5', () => {
 
     const payload = encoder.makePayload()
 
-    expect(encoder.count()).to.equal(0)
-    expect(payload).to.have.length(12)
-    expect(payload[5]).to.equal(1)
-    expect(payload[11]).to.equal(0)
+    assert.strictEqual(encoder.count(), 0)
+    assert.strictEqual(payload.length, 12)
+    assert.strictEqual(payload[5], 1)
+    assert.strictEqual(payload[11], 0)
   })
 
   it('should ignore meta_struct property', () => {
@@ -233,20 +231,21 @@ describe('encode 0.5', () => {
     const stringMap = decoded[0]
     const trace = decoded[1][0]
 
-    expect(trace).to.be.instanceof(Array)
-    expect(trace[0]).to.be.instanceof(Array)
-    expect(stringMap[trace[0][0]]).to.equal(data[0].service)
-    expect(stringMap[trace[0][1]]).to.equal(data[0].name)
-    expect(stringMap[trace[0][2]]).to.equal(data[0].resource)
-    expect(trace[0][3].toString(16)).to.equal(data[0].trace_id.toString())
-    expect(trace[0][4].toString(16)).to.equal(data[0].span_id.toString())
-    expect(trace[0][5].toString(16)).to.equal(data[0].parent_id.toString())
-    expect(trace[0][6]).to.equal(BigInt(data[0].start))
-    expect(trace[0][7]).to.equal(BigInt(data[0].duration))
-    expect(trace[0][8]).to.equal(0)
-    expect(trace[0][9]).to.deep.equal({ [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
-    expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })
-    expect(stringMap[trace[0][11]]).to.equal('') // unset
-    expect(trace[0][12]).to.be.undefined // Everything works the same as without meta_struct, and nothing else is added
+    assert.ok(trace instanceof Array)
+    assert.ok(trace[0] instanceof Array)
+    assert.strictEqual(stringMap[trace[0][0]], data[0].service)
+    assert.strictEqual(stringMap[trace[0][1]], data[0].name)
+    assert.strictEqual(stringMap[trace[0][2]], data[0].resource)
+    assert.strictEqual(trace[0][3].toString(16), data[0].trace_id.toString())
+    assert.strictEqual(trace[0][4].toString(16), data[0].span_id.toString())
+    assert.strictEqual(trace[0][5].toString(16), data[0].parent_id.toString())
+    assert.strictEqual(trace[0][6], BigInt(data[0].start))
+    assert.strictEqual(trace[0][7], BigInt(data[0].duration))
+    assert.strictEqual(trace[0][8], 0)
+    assert.deepStrictEqual(trace[0][9], { [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
+    assert.deepStrictEqual(trace[0][10], { [stringMap.indexOf('example')]: 1 })
+    assert.strictEqual(stringMap[trace[0][11]], '') // unset
+    // Everything works the same as without meta_struct, and nothing else is added
+    assert.strictEqual(trace[0][12], undefined)
   })
 })

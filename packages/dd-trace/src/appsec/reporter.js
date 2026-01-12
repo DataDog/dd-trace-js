@@ -546,10 +546,6 @@ function finishRequest (req, res, storedResponseHeaders, requestBody) {
     reportRequestBody(rootSpan, requestBody)
   }
 
-  if (tags['appsec.event'] === 'true' && typeof req.route?.path === 'string') {
-    newTags['http.endpoint'] = req.route.path
-  }
-
   rootSpan.addTags(newTags)
 }
 

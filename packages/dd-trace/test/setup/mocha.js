@@ -1,22 +1,21 @@
 'use strict'
 
 const assert = require('node:assert')
-const util = require('node:util')
+const fs = require('node:fs')
 const { platform } = require('node:os')
 const path = require('node:path')
-const fs = require('node:fs')
+const util = require('node:util')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
-
 require('./core')
 
 const externals = require('../plugins/externals.json')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
+const extraServices = require('../../src/service-naming/extra-services')
 const { storage } = require('../../../datadog-core')
 const { getInstrumentation } = require('./helpers/load-inst')
 
@@ -79,8 +78,8 @@ function withNamingSchema (
                   ? serviceName()
                   : serviceName
 
-                expect(span).to.have.property('name', expectedOpName)
-                expect(span).to.have.property('service', expectedServiceName)
+                assert.strictEqual(span.name, expectedOpName)
+                assert.strictEqual(span.service, expectedServiceName)
               }, { timeoutMs: 25000 })
 
             const testPromise = spanProducerFn(reject)
@@ -120,7 +119,7 @@ function withNamingSchema (
               const expectedServiceName = typeof serviceName === 'function'
                 ? serviceName()
                 : serviceName
-              expect(span).to.have.property('service', expectedServiceName)
+              assert.strictEqual(span.service, expectedServiceName)
             }, { timeoutMs: 15000 })
 
           const testPromise = spanProducerFn(reject)
@@ -149,7 +148,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
     it('should compute peer service', async () => {
       const useCallback = spanGenerationFn.length === 1
       const spanGenerationPromise = useCallback
-        ? new Promise((resolve, reject) => {
+        ? new Promise(/** @type {() => void} */ (resolve, reject) => {
           const result = spanGenerationFn((err) => err ? reject(err) : resolve())
           // Some callback based methods are a mixture of callback and promise,
           // depending on the module version. Await the promises as well.
@@ -168,8 +167,8 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
       await Promise.all([
         agent.assertSomeTraces(traces => {
           const span = traces[0][0]
-          expect(span.meta).to.have.property('peer.service', typeof service === 'function' ? service() : service)
-          expect(span.meta).to.have.property('_dd.peer.service.source', serviceSource)
+          assert.strictEqual(span.meta['peer.service'], typeof service === 'function' ? service() : service)
+          assert.strictEqual(span.meta['_dd.peer.service.source'], serviceSource)
         }),
         spanGenerationPromise
       ])
@@ -178,13 +177,23 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
 }
 
 /**
+ * @typedef {typeof import('../../src/plugins/plugin')} Plugin
+ */
+/**
+ * @callback withVersionsCallback
+ * @param {string} versionKey - The version string used in the module path
+ * @param {string} moduleName - The name of the module being tested
+ * @param {string} resolvedVersion - The specific version of the module being tested
+ */
+/**
  * @overload
  * @param {string|Plugin} plugin - The name of the plugin to test, e.g. 'fastify', or the exports object of an already
  *     loaded plugin
  * @param {string|string[]} modules - The name(s) of the module(s) to test, e.g. 'fastify' or ['fastify', 'middie']
  * @param {withVersionsCallback} cb - The callback function to call with the test case data
  * @returns {void}
- *
+ */
+/**
  * @overload
  * @param {string|Plugin} plugin - The name of the plugin to test, e.g. 'fastify', or the exports object of an already
  *     loaded plugin
@@ -192,15 +201,6 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
  * @param {string} range - The specific version or range of versions to test, e.g. '>=3' or '3.1.2'
  * @param {withVersionsCallback} cb - The callback function to call with the test case data
  * @returns {void}
- *
- * @typedef {object} Plugin
- * @property {string} name
- * @property {string} version
- *
- * @callback withVersionsCallback
- * @param {string} versionKey - The version string used in the module path
- * @param {string} moduleName - The name of the module being tested
- * @param {string} resolvedVersion - The specific version of the module being tested
  */
 function withVersions (plugin, modules, range, cb) {
   if (typeof range === 'function') {
@@ -238,9 +238,8 @@ function withVersions (plugin, modules, range, cb) {
       for (const version of versions) {
         if (process.env.RANGE && !semver.subset(version, process.env.RANGE)) continue
         if (version !== '*') {
-          const result = semver.coerce(version)
-          if (!result) throw new Error(`Invalid version: ${version}`)
-          const min = result.version
+          const min = semver.coerce(version)?.version
+          if (!min) throw new Error(`Invalid version: ${version}`)
           testVersions.set(min, { versionRange: version, versionKey: min, resolvedVersion: min })
         }
 
@@ -273,6 +272,7 @@ function withVersions (plugin, modules, range, cb) {
           nodePath = process.env.NODE_PATH
           process.env.NODE_PATH += `${NODE_PATH_SEP}${absNodeModulesPath}`
 
+          // @ts-expect-error - Module._initPaths is not typed due to being an internal API.
           require('module').Module._initPaths()
         })
 
@@ -280,6 +280,7 @@ function withVersions (plugin, modules, range, cb) {
 
         after(() => {
           process.env.NODE_PATH = nodePath
+          // @ts-expect-error - Module._initPaths is not typed due to being an internal API.
           require('module').Module._initPaths()
         })
       })
@@ -288,13 +289,18 @@ function withVersions (plugin, modules, range, cb) {
 }
 
 /**
+ * @callback withExportsCallback
+ * @param {() => import('module').Module} getExport - A function that returns the module export to test
+ */
+/**
  * @overload
  * @param {string} moduleName - The name of the module being tested
  * @param {string} version - The specific version of the module being tested
  * @param {string[]} exportNames - The names of the module exports to be tested (the default export will always be
  *     tested)
  * @param {withExportsCallback} cb
- *
+ */
+/**
  * @overload
  * @param {string} moduleName - The name of the module being tested
  * @param {string} version - The specific version of the module being tested
@@ -303,9 +309,6 @@ function withVersions (plugin, modules, range, cb) {
  * @param {string} versionRange - The version range in which the given version should reside. If not within this range,
  *     only the default export will be tested.
  * @param {withExportsCallback} cb
- *
- * @callback withExportsCallback
- * @param {function} getExport - A function that returns the module export to test
  */
 function withExports (moduleName, version, exportNames, versionRange, cb) {
   if (typeof versionRange === 'function') {
@@ -357,5 +360,7 @@ exports.mochaHooks = {
     agent.reset()
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
+    storage('baggage').enterWith(undefined)
+    extraServices.clear()
   }
 }

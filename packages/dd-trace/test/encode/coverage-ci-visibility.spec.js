@@ -1,14 +1,22 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
 const msgpack = require('@msgpack/msgpack')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
-
 const id = require('../../src/id')
+
+/**
+ * @typedef {{
+ *   version: number,
+ *   coverages: { test_session_id: number, test_suite_id: number, files: { filename: string }[] }[] }
+ * } CoverageObject
+ */
 
 describe('coverage-ci-visibility', () => {
   let encoder
@@ -48,54 +56,60 @@ describe('coverage-ci-visibility', () => {
 
     const form = encoder.makePayload()
 
-    expect(form._data[1]).to.contain('Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"')
-    expect(form._data[2]).to.contain('Content-Type: application/msgpack')
+    assert.ok(form._data[0].startsWith('--'))
+    assertObjectContains(
+      form._data,
+      [
+        'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"\r\n',
+        // TODO: The double line breaks seem to be a mistake
+        'Content-Type: application/msgpack\r\n\r\n'
+      ]
+    )
+    const decodedCoverages = /** @type {CoverageObject} */ (msgpack.decode(form._data[3]))
 
-    const decodedCoverages = msgpack.decode(form._data[3])
+    assert.strictEqual(decodedCoverages.version, 2)
+    assert.strictEqual(decodedCoverages.coverages.length, 2)
+    assertObjectContains(decodedCoverages.coverages[0], { test_session_id: 1, test_suite_id: 2 })
+    assert.deepStrictEqual(decodedCoverages.coverages[0].files[0], { filename: 'file.js' })
 
-    expect(decodedCoverages.version).to.equal(2)
-    expect(decodedCoverages.coverages).to.have.length(2)
-    expect(decodedCoverages.coverages[0]).to.contain({ test_session_id: 1, test_suite_id: 2 })
-    expect(decodedCoverages.coverages[0].files[0]).to.eql({ filename: 'file.js' })
-
-    expect(decodedCoverages.coverages[1]).to.contain({ test_session_id: 3, test_suite_id: 4 })
-    expect(decodedCoverages.coverages[1].files[0]).to.eql({ filename: 'file2.js' })
+    assertObjectContains(decodedCoverages.coverages[1], { test_session_id: 3, test_suite_id: 4 })
+    assert.deepStrictEqual(decodedCoverages.coverages[1].files[0], { filename: 'file2.js' })
   })
 
   it('should report its count', () => {
-    expect(encoder.count()).to.equal(0)
+    assert.strictEqual(encoder.count(), 0)
 
     encoder.encode(formattedCoverage)
 
-    expect(encoder.count()).to.equal(1)
+    assert.strictEqual(encoder.count(), 1)
 
     encoder.encode(formattedCoverage)
 
-    expect(encoder.count()).to.equal(2)
+    assert.strictEqual(encoder.count(), 2)
   })
 
   it('should reset after making a payload', () => {
     encoder.encode(formattedCoverage)
     encoder.makePayload()
 
-    expect(encoder.count()).to.equal(0)
+    assert.strictEqual(encoder.count(), 0)
   })
 
   it('should be able to make multiple payloads', () => {
     let form, decodedCoverages
     encoder.encode(formattedCoverage)
     form = encoder.makePayload()
-    decodedCoverages = msgpack.decode(form._data[3])
-    expect(decodedCoverages.version).to.equal(2)
-    expect(decodedCoverages.coverages).to.have.length(1)
-    expect(decodedCoverages.coverages[0]).to.contain({ test_session_id: 1, test_suite_id: 2 })
+    decodedCoverages = /** @type {CoverageObject} */ (msgpack.decode(form._data[3]))
+    assert.strictEqual(decodedCoverages.version, 2)
+    assert.strictEqual(decodedCoverages.coverages.length, 1)
+    assertObjectContains(decodedCoverages.coverages[0], { test_session_id: 1, test_suite_id: 2 })
 
     encoder.encode(formattedCoverage2)
     form = encoder.makePayload()
-    decodedCoverages = msgpack.decode(form._data[3])
-    expect(decodedCoverages.version).to.equal(2)
-    expect(decodedCoverages.coverages).to.have.length(1)
-    expect(decodedCoverages.coverages[0]).to.contain({ test_session_id: 3, test_suite_id: 4 })
+    decodedCoverages = /** @type {CoverageObject} */ (msgpack.decode(form._data[3]))
+    assert.strictEqual(decodedCoverages.version, 2)
+    assert.strictEqual(decodedCoverages.coverages.length, 1)
+    assertObjectContains(decodedCoverages.coverages[0], { test_session_id: 3, test_suite_id: 4 })
   })
 
   it('should be able to encode test coverages', () => {
@@ -103,14 +117,20 @@ describe('coverage-ci-visibility', () => {
 
     const form = encoder.makePayload()
 
-    expect(form._data[1]).to.contain('Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"')
-    expect(form._data[2]).to.contain('Content-Type: application/msgpack')
+    assert.ok(form._data[0].startsWith('--'))
+    assertObjectContains(
+      form._data,
+      [
+        'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"\r\n',
+        'Content-Type: application/msgpack\r\n\r\n'
+      ]
+    )
 
-    const decodedCoverages = msgpack.decode(form._data[3])
+    const decodedCoverages = /** @type {CoverageObject} */ (msgpack.decode(form._data[3]))
 
-    expect(decodedCoverages.version).to.equal(2)
-    expect(decodedCoverages.coverages).to.have.length(1)
-    expect(decodedCoverages.coverages[0]).to.contain({ test_session_id: 5, test_suite_id: 6, span_id: 7 })
-    expect(decodedCoverages.coverages[0].files[0]).to.eql({ filename: 'file3.js' })
+    assert.strictEqual(decodedCoverages.version, 2)
+    assert.strictEqual(decodedCoverages.coverages.length, 1)
+    assertObjectContains(decodedCoverages.coverages[0], { test_session_id: 5, test_suite_id: 6, span_id: 7 })
+    assert.deepStrictEqual(decodedCoverages.coverages[0].files[0], { filename: 'file3.js' })
   })
 })

@@ -29,6 +29,7 @@ tracer.use('pg', {
 <h5 id="aws-sdk-tags"></h5>
 <h5 id="aws-sdk-config"></h5>
 <h5 id="azure-functions"></h5>
+<h5 id="bullmq"></h5>
 <h5 id="bunyan"></h5>
 <h5 id="confluentinc-kafka-javascript"></h5>
 <h5 id="couchbase"></h5>
@@ -111,6 +112,7 @@ tracer.use('pg', {
 * [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
 * [azure-functions](./interfaces/export_.plugins.azure_functions.html)
 * [bluebird](./interfaces/export_.plugins.bluebird.html)
+* [bullmq](./interfaces/export_.plugins.bullmq.html)
 * [couchbase](./interfaces/export_.plugins.couchbase.html)
 * [cucumber](./interfaces/export_.plugins.cucumber.html)
 * [bunyan](./interfaces/export_.plugins.bunyan.html)
@@ -408,14 +410,74 @@ app.listen(3000)
 The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
 
 - `DD_LOGS_OTEL_ENABLED` - Enable OpenTelemetry logs (default: `false`)
-- `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` - OTLP endpoint URL for logs (default: `http://localhost:4318`)
-- `OTEL_EXPORTER_OTLP_LOGS_HEADERS` - Optional headers in JSON format for logs (default: `{}`)
-- `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` - OTLP protocol for logs (default: `http/protobuf`)
-- `OTEL_EXPORTER_OTLP_LOGS_TIMEOUT` - Request timeout in milliseconds for logs (default: `10000`)
-- `OTEL_BSP_SCHEDULE_DELAY` - Batch timeout in milliseconds (default: `5000`)
+- `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` - OTLP endpoint URL for logs. Falls back to `OTEL_EXPORTER_OTLP_ENDPOINT` with `/v1/logs` appended (default: `http://localhost:4318/v1/logs`)
+- `OTEL_EXPORTER_OTLP_LOGS_HEADERS` - Optional headers for logs in JSON format. Falls back to `OTEL_EXPORTER_OTLP_HEADERS` (default: `{}`)
+- `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` - OTLP protocol for logs. Options: `http/protobuf`, `http/json`. Falls back to `OTEL_EXPORTER_OTLP_PROTOCOL` (default: `http/protobuf`)
+- `OTEL_EXPORTER_OTLP_LOGS_TIMEOUT` - Request timeout in milliseconds for logs. Falls back to `OTEL_EXPORTER_OTLP_TIMEOUT` (default: `10000`)
+- `OTEL_BSP_SCHEDULE_DELAY` - Batch export delay in milliseconds (default: `5000`)
 - `OTEL_BSP_MAX_EXPORT_BATCH_SIZE` - Maximum logs per batch (default: `512`)
+- `OTEL_BSP_MAX_QUEUE_SIZE` - Maximum logs to queue before dropping (default: `2048`)
 
-Logs are exported via OTLP over HTTP. The protocol can be configured using `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` or `OTEL_EXPORTER_OTLP_PROTOCOL` environment variables. Supported protocols are `http/protobuf` (default) and `http/json`. For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
+For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
+
+<h3 id="opentelemetry-metrics">OpenTelemetry Metrics</h3>
+
+dd-trace-js includes experimental support for OpenTelemetry metrics, designed as a drop-in replacement for the OpenTelemetry Metrics SDK. This lightweight implementation is fully compliant with the OpenTelemetry Metrics API and integrates with the existing OTLP export infrastructure. Enable it by setting `DD_METRICS_OTEL_ENABLED=true` and use the [OpenTelemetry Metrics API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api.html) to record metric data:
+
+```javascript
+require('dd-trace').init()
+const { metrics } = require('@opentelemetry/api')
+
+const meter = metrics.getMeter('my-service', '1.0.0')
+
+// Counter - monotonically increasing values
+const requestCounter = meter.createCounter('http.requests', {
+  description: 'Total HTTP requests',
+  unit: 'requests'
+})
+requestCounter.add(1, { method: 'GET', status: 200 })
+
+// Histogram - distribution of values
+const durationHistogram = meter.createHistogram('http.duration', {
+  description: 'HTTP request duration',
+  unit: 'ms'
+})
+durationHistogram.record(145, { route: '/api/users' })
+
+// UpDownCounter - can increase and decrease
+const connectionCounter = meter.createUpDownCounter('active.connections', {
+  description: 'Active connections',
+  unit: 'connections'
+})
+connectionCounter.add(1)  // New connection
+connectionCounter.add(-1) // Connection closed
+
+// ObservableGauge - asynchronous observations
+const cpuGauge = meter.createObservableGauge('system.cpu.usage', {
+  description: 'CPU usage percentage',
+  unit: 'percent'
+})
+cpuGauge.addCallback((result) => {
+  const cpuUsage = process.cpuUsage()
+  result.observe(cpuUsage.system / 1000000, { core: '0' })
+})
+```
+
+#### Supported Configuration
+
+The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
+
+- `DD_METRICS_OTEL_ENABLED` - Enable OpenTelemetry metrics (default: `false`)
+- `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` - OTLP endpoint URL for metrics. Falls back to `OTEL_EXPORTER_OTLP_ENDPOINT` with `/v1/metrics` appended (default: `http://localhost:4318/v1/metrics`)
+- `OTEL_EXPORTER_OTLP_METRICS_HEADERS` - Optional headers for metrics in JSON format. Falls back to `OTEL_EXPORTER_OTLP_HEADERS` (default: `{}`)
+- `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` - OTLP protocol for metrics. Options: `http/protobuf`, `http/json`. Falls back to `OTEL_EXPORTER_OTLP_PROTOCOL` (default: `http/protobuf`)
+- `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` - Request timeout in milliseconds for metrics. Falls back to `OTEL_EXPORTER_OTLP_TIMEOUT` (default: `10000`)
+- `OTEL_METRIC_EXPORT_INTERVAL` - Metric export interval in milliseconds (default: `10000`)
+- `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` - Aggregation temporality preference. Options: `CUMULATIVE`, `DELTA`, `LOWMEMORY` (default: `DELTA`). See [OpenTelemetry spec](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/otlp/#additional-environment-variable-configuration) for details
+- `OTEL_BSP_MAX_QUEUE_SIZE` - Maximum metrics to queue before dropping (default: `2048`)
+- `OTEL_METRIC_EXPORT_TIMEOUT` - [NOT YET SUPPORTED] Time to export metrics including retries
+
+For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 

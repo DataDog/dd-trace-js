@@ -1,8 +1,9 @@
 'use strict'
 
-const { describe, it } = require('tap').mocha
 const assert = require('node:assert')
 const { join } = require('node:path')
+
+const { describe, it } = require('mocha')
 
 require('../../setup/core')
 
@@ -36,7 +37,7 @@ describe('stacktrace utils', () => {
         const { stack } = new Error('foo')
         const [frame] = parseUserLandFrames(stack)
         assert.deepStrictEqual(frame, {
-          typeName: 'Test',
+          typeName: 'Context',
           functionName: 'outerFunction',
           methodName: undefined,
           fileName: __filename,

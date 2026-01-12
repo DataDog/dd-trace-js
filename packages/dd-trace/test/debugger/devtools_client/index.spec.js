@@ -1,9 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('mocha')
-const sinon = require('sinon')
+const assert = require('node:assert/strict')
+
+const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 require('../../setup/mocha')
 
@@ -16,16 +17,39 @@ const functionName = 'myFn'
 const parentThreadId = 'my-parent-thread-id'
 const event = {
   params: {
+    reason: 'other',
     hitBreakpoints: [breakpointId],
     callFrames: [{ functionName, location: { scriptId, lineNumber: breakpoint.line - 1, columnNumber: 0 } }]
   }
 }
 
 describe('onPause', function () {
-  let session, send, onPaused, ackReceived
+  /**
+   * @typedef {{
+   *   on: sinon.SinonSpy & { args: Array<[string, Function]> },
+   *   post: sinon.SinonSpy,
+   *   emit: sinon.SinonSpy,
+   *   '@noCallThru'?: boolean
+   * }} MockSession
+   */
+  /** @type {MockSession} */
+  let session
+  /** @type {sinon.SinonSpy} */
+  let send
+  /** @type {Function} */
+  let onPaused
+  /** @type {sinon.SinonSpy} */
+  let ackReceived
+  /** @type {unknown} */
+  let log
 
   beforeEach(async function () {
     ackReceived = sinon.spy()
+    log = {
+      error: sinon.spy(),
+      debug: sinon.spy(),
+      '@noCallThru': true
+    }
 
     session = {
       on: sinon.spy((event, listener) => {
@@ -43,6 +67,7 @@ describe('onPause', function () {
       runtimeId: 'my-runtime-id',
       parentThreadId,
       dynamicInstrumentation: {
+        captureTimeoutNs: 15_000_000n, // Default value is 15ms
         redactedIdentifiers: [],
         redactionExcludedIdentifiers: []
       },
@@ -68,19 +93,44 @@ describe('onPause', function () {
       './session': session,
       './state': state,
       './snapshot': snapshot,
+      './log': log,
       './send': send,
       './status': { ackReceived },
       './remote_config': { '@noCallThru': true }
     })
 
     const onPausedCall = session.on.args.find(([event]) => event === 'Debugger.paused')
+    assert(onPausedCall, 'onPaused call should be found')
     onPaused = onPausedCall[1]
   })
 
   it('should not fail if there is no probe for at the breakpoint', async function () {
     await onPaused(event)
-    expect(session.post).to.have.been.calledOnceWith('Debugger.resume')
-    expect(ackReceived).to.not.have.been.called
-    expect(send).to.not.have.been.called
+    sinon.assert.calledOnceWithExactly(session.post, 'Debugger.resume')
+    sinon.assert.notCalled(ackReceived)
+    sinon.assert.notCalled(send)
+  })
+
+  it('should throw if paused for an unknown reason', async function () {
+    const unknownReasonEvent = {
+      ...event,
+      params: {
+        ...event.params,
+        reason: 'OOM'
+      }
+    }
+
+    let thrown
+    try {
+      await onPaused(unknownReasonEvent)
+    } catch (err) {
+      thrown = err
+    }
+
+    assert(thrown instanceof Error)
+    assert.strictEqual(thrown.message, 'Unexpected Debugger.paused reason: OOM')
+    sinon.assert.notCalled(session.post)
+    sinon.assert.notCalled(ackReceived)
+    sinon.assert.notCalled(send)
   })
 })

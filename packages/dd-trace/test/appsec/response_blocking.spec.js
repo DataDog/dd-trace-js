@@ -1,15 +1,16 @@
 'use strict'
 
+const assert = require('node:assert')
+const fs = require('node:fs')
+const path = require('node:path')
+
 const Axios = require('axios')
-const { assert } = require('chai')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
-const path = require('node:path')
-const fs = require('node:fs')
 
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
+const { getConfigFresh } = require('../helpers/config')
 const WafContext = require('../../src/appsec/waf/waf_context_wrapper')
 const blockingResponse = JSON.parse(require('../../src/appsec/blocked_templates').json)
 
@@ -40,7 +41,7 @@ describe('HTTP Response Blocking', () => {
     await new Promise((resolve, reject) => {
       server.listen(0, 'localhost')
         .once('listening', (...args) => {
-          const port = server.address().port
+          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
 
           axios = Axios.create(({
             baseURL: `http://localhost:${port}`,
@@ -52,7 +53,7 @@ describe('HTTP Response Blocking', () => {
         .once('error', reject)
     })
 
-    appsec.enable(new Config({
+    appsec.enable(getConfigFresh({
       appsec: {
         enabled: true,
         rules: path.join(__dirname, 'response_blocking_rules.json'),
@@ -127,14 +128,14 @@ describe('HTTP Response Blocking', () => {
     const res = await axios.get('/')
 
     assert.equal(res.status, 200)
-    assert.hasAllKeys(cloneHeaders(res.headers), [
+    assert.deepStrictEqual([
       'a',
       'b',
       'bad3',
-      'date',
       'connection',
-      'transfer-encoding'
-    ])
+      'date',
+      'transfer-encoding',
+    ], Object.keys(cloneHeaders(res.headers)).sort())
     assert.deepEqual(res.data, 'end')
   })
 
@@ -220,16 +221,16 @@ describe('HTTP Response Blocking', () => {
     const res = await axios.get('/')
 
     assert.equal(res.status, 201)
-    assert.hasAllKeys(cloneHeaders(res.headers), [
+    assert.deepStrictEqual([
       'a',
       'b',
       'c',
-      'd',
-      'e',
-      'date',
       'connection',
-      'transfer-encoding'
-    ])
+      'd',
+      'date',
+      'e',
+      'transfer-encoding',
+    ], Object.keys(cloneHeaders(res.headers)).sort())
     assert.deepEqual(res.data, 'writefileend')
   })
 
@@ -263,12 +264,12 @@ function cloneHeaders (headers) {
 
 function assertBlocked (res) {
   assert.equal(res.status, 403)
-  assert.hasAllKeys(cloneHeaders(res.headers), [
-    'content-type',
+  assert.deepStrictEqual([
+    'connection',
     'content-length',
+    'content-type',
     'date',
-    'connection'
-  ])
+  ], Object.keys(cloneHeaders(res.headers)).sort())
   assert.deepEqual(res.data, blockingResponse)
 
   sinon.assert.callCount(WafContext.prototype.run, 2)

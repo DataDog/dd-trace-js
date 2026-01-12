@@ -2,12 +2,13 @@
 
 const assert = require('node:assert')
 const path = require('node:path')
+
 const axios = require('axios')
 const sinon = require('sinon')
 
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
+const { getConfigFresh } = require('../helpers/config')
 const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
 
@@ -31,14 +32,19 @@ withVersions('cookie-parser', 'cookie-parser', version => {
       })
 
       server = app.listen(port, () => {
-        port = server.address().port
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         done()
       })
     })
 
     beforeEach(async () => {
       requestCookie = sinon.stub()
-      appsec.enable(new Config({ appsec: { enabled: true, rules: path.join(__dirname, 'cookie-parser-rules.json') } }))
+      appsec.enable(getConfigFresh({
+        appsec: {
+          enabled: true,
+          rules: path.join(__dirname, 'cookie-parser-rules.json')
+        }
+      }))
     })
 
     afterEach(() => {

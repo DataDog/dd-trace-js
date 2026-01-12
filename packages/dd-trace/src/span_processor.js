@@ -1,16 +1,14 @@
 'use strict'
 
 const log = require('./log')
-const format = require('./format')
+const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const { getEnvironmentVariable } = require('./config-helper')
+const processTags = require('./process-tags')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
-
-const { channel } = require('dc-polyfill')
-const spanProcessCh = channel('dd-trace:span:process')
 
 class SpanProcessor {
   constructor (exporter, prioritySampler, config) {
@@ -27,6 +25,16 @@ class SpanProcessor {
 
     this._spanSampler = new SpanSampler(config.sampler)
     this._gitMetadataTagger = new GitMetadataTagger(config)
+
+    this._processTags = config.propagateProcessTags?.enabled
+      ? processTags.serialized
+      : false
+  }
+
+  sample (span) {
+    const spanContext = span.context()
+    this._prioritySampler.sample(spanContext)
+    this._spanSampler.sample(spanContext)
   }
 
   process (span) {
@@ -43,22 +51,19 @@ class SpanProcessor {
       return
     }
     if (started.length === finished.length || finished.length >= flushMinSpans) {
-      this._prioritySampler.sample(spanContext)
-      this._spanSampler.sample(spanContext)
+      this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
-      let isChunkRoot = true
+      let isFirstSpanInChunk = true
 
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
         } else {
-          const formattedSpan = format(span, isChunkRoot)
-          isChunkRoot = false
+          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+          isFirstSpanInChunk = false
           this._stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
-
-          spanProcessCh.publish({ span })
         }
       }
 

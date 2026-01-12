@@ -1,14 +1,16 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const axios = require('axios')
-const { expect } = require('chai')
+
+const { after, afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
-const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
-const { Verbosity } = require('../../../../src/appsec/iast/telemetry/verbosity')
-const Config = require('../../../../src/config')
 const iast = require('../../../../src/appsec/iast')
+const { Verbosity } = require('../../../../src/appsec/iast/telemetry/verbosity')
+const { getConfigFresh } = require('../../../helpers/config')
 const agent = require('../../../plugins/agent')
 const { testInRequest } = require('../utils')
 
@@ -55,8 +57,8 @@ describe('Telemetry', () => {
       it('should set default verbosity', () => {
         iastTelemetry.configure(defaultConfig)
 
-        expect(iastTelemetry.enabled).to.be.true
-        expect(iastTelemetry.verbosity).to.be.equal(Verbosity.INFORMATION)
+        assert.strictEqual(iastTelemetry.enabled, true)
+        assert.strictEqual(iastTelemetry.verbosity, Verbosity.INFORMATION)
       })
 
       it('should not enable telemetry if verbosity is OFF', () => {
@@ -69,9 +71,9 @@ describe('Telemetry', () => {
           telemetry: telemetryConfig
         }, 'OFF')
 
-        expect(iastTelemetry.enabled).to.be.false
-        expect(iastTelemetry.verbosity).to.be.equal(Verbosity.OFF)
-        expect(telemetryMetrics.manager.set).to.not.be.called
+        assert.strictEqual(iastTelemetry.enabled, false)
+        assert.strictEqual(iastTelemetry.verbosity, Verbosity.OFF)
+        sinon.assert.notCalled(telemetryMetrics.manager.set)
       })
 
       it('should enable telemetry if telemetry.metrics is true', () => {
@@ -80,9 +82,9 @@ describe('Telemetry', () => {
           telemetry: telemetryConfig
         })
 
-        expect(iastTelemetry.enabled).to.be.true
-        expect(iastTelemetry.verbosity).to.be.equal(Verbosity.INFORMATION)
-        expect(telemetryMetrics.manager.set).to.be.calledOnce
+        assert.strictEqual(iastTelemetry.enabled, true)
+        assert.strictEqual(iastTelemetry.verbosity, Verbosity.INFORMATION)
+        sinon.assert.calledOnce(telemetryMetrics.manager.set)
       })
 
       it('should not enable telemetry if telemetry.metrics is false', () => {
@@ -91,9 +93,9 @@ describe('Telemetry', () => {
           telemetry: telemetryConfig
         })
 
-        expect(iastTelemetry.enabled).to.be.false
-        expect(iastTelemetry.verbosity).to.be.equal(Verbosity.OFF)
-        expect(telemetryMetrics.manager.set).to.not.be.called
+        assert.strictEqual(iastTelemetry.enabled, false)
+        assert.strictEqual(iastTelemetry.verbosity, Verbosity.OFF)
+        sinon.assert.notCalled(telemetryMetrics.manager.set)
       })
     })
 
@@ -102,8 +104,8 @@ describe('Telemetry', () => {
         iastTelemetry.configure(defaultConfig)
 
         iastTelemetry.stop()
-        expect(iastTelemetry.enabled).to.be.false
-        expect(telemetryMetrics.manager.delete).to.be.calledOnce
+        assert.strictEqual(iastTelemetry.enabled, false)
+        sinon.assert.calledOnce(telemetryMetrics.manager.delete)
       })
     })
 
@@ -114,7 +116,7 @@ describe('Telemetry', () => {
         const iastContext = {}
         iastTelemetry.onRequestStart(iastContext)
 
-        expect(initRequestNamespace).to.be.calledOnceWith(iastContext)
+        sinon.assert.calledOnceWithExactly(initRequestNamespace, iastContext)
       })
 
       it('should not call init if enabled and verbosity is Off', () => {
@@ -131,7 +133,7 @@ describe('Telemetry', () => {
         const iastContext = {}
         iastTelemetry.onRequestStart(iastContext)
 
-        expect(initRequestNamespace).to.not.be.calledOnce
+        sinon.assert.notCalled(initRequestNamespace)
       })
     })
 
@@ -142,7 +144,7 @@ describe('Telemetry', () => {
         const iastContext = {}
         iastTelemetry.onRequestEnd(iastContext)
 
-        expect(finalizeRequestNamespace).to.be.calledOnceWith(iastContext)
+        sinon.assert.calledOnceWithMatch(finalizeRequestNamespace, iastContext)
       })
 
       it('should not call finalizeRequestNamespace if enabled and verbosity is Off', () => {
@@ -159,7 +161,7 @@ describe('Telemetry', () => {
         const iastContext = {}
         iastTelemetry.onRequestEnd(iastContext)
 
-        expect(finalizeRequestNamespace).to.not.be.calledOnce
+        sinon.assert.notCalled(finalizeRequestNamespace)
       })
     })
   })
@@ -174,8 +176,7 @@ describe('Telemetry', () => {
         DD_IAST_ENABLED: 'true',
         DD_IAST_REQUEST_SAMPLING: '100'
       }
-      const config = new Config()
-      iast.enable(config)
+      iast.enable(getConfigFresh())
     })
 
     afterEach(() => {
@@ -192,7 +193,7 @@ describe('Telemetry', () => {
       it('should have header source execution metric', (done) => {
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0].metrics['_dd.iast.telemetry.executed.source.http_request_header']).to.be.equal(1)
+            assert.strictEqual(traces[0][0].metrics['_dd.iast.telemetry.executed.source.http_request_header'], 1)
           })
           .then(done)
           .catch(done)
@@ -206,7 +207,7 @@ describe('Telemetry', () => {
       it('should have url source execution metric', (done) => {
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0].metrics['_dd.iast.telemetry.executed.source.http_request_uri']).to.be.equal(1)
+            assert.strictEqual(traces[0][0].metrics['_dd.iast.telemetry.executed.source.http_request_uri'], 1)
           })
           .then(done)
           .catch(done)

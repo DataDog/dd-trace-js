@@ -1,7 +1,7 @@
 'use strict'
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
-const Config = require('./config')
+const getConfig = require('./config')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
@@ -98,7 +98,7 @@ class Tracer extends NoopProxy {
     this._initialized = true
 
     try {
-      const config = new Config(options) // TODO: support dynamic code config
+      const config = getConfig(options) // TODO: support dynamic code config
 
       if (config.crashtracking.enabled) {
         require('./crashtracking').start(config)
@@ -126,16 +126,11 @@ class Tracer extends NoopProxy {
       }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        const rc = require('./remote_config').enable(config, this._modules.appsec)
+        const RemoteConfig = require('./remote_config')
+        const rc = new RemoteConfig(config)
 
-        rc.setProductHandler('APM_TRACING', (action, conf) => {
-          if (action === 'unapply') {
-            config.configure({}, true)
-          } else {
-            config.configure(conf.lib_config, true)
-          }
-          this._enableOrDisableTracing(config)
-        })
+        const tracingRemoteConfig = require('./config/remote_config')
+        tracingRemoteConfig.enable(rc, config, this._enableOrDisableTracing.bind(this))
 
         rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
           if (!conf?.name?.startsWith('flare-log-level.')) return
@@ -156,18 +151,17 @@ class Tracer extends NoopProxy {
           this._flare.module.send(conf.args)
         })
 
+        if (this._modules.appsec) {
+          const appsecRemoteConfig = require('./appsec/remote_config')
+          appsecRemoteConfig.enable(rc, config, this._modules.appsec)
+        }
+
         if (config.dynamicInstrumentation.enabled) {
           DynamicInstrumentation.start(config, rc)
         }
 
-        if (config.experimental.flaggingProvider.enabled) {
-          rc.setProductHandler('FFE_FLAGS', (action, conf) => {
-            // Feed UFC config directly to OpenFeature provider
-            if (action === 'apply' || action === 'modify') {
-              this.openfeature._setConfiguration(conf)
-            }
-          })
-        }
+        const openfeatureRemoteConfig = require('./openfeature/remote_config')
+        openfeatureRemoteConfig.enable(rc, config, () => this.openfeature)
       }
 
       if (config.profiling.enabled === 'true') {
@@ -217,6 +211,11 @@ class Tracer extends NoopProxy {
       if (config.otelLogsEnabled) {
         const { initializeOpenTelemetryLogs } = require('./opentelemetry/logs')
         initializeOpenTelemetryLogs(config)
+      }
+
+      if (config.otelMetricsEnabled) {
+        const { initializeOpenTelemetryMetrics } = require('./opentelemetry/metrics')
+        initializeOpenTelemetryMetrics(config)
       }
 
       if (config.isTestDynamicInstrumentationEnabled) {

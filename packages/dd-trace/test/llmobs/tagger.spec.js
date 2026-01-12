@@ -1,13 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('mocha')
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
+const assert = require('node:assert/strict')
 
-const assert = require('node:assert')
 const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
 
+const { beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 function unserializbleObject () {
   const obj = {}
   obj.obj = obj
@@ -59,13 +58,13 @@ describe('tagger', () => {
         tagger = new Tagger({ llmobs: { enabled: false } })
         tagger.registerLLMObsSpan(span, 'llm')
 
-        expect(Tagger.tagMap.get(span)).to.deep.equal(undefined)
+        assert.deepStrictEqual(Tagger.tagMap.get(span), undefined)
       })
 
       it('tags an llm obs span with basic and default properties', () => {
         tagger.registerLLMObsSpan(span, { kind: 'workflow' })
 
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'workflow',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': 'undefined' // no parent id provided
@@ -81,7 +80,7 @@ describe('tagger', () => {
           mlApp: 'my-app'
         })
 
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.model_name': 'my-model',
           '_ml_obs.meta.model_provider': 'my-provider',
@@ -94,7 +93,7 @@ describe('tagger', () => {
       it('uses the name if provided', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm', name: 'my-span-name' })
 
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -105,7 +104,7 @@ describe('tagger', () => {
       it('defaults parent id to undefined', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': 'undefined'
@@ -128,7 +127,7 @@ describe('tagger', () => {
 
         tagger.registerLLMObsSpan(span, { kind: 'llm', parent: parentSpan })
 
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-ml-app',
           '_ml_obs.session_id': 'my-session',
@@ -139,7 +138,7 @@ describe('tagger', () => {
       it('uses the propagated trace id if provided', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': 'undefined'
@@ -151,7 +150,7 @@ describe('tagger', () => {
 
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': '-567'
@@ -161,7 +160,7 @@ describe('tagger', () => {
       it('does not set span type if the LLMObs span kind is falsy', () => {
         tagger.registerLLMObsSpan(span, { kind: false })
 
-        expect(Tagger.tagMap.get(span)).to.be.undefined
+        assert.strictEqual(Tagger.tagMap.get(span), undefined)
       })
 
       it('uses the propagated mlApp over the global mlApp if both are provided', () => {
@@ -170,7 +169,7 @@ describe('tagger', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
         const tags = Tagger.tagMap.get(span)
-        expect(tags['_ml_obs.meta.ml_app']).to.equal('my-propagated-ml-app')
+        assert.strictEqual(tags['_ml_obs.meta.ml_app'], 'my-propagated-ml-app')
       })
 
       describe('with no global mlApp configured', () => {
@@ -184,11 +183,11 @@ describe('tagger', () => {
           tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
           const tags = Tagger.tagMap.get(span)
-          expect(tags['_ml_obs.meta.ml_app']).to.equal('my-propagated-ml-app')
+          assert.strictEqual(tags['_ml_obs.meta.ml_app'], 'my-propagated-ml-app')
         })
 
         it('throws an error if no mlApp is provided and no propagated mlApp is provided and no service', () => {
-          expect(() => tagger.registerLLMObsSpan(span, { kind: 'llm' })).to.throw()
+          assert.throws(() => tagger.registerLLMObsSpan(span, { kind: 'llm' }))
         })
 
         it('uses the service name if no mlApp is provided and no propagated mlApp is provided', () => {
@@ -196,7 +195,7 @@ describe('tagger', () => {
           tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
           const tags = Tagger.tagMap.get(span)
-          expect(tags['_ml_obs.meta.ml_app']).to.equal('my-service')
+          assert.strictEqual(tags['_ml_obs.meta.ml_app'], 'my-service')
         })
       })
     })
@@ -205,7 +204,7 @@ describe('tagger', () => {
       it('tags a span with metadata', () => {
         tagger._register(span)
         tagger.tagMetadata(span, { a: 'foo', b: 'bar' })
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.metadata': { a: 'foo', b: 'bar' }
         })
       })
@@ -213,7 +212,7 @@ describe('tagger', () => {
       it('updates instead of overriding', () => {
         Tagger.tagMap.set(span, { '_ml_obs.meta.metadata': { a: 'foo' } })
         tagger.tagMetadata(span, { b: 'bar' })
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.metadata': { a: 'foo', b: 'bar' }
         })
       })
@@ -223,7 +222,7 @@ describe('tagger', () => {
       it('tags a span with metrics', () => {
         tagger._register(span)
         tagger.tagMetrics(span, { a: 1, b: 2 })
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.metrics': { a: 1, b: 2 }
         })
       })
@@ -236,7 +235,7 @@ describe('tagger', () => {
           totalTokens: 3,
           foo: 10
         })
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.metrics': { input_tokens: 1, output_tokens: 2, total_tokens: 3, foo: 10 }
         })
       })
@@ -249,13 +248,13 @@ describe('tagger', () => {
           d: undefined
         }
         tagger._register(span)
-        expect(() => tagger.tagMetrics(span, metrics)).to.throw()
+        assert.throws(() => tagger.tagMetrics(span, metrics))
       })
 
       it('updates instead of overriding', () => {
         Tagger.tagMap.set(span, { '_ml_obs.metrics': { a: 1 } })
         tagger.tagMetrics(span, { b: 2 })
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.metrics': { a: 1, b: 2 }
         })
       })
@@ -266,7 +265,7 @@ describe('tagger', () => {
         const tags = { foo: 'bar' }
         tagger._register(span)
         tagger.tagSpanTags(span, tags)
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.tags': { foo: 'bar' }
         })
       })
@@ -275,7 +274,7 @@ describe('tagger', () => {
         Tagger.tagMap.set(span, { '_ml_obs.tags': { a: 1 } })
         const tags = { a: 2, b: 1 }
         tagger.tagSpanTags(span, tags)
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.tags': { a: 2, b: 1 }
         })
       })
@@ -295,15 +294,15 @@ describe('tagger', () => {
 
         tagger._register(span)
         tagger.tagLLMIO(span, inputData, outputData)
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.input.messages': [
-            { content: 'you are an amazing assistant' },
-            { content: 'hello! my name is foobar' },
+            { content: 'you are an amazing assistant', role: '' },
+            { content: 'hello! my name is foobar', role: '' },
             { content: 'I am a robot', role: 'assistant' },
             { content: 'I am a human', role: 'user' },
-            { content: '' }
+            { content: '', role: '' }
           ],
-          '_ml_obs.meta.output.messages': [{ content: 'Nice to meet you, human!' }]
+          '_ml_obs.meta.output.messages': [{ content: 'Nice to meet you, human!', role: '' }]
         })
       })
 
@@ -312,7 +311,7 @@ describe('tagger', () => {
           5
         ]
 
-        expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+        assert.throws(() => tagger.tagLLMIO(span, messages, undefined))
       })
 
       it('throws for a non-string message content', () => {
@@ -320,7 +319,7 @@ describe('tagger', () => {
           { content: 5 }
         ]
 
-        expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+        assert.throws(() => tagger.tagLLMIO(span, messages, undefined))
       })
 
       it('throws for a non-string message role', () => {
@@ -328,7 +327,7 @@ describe('tagger', () => {
           { content: 'a', role: 5 }
         ]
 
-        expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+        assert.throws(() => tagger.tagLLMIO(span, messages, undefined))
       })
 
       describe('tagging tool calls appropriately', () => {
@@ -343,16 +342,18 @@ describe('tagger', () => {
 
           tagger._register(span)
           tagger.tagLLMIO(span, inputData, outputData)
-          expect(Tagger.tagMap.get(span)).to.deep.equal({
+          assert.deepStrictEqual(Tagger.tagMap.get(span), {
             '_ml_obs.meta.input.messages': [
               {
                 content: 'hello',
-                tool_calls: [{ name: 'tool1' }, { name: 'tool2', arguments: { a: 1, b: 2 } }]
+                tool_calls: [{ name: 'tool1' }, { name: 'tool2', arguments: { a: 1, b: 2 } }],
+                role: ''
               }, {
                 content: 'goodbye',
-                tool_calls: [{ name: 'tool3' }]
+                tool_calls: [{ name: 'tool3' }],
+                role: ''
               }],
-            '_ml_obs.meta.output.messages': [{ content: 'hi', tool_calls: [{ name: 'tool4' }] }]
+            '_ml_obs.meta.output.messages': [{ content: 'hi', tool_calls: [{ name: 'tool4' }], role: '' }]
           })
         })
 
@@ -361,7 +362,7 @@ describe('tagger', () => {
             { content: 'a', toolCalls: 5 }
           ]
 
-          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+          assert.throws(() => tagger.tagLLMIO(span, messages, undefined))
         })
 
         it('throws for a non-string tool name', () => {
@@ -369,7 +370,7 @@ describe('tagger', () => {
             { content: 'a', toolCalls: [{ name: 5 }] }
           ]
 
-          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+          assert.throws(() => tagger.tagLLMIO(span, messages, undefined))
         })
 
         it('throws for a non-object tool arguments', () => {
@@ -377,7 +378,7 @@ describe('tagger', () => {
             { content: 'a', toolCalls: [{ name: 'tool1', arguments: 5 }] }
           ]
 
-          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+          assert.throws(() => tagger.tagLLMIO(span, messages, undefined))
         })
 
         it('throws for a non-string tool id', () => {
@@ -385,7 +386,7 @@ describe('tagger', () => {
             { content: 'a', toolCalls: [{ name: 'tool1', toolId: 5 }] }
           ]
 
-          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+          assert.throws(() => tagger.tagLLMIO(span, messages, undefined))
         })
 
         it('throws for a non-string tool type', () => {
@@ -393,7 +394,7 @@ describe('tagger', () => {
             { content: 'a', toolCalls: [{ name: 'tool1', type: 5 }] }
           ]
 
-          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+          assert.throws(() => tagger.tagLLMIO(span, messages, undefined))
         })
 
         it('logs multiple errors if there are multiple errors for a message and filters it out', () => {
@@ -401,7 +402,7 @@ describe('tagger', () => {
             { content: 'a', toolCalls: [5, { name: 5, type: 7 }], role: 7 }
           ]
 
-          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+          assert.throws(() => tagger.tagLLMIO(span, messages, undefined))
         })
       })
 
@@ -413,9 +414,13 @@ describe('tagger', () => {
 
           tagger._register(span)
           tagger.tagLLMIO(span, inputData)
-          expect(Tagger.tagMap.get(span)).to.deep.equal({
+          assert.deepStrictEqual(Tagger.tagMap.get(span), {
             '_ml_obs.meta.input.messages': [
-              { content: 'hello', tool_results: [{ result: 'foo', tool_id: '123', name: '', type: 'tool_result' }] }
+              {
+                content: 'hello',
+                tool_results: [{ result: 'foo', tool_id: '123', name: '', type: 'tool_result' }],
+                role: ''
+              }
             ]
           })
         })
@@ -427,7 +432,10 @@ describe('tagger', () => {
 
           tagger._register(span)
 
-          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw('Tool result must be an object.')
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: 'Tool result must be an object.' }
+          )
         })
 
         it('throws for a non-string tool result', () => {
@@ -437,7 +445,10 @@ describe('tagger', () => {
 
           tagger._register(span)
 
-          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw('"Tool result" must be a string.')
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: '"Tool result" must be a string.' }
+          )
         })
 
         it('throws for a non-string tool id', () => {
@@ -447,7 +458,10 @@ describe('tagger', () => {
 
           tagger._register(span)
 
-          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw('"Tool ID" must be a string.')
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: '"Tool ID" must be a string.' }
+          )
         })
 
         it('throws for a non-string tool type', () => {
@@ -457,7 +471,10 @@ describe('tagger', () => {
 
           tagger._register(span)
 
-          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw('"Tool type" must be a string.')
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: '"Tool type" must be a string.' }
+          )
         })
       })
 
@@ -469,7 +486,7 @@ describe('tagger', () => {
 
           tagger._register(span)
           tagger.tagLLMIO(span, messages, undefined)
-          expect(Tagger.tagMap.get(span)).to.deep.equal({
+          assert.deepStrictEqual(Tagger.tagMap.get(span), {
             '_ml_obs.meta.input.messages': [
               { role: 'tool', content: 'The weather in San Francisco is sunny', tool_id: '123' }
             ]
@@ -481,7 +498,10 @@ describe('tagger', () => {
             { role: 'tool', content: 'The weather in San Francisco is sunny', toolId: 123 }
           ]
 
-          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: '"Tool ID" must be a string.' }
+          )
         })
 
         it('logs a warning if the tool id is not associated with a tool role', () => {
@@ -493,9 +513,9 @@ describe('tagger', () => {
           tagger.tagLLMIO(span, messages, undefined)
 
           const messageTags = Tagger.tagMap.get(span)['_ml_obs.meta.input.messages']
-          expect(messageTags[0]).to.not.have.property('tool_id')
+          assert.ok(!('tool_id' in messageTags[0]))
 
-          expect(logger.warn).to.have.been.calledOnce
+          sinon.assert.calledOnce(logger.warn)
         })
       })
     })
@@ -513,7 +533,7 @@ describe('tagger', () => {
         const outputData = 'embedded documents'
         tagger._register(span)
         tagger.tagEmbeddingIO(span, inputData, outputData)
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.input.documents': [
             { text: 'my string document' },
             { text: 'my object document' },
@@ -530,7 +550,7 @@ describe('tagger', () => {
           5
         ]
 
-        expect(() => tagger.tagEmbeddingIO(span, documents, undefined)).to.throw()
+        assert.throws(() => tagger.tagEmbeddingIO(span, documents, undefined))
       })
 
       it('throws for a non-string document text', () => {
@@ -538,7 +558,7 @@ describe('tagger', () => {
           { text: 5 }
         ]
 
-        expect(() => tagger.tagEmbeddingIO(span, documents, undefined)).to.throw()
+        assert.throws(() => tagger.tagEmbeddingIO(span, documents, undefined))
       })
 
       it('throws for a non-string document name', () => {
@@ -546,7 +566,7 @@ describe('tagger', () => {
           { text: 'a', name: 5 }
         ]
 
-        expect(() => tagger.tagEmbeddingIO(span, documents, undefined)).to.throw()
+        assert.throws(() => tagger.tagEmbeddingIO(span, documents, undefined))
       })
 
       it('throws for a non-string document id', () => {
@@ -554,7 +574,7 @@ describe('tagger', () => {
           { text: 'a', id: 5 }
         ]
 
-        expect(() => tagger.tagEmbeddingIO(span, documents, undefined)).to.throw()
+        assert.throws(() => tagger.tagEmbeddingIO(span, documents, undefined))
       })
 
       it('throws for a non-number document score', () => {
@@ -562,7 +582,7 @@ describe('tagger', () => {
           { text: 'a', score: '5' }
         ]
 
-        expect(() => tagger.tagEmbeddingIO(span, documents, undefined)).to.throw()
+        assert.throws(() => tagger.tagEmbeddingIO(span, documents, undefined))
       })
     })
 
@@ -580,7 +600,7 @@ describe('tagger', () => {
 
         tagger._register(span)
         tagger.tagRetrievalIO(span, inputData, outputData)
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.input.value': 'some query',
           '_ml_obs.meta.output.documents': [
             { text: 'result 1' },
@@ -604,7 +624,7 @@ describe('tagger', () => {
         ]
 
         // specific cases of throwing tested with embedding inputs
-        expect(() => tagger.tagRetrievalIO(span, inputData, outputData)).to.throw()
+        assert.throws(() => tagger.tagRetrievalIO(span, inputData, outputData))
       })
     })
 
@@ -614,7 +634,7 @@ describe('tagger', () => {
         const outputData = 'some text'
         tagger._register(span)
         tagger.tagTextIO(span, inputData, outputData)
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.input.value': '{"some":"object"}',
           '_ml_obs.meta.output.value': 'some text'
         })
@@ -622,7 +642,7 @@ describe('tagger', () => {
 
       it('throws when the value is not JSON serializable', () => {
         const data = unserializbleObject()
-        expect(() => tagger.tagTextIO(span, data, 'output')).to.throw()
+        assert.throws(() => tagger.tagTextIO(span, data, 'output'))
       })
     })
 
@@ -630,20 +650,20 @@ describe('tagger', () => {
       it('changes the span kind', () => {
         tagger._register(span)
         tagger._setTag(span, '_ml_obs.meta.span.kind', 'old-kind')
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'old-kind'
         })
         tagger.changeKind(span, 'new-kind')
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'new-kind'
         })
       })
 
       it('sets the kind if it is not already set', () => {
         tagger._register(span)
-        expect(Tagger.tagMap.get(span)).to.deep.equal({})
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {})
         tagger.changeKind(span, 'new-kind')
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'new-kind'
         })
       })
@@ -855,7 +875,7 @@ describe('tagger', () => {
       const data = unserializbleObject()
       tagger._register(span)
       tagger.tagTextIO(span, data, 'input')
-      expect(logger.warn).to.have.been.calledOnce
+      sinon.assert.calledOnce(logger.warn)
     })
 
     it('logs a warning when an unexpected value is encountered for metrics tagging', () => {
@@ -866,7 +886,7 @@ describe('tagger', () => {
 
       tagger._register(span)
       tagger.tagMetrics(span, metrics)
-      expect(logger.warn).to.have.been.calledOnce
+      sinon.assert.calledOnce(logger.warn)
     })
 
     describe('tagDocuments', () => {
@@ -874,7 +894,7 @@ describe('tagger', () => {
         const data = [undefined]
         tagger._register(span)
         tagger.tagEmbeddingIO(span, data, undefined)
-        expect(logger.warn).to.have.been.calledOnce
+        sinon.assert.calledOnce(logger.warn)
       })
 
       it('logs multiple warnings otherwise', () => {
@@ -889,7 +909,7 @@ describe('tagger', () => {
 
         tagger._register(span)
         tagger.tagEmbeddingIO(span, documents, undefined)
-        expect(logger.warn.callCount).to.equal(3)
+        assert.strictEqual(logger.warn.callCount, 3)
       })
     })
 
@@ -898,7 +918,7 @@ describe('tagger', () => {
         const messages = [5]
         tagger._register(span)
         tagger.tagLLMIO(span, messages, undefined)
-        expect(logger.warn).to.have.been.calledOnce
+        sinon.assert.calledOnce(logger.warn)
       })
 
       it('logs multiple warnings otherwise', () => {
@@ -908,7 +928,7 @@ describe('tagger', () => {
 
         tagger._register(span)
         tagger.tagLLMIO(span, messages, undefined)
-        expect(logger.warn.callCount).to.equal(2)
+        assert.strictEqual(logger.warn.callCount, 2)
       })
 
       describe('tool call tagging', () => {
@@ -919,7 +939,7 @@ describe('tagger', () => {
 
           tagger._register(span)
           tagger.tagLLMIO(span, messages, undefined)
-          expect(logger.warn).to.have.been.calledOnce
+          sinon.assert.calledOnce(logger.warn)
         })
 
         it('logs multiple warnings otherwise', () => {
@@ -940,7 +960,7 @@ describe('tagger', () => {
 
           tagger._register(span)
           tagger.tagLLMIO(span, messages, undefined)
-          expect(logger.warn.callCount).to.equal(5) // 4 for tool call + 1 for role
+          assert.strictEqual(logger.warn.callCount, 5) // 4 for tool call + 1 for role
         })
       })
 
@@ -951,8 +971,8 @@ describe('tagger', () => {
 
         tagger._register(span)
         tagger.tagLLMIO(span, messages, undefined)
-        expect(Tagger.tagMap.get(span)).to.not.have.property('_ml_obs.meta.input.messages')
-        expect(logger.warn).to.have.been.calledOnce
+        assert.ok(!('_ml_obs.meta.input.messages' in Tagger.tagMap.get(span)))
+        sinon.assert.calledOnce(logger.warn)
       })
     })
   })

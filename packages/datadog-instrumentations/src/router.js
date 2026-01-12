@@ -1,7 +1,7 @@
 'use strict'
 
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
-const pathToRegExp = require('path-to-regexp')
+const pathToRegExp = require('../../../vendor/dist/path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -146,33 +146,34 @@ function createWrapRouterMethod (name) {
   }
 
   function wrapMethod (original) {
-    return shimmer.wrapFunction(original, original => function methodWithTrace (fn, ...otherArgs) {
+    return shimmer.wrapFunction(original, original => function methodWithTrace (...args) {
       let offset = 0
       if (this.stack) {
         offset = Array.isArray(this.stack) ? this.stack.length : 1
       }
-      const router = original.call(this, fn, ...otherArgs)
+      const router = original.apply(this, args)
 
       if (typeof this.stack === 'function') {
         this.stack = [{ handle: this.stack }]
       }
 
       if (routeAddedChannel.hasSubscribers) {
-        routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack.at(-1) })
+        routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack?.at(-1) })
       }
+
+      const fn = args[0]
 
       // Publish only if this router was mounted by app.use() (prevents early '/sub/...')
       if (routeAddedChannel.hasSubscribers && isAppMounted(this) && this.stack?.length > offset) {
         // Handle nested router mounting for 'use' method
-        if (original.name === 'use' && otherArgs.length >= 1) {
+        if (original.name === 'use' && args.length >= 2) {
           const { mountPaths, startIdx } = extractMountPaths(fn)
 
           if (mountPaths.length) {
             const parentPaths = getRouterMountPaths(this)
-            const callArgs = [fn, ...otherArgs]
 
-            for (let i = startIdx; i < callArgs.length; i++) {
-              const nestedRouter = callArgs[i]
+            for (let i = startIdx; i < args.length; i++) {
+              const nestedRouter = args[i]
 
               if (!nestedRouter || typeof nestedRouter !== 'function') continue
 
@@ -206,7 +207,7 @@ function createWrapRouterMethod (name) {
         }
       }
 
-      if (this.stack.length > offset) {
+      if (this.stack?.length > offset) {
         wrapStack(this.stack.slice(offset), extractMatchers(fn))
       }
 

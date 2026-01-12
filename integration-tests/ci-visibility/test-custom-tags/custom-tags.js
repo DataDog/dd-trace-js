@@ -1,9 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const sum = require('../test/sum')
+const assert = require('assert')
+
 const tracer = require('dd-trace')
 
+const sum = require('../test/sum')
 describe('test optimization custom tags', () => {
   beforeEach(() => {
     const testSpan = tracer.scope().active()
@@ -13,7 +14,7 @@ describe('test optimization custom tags', () => {
   it('can report tests', () => {
     const testSpan = tracer.scope().active()
     testSpan.setTag('custom_tag.it', 'true')
-    expect(sum(1, 2)).to.equal(3)
+    assert.strictEqual(sum(1, 2), 3)
   })
 
   afterEach(() => {

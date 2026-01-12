@@ -1,9 +1,10 @@
 'use strict'
 
-const { assert } = require('chai')
-const { describe, it, afterEach } = require('tap').mocha
+const assert = require('node:assert/strict')
 const { fork } = require('node:child_process')
 const path = require('node:path')
+
+const { describe, it, afterEach } = require('mocha')
 
 require('../../../../dd-trace/test/setup/core')
 
@@ -24,12 +25,12 @@ describe('test visibility with dynamic instrumentation', () => {
     childProcess = fork(path.join(__dirname, 'target-app', 'test-visibility-dynamic-instrumentation-script.js'))
 
     childProcess.on('message', ({ snapshot: { language, stack, probe, captures }, probeId }) => {
-      assert.exists(probeId)
-      assert.exists(probe)
-      assert.exists(stack)
-      assert.equal(language, 'javascript')
+      assert.ok(probeId)
+      assert.ok(probe)
+      assert.ok(stack)
+      assert.strictEqual(language, 'javascript')
 
-      assert.deepEqual(captures, {
+      assert.deepStrictEqual(captures, {
         lines: {
           9: {
             locals: {

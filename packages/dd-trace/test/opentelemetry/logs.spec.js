@@ -3,16 +3,19 @@
 // Increase max listeners to avoid warnings in tests
 process.setMaxListeners(50)
 
-require('../setup/core')
 const assert = require('assert')
 const os = require('os')
 const http = require('http')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { logs } = require('@opentelemetry/api-logs')
 const { trace, context } = require('@opentelemetry/api')
+
+require('../setup/core')
 const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
+const { getConfigFresh } = require('../helpers/config')
 
 describe('OpenTelemetry Logs', () => {
   let originalEnv
@@ -20,7 +23,16 @@ describe('OpenTelemetry Logs', () => {
   function setupTracer (enabled = true, maxExportBatchSize = '1') {
     process.env.DD_LOGS_OTEL_ENABLED = enabled ? 'true' : 'false'
     process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = maxExportBatchSize // Force immediate export
-    const tracer = require('../../')
+
+    const proxy = proxyquire.noPreserveCache()('../../src/proxy', {
+      './config': getConfigFresh,
+    })
+    const TracerProxy = proxyquire.noPreserveCache()('../../src', {
+      './proxy': proxy
+    })
+    const tracer = proxyquire.noPreserveCache()('../../', {
+      './src': TracerProxy
+    })
     tracer._initialized = false
     tracer.init()
     return { tracer, logs, loggerProvider: logs.getLoggerProvider() }
@@ -353,6 +365,7 @@ describe('OpenTelemetry Logs', () => {
 
       // Emit with an invalid severity number (999)
       logger.emit({
+        // @ts-expect-error - check invalid severity number
         severityNumber: 999,
         body: 'Test message with invalid severity'
       })
@@ -485,7 +498,7 @@ describe('OpenTelemetry Logs', () => {
 
       const { loggerProvider } = setupTracer()
       assert.strictEqual(loggerProvider.processor.exporter.transformer.protocol, 'http/protobuf')
-      assert(logMock.getMessage().includes('OTLP gRPC protocol is not supported'))
+      assert.match(logMock.getMessage(), /OTLP gRPC protocol is not supported/)
 
       logMock.restore()
     })

@@ -6,6 +6,6 @@ const testSchema = new mongoose.Schema({
 })
 const TestModel = mongoose.model('Test', testSchema)
 
-await mongoose.connect('mongodb://localhost:27017/test_db', { useNewUrlParser: true, useUnifiedTopology: true })
+await mongoose.connect('mongodb://localhost:27017/test_db')
 await TestModel.create({ a: 1 })
 await mongoose.disconnect()

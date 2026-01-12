@@ -1,18 +1,21 @@
 'use strict'
 
-const Axios = require('axios')
-const { assert } = require('chai')
-const semver = require('semver')
-const sinon = require('sinon')
+const assert = require('node:assert/strict')
+
 const path = require('node:path')
 const zlib = require('node:zlib')
 const fs = require('node:fs')
 
+const Axios = require('axios')
+const semver = require('semver')
+const sinon = require('sinon')
+
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
+
+const { getConfigFresh } = require('../helpers/config')
 
 withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
   describe('Suspicious request blocking - query', () => {
@@ -33,7 +36,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       })
 
       app.listen({ port: 0 }, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -47,7 +50,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     beforeEach(async () => {
       requestBody = sinon.stub()
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json')
@@ -62,8 +65,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     it('should not block the request without an attack', async () => {
       const res = await axios.get('/?key=value')
 
-      assert.equal(res.status, 200)
-      assert.equal(res.data, 'DONE')
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'DONE')
       sinon.assert.calledOnce(requestBody)
     })
 
@@ -73,8 +76,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
-        assert.equal(e.response.status, 403)
-        assert.deepEqual(e.response.data, JSON.parse(json))
+        assert.strictEqual(e.response.status, 403)
+        assert.deepStrictEqual(e.response.data, JSON.parse(json))
         sinon.assert.notCalled(requestBody)
       }
     })
@@ -98,7 +101,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       })
 
       app.listen({ port: 0 }, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -112,7 +115,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     beforeEach(async () => {
       requestBody = sinon.stub()
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'body-parser-rules.json')
@@ -127,8 +130,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     it('should not block the request without an attack', async () => {
       const res = await axios.post('/', { key: 'value' })
 
-      assert.equal(res.status, 200)
-      assert.equal(res.data, 'DONE')
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'DONE')
       sinon.assert.calledOnce(requestBody)
     })
 
@@ -138,8 +141,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
-        assert.equal(e.response.status, 403)
-        assert.deepEqual(e.response.data, JSON.parse(json))
+        assert.strictEqual(e.response.status, 403)
+        assert.deepStrictEqual(e.response.data, JSON.parse(json))
         sinon.assert.notCalled(requestBody)
       }
     })
@@ -165,8 +168,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
-        assert.equal(e.response.status, 403)
-        assert.deepEqual(e.response.data, JSON.parse(json))
+        assert.strictEqual(e.response.status, 403)
+        assert.deepStrictEqual(e.response.data, JSON.parse(json))
         sinon.assert.notCalled(requestBody)
 
         await agent.assertFirstTraceSpan({
@@ -207,7 +210,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       })
 
       app.listen({ port: 0 }, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -220,7 +223,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     })
 
     beforeEach(async () => {
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'body-parser-rules.json')
@@ -238,8 +241,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
-        assert.equal(e.response.status, 403)
-        assert.deepEqual(e.response.data, JSON.parse(json))
+        assert.strictEqual(e.response.status, 403)
+        assert.deepStrictEqual(e.response.data, JSON.parse(json))
       }
     })
 
@@ -249,8 +252,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
-        assert.equal(e.response.status, 403)
-        assert.deepEqual(e.response.data, JSON.parse(json))
+        assert.strictEqual(e.response.status, 403)
+        assert.deepStrictEqual(e.response.data, JSON.parse(json))
       }
     })
   })
@@ -296,7 +299,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       })
 
       app.listen({ port: 0 }, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -309,7 +312,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     })
 
     beforeEach(async () => {
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json')
@@ -326,8 +329,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       it('should not block the request when attack is not detected', async () => {
         const res = await axios.get('/multiple-path-params/safe_param/safe_param')
 
-        assert.equal(res.status, 200)
-        assert.equal(res.data, 'DONE')
+        assert.strictEqual(res.status, 200)
+        assert.strictEqual(res.data, 'DONE')
       })
 
       it('should block the request when attack is detected in both parameters', async () => {
@@ -336,8 +339,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
-          assert.equal(e.response.status, 403)
-          assert.deepEqual(e.response.data, JSON.parse(json))
+          assert.strictEqual(e.response.status, 403)
+          assert.deepStrictEqual(e.response.data, JSON.parse(json))
         }
       })
 
@@ -347,8 +350,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
-          assert.equal(e.response.status, 403)
-          assert.deepEqual(e.response.data, JSON.parse(json))
+          assert.strictEqual(e.response.status, 403)
+          assert.deepStrictEqual(e.response.data, JSON.parse(json))
         }
       })
 
@@ -358,8 +361,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
-          assert.equal(e.response.status, 403)
-          assert.deepEqual(e.response.data, JSON.parse(json))
+          assert.strictEqual(e.response.status, 403)
+          assert.deepStrictEqual(e.response.data, JSON.parse(json))
         }
       })
     })
@@ -368,8 +371,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       it('should not block the request when attack is not detected', async () => {
         const res = await axios.get('/nested/safe_param/safe_param')
 
-        assert.equal(res.status, 200)
-        assert.equal(res.data, 'DONE')
+        assert.strictEqual(res.status, 200)
+        assert.strictEqual(res.data, 'DONE')
       })
 
       it('should block the request when attack is detected in the nested parameter', async () => {
@@ -378,8 +381,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
-          assert.equal(e.response.status, 403)
-          assert.deepEqual(e.response.data, JSON.parse(json))
+          assert.strictEqual(e.response.status, 403)
+          assert.deepStrictEqual(e.response.data, JSON.parse(json))
         }
       })
 
@@ -389,8 +392,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
-          assert.equal(e.response.status, 403)
-          assert.deepEqual(e.response.data, JSON.parse(json))
+          assert.strictEqual(e.response.status, 403)
+          assert.deepStrictEqual(e.response.data, JSON.parse(json))
         }
       })
 
@@ -400,8 +403,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
-          assert.equal(e.response.status, 403)
-          assert.deepEqual(e.response.data, JSON.parse(json))
+          assert.strictEqual(e.response.status, 403)
+          assert.deepStrictEqual(e.response.data, JSON.parse(json))
         }
       })
     })
@@ -410,8 +413,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       it('should not block the request when attack is not detected', async () => {
         const res = await axios.get('/callback-path-param/safe_param')
 
-        assert.equal(res.status, 200)
-        assert.equal(res.data, 'DONE')
+        assert.strictEqual(res.status, 200)
+        assert.strictEqual(res.data, 'DONE')
         sinon.assert.calledOnce(preHandlerHookSpy)
         sinon.assert.calledOnce(preValidationHookSpy)
       })
@@ -422,8 +425,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
-          assert.equal(e.response.status, 403)
-          assert.deepEqual(e.response.data, JSON.parse(json))
+          assert.strictEqual(e.response.status, 403)
+          assert.deepStrictEqual(e.response.data, JSON.parse(json))
           sinon.assert.notCalled(preHandlerHookSpy)
           sinon.assert.notCalled(preValidationHookSpy)
         }
@@ -478,7 +481,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
             })
 
             app.listen({ port: 0 }, () => {
-              const port = server.address().port
+              const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
               axios = Axios.create({ baseURL: `http://localhost:${port}` })
               done()
             })
@@ -488,7 +491,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           beforeEach(async () => {
             requestCookie = sinon.stub()
             appsec.enable(
-              new Config({
+              getConfigFresh({
                 appsec: {
                   enabled: true,
                   rules: path.join(__dirname, 'cookie-parser-rules.json')
@@ -524,7 +527,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
               return Promise.reject(new Error('Request should not return 200'))
             } catch (e) {
               assert.strictEqual(e.response.status, 403)
-              assert.deepEqual(e.response.data, JSON.parse(json))
+              assert.deepStrictEqual(e.response.data, JSON.parse(json))
               sinon.assert.notCalled(requestCookie)
             }
           })
@@ -572,7 +575,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         })
 
         app.listen({ port: 0 }, () => {
-          const port = server.address().port
+          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
           axios = Axios.create({ baseURL: `http://localhost:${port}` })
           done()
         })
@@ -581,7 +584,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
       beforeEach(() => {
         uploadSpy = sinon.stub()
-        appsec.enable(new Config({
+        appsec.enable(getConfigFresh({
           appsec: {
             enabled: true,
             rules: path.join(__dirname, 'body-parser-rules.json')
@@ -666,7 +669,7 @@ describe('Api Security - Fastify', () => {
       })
 
       app.listen({ port: 0 }, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -679,7 +682,7 @@ describe('Api Security - Fastify', () => {
     })
 
     beforeEach(() => {
-      config = new Config({
+      config = getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'api_security_rules.json'),
@@ -710,8 +713,8 @@ describe('Api Security - Fastify', () => {
         }
       })
 
-      assert.equal(res.status, 200)
-      assert.deepEqual(res.data, { sendResKey: 'sendResValue' })
+      assert.strictEqual(res.status, 200)
+      assert.deepStrictEqual(res.data, { sendResKey: 'sendResValue' })
     })
 
     it('should get the response body schema with return', async () => {
@@ -724,19 +727,19 @@ describe('Api Security - Fastify', () => {
         }
       })
 
-      assert.equal(res.status, 200)
-      assert.deepEqual(res.data, { returnResKey: 'returnResValue' })
+      assert.strictEqual(res.status, 200)
+      assert.deepStrictEqual(res.data, { returnResKey: 'returnResValue' })
     })
 
     it('should not get the schema for string', async () => {
       const res = await axios.get('/')
 
       await agent.assertFirstTraceSpan(span => {
-        assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+        assert.ok(!('_dd.appsec.s.res.body' in span.meta))
       })
 
-      assert.equal(res.status, 200)
-      assert.equal(res.data, 'DONE')
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'DONE')
     })
 
     it('should not get the schema for Buffer', async () => {
@@ -744,12 +747,12 @@ describe('Api Security - Fastify', () => {
 
       await agent.assertFirstTraceSpan(span => {
         if (span.meta) {
-          assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+          assert.ok(!('_dd.appsec.s.res.body' in span.meta))
         }
       })
 
-      assert.equal(res.status, 200)
-      assert.equal(res.data, 'DONE')
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'DONE')
     })
 
     it('should not get the schema for stream', async () => {
@@ -757,11 +760,11 @@ describe('Api Security - Fastify', () => {
 
       await agent.assertFirstTraceSpan(span => {
         if (span.meta) {
-          assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+          assert.ok(!('_dd.appsec.s.res.body' in span.meta))
         }
       })
 
-      assert.equal(res.status, 200)
+      assert.strictEqual(res.status, 200)
     })
 
     it('should not get the schema for TypedArray', async () => {
@@ -769,11 +772,11 @@ describe('Api Security - Fastify', () => {
 
       await agent.assertFirstTraceSpan(span => {
         if (span.meta) {
-          assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+          assert.ok(!('_dd.appsec.s.res.body' in span.meta))
         }
       })
 
-      assert.equal(res.status, 200)
+      assert.strictEqual(res.status, 200)
     })
   })
 })

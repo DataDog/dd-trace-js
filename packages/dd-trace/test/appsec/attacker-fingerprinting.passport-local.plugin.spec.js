@@ -1,21 +1,21 @@
 'use strict'
 
-const Axios = require('axios')
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 
+const Axios = require('axios')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
+const { getConfigFresh } = require('../helpers/config')
 const { withVersions } = require('../setup/mocha')
 
 function assertFingerprintInTraces (traces) {
   const span = traces[0][0]
-  assert.property(span.meta, '_dd.appsec.fp.http.header')
-  assert.equal(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-74c2908f-4-c348f529')
-  assert.property(span.meta, '_dd.appsec.fp.http.network')
-  assert.equal(span.meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
-  assert.property(span.meta, '_dd.appsec.fp.http.endpoint')
-  assert.equal(span.meta['_dd.appsec.fp.http.endpoint'], 'http-post-7e93fba0--f29f6224')
+  assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.header'))
+  assert.strictEqual(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-74c2908f-4-c348f529')
+  assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.network'))
+  assert.strictEqual(span.meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
+  assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.endpoint'))
+  assert.strictEqual(span.meta['_dd.appsec.fp.http.endpoint'], 'http-post-7e93fba0--f29f6224')
 }
 
 withVersions('passport-local', 'passport-local', version => {
@@ -27,7 +27,7 @@ withVersions('passport-local', 'passport-local', version => {
     })
 
     before(() => {
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: true
       }))
     })
@@ -60,7 +60,7 @@ withVersions('passport-local', 'passport-local', version => {
       })
 
       server = app.listen(port, () => {
-        port = server.address().port
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({
           baseURL: `http://localhost:${port}`,
           headers: {

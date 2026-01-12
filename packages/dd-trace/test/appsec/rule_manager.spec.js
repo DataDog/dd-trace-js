@@ -1,26 +1,25 @@
 'use strict'
 
-const { expect, assert } = require('chai')
-const proxyquire = require('proxyquire')
-const sinon = require('sinon')
-
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { loadRules, clearAllRules } = require('../../src/appsec/rule_manager')
-const Config = require('../../src/config')
-const { ACKNOWLEDGED, UNACKNOWLEDGED, ERROR } = require('../../src/remote_config/apply_states')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
-const rules = require('../../src/appsec/recommended.json')
-const waf = require('../../src/appsec/waf')
 const blocking = require('../../src/appsec/blocking')
+const rules = require('../../src/appsec/recommended.json')
+const { loadRules, clearAllRules } = require('../../src/appsec/rule_manager')
+const waf = require('../../src/appsec/waf')
+const { UNACKNOWLEDGED } = require('../../src/remote_config/apply_states')
+const { getConfigFresh } = require('../helpers/config')
 
 describe('AppSec Rule Manager', () => {
   let config
 
   beforeEach(() => {
     clearAllRules()
-    config = new Config()
+    config = getConfigFresh()
 
     sinon.stub(waf, 'init')
     sinon.stub(waf, 'destroy')
@@ -37,16 +36,16 @@ describe('AppSec Rule Manager', () => {
     it('should call waf init with proper params', () => {
       loadRules(config.appsec)
 
-      expect(waf.init).to.have.been.calledOnceWithExactly(rules, config.appsec)
+      sinon.assert.calledOnceWithExactly(waf.init, rules, config.appsec)
     })
 
     it('should throw if null/undefined are passed', () => {
       // TODO: fix the exception thrown in the waf or catch it in rule_manager?
       config.appsec.rules = './not/existing/file.json'
-      expect(() => { loadRules(config.appsec) }).to.throw()
+      assert.throws(() => { loadRules(config.appsec) })
 
       config.appsec.rules = './bad-formatted-rules.json'
-      expect(() => { loadRules(config.appsec) }).to.throw()
+      assert.throws(() => { loadRules(config.appsec) })
     })
 
     it('should call updateBlockingConfiguration with proper params', () => {
@@ -57,25 +56,33 @@ describe('AppSec Rule Manager', () => {
 
       loadRules(config.appsec)
 
-      expect(waf.init).to.have.been.calledOnceWithExactly(testRules, config.appsec)
-      expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly(testRules.actions)
+      sinon.assert.calledOnceWithExactly(waf.init, testRules, config.appsec)
+      sinon.assert.calledOnceWithExactly(blocking.setDefaultBlockingActionParameters, testRules.actions)
     })
   })
 
   describe('clearAllRules', () => {
     it('should call clear method on all applied rules', () => {
       loadRules(config.appsec)
-      expect(waf.init).to.have.been.calledOnce
+      sinon.assert.calledOnce(waf.init)
 
       blocking.setDefaultBlockingActionParameters.resetHistory()
 
       clearAllRules()
-      expect(waf.destroy).to.have.been.calledOnce
-      expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly(undefined)
+      sinon.assert.calledOnce(waf.destroy)
+      sinon.assert.calledOnceWithExactly(blocking.setDefaultBlockingActionParameters, undefined)
     })
   })
 
   describe('updateWafFromRC', () => {
+    function createTransaction (changes) {
+      return {
+        ...changes,
+        ack: sinon.spy(),
+        error: sinon.spy()
+      }
+    }
+
     function getRcConfigs () {
       return {
         toUnapply: [{
@@ -165,13 +172,13 @@ describe('AppSec Rule Manager', () => {
 
       RuleManager.clearAllRules()
 
-      config = new Config()
+      config = getConfigFresh()
       RuleManager.loadRules(config.appsec)
       sinon.resetHistory()
     })
 
     it('should not apply configs from non ASM products', () => {
-      const rcConfigsForNonAsmProducts = {
+      const changes = {
         toUnapply: [{
           id: 'test.toUnapply',
           product: 'NON_ASM_PRODUCT',
@@ -195,81 +202,86 @@ describe('AppSec Rule Manager', () => {
         }]
       }
 
-      RuleManager.updateWafFromRC(rcConfigsForNonAsmProducts)
+      const transaction = createTransaction(changes)
+      RuleManager.updateWafFromRC(transaction)
 
-      assert.strictEqual(rcConfigsForNonAsmProducts.toUnapply[0].apply_state, UNACKNOWLEDGED)
-      assert.notProperty(rcConfigsForNonAsmProducts.toUnapply[0], 'apply_error')
-      assert.strictEqual(rcConfigsForNonAsmProducts.toModify[0].apply_state, UNACKNOWLEDGED)
-      assert.notProperty(rcConfigsForNonAsmProducts.toModify[0], 'apply_error')
-      assert.strictEqual(rcConfigsForNonAsmProducts.toApply[0].apply_state, UNACKNOWLEDGED)
-      assert.notProperty(rcConfigsForNonAsmProducts.toApply[0], 'apply_error')
+      sinon.assert.notCalled(transaction.ack)
+      sinon.assert.notCalled(transaction.error)
 
       sinon.assert.notCalled(waf.updateConfig)
       sinon.assert.notCalled(waf.removeConfig)
 
-      assert.deepEqual(waf.wafManager.ddwaf.configPaths, [waf.wafManager.constructor.defaultWafConfigPath])
+      assert.deepStrictEqual(waf.wafManager.ddwaf.configPaths, [waf.wafManager.constructor.defaultWafConfigPath])
     })
 
     it('should apply configs from ASM products', () => {
       waf.updateConfig.callThrough()
       waf.removeConfig.callThrough()
 
-      const rcConfigs = getRcConfigs()
+      const changes = getRcConfigs()
+      const transaction = createTransaction(changes)
 
-      RuleManager.updateWafFromRC(rcConfigs)
+      RuleManager.updateWafFromRC(transaction)
 
-      sinon.assert.calledOnceWithExactly(waf.removeConfig, rcConfigs.toUnapply[0].path)
+      sinon.assert.calledOnceWithExactly(waf.removeConfig, changes.toUnapply[0].path)
       sinon.assert.calledTwice(waf.updateConfig)
       sinon.assert.calledWith(
         waf.updateConfig,
-        rcConfigs.toApply[0].product,
-        rcConfigs.toApply[0].id,
-        rcConfigs.toApply[0].path,
-        rcConfigs.toApply[0].file
+        changes.toApply[0].product,
+        changes.toApply[0].id,
+        changes.toApply[0].path,
+        changes.toApply[0].file
       )
       sinon.assert.calledWith(
         waf.updateConfig,
-        rcConfigs.toModify[0].product,
-        rcConfigs.toModify[0].id,
-        rcConfigs.toModify[0].path,
-        rcConfigs.toModify[0].file
+        changes.toModify[0].product,
+        changes.toModify[0].id,
+        changes.toModify[0].path,
+        changes.toModify[0].file
       )
 
       assert.strictEqual(waf.wafManager.ddwaf.configPaths.length, 3)
-      assert.include(waf.wafManager.ddwaf.configPaths, waf.wafManager.constructor.defaultWafConfigPath)
-      assert.include(waf.wafManager.ddwaf.configPaths, rcConfigs.toApply[0].path)
-      assert.include(waf.wafManager.ddwaf.configPaths, rcConfigs.toModify[0].path)
+      assert.deepStrictEqual(waf.wafManager.ddwaf.configPaths.sort(), [
+        waf.wafManager.constructor.defaultWafConfigPath,
+        changes.toApply[0].path,
+        changes.toModify[0].path
+      ].sort())
+
+      // Should ack for each ASM product config.
+      sinon.assert.calledWithExactly(transaction.ack, changes.toUnapply[0].path)
+      sinon.assert.calledWithExactly(transaction.ack, changes.toApply[0].path)
+      sinon.assert.calledWithExactly(transaction.ack, changes.toModify[0].path)
+      sinon.assert.notCalled(transaction.error)
     })
 
-    it('should update apply_state and apply_error on successful apply', () => {
+    it('should ack on successful apply', () => {
       waf.updateConfig.callThrough()
       waf.removeConfig.callThrough()
 
-      const rcConfigs = getRcConfigs()
+      const changes = getRcConfigs()
+      const transaction = createTransaction(changes)
 
-      RuleManager.updateWafFromRC(rcConfigs)
+      RuleManager.updateWafFromRC(transaction)
 
-      assert.strictEqual(rcConfigs.toUnapply[0].apply_state, ACKNOWLEDGED)
-      assert.notProperty(rcConfigs.toUnapply[0], 'apply_error')
-      assert.strictEqual(rcConfigs.toModify[0].apply_state, ACKNOWLEDGED)
-      assert.notProperty(rcConfigs.toModify[0], 'apply_error')
-      assert.strictEqual(rcConfigs.toApply[0].apply_state, ACKNOWLEDGED)
-      assert.notProperty(rcConfigs.toApply[0], 'apply_error')
+      sinon.assert.calledWithExactly(transaction.ack, changes.toUnapply[0].path)
+      sinon.assert.calledWithExactly(transaction.ack, changes.toApply[0].path)
+      sinon.assert.calledWithExactly(transaction.ack, changes.toModify[0].path)
+      sinon.assert.notCalled(transaction.error)
     })
 
-    it('should update apply_state and apply_error on failed config remove', () => {
+    it('should call transaction.error on failed config remove', () => {
       const removeConfigError = new Error('Error remove config')
       waf.removeConfig.throws(removeConfigError)
 
-      const { toUnapply } = getRcConfigs()
+      const changes = { toUnapply: getRcConfigs().toUnapply, toApply: [], toModify: [] }
+      const transaction = createTransaction(changes)
 
-      RuleManager.updateWafFromRC({ toUnapply, toApply: [], toModify: [] })
+      RuleManager.updateWafFromRC(transaction)
 
-      assert.strictEqual(toUnapply[0].apply_state, ERROR)
-      assert.strictEqual(toUnapply[0].apply_error, removeConfigError.toString())
+      sinon.assert.calledWithMatch(transaction.error, changes.toUnapply[0].path, removeConfigError)
     })
 
-    it('should update apply_state and apply_error on failed config update', () => {
+    it('should call transaction.error on failed config update', () => {
       const diagnostics = {
         rules: {
           loaded: [],
@@ -321,19 +333,19 @@ describe('AppSec Rule Manager', () => {
       waf.updateConfig.throws(new waf.WafUpdateError(diagnostics))
 
       const { toModify, toApply } = getRcConfigs()
+      const changes = { toUnapply: [], toApply, toModify }
+      const transaction = createTransaction(changes)
 
-      RuleManager.updateWafFromRC({ toUnapply: [], toApply, toModify })
+      RuleManager.updateWafFromRC(transaction)
 
-      assert.strictEqual(toApply[0].apply_state, ERROR)
-      assert.strictEqual(toApply[0].apply_error, JSON.stringify(expectedApplyError))
-      assert.strictEqual(toModify[0].apply_state, ERROR)
-      assert.strictEqual(toModify[0].apply_error, JSON.stringify(expectedApplyError))
+      sinon.assert.calledWithExactly(transaction.error, toApply[0].path, JSON.stringify(expectedApplyError))
+      sinon.assert.calledWithExactly(transaction.error, toModify[0].path, JSON.stringify(expectedApplyError))
     })
 
     it('should report successful waf update', () => {
-      const rcConfigs = getRcConfigs()
+      const transaction = createTransaction(getRcConfigs())
 
-      RuleManager.updateWafFromRC(rcConfigs)
+      RuleManager.updateWafFromRC(transaction)
 
       sinon.assert.calledOnceWithExactly(
         reportWafUpdate,
@@ -346,9 +358,9 @@ describe('AppSec Rule Manager', () => {
     it('should report failed waf update', () => {
       waf.updateConfig.throws(new waf.WafUpdateError({ error: 'Update failed' }))
 
-      const rcConfigs = getRcConfigs()
+      const transaction = createTransaction(getRcConfigs())
 
-      RuleManager.updateWafFromRC(rcConfigs)
+      RuleManager.updateWafFromRC(transaction)
 
       sinon.assert.calledOnceWithExactly(
         reportWafUpdate,
@@ -363,7 +375,7 @@ describe('AppSec Rule Manager', () => {
         waf.updateConfig.callThrough()
         waf.removeConfig.callThrough()
 
-        const rcConfigs = {
+        const changes = {
           toApply: [
             {
               id: 'asm_dd.test.failed',
@@ -376,14 +388,12 @@ describe('AppSec Rule Manager', () => {
           toUnapply: []
         }
 
-        RuleManager.updateWafFromRC(rcConfigs)
+        const transaction = createTransaction(changes)
+        RuleManager.updateWafFromRC(transaction)
 
-        assert.strictEqual(rcConfigs.toApply[0].apply_state, ERROR)
+        sinon.assert.called(transaction.error)
 
-        assert.deepEqual(
-          waf.wafManager.ddwaf.configPaths,
-          [waf.wafManager.constructor.defaultWafConfigPath]
-        )
+        assert.deepStrictEqual(waf.wafManager.ddwaf.configPaths, [waf.wafManager.constructor.defaultWafConfigPath])
       })
     })
 
@@ -424,7 +434,7 @@ describe('AppSec Rule Manager', () => {
           }
         ]
 
-        RuleManager.updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
+        RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply, toModify: [] }))
 
         const expectedActions = [
           {
@@ -469,7 +479,7 @@ describe('AppSec Rule Manager', () => {
           }
         ]
 
-        RuleManager.updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
+        RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply, toModify: [] }))
 
         sinon.assert.calledOnceWithExactly(setDefaultBlockingActionParameters, asm.actions)
         sinon.resetHistory()
@@ -481,7 +491,7 @@ describe('AppSec Rule Manager', () => {
           }
         ]
 
-        RuleManager.updateWafFromRC({ toUnapply, toApply: [], toModify: [] })
+        RuleManager.updateWafFromRC(createTransaction({ toUnapply, toApply: [], toModify: [] }))
 
         sinon.assert.calledOnceWithExactly(setDefaultBlockingActionParameters, [])
       })

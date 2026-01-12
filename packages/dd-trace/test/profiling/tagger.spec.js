@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
 
 require('../setup/core')
 
@@ -15,13 +16,13 @@ describe('tagger', () => {
   it('should default to an empty object', () => {
     const parsed = tagger.parse()
 
-    expect(parsed).to.deep.equal({})
+    assert.deepStrictEqual(parsed, {})
   })
 
   it('should default to an empty object for invalid values', () => {
     const parsed = tagger.parse(1234)
 
-    expect(parsed).to.deep.equal({})
+    assert.deepStrictEqual(parsed, {})
   })
 
   it('should support objects', () => {
@@ -34,7 +35,7 @@ describe('tagger', () => {
 
     const parsed = tagger.parse(tags)
 
-    expect(parsed).to.deep.equal({
+    assert.deepStrictEqual(parsed, {
       foo: 'bar',
       baz: 'qux'
     })
@@ -44,7 +45,7 @@ describe('tagger', () => {
     const tags = 'foo:bar,baz:qux'
     const parsed = tagger.parse(tags)
 
-    expect(parsed).to.deep.equal({
+    assert.deepStrictEqual(parsed, {
       foo: 'bar',
       baz: 'qux'
     })
@@ -54,7 +55,7 @@ describe('tagger', () => {
     const tags = ['foo:bar', 'baz:qux']
     const parsed = tagger.parse(tags)
 
-    expect(parsed).to.deep.equal({
+    assert.deepStrictEqual(parsed, {
       foo: 'bar',
       baz: 'qux'
     })
@@ -64,7 +65,7 @@ describe('tagger', () => {
     const tags = 'foo:bar:baz'
     const parsed = tagger.parse(tags)
 
-    expect(parsed).to.deep.equal({
+    assert.deepStrictEqual(parsed, {
       foo: 'bar:baz'
     })
   })
@@ -73,28 +74,28 @@ describe('tagger', () => {
     const tags = ':bar'
     const parsed = tagger.parse(tags)
 
-    expect(parsed).to.deep.equal({})
+    assert.deepStrictEqual(parsed, {})
   })
 
   it('should ignore empty values in strings', () => {
     const tags = 'foo:'
     const parsed = tagger.parse(tags)
 
-    expect(parsed).to.deep.equal({})
+    assert.deepStrictEqual(parsed, {})
   })
 
   it('should ignore empty values in strings', () => {
     const tags = 'foo:'
     const parsed = tagger.parse(tags)
 
-    expect(parsed).to.deep.equal({})
+    assert.deepStrictEqual(parsed, {})
   })
 
   it('should trim whitespace around keys and values', () => {
     const tags = 'foo:bar, fruit:banana'
     const parsed = tagger.parse(tags)
 
-    expect(parsed).to.deep.equal({
+    assert.deepStrictEqual(parsed, {
       foo: 'bar',
       fruit: 'banana'
     })

@@ -8,6 +8,6 @@ app.use(async (ctx) => {
 })
 
 const server = app.listen(0, () => {
-  const port = server.address().port
+  const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
   process.send({ port })
 })

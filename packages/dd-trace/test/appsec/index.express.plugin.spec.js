@@ -12,9 +12,10 @@ const zlib = require('node:zlib')
 const { NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
+
+const { getConfigFresh } = require('../helpers/config')
 
 withVersions('express', 'express', version => {
   if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
@@ -60,7 +61,7 @@ withVersions('express', 'express', version => {
       app.param('callbackedParameter', paramCallbackSpy)
 
       server = app.listen(0, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -72,7 +73,7 @@ withVersions('express', 'express', version => {
     })
 
     beforeEach(async () => {
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json')
@@ -209,7 +210,7 @@ withVersions('express', 'express', version => {
       })
 
       server = app.listen(0, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -222,7 +223,7 @@ withVersions('express', 'express', version => {
 
     beforeEach(async () => {
       requestBody = sinon.stub()
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json')
@@ -286,7 +287,7 @@ withVersions('express', 'express', version => {
       })
 
       server = app.listen(0, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
       })
@@ -298,7 +299,7 @@ withVersions('express', 'express', version => {
     })
 
     beforeEach(() => {
-      config = new Config({
+      config = getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'api_security_rules.json'),
@@ -331,7 +332,7 @@ withVersions('express', 'express', version => {
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.ok(Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
-          assert.ok(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'))
+          assert.ok(!('_dd.appsec.s.res.body' in span.meta))
           assert.equal(span.meta['_dd.appsec.s.req.body'], expectedRequestBodySchema)
         })
 

@@ -1,6 +1,6 @@
 import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from "http";
 import { LookupFunction } from 'net';
-import * as opentracing from "opentracing";
+import * as opentracing from "./vendor/dist/opentracing";
 import * as otel from "@opentelemetry/api";
 
 /**
@@ -191,6 +191,7 @@ interface Plugins {
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
+  "bullmq": tracer.plugins.bullmq;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
@@ -207,6 +208,7 @@ interface Plugins {
   "generic-pool": tracer.plugins.generic_pool;
   "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
   "google-cloud-vertexai": tracer.plugins.google_cloud_vertexai;
+  "google-genai": tracer.plugins.google_genai;
   "graphql": tracer.plugins.graphql;
   "grpc": tracer.plugins.grpc;
   "hapi": tracer.plugins.hapi;
@@ -542,6 +544,12 @@ declare namespace tracer {
     }
 
     /**
+     * Whether to add an auto-generated `runtime-id` tag to metrics.
+     * @default false
+     */
+    runtimeMetricsRuntimeId?: boolean
+
+    /**
      * Custom function for DNS lookups when sending requests to the agent.
      * @default dns.lookup()
      */
@@ -577,13 +585,6 @@ declare namespace tracer {
      */
     experimental?: {
       b3?: boolean
-      traceparent?: boolean
-
-      /**
-       * Whether to add an auto-generated `runtime-id` tag to metrics.
-       * @default false
-       */
-      runtimeId?: boolean
 
       /**
        * Whether to write traces to log output or agentless, rather than send to an agent
@@ -654,6 +655,13 @@ declare namespace tracer {
          * @default false
          */
         enabled?: boolean
+        /**
+         * Timeout in milliseconds for OpenFeature provider initialization.
+         * If configuration is not received within this time, initialization fails.
+         *
+         * @default 30000
+         */
+        initializationTimeoutMs?: number
       }
     };
 
@@ -681,13 +689,6 @@ declare namespace tracer {
     tags?: { [key: string]: any };
 
     /**
-     * Specifies which scope implementation to use. The default is to use the best
-     * implementation for the runtime. Only change this if you know what you are
-     * doing.
-     */
-    scope?: 'async_hooks' | 'async_local_storage' | 'async_resource' | 'sync' | 'noop'
-
-    /**
      * Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.
      * @default false
      */
@@ -698,13 +699,6 @@ declare namespace tracer {
      * @default 'debug'
      */
     logLevel?: 'error' | 'debug'
-
-    /**
-     * If false, require a parent in order to trace.
-     * @default true
-     * @deprecated since version 4.0
-     */
-    orphanable?: boolean
 
     /**
      * Enables DBM to APM link using tag injection.
@@ -912,7 +906,7 @@ declare namespace tracer {
     /**
      * The selection and priority order of context propagation injection and extraction mechanisms.
      */
-    propagationStyle?: string[] | PropagationStyle
+    tracePropagationStyle?: string[] | PropagationStyle
 
     /**
      * Cloud payload report as tags
@@ -1327,6 +1321,10 @@ declare namespace tracer {
        * Human-readable explanation for why this action was chosen.
        */
       reason: string;
+      /**
+       * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
+       */
+      tags: string[];
     }
 
     /**
@@ -1338,6 +1336,10 @@ declare namespace tracer {
        * Human-readable explanation from AI Guard describing why the conversation was blocked.
        */
       reason: string;
+      /**
+       * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
+       */
+      tags: string[];
     }
 
     /**
@@ -1756,6 +1758,12 @@ declare namespace tracer {
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
      * on the tracer.
      */
+    /**
+     * This plugin automatically instruments the
+     * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
+     */
+    interface bullmq extends Instrumentation {}
+
     interface bunyan extends Integration {}
 
     /**
@@ -1855,19 +1863,25 @@ declare namespace tracer {
     /**
      * This plugin automatically instruments the
      * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
-     */
-    interface google_cloud_vertexai extends Integration {}
+    */
+   interface google_cloud_vertexai extends Integration {}
 
-    /** @hidden */
-    interface ExecutionArgs {
-      schema: any,
-      document: any,
-      rootValue?: any,
-      contextValue?: any,
-      variableValues?: any,
-      operationName?: string,
-      fieldResolver?: any,
-      typeResolver?: any,
+   /**
+    * This plugin automatically instruments the
+    * [@google-genai](https://github.com/googleapis/js-genai) module.
+    */
+   interface google_genai extends Integration {}
+
+   /** @hidden */
+   interface ExecutionArgs {
+     schema: any,
+     document: any,
+     rootValue?: any,
+     contextValue?: any,
+     variableValues?: any,
+     operationName?: string,
+     fieldResolver?: any,
+     typeResolver?: any,
     }
 
     /**
@@ -3011,15 +3025,15 @@ declare namespace tracer {
       label: string,
 
       /**
-       * The type of evaluation metric, one of 'categorical' or 'score'
+       * The type of evaluation metric, one of 'categorical', 'score', or 'boolean'
        */
-      metricType: 'categorical' | 'score',
+      metricType: 'categorical' | 'score' | 'boolean',
 
       /**
        * The value of the evaluation metric.
-       * Must be string for 'categorical' metrics and number for 'score' metrics.
+       * Must be string for 'categorical' metrics, number for 'score' metrics, and boolean for 'boolean' metrics.
        */
-      value: string | number,
+      value: string | number | boolean,
 
       /**
        * An object of string key-value pairs to tag the evaluation metric with.

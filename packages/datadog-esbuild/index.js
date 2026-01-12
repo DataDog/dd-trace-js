@@ -245,28 +245,45 @@ ${build.initialOptions.banner.js}`
         }
       }
 
-      const packageJson = JSON.parse(fs.readFileSync(pathToPackageJson).toString())
+      try {
+        const packageJson = JSON.parse(fs.readFileSync(pathToPackageJson).toString())
 
-      const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
-      if (isESM && !interceptedESMModules.has(fullPathToModule)) {
-        fullPathToModule += ESM_INTERCEPTED_SUFFIX
-      }
+        const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
+        if (isESM && !interceptedESMModules.has(fullPathToModule)) {
+          fullPathToModule += ESM_INTERCEPTED_SUFFIX
+        }
 
-      if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
+        if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
 
-      // https://esbuild.github.io/plugins/#on-resolve-arguments
-      return {
-        path: fullPathToModule,
-        pluginData: {
-          version: packageJson.version,
-          pkg: extracted.pkg,
-          path: extracted.path,
-          full: fullPathToModule,
-          raw: args.path,
-          pkgOfInterest: true,
-          kind: args.kind,
-          internal,
-          isESM
+        // https://esbuild.github.io/plugins/#on-resolve-arguments
+        return {
+          path: fullPathToModule,
+          pluginData: {
+            version: packageJson.version,
+            pkg: extracted.pkg,
+            path: extracted.path,
+            full: fullPathToModule,
+            raw: args.path,
+            pkgOfInterest: true,
+            kind: args.kind,
+            internal,
+            isESM
+          }
+        }
+      } catch (e) {
+        // Skip vendored dependencies which never have a `package.json`. This
+        // will use the default resolve logic of ESBuild which is what we want
+        // since those files should be treated as regular files and not modules
+        // even though they are in a `node_modules` folder.
+        if (e.code === 'ENOENT') {
+          if (DEBUG) {
+            console.log([
+              'Skipping `package.json` lookup.',
+              'This usually means the package was vendored but could indicate an issue otherwise.'
+            ].join(' '))
+          }
+        } else {
+          throw e
         }
       }
     }
