@@ -124,13 +124,17 @@ class NativeDatadogSpan {
     // Queue the span name to native storage
     this._spanContext._syncNameToNative(operationName)
 
-    // Set default error to 0 (non-error state) to match regular span behavior
-    this._spanContext.setTag('error', 0)
+    // Note: We do NOT set error:0 here as a tag. Native spans default to error=0
+    // in native storage, but the JS tags should not contain 'error' until explicitly
+    // set. This matches regular span behavior where getTags() doesn't include 'error'.
 
     // Add tags using setTag() to sync to native storage
     for (const [key, value] of Object.entries(tags)) {
       this._spanContext.setTag(key, value)
     }
+
+    // Note: BASE_SERVICE is handled in span_context.js setTag() when service.name changes
+    // This ensures it's set correctly whether service is set during construction or later via addTags()
 
     // Add to trace's started spans
     this._spanContext._trace.started.push(this)
@@ -441,7 +445,8 @@ class NativeDatadogSpan {
         baggageItems: { ...existingContext._baggageItems },
         tags: { ...existingContext.getTags() },
         trace: existingContext._trace,
-        tracestate: existingContext._tracestate
+        tracestate: existingContext._tracestate,
+        tracerService: this._parentTracer._service
       })
 
       if (!spanContext._trace.startTime) {
@@ -471,7 +476,8 @@ class NativeDatadogSpan {
         sampling: parent._sampling,
         baggageItems: { ...parent._baggageItems },
         trace: parent._trace,
-        tracestate: parent._tracestate
+        tracestate: parent._tracestate,
+        tracerService: this._parentTracer._service
       })
 
       if (!spanContext._trace.startTime) {
@@ -496,7 +502,8 @@ class NativeDatadogSpan {
 
       spanContext = new NativeSpanContext(this._nativeSpans, {
         traceId: spanId,
-        spanId
+        spanId,
+        tracerService: this._parentTracer._service
       })
       spanContext._trace.startTime = startTime
 

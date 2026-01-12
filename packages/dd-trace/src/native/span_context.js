@@ -2,6 +2,7 @@
 
 const DatadogSpanContext = require('../opentracing/span_context')
 const { OpCode } = require('./index')
+const { BASE_SERVICE } = require('../../../../ext/tags')
 
 /**
  * NativeSpanContext extends DatadogSpanContext to store span data in native Rust storage.
@@ -26,12 +27,14 @@ class NativeSpanContext extends DatadogSpanContext {
    * @param {Object} [props.baggageItems] - Baggage items
    * @param {Object} [props.trace] - Shared trace object
    * @param {Object} [props.tracestate] - W3C tracestate
+   * @param {string} [props.tracerService] - Tracer's configured service name (for BASE_SERVICE)
    */
   constructor (nativeSpans, props) {
     super(props)
 
     this.#nativeSpans = nativeSpans
     this._nativeSpanId = props.spanId.toBigInt()
+    this._tracerService = props.tracerService // Store for BASE_SERVICE check
 
     // Override _name property with getter/setter to sync name changes to native storage.
     // This is needed because web.js setFramework() directly sets span.context()._name.
@@ -85,6 +88,17 @@ class NativeSpanContext extends DatadogSpanContext {
           this._nativeSpanId,
           String(value)
         )
+        // Set _dd.base_service when span's service differs from tracer's configured service
+        // This matches the behavior in span_format.js
+        if (this._tracerService && String(value).toLowerCase() !== this._tracerService.toLowerCase()) {
+          super.setTag(BASE_SERVICE, this._tracerService)
+          this.#nativeSpans.queueOp(
+            OpCode.SetMetaAttr,
+            this._nativeSpanId,
+            BASE_SERVICE,
+            String(this._tracerService)
+          )
+        }
         return
 
       case 'resource.name':
