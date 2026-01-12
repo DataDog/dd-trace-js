@@ -187,7 +187,7 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(spanFormat, finishedSpan, true)
   })
 
-  it('should add span tags to first span in a chunk', () => {
+  it('should add span tags to first span in first chunk only', () => {
     config.flushMinSpans = 2
     config.propagateProcessTags = { enabled: true }
     const processor = new SpanProcessor(exporter, prioritySampler, config)
@@ -201,15 +201,42 @@ describe('SpanProcessor', () => {
       tags.split(',').forEach(tag => {
         const [key, value] = tag.split(':')
         if (key !== 'entrypoint.basedir') return
-        assert.strictEqual(value, 'test')
+        // The value will be 'bin' when running via mocha CLI
+        assert.ok(value === 'test' || value === 'bin')
         foundATag = true
       })
       assert.ok(foundATag)
     }
 
+    // First chunk: process tags should be on first span only
     sinon.assert.calledWith(spanFormat.getCall(0), finishedSpan, true, processor._processTags)
-    sinon.assert.calledWith(spanFormat.getCall(1), finishedSpan, false, processor._processTags)
-    sinon.assert.calledWith(spanFormat.getCall(2), finishedSpan, false, processor._processTags)
-    sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
+    sinon.assert.calledWith(spanFormat.getCall(1), finishedSpan, false, false)
+    sinon.assert.calledWith(spanFormat.getCall(2), finishedSpan, false, false)
+    sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, false)
+  })
+
+  it('should not add process tags to subsequent chunks', () => {
+    config.flushMinSpans = 2
+    config.propagateProcessTags = { enabled: true }
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+
+    // First chunk
+    trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan]
+    trace.finished = [finishedSpan, finishedSpan, finishedSpan]
+    processor.process(activeSpan)
+
+    // Verify first chunk had process tags on first span only
+    sinon.assert.calledWith(spanFormat.getCall(0), finishedSpan, true, processor._processTags)
+    sinon.assert.calledWith(spanFormat.getCall(1), finishedSpan, false, false)
+    sinon.assert.calledWith(spanFormat.getCall(2), finishedSpan, false, false)
+
+    // Second chunk - add more finished spans
+    trace.started = [activeSpan, finishedSpan, finishedSpan]
+    trace.finished = [finishedSpan, finishedSpan]
+    processor.process(activeSpan)
+
+    // Verify second chunk does NOT have process tags on any span
+    sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, true, false)
+    sinon.assert.calledWith(spanFormat.getCall(4), finishedSpan, false, false)
   })
 })
