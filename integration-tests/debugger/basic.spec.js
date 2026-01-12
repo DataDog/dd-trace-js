@@ -5,10 +5,10 @@ const os = require('os')
 const { join } = require('path')
 
 const assert = require('assert')
-const { pollInterval, setup } = require('./utils')
 const { assertObjectContains, assertUUID } = require('../helpers')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const { version } = require('../../package.json')
+const { pollInterval, setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   describe('Default env', function () {

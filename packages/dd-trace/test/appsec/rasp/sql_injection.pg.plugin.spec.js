@@ -1,10 +1,10 @@
 'use strict'
 
-const Axios = require('axios')
 const assert = require('node:assert')
+const path = require('node:path')
+const Axios = require('axios')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
-const path = require('node:path')
 
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')

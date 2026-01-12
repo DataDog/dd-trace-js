@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
-import esbuild from 'esbuild'
 import { spawnSync } from 'child_process'
+import esbuild from 'esbuild'
 import commonConfig from './build.esm.common-config.js'
 
 // output => basic-test.mjs

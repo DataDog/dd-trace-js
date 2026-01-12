@@ -1,12 +1,12 @@
 'use strict'
 
+const assert = require('node:assert')
 const { describe, it, before, after } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { setup } = require('./spec_helpers')
 const { models } = require('./fixtures/bedrockruntime')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const assert = require('node:assert')
 const serviceName = 'bedrock-service-name-test'
 
 describe('Plugin', () => {

@@ -2,6 +2,10 @@
 
 const assert = require('node:assert/strict')
 
+const path = require('path')
+const { inspect } = require('util')
+const fs = require('fs')
+const semver = require('semver')
 const {
   FakeAgent,
   spawnProc,
@@ -9,10 +13,6 @@ const {
   useSandbox,
   curlAndAssertMessage
 } = require('./helpers')
-const path = require('path')
-const semver = require('semver')
-const { inspect } = require('util')
-const fs = require('fs')
 
 const execArgvs = [
   {
@@ -25,18 +25,32 @@ const execArgvs = [
   {
     execArgv: ['--loader', 'dd-trace/loader-hook.mjs'],
     skip: semver.satisfies(process.versions.node, '>=20.6')
+  },
+  {
+    execArgv: [],
+    optional: false
   }
 ]
 
-execArgvs.forEach(({ execArgv, skip }) => {
+execArgvs.forEach(({ execArgv, skip, optional = true }) => {
   const describe = skip ? globalThis.describe.skip : globalThis.describe
 
-  describe(`startup ${execArgv.join(' ')}`, () => {
+  describe(`startup ${execArgv.join(' ').concat(`(optional: ${optional})`)}`, () => {
     let agent
     let proc
     let cwd
     let startupTestFile
     let unsupportedTestFile
+
+    before(() => {
+      if (optional === false) {
+        process.env.OMIT = 'optional'
+      }
+    })
+
+    after(() => {
+      delete process.env.OMIT
+    })
 
     useSandbox(['d3-format@3.1.0'])
 
@@ -74,38 +88,41 @@ execArgvs.forEach(({ execArgv, skip }) => {
         })
       })
 
-      it('saves tracer configuration on disk', async () => {
-        if (process.platform !== 'linux') {
-          return
-        }
-
-        proc = await spawnProc(startupTestFile, {
-          cwd,
-          execArgv,
-          env: {
-            AGENT_PORT: agent.port
+      // This feature requires libdatadog which is an optional dependency.
+      if (optional) {
+        it('saves tracer configuration on disk', async () => {
+          if (process.platform !== 'linux') {
+            return
           }
+
+          proc = await spawnProc(startupTestFile, {
+            cwd,
+            execArgv,
+            env: {
+              AGENT_PORT: agent.port
+            }
+          })
+
+          const containsDatadogMemfd = (fds) => {
+            for (const fd of fds) {
+              try {
+                const fdName = fs.readlinkSync(`/proc/${proc.pid}/fd/${fd}`)
+                if (fdName.includes('datadog-tracer-info-')) {
+                  return true
+                }
+              } catch {}
+            }
+            return false
+          }
+
+          const fds = fs.readdirSync(`/proc/${proc.pid}/fd`)
+
+          assert(
+            containsDatadogMemfd(fds),
+            `FDs ${inspect(fds)} of PID ${proc.pid} did not contain the datadog tracer configuration in memfd`
+          )
         })
-
-        const containsDatadogMemfd = (fds) => {
-          for (const fd of fds) {
-            try {
-              const fdName = fs.readlinkSync(`/proc/${proc.pid}/fd/${fd}`)
-              if (fdName.includes('datadog-tracer-info-')) {
-                return true
-              }
-            } catch {}
-          }
-          return false
-        }
-
-        const fds = fs.readdirSync(`/proc/${proc.pid}/fd`)
-
-        assert(
-          containsDatadogMemfd(fds),
-          `FDs ${inspect(fds)} of PID ${proc.pid} did not contain the datadog tracer configuration in memfd`
-        )
-      })
+      }
 
       it('works for options.url', async () => {
         proc = await spawnProc(startupTestFile, {

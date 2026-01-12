@@ -3,10 +3,10 @@
 const assert = require('node:assert/strict')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const NODE_20_PLUS = require('semver').gte(process.version, '20.0.0')
 
 const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../setup/mocha')
-
 const {
   session,
   getTargetCodePath,
@@ -16,7 +16,6 @@ const {
   getLocalStateForCallFrame
 } = require('./utils')
 
-const NODE_20_PLUS = require('semver').gte(process.version, '20.0.0')
 const target = getTargetCodePath(__filename)
 
 describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', function () {

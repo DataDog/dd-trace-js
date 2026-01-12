@@ -1,10 +1,10 @@
 'use strict'
 
-const { processModule } = require('../src/utils.js')
 const assert = require('assert')
 const path = require('path')
-const sinon = require('sinon')
 const fs = require('fs')
+const sinon = require('sinon')
+const { processModule } = require('../src/utils.js')
 
 describe('esbuild utils', () => {
   describe('processModule', () => {

@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const ddpv = require('mocha/package.json').version
 const semver = require('semver')
 const sinon = require('sinon')
 
@@ -10,7 +11,6 @@ const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const ddpv = require('mocha/package.json').version
 
 const withTopologies = fn => {
   withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName) => {

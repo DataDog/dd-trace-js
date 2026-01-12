@@ -8,11 +8,11 @@ const {
   routerMiddlewareError
 } = require('../channels')
 const { block, registerBlockDelegation, isBlocked } = require('../blocking')
+const { updateRaspRuleMatchMetricTags } = require('../telemetry')
 const ssrf = require('./ssrf')
 const sqli = require('./sql_injection')
 const lfi = require('./lfi')
 const cmdi = require('./command_injection')
-const { updateRaspRuleMatchMetricTags } = require('../telemetry')
 
 const { DatadogRaspAbortError } = require('./utils')
 

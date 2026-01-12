@@ -2,12 +2,14 @@
 
 const fs = require('fs')
 const os = require('os')
-const uuid = require('../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const { URL } = require('url')
+const path = require('path')
+const uuid = require('../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 
+const set = require('../../datadog-core/src/utils/src/set')
+const { DD_MAJOR } = require('../../../version')
 const log = require('./log')
 const tagger = require('./tagger')
-const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
@@ -24,8 +26,6 @@ const { ORIGIN_KEY } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./config-helper')
 const defaults = require('./config_defaults')
-const path = require('path')
-const { DD_MAJOR } = require('../../../version')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 

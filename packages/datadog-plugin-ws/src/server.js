@@ -2,8 +2,8 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 const tags = require('../../../ext/tags.js')
-const { initWebSocketMessageCounters } = require('./util')
 const { FORMAT_HTTP_HEADERS } = require('../../../ext/formats')
+const { initWebSocketMessageCounters } = require('./util')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 

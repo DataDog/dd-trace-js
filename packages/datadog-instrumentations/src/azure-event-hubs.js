@@ -1,10 +1,10 @@
 'use strict'
 
+const dc = require('dc-polyfill')
+const shimmer = require('../../datadog-shimmer')
 const {
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
-const dc = require('dc-polyfill')
 
 const producerCh = dc.tracingChannel('apm:azure-event-hubs:send')
 
