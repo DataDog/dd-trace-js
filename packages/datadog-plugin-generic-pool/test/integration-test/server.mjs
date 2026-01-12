@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
+import { AsyncLocalStorage } from 'async_hooks'
 import express from 'express'
 import genericPool from 'generic-pool'
-import { AsyncLocalStorage } from 'async_hooks'
 
 const asyncStore = new AsyncLocalStorage()
 const app = express()

@@ -2,8 +2,8 @@
 
 const { errorMonitor } = require('events')
 
-const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { channel, addHook } = require('./helpers/instrument')
 
 const startICPCh = channel('apm:net:ipc:start')
 const finishICPCh = channel('apm:net:ipc:finish')

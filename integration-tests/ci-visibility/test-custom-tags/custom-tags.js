@@ -1,8 +1,7 @@
 'use strict'
 
-const assert = require('assert')
-
 const tracer = require('dd-trace')
+const assert = require('assert')
 
 const sum = require('../test/sum')
 describe('test optimization custom tags', () => {

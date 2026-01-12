@@ -2,12 +2,12 @@
 
 const assert = require('node:assert/strict')
 
+const path = require('path')
+const Axios = require('axios')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const getConfig = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
-const path = require('path')
-const Axios = require('axios')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - sql_injection', () => {

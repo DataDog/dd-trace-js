@@ -8,7 +8,7 @@ const digitRegex = /^\d+$/
  * Also supports array-keys. For example:
  *   { 'a.0.b': 'value' } -> { a: [{ b: 'value' }] }
  *
- * @param {Object} tags - Key/value pairs of tags
+ * @param {object} tags - Key/value pairs of tags
  * @returns Object - Parsed tags
  */
 module.exports = function parseTags (tags) {

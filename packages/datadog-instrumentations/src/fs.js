@@ -1,8 +1,8 @@
 'use strict'
 
 const { errorMonitor } = require('events')
-const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { channel, addHook } = require('./helpers/instrument')
 
 const startChannel = channel('apm:fs:operation:start')
 const finishChannel = channel('apm:fs:operation:finish')

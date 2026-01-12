@@ -1,11 +1,11 @@
 'use strict'
 
-const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const { MsgpackChunk, MsgpackEncoder } = require('../msgpack')
 const log = require('../log')
 const { isTrue } = require('../util')
 const { memoize } = require('../log/utils')
 const { getEnvironmentVariable } = require('../config-helper')
+const { truncateSpan, normalizeSpan } = require('./tags-processors')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 

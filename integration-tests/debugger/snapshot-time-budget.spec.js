@@ -1,11 +1,11 @@
 'use strict'
 
 const assert = require('node:assert')
-const { setup } = require('./utils')
 const {
   DEFAULT_MAX_COLLECTION_SIZE,
   LARGE_OBJECT_SKIP_THRESHOLD
 } = require('../../packages/dd-trace/src/debugger/devtools_client/snapshot/constants')
+const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   describe('input messages', function () {

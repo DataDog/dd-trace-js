@@ -2,9 +2,9 @@
 
 const assert = require('node:assert/strict')
 
-const { FakeAgent, spawnProc, sandboxCwd, useSandbox, curl, assertObjectContains } = require('./helpers')
 const path = require('path')
 const { once } = require('events')
+const { FakeAgent, spawnProc, sandboxCwd, useSandbox, curl, assertObjectContains } = require('./helpers')
 
 describe('pino test', () => {
   let agent

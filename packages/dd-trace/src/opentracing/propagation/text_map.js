@@ -1,16 +1,16 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
 const pick = require('../../../../datadog-core/src/utils/src/pick')
 const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
-const TraceState = require('./tracestate')
 const tags = require('../../../../../ext/tags')
-const { channel } = require('dc-polyfill')
 const { setBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../baggage')
 const telemetryMetrics = require('../../telemetry/metrics')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
+const TraceState = require('./tracestate')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -36,6 +36,9 @@ const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 const tagKeyExpr = /^_dd\.p\.[\x21-\x2B\x2D-\x7E]+$/ // ASCII minus spaces and commas
 const tagValueExpr = /^[\x20-\x2B\x2D-\x7E]*$/ // ASCII minus commas
+// RFC7230 token (used by HTTP header field-name) and compatible with Node's header name validation.
+// See https://www.rfc-editor.org/rfc/rfc7230#section-3.2.6
+const httpHeaderNameExpr = /^[0-9A-Za-z!#$%&'*+\-.^_`|~]+$/
 const traceparentExpr = /^([a-f0-9]{2})-([a-f0-9]{32})-([a-f0-9]{16})-([a-f0-9]{2})(-.*)?$/i
 const traceparentKey = 'traceparent'
 const tracestateKey = 'tracestate'
@@ -130,9 +133,21 @@ class TextMapPropagator {
 
   _injectBaggageItems (spanContext, carrier) {
     if (this._config.legacyBaggageEnabled) {
-      spanContext?._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
-        carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
-      })
+      const baggageItems = spanContext?._baggageItems
+      if (baggageItems) {
+        for (const key of Object.keys(baggageItems)) {
+          const headerName = baggagePrefix + key
+
+          // Legacy OpenTracing baggage is propagated as individual headers (ot-baggage-*),
+          // so it must always be representable as a valid HTTP header name.
+          if (!httpHeaderNameExpr.test(headerName)) {
+            tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
+            continue
+          }
+
+          carrier[headerName] = String(baggageItems[key])
+        }
+      }
     }
     if (this._hasPropagationStyle('inject', 'baggage')) {
       let baggage = ''
@@ -646,9 +661,10 @@ class TextMapPropagator {
 
   _extractBaggageItems (carrier, spanContext) {
     if (!this._hasPropagationStyle('extract', 'baggage')) return
-    if (!carrier || !carrier.baggage) return
+    if (!carrier?.baggage) return
     const baggages = carrier.baggage.split(',')
-    const keysToSpanTag = this._config.baggageTagKeys === '*'
+    const tagAllKeys = this._config.baggageTagKeys === '*'
+    const keysToSpanTag = tagAllKeys
       ? undefined
       : new Set(this._config.baggageTagKeys.split(','))
     for (const keyValue of baggages) {
@@ -665,7 +681,7 @@ class TextMapPropagator {
         removeAllBaggageItems()
         return
       }
-      if (spanContext && (this._config.baggageTagKeys === '*' || keysToSpanTag.has(key))) {
+      if (spanContext && (tagAllKeys || keysToSpanTag?.has(key))) {
         spanContext._trace.tags['baggage.' + key] = value
       }
       setBaggageItem(key, value)

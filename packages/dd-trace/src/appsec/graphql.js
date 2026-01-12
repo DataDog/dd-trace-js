@@ -1,16 +1,16 @@
 'use strict'
 
 const { storage } = require('../../../datadog-core')
+const log = require('../log')
+const web = require('../plugins/util/web')
 const {
   addSpecificEndpoint,
   specificBlockingTypes,
   getBlockingData,
   getBlockingAction
 } = require('./blocking')
-const log = require('../log')
 const waf = require('./waf')
 const addresses = require('./addresses')
-const web = require('../plugins/util/web')
 const {
   startGraphqlResolve,
   graphqlMiddlewareChannel,

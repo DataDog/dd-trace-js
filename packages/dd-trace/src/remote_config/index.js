@@ -6,12 +6,12 @@ const tracerVersion = require('../../../../package.json').version
 const request = require('../exporters/common/request')
 const log = require('../log')
 const { getExtraServices } = require('../service-naming/extra-services')
-const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
-const Scheduler = require('./scheduler')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const tagger = require('../tagger')
 const defaults = require('../config_defaults')
 const processTags = require('../process-tags')
+const Scheduler = require('./scheduler')
+const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 
 const clientId = uuid()
 
@@ -436,7 +436,7 @@ class RemoteConfig {
  * Remote Config “applied config” state tracked by the RC manager.
  * This is the mutable shape stored in `this.appliedConfigs` and passed to per-product handlers.
  *
- * @typedef {Object} RcConfigState
+ * @typedef {object} RcConfigState
  * @property {string} path
  * @property {string} product
  * @property {string} id
@@ -451,7 +451,7 @@ class RemoteConfig {
 /**
  * Target file metadata cached in `state.cached_target_files` and sent back to the agent.
  *
- * @typedef {Object} RcCachedTargetFile
+ * @typedef {object} RcCachedTargetFile
  * @property {string} path
  * @property {number} length
  * @property {Array<{algorithm: string, hash: string}>} hashes
@@ -461,7 +461,7 @@ class RemoteConfig {
  * Remote Config batch update transaction passed to batch handlers registered via
  * `RemoteConfig.setBatchHandler()`.
  *
- * @typedef {Object} RcBatchUpdateTransaction
+ * @typedef {object} RcBatchUpdateTransaction
  * @property {RcConfigState[]} toUnapply
  * @property {RcConfigState[]} toApply
  * @property {RcConfigState[]} toModify
