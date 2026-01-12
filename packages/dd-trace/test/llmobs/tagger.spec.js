@@ -2,11 +2,10 @@
 
 const assert = require('node:assert/strict')
 
-const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
-
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
 function unserializbleObject () {
   const obj = {}
   obj.obj = obj
