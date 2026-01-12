@@ -8,6 +8,7 @@ const { getEnvironmentVariable } = require('./config-helper')
 const getProcessTags = require('./process-tags')
 const {
   SAMPLING_MECHANISM_MANUAL,
+  SAMPLING_MECHANISM_DEFAULT,
   DECISION_MAKER_KEY
 } = require('./constants')
 
@@ -92,8 +93,11 @@ class SpanProcessor {
         const priority = this._nativeSpans.sample(spanContext._nativeSpanId)
         // Set result in JS context for propagation
         spanContext._sampling.priority = priority
-        // Native sampling mechanism will be determined by native side
-        // We don't set mechanism here as native handles it
+        // Set default mechanism for native sampling
+        spanContext._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
+
+        // Sync native sampling decision to native storage as trace metric
+        this._syncSamplingToNative(spanContext, spanContext._nativeSpanId)
       } else {
         // Span not in native storage (e.g., OTel spans) - fall back to JS sampling
         this._prioritySampler.sample(spanContext)
@@ -305,7 +309,13 @@ class SpanProcessor {
     }
 
     for (const span of trace.finished) {
-      span.context().clearTags()
+      // Skip clearing tags for native spans since:
+      // 1. Tags are already synced to native storage
+      // 2. Keeps tags accessible for debugging/testing after export
+      // 3. Memory will be freed when span is garbage collected anyway
+      if (!this._isNativeMode) {
+        span.context().clearTags()
+      }
     }
 
     trace.started = active

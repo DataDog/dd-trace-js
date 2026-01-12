@@ -20,6 +20,35 @@ const SERVICE_NAME = tags.SERVICE_NAME
 const EXPORT_SERVICE_NAME = 'service'
 const BASE_SERVICE = tags.BASE_SERVICE
 
+// Helper to get span properties that works with both native and formatted spans
+// Native spans export raw span objects, regular spans export formatted objects
+function getExportedSpanService (exportedSpan) {
+  // Native span: access via context().getTag()
+  if (typeof exportedSpan.context === 'function') {
+    return exportedSpan.context().getTag('service.name')
+  }
+  // Formatted span: direct property
+  return exportedSpan[EXPORT_SERVICE_NAME]
+}
+
+function getExportedSpanMeta (exportedSpan, key) {
+  // Native span: access via context().getTag()
+  if (typeof exportedSpan.context === 'function') {
+    return exportedSpan.context().getTag(key)
+  }
+  // Formatted span: meta object
+  return exportedSpan.meta?.[key]
+}
+
+function hasExportedSpanMeta (exportedSpan, key) {
+  // Native span: check via context().getTag()
+  if (typeof exportedSpan.context === 'function') {
+    return exportedSpan.context().getTag(key) !== undefined
+  }
+  // Formatted span: check meta object
+  return key in (exportedSpan.meta || {})
+}
+
 describe('Tracer', () => {
   let tracer
   let config
@@ -83,22 +112,22 @@ describe('Tracer', () => {
       it('should be set when tracer.trace service mismatches configured service', () => {
         tracer.trace('name', { service: 'custom' }, () => {})
         const trace = tracer._exporter.export.getCall(0).args[0][0]
-        assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'custom')
-        assert.strictEqual(trace.meta[BASE_SERVICE], 'service')
+        assert.strictEqual(getExportedSpanService(trace), 'custom')
+        assert.strictEqual(getExportedSpanMeta(trace, BASE_SERVICE), 'service')
       })
 
       it('should not be set when tracer.trace service is not supplied', () => {
         tracer.trace('name', {}, () => {})
         const trace = tracer._exporter.export.getCall(0).args[0][0]
-        assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'service')
-        assert.ok(!(BASE_SERVICE in trace.meta))
+        assert.strictEqual(getExportedSpanService(trace), 'service')
+        assert.ok(!hasExportedSpanMeta(trace, BASE_SERVICE))
       })
 
       it('should not be set when tracer.trace service matched configured service', () => {
         tracer.trace('name', { service: 'service' }, () => {})
         const trace = tracer._exporter.export.getCall(0).args[0][0]
-        assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'service')
-        assert.ok(!(BASE_SERVICE in trace.meta))
+        assert.strictEqual(getExportedSpanService(trace), 'service')
+        assert.ok(!hasExportedSpanMeta(trace, BASE_SERVICE))
       })
     })
 
