@@ -105,7 +105,7 @@ function wrapParse (parse) {
 
         return ctx.document
       } catch (err) {
-        err.stack
+        void err.stack
         ctx.error = err
         parseErrorCh.publish(ctx)
 
@@ -134,7 +134,7 @@ function wrapValidate (validate) {
         }
         return errors
       } catch (err) {
-        err.stack
+        void err.stack
         ctx.error = err
         validateErrorCh.publish(ctx)
 

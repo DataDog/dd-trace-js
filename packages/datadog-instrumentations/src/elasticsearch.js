@@ -99,7 +99,7 @@ function createWrapRequest (name) {
           }
           return promise
         } catch (err) {
-          err.stack // trigger getting the stack at the original throwing point
+          void err.stack // trigger getting the stack at the original throwing point
           errorCh.publish(err)
 
           throw err
