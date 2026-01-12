@@ -14,7 +14,7 @@ describe('Push Subscription Plugin', () => {
 
   before(() => {
     process.env.K_SERVICE = 'test-service'
-    return agent.load(['http', 'google-cloud-pubsub'], { client: false })
+    return agent.load(['http'], { client: false })
   })
 
   after(() => {
