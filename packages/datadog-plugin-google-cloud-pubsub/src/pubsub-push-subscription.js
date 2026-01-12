@@ -1,5 +1,6 @@
 'use strict'
 
+console.log('[DEBUG PUSH PLUGIN] Loading pubsub-push-subscription module, K_SERVICE =', process.env.K_SERVICE)
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const SpanContext = require('../../dd-trace/src/opentracing/span_context')
 const id = require('../../dd-trace/src/id')
@@ -12,6 +13,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   static get id () { return 'google-cloud-pubsub-push-subscription' }
 
   constructor (...args) {
+    console.log('[DEBUG PUSH PLUGIN] Constructor called')
     super(...args)
 
     /**
@@ -215,3 +217,4 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 }
 
 module.exports = GoogleCloudPubsubPushSubscriptionPlugin
+console.log('[DEBUG PUSH PLUGIN] Module exported successfully:', typeof GoogleCloudPubsubPushSubscriptionPlugin, GoogleCloudPubsubPushSubscriptionPlugin.name)

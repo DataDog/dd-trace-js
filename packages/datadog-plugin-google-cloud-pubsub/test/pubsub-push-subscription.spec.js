@@ -13,11 +13,15 @@ describe('Push Subscription Plugin', () => {
   let http
 
   before(() => {
+    console.log('[DEBUG TEST] Before hook - Setting K_SERVICE to test-service')
     process.env.K_SERVICE = 'test-service'
+    console.log('[DEBUG TEST] K_SERVICE =', process.env.K_SERVICE)
+    console.log('[DEBUG TEST] Loading agent with http plugin')
     return agent.load(['http'], { client: false })
   })
 
   after(() => {
+    console.log('[DEBUG TEST] After hook - Cleaning up')
     return agent.close({ ritmReset: false })
   })
 

@@ -1,6 +1,8 @@
 'use strict'
 
+console.log('[DEBUG HTTP] Loading module, K_SERVICE =', process.env.K_SERVICE)
 const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
+console.log('[DEBUG HTTP] PushSubscriptionPlugin loaded:', typeof PushSubscriptionPlugin, PushSubscriptionPlugin?.name)
 const HttpServerPlugin = require('./server')
 const HttpClientPlugin = require('./client')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
