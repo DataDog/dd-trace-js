@@ -6,7 +6,8 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
-function unserializbleObject () {
+
+function unserializableObject () {
   const obj = {}
   obj.obj = obj
   return obj
@@ -640,7 +641,7 @@ describe('tagger', () => {
       })
 
       it('throws when the value is not JSON serializable', () => {
-        const data = unserializbleObject()
+        const data = unserializableObject()
         assert.throws(() => tagger.tagTextIO(span, data, 'output'))
       })
     })
@@ -863,7 +864,7 @@ describe('tagger', () => {
     })
 
     it('logs a warning when an unexpected value is encountered for text tagging', () => {
-      const data = unserializbleObject()
+      const data = unserializableObject()
       tagger._register(span)
       tagger.tagTextIO(span, data, 'input')
       sinon.assert.calledOnce(logger.warn)
