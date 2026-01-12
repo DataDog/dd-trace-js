@@ -5,8 +5,10 @@ const tags = require('../../../../../ext/tags')
 
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SPAN_TYPE = tags.SPAN_TYPE
+const SPAN_KIND = tags.SPAN_KIND
 const HTTP_URL = tags.HTTP_URL
 const HTTP_METHOD = tags.HTTP_METHOD
+const HTTP_ROUTE = tags.HTTP_ROUTE
 
 const PROXY_HEADER_SYSTEM = 'x-dd-proxy'
 const PROXY_HEADER_START_TIME_MS = 'x-dd-proxy-request-time-ms'
@@ -14,11 +16,16 @@ const PROXY_HEADER_PATH = 'x-dd-proxy-path'
 const PROXY_HEADER_HTTPMETHOD = 'x-dd-proxy-httpmethod'
 const PROXY_HEADER_DOMAIN = 'x-dd-proxy-domain-name'
 const PROXY_HEADER_STAGE = 'x-dd-proxy-stage'
+const PROXY_HEADER_RESOURCE_PATH = 'x-dd-proxy-resource-path'
 
 const supportedProxies = {
   'aws-apigateway': {
     spanName: 'aws.apigateway',
     component: 'aws-apigateway'
+  },
+  'aws-httpapi': {
+    spanName: 'aws.httpapi',
+    component: 'aws-httpapi'
   }
 }
 
@@ -50,9 +57,11 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
       service: proxyContext.domainName || tracer._config.service,
       component: proxySpanInfo.component,
       [SPAN_TYPE]: 'web',
+      [SPAN_KIND]: 'server',
       [HTTP_METHOD]: proxyContext.method,
-      [HTTP_URL]: proxyContext.domainName + proxyContext.path,
-      stage: proxyContext.stage
+      [HTTP_URL]: 'https://' + proxyContext.domainName + proxyContext.path,
+      stage: proxyContext.stage,
+      ...(proxyContext.resourcePath && { [HTTP_ROUTE]: proxyContext.resourcePath })
     }
   }, traceCtx, config)
 
@@ -67,7 +76,8 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
 }
 
 function setInferredProxySpanTags (span, proxyContext) {
-  span.setTag(RESOURCE_NAME, `${proxyContext.method} ${proxyContext.path}`)
+  const resourcePath = proxyContext.resourcePath || proxyContext.path
+  span.setTag(RESOURCE_NAME, `${proxyContext.method} ${resourcePath}`)
   span.setTag('_dd.inferred_span', 1)
   return span
 }
@@ -90,7 +100,8 @@ function extractInferredProxyContext (headers) {
     path: headers[PROXY_HEADER_PATH],
     stage: headers[PROXY_HEADER_STAGE],
     domainName: headers[PROXY_HEADER_DOMAIN],
-    proxySystemName: headers[PROXY_HEADER_SYSTEM]
+    proxySystemName: headers[PROXY_HEADER_SYSTEM],
+    resourcePath: headers[PROXY_HEADER_RESOURCE_PATH]
   }
 }
 
