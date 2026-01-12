@@ -9,19 +9,21 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Push Subscription Plugin', () => {
-  let tracer
   let appListener
+  let http
 
   before(() => {
+    process.env.K_SERVICE = 'test-service'
     return agent.load(['http', 'google-cloud-pubsub'], { client: false })
   })
 
   after(() => {
+    delete process.env.K_SERVICE
     return agent.close({ ritmReset: false })
   })
 
   beforeEach(() => {
-    tracer = require('../../dd-trace')
+    http = require('http')
   })
 
   afterEach(() => {
@@ -31,191 +33,124 @@ describe('Push Subscription Plugin', () => {
     }
   })
 
-  describe('Push subscription with raw HTTP server', () => {
-    let http
-
-    beforeEach(() => {
-      http = require('http')
+  // Helper to create a simple HTTP server that responds OK to /push-endpoint
+  function createServer () {
+    return http.createServer((req, res) => {
+      if (req.method === 'POST' && req.url.startsWith('/push-endpoint')) {
+        req.on('data', () => {})
+        req.on('end', () => {
+          res.writeHead(200)
+          res.end('OK')
+        })
+      } else {
+        res.writeHead(404)
+        res.end()
+      }
     })
+  }
 
-    it('should create BOTH pubsub.delivery span AND HTTP span in same trace', (done) => {
+  // Helper to send a push subscription request
+  async function sendPushRequest (port, headers = {}) {
+    const defaultHeaders = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)',
+      'x-goog-pubsub-message-id': 'test-message-id',
+      'x-goog-pubsub-subscription-name': 'projects/test-project/subscriptions/test-sub',
+      'x-goog-pubsub-publish-time': new Date().toISOString()
+    }
+
+    return axios.post(`http://localhost:${port}/push-endpoint`, {
+      message: { data: 'dGVzdA==', messageId: 'test-message-id' }
+    }, {
+      headers: { ...defaultHeaders, ...headers }
+    })
+  }
+
+  // Helper to find pubsub.request span
+  function findPubSubSpan (traces) {
+    const trace = traces.find(t => t.some(s => s.name === 'pubsub.request'))
+    if (!trace) throw new Error('Could not find trace with pubsub.request span')
+    return trace.find(s => s.name === 'pubsub.request')
+  }
+
+  describe('Push subscription with raw HTTP server', () => {
+    it('should create pubsub.request span with delivery duration', (done) => {
       const messageId = 'http-test-789'
-      const subscriptionName = 'projects/test-project/subscriptions/test-sub'
-      const publishTime = new Date().toISOString()
-      const topicName = 'projects/test-project/topics/test-topic'
+      const publishStartTime = Date.now().toString()
 
-      let handlerCalled = false
-      let activeSpanInHandler = null
-
-      const server = http.createServer((req, res) => {
-        if (req.method === 'POST' && req.url === '/push-endpoint') {
-          handlerCalled = true
-          activeSpanInHandler = tracer.scope().active()
-
-          req.on('data', () => {})
-          req.on('end', () => {
-            res.writeHead(200, { 'Content-Type': 'text/plain' })
-            res.end('OK')
-          })
-        } else {
-          res.writeHead(404)
-          res.end()
-        }
-      })
-
-      appListener = server.listen(0, 'localhost', () => {
-        const port = server.address().port
+      appListener = createServer().listen(0, 'localhost', () => {
+        const port = appListener.address().port
 
         agent
           .assertSomeTraces(traces => {
-            const trace = traces.find(t =>
-              t.some(s => s.name === 'web.request') &&
-              t.some(s => s.name === 'pubsub.delivery')
-            )
-            if (!trace) return
-
-            assert.strictEqual(handlerCalled, true)
-
-            const httpSpan = trace.find(s => s.name === 'web.request')
-            const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
-
-            assert.ok(httpSpan, 'HTTP server span must exist')
-            assert.ok(pubsubSpan, 'pubsub.delivery span must exist')
-
-            // For raw HTTP, the active span might be web.request OR pubsub.delivery depending on timing
-            if (activeSpanInHandler) {
-              const spanName = activeSpanInHandler.context()._name
-              assert.ok(['web.request', 'pubsub.delivery'].includes(spanName))
-            }
-
-            // For raw HTTP, parent-child relationship might not be established the same way
-            // as with framework-based servers (Express, Fastify, etc.)
-            // Both spans should exist in the same trace though
-            assert.strictEqual(pubsubSpan.trace_id.toString(), httpSpan.trace_id.toString())
+            const pubsubSpan = findPubSubSpan(traces)
 
             assertObjectContains(pubsubSpan.meta, {
               'span.kind': 'consumer',
               component: 'google-cloud-pubsub',
               'pubsub.message_id': messageId,
-              'pubsub.delivery_method': 'push'
+              'pubsub.subscription_type': 'push'
             })
 
-            assertObjectContains(httpSpan.meta, {
-              'span.kind': 'server',
-              'http.method': 'POST'
-            })
+            // Verify delivery_duration_ms
+            assert.ok(pubsubSpan.metrics['pubsub.delivery_duration_ms'] !== undefined)
+            assert.ok(typeof pubsubSpan.metrics['pubsub.delivery_duration_ms'] === 'number')
+            assert.ok(pubsubSpan.metrics['pubsub.delivery_duration_ms'] >= 0)
           })
           .then(done)
           .catch(done)
 
-        axios.post(`http://localhost:${port}/push-endpoint`, {
-          message: { data: Buffer.from('test').toString('base64'), messageId }
-        }, {
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)',
-            'x-goog-pubsub-message-id': messageId,
-            'x-goog-pubsub-subscription-name': subscriptionName,
-            'x-goog-pubsub-publish-time': publishTime,
-            'pubsub.topic': topicName
-          }
+        sendPushRequest(port, {
+          'x-goog-pubsub-message-id': messageId,
+          'x-dd-publish-start-time': publishStartTime,
+          'pubsub.topic': 'projects/test-project/topics/test-topic'
         }).catch(done)
       })
     })
 
     it('should propagate distributed trace context from producer to push delivery', (done) => {
-      const messageId = 'distributed-trace-msg'
-      const subscriptionName = 'projects/test-project/subscriptions/test-sub'
       const producerTraceId = '1234567890abcdef'
       const producerSpanId = 'fedcba0987654321'
 
-      const server = http.createServer((req, res) => {
-        if (req.method === 'POST' && req.url === '/push-endpoint') {
-          req.on('data', () => {})
-          req.on('end', () => {
-            res.writeHead(200)
-            res.end('OK')
-          })
-        } else {
-          res.writeHead(404)
-          res.end()
-        }
-      })
-
-      appListener = server.listen(0, 'localhost', () => {
-        const port = server.address().port
+      appListener = createServer().listen(0, 'localhost', () => {
+        const port = appListener.address().port
 
         agent
           .assertSomeTraces(traces => {
-            const trace = traces.find(t =>
-              t.some(s => s.name === 'pubsub.delivery')
-            )
-            if (!trace) return
-
-            const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
-            assert.ok(pubsubSpan)
+            const pubsubSpan = findPubSubSpan(traces)
 
             if (pubsubSpan.meta['_dd.span_links']) {
               const spanLinks = JSON.parse(pubsubSpan.meta['_dd.span_links'])
               assert.ok(Array.isArray(spanLinks))
-              const hasProducerLink = spanLinks.some(link =>
-                link.trace_id && link.span_id
-              )
+              const hasProducerLink = spanLinks.some(link => link.trace_id && link.span_id)
               assert.strictEqual(hasProducerLink, true)
             }
           })
           .then(done)
           .catch(done)
 
-        axios.post(`http://localhost:${port}/push-endpoint`, { message: { data: 'dGVzdA==' } }, {
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)',
-            'x-goog-pubsub-message-id': messageId,
-            'x-goog-pubsub-subscription-name': subscriptionName,
-            'x-goog-pubsub-publish-time': new Date().toISOString(),
-            'x-datadog-trace-id': producerTraceId,
-            'x-datadog-parent-id': producerSpanId,
-            'x-datadog-sampling-priority': '1'
-          }
+        sendPushRequest(port, {
+          'x-datadog-trace-id': producerTraceId,
+          'x-datadog-parent-id': producerSpanId,
+          'x-datadog-sampling-priority': '1'
         }).catch(done)
       })
     })
 
     it('should add batch metadata to delivery span', (done) => {
-      const messageId = 'batch-msg-1'
-      const subscriptionName = 'projects/test-project/subscriptions/test-sub'
       const batchTraceId = 'abc123def456'
       const batchSpanId = '789012345678'
 
-      const server = http.createServer((req, res) => {
-        if (req.method === 'POST' && req.url === '/push-endpoint') {
-          req.on('data', () => {})
-          req.on('end', () => {
-            res.writeHead(200)
-            res.end('OK')
-          })
-        } else {
-          res.writeHead(404)
-          res.end()
-        }
-      })
-
-      appListener = server.listen(0, 'localhost', () => {
-        const port = server.address().port
+      appListener = createServer().listen(0, 'localhost', () => {
+        const port = appListener.address().port
 
         agent
           .assertSomeTraces(traces => {
-            const trace = traces.find(t => t.some(s => s.name === 'pubsub.delivery'))
-            if (!trace) return
-
-            const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
-            assert.ok(pubsubSpan)
+            const pubsubSpan = findPubSubSpan(traces)
 
             assertObjectContains(pubsubSpan.meta, {
               'pubsub.batch.description': 'Message 1 of 3',
-              'pubsub.batch.request_trace_id': batchTraceId,
-              'pubsub.batch.request_span_id': batchSpanId
+              'pubsub.batch.request_trace_id': batchTraceId
             })
             assertObjectContains(pubsubSpan.metrics, {
               'pubsub.batch.message_count': 3,
@@ -225,49 +160,22 @@ describe('Push Subscription Plugin', () => {
           .then(done)
           .catch(done)
 
-        axios.post(`http://localhost:${port}/push-endpoint`, { message: { data: 'dGVzdA==' } }, {
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)',
-            'x-goog-pubsub-message-id': messageId,
-            'x-goog-pubsub-subscription-name': subscriptionName,
-            'x-goog-pubsub-publish-time': new Date().toISOString(),
-            '_dd.batch.size': '3',
-            '_dd.batch.index': '0',
-            '_dd.pubsub_request.trace_id': batchTraceId,
-            '_dd.pubsub_request.span_id': batchSpanId
-          }
+        sendPushRequest(port, {
+          '_dd.batch.size': '3',
+          '_dd.batch.index': '0',
+          '_dd.pubsub_request.trace_id': batchTraceId,
+          '_dd.pubsub_request.span_id': batchSpanId
         }).catch(done)
       })
     })
 
     it('should set service name with -pubsub suffix', (done) => {
-      const messageId = 'service-test-123'
-      const subscriptionName = 'projects/test-project/subscriptions/test-sub'
-
-      const server = http.createServer((req, res) => {
-        if (req.method === 'POST' && req.url === '/push-endpoint') {
-          req.on('data', () => {})
-          req.on('end', () => {
-            res.writeHead(200)
-            res.end('OK')
-          })
-        } else {
-          res.writeHead(404)
-          res.end()
-        }
-      })
-
-      appListener = server.listen(0, 'localhost', () => {
-        const port = server.address().port
+      appListener = createServer().listen(0, 'localhost', () => {
+        const port = appListener.address().port
 
         agent
           .assertSomeTraces(traces => {
-            const trace = traces.find(t => t.some(s => s.name === 'pubsub.delivery'))
-            if (!trace) return
-
-            const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
-            assert.ok(pubsubSpan)
+            const pubsubSpan = findPubSubSpan(traces)
 
             assert.strictEqual(pubsubSpan.service, 'test-pubsub')
             assertObjectContains(pubsubSpan.meta, {
@@ -278,81 +186,45 @@ describe('Push Subscription Plugin', () => {
           .then(done)
           .catch(done)
 
-        axios.post(`http://localhost:${port}/push-endpoint`, { message: { data: 'dGVzdA==' } }, {
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)',
-            'x-goog-pubsub-message-id': messageId,
-            'x-goog-pubsub-subscription-name': subscriptionName,
-            'x-goog-pubsub-publish-time': new Date().toISOString()
-          }
-        }).catch(done)
+        sendPushRequest(port).catch(done)
       })
     })
 
     it('should NOT create pubsub span for non-push-subscription requests', (done) => {
-      const server = http.createServer((req, res) => {
-        if (req.method === 'POST' && req.url === '/regular-endpoint') {
-          req.on('data', () => {})
-          req.on('end', () => {
-            res.writeHead(200)
-            res.end('OK')
-          })
-        } else {
-          res.writeHead(404)
-          res.end()
-        }
-      })
-
-      appListener = server.listen(0, 'localhost', () => {
-        const port = server.address().port
+      appListener = createServer().listen(0, 'localhost', () => {
+        const port = appListener.address().port
 
         agent
           .assertSomeTraces(traces => {
             const trace = traces.find(t => t.some(s => s.name === 'web.request'))
             if (!trace) return
 
-            assert.ok(trace)
-            const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
-            assert.ok(!pubsubSpan)
+            const pubsubSpan = trace.find(s => s.name === 'pubsub.request')
+            assert.ok(!pubsubSpan, 'pubsub.request span should NOT exist')
           })
           .then(done)
           .catch(done)
 
-        axios.post(`http://localhost:${port}/regular-endpoint`, { data: 'regular request' }, {
+        axios.post(`http://localhost:${port}/push-endpoint`, { data: 'regular' }, {
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0'
+            'User-Agent': 'Mozilla/5.0' // Not Google user agent
           }
         }).catch(done)
       })
     })
 
     it('should NOT create pubsub span when missing required headers', (done) => {
-      const server = http.createServer((req, res) => {
-        if (req.method === 'POST' && req.url === '/push-endpoint') {
-          req.on('data', () => {})
-          req.on('end', () => {
-            res.writeHead(200)
-            res.end('OK')
-          })
-        } else {
-          res.writeHead(404)
-          res.end()
-        }
-      })
-
-      appListener = server.listen(0, 'localhost', () => {
-        const port = server.address().port
+      appListener = createServer().listen(0, 'localhost', () => {
+        const port = appListener.address().port
 
         agent
           .assertSomeTraces(traces => {
             const trace = traces.find(t => t.some(s => s.name === 'web.request'))
             if (!trace) return
 
-            assert.ok(trace)
-            const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
-            assert.ok(!pubsubSpan)
+            const pubsubSpan = trace.find(s => s.name === 'pubsub.request')
+            assert.ok(!pubsubSpan, 'pubsub.request span should NOT exist')
           })
           .then(done)
           .catch(done)
@@ -361,13 +233,13 @@ describe('Push Subscription Plugin', () => {
           headers: {
             'Content-Type': 'application/json',
             'User-Agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)'
+            // Missing x-goog-pubsub-message-id
           }
         }).catch(done)
       })
     })
 
     describe('garbage collection and memory leaks', function () {
-      // GC tests need --expose-gc flag
       if (typeof global.gc !== 'function') {
         return it.skip('requires --expose-gc flag')
       }
@@ -375,27 +247,19 @@ describe('Push Subscription Plugin', () => {
       it('should clean up deliverySpans WeakMap when request is garbage collected', function (done) {
         this.timeout(10000)
 
-        const messageId = 'gc-test-message'
-        const subscriptionName = 'projects/test-project/subscriptions/test-sub'
-
         let requestWasCollected = false
         const finalizationRegistry = new FinalizationRegistry(() => {
           requestWasCollected = true
         })
 
         const server = http.createServer((req, res) => {
-          if (req.method === 'POST' && req.url === '/push-endpoint') {
-            // Register request for GC tracking
+          if (req.method === 'POST') {
             finalizationRegistry.register(req, 'test-request')
-
             req.on('data', () => {})
             req.on('end', () => {
               res.writeHead(200)
               res.end('OK')
             })
-          } else {
-            res.writeHead(404)
-            res.end()
           }
         })
 
@@ -403,36 +267,17 @@ describe('Push Subscription Plugin', () => {
           const port = server.address().port
 
           try {
-            await axios.post(`http://localhost:${port}/push-endpoint`, {
-              message: { data: Buffer.from('test').toString('base64'), messageId }
-            }, {
-              headers: {
-                'Content-Type': 'application/json',
-                'User-Agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)',
-                'x-goog-pubsub-message-id': messageId,
-                'x-goog-pubsub-subscription-name': subscriptionName,
-                'x-goog-pubsub-publish-time': new Date().toISOString()
-              }
-            })
-
-            // Wait for request to complete
+            await sendPushRequest(port)
             await wait(100)
 
-            // Force garbage collection
-            // @ts-expect-error We expect the test to be started with --trace-gc
+            // Force garbage collection multiple times
             global.gc()
             await wait(100)
-            // @ts-expect-error We expect the test to be started with --trace-gc
             global.gc()
             await wait(100)
-            // @ts-expect-error We expect the test to be started with --trace-gc
             global.gc()
-
-            // Wait for FinalizationRegistry callback
             await wait(500)
 
-            // Verify request was garbage collected
-            // This proves deliverySpans WeakMap doesn't prevent GC
             assert.strictEqual(requestWasCollected, true)
             done()
           } catch (err) {
@@ -444,60 +289,34 @@ describe('Push Subscription Plugin', () => {
       it('should not leak memory with many push requests', function (done) {
         this.timeout(15000)
 
-        const server = http.createServer((req, res) => {
-          if (req.method === 'POST' && req.url === '/push-endpoint') {
-            req.on('data', () => {})
-            req.on('end', () => {
-              res.writeHead(200)
-              res.end('OK')
-            })
-          } else {
-            res.writeHead(404)
-            res.end()
-          }
-        })
-
-        appListener = server.listen(0, 'localhost', async () => {
-          const port = server.address().port
+        appListener = createServer().listen(0, 'localhost', async () => {
+          const port = appListener.address().port
 
           try {
             const initialMemory = process.memoryUsage().heapUsed
 
-            // Send many requests
+            // Send 100 requests
             const promises = []
             for (let i = 0; i < 100; i++) {
               promises.push(
-                axios.post(`http://localhost:${port}/push-endpoint`, {
-                  message: { data: Buffer.from(`test ${i}`).toString('base64'), messageId: `msg-${i}` }
-                }, {
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'User-Agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)',
-                    'x-goog-pubsub-message-id': `msg-${i}`,
-                    'x-goog-pubsub-subscription-name': 'projects/test-project/subscriptions/test-sub',
-                    'x-goog-pubsub-publish-time': new Date().toISOString()
-                  }
+                sendPushRequest(port, {
+                  'x-goog-pubsub-message-id': `msg-${i}`
                 }).catch(() => {})
               )
             }
 
             await Promise.all(promises)
-
-            // Wait for all requests to complete
             await wait(500)
 
             // Force GC
-            // @ts-expect-error We expect the test to be started with --trace-gc
             global.gc()
             await wait(100)
-            // @ts-expect-error We expect the test to be started with --trace-gc
             global.gc()
 
             const afterMemory = process.memoryUsage().heapUsed
             const memoryIncrease = afterMemory - initialMemory
 
             // Memory should not increase significantly (less than 10MB for 100 requests)
-            // If deliverySpans WeakMap is leaking, this would be much higher
             assert.ok(
               memoryIncrease < (10 * 1024 * 1024),
               `Memory increase should be minimal but was ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB`

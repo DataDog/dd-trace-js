@@ -126,7 +126,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       'gcloud.project_id': subscription.pubsub.projectId,
       'pubsub.topic': topic,
       'span.kind': 'consumer',
-      'pubsub.delivery_method': 'pull',
+      'pubsub.subscription_type': 'pull',
       'pubsub.span_type': 'message_processing',
       'messaging.operation': 'receive',
       base_service: baseService,
@@ -134,9 +134,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     }
 
     if (batchRequestTraceId && batchRequestSpanId) {
-      meta['pubsub.batch.request_span_id'] = batchRequestSpanId
-      meta['_dd.pubsub_request.trace_id'] = batchRequestTraceId
-      meta['_dd.pubsub_request.span_id'] = batchRequestSpanId
+      meta['pubsub.batch.request_trace_id'] = batchRequestTraceId
       // Use JSON format like producer for proper span link parsing
       meta['_dd.span_links'] = JSON.stringify([{
         trace_id: batchRequestTraceId,

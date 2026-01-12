@@ -16,10 +16,10 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
     /**
      * PUSH SUBSCRIPTION: GCP sends HTTP POST requests to our service with message data in headers.
-     * We intercept these requests to create a pubsub.delivery span that wraps the HTTP request.
+     * We intercept these requests to create a pubsub.request span that wraps the HTTP request.
      *
      * Flow: Detect push request -> Extract trace context -> Create delivery span -> Activate it
-     * Hierarchy: pubsub.delivery (parent) -> http.request (child) -> express.middleware...
+     * Hierarchy: pubsub.request (parent) -> http.request (child) -> express.middleware...
      *
      * Plugin load order (http/index.js) ensures we subscribe before HttpServerPlugin.
      */
@@ -53,7 +53,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     }
 
     log.warn(
-      '[PubSub] No x-goog-pubsub-* headers detected. pubsub.delivery spans will not be created. ' +
+      '[PubSub] No x-goog-pubsub-* headers detected. pubsub.request spans will not be created. ' +
       'Add --push-no-wrapper-write-metadata to your subscription.'
     )
     return false
@@ -151,17 +151,17 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     const serviceOverride = this.config.service ?? `${baseService}-pubsub`
 
     // Use this.startSpan() which automatically activates the span
-    const span = this.startSpan('pubsub.delivery', {
+    const span = this.startSpan('pubsub.request', {
       childOf: parentContext,
       startTime,
       kind: 'consumer',
       service: serviceOverride,
       meta: {
         component: 'google-cloud-pubsub',
-        'pubsub.method': 'delivery',
+        'pubsub.method': 'request',
         'pubsub.subscription': subscription,
         'pubsub.message_id': message.messageId,
-        'pubsub.delivery_method': 'push',
+        'pubsub.subscription_type': 'push',
         'pubsub.topic': topicName,
         '_dd.base_service': baseService,
         '_dd.serviceoverride.type': 'integration',
@@ -173,6 +173,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       return null
     }
 
+    span._integrationName = 'google-cloud-pubsub'
     // Calculate delivery latency (queue time from publish to delivery)
     if (publishStartTime) {
       const deliveryDuration = Date.now() - Number(publishStartTime)
@@ -206,9 +207,9 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     span.setTag('pubsub.batch.message_index', index)
     span.setTag('pubsub.batch.description', `Message ${index + 1} of ${size}`)
 
-    const requestSpanId = attrs['_dd.pubsub_request.span_id']
-    if (requestSpanId) {
-      span.setTag('pubsub.batch.request_span_id', requestSpanId)
+    const requestTraceId = attrs['_dd.pubsub_request.trace_id']
+    if (requestTraceId) {
+      span.setTag('pubsub.batch.request_trace_id', requestTraceId)
     }
   }
 }
