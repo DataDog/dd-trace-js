@@ -10,9 +10,8 @@ const semver = require('semver')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
-
 const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const withTopologies = fn => {
   withVersions('mongodb-core', ['mongodb-core', 'mongodb'], '<4', (version, moduleName) => {

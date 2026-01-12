@@ -1,7 +1,7 @@
 'use strict'
-const Analyzer = require('./vulnerability-analyzer')
 const { getRanges } = require('../taint-tracking/operations')
 const { SQL_ROW_VALUE } = require('../taint-tracking/source-types')
+const Analyzer = require('./vulnerability-analyzer')
 
 class InjectionAnalyzer extends Analyzer {
   _isVulnerable (value, iastContext) {

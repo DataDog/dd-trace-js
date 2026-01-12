@@ -7,10 +7,10 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
+const id = require('../../dd-trace/src/id')
 const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
-const id = require('../../dd-trace/src/id')
 
 describe('Kinesis', function () {
   this.timeout(10000)

@@ -5,6 +5,7 @@ const { TracerProvider } = tracer
 const provider = new TracerProvider()
 provider.register()
 
+const http = require('http')
 const { registerInstrumentations } = require('@opentelemetry/instrumentation')
 const { HttpInstrumentation } = require('@opentelemetry/instrumentation-http')
 const { ExpressInstrumentation } = require('@opentelemetry/instrumentation-express')
@@ -29,7 +30,6 @@ registerInstrumentations({
 })
 
 const express = require('express')
-const http = require('http')
 const app = express()
 const PORT = process.env.SERVER_PORT
 

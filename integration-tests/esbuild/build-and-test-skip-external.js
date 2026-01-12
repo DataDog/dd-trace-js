@@ -4,8 +4,8 @@
 const fs = require('fs')
 const assert = require('assert')
 
-const ddPlugin = require('../../esbuild') // dd-trace/esbuild
 const esbuild = require('esbuild')
+const ddPlugin = require('../../esbuild') // dd-trace/esbuild
 
 esbuild.build({
   entryPoints: ['skip-external.js'],

@@ -8,8 +8,8 @@ const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/c
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 describe('Plugin', () => {
   let elasticsearch
   let tracer

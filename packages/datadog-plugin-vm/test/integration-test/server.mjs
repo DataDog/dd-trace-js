@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
-import express from 'express'
 import { runInThisContext } from 'node:vm'
+import express from 'express'
 import dc from 'dc-polyfill'
 
 const runScriptCh = dc.channel('datadog:vm:run-script:start')

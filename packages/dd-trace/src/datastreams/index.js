@@ -13,7 +13,7 @@ const {
 //
 // TODO: Remove this when DSM has been moved to dedicated plugins.
 /**
- * @template T extends new (...args: any[]) => any
+ * @template T extends new (...args: unknown[]) => unknown
  * @param {() => T} classGetter
  * @param {string[]} methods
  * @param {string[]} staticMethods

@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
-import express from 'express'
 import process from 'node:process'
+import express from 'express'
 import dc from 'dc-polyfill'
 
 const startCh = dc.channel('datadog:process:setUncaughtExceptionCaptureCallback:start')

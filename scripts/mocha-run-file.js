@@ -43,7 +43,7 @@ async function main () {
    *   retries?: number,
    *   fullTrace?: boolean,
    *   reporter?: string,
-   *   reporterOptions?: any,
+   *   reporterOptions?: Record<string, unknown>,
    *   require?: string[]
    * }}
    */

@@ -3,6 +3,7 @@
 const assert = require('assert')
 
 const { Given, When, Then } = require('@cucumber/cucumber')
+// eslint-disable-next-line import/order
 const tracer = require('dd-trace')
 let num1, num2, result
 

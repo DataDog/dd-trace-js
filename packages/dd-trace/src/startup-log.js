@@ -1,11 +1,11 @@
 'use strict'
 
-const { info, warn } = require('./log/writer')
-
 const os = require('os')
 const { inspect } = require('util')
-const defaults = require('./config_defaults')
+
 const tracerVersion = require('../../../package.json').version
+const defaults = require('./config_defaults')
+const { info, warn } = require('./log/writer')
 
 const errors = {}
 let config

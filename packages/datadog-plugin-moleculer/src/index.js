@@ -2,9 +2,9 @@
 
 // TODO: support https://moleculer.services/docs/0.13/actions.html#Streaming
 
+const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const MoleculerServerPlugin = require('./server')
 const MoleculerClientPlugin = require('./client')
-const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
 class MoleculerPlugin extends CompositePlugin {
   static id = 'moleculer'

@@ -1,11 +1,11 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook,
   AsyncResource
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('apm:mongodb:query:start')
 const finishCh = channel('apm:mongodb:query:finish')

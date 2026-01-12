@@ -2,8 +2,8 @@
 
 const assert = require('node:assert/strict')
 const semver = require('semver')
-const { setup } = require('./utils')
 const { NODE_MAJOR } = require('../../version')
+const { setup } = require('./utils')
 
 const NODE_24_11_1_OR_LATER = semver.gte(process.version, '24.11.1')
 
