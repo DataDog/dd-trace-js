@@ -11,7 +11,7 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  spawnPluginIntegrationTestProc,
+  spawnPluginIntegrationTestProcAndExpectExit,
   assertObjectContains,
   varySandbox
 } = require('../../../../integration-tests/helpers')
@@ -146,10 +146,12 @@ describe('esm', () => {
               }]])
             })
 
-            const procPromise = spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, {
-              DD_TRACE_FLUSH_INTERVAL: '2000',
-              ...config.env
-            })
+            const procPromise = spawnPluginIntegrationTestProcAndExpectExit(
+              sandboxCwd(),
+              variants[variant],
+              agent.port,
+              { DD_TRACE_FLUSH_INTERVAL: '2000', ...config.env }
+            )
 
             await Promise.all([
               procPromise.then((res) => {

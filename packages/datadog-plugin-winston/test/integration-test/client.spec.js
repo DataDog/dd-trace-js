@@ -5,7 +5,7 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -28,7 +28,7 @@ describe('esm', () => {
     })
 
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(
+      proc = await spawnPluginIntegrationTestProcAndExpectExit(
         sandboxCwd(),
         'server.mjs',
         agent.port,

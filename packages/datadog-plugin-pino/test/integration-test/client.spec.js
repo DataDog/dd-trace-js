@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const {
   FakeAgent,
-  spawnPluginIntegrationTestProc,
+  spawnPluginIntegrationTestProcAndExpectExit,
   sandboxCwd,
   useSandbox,
   varySandbox
@@ -34,7 +34,7 @@ describe('esm', () => {
 
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
-        proc = await spawnPluginIntegrationTestProc(
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),
           variants[variant],
           agent.port,

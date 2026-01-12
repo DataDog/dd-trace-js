@@ -7,7 +7,7 @@ const {
   assertObjectContains,
   sandboxCwd,
   useSandbox,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
@@ -37,7 +37,7 @@ describe('esm', () => {
         assert.ok(Array.isArray(payload))
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, spawnEnv)
+      proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'server.mjs', agent.port, spawnEnv)
 
       await res
     }).timeout(20000)
@@ -220,7 +220,7 @@ describe('esm', () => {
         assert.strictEqual(parseLinks(payload[22][0]).length, 2)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, spawnEnv)
+      proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'server.mjs', agent.port, spawnEnv)
 
       await res
     }).timeout(60000)
