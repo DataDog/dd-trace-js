@@ -1,9 +1,9 @@
 'use strict'
 
-const { addHook } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
-
 const { channel, tracingChannel } = require('dc-polyfill')
+const shimmer = require('../../datadog-shimmer')
+const { addHook } = require('./helpers/instrument')
+
 const toolCreationChannel = channel('dd-trace:vercel-ai:tool')
 
 const TRACED_FUNCTIONS = {

@@ -1,12 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const {
-  FakeAgent,
-  sandboxCwd,
-  useSandbox,
-  assertObjectContains,
-} = require('../helpers')
 const childProcess = require('child_process')
 const { fork } = childProcess
 const path = require('path')
@@ -15,8 +9,14 @@ const fs = require('fs/promises')
 const fsync = require('fs')
 const net = require('net')
 const zlib = require('zlib')
-const { Profile } = require('../../vendor/dist/pprof-format')
 const satisfies = require('semifies')
+const { Profile } = require('../../vendor/dist/pprof-format')
+const {
+  FakeAgent,
+  sandboxCwd,
+  useSandbox,
+  assertObjectContains,
+} = require('../helpers')
 
 const DEFAULT_PROFILE_TYPES = ['wall', 'space']
 if (process.platform !== 'win32') {

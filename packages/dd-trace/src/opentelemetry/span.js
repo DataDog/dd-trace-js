@@ -1,8 +1,8 @@
 'use strict'
 
+const { performance } = require('perf_hooks')
 const api = require('@opentelemetry/api')
 
-const { performance } = require('perf_hooks')
 const { timeOrigin } = performance
 
 const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
@@ -13,8 +13,8 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, IGNORE_OTEL_ERROR } = require('.
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 
-const SpanContext = require('./span_context')
 const id = require('../id')
+const SpanContext = require('./span_context')
 
 // The one built into OTel rounds so we lose sub-millisecond precision.
 function hrTimeToMilliseconds (time) {

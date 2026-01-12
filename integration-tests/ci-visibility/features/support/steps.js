@@ -1,8 +1,8 @@
 'use strict'
 
+const tracer = require('dd-trace')
 const assert = require('assert')
 const { When, Then, Before, After } = require('@cucumber/cucumber')
-const tracer = require('dd-trace')
 
 class Greeter {
   sayFarewell () {

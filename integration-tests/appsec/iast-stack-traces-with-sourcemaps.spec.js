@@ -2,10 +2,10 @@
 
 const assert = require('node:assert/strict')
 
-const { sandboxCwd, useSandbox, spawnProc, FakeAgent } = require('../helpers')
 const childProcess = require('child_process')
 const path = require('path')
 const Axios = require('axios')
+const { sandboxCwd, useSandbox, spawnProc, FakeAgent } = require('../helpers')
 describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
   let axios, cwd, appDir, appFile, agent, proc
 

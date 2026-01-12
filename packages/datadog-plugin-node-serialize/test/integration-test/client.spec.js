@@ -1,10 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const {
   useSandbox, sandboxCwd, varySandbox,
   FakeAgent, spawnPluginIntegrationTestProc, curl
 } = require('../../../../integration-tests/helpers')
-const assert = require('node:assert/strict')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 withVersions('node-serialize', 'node-serialize', version => {

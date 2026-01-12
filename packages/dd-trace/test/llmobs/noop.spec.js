@@ -8,8 +8,8 @@ const LLMObsSDK = require('../../../dd-trace/src/llmobs/sdk')
 
 /**
  * Get the methods of a class
- * @param {Object} clsProto - The prototype of the class
- * @param {Object} [options] - The options
+ * @param {object} clsProto - The prototype of the class
+ * @param {object} [options] - The options
  * @param {string[]} options.ignore - The methods to ignore
  * @returns {string[]} The methods of the class
  */

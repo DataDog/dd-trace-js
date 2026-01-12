@@ -10,8 +10,8 @@ const { withVersions } = require('../setup/mocha')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 
-const { createDeepObject } = require('./utils')
 const { getConfigFresh } = require('../helpers/config')
+const { createDeepObject } = require('./utils')
 
 describe('extended data collection', () => {
   before(() => {

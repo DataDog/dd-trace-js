@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const Module = require('node:module')
 
 const { describe } = require('mocha')
 
@@ -29,7 +30,6 @@ function createChaiShim () {
   }
 }
 
-const Module = require('module')
 // @ts-expect-error - `Module._load` is an internal Node API used only for this test shim.
 const originalLoad = Module._load
 // @ts-expect-error - `Module._load` is an internal Node API used only for this test shim.

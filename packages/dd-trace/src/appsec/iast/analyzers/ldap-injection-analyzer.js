@@ -1,7 +1,7 @@
 'use strict'
-const InjectionAnalyzer = require('./injection-analyzer')
 const { LDAP_INJECTION } = require('../vulnerabilities')
 const { getNodeModulesPaths } = require('../path-line')
+const InjectionAnalyzer = require('./injection-analyzer')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('ldapjs-promise')
 

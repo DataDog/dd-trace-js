@@ -1,9 +1,9 @@
 'use strict'
 
+const assert = require('node:assert')
 const { describe, before, after, it } = require('mocha')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const assert = require('node:assert')
 const { useEnv } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {

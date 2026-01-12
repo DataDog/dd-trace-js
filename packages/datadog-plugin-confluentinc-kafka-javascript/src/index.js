@@ -1,9 +1,9 @@
 'use strict'
 
+const KafkajsPlugin = require('../../datadog-plugin-kafkajs/src/index')
 const ProducerPlugin = require('./producer')
 const ConsumerPlugin = require('./consumer')
 const BatchConsumerPlugin = require('./batch-consumer')
-const KafkajsPlugin = require('../../datadog-plugin-kafkajs/src/index')
 
 class ConfluentKafkaJsPlugin extends KafkajsPlugin {
   /**
