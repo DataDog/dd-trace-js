@@ -5,7 +5,7 @@ const { channel } = require('dc-polyfill')
 const { isTrue, isError } = require('../util')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getEnvironmentVariable } = require('../config/helper')
 const Span = require('../opentracing/span')
 const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
 const {

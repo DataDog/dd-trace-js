@@ -5,7 +5,7 @@ const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 
 class BaseAwsSdkPlugin extends ClientPlugin {
   static id = 'aws'

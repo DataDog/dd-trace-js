@@ -3,7 +3,7 @@ const request = require('../../../exporters/common/request')
 const log = require('../../../log')
 const { safeJSONStringify } = require('../../../exporters/common/util')
 const { JSONEncoder } = require('../../encode/json-encoder')
-const { getEnvironmentVariable } = require('../../../config-helper')
+const { getEnvironmentVariable } = require('../../../config/helper')
 
 const BaseWriter = require('../../../exporters/common/writer')
 

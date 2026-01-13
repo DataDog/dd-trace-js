@@ -4,28 +4,28 @@ const fs = require('fs')
 const os = require('os')
 const { URL } = require('url')
 const path = require('path')
-const uuid = require('../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
+const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 
-const set = require('../../datadog-core/src/utils/src/set')
-const { DD_MAJOR } = require('../../../version')
-const log = require('./log')
-const tagger = require('./tagger')
-const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
-const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
-const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
-  require('./git_properties')
-const { updateConfig } = require('./telemetry')
-const telemetryMetrics = require('./telemetry/metrics')
+const set = require('../../../datadog-core/src/utils/src/set')
+const { DD_MAJOR } = require('../../../../version')
+const log = require('../log')
+const tagger = require('../tagger')
+const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('../util')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
+const { updateConfig } = require('../telemetry')
+const telemetryMetrics = require('../telemetry/metrics')
 const {
   isInServerlessEnvironment,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription
-} = require('./serverless')
-const { ORIGIN_KEY } = require('./constants')
-const { appendRules } = require('./payload-tagging/config')
-const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./config-helper')
-const defaults = require('./config_defaults')
+} = require('../serverless')
+const { ORIGIN_KEY } = require('../constants')
+const { appendRules } = require('../payload-tagging/config')
+const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
+  require('./git_properties')
+const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./helper')
+const defaults = require('./defaults')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -277,7 +277,7 @@ class Config {
   constructor (options = {}) {
     if (!isInServerlessEnvironment()) {
       // Bail out early if we're in a serverless environment, stable config isn't supported
-      const StableConfig = require('./config_stable')
+      const StableConfig = require('./stable')
       this.stableConfig = new StableConfig()
     }
 

@@ -3,7 +3,7 @@
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const telemetryMetrics = require('../../dd-trace/src/telemetry/metrics')
 const apiMetrics = telemetryMetrics.manager.namespace('tracers')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 
 // api ==> here
 const objectMap = new WeakMap()
