@@ -861,8 +861,7 @@ function buildLlmobsPluginTestSet (repoRoot) {
 }
 
 function main () {
-  const profile = process.env.CHECK_TEST_GLOBS_PROFILE === '1'
-  const startNs = profile ? process.hrtime.bigint() : 0n
+  const startNs = process.hrtime.bigint()
 
   const repoRoot = path.resolve(__dirname, '..')
   const packageJsonPath = path.join(repoRoot, 'package.json')
@@ -1116,11 +1115,11 @@ function main () {
   process.stdout.write(`Test files: ${testFiles.length}\n`)
   process.stdout.write(`Extracted globs: ${globs.length}\n`)
 
-  if (profile) {
-    const durMs = Number(process.hrtime.bigint() - startNs) / 1e6
-    process.stdout.write(`Runtime(ms): ${durMs.toFixed(1)}\n`)
-    process.stdout.write(`Glob cache: size=${globCache.size} hits=${globCacheHits} misses=${globCacheMisses}\n`)
-  }
+  const durMs = Number(process.hrtime.bigint() - startNs) / 1e6
+  process.stdout.write(`Runtime(ms): ${durMs.toFixed(1)}\n`)
+  process.stdout.write(`Glob cache: size=${globCache.size} hits=${globCacheHits} misses=${globCacheMisses}\n`)
+
+  process.exit(hasCategoryWarnings ? 1 : 0)
 }
 
 main()
