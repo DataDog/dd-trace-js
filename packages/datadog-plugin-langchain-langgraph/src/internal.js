@@ -29,10 +29,6 @@ class LangchainLanggraphInternalPlugin extends TracingPlugin {
     this.finish(ctx)
   }
 
-  end (ctx) {
-    this.finish(ctx)
-  }
-
   finish (ctx) {
     if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
 

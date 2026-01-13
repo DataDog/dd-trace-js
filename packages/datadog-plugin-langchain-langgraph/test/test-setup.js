@@ -5,13 +5,11 @@ class LangchainLanggraphTestSetup {
     this.workflow = null
     this.module = module
 
-    // Extract StateGraph, START, END from the module
     const { StateGraph, START, END } = module
     this.StateGraph = StateGraph
     this.START = START
     this.END = END
 
-    // Define the agent state
     const graphState = {
       messages: {
         value: (x, y) => x.concat(y),
@@ -23,10 +21,8 @@ class LangchainLanggraphTestSetup {
       }
     }
 
-    // Create a new graph
     const workflow = new StateGraph({ channels: graphState })
 
-    // Define node functions
     const callModel = async (state) => {
       const newMessage = `Response ${state.count + 1}`
       return {
@@ -40,17 +36,14 @@ class LangchainLanggraphTestSetup {
       return state.count >= 2 ? END : 'agent'
     }
 
-    // Add nodes to the graph
     workflow.addNode('agent', callModel)
 
-    // Add edges
     workflow.addEdge(START, 'agent')
     workflow.addConditionalEdges('agent', shouldContinue, {
       agent: 'agent',
       [END]: END
     })
 
-    // Compile the graph
     this.workflow = workflow.compile()
   }
 
@@ -58,7 +51,6 @@ class LangchainLanggraphTestSetup {
     this.workflow = null
   }
 
-  // --- Operations ---
   async pregelInvoke () {
     const input = {
       messages: ['User: What is the weather in SF?'],
@@ -96,8 +88,6 @@ class LangchainLanggraphTestSetup {
     let attemptCount = 0
     const simpleNode = async (state) => {
       attemptCount++
-      // Simulate some work
-      await new Promise(resolve => setTimeout(resolve, 10))
       return {
         attempts: attemptCount,
         result: 'success'

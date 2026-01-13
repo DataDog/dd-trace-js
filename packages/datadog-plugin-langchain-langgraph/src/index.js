@@ -7,7 +7,7 @@ const internalPlugin = require('./internal')
 class LangchainLanggraphPlugin extends CompositePlugin {
   static id = 'langchain-langgraph'
   static plugins = {
-    ...clientPlugin,
+    client: clientPlugin,
     internal: internalPlugin
   }
 }
