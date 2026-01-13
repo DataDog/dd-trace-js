@@ -20,7 +20,7 @@ describe('esm', () => {
       './packages/datadog-plugin-ioredis/test/integration-test/*'])
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'ioredis')
+      variants = varySandbox('server.mjs', 'Redis', undefined, 'ioredis')
     })
 
     beforeEach(async () => {

@@ -74,7 +74,7 @@ describe('esm', () => {
         useSandbox(deps, false, paths)
 
         before(function () {
-          variants = varySandbox(config.serverFile, config.importPath, 'PrismaClient')
+          variants = varySandbox(config.serverFile, 'PrismaClient', undefined, config.importPath)
         })
 
         beforeEach(async function () {
