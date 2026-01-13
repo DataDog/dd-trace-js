@@ -109,7 +109,8 @@ describe('Plugin', () => {
           age: { type: 'number' },
           height: { type: 'string' }
         },
-        required: ['name', 'age', 'height']
+        required: ['name', 'age', 'height'],
+        additionalProperties: false
       })
 
       await ai.generateObject({
@@ -294,7 +295,8 @@ describe('Plugin', () => {
           age: { type: 'number' },
           height: { type: 'string' }
         },
-        required: ['name', 'age', 'height']
+        required: ['name', 'age', 'height'],
+        additionalProperties: false
       })
 
       const result = await ai.streamObject({
@@ -309,7 +311,7 @@ describe('Plugin', () => {
 
       const { apmSpans, llmobsSpans } = await getEvents()
 
-      const expectedCharacter = { name: 'Zara Nightshade', age: 28, height: "5'7\"" }
+      const expectedCharacter = { name: 'Zara Windrider', age: 28, height: "5'7\"" }
 
       const expectedWorkflowMetadata = {
         schema: MOCK_OBJECT,
@@ -404,17 +406,6 @@ describe('Plugin', () => {
 
       const { apmSpans, llmobsSpans } = await getEvents(4)
 
-      let expectedFinalOutput
-
-      if (semifies(openaiVersion, '>=2.0.50')) {
-        expectedFinalOutput = 'The current temperature in Tokyo is 72°F.'
-      } else if (semifies(realVersion, '>=5.0.0')) {
-        expectedFinalOutput =
-          'The current temperature in Tokyo is 72°F. If you need more details about the weather, just let me know!'
-      } else {
-        expectedFinalOutput = 'The current weather in Tokyo is 72°F.'
-      }
-
       const expectedWorkflowMetadata = {}
       if (semifies(realVersion, '>=5.0.0')) {
         expectedWorkflowMetadata.maxRetries = MOCK_NUMBER
@@ -427,7 +418,7 @@ describe('Plugin', () => {
         name: 'generateText',
         spanKind: 'workflow',
         inputValue: 'What is the weather in Tokyo?',
-        outputValue: expectedFinalOutput,
+        outputValue: MOCK_STRING,
         metadata: expectedWorkflowMetadata,
         tags: { ml_app: 'test', integration: 'ai' },
       })
@@ -496,7 +487,7 @@ describe('Plugin', () => {
             tool_id: toolCallId
           }
         ],
-        outputMessages: [{ content: expectedFinalOutput, role: 'assistant' }],
+        outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', integration: 'ai' },
       })
@@ -566,18 +557,6 @@ describe('Plugin', () => {
 
       const { apmSpans, llmobsSpans } = await getEvents(4)
 
-      let expectedFinalOutput
-
-      if (semifies(openaiVersion, '>=2.0.50')) {
-        expectedFinalOutput =
-        'The current temperature in Tokyo is 72°F. If you need more detailed weather information, feel free to ask!'
-      } else if (semifies(realVersion, '>=5.0.0')) {
-        expectedFinalOutput =
-          'The current temperature in Tokyo is 72°F. If you need more details or specific forecasts, feel free to ask!'
-      } else {
-        expectedFinalOutput = 'The current weather in Tokyo is 72°F.'
-      }
-
       const expectedWorkflowMetadata = {}
       if (semifies(realVersion, '>=5.0.0')) {
         expectedWorkflowMetadata.maxRetries = MOCK_NUMBER
@@ -590,7 +569,7 @@ describe('Plugin', () => {
         name: 'streamText',
         spanKind: 'workflow',
         inputValue: 'What is the weather in Tokyo?',
-        outputValue: expectedFinalOutput,
+        outputValue: MOCK_STRING,
         metadata: expectedWorkflowMetadata,
         tags: { ml_app: 'test', integration: 'ai' },
       })
@@ -667,7 +646,7 @@ describe('Plugin', () => {
             tool_id: toolCallId
           }
         ],
-        outputMessages: [{ content: expectedFinalOutput, role: 'assistant' }],
+        outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', integration: 'ai' },
       })
