@@ -1,8 +1,6 @@
 'use strict'
 
-console.log('[DEBUG HTTP] Loading module, K_SERVICE =', process.env.K_SERVICE)
 const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
-console.log('[DEBUG HTTP] PushSubscriptionPlugin loaded:', typeof PushSubscriptionPlugin, PushSubscriptionPlugin?.name)
 const HttpServerPlugin = require('./server')
 const HttpClientPlugin = require('./client')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
@@ -19,18 +17,12 @@ class HttpPlugin extends CompositePlugin {
   static get plugins () {
     const plugins = {}
 
-    console.log('[DEBUG HTTP PLUGIN] Getting plugins, K_SERVICE =', process.env.K_SERVICE)
-    console.log('[DEBUG HTTP PLUGIN] enableGCPPubSubPushSubscription() =', enableGCPPubSubPushSubscription())
-    console.log('[DEBUG HTTP PLUGIN] PushSubscriptionPlugin =', typeof PushSubscriptionPlugin, PushSubscriptionPlugin)
-
     // Load push subscription plugin first (if enabled) for GCP Cloud Run
     if (enableGCPPubSubPushSubscription()) {
       try {
         plugins['pubsub-push-subscription'] = PushSubscriptionPlugin
-        console.log('[DEBUG HTTP PLUGIN] Added pubsub-push-subscription plugin')
         log.debug('Loaded GCP Pub/Sub Push Subscription plugin for HTTP requests')
       } catch (e) {
-        console.log('[DEBUG HTTP PLUGIN] Failed to load:', e.message, e.stack)
         log.debug(`Failed to load GCP Pub/Sub Push Subscription plugin: ${e.message}`)
       }
     }
@@ -38,7 +30,6 @@ class HttpPlugin extends CompositePlugin {
     plugins.server = HttpServerPlugin
     plugins.client = HttpClientPlugin
 
-    console.log('[DEBUG HTTP PLUGIN] Returning plugins:', Object.keys(plugins))
     return plugins
   }
 }

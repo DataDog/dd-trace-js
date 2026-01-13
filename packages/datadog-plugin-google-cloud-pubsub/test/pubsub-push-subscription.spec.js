@@ -1,5 +1,8 @@
 'use strict'
 
+// Set K_SERVICE before any modules load to enable push subscription plugin
+process.env.K_SERVICE = 'test-service'
+
 const assert = require('node:assert/strict')
 const { setTimeout: wait } = require('node:timers/promises')
 
@@ -17,6 +20,7 @@ describe('Push Subscription Plugin', () => {
   })
 
   after(() => {
+    delete process.env.K_SERVICE
     return agent.close({ ritmReset: false })
   })
 
@@ -117,7 +121,8 @@ describe('Push Subscription Plugin', () => {
             'x-goog-pubsub-message-id': messageId,
             'x-goog-pubsub-subscription-name': subscriptionName,
             'x-goog-pubsub-publish-time': publishTime,
-            'pubsub.topic': topicName
+            'pubsub.topic': topicName,
+            'x-dd-publish-start-time': String(Date.now() - 1000) // 1 second ago
           }
         }).catch(done)
       })
