@@ -1,10 +1,5 @@
 'use strict'
 
-// Set K_SERVICE early at module load time, before any plugins are loaded
-// This ensures the HTTP plugin's conditional loading of pubsub-push-subscription
-// sees a consistent K_SERVICE value in both constructor and configure
-process.env.K_SERVICE = 'test-service'
-
 const assert = require('node:assert/strict')
 const sinon = require('sinon')
 
@@ -33,14 +28,13 @@ describe('Plugin', () => {
     before(() => {
       process.env.PUBSUB_EMULATOR_HOST = 'localhost:8081'
       process.env.DD_DATA_STREAMS_ENABLED = 'true'
-      // K_SERVICE is already set at module level above
+      process.env.K_SERVICE = 'test-service'
     })
 
     after(() => {
       delete process.env.PUBSUB_EMULATOR_HOST
       delete process.env.DD_DATA_STREAMS_ENABLED
-      // Don't delete K_SERVICE here - it's needed for pubsub-push-subscription.spec.js
-      // which runs after this file and handles its own cleanup
+      // Don't delete K_SERVICE - pubsub-push-subscription.spec.js needs it
     })
 
     afterEach(() => {

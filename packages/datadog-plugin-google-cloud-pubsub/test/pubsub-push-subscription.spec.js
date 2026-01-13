@@ -16,11 +16,10 @@ describe('Push Subscription Plugin', () => {
   let appListener
 
   before(() => {
-    return agent.load(['http', 'google-cloud-pubsub'], { client: false })
+    return agent.load(['http'], { client: false })
   })
 
   after(() => {
-    delete process.env.K_SERVICE
     return agent.close({ ritmReset: false })
   })
 
