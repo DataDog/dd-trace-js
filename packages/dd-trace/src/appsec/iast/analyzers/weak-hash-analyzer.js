@@ -23,7 +23,8 @@ const EXCLUDED_LOCATIONS = getNodeModulesPaths(
   'ws/lib/websocket-server.js',
   'google-gax/build/src/grpc.js',
   'cookie-signature/index.js',
-  'express-session/index.js'
+  'express-session/index.js',
+  'node-preload/preload-list-env.js'
 )
 
 const EXCLUDED_PATHS_FROM_STACK = [
