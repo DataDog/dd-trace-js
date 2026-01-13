@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
-import { PrismaClient } from './dist/client.js'
+import prismaLib from './dist/client.js'
 
-const prismaClient = new PrismaClient()
+const prismaClient = new prismaLib.PrismaClient()
 const user = await prismaClient.user.create({
   data: {
     name: 'John Doe',

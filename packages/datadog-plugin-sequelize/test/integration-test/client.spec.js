@@ -15,7 +15,7 @@ withVersions('sequelize', 'sequelize', version => {
       ['./packages/datadog-plugin-sequelize/test/integration-test/*'])
 
     before(function () {
-      variants = varySandbox('server.mjs', 'Sequelize', undefined, 'sequelize')
+      variants = varySandbox('server.mjs', 'sequelizeLib', undefined, 'sequelize')
     })
 
     beforeEach(async () => {
