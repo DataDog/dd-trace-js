@@ -378,7 +378,7 @@ class Config {
   /**
    * Updates the configuration with new programmatic options.
    *
-   * @param {Object} options - Configuration options to apply (same format as tracer init options)
+   * @param {object} options - Configuration options to apply (same format as tracer init options)
    */
   updateOptions (options) {
     this.#applyOptions(options)
