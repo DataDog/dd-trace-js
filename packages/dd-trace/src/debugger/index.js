@@ -38,8 +38,8 @@ function isStarted () {
  * the LIVE_DEBUGGING product handler with remote config.
  * Does nothing if the worker is already started.
  *
- * @param {Object} config - The tracer configuration object
- * @param {Object} rcInstance - The RemoteConfig instance
+ * @param {object} config - The tracer configuration object
+ * @param {object} rcInstance - The RemoteConfig instance
  */
 function start (config, rcInstance) {
   if (worker !== null) return
@@ -127,7 +127,7 @@ function start (config, rcInstance) {
  * Sends the new configuration to the worker thread via the config channel.
  * Does nothing if the worker is not started.
  *
- * @param {Object} config - The updated tracer configuration object
+ * @param {object} config - The updated tracer configuration object
  */
 function configure (config) {
   if (configChannel === null) return
