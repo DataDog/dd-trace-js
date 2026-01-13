@@ -12,6 +12,14 @@ const msgpack = require('@msgpack/msgpack')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 
 const exec = promisify(childProcess.exec)
+const retry = async fn => {
+  try {
+    await fn()
+  } catch {
+    await exec('sleep 60')
+    await fn()
+  }
+}
 
 describe('esbuild support for IAST', () => {
   let cwd, craftedNodeModulesDir
@@ -19,16 +27,18 @@ describe('esbuild support for IAST', () => {
   useSandbox()
 
   before(async () => {
+    this.timeout(120_000)
+
     cwd = sandboxCwd()
     craftedNodeModulesDir = path.join(cwd, 'tmp_node_module')
 
     // Craft node_modules directory to ship native modules
     fs.mkdirSync(craftedNodeModulesDir)
     await exec('npm init -y', { cwd: craftedNodeModulesDir })
-    await exec('npm install @datadog/wasm-js-rewriter @datadog/native-iast-taint-tracking', {
+    await retry(() => exec('npm install @datadog/wasm-js-rewriter @datadog/native-iast-taint-tracking', {
       cwd: craftedNodeModulesDir,
       timeout: 10e3
-    })
+    }))
   })
 
   function assertVulnerabilityDetected (agent, expectedPath, expectedLine) {
@@ -63,10 +73,10 @@ describe('esbuild support for IAST', () => {
     const applicationDir = path.join(cwd, 'appsec', appDirName)
 
     // Install app deps
-    await exec('npm install || npm install', {
+    await retry(() => exec('npm install', {
       cwd: applicationDir,
-      timeout: 10e3
-    })
+      timeout: 6e3
+    }))
 
     // Bundle the application
     await exec('npm run build', {
