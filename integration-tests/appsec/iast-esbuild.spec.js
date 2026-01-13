@@ -37,7 +37,7 @@ describe('esbuild support for IAST', () => {
     await exec('npm init -y', { cwd: craftedNodeModulesDir })
     await retry(() => exec('npm install @datadog/wasm-js-rewriter @datadog/native-iast-taint-tracking', {
       cwd: craftedNodeModulesDir,
-      timeout: 10e3
+      timeout: 3e3
     }))
   })
 
