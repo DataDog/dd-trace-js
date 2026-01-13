@@ -120,7 +120,7 @@ describe('end to end sdk integration tests', () => {
       Date.now.restore()
     })
 
-    it.only('submits evaluations', async () => {
+    it('submits evaluations', async () => {
       llmobs.trace({ kind: 'agent', name: 'myAgent' }, () => {
         llmobs.annotate({ inputData: 'hello', outputData: 'world' })
         const spanCtx = llmobs.exportSpan()
