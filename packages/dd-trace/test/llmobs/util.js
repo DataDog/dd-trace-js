@@ -38,6 +38,19 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
  */
 
 /**
+ * @typedef {{
+ *   label: string,
+ *   traceId: string,
+ *   spanId: string,
+ *   metricType: 'categorical' | 'score',
+ *   mlApp: string,
+ *   timestamp?: number,
+ *   value: string | number,
+ *   tags?: { [key: string]: string },
+ * }} ExpectedLLMObsEvaluationMetrics
+ */
+
+/**
  *
  * @param {object} actual
  * @param {ExpectedLLMObsSpanEvent} expected
@@ -202,6 +215,11 @@ function assertLlmObsSpanEvent (actual, expected) {
   const expectedTags = expectedLLMObsTags({ span, tags, error, sessionId })
   const sortedExpectedTags = [...expectedTags.sort()]
   const sortedActualTags = [...actualTags.sort()]
+  if (sortedExpectedTags.length !== sortedActualTags.length) {
+    assert.fail(
+      `tags have different length than expected (${sortedExpectedTags.length} !== ${sortedActualTags.length})`
+    )
+  }
   for (let i = 0; i < sortedExpectedTags.length; i++) {
     assert.equal(
       sortedActualTags[i],
@@ -251,6 +269,66 @@ function assertLlmObsSpanEvent (actual, expected) {
   assert.deepStrictEqual(actual, expectedSpanEvent)
 }
 
+/**
+ * Asserts that the actual LLMObs evaluation metric matches the evaluation metric created from the expected fields.
+ *
+ * Dynamic fields, like tags and timestamp, can be asserted with mock values.
+ * @param {object} actual
+ * @param {ExpectedLLMObsEvaluationMetrics} expected
+ */
+function assertLlmObsEvaluationMetric (actual, expected) {
+  const {
+    label,
+    traceId = MOCK_STRING,
+    spanId = MOCK_STRING,
+    metricType,
+    mlApp,
+    timestamp = MOCK_NUMBER,
+    value,
+    tags
+  } = expected
+
+  const actualTags = actual.tags
+  const actualTimestamp = actual.timestamp_ms
+
+  delete actual.tags
+  delete actual.timestamp_ms
+
+  assertWithMockValues(actualTimestamp, timestamp, 'timestamp_ms')
+
+  const expectedTags = [
+    `ddtrace.version:${tracerVersion}`,
+    `ml_app:${mlApp}`,
+    ...Object.entries(tags ?? {}).map(([key, value]) => `${key}:${value}`),
+  ]
+  const sortedExpectedTags = [...expectedTags.sort()]
+  const sortedActualTags = [...actualTags.sort()]
+  if (sortedExpectedTags.length !== sortedActualTags.length) {
+    assert.fail(
+      `Tags have different length than expected (${sortedExpectedTags.length} !== ${sortedActualTags.length}).
+      Diff: ${util.inspect(sortedExpectedTags)} !== ${util.inspect(sortedActualTags)}.`
+    )
+  }
+  for (let i = 0; i < sortedExpectedTags.length; i++) {
+    assert.equal(
+      sortedActualTags[i],
+      sortedExpectedTags[i],
+      `tags[${i}] does not match expected (${sortedExpectedTags[i]} !== ${sortedActualTags[i]})`
+    )
+  }
+
+  const expectedEvaluationMetric = {
+    span_id: spanId,
+    trace_id: traceId,
+    label,
+    metric_type: metricType,
+    ml_app: mlApp,
+    [`${metricType}_value`]: value,
+  }
+
+  assert.deepStrictEqual(actual, expectedEvaluationMetric)
+}
+
 function expectedLLMObsTags ({
   span,
   error,
@@ -294,7 +372,10 @@ function fromBuffer (spanProperty, isNumber = false) {
  * @param {string} options.plugin
  * @param {object} options.tracerConfigOptions
  * @param {object} options.closeOptions
- * @returns {function(): Promise<{ apmSpans: Array, llmobsSpans: Array }>}
+ * @returns {{
+ *   getEvents: () => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
+ *   getEvaluationMetrics: () => Promise<Array<ExpectedLLMObsEvaluationMetrics>>
+ * }}
  */
 function useLlmObs ({
   plugin,
@@ -332,24 +413,33 @@ function useLlmObs ({
     return agent.close({ ritmReset: false, ...closeOptions })
   })
 
-  return async function (numLlmObsSpans = 1) {
-    // get apm spans from the agent
-    const apmSpans = await apmTracesPromise
-    resetTracesPromises()
+  return {
+    getEvents: async function (numLlmObsSpans = 1) {
+      // get apm spans from the agent
+      const apmSpans = await apmTracesPromise
+      resetTracesPromises()
 
-    // get llmobs span events requests from the agent
-    // because llmobs process spans on span finish and submits periodically,
-    // we need to aggregate all of the span events
-    // tests should know how many spans they expect to see, otherwise tests will timeout
-    const llmobsSpans = []
+      // get llmobs span events requests from the agent
+      // because llmobs process spans on span finish and submits periodically,
+      // we need to aggregate all of the span events
+      // tests should know how many spans they expect to see, otherwise tests will timeout
+      const llmobsSpans = []
 
-    while (llmobsSpans.length < numLlmObsSpans) {
-      await new Promise(resolve => setImmediate(resolve))
-      const llmobsSpanEventsRequests = agent.getLlmObsSpanEventsRequests(true)
-      llmobsSpans.push(...getLlmObsSpansFromRequests(llmobsSpanEventsRequests))
+      while (llmobsSpans.length < numLlmObsSpans) {
+        await new Promise(resolve => setImmediate(resolve))
+        const llmobsSpanEventsRequests = agent.getLlmObsSpanEventsRequests(true)
+        llmobsSpans.push(...getLlmObsSpansFromRequests(llmobsSpanEventsRequests))
+      }
+
+      return { apmSpans, llmobsSpans: llmobsSpans.sort((a, b) => a.start_ns - b.start_ns) }
+    },
+
+    getEvaluationMetrics: function () {
+      const evaluationMetricsRequests = agent.getLlmObsEvaluationMetricsRequests(true)
+      return evaluationMetricsRequests
+        .flatMap(request => request.data.attributes.metrics)
+        .sort((a, b) => a.timestamp_ms - b.timestamp_ms)
     }
-
-    return { apmSpans, llmobsSpans: llmobsSpans.sort((a, b) => a.start_ns - b.start_ns) }
   }
 }
 
@@ -405,6 +495,7 @@ function assertPromptTracking (
 }
 
 module.exports = {
+  assertLlmObsEvaluationMetric,
   assertLlmObsSpanEvent,
   assertPromptTracking,
   useLlmObs,
