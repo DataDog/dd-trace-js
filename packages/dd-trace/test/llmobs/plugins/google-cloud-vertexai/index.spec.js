@@ -75,7 +75,7 @@ describe('integrations', () => {
   }
 
   describe('vertexai', () => {
-    const getEvents = useLlmObs({ plugin: 'google-cloud-vertexai' })
+    const { getEvents } = useLlmObs({ plugin: 'google-cloud-vertexai' })
 
     withVersions('google-cloud-vertexai', '@google-cloud/vertexai', '>=1', version => {
       before(() => {
