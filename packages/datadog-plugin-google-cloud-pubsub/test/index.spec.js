@@ -34,7 +34,7 @@ describe('Plugin', () => {
     after(() => {
       delete process.env.PUBSUB_EMULATOR_HOST
       delete process.env.DD_DATA_STREAMS_ENABLED
-      delete process.env.K_SERVICE
+      // Don't delete K_SERVICE - pubsub-push-subscription.spec.js needs it
     })
 
     afterEach(() => {

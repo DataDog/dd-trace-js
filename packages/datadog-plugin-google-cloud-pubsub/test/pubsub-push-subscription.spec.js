@@ -1,5 +1,8 @@
 'use strict'
 
+// Set K_SERVICE before any modules load to enable push subscription plugin
+process.env.K_SERVICE = 'test-service'
+
 const assert = require('node:assert/strict')
 const { setTimeout: wait } = require('node:timers/promises')
 
@@ -13,7 +16,6 @@ describe('Push Subscription Plugin', () => {
   let http
 
   before(() => {
-    process.env.K_SERVICE = 'test-service'
     return agent.load(['http'], { client: false })
   })
 
@@ -65,15 +67,15 @@ describe('Push Subscription Plugin', () => {
     })
   }
 
-  // Helper to find pubsub.request span
+  // Helper to find pubsub.push.receive span
   function findPubSubSpan (traces) {
-    const trace = traces.find(t => t.some(s => s.name === 'pubsub.request'))
-    if (!trace) throw new Error('Could not find trace with pubsub.request span')
-    return trace.find(s => s.name === 'pubsub.request')
+    const trace = traces.find(t => t.some(s => s.name === 'pubsub.push.receive'))
+    if (!trace) throw new Error('Could not find trace with pubsub.push.receive span')
+    return trace.find(s => s.name === 'pubsub.push.receive')
   }
 
   describe('Push subscription with raw HTTP server', () => {
-    it('should create pubsub.request span with delivery duration', (done) => {
+    it('should create pubsub.push.receive span with delivery duration', (done) => {
       const messageId = 'http-test-789'
       const publishStartTime = Date.now().toString()
 
@@ -107,7 +109,7 @@ describe('Push Subscription Plugin', () => {
       })
     })
 
-    it('should propagate distributed trace context from producer to push delivery', (done) => {
+    it('should propagate distributed trace context from producer to push receive', (done) => {
       const producerTraceId = '1234567890abcdef'
       const producerSpanId = 'fedcba0987654321'
 
@@ -136,7 +138,7 @@ describe('Push Subscription Plugin', () => {
       })
     })
 
-    it('should add batch metadata to delivery span', (done) => {
+    it('should add batch metadata to receive span', (done) => {
       const batchTraceId = 'abc123def456'
       const batchSpanId = '789012345678'
 
@@ -198,8 +200,8 @@ describe('Push Subscription Plugin', () => {
             const trace = traces.find(t => t.some(s => s.name === 'web.request'))
             if (!trace) return
 
-            const pubsubSpan = trace.find(s => s.name === 'pubsub.request')
-            assert.ok(!pubsubSpan, 'pubsub.request span should NOT exist')
+            const pubsubSpan = trace.find(s => s.name === 'pubsub.push.receive')
+            assert.ok(!pubsubSpan, 'pubsub.push.receive span should NOT exist')
           })
           .then(done)
           .catch(done)
@@ -222,8 +224,8 @@ describe('Push Subscription Plugin', () => {
             const trace = traces.find(t => t.some(s => s.name === 'web.request'))
             if (!trace) return
 
-            const pubsubSpan = trace.find(s => s.name === 'pubsub.request')
-            assert.ok(!pubsubSpan, 'pubsub.request span should NOT exist')
+            const pubsubSpan = trace.find(s => s.name === 'pubsub.push.receive')
+            assert.ok(!pubsubSpan, 'pubsub.push.receive span should NOT exist')
           })
           .then(done)
           .catch(done)
@@ -243,7 +245,7 @@ describe('Push Subscription Plugin', () => {
         return it.skip('requires --expose-gc flag')
       }
 
-      it('should clean up deliverySpans WeakMap when request is garbage collected', function (done) {
+      it('should clean up receiveSpans WeakMap when request is garbage collected', function (done) {
         this.timeout(10000)
 
         let requestWasCollected = false

@@ -279,9 +279,9 @@ const web = {
     const reqCtx = contexts.get(req)
     const { storage } = require('../../../../datadog-core')
     const store = storage('legacy').getStore()
-    const deliverySpan = store?.span?._name === 'pubsub.delivery' ? store.span : null
+    const pubsubSpan = store?.span?._name === 'pubsub.push.receive' ? store.span : null
 
-    let childOf = deliverySpan || tracer.extract(FORMAT_HTTP_HEADERS, headers)
+    let childOf = pubsubSpan || tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.inferredProxyServicesEnabled) {
