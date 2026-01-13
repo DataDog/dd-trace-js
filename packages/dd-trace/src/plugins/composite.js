@@ -27,6 +27,14 @@ class CompositePlugin extends Plugin {
     
     for (const name in this.constructor.plugins) {
       console.log('[DEBUG COMPOSITE] Configuring plugin:', name, 'this[name] =', typeof this[name], this[name])
+      
+      // Skip if plugin was not instantiated (can happen with conditional plugins like HttpPlugin's
+      // pubsub-push-subscription when K_SERVICE changes between constructor and configure calls)
+      if (!this[name]) {
+        console.log('[DEBUG COMPOSITE] Skipping undefined plugin:', name)
+        continue
+      }
+      
       const pluginConfig = config[name] === false
         ? false
         : { ...config, ...config[name] }

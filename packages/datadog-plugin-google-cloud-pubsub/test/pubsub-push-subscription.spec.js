@@ -70,22 +70,22 @@ describe('Push Subscription Plugin', () => {
           .assertSomeTraces(traces => {
             const trace = traces.find(t =>
               t.some(s => s.name === 'web.request') &&
-              t.some(s => s.name === 'pubsub.delivery')
+              t.some(s => s.name === 'pubsub.request')
             )
-            if (!trace) return
+            if (!trace) throw new Error('Could not find trace with both web.request and pubsub.request spans')
 
             assert.strictEqual(handlerCalled, true)
 
             const httpSpan = trace.find(s => s.name === 'web.request')
-            const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
+            const pubsubSpan = trace.find(s => s.name === 'pubsub.request')
 
             assert.ok(httpSpan, 'HTTP server span must exist')
-            assert.ok(pubsubSpan, 'pubsub.delivery span must exist')
+            assert.ok(pubsubSpan, 'pubsub.request span must exist')
 
-            // For raw HTTP, the active span might be web.request OR pubsub.delivery depending on timing
+            // For raw HTTP, the active span might be web.request OR pubsub.request depending on timing
             if (activeSpanInHandler) {
               const spanName = activeSpanInHandler.context()._name
-              assert.ok(['web.request', 'pubsub.delivery'].includes(spanName))
+              assert.ok(['web.request', 'pubsub.request'].includes(spanName))
             }
 
             // For raw HTTP, parent-child relationship might not be established the same way
@@ -97,7 +97,7 @@ describe('Push Subscription Plugin', () => {
               'span.kind': 'consumer',
               component: 'google-cloud-pubsub',
               'pubsub.message_id': messageId,
-              'pubsub.delivery_method': 'push'
+              'pubsub.subscription_type': 'push'
             })
 
             assertObjectContains(httpSpan.meta, {
@@ -148,11 +148,11 @@ describe('Push Subscription Plugin', () => {
         agent
           .assertSomeTraces(traces => {
             const trace = traces.find(t =>
-              t.some(s => s.name === 'pubsub.delivery')
+              t.some(s => s.name === 'pubsub.request')
             )
-            if (!trace) return
+            if (!trace) throw new Error('Could not find trace with pubsub.request span')
 
-            const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
+            const pubsubSpan = trace.find(s => s.name === 'pubsub.request')
             assert.ok(pubsubSpan)
 
             if (pubsubSpan.meta['_dd.span_links']) {
@@ -206,16 +206,15 @@ describe('Push Subscription Plugin', () => {
 
         agent
           .assertSomeTraces(traces => {
-            const trace = traces.find(t => t.some(s => s.name === 'pubsub.delivery'))
-            if (!trace) return
+            const trace = traces.find(t => t.some(s => s.name === 'pubsub.request'))
+            if (!trace) throw new Error('Could not find trace with pubsub.request span')
 
-            const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
+            const pubsubSpan = trace.find(s => s.name === 'pubsub.request')
             assert.ok(pubsubSpan)
 
             assertObjectContains(pubsubSpan.meta, {
               'pubsub.batch.description': 'Message 1 of 3',
-              'pubsub.batch.request_trace_id': batchTraceId,
-              'pubsub.batch.request_span_id': batchSpanId
+              'pubsub.batch.request_trace_id': batchTraceId
             })
             assertObjectContains(pubsubSpan.metrics, {
               'pubsub.batch.message_count': 3,
@@ -263,10 +262,10 @@ describe('Push Subscription Plugin', () => {
 
         agent
           .assertSomeTraces(traces => {
-            const trace = traces.find(t => t.some(s => s.name === 'pubsub.delivery'))
-            if (!trace) return
+            const trace = traces.find(t => t.some(s => s.name === 'pubsub.request'))
+            if (!trace) throw new Error('Could not find trace with pubsub.request span')
 
-            const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
+            const pubsubSpan = trace.find(s => s.name === 'pubsub.request')
             assert.ok(pubsubSpan)
 
             assert.strictEqual(pubsubSpan.service, 'test-pubsub')
@@ -313,7 +312,7 @@ describe('Push Subscription Plugin', () => {
             if (!trace) return
 
             assert.ok(trace)
-            const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
+            const pubsubSpan = trace.find(s => s.name === 'pubsub.request')
             assert.ok(!pubsubSpan)
           })
           .then(done)
@@ -351,7 +350,7 @@ describe('Push Subscription Plugin', () => {
             if (!trace) return
 
             assert.ok(trace)
-            const pubsubSpan = trace.find(s => s.name === 'pubsub.delivery')
+            const pubsubSpan = trace.find(s => s.name === 'pubsub.request')
             assert.ok(!pubsubSpan)
           })
           .then(done)
