@@ -3,6 +3,14 @@
 class LangchainLanggraphTestSetup {
   async setup (module) {
     this.workflow = null
+    this.module = module
+
+    // Extract StateGraph, START, END from the module
+    const { StateGraph, START, END } = module
+    this.StateGraph = StateGraph
+    this.START = START
+    this.END = END
+
     try {
       // Define the agent state
       const graphState = {
@@ -85,6 +93,7 @@ class LangchainLanggraphTestSetup {
   }
 
   async runWithRetry () {
+    const { StateGraph, START, END } = this.module
     try {
       // Create a simple workflow to test node execution
       const graphState = {
@@ -125,6 +134,7 @@ class LangchainLanggraphTestSetup {
   }
 
   async runWithRetryError () {
+    const { StateGraph, START, END } = this.module
     try {
       const graphState = {
         count: {

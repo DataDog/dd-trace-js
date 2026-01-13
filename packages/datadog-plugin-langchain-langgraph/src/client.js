@@ -1,16 +1,17 @@
 'use strict'
 
-const ClientPlugin = require('../../dd-trace/src/plugins/client')
+const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-class BaseLangchainLanggraphClientPlugin extends ClientPlugin {
+class BaseLangchainLanggraphClientPlugin extends TracingPlugin {
   static id = 'langchain-langgraph'
   static prefix = 'tracing:orchestrion:@langchain/langgraph:Pregel_invoke'
 
   bindStart (ctx) {
     const meta = this.getTags(ctx)
 
-    this.startSpan('invoke', {
-      service: this.serviceName({ pluginService: this.config.service }),
+    this.startSpan('langchain-langgraph.invoke', {
+      service: this.config.service,
+      kind: 'client',
       meta
     }, ctx)
 
@@ -24,7 +25,6 @@ class BaseLangchainLanggraphClientPlugin extends ClientPlugin {
     }
   }
 
-  // asyncEnd and end delegate to finish() which has the required guard
   asyncEnd (ctx) {
     this.finish(ctx)
   }
@@ -33,20 +33,13 @@ class BaseLangchainLanggraphClientPlugin extends ClientPlugin {
     this.finish(ctx)
   }
 
-  // You may modify this method, but the guard below is REQUIRED and MUST NOT be removed!
   finish (ctx) {
-    // CRITICAL GUARD - DO NOT REMOVE: Ensures span only finishes when operation completes
     if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
 
     super.finish(ctx)
   }
 }
 
-class PregelStreamIteratorPlugin extends BaseLangchainLanggraphClientPlugin {
-  static prefix = 'tracing:orchestrion:@langchain/langgraph:Pregel__streamIterator'
-}
-
 module.exports = {
-  'BaseLangchainLanggraphClientPlugin': BaseLangchainLanggraphClientPlugin,
-  'PregelStreamIteratorPlugin': PregelStreamIteratorPlugin
+  BaseLangchainLanggraphClientPlugin
 }
