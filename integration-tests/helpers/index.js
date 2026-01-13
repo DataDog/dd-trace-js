@@ -466,7 +466,7 @@ async function createSandbox (
  */
 function varySandbox (filename, variants, namedVariant, packageName = variants) {
   if (typeof variants === 'string') {
-    const bindingName = namedVariant || variants
+    const bindingName = variants
     variants = {
       default: `import ${bindingName} from '${packageName}'`,
       star: namedVariant
@@ -488,6 +488,8 @@ function varySandbox (filename, variants, namedVariant, packageName = variants) 
     let newFileData = origFileData
     if (variant !== 'default') {
       newFileData = origFileData.replace(variants.default, `${value}`)
+      // Error out when the default import does not match that of server.mjs
+      if (newFileData === origFileData) throw Error('Unable to match default import')
     }
     writeFileSync(path.join(sandbox.folder, variantFilename), newFileData)
   }

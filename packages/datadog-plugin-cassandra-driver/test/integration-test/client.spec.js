@@ -22,7 +22,7 @@ describe('esm', () => {
       './packages/datadog-plugin-cassandra-driver/test/integration-test/*'])
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'cassandra-driver', 'Client')
+      variants = varySandbox('server.mjs', 'cassandra', undefined, 'cassandra-driver')
     })
 
     beforeEach(async () => {
