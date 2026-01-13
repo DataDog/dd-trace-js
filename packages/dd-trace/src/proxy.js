@@ -294,8 +294,8 @@ class Tracer extends NoopProxy {
    * Updates the debugger (Dynamic Instrumentation) state based on remote config changes.
    * Handles starting, stopping, and reconfiguring the debugger dynamically.
    *
-   * @param {Object} config - The tracer configuration object
-   * @param {Object} rc - The RemoteConfig instance
+   * @param {object} config - The tracer configuration object
+   * @param {object} rc - The RemoteConfig instance
    */
   _updateDebugger (config, rc) {
     const shouldBeEnabled = config.dynamicInstrumentation.enabled
