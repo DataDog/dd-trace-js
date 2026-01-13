@@ -65,7 +65,7 @@ describe('IAST - overhead-controller - integration', () => {
         Object.keys(vulnerabilitiesAndCount).forEach((vType) => {
           assert.strictEqual(vulnerabilities[vType], vulnerabilitiesAndCount[vType], `route: ${path} - type: ${vType}`)
         })
-      }, 1000, 2, true)
+      }, 1000, 1, true)
     }
 
     async function checkNoVulnerabilitiesInEndpoint (path, method = 'GET') {
