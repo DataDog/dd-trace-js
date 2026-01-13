@@ -280,7 +280,7 @@ describe('Plugin', () => {
         beforeEach(async () => {
           await agent.load(['ws'], [{
             service: 'custom-ws-service',
-            traceWebsocketMessagesEnabled: true
+            traceWebsocketMessagesEnabled: false
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
