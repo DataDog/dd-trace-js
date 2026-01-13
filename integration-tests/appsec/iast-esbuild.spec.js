@@ -26,7 +26,7 @@ describe('esbuild support for IAST', () => {
 
   useSandbox()
 
-  before(async () => {
+  before(async function () {
     this.timeout(120_000)
 
     cwd = sandboxCwd()
