@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const {
   FakeAgent,
   sandboxCwd,
@@ -10,7 +11,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { describe, it, beforeEach, afterEach } = require('mocha')
 
 describe('esm', () => {
   let agent

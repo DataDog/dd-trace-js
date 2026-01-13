@@ -7,9 +7,9 @@ const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
-const { getNextLineNumber } = require('./helpers')
 const OutboundPlugin = require('../../src/plugins/outbound')
 const parseTags = require('../../../datadog-core/src/utils/src/parse-tags')
+const { getNextLineNumber } = require('./helpers')
 
 describe('OuboundPlugin', () => {
   describe('peer service decision', () => {

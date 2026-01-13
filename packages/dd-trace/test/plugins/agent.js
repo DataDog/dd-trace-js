@@ -17,6 +17,7 @@ const ritm = require('../../src/ritm')
 const traceHandlers = new Set()
 const statsHandlers = new Set()
 let llmobsSpanEventsRequests = []
+let llmobsEvaluationMetricsRequests = []
 let sockets = []
 let agent = null
 let listener = null
@@ -387,7 +388,7 @@ module.exports = {
    * Load the plugin on the tracer with an optional config and start a mock agent.
    *
    * @overload
-   * @param {String|String[]} pluginNames - Name or list of names of plugins to load
+   * @param {string | string[]} pluginNames - Name or list of names of plugins to load
    * @param {Record<string, unknown>} [config]
    * @param {Record<string, unknown>} [tracerConfig={}]
    * @returns Promise<void>
@@ -396,7 +397,7 @@ module.exports = {
    * Load the plugin on the tracer with an optional config and start a mock agent.
    *
    * @overload
-   * @param {String[]} pluginNames - Name or list of names of plugins to load
+   * @param {string[]} pluginNames - Name or list of names of plugins to load
    * @param {Record<string, unknown>[]} config
    * @param {Record<string, unknown>} [tracerConfig={}]
    * @returns Promise<void>
@@ -465,6 +466,12 @@ module.exports = {
     // LLM Observability traces endpoint
     agent.post('/evp_proxy/v2/api/v2/llmobs', (req, res) => {
       llmobsSpanEventsRequests.push(JSON.parse(req.body))
+      res.status(200).send()
+    })
+
+    // LLM Observability evaluation metrics endpoint
+    agent.post('/evp_proxy/v2/api/intake/llm-obs/v1/eval-metric', (req, res) => {
+      llmobsEvaluationMetricsRequests.push(JSON.parse(req.body))
       res.status(200).send()
     })
 
@@ -615,12 +622,26 @@ module.exports = {
   /**
    * Get the LLM Observability span events requests.
    * @param {boolean} clear - Clear the requests after getting them.
-   * @returns {Array<Object>} The LLM Observability span events requests.
+   * @returns {Array<object>} The LLM Observability span events requests.
    */
   getLlmObsSpanEventsRequests (clear = false) {
     const requests = llmobsSpanEventsRequests
     if (clear) {
       llmobsSpanEventsRequests = []
+    }
+
+    return requests
+  },
+
+  /**
+   * Get the LLM Observability evaluation metrics requests.
+   * @param {boolean} clear - Clear the requests after getting them.
+   * @returns {Array<object>} The LLM Observability evaluation metrics requests.
+   */
+  getLlmObsEvaluationMetricsRequests (clear = false) {
+    const requests = llmobsEvaluationMetricsRequests
+    if (clear) {
+      llmobsEvaluationMetricsRequests = []
     }
 
     return requests
@@ -633,6 +654,7 @@ module.exports = {
     traceHandlers.clear()
     statsHandlers.clear()
     llmobsSpanEventsRequests = []
+    llmobsEvaluationMetricsRequests = []
   },
 
   /**
@@ -642,7 +664,7 @@ module.exports = {
    * - ritmReset: true
    * - wipe: false
    *
-   * @param {Object} [options]
+   * @param {object} [options]
    * @param {boolean} [options.ritmReset=true] - Resets the Require In The Middle cache. You probably don't need this.
    * @param {boolean} [options.wipe=false] - Wipes tracer and non-native modules from require cache. You probably don't
    *     need this.
@@ -662,6 +684,7 @@ module.exports = {
     traceHandlers.clear()
     statsHandlers.clear()
     llmobsSpanEventsRequests = []
+    llmobsEvaluationMetricsRequests = []
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }

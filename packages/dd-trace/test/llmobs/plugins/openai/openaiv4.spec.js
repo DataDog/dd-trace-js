@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert')
 const { describe, it, beforeEach } = require('mocha')
 const semifies = require('semifies')
 
@@ -13,15 +14,13 @@ const {
   MOCK_NUMBER
 } = require('../../util')
 
-const assert = require('node:assert')
-
 describe('integrations', () => {
   let openai
   let azureOpenai
   let deepseekOpenai
 
   describe('openai', () => {
-    const getEvents = useLlmObs({ plugin: 'openai', closeOptions: { wipe: true } })
+    const { getEvents } = useLlmObs({ plugin: 'openai', closeOptions: { wipe: true } })
 
     withVersions('openai', 'openai', '>=4', version => {
       const moduleRequirePath = `../../../../../../versions/openai@${version}`

@@ -1,9 +1,9 @@
 'use strict'
 
+const { URL } = require('url')
+const axios = require('axios')
 const { prepareTestServerForIastInExpress } = require('../utils')
 const { withVersions } = require('../../../setup/mocha')
-const axios = require('axios')
-const { URL } = require('url')
 
 function noop () {}
 

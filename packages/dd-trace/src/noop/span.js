@@ -1,8 +1,8 @@
 'use strict'
 
-const NoopSpanContext = require('./span_context')
 const id = require('../id')
 const { storage } = require('../../../datadog-core') // TODO: noop storage?
+const NoopSpanContext = require('./span_context')
 
 class NoopSpan {
   constructor (tracer, parent) {

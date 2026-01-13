@@ -1,8 +1,9 @@
 'use strict'
 
+const tracingChannel = require('dc-polyfill').tracingChannel
+
 const { channel, addHook } = require('./helpers/instrument')
 const prismaEngineStart = channel('apm:prisma:engine:start')
-const tracingChannel = require('dc-polyfill').tracingChannel
 const clientCH = tracingChannel('apm:prisma:client')
 
 const allowedClientSpanOperations = new Set([

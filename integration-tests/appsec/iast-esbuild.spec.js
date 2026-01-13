@@ -2,11 +2,11 @@
 
 const assert = require('node:assert/strict')
 
-const Axios = require('axios')
 const childProcess = require('child_process')
 const fs = require('fs')
 const path = require('path')
 const { promisify } = require('util')
+const Axios = require('axios')
 const msgpack = require('@msgpack/msgpack')
 
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')

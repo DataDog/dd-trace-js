@@ -5,8 +5,8 @@ const RemoteConfigCapabilities = require('../remote_config/capabilities')
 /**
  * Configures remote config for core APM tracing functionality
  *
- * @param {Object} rc - RemoteConfig instance
- * @param {Object} config - Tracer config
+ * @param {object} rc - RemoteConfig instance
+ * @param {object} config - Tracer config
  * @param {Function} enableOrDisableTracing - Function to enable/disable tracing based on config
  */
 function enable (rc, config, enableOrDisableTracing) {
