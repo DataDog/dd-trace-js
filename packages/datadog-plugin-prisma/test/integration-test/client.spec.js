@@ -49,7 +49,7 @@ const prismaClientConfigs = [{
   ts: true
 }]
 
-describe('esm', () => {
+describe.only('esm', () => {
   let agent
   let proc
   prismaClientConfigs.forEach(config => {
@@ -74,7 +74,8 @@ describe('esm', () => {
         useSandbox(deps, false, paths)
 
         before(function () {
-          variants = varySandbox(config.serverFile, 'prismaLib', undefined, config.importPath)
+          variants = varySandbox(config.serverFile, config.ts ? 'PrismaClient' : 'prismaLib',
+            config.ts ? 'PrismaClient' : undefined, config.importPath, config.ts)
         })
 
         beforeEach(async function () {
@@ -127,6 +128,7 @@ describe('esm', () => {
         })
 
         for (const variant of varySandbox.VARIANTS) {
+          if (config.ts && variant === 'default') { continue }
           it(`is instrumented with ${variant} import`, async function () {
             this.timeout(60000)
             const res = agent.assertMessageReceived(({ headers, payload }) => {
