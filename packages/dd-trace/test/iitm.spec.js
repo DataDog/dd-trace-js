@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, before, after } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, before, after } = require('mocha')
 const sinon = require('sinon')
 const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -29,13 +30,13 @@ describe('iitm.js', () => {
     })
 
     it('should export iitm', () => {
-      expect(iitmjs).to.equal(iitm)
+      assert.strictEqual(iitmjs, iitm)
     })
 
     it('should publish in channel hook trigger', () => {
       moduleLoadStartChannel.subscribe(listener)
       hookFn('moduleName', 'moduleNs')
-      expect(listener).to.have.been.calledOnce
+      sinon.assert.calledOnce(listener)
     })
 
     after(() => {

@@ -1,8 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
 
+const { afterEach, beforeEach, describe, it } = require('mocha')
 require('../../../setup/mocha')
 
 const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
@@ -17,13 +17,18 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
   describe('scopes', function () {
     it('should capture expected scopes', function (done) {
       assertOnBreakpoint(done, (state) => {
-        expect(Object.entries(state).length).to.equal(5)
+        assert.strictEqual(Object.entries(state).length, 5)
 
-        expect(state).to.have.deep.property('a1', { type: 'number', value: '1' })
-        expect(state).to.have.deep.property('a2', { type: 'number', value: '2' })
-        expect(state).to.have.deep.property('total', { type: 'number', value: '0' })
-        expect(state).to.have.deep.property('i', { type: 'number', value: '0' })
-        expect(state).to.have.deep.property('inc', { type: 'number', value: '2' })
+        assert.ok('a1' in state)
+        assert.deepStrictEqual(state.a1, { type: 'number', value: '1' })
+        assert.ok('a2' in state)
+        assert.deepStrictEqual(state.a2, { type: 'number', value: '2' })
+        assert.ok('total' in state)
+        assert.deepStrictEqual(state.total, { type: 'number', value: '0' })
+        assert.ok('i' in state)
+        assert.deepStrictEqual(state.i, { type: 'number', value: '0' })
+        assert.ok('inc' in state)
+        assert.deepStrictEqual(state.inc, { type: 'number', value: '2' })
       })
 
       setAndTriggerBreakpoint(target, 13)

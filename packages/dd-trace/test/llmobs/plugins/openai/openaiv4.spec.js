@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert')
 const { describe, it, beforeEach } = require('mocha')
 const semifies = require('semifies')
 
@@ -8,11 +9,10 @@ const { withVersions } = require('../../../setup/mocha')
 const {
   useLlmObs,
   assertLlmObsSpanEvent,
+  assertPromptTracking,
   MOCK_STRING,
   MOCK_NUMBER
 } = require('../../util')
-
-const assert = require('node:assert')
 
 describe('integrations', () => {
   let openai
@@ -20,7 +20,7 @@ describe('integrations', () => {
   let deepseekOpenai
 
   describe('openai', () => {
-    const getEvents = useLlmObs({ plugin: 'openai', closeOptions: { wipe: true } })
+    const { getEvents } = useLlmObs({ plugin: 'openai', closeOptions: { wipe: true } })
 
     withVersions('openai', 'openai', '>=4', version => {
       const moduleRequirePath = `../../../../../../versions/openai@${version}`
@@ -80,7 +80,9 @@ describe('integrations', () => {
           outputMessages: [
             { content: MOCK_STRING, role: '' }
           ],
-          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+          metrics: {
+            input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER, reasoning_output_tokens: 0
+          },
           modelName: 'gpt-3.5-turbo-instruct:20230824-v2',
           modelProvider: 'openai',
           metadata: {
@@ -127,6 +129,7 @@ describe('integrations', () => {
           ],
           metrics: {
             cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER
@@ -160,7 +163,9 @@ describe('integrations', () => {
             { text: 'hello world' }
           ],
           outputValue: '[1 embedding(s) returned]',
-          metrics: { input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER },
+          metrics: {
+            input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER, reasoning_output_tokens: 0
+          },
           modelName: 'text-embedding-ada-002-v2',
           modelProvider: 'openai',
           metadata: { encoding_format: 'base64' },
@@ -219,6 +224,7 @@ describe('integrations', () => {
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
             cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER
@@ -267,7 +273,12 @@ describe('integrations', () => {
             outputMessages: [
               { content: '\n\nHello! How can I assist you?', role: '' }
             ],
-            metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+            metrics: {
+              input_tokens: MOCK_NUMBER,
+              output_tokens: MOCK_NUMBER,
+              total_tokens: MOCK_NUMBER,
+              reasoning_output_tokens: 0
+            },
             modelName: 'gpt-3.5-turbo-instruct:20230824-v2',
             modelProvider: 'openai',
             metadata: {
@@ -328,6 +339,7 @@ describe('integrations', () => {
             ],
             metrics: {
               cache_read_input_tokens: 0,
+              reasoning_output_tokens: 0,
               input_tokens: MOCK_NUMBER,
               output_tokens: MOCK_NUMBER,
               total_tokens: MOCK_NUMBER
@@ -412,6 +424,7 @@ describe('integrations', () => {
             tags: { ml_app: 'test', integration: 'openai' },
             metrics: {
               cache_read_input_tokens: 0,
+              reasoning_output_tokens: 0,
               input_tokens: MOCK_NUMBER,
               output_tokens: MOCK_NUMBER,
               total_tokens: MOCK_NUMBER
@@ -598,6 +611,7 @@ describe('integrations', () => {
           ],
           metrics: {
             cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
             input_tokens: 1221,
             output_tokens: 100,
             total_tokens: 1321
@@ -646,6 +660,7 @@ describe('integrations', () => {
             output_tokens: 100,
             total_tokens: 1320,
             cache_read_input_tokens: 1152,
+            reasoning_output_tokens: 0
           },
           modelName: 'gpt-4o-2024-08-06',
           modelProvider: 'openai',
@@ -688,7 +703,8 @@ describe('integrations', () => {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
-            cache_read_input_tokens: 0
+            cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0
           },
           modelName: 'gpt-4o-mini-2024-07-18',
           modelProvider: 'openai',
@@ -699,7 +715,6 @@ describe('integrations', () => {
             tool_choice: 'auto',
             truncation: 'disabled',
             text: { format: { type: 'text' }, verbosity: 'medium' },
-            reasoning_tokens: 0,
             stream: false
           },
           tags: { ml_app: 'test', integration: 'openai' }
@@ -738,7 +753,8 @@ describe('integrations', () => {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
-            cache_read_input_tokens: 0
+            cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0
           },
           modelName: 'gpt-4o-mini-2024-07-18',
           modelProvider: 'openai',
@@ -749,8 +765,254 @@ describe('integrations', () => {
             tool_choice: 'auto',
             truncation: 'disabled',
             text: { format: { type: 'text' }, verbosity: 'medium' },
-            reasoning_tokens: 0,
             stream: true
+          },
+          tags: { ml_app: 'test', integration: 'openai' }
+        })
+      })
+
+      describe('prompts', function () {
+        beforeEach(function () {
+          if (semifies(realVersion, '<4.87.0')) {
+            this.skip()
+          }
+        })
+
+        it('submits a response span with prompt tracking - overlapping values', async function () {
+          await openai.responses.create({
+            prompt: {
+              id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+              version: '1',
+              variables: { phrase: 'cat in the hat', word: 'cat' }
+            }
+          })
+
+          const { llmobsSpans } = await getEvents()
+
+          assertPromptTracking(llmobsSpans[0], {
+            id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+            version: '1',
+            variables: { phrase: 'cat in the hat', word: 'cat' },
+            chat_template: [
+              { role: 'user', content: 'I saw a {{phrase}} and another {{word}}' }
+            ]
+          }, [
+            { role: 'user', content: 'I saw a cat in the hat and another cat' }
+          ])
+        })
+
+        it('submits a response span with prompt tracking - partial word match', async function () {
+          await openai.responses.create({
+            prompt: {
+              id: 'pmpt_6911a954c8988190a82b11560faa47cd0d6629899573dd8f',
+              version: '2',
+              variables: { word: 'test' }
+            }
+          })
+
+          const { llmobsSpans } = await getEvents()
+
+          assertPromptTracking(llmobsSpans[0], {
+            id: 'pmpt_6911a954c8988190a82b11560faa47cd0d6629899573dd8f',
+            version: '2',
+            variables: { word: 'test' },
+            chat_template: [
+              { role: 'developer', content: 'Reply with "OK".' },
+              { role: 'user', content: 'This is a {{word}} for {{word}}ing the {{word}}er' }
+            ]
+          }, [
+            { role: 'developer', content: 'Reply with "OK".' },
+            { role: 'user', content: 'This is a test for testing the tester' }
+          ])
+        })
+
+        it('submits a response span with prompt tracking - special characters', async function () {
+          await openai.responses.create({
+            prompt: {
+              id: 'pmpt_6911a99a3eec81959d5f2e408a2654380b2b15731a51f191',
+              version: '2',
+              variables: { price: '$99.99', item: 'groceries' }
+            }
+          })
+
+          const { llmobsSpans } = await getEvents()
+
+          assertPromptTracking(llmobsSpans[0], {
+            id: 'pmpt_6911a99a3eec81959d5f2e408a2654380b2b15731a51f191',
+            version: '2',
+            variables: { price: '$99.99', item: 'groceries' },
+            chat_template: [
+              { role: 'user', content: 'The price of {{item}} is {{price}}.' }
+            ]
+          }, [
+            { role: 'user', content: 'The price of groceries is $99.99.' }
+          ])
+        })
+
+        it('submits a response span with prompt tracking - empty values', async function () {
+          await openai.responses.create({
+            prompt: {
+              id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+              version: '1',
+              variables: { phrase: 'cat in the hat', word: '' }
+            }
+          })
+
+          const { llmobsSpans } = await getEvents()
+
+          assertPromptTracking(llmobsSpans[0], {
+            id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+            version: '1',
+            variables: { phrase: 'cat in the hat', word: '' },
+            chat_template: [
+              { role: 'user', content: 'I saw a {{phrase}} and another ' }
+            ]
+          }, [
+            { role: 'user', content: 'I saw a cat in the hat and another ' }
+          ])
+        })
+
+        it('submits a response span with prompt tracking - mixed input types (url stripped)', async function () {
+          await openai.responses.create({
+            prompt: {
+              id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
+              version: '2',
+              variables: {
+                user_message: { type: 'input_text', text: 'Analyze these images and document' },
+                user_image_1: { type: 'input_image', image_url: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png', detail: 'auto' },
+                user_file: { type: 'input_file', file_url: 'https://www.berkshirehathaway.com/letters/2024ltr.pdf' },
+                user_image_2: { type: 'input_image', file_id: 'file-BCuhT1HQ24kmtsuuzF1mh2', detail: 'auto' }
+              }
+            }
+          })
+
+          const { llmobsSpans } = await getEvents()
+
+          assertPromptTracking(llmobsSpans[0], {
+            id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
+            version: '2',
+            variables: {
+              user_message: 'Analyze these images and document',
+              user_image_1: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png',
+              user_file: 'https://www.berkshirehathaway.com/letters/2024ltr.pdf',
+              user_image_2: 'file-BCuhT1HQ24kmtsuuzF1mh2'
+            },
+            chat_template: [
+              {
+                role: 'user',
+                content: 'Analyze the following content from the user:\n\n' +
+                  'Text message: {{user_message}}\n' +
+                  'Image reference 1: [image]\n' +
+                  'Document reference: {{user_file}}\n' +
+                  'Image reference 2: {{user_image_2}}\n\n' +
+                  'Please provide a comprehensive analysis.'
+              }
+            ]
+          }, [
+            {
+              role: 'user',
+              content: 'Analyze the following content from the user:\n\n' +
+                'Text message: Analyze these images and document\n' +
+                'Image reference 1: [image]\n' +
+                'Document reference: https://www.berkshirehathaway.com/letters/2024ltr.pdf\n' +
+                'Image reference 2: file-BCuhT1HQ24kmtsuuzF1mh2\n\n' +
+                'Please provide a comprehensive analysis.'
+            }
+          ], { promptMultimodal: true })
+        })
+
+        it('submits a response span with prompt tracking - mixed input types (url preserved)', async function () {
+          await openai.responses.create({
+            include: ['message.input_image.image_url'],
+            prompt: {
+              id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
+              version: '2',
+              variables: {
+                user_message: { type: 'input_text', text: 'Analyze these images and document' },
+                user_image_1: { type: 'input_image', image_url: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png', detail: 'auto' },
+                user_file: { type: 'input_file', file_url: 'https://www.berkshirehathaway.com/letters/2024ltr.pdf' },
+                user_image_2: { type: 'input_image', file_id: 'file-BCuhT1HQ24kmtsuuzF1mh2', detail: 'auto' }
+              }
+            }
+          })
+
+          const { llmobsSpans } = await getEvents()
+
+          assertPromptTracking(llmobsSpans[0], {
+            id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
+            version: '2',
+            variables: {
+              user_message: 'Analyze these images and document',
+              user_image_1: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png',
+              user_file: 'https://www.berkshirehathaway.com/letters/2024ltr.pdf',
+              user_image_2: 'file-BCuhT1HQ24kmtsuuzF1mh2'
+            },
+            chat_template: [
+              {
+                role: 'user',
+                content: 'Analyze the following content from the user:\n\n' +
+                  'Text message: {{user_message}}\n' +
+                  'Image reference 1: {{user_image_1}}\n' +
+                  'Document reference: {{user_file}}\n' +
+                  'Image reference 2: {{user_image_2}}\n\n' +
+                  'Please provide a comprehensive analysis.'
+              }
+            ]
+          }, [
+            {
+              role: 'user',
+              content: 'Analyze the following content from the user:\n\n' +
+                'Text message: Analyze these images and document\n' +
+                'Image reference 1: https://raw.githubusercontent.com/github/explore/main/topics/python/python.png\n' +
+                'Document reference: https://www.berkshirehathaway.com/letters/2024ltr.pdf\n' +
+                'Image reference 2: file-BCuhT1HQ24kmtsuuzF1mh2\n\n' +
+                'Please provide a comprehensive analysis.'
+            }
+          ], { promptMultimodal: true })
+        })
+      })
+
+      it('submits a response span with reasoning tokens', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          model: 'gpt-5-mini',
+          input: 'Solve this step by step: What is 15 * 24?',
+          max_output_tokens: 500,
+          stream: false
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [
+            { role: 'user', content: 'Solve this step by step: What is 15 * 24?' }
+          ],
+          outputMessages: [
+            { role: 'reasoning', content: MOCK_STRING },
+            { role: 'assistant', content: MOCK_STRING }
+          ],
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 128
+          },
+          modelName: 'gpt-5-mini-2025-08-07',
+          modelProvider: 'openai',
+          metadata: {
+            max_output_tokens: 500,
+            top_p: 1,
+            temperature: 1,
+            tool_choice: 'auto',
+            truncation: 'disabled',
+            text: { format: { type: 'text' }, verbosity: 'medium' },
+            stream: false
           },
           tags: { ml_app: 'test', integration: 'openai' }
         })

@@ -14,8 +14,8 @@
  * - https://github.com/open-telemetry/opentelemetry-proto (v1.7.0)
  */
 
-const protobuf = require('protobufjs')
 const path = require('path')
+const protobuf = require('../../../../../vendor/dist/protobufjs')
 
 let _root = null
 let protoLogsService = null

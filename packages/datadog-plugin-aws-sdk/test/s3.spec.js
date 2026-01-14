@@ -1,14 +1,16 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, before, after } = require('mocha')
+const assert = require('node:assert/strict')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
 const axios = require('axios')
-const { rawExpectedSchema } = require('./s3-naming')
+const { after, before, describe, it } = require('mocha')
+
 const { S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { rawExpectedSchema } = require('./s3-naming')
+const { setup } = require('./spec_helpers')
 
 const bucketName = 's3-bucket-name-test'
 
@@ -84,8 +86,8 @@ describe('Plugin', () => {
                 const span = traces[0][0]
                 const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
 
-                expect(links).to.have.lengthOf(1)
-                expect(links[0].attributes).to.deep.equal({
+                assert.strictEqual(links.length, 1)
+                assert.deepStrictEqual(links[0].attributes, {
                   'ptr.kind': S3_PTR_KIND,
                   'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
                   'ptr.hash': '6d1a2fe194c6579187408f827f942be3',
@@ -114,8 +116,8 @@ describe('Plugin', () => {
                 const span = traces[0][0]
                 const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
 
-                expect(links).to.have.lengthOf(1)
-                expect(links[0].attributes).to.deep.equal({
+                assert.strictEqual(links.length, 1)
+                assert.deepStrictEqual(links[0].attributes, {
                   'ptr.kind': S3_PTR_KIND,
                   'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
                   'ptr.hash': '1542053ce6d393c424b1374bac1fc0c5',
@@ -190,8 +192,8 @@ describe('Plugin', () => {
                     if (operation === 'completeMultipartUpload') {
                       try {
                         const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
-                        expect(links).to.have.lengthOf(1)
-                        expect(links[0].attributes).to.deep.equal({
+                        assert.strictEqual(links.length, 1)
+                        assert.deepStrictEqual(links[0].attributes, {
                           'ptr.kind': S3_PTR_KIND,
                           'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
                           'ptr.hash': '422412aa6b472a7194f3e24f4b12b4a6',
@@ -214,12 +216,12 @@ describe('Plugin', () => {
 
           agent.assertSomeTraces(traces => {
             const span = traces[0][0]
-            expect(span).to.include({
+            assertObjectContains(span, {
               name: 'aws.request',
               resource: `putObject ${bucketName}`
             })
 
-            expect(span.meta).to.include({
+            assertObjectContains(span.meta, {
               bucketname: bucketName,
               aws_service: 'S3',
               region: 'us-east-1'
@@ -237,7 +239,7 @@ describe('Plugin', () => {
 
             setTimeout(() => {
               try {
-                expect(total).to.equal(1)
+                assert.strictEqual(total, 1)
                 done()
               } catch (e) {
                 done(e)

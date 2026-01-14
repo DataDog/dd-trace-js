@@ -5,18 +5,18 @@
 const Module = require('module')
 const { pathToFileURL } = require('url')
 const { MessageChannel } = require('worker_threads')
+const { isMainThread } = require('worker_threads')
+const dc = require('dc-polyfill')
 const shimmer = require('../../../../../datadog-shimmer')
-const { isPrivateModule, isDdTrace } = require('./filter')
-const { csiMethods } = require('./csi-methods')
 const { getName } = require('../telemetry/verbosity')
 const telemetry = require('../telemetry')
-const { incrementTelemetryIfNeeded } = require('./rewriter-telemetry')
-const dc = require('dc-polyfill')
 const log = require('../../../log')
-const { isMainThread } = require('worker_threads')
-const { LOG_MESSAGE, REWRITTEN_MESSAGE } = require('./constants')
 const orchestrionConfig = require('../../../../../datadog-instrumentations/src/orchestrion-config')
 const { getEnvironmentVariable } = require('../../../config-helper')
+const { LOG_MESSAGE, REWRITTEN_MESSAGE } = require('./constants')
+const { incrementTelemetryIfNeeded } = require('./rewriter-telemetry')
+const { csiMethods } = require('./csi-methods')
+const { isPrivateModule, isDdTrace } = require('./filter')
 
 let config
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
@@ -175,23 +175,18 @@ function enableRewriter (telemetryVerbosity) {
           shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
         }
       }
+      enableEsmRewriter(telemetryVerbosity)
     }
-
-    enableEsmRewriter(telemetryVerbosity)
   } catch (e) {
     log.error('Error enabling Rewriter', e)
   }
 }
 
 function isEsmConfigured () {
-  const hasLoaderArg = isFlagPresent('--loader') || isFlagPresent('--experimental-loader')
-  if (hasLoaderArg) return true
-
-  // Fast path for common case when enabled
-  if (require.cache[`${process.cwd()}/node_modules/import-in-the-middle/hook.js`]) {
-    return true
-  }
-  return Object.keys(require.cache).some(file => file.endsWith('import-in-the-middle/hook.js'))
+  return (isFlagPresent('--loader') ||
+    isFlagPresent('--experimental-loader') ||
+    isFlagPresent('dd-trace/initialize.mjs')) ||
+    isFlagPresent('dd-trace/register.js')
 }
 
 let enableEsmRewriter = function (telemetryVerbosity) {

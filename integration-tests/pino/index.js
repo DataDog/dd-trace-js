@@ -11,8 +11,8 @@ if (process.env.lOG_INJECTION) {
 }
 
 const tracer = require('dd-trace').init(options)
-
 const http = require('http')
+
 const logger = require('pino')()
 
 const server = http
@@ -27,6 +27,6 @@ const server = http
     res.end('hello, world\n')
   })
   .listen(0, () => {
-    const port = server.address().port
+    const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
     process.send({ port })
   })

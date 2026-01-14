@@ -1,16 +1,16 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const http = require('node:http')
 
-const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const express = require('express')
 const upload = require('multer')()
 const proxyquire = require('proxyquire').noCallThru()
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
-
 const { getConfigFresh } = require('./helpers/config')
 
 const debugChannel = channel('datadog:log:debug')
@@ -40,7 +40,7 @@ describe('Flare', () => {
     })
 
     listener = server.listen(0, '127.0.0.1', () => {
-      port = server.address().port
+      port = (/** @type {import('net').AddressInfo} */ (server.address())).port
       done()
     })
   }
@@ -88,7 +88,7 @@ describe('Flare', () => {
   it('should send a flare', done => {
     handler = req => {
       try {
-        expect(req.body).to.include({
+        assertObjectContains(req.body, {
           case_id: task.case_id,
           hostname: task.hostname,
           email: task.user_handle,
@@ -108,8 +108,8 @@ describe('Flare', () => {
   it('should send the tracer info', done => {
     handler = req => {
       try {
-        expect(req.files).to.have.length(1)
-        expect(req.files[0]).to.include({
+        assert.strictEqual(req.files.length, 1)
+        assertObjectContains(req.files[0], {
           fieldname: 'flare_file',
           originalname: 'tracer_info.txt',
           mimetype: 'application/octet-stream'
@@ -117,7 +117,7 @@ describe('Flare', () => {
 
         const content = JSON.parse(req.files[0].buffer.toString())
 
-        expect(content).to.have.property('lang', 'nodejs')
+        assert.strictEqual(content.lang, 'nodejs')
 
         done()
       } catch (e) {
@@ -136,7 +136,7 @@ describe('Flare', () => {
 
         if (file.originalname !== 'tracer_logs.txt') return
 
-        expect(file).to.include({
+        assertObjectContains(file, {
           fieldname: 'flare_file',
           originalname: 'tracer_logs.txt',
           mimetype: 'application/octet-stream'
@@ -144,7 +144,7 @@ describe('Flare', () => {
 
         const content = file.buffer.toString()
 
-        expect(content).to.equal('foo\nbar\n{"foo":"bar"}\n')
+        assert.strictEqual(content, 'foo\nbar\n{"foo":"bar"}\n')
 
         done()
       } catch (e) {

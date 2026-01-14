@@ -1,9 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const path = require('node:path')
 
 const Axios = require('axios')
-const { assert } = require('chai')
 const { describe, it, beforeEach, before, after } = require('mocha')
 
 const { getConfigFresh } = require('../../helpers/config')
@@ -39,7 +40,7 @@ describe('RASP - ssrf', () => {
       }))
 
       server = expressApp.listen(0, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({
           baseURL: `http://localhost:${port}`
         })
@@ -247,7 +248,7 @@ describe('RASP - ssrf', () => {
       }))
 
       server.listen(0, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({
           baseURL: `http://localhost:${port}`
         })
@@ -290,7 +291,7 @@ describe('RASP - ssrf', () => {
         }
       })
 
-      assert.equal(response.status, 200)
+      assert.strictEqual(response.status, 200)
 
       return checkRaspExecutedAndHasThreat(agent, 'rasp-ssrf-rule-id-1')
     })

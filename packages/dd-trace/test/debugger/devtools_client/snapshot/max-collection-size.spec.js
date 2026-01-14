@@ -1,13 +1,18 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
 
+const { afterEach, beforeEach, describe, it } = require('mocha')
+
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../setup/mocha')
 
+const {
+  LARGE_OBJECT_SKIP_THRESHOLD,
+  DEFAULT_MAX_COLLECTION_SIZE
+} = require('../../../../src/debugger/devtools_client/snapshot/constants')
 const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
 
-const DEFAULT_MAX_COLLECTION_SIZE = 100
 const target = getTargetCodePath(__filename)
 
 describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', function () {
@@ -25,7 +30,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       const maxCollectionSize = config?.maxCollectionSize ?? DEFAULT_MAX_COLLECTION_SIZE
       const postfix = config === undefined ? 'not set' : `set to ${config.maxCollectionSize}`
 
-      describe(`shold respect the default maxCollectionSize if ${postfix}`, function () {
+      describe(`should respect the default maxCollectionSize if ${postfix}`, function () {
         let state
 
         const expectedElements = []
@@ -45,85 +50,94 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           assertOnBreakpoint(done, config, (_state) => {
             state = _state
           })
-          setAndTriggerBreakpoint(target, 24)
+          setAndTriggerBreakpoint(target, 29)
         })
 
         it('should have expected number of elements in state', function () {
-          expect(state).to.have.keys(['arr', 'map', 'set', 'wmap', 'wset', 'typedArray'])
+          assert.deepStrictEqual(
+            Object.keys(state).sort(),
+            ['LARGE_SIZE', 'arr', 'map', 'set', 'typedArray', 'wmap', 'wset']
+          )
         })
 
         it('Array', function () {
-          expect(state).to.have.deep.property('arr', {
+          assert.ok('arr' in state)
+          assert.deepStrictEqual(state.arr, {
             type: 'Array',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
           })
         })
 
         it('Map', function () {
-          expect(state).to.have.deep.property('map', {
+          assert.ok('map' in state)
+          assert.deepStrictEqual(state.map, {
             type: 'Map',
             entries: expectedEntries,
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
           })
         })
 
         it('Set', function () {
-          expect(state).to.have.deep.property('set', {
+          assert.ok('set' in state)
+          assert.deepStrictEqual(state.set, {
             type: 'Set',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
           })
         })
 
         it('WeakMap', function () {
-          expect(state.wmap).to.include({
+          assertObjectContains(state.wmap, {
             type: 'WeakMap',
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
           })
 
-          expect(state.wmap.entries).to.have.lengthOf(maxCollectionSize)
+          assert.strictEqual(state.wmap.entries.length, maxCollectionSize)
 
           // The order of the entries is not guaranteed, so we don't know which were removed
           for (const entry of state.wmap.entries) {
-            expect(entry).to.have.lengthOf(2)
-            expect(entry[0]).to.have.property('type', 'Object')
-            expect(entry[0].fields).to.have.property('i')
-            expect(entry[0].fields.i).to.have.property('type', 'number')
-            expect(entry[0].fields.i).to.have.property('value').to.match(/^\d+$/)
-            expect(entry[1]).to.have.property('type', 'number')
-            expect(entry[1]).to.have.property('value', entry[0].fields.i.value)
+            assert.strictEqual(entry.length, 2)
+            assert.strictEqual(entry[0].type, 'Object')
+            assert.ok(Object.hasOwn(entry[0].fields, 'i'))
+            assert.strictEqual(entry[0].fields.i.type, 'number')
+            assert.ok(Object.hasOwn(entry[0].fields.i, 'value'))
+            assert.match(entry[0].fields.i.value, /^\d+$/)
+            assert.strictEqual(entry[1].type, 'number')
+            assert.strictEqual(entry[1].value, entry[0].fields.i.value)
           }
         })
 
         it('WeakSet', function () {
-          expect(state.wset).to.include({
+          assertObjectContains(state.wset, {
             type: 'WeakSet',
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
           })
 
-          expect(state.wset.elements).to.have.lengthOf(maxCollectionSize)
+          assert.strictEqual(state.wset.elements.length, maxCollectionSize)
 
           // The order of the elements is not guaranteed, so we don't know which were removed
           for (const element of state.wset.elements) {
-            expect(element).to.have.property('type', 'Object')
-            expect(element.fields).to.have.property('i')
-            expect(element.fields.i).to.have.property('type', 'number')
-            expect(element.fields.i).to.have.property('value').to.match(/^\d+$/)
+            assert.strictEqual(element.type, 'Object')
+            assert.ok(Object.hasOwn(element.fields, 'i'))
+            assert.strictEqual(element.fields.i.type, 'number')
+            assert.ok(Object.hasOwn(element.fields.i, 'value'))
+            assert.match(element.fields.i.value, /^\d+$/)
           }
         })
 
         it('TypedArray', function () {
-          expect(state).to.have.deep.property('typedArray', {
+          assert.ok('typedArray' in state)
+          assert.deepStrictEqual(state.typedArray, {
             type: 'Uint16Array',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
           })
         })
       })

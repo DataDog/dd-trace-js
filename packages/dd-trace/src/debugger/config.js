@@ -8,6 +8,7 @@ module.exports = function getDebuggerConfig (config) {
     hostname: config.hostname,
     logLevel: config.logLevel,
     port: config.port,
+    propagateProcessTags: config.propagateProcessTags,
     repositoryUrl: config.repositoryUrl,
     runtimeId: config.tags['runtime-id'],
     service: config.service,

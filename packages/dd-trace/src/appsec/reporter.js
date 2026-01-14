@@ -1,11 +1,13 @@
 'use strict'
 
-const dc = require('dc-polyfill')
 const zlib = require('zlib')
+const dc = require('dc-polyfill')
 
 const { storage } = require('../../../datadog-core')
 const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
+const { keepTrace } = require('../priority_sampler')
+const { ASM } = require('../standalone/product')
 const {
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
@@ -16,8 +18,6 @@ const {
   updateRaspRuleSkippedMetricTags,
   getRequestMetrics
 } = require('./telemetry')
-const { keepTrace } = require('../priority_sampler')
-const { ASM } = require('../standalone/product')
 const { DIAGNOSTIC_KEYS } = require('./waf/diagnostics')
 
 const REQUEST_HEADER_TAG_PREFIX = 'http.request.headers.'
@@ -544,10 +544,6 @@ function finishRequest (req, res, storedResponseHeaders, requestBody) {
 
   if (extendedDataCollection) {
     reportRequestBody(rootSpan, requestBody)
-  }
-
-  if (tags['appsec.event'] === 'true' && typeof req.route?.path === 'string') {
-    newTags['http.endpoint'] = req.route.path
   }
 
   rootSpan.addTags(newTags)

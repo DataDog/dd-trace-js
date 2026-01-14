@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const telemetryMetrics = require('../../../src/telemetry/metrics')
@@ -47,18 +48,18 @@ describe('Appsec Rasp Telemetry metrics', () => {
           rulesVersion: '2.0.0'
         }, req, { type: 'rule-type' })
 
-        expect(count).to.have.been.calledWith('rasp.rule.eval', {
+        sinon.assert.calledWith(count, 'rasp.rule.eval', {
           rule_type: 'rule-type',
           waf_version: '1.0.0',
           event_rules_version: '2.0.0'
         })
-        expect(count).to.not.have.been.calledWith('rasp.timeout', {
+        sinon.assert.neverCalledWith(count, 'rasp.timeout', {
           rule_type: 'rule-type',
           waf_version: '1.0.0',
           event_rules_version: '2.0.0'
         })
-        expect(count).to.not.have.been.calledWith('rasp.rule.match')
-        expect(inc).to.have.been.calledOnceWith(1)
+        sinon.assert.neverCalledWith(count, 'rasp.rule.match')
+        sinon.assert.calledOnceWithExactly(inc, 1)
       })
 
       it('should increment rasp.timeout metric if timeout', () => {
@@ -70,18 +71,18 @@ describe('Appsec Rasp Telemetry metrics', () => {
           rulesVersion: '2.0.0'
         }, req, { type: 'rule-type' })
 
-        expect(count).to.have.been.calledWith('rasp.rule.eval', {
+        sinon.assert.calledWith(count, 'rasp.rule.eval', {
           rule_type: 'rule-type',
           waf_version: '1.0.0',
           event_rules_version: '2.0.0'
         })
-        expect(count).to.have.been.calledWith('rasp.timeout', {
+        sinon.assert.calledWith(count, 'rasp.timeout', {
           rule_type: 'rule-type',
           waf_version: '1.0.0',
           event_rules_version: '2.0.0'
         })
-        expect(count).to.not.have.been.calledWith('rasp.rule.match')
-        expect(inc).to.have.been.calledTwice
+        sinon.assert.neverCalledWith(count, 'rasp.rule.match')
+        sinon.assert.calledTwice(inc)
       })
 
       it('should track rasp.error', () => {
@@ -91,7 +92,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
           rulesVersion: '2.0.0'
         }, req, { type: 'rule-type' })
 
-        expect(count).to.have.been.calledWith('rasp.error', {
+        sinon.assert.calledWith(count, 'rasp.error', {
           waf_version: '1.0.0',
           event_rules_version: '2.0.0',
           rule_type: 'rule-type',
@@ -104,7 +105,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
           rulesVersion: '2.0.0'
         }, req, { type: 'rule-type' })
 
-        expect(count).to.have.been.calledWith('rasp.error', {
+        sinon.assert.calledWith(count, 'rasp.error', {
           waf_version: '1.0.0',
           event_rules_version: '2.0.0',
           rule_type: 'rule-type',
@@ -131,11 +132,11 @@ describe('Appsec Rasp Telemetry metrics', () => {
           raspEvalCount
         } = appsecTelemetry.getRequestMetrics(req)
 
-        expect(duration).to.be.eq(0)
-        expect(durationExt).to.be.eq(0)
-        expect(raspDuration).to.be.eq(66)
-        expect(raspDurationExt).to.be.eq(77)
-        expect(raspEvalCount).to.be.eq(2)
+        assert.strictEqual(duration, 0)
+        assert.strictEqual(durationExt, 0)
+        assert.strictEqual(raspDuration, 66)
+        assert.strictEqual(raspDurationExt, 77)
+        assert.strictEqual(raspEvalCount, 2)
       })
 
       it('should increment raspTimeouts if wafTimeout is true', () => {
@@ -143,7 +144,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({ wafTimeout: true }, req, { type: 'rule-type' })
 
         const { raspTimeouts } = appsecTelemetry.getRequestMetrics(req)
-        expect(raspTimeouts).to.equal(2)
+        assert.strictEqual(raspTimeouts, 2)
       })
 
       it('should keep the maximum raspErrorCode', () => {
@@ -151,7 +152,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({ errorCode: -3 }, req, { type: 'rule-type' })
 
         const { raspErrorCode } = appsecTelemetry.getRequestMetrics(req)
-        expect(raspErrorCode).to.equal(-1)
+        assert.strictEqual(raspErrorCode, -1)
       })
     })
 
@@ -173,47 +174,47 @@ describe('Appsec Rasp Telemetry metrics', () => {
       it('should increment rasp.rule.match metric with success block status', () => {
         appsecTelemetry.updateRaspRuleMatchMetricTags(req, raspRule, true, true)
 
-        expect(count).to.have.been.calledWith('rasp.rule.match', {
+        sinon.assert.calledWith(count, 'rasp.rule.match', {
           rule_type: 'rule-type',
           rule_variant: 'rule-variant',
           waf_version: '1.0.0',
           event_rules_version: '2.0.0',
           block: 'success'
         })
-        expect(inc).to.have.been.called
+        sinon.assert.called(inc)
       })
 
       it('should increment rasp.rule.match metric with failure block status', () => {
         appsecTelemetry.updateRaspRuleMatchMetricTags(req, raspRule, true, false)
 
-        expect(count).to.have.been.calledWith('rasp.rule.match', {
+        sinon.assert.calledWith(count, 'rasp.rule.match', {
           rule_type: 'rule-type',
           rule_variant: 'rule-variant',
           waf_version: '1.0.0',
           event_rules_version: '2.0.0',
           block: 'failure'
         })
-        expect(inc).to.have.been.called
+        sinon.assert.called(inc)
       })
 
       it('should increment rasp.rule.match metric with irrelevant block status', () => {
         appsecTelemetry.updateRaspRuleMatchMetricTags(req, raspRule, false, false)
 
-        expect(count).to.have.been.calledWith('rasp.rule.match', {
+        sinon.assert.calledWith(count, 'rasp.rule.match', {
           rule_type: 'rule-type',
           rule_variant: 'rule-variant',
           waf_version: '1.0.0',
           event_rules_version: '2.0.0',
           block: 'irrelevant'
         })
-        expect(inc).to.have.been.called
+        sinon.assert.called(inc)
       })
 
       it('should not increment any metric if req is not provided', () => {
         appsecTelemetry.updateRaspRuleMatchMetricTags(null, raspRule, true, true)
 
-        expect(count).to.not.have.been.called
-        expect(inc).to.not.have.been.called
+        sinon.assert.notCalled(count)
+        sinon.assert.notCalled(inc)
       })
     })
 
@@ -222,7 +223,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
         const raspRule = { type: 'rule-type', variant: 'rule-variant' }
         appsecTelemetry.updateRaspRuleSkippedMetricTags(raspRule, 'after-request')
 
-        expect(count).to.have.been.calledWith('rasp.rule.skipped', {
+        sinon.assert.calledWith(count, 'rasp.rule.skipped', {
           reason: 'after-request',
           rule_type: 'rule-type',
           rule_variant: 'rule-variant'
@@ -249,10 +250,10 @@ describe('Appsec Rasp Telemetry metrics', () => {
           rulesVersion
         }, req, { type: 'rule-type' })
 
-        expect(count).to.have.not.been.calledWith('waf.requests')
+        sinon.assert.neverCalledWith(count, 'waf.requests')
         appsecTelemetry.incrementWafRequestsMetric(req)
 
-        expect(count).to.have.been.calledWithExactly('waf.requests', {
+        sinon.assert.calledWithExactly(count, 'waf.requests', {
           block_failure: false,
           input_truncated: false,
           request_blocked: false,
@@ -276,8 +277,8 @@ describe('Appsec Rasp Telemetry metrics', () => {
 
       appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
 
-      expect(count).to.not.have.been.called
-      expect(inc).to.not.have.been.called
+      sinon.assert.notCalled(count)
+      sinon.assert.notCalled(inc)
     })
 
     it('should not increment any metric if telemetry metrics are disabled', () => {
@@ -288,8 +289,8 @@ describe('Appsec Rasp Telemetry metrics', () => {
 
       appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
 
-      expect(count).to.not.have.been.called
-      expect(inc).to.not.have.been.called
+      sinon.assert.notCalled(count)
+      sinon.assert.notCalled(inc)
     })
 
     describe('updateRaspRequestsMetricTags', () => {
@@ -311,9 +312,9 @@ describe('Appsec Rasp Telemetry metrics', () => {
 
         const { raspDuration, raspDurationExt, raspEvalCount } = appsecTelemetry.getRequestMetrics(req)
 
-        expect(raspDuration).to.be.eq(66)
-        expect(raspDurationExt).to.be.eq(77)
-        expect(raspEvalCount).to.be.eq(2)
+        assert.strictEqual(raspDuration, 66)
+        assert.strictEqual(raspDurationExt, 77)
+        assert.strictEqual(raspEvalCount, 2)
       })
 
       it('should sum rasp.duration and rasp.durationExt with telemetry enabled and metrics disabled', () => {
@@ -334,9 +335,9 @@ describe('Appsec Rasp Telemetry metrics', () => {
 
         const { raspDuration, raspDurationExt, raspEvalCount } = appsecTelemetry.getRequestMetrics(req)
 
-        expect(raspDuration).to.be.eq(66)
-        expect(raspDurationExt).to.be.eq(77)
-        expect(raspEvalCount).to.be.eq(2)
+        assert.strictEqual(raspDuration, 66)
+        assert.strictEqual(raspDurationExt, 77)
+        assert.strictEqual(raspEvalCount, 2)
       })
 
       it('should not increment any metric if telemetry metrics are disabled', () => {
@@ -350,8 +351,8 @@ describe('Appsec Rasp Telemetry metrics', () => {
           durationExt: 25
         }, req, { type: 'rule-type' })
 
-        expect(count).to.not.have.been.called
-        expect(inc).to.not.have.been.called
+        sinon.assert.notCalled(count)
+        sinon.assert.notCalled(inc)
       })
     })
   })

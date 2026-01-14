@@ -4,10 +4,10 @@
 // other languages use FNV1
 // this inconsistency is ok because hashes do not need to be consistent across services
 const crypto = require('crypto')
-const { encodeVarint, decodeVarint } = require('./encoding')
-const { LRUCache } = require('lru-cache')
+const { LRUCache } = require('../../../../vendor/dist/lru-cache')
 const log = require('../log')
 const pick = require('../../../datadog-core/src/utils/src/pick')
+const { encodeVarint, decodeVarint } = require('./encoding')
 
 const cache = new LRUCache({ max: 500 })
 
@@ -21,6 +21,12 @@ function shaHash (checkpointString) {
   return Buffer.from(hash, 'hex')
 }
 
+/**
+ * @param {string} service
+ * @param {string} env
+ * @param {string[]} edgeTags
+ * @param {Buffer} parentHash
+ */
 function computeHash (service, env, edgeTags, parentHash) {
   edgeTags.sort()
   const hashableEdgeTags = edgeTags.filter(item => item !== 'manual_checkpoint:true')
@@ -37,6 +43,13 @@ function computeHash (service, env, edgeTags, parentHash) {
   return value
 }
 
+/**
+ * @param {object} dataStreamsContext
+ * @param {Buffer} dataStreamsContext.hash
+ * @param {number} dataStreamsContext.pathwayStartNs
+ * @param {number} dataStreamsContext.edgeStartNs
+ * @returns {Buffer}
+ */
 function encodePathwayContext (dataStreamsContext) {
   return Buffer.concat([
     dataStreamsContext.hash,
@@ -45,11 +58,22 @@ function encodePathwayContext (dataStreamsContext) {
   ], 20)
 }
 
+/**
+ * @param {object} dataStreamsContext
+ * @param {Buffer} dataStreamsContext.hash
+ * @param {number} dataStreamsContext.pathwayStartNs
+ * @param {number} dataStreamsContext.edgeStartNs
+ * @returns {string}
+ */
 function encodePathwayContextBase64 (dataStreamsContext) {
   const encodedPathway = encodePathwayContext(dataStreamsContext)
   return encodedPathway.toString('base64')
 }
 
+/**
+ * @param {Buffer} pathwayContext
+ * @returns {object}
+ */
 function decodePathwayContext (pathwayContext) {
   if (pathwayContext == null || pathwayContext.length < 8) {
     return null
@@ -68,6 +92,10 @@ function decodePathwayContext (pathwayContext) {
   return { hash: pathwayHash, pathwayStartNs: pathwayStartMs * 1e6, edgeStartNs: edgeStartMs * 1e6 }
 }
 
+/**
+ * @param {string} pathwayContext
+ * @returns {ReturnType<typeof decodePathwayContext>|undefined}
+ */
 function decodePathwayContextBase64 (pathwayContext) {
   if (pathwayContext == null || pathwayContext.length < 8) {
     return
@@ -82,6 +110,13 @@ function decodePathwayContextBase64 (pathwayContext) {
 const DsmPathwayCodec = {
   // we use a class for encoding / decoding in case we update our encoding/decoding. A class will make updates easier
   // instead of using individual functions.
+  /**
+   * @param {object} dataStreamsContext
+   * @param {Buffer} dataStreamsContext.hash
+   * @param {number} dataStreamsContext.pathwayStartNs
+   * @param {number} dataStreamsContext.edgeStartNs
+   * @param {object} carrier
+   */
   encode (dataStreamsContext, carrier) {
     if (!dataStreamsContext || !dataStreamsContext.hash) {
       return
@@ -91,6 +126,10 @@ const DsmPathwayCodec = {
     log.debug(() => `Injected into DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
   },
 
+  /**
+   * @param {object} carrier
+   * @returns {ReturnType<typeof decodePathwayContext>|undefined}
+   */
   decode (carrier) {
     log.debug(() => `Attempting extract from DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
 

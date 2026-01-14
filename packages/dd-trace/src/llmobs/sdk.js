@@ -1,26 +1,22 @@
 'use strict'
 
-const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
+const { channel } = require('dc-polyfill')
 
+const { isTrue, isError } = require('../util')
+const tracerVersion = require('../../../../package.json').version
+const logger = require('../log')
+const { getEnvironmentVariable } = require('../config-helper')
+const Span = require('../opentracing/span')
+const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
 const {
   getFunctionArguments,
   validateKind
 } = require('./util')
-const { isTrue, isError } = require('../util')
-
 const { storage } = require('./storage')
-
-const Span = require('../opentracing/span')
-
-const tracerVersion = require('../../../../package.json').version
-const logger = require('../log')
-const { getEnvironmentVariable } = require('../config-helper')
 const telemetry = require('./telemetry')
-
 const LLMObsTagger = require('./tagger')
 
 // communicating with writer
-const { channel } = require('dc-polyfill')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const registerUserSpanProcessorCh = channel('llmobs:register-processor')
@@ -53,23 +49,20 @@ class LLMObs extends NoopLLMObs {
 
     logger.debug('Enabling LLMObs')
 
-    const { mlApp, agentlessEnabled } = options
-
     const DD_LLMOBS_ENABLED = getEnvironmentVariable('DD_LLMOBS_ENABLED')
 
-    const llmobsConfig = {
-      mlApp,
-      agentlessEnabled
-    }
-
-    const enabled = DD_LLMOBS_ENABLED == null || isTrue(DD_LLMOBS_ENABLED)
-    if (!enabled) {
+    if (DD_LLMOBS_ENABLED != null && !isTrue(DD_LLMOBS_ENABLED)) {
       logger.debug('LLMObs.enable() called when DD_LLMOBS_ENABLED is false. No action taken.')
       return
     }
 
-    this._config.llmobs.enabled = true
-    this._config.configure({ ...this._config, llmobs: llmobsConfig })
+    const llmobs = {
+      mlApp: options.mlApp,
+      agentlessEnabled: options.agentlessEnabled
+    }
+    // TODO: This will update config telemetry with the origin 'code', which is not ideal when `enable()` is called
+    // based on `APM_TRACING` RC product updates.
+    this._config.configure({ llmobs })
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)
@@ -408,6 +401,11 @@ class LLMObs extends NoopLLMObs {
             throw new Error('Failed to parse tags. Tags for evaluation metrics must be strings')
           }
         }
+      }
+
+      // When OTel tracing is enabled, add source:otel tag to allow backend to wait for OTel span conversion
+      if (isTrue(getEnvironmentVariable('DD_TRACE_OTEL_ENABLED'))) {
+        evaluationTags.source = 'otel'
       }
 
       const payload = {

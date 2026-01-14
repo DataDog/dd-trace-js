@@ -1,10 +1,12 @@
 'use strict'
 
-require('../setup/mocha')
-
 const assert = require('node:assert')
+const { MessageChannel } = require('node:worker_threads')
+
 const getDebuggerConfig = require('../../src/debugger/config')
 const getConfig = require('../../src/config')
+
+require('../setup/mocha')
 
 describe('getDebuggerConfig', function () {
   it('should only contain the allowed properties', function () {
@@ -19,6 +21,7 @@ describe('getDebuggerConfig', function () {
       'hostname',
       'logLevel',
       'port',
+      'propagateProcessTags',
       'repositoryUrl',
       'runtimeId',
       'service',

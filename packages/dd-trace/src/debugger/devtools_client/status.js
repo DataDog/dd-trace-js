@@ -1,10 +1,10 @@
 'use strict'
 
-const TTLSet = require('ttl-set')
-const config = require('./config')
-const JSONBuffer = require('./json-buffer')
+const TTLSet = require('../../../../../vendor/dist/ttl-set')
 const request = require('../../exporters/common/request')
 const FormData = require('../../exporters/common/form-data')
+const config = require('./config')
+const JSONBuffer = require('./json-buffer')
 const log = require('./log')
 
 module.exports = {

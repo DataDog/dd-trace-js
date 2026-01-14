@@ -1,14 +1,20 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, before } = require('mocha')
+const assert = require('node:assert/strict')
 
-const assert = require('node:assert')
+const { before, describe, it } = require('mocha')
 
 const LLMObsSDK = require('../../../dd-trace/src/llmobs/sdk')
 
-function getClassMethods (clsProto, { ignore = [] } = {}) {
-  const ignoreList = new Set(['constructor', ...[].concat(ignore)])
+/**
+ * Get the methods of a class
+ * @param {object} clsProto - The prototype of the class
+ * @param {object} [options] - The options
+ * @param {string[]} options.ignore - The methods to ignore
+ * @returns {string[]} The methods of the class
+ */
+function getClassMethods (clsProto, options) {
+  const ignoreList = new Set(['constructor', ...(options?.ignore ?? [])])
   return Object.getOwnPropertyNames(clsProto)
     .filter(member => {
       if (member.startsWith('_') || ignoreList.has(member)) {
@@ -81,21 +87,23 @@ describe('noop', () => {
   describe('trace', () => {
     it('should not throw with just a span', () => {
       const res = llmobs.trace({}, (span) => {
-        expect(() => span.setTag('foo', 'bar')).does.not.throw
+        // Should not throw
+        span.setTag('foo', 'bar')
         return 1
       })
 
-      expect(res).to.equal(1)
+      assert.strictEqual(res, 1)
     })
 
     it('should not throw with a span and a callback', async () => {
       const prom = llmobs.trace({}, (span, cb) => {
-        expect(() => span.setTag('foo', 'bar')).does.not.throw
-        expect(() => cb()).does.not.throw
+        // Should not throw
+        span.setTag('foo', 'bar')
+        cb()
         return Promise.resolve(5)
       })
 
-      expect(await prom).to.equal(5)
+      assert.strictEqual(await prom, 5)
     })
   })
 
@@ -106,7 +114,7 @@ describe('noop', () => {
       }
 
       const wrapped = llmobs.wrap({}, fn)
-      expect(wrapped()).to.equal(1)
+      assert.strictEqual(wrapped(), 1)
     })
 
     it('should not throw with a span and a callback', async () => {
@@ -114,7 +122,7 @@ describe('noop', () => {
         return Promise.resolve(5)
       }
       const wrapped = llmobs.wrap({}, fn)
-      expect(await wrapped()).to.equal(5)
+      assert.strictEqual(await wrapped(), 5)
     })
   })
 })

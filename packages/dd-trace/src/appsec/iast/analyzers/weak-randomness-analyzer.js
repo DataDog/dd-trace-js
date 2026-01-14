@@ -1,6 +1,6 @@
 'use strict'
-const Analyzer = require('./vulnerability-analyzer')
 const { WEAK_RANDOMNESS } = require('../vulnerabilities')
+const Analyzer = require('./vulnerability-analyzer')
 
 class WeakRandomnessAnalyzer extends Analyzer {
   constructor () {

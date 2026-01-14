@@ -1,16 +1,16 @@
 'use strict'
 
-const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-const semver = require('semver')
-
+const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
 
-const { withExports, withVersions } = require('../../dd-trace/test/setup/mocha')
+const axios = require('axios')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
+
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
-
+const { withExports, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const host = 'localhost'
 
 describe('Plugin', () => {
@@ -59,16 +59,20 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = traces[0]
 
-                  expect(spans[0]).to.have.property('name', 'fastify.request')
-                  expect(spans[0]).to.have.property('service', 'test')
-                  expect(spans[0]).to.have.property('type', 'web')
-                  expect(spans[0]).to.have.property('resource', 'GET /user')
-                  expect(spans[0].meta).to.have.property('span.kind', 'server')
-                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                  expect(spans[0].meta).to.have.property('http.method', 'GET')
-                  expect(spans[0].meta).to.have.property('http.status_code', '200')
-                  expect(spans[0].meta).to.have.property('component', 'fastify')
-                  expect(spans[0].meta).to.have.property('_dd.integration', 'fastify')
+                  assertObjectContains(spans[0], {
+                    name: 'fastify.request',
+                    service: 'test',
+                    type: 'web',
+                    resource: 'GET /user',
+                    meta: {
+                      'span.kind': 'server',
+                      'http.url': `http://localhost:${port}/user`,
+                      'http.method': 'GET',
+                      'http.status_code': '200',
+                      component: 'fastify',
+                      '_dd.integration': 'fastify'
+                    }
+                  })
                 })
                 .then(done)
                 .catch(done)
@@ -95,15 +99,19 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = traces[0]
 
-                  expect(spans[0]).to.have.property('name', 'fastify.request')
-                  expect(spans[0]).to.have.property('service', 'test')
-                  expect(spans[0]).to.have.property('type', 'web')
-                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-                  expect(spans[0].meta).to.have.property('span.kind', 'server')
-                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
-                  expect(spans[0].meta).to.have.property('http.method', 'GET')
-                  expect(spans[0].meta).to.have.property('http.status_code', '200')
-                  expect(spans[0].meta).to.have.property('component', 'fastify')
+                  assertObjectContains(spans[0], {
+                    name: 'fastify.request',
+                    service: 'test',
+                    type: 'web',
+                    resource: 'GET /user/:id',
+                    meta: {
+                      'span.kind': 'server',
+                      'http.url': `http://localhost:${port}/user/123`,
+                      'http.method': 'GET',
+                      'http.status_code': '200',
+                      component: 'fastify'
+                    }
+                  })
                 })
                 .then(done)
                 .catch(done)
@@ -129,15 +137,19 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = traces[0]
 
-                    expect(spans[0]).to.have.property('name', 'fastify.request')
-                    expect(spans[0]).to.have.property('service', 'test')
-                    expect(spans[0]).to.have.property('type', 'web')
-                    expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-                    expect(spans[0].meta).to.have.property('span.kind', 'server')
-                    expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
-                    expect(spans[0].meta).to.have.property('http.method', 'GET')
-                    expect(spans[0].meta).to.have.property('http.status_code', '200')
-                    expect(spans[0].meta).to.have.property('component', 'fastify')
+                    assertObjectContains(spans[0], {
+                      name: 'fastify.request',
+                      service: 'test',
+                      type: 'web',
+                      resource: 'GET /user/:id',
+                      meta: {
+                        'span.kind': 'server',
+                        'http.url': `http://localhost:${port}/user/123`,
+                        'http.method': 'GET',
+                        'http.status_code': '200',
+                        component: 'fastify'
+                      }
+                    })
                   })
                   .then(done)
                   .catch(done)
@@ -151,12 +163,12 @@ describe('Plugin', () => {
 
           it('should run handlers in the request scope', done => {
             app.use((req, res, next) => {
-              expect(tracer.scope().active()).to.not.be.null
+              assert.notStrictEqual(tracer.scope().active(), null)
               next()
             })
 
             app.get('/user', (request, reply) => {
-              expect(tracer.scope().active()).to.not.be.null
+              assert.notStrictEqual(tracer.scope().active(), null)
               reply.send()
             })
 
@@ -171,7 +183,7 @@ describe('Plugin', () => {
 
           it('should run middleware in the request scope', done => {
             app.use((req, res, next) => {
-              expect(tracer.scope().active()).to.not.be.null
+              assert.notStrictEqual(tracer.scope().active(), null)
               next()
             })
 
@@ -188,7 +200,7 @@ describe('Plugin', () => {
 
           it('should run POST handlers in the request scope', done => {
             app.post('/user', (request, reply) => {
-              expect(tracer.scope().active()).to.not.be.null
+              assert.notStrictEqual(tracer.scope().active(), null)
               reply.send()
             })
 
@@ -203,7 +215,7 @@ describe('Plugin', () => {
 
           it('should run routes in the request scope', done => {
             app.use((req, res, next) => {
-              expect(tracer.scope().active()).to.not.be.null
+              assert.notStrictEqual(tracer.scope().active(), null)
               next()
             })
 
@@ -211,7 +223,7 @@ describe('Plugin', () => {
               method: 'POST',
               url: '/user',
               handler: (request, reply) => {
-                expect(tracer.scope().active()).to.not.be.null
+                assert.notStrictEqual(tracer.scope().active(), null)
                 reply.send()
               }
             })
@@ -227,17 +239,17 @@ describe('Plugin', () => {
 
           it('should run hooks in the request scope', done => {
             app.addHook('onRequest', (request, reply, next) => {
-              expect(tracer.scope().active()).to.not.be.null
+              assert.notStrictEqual(tracer.scope().active(), null)
               next()
             })
 
             app.addHook('preHandler', (request, reply, next) => {
-              expect(tracer.scope().active()).to.not.be.null
+              assert.notStrictEqual(tracer.scope().active(), null)
               next ? next() : reply()
             })
 
             app.addHook('onResponse', (request, reply, next) => {
-              expect(tracer.scope().active()).to.not.be.null
+              assert.notStrictEqual(tracer.scope().active(), null)
               next ? next() : reply()
             })
 
@@ -276,12 +288,16 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = traces[0]
 
-                  expect(spans[0]).to.have.property('name', 'fastify.request')
-                  expect(spans[0]).to.have.property('resource', 'GET /user')
-                  expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                  expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                  expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                  expect(spans[0].meta).to.have.property('component', 'fastify')
+                  assertObjectContains(spans[0], {
+                    name: 'fastify.request',
+                    resource: 'GET /user',
+                    meta: {
+                      [ERROR_TYPE]: error.name,
+                      [ERROR_MESSAGE]: error.message,
+                      [ERROR_STACK]: error.stack,
+                      component: 'fastify'
+                    }
+                  })
                 })
                 .then(done)
                 .catch(done)
@@ -320,7 +336,7 @@ describe('Plugin', () => {
 
             app.get('/user', (request, reply) => {
               try {
-                expect(storage.getStore()).to.equal(store)
+                assert.strictEqual(storage.getStore(), store)
                 done()
               } catch (e) {
                 done(e)
@@ -355,13 +371,17 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = traces[0]
 
-                  expect(spans[0]).to.have.property('name', 'fastify.request')
-                  expect(spans[0]).to.have.property('resource', 'GET /user')
-                  expect(spans[0]).to.have.property('error', 1)
-                  expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                  expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                  expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                  expect(spans[0].meta).to.have.property('component', 'fastify')
+                  assertObjectContains(spans[0], {
+                    name: 'fastify.request',
+                    resource: 'GET /user',
+                    error: 1,
+                    meta: {
+                      [ERROR_TYPE]: error.name,
+                      [ERROR_MESSAGE]: error.message,
+                      [ERROR_STACK]: error.stack,
+                      component: 'fastify'
+                    }
+                  })
                 })
                 .then(done)
                 .catch(done)
@@ -388,10 +408,14 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = traces[0]
 
-                    expect(spans[0]).to.have.property('name', 'fastify.request')
-                    expect(spans[0]).to.have.property('resource', 'GET /user')
-                    expect(spans[0]).to.have.property('error', 0)
-                    expect(spans[0].meta).to.have.property('component', 'fastify')
+                    assertObjectContains(spans[0], {
+                      name: 'fastify.request',
+                      resource: 'GET /user',
+                      error: 0,
+                      meta: {
+                        component: 'fastify'
+                      }
+                    })
                   })
                   .then(done)
                   .catch(done)
@@ -419,12 +443,16 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = traces[0]
 
-                    expect(spans[0]).to.have.property('name', 'fastify.request')
-                    expect(spans[0]).to.have.property('resource', 'GET /user')
-                    expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                    expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                    expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                    expect(spans[0].meta).to.have.property('component', 'fastify')
+                    assertObjectContains(spans[0], {
+                      name: 'fastify.request',
+                      resource: 'GET /user',
+                      meta: {
+                        [ERROR_TYPE]: error.name,
+                        [ERROR_MESSAGE]: error.message,
+                        [ERROR_STACK]: error.stack,
+                        component: 'fastify'
+                      }
+                    })
                   })
                   .then(done)
                   .catch(done)
@@ -453,13 +481,17 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = traces[0]
 
-                    expect(spans[0]).to.have.property('name', 'fastify.request')
-                    expect(spans[0]).to.have.property('resource', 'GET /user')
-                    expect(spans[0]).to.have.property('error', 1)
-                    expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                    expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                    expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                    expect(spans[0].meta).to.have.property('component', 'fastify')
+                    assertObjectContains(spans[0], {
+                      name: 'fastify.request',
+                      resource: 'GET /user',
+                      error: 1,
+                      meta: {
+                        [ERROR_TYPE]: error.name,
+                        [ERROR_MESSAGE]: error.message,
+                        [ERROR_STACK]: error.stack,
+                        component: 'fastify'
+                      }
+                    })
                   })
                   .then(done)
                   .catch(done)
@@ -486,13 +518,15 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = traces[0]
 
-                    expect(spans[0]).to.have.property('name', 'fastify.request')
-                    expect(spans[0]).to.have.property('resource', 'GET /user')
-                    expect(spans[0]).to.have.property('error', 0)
-                    expect(spans[0].meta).to.not.have.property(ERROR_TYPE)
-                    expect(spans[0].meta).to.not.have.property(ERROR_MESSAGE)
-                    expect(spans[0].meta).to.not.have.property(ERROR_STACK)
-                    expect(spans[0].meta).to.have.property('component', 'fastify')
+                    assert.strictEqual(spans[0].name, 'fastify.request')
+                    assert.strictEqual(spans[0].resource, 'GET /user')
+                    assert.strictEqual(spans[0].error, 0)
+                    assert.ok(!(ERROR_TYPE in spans[0].meta))
+                    assert.ok(!(ERROR_MESSAGE in spans[0].meta))
+                    assert.ok(!(ERROR_STACK in spans[0].meta))
+                    assertObjectContains(spans[0].meta, {
+                      component: 'fastify'
+                    })
                   })
                   .then(done)
                   .catch(done)
@@ -525,13 +559,17 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = traces[0]
 
-                    expect(spans[0]).to.have.property('name', 'fastify.request')
-                    expect(spans[0]).to.have.property('resource', 'GET /user')
-                    expect(spans[0]).to.have.property('error', 1)
-                    expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                    expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                    expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                    expect(spans[0].meta).to.have.property('component', 'fastify')
+                    assertObjectContains(spans[0], {
+                      name: 'fastify.request',
+                      resource: 'GET /user',
+                      error: 1,
+                      meta: {
+                        [ERROR_TYPE]: error.name,
+                        [ERROR_MESSAGE]: error.message,
+                        [ERROR_STACK]: error.stack,
+                        component: 'fastify'
+                      }
+                    })
                   })
                   .then(done)
                   .catch(done)

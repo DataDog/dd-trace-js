@@ -1,7 +1,7 @@
 'use strict'
 
-const express = require('express')
 const tracer = require('dd-trace').init({ flushInterval: 0 })
+const express = require('express')
 
 const app = express()
 
@@ -48,6 +48,6 @@ app.get('/abort', async (req, res) => {
 })
 
 const server = app.listen(() => {
-  const port = server.address().port
+  const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
   process.send({ port })
 })

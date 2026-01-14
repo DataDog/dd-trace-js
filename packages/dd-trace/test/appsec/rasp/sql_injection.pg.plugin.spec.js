@@ -1,10 +1,10 @@
 'use strict'
 
-const Axios = require('axios')
 const assert = require('node:assert')
+const path = require('node:path')
+const Axios = require('axios')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
-const path = require('node:path')
 
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
@@ -49,7 +49,7 @@ describe('RASP - sql_injection', () => {
           }))
 
           server = expressApp.listen(0, () => {
-            const port = server.address().port
+            const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
             axios = Axios.create({
               baseURL: `http://localhost:${port}`
             })

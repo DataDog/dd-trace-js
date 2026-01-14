@@ -1,8 +1,8 @@
 'use strict'
 
-const { assert } = require('chai')
-const { setup } = require('./utils')
 const { once } = require('node:events')
+const { assertObjectContains } = require('../helpers')
+const { setup } = require('./utils')
 
 // Default settings is tested in unit tests, so we only need to test the env vars here
 describe('Dynamic Instrumentation snapshot PII redaction', function () {
@@ -22,12 +22,14 @@ describe('Dynamic Instrumentation snapshot PII redaction', function () {
       const [{ payload: [{ debugger: { snapshot: { captures } } }] }] = await promise
       const { locals } = captures.lines[t.breakpoint.line]
 
-      assert.deepPropertyVal(locals, 'foo', { type: 'string', notCapturedReason: 'redactedIdent' })
-      assert.deepPropertyVal(locals, 'bar', { type: 'string', notCapturedReason: 'redactedIdent' })
-      assert.deepPropertyVal(locals, 'baz', { type: 'string', value: 'c' })
+      assertObjectContains(locals, {
+        foo: { type: 'string', notCapturedReason: 'redactedIdent' },
+        bar: { type: 'string', notCapturedReason: 'redactedIdent' },
+        baz: { type: 'string', value: 'c' }
+      })
 
       // existing redaction should not be impacted
-      assert.deepPropertyVal(locals, 'secret', { type: 'string', notCapturedReason: 'redactedIdent' })
+      assertObjectContains(locals, { secret: { type: 'string', notCapturedReason: 'redactedIdent' } })
     })
   })
 
@@ -47,8 +49,10 @@ describe('Dynamic Instrumentation snapshot PII redaction', function () {
       const [{ payload: [{ debugger: { snapshot: { captures } } }] }] = await promise
       const { locals } = captures.lines[t.breakpoint.line]
 
-      assert.deepPropertyVal(locals, 'secret', { type: 'string', value: 'shh!' })
-      assert.deepPropertyVal(locals, 'password', { type: 'string', notCapturedReason: 'redactedIdent' })
+      assertObjectContains(locals, {
+        secret: { type: 'string', value: 'shh!' },
+        password: { type: 'string', notCapturedReason: 'redactedIdent' }
+      })
     })
   })
 })

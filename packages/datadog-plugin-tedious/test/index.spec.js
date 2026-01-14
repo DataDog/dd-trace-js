@@ -1,14 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-
 const MSSQL_USERNAME = 'sa'
 const MSSQL_PASSWORD = 'DD_HUNTER2'
 
@@ -114,7 +114,7 @@ describe('Plugin', () => {
 
         tracer.scope().activate(span, () => {
           const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
-            expect(tracer.scope().active()).to.equal(span)
+            assert.strictEqual(tracer.scope().active(), span)
             done(err)
           })
           connection.execSql(request)
@@ -129,7 +129,7 @@ describe('Plugin', () => {
             if (err) done(err)
           })
           request.on('requestCompleted', () => {
-            expect(tracer.scope().active()).to.equal(span)
+            assert.strictEqual(tracer.scope().active(), span)
             done()
           })
           connection.execSql(request)
@@ -141,18 +141,18 @@ describe('Plugin', () => {
 
         const promise = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', query)
-            expect(traces[0][0]).to.have.property('type', 'sql')
-            expect(traces[0][0].meta).to.have.property('component', 'tedious')
-            expect(traces[0][0].meta).to.have.property('_dd.integration', 'tedious')
-            expect(traces[0][0].meta).to.have.property('db.name', 'master')
-            expect(traces[0][0].meta).to.have.property('db.user', 'sa')
-            expect(traces[0][0].meta).to.have.property('db.type', 'mssql')
-            expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-            expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-            expect(traces[0][0].metrics).to.have.property('network.destination.port', 1433)
+            assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+            assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+            assert.strictEqual(traces[0][0].resource, query)
+            assert.strictEqual(traces[0][0].type, 'sql')
+            assert.strictEqual(traces[0][0].meta.component, 'tedious')
+            assert.strictEqual(traces[0][0].meta['_dd.integration'], 'tedious')
+            assert.strictEqual(traces[0][0].meta['db.name'], 'master')
+            assert.strictEqual(traces[0][0].meta['db.user'], 'sa')
+            assert.strictEqual(traces[0][0].meta['db.type'], 'mssql')
+            assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
+            assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+            assert.strictEqual(traces[0][0].metrics['network.destination.port'], 1433)
           })
 
         const request = new tds.Request(query, (err) => {
@@ -167,9 +167,9 @@ describe('Plugin', () => {
 
         const promise = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', query)
+            assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+            assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+            assert.strictEqual(traces[0][0].resource, query)
           })
 
         const request = new tds.Request(query, (err) => {
@@ -186,9 +186,9 @@ describe('Plugin', () => {
 
         const promise = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', query)
+            assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+            assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+            assert.strictEqual(traces[0][0].resource, query)
           })
 
         const request = new tds.Request(query, (err) => {
@@ -203,9 +203,9 @@ describe('Plugin', () => {
 
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', query)
+            assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+            assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+            assert.strictEqual(traces[0][0].resource, query)
           })
           .then(done)
           .catch(done)
@@ -221,9 +221,9 @@ describe('Plugin', () => {
 
         const promise = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', query)
+            assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+            assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+            assert.strictEqual(traces[0][0].resource, query)
           })
 
         const request = new tds.Request(query, (err) => {
@@ -242,9 +242,9 @@ describe('Plugin', () => {
 
         const promise = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', query)
+            assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+            assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+            assert.strictEqual(traces[0][0].resource, query)
           })
 
         const request = new tds.Request(query, (err) => {
@@ -263,9 +263,9 @@ describe('Plugin', () => {
 
         const promise = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', procedure)
+            assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+            assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+            assert.strictEqual(traces[0][0].resource, procedure)
           })
 
         const request = new tds.Request(procedure, (err) => {
@@ -282,10 +282,10 @@ describe('Plugin', () => {
 
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-            expect(traces[0][0].meta).to.have.property('component', 'tedious')
+            assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
+            assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+            assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
+            assert.strictEqual(traces[0][0].meta.component, 'tedious')
           })
           .then(done)
           .catch(done)
@@ -303,11 +303,11 @@ describe('Plugin', () => {
 
         agent
           .assertSomeTraces(traces => {
-            expect(error.message).to.equal('Canceled.')
-            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-            expect(traces[0][0].meta).to.have.property('component', 'tedious')
+            assert.strictEqual(error.message, 'Canceled.')
+            assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
+            assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+            assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
+            assert.strictEqual(traces[0][0].meta.component, 'tedious')
           })
           .then(done)
           .catch(done)
@@ -354,8 +354,8 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-                expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
+                assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+                assert.strictEqual(traces[0][0].resource, bulkLoad.getBulkInsertSql())
               })
               .then(done)
               .catch(done)
@@ -370,8 +370,8 @@ describe('Plugin', () => {
 
               const promise = agent
                 .assertSomeTraces(traces => {
-                  expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-                  expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
+                  assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+                  assert.strictEqual(traces[0][0].resource, bulkLoad.getBulkInsertSql())
                 })
 
               connection.execBulkLoad(bulkLoad)
@@ -389,7 +389,7 @@ describe('Plugin', () => {
 
               tracer.scope().activate(span, () => {
                 rowStream.on('finish', () => {
-                  expect(tracer.scope().active()).to.equal(span)
+                  assert.strictEqual(tracer.scope().active(), span)
                   done()
                 })
               })
@@ -459,8 +459,8 @@ describe('Plugin', () => {
 
         const promise = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
-            expect(request.sqlTextOrProcedure).to.equal("/*dddb='master',dddbs='custom',dde='tester'," +
+            assert.strictEqual(traces[0][0].resource, 'SELECT 1 + 1 AS solution')
+            assert.strictEqual(request.sqlTextOrProcedure, "/*dddb='master',dddbs='custom',dde='tester'," +
               "ddh='localhost',ddps='test',ddpv='10.8.2'*/ SELECT 1 + 1 AS solution")
           })
 

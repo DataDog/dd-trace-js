@@ -4,6 +4,7 @@ const log = require('../../log')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
+ * @typedef {import('@opentelemetry/api').AttributeValue} AttributeValue
  */
 
 /**
@@ -25,7 +26,7 @@ class OtlpTransformerBase {
    * @param {string} signalType - Signal type for warning messages (e.g., 'logs', 'metrics')
    */
   constructor (resourceAttributes, protocol, signalType) {
-    this.#resourceAttributes = this._transformAttributes(resourceAttributes)
+    this.#resourceAttributes = this.transformAttributes(resourceAttributes)
     if (protocol === 'grpc') {
       log.warn(`OTLP gRPC protocol is not supported for ${signalType}. ` +
         'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.')
@@ -40,12 +41,12 @@ class OtlpTransformerBase {
    * @returns {Map<string, Array>} Map of instrumentation scope key to items
    * @protected
    */
-  _groupByInstrumentationScope (items) {
+  groupByInstrumentationScope (items) {
     const grouped = new Map()
 
     for (const item of items) {
       const instrumentationScope = item.instrumentationScope || { name: '', version: '', schemaUrl: '', attributes: {} }
-      const attrsKey = JSON.stringify(instrumentationScope.attributes || {})
+      const attrsKey = stableStringify(instrumentationScope.attributes || {})
       const key = `${instrumentationScope.name}@${instrumentationScope.version}@` +
         `${instrumentationScope.schemaUrl}@${attrsKey}`
 
@@ -61,10 +62,10 @@ class OtlpTransformerBase {
 
   /**
    * Transforms resource attributes to OTLP resource format.
-   * @returns {Object} OTLP resource object
+   * @returns {object} OTLP resource object
    * @protected
    */
-  _transformResource () {
+  transformResource () {
     return {
       attributes: this.#resourceAttributes,
       droppedAttributesCount: 0
@@ -73,26 +74,24 @@ class OtlpTransformerBase {
 
   /**
    * Transforms attributes to OTLP KeyValue format.
-   * @param {Object} attributes - Attributes to transform
-   * @returns {Object[]} Array of OTLP KeyValue objects
+   * @param {Attributes} attributes - Attributes to transform
+   * @returns {object[]} Array of OTLP KeyValue objects
    * @protected
    */
-  _transformAttributes (attributes) {
-    if (!attributes) return []
-
+  transformAttributes (attributes) {
     return Object.entries(attributes).map(([key, value]) => ({
       key,
-      value: this._transformAnyValue(value)
+      value: this.transformAnyValue(value)
     }))
   }
 
   /**
    * Transforms attributes to JSON format (simplified).
-   * @param {Object} attributes - Attributes to transform
-   * @returns {Object[]} Array of OTLP KeyValue objects with string values
+   * @param {object} attributes - Attributes to transform
+   * @returns {object[]} Array of OTLP KeyValue objects with string values
    * @protected
    */
-  _attributesToJson (attributes) {
+  attributesToJson (attributes) {
     if (!attributes) return []
 
     return Object.entries(attributes).map(([key, value]) => ({
@@ -103,11 +102,13 @@ class OtlpTransformerBase {
 
   /**
    * Transforms any value to OTLP AnyValue format.
-   * @param {any} value - Value to transform
-   * @returns {Object} OTLP AnyValue object
+   * Supports: strings, numbers (int/double), booleans, arrays.
+   * Objects are filtered out by sanitizeAttributes before reaching this method.
+   * @param {AttributeValue | null | undefined} value - Value to transform
+   * @returns {object} OTLP AnyValue object
    * @protected
    */
-  _transformAnyValue (value) {
+  transformAnyValue (value) {
     if (typeof value === 'string') {
       return { stringValue: value }
     } else if (typeof value === 'number') {
@@ -120,30 +121,22 @@ class OtlpTransformerBase {
     } else if (Array.isArray(value)) {
       return {
         arrayValue: {
-          values: value.map(v => this._transformAnyValue(v))
-        }
-      }
-    } else if (value && typeof value === 'object') {
-      return {
-        kvlistValue: {
-          values: Object.entries(value).map(([k, v]) => ({
-            key: k,
-            value: this._transformAnyValue(v)
-          }))
+          values: value.map(v => this.transformAnyValue(v))
         }
       }
     }
+    // Fallback for any unexpected types
     return { stringValue: String(value) }
   }
 
   /**
    * Serializes data to protobuf format.
-   * @param {Object} protoType - Protobuf type from protobuf_loader
-   * @param {Object} data - Data to serialize
+   * @param {object} protoType - Protobuf type from protobuf_loader
+   * @param {object} data - Data to serialize
    * @returns {Buffer} Protobuf-encoded data
    * @protected
    */
-  _serializeToProtobuf (protoType, data) {
+  serializeToProtobuf (protoType, data) {
     const message = protoType.create(data)
     const buffer = protoType.encode(message).finish()
     return buffer
@@ -151,13 +144,35 @@ class OtlpTransformerBase {
 
   /**
    * Serializes data to JSON format.
-   * @param {Object} data - Data to serialize
+   * @param {object} data - Data to serialize
    * @returns {Buffer} JSON-encoded data
    * @protected
    */
-  _serializeToJson (data) {
+  serializeToJson (data) {
     return Buffer.from(JSON.stringify(data))
   }
 }
 
+/**
+ * Stable stringification of OpenTelemetry Attributes.
+ * Ensures consistent serialization regardless of key order by sorting keys.
+ * Supports string keys with primitive values or arrays of primitives.
+ *
+ * @param {Attributes} attributes - Attributes object to stringify
+ * @returns {string} Stable string representation
+ */
+function stableStringify (attributes) {
+  if (attributes == null) {
+    return JSON.stringify(attributes)
+  }
+  // Attributes are sorted by key to ensure consistent serialization regardless of key order.
+  // Keys are always strings and values are always strings, numbers, booleans,
+  // or arrays of strings, numbers, or booleans.
+  return Object.keys(attributes)
+    .sort()
+    .map(key => `${key}:${JSON.stringify(attributes[key])}`)
+    .join(',')
+}
+
 module.exports = OtlpTransformerBase
+module.exports.stableStringify = stableStringify

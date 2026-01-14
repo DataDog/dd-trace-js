@@ -1,12 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, context } = require('tap').mocha
+const assert = require('node:assert/strict')
 const path = require('node:path')
-const istanbul = require('istanbul-lib-coverage')
+
+const { describe, it, beforeEach } = require('mocha')
+const context = describe
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
 require('../../setup/core')
 
 const {
@@ -34,20 +36,20 @@ const {
 describe('getTestParametersString', () => {
   it('returns formatted test parameters and removes params from input', () => {
     const input = { test_stuff: [['params'], [{ b: 'c' }]] }
-    expect(getTestParametersString(input, 'test_stuff')).to.equal(
+    assert.strictEqual(getTestParametersString(input, 'test_stuff'),
       JSON.stringify({ arguments: ['params'], metadata: {} })
     )
-    expect(input).to.eql({ test_stuff: [[{ b: 'c' }]] })
-    expect(getTestParametersString(input, 'test_stuff')).to.equal(
+    assert.deepStrictEqual(input, { test_stuff: [[{ b: 'c' }]] })
+    assert.strictEqual(getTestParametersString(input, 'test_stuff'),
       JSON.stringify({ arguments: [{ b: 'c' }], metadata: {} })
     )
-    expect(input).to.eql({ test_stuff: [] })
+    assert.deepStrictEqual(input, { test_stuff: [] })
   })
 
   it('does not crash when test name is not found and does not modify input', () => {
     const input = { test_stuff: [['params'], ['params2']] }
-    expect(getTestParametersString(input, 'test_not_present')).to.equal('')
-    expect(input).to.eql({ test_stuff: [['params'], ['params2']] })
+    assert.strictEqual(getTestParametersString(input, 'test_not_present'), '')
+    assert.deepStrictEqual(input, { test_stuff: [['params'], ['params2']] })
   })
 
   it('does not crash when parameters can not be serialized and removes params from input', () => {
@@ -55,9 +57,9 @@ describe('getTestParametersString', () => {
     circular.b = circular
 
     const input = { test_stuff: [[circular], ['params2']] }
-    expect(getTestParametersString(input, 'test_stuff')).to.equal('')
-    expect(input).to.eql({ test_stuff: [['params2']] })
-    expect(getTestParametersString(input, 'test_stuff')).to.equal(
+    assert.strictEqual(getTestParametersString(input, 'test_stuff'), '')
+    assert.deepStrictEqual(input, { test_stuff: [['params2']] })
+    assert.strictEqual(getTestParametersString(input, 'test_stuff'),
       JSON.stringify({ arguments: ['params2'], metadata: {} })
     )
   })
@@ -67,14 +69,14 @@ describe('getTestSuitePath', () => {
   it('returns sourceRoot if the test path is falsy', () => {
     const sourceRoot = '/users/opt'
     const testSuitePath = getTestSuitePath(undefined, sourceRoot)
-    expect(testSuitePath).to.equal(sourceRoot)
+    assert.strictEqual(testSuitePath, sourceRoot)
   })
 
   it('returns sourceRoot if the test path has the same value', () => {
     const sourceRoot = '/users/opt'
     const testSuiteAbsolutePath = sourceRoot
     const testSuitePath = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
-    expect(testSuitePath).to.equal(sourceRoot)
+    assert.strictEqual(testSuitePath, sourceRoot)
   })
 })
 
@@ -83,11 +85,11 @@ describe('getCodeOwnersFileEntries', () => {
     const rootDir = path.join(__dirname, '__test__')
     const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
 
-    expect(codeOwnersFileEntries[0]).to.eql({
+    assert.deepStrictEqual(codeOwnersFileEntries[0], {
       pattern: 'packages/dd-trace/test/plugins/util/test.spec.js',
       owners: ['@datadog-ci-app']
     })
-    expect(codeOwnersFileEntries[1]).to.eql({
+    assert.deepStrictEqual(codeOwnersFileEntries[1], {
       pattern: 'packages/dd-trace/test/plugins/util/*',
       owners: ['@datadog-dd-trace-js']
     })
@@ -100,7 +102,7 @@ describe('getCodeOwnersFileEntries', () => {
     const oldCwd = process.cwd()
     process.chdir(path.join(__dirname))
     const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
-    expect(codeOwnersFileEntries).to.equal(null)
+    assert.strictEqual(codeOwnersFileEntries, null)
     process.chdir(oldCwd)
   })
 
@@ -111,11 +113,11 @@ describe('getCodeOwnersFileEntries', () => {
     process.chdir(path.join(__dirname, '__test__'))
     const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
 
-    expect(codeOwnersFileEntries[0]).to.eql({
+    assert.deepStrictEqual(codeOwnersFileEntries[0], {
       pattern: 'packages/dd-trace/test/plugins/util/test.spec.js',
       owners: ['@datadog-ci-app']
     })
-    expect(codeOwnersFileEntries[1]).to.eql({
+    assert.deepStrictEqual(codeOwnersFileEntries[1], {
       pattern: 'packages/dd-trace/test/plugins/util/*',
       owners: ['@datadog-dd-trace-js']
     })
@@ -127,7 +129,7 @@ describe('getCodeOwnersForFilename', () => {
   it('returns null if entries is empty', () => {
     const codeOwners = getCodeOwnersForFilename('filename', undefined)
 
-    expect(codeOwners).to.equal(null)
+    assert.strictEqual(codeOwners, null)
   })
 
   it('returns the code owners for a given file path', () => {
@@ -139,14 +141,14 @@ describe('getCodeOwnersForFilename', () => {
       codeOwnersFileEntries
     )
 
-    expect(codeOwnersForGitSpec).to.equal(JSON.stringify(['@datadog-dd-trace-js']))
+    assert.strictEqual(codeOwnersForGitSpec, JSON.stringify(['@datadog-dd-trace-js']))
 
     const codeOwnersForTestSpec = getCodeOwnersForFilename(
       'packages/dd-trace/test/plugins/util/test.spec.js',
       codeOwnersFileEntries
     )
 
-    expect(codeOwnersForTestSpec).to.equal(JSON.stringify(['@datadog-ci-app']))
+    assert.strictEqual(codeOwnersForTestSpec, JSON.stringify(['@datadog-ci-app']))
   })
 })
 
@@ -161,12 +163,12 @@ describe('coverage utils', () => {
   describe('getCoveredFilenamesFromCoverage', () => {
     it('returns the list of files the code coverage includes', () => {
       const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
-      expect(coverageFiles).to.eql(['subtract.js', 'add.js'])
+      assert.deepStrictEqual(coverageFiles, ['subtract.js', 'add.js'])
     })
 
     it('returns an empty list if coverage is empty', () => {
       const coverageFiles = getCoveredFilenamesFromCoverage({})
-      expect(coverageFiles).to.eql([])
+      assert.deepStrictEqual(coverageFiles, [])
     })
   })
 
@@ -174,7 +176,7 @@ describe('coverage utils', () => {
     it('resets the code coverage', () => {
       resetCoverage(coverage)
       const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
-      expect(coverageFiles).to.eql([])
+      assert.deepStrictEqual(coverageFiles, [])
     })
   })
 
@@ -182,32 +184,32 @@ describe('coverage utils', () => {
     it('copies the code coverage', () => {
       const newCoverageMap = istanbul.createCoverageMap()
       // At first it's different, then it is the same after copying
-      expect(JSON.stringify(coverage)).not.to.equal(JSON.stringify(newCoverageMap.toJSON()))
+      assert.notStrictEqual(JSON.stringify(coverage), JSON.stringify(newCoverageMap.toJSON()))
       mergeCoverage(coverage, newCoverageMap)
-      expect(JSON.stringify(coverage)).to.equal(JSON.stringify(newCoverageMap.toJSON()))
+      assert.strictEqual(JSON.stringify(coverage), JSON.stringify(newCoverageMap.toJSON()))
     })
 
     it('returns a copy that is not affected by other copies being reset', () => {
       const newCoverageMap = istanbul.createCoverageMap()
 
-      expect(JSON.stringify(coverage)).not.to.equal(JSON.stringify(newCoverageMap.toJSON()))
+      assert.notStrictEqual(JSON.stringify(coverage), JSON.stringify(newCoverageMap.toJSON()))
       mergeCoverage(coverage, newCoverageMap)
 
       const originalCoverageJson = JSON.stringify(coverage)
       const copiedCoverageJson = JSON.stringify(newCoverageMap.toJSON())
-      expect(originalCoverageJson).to.equal(copiedCoverageJson)
+      assert.strictEqual(originalCoverageJson, copiedCoverageJson)
 
       // The original coverage is reset
       resetCoverage(coverage)
 
       // The original coverage JSON representation changes
-      expect(originalCoverageJson).not.to.equal(JSON.stringify(coverage))
+      assert.notStrictEqual(originalCoverageJson, JSON.stringify(coverage))
 
       // The original coverage JSON representation is not the same as the copied coverage
-      expect(JSON.stringify(coverage)).not.to.equal(JSON.stringify(newCoverageMap.toJSON()))
+      assert.notStrictEqual(JSON.stringify(coverage), JSON.stringify(newCoverageMap.toJSON()))
 
       // The copied coverage remains the same after the original reset
-      expect(copiedCoverageJson).to.equal(JSON.stringify(newCoverageMap.toJSON()))
+      assert.strictEqual(copiedCoverageJson, JSON.stringify(newCoverageMap.toJSON()))
     })
   })
 })
@@ -237,9 +239,7 @@ describe('metadata validation', () => {
     const invalidMetadata5 = { [GIT_REPOSITORY_URL]: '', [CI_PIPELINE_URL]: '', [GIT_COMMIT_SHA]: '' }
     const invalidMetadatas = [invalidMetadata1, invalidMetadata2, invalidMetadata3, invalidMetadata4, invalidMetadata5]
     invalidMetadatas.forEach((invalidMetadata) => {
-      expect(
-        JSON.stringify(removeInvalidMetadata(invalidMetadata)), `${JSON.stringify(invalidMetadata)} is valid`
-      ).to.equal(JSON.stringify({}))
+      assert.strictEqual(JSON.stringify(removeInvalidMetadata(invalidMetadata)), JSON.stringify({}))
     })
   })
 
@@ -261,7 +261,7 @@ describe('metadata validation', () => {
     }
     const validMetadatas = [validMetadata1, validMetadata2, validMetadata3]
     validMetadatas.forEach((validMetadata) => {
-      expect(JSON.stringify(removeInvalidMetadata(validMetadata))).to.be.equal(JSON.stringify(validMetadata))
+      assert.strictEqual(JSON.stringify(removeInvalidMetadata(validMetadata)), JSON.stringify(validMetadata))
     })
   })
 })
@@ -278,7 +278,7 @@ describe('parseAnnotations', () => {
         description: 'sales'
       }
     ])
-    expect(tags).to.eql({
+    assert.deepStrictEqual(tags, {
       'test.requirement': 'high',
       'test.responsible_team': 'sales'
     })
@@ -294,7 +294,7 @@ describe('parseAnnotations', () => {
       { type: 'DD_TAGS[v', description: 'invalid' },
       { type: 'test.requirement', description: 'sure' }
     ])
-    expect(tags).to.eql({})
+    assert.deepStrictEqual(tags, {})
   })
 })
 
@@ -314,7 +314,7 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
       knownSuites,
       faultyThreshold
     )
-    expect(isFaulty).to.be.false
+    assert.strictEqual(isFaulty, false)
 
     // Session has 60 tests and 30 are marked as new (50%): not faulty.
     const projectSuites2 = Array.from({ length: 60 }).map((_, i) => `test${i}.spec.js`)
@@ -327,7 +327,7 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
       knownSuites2,
       faultyThreshold
     )
-    expect(isFaulty2).to.be.false
+    assert.strictEqual(isFaulty2, false)
   })
 
   it('returns true if the percentage is above the threshold', () => {
@@ -345,7 +345,7 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
       knownSuites,
       faultyThreshold
     )
-    expect(isFaulty).to.be.true
+    assert.strictEqual(isFaulty, true)
   })
 })
 
@@ -359,22 +359,22 @@ describe('getNumFromKnownTests', () => {
     }
 
     const numTests = getNumFromKnownTests(knownTests)
-    expect(numTests).to.equal(3)
+    assert.strictEqual(numTests, 3)
   })
 
   it('does not crash with empty dictionaries', () => {
     const knownTests = {}
 
     const numTests = getNumFromKnownTests(knownTests)
-    expect(numTests).to.equal(0)
+    assert.strictEqual(numTests, 0)
   })
 
   it('does not crash if known tests is undefined or null', () => {
     const numTestsUndefined = getNumFromKnownTests(undefined)
-    expect(numTestsUndefined).to.equal(0)
+    assert.strictEqual(numTestsUndefined, 0)
 
     const numTestsNull = getNumFromKnownTests(null)
-    expect(numTestsNull).to.equal(0)
+    assert.strictEqual(numTestsNull, 0)
   })
 })
 
@@ -401,13 +401,13 @@ index 1234567..89abcde 100644
       'test/file2.js': [5]
     }
 
-    expect(getModifiedFilesFromDiff(diff)).to.eql(expected)
+    assert.deepStrictEqual(getModifiedFilesFromDiff(diff), expected)
   })
 
   it('should return null for empty or invalid diff', () => {
-    expect(getModifiedFilesFromDiff('')).to.be.null
-    expect(getModifiedFilesFromDiff(null)).to.be.null
-    expect(getModifiedFilesFromDiff(undefined)).to.be.null
+    assert.strictEqual(getModifiedFilesFromDiff(''), null)
+    assert.strictEqual(getModifiedFilesFromDiff(null), null)
+    assert.strictEqual(getModifiedFilesFromDiff(undefined), null)
   })
 
   it('should handle multiple line changes in a single hunk', () => {
@@ -427,7 +427,7 @@ index 1234567..89abcde 100644
       'test/file.js': [2, 4, 6]
     }
 
-    expect(getModifiedFilesFromDiff(diff)).to.eql(expected)
+    assert.deepStrictEqual(getModifiedFilesFromDiff(diff), expected)
   })
 })
 
@@ -439,32 +439,33 @@ describe('isModifiedTest', () => {
       const modifiedFiles = {
         'test/file.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/file.js', 1, 3, modifiedFiles, testFramework)).to.be.true // overlaps with line 2
-      expect(isModifiedTest('test/file.js', 3, 5, modifiedFiles, testFramework)).to.be.true // overlaps with line 4
-      expect(isModifiedTest('test/file.js', 5, 7, modifiedFiles, testFramework)).to.be.true // overlaps with line 6
+      // Overlaps with lines 2, 4, 6
+      assert.strictEqual(isModifiedTest('test/file.js', 1, 3, modifiedFiles, testFramework), true)
+      assert.strictEqual(isModifiedTest('test/file.js', 3, 5, modifiedFiles, testFramework), true)
+      assert.strictEqual(isModifiedTest('test/file.js', 5, 7, modifiedFiles, testFramework), true)
     })
 
     it('should return false when test lines do not overlap with modified lines', () => {
       const modifiedFiles = {
         'test/file.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/file.js', 7, 9, modifiedFiles, testFramework)).to.be.false
-      expect(isModifiedTest('test/file.js', 0, 1, modifiedFiles, testFramework)).to.be.false
+      assert.strictEqual(isModifiedTest('test/file.js', 7, 9, modifiedFiles, testFramework), false)
+      assert.strictEqual(isModifiedTest('test/file.js', 0, 1, modifiedFiles, testFramework), false)
     })
 
     it('should return false when file is not in modified tests', () => {
       const modifiedFiles = {
         'test/file.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/other.js', 1, 3, modifiedFiles, testFramework)).to.be.false
+      assert.strictEqual(isModifiedTest('test/other.js', 1, 3, modifiedFiles, testFramework), false)
     })
 
     it('should handle single line tests', () => {
       const modifiedFiles = {
         'test/file.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/file.js', 2, 2, modifiedFiles, testFramework)).to.be.true
-      expect(isModifiedTest('test/file.js', 3, 3, modifiedFiles, testFramework)).to.be.false
+      assert.strictEqual(isModifiedTest('test/file.js', 2, 2, modifiedFiles, testFramework), true)
+      assert.strictEqual(isModifiedTest('test/file.js', 3, 3, modifiedFiles, testFramework), false)
     })
   })
 
@@ -476,20 +477,20 @@ describe('isModifiedTest', () => {
         'test/file.js': [2, 4, 6],
         'test/other.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/file.js', 1, 10, modifiedFiles, testFramework)).to.be.true
-      expect(isModifiedTest('test/other.js', 1, 10, modifiedFiles, testFramework)).to.be.true
+      assert.strictEqual(isModifiedTest('test/file.js', 1, 10, modifiedFiles, testFramework), true)
+      assert.strictEqual(isModifiedTest('test/other.js', 1, 10, modifiedFiles, testFramework), true)
     })
 
     it('should return false when test file is not in modifiedFiles', () => {
       const modifiedFiles = {
         'test/file.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/other.js', 1, 10, modifiedFiles, testFramework)).to.be.false
+      assert.strictEqual(isModifiedTest('test/other.js', 1, 10, modifiedFiles, testFramework), false)
     })
   })
 
   it('should handle empty modifiedFiles object', () => {
-    expect(isModifiedTest('test/file.js', 1, 10, {}, 'jest')).to.be.false
+    assert.strictEqual(isModifiedTest('test/file.js', 1, 10, {}, 'jest'), false)
   })
 })
 
@@ -510,10 +511,10 @@ describe('getPullRequestBaseBranch', () => {
         }
       })
       const baseBranch = getPullRequestBaseBranch('trunk')
-      expect(baseBranch).to.equal('1234af')
-      expect(checkAndFetchBranchStub).to.have.been.calledWith('trunk', 'origin')
-      expect(getMergeBaseStub).to.have.been.calledWith('trunk', 'feature-branch')
-      expect(getLocalBranchesStub).not.to.have.been.called
+      assert.strictEqual(baseBranch, '1234af')
+      sinon.assert.calledWith(checkAndFetchBranchStub, 'trunk', 'origin')
+      sinon.assert.calledWith(getMergeBaseStub, 'trunk', 'feature-branch')
+      sinon.assert.notCalled(getLocalBranchesStub)
     })
   })
 
@@ -542,16 +543,16 @@ describe('getPullRequestBaseBranch', () => {
         }
       })
       const baseBranch = getPullRequestBaseBranch()
-      expect(baseBranch).to.equal('fa4321')
+      assert.strictEqual(baseBranch, 'fa4321')
 
       POSSIBLE_BASE_BRANCHES.forEach((baseBranch) => {
-        expect(checkAndFetchBranchStub).to.have.been.calledWith(baseBranch, 'origin')
+        sinon.assert.calledWith(checkAndFetchBranchStub, baseBranch, 'origin')
       })
-      expect(getLocalBranchesStub).to.have.been.calledWith('origin')
-      expect(getMergeBaseStub).to.have.been.calledWith('master', 'feature-branch')
-      expect(getMergeBaseStub).to.have.been.calledWith('trunk', 'feature-branch')
-      expect(getCountsStub).to.have.been.calledWith('master', 'feature-branch')
-      expect(getCountsStub).to.have.been.calledWith('trunk', 'feature-branch')
+      sinon.assert.calledWith(getLocalBranchesStub, 'origin')
+      sinon.assert.calledWith(getMergeBaseStub, 'master', 'feature-branch')
+      sinon.assert.calledWith(getMergeBaseStub, 'trunk', 'feature-branch')
+      sinon.assert.calledWith(getCountsStub, 'master', 'feature-branch')
+      sinon.assert.calledWith(getCountsStub, 'trunk', 'feature-branch')
     })
   })
 })
@@ -591,13 +592,13 @@ describe('checkShaDiscrepancies', () => {
     ]
 
     expectedCalls.forEach(({ type, expectedProvider, discrepantProvider }) => {
-      expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY, {
+      sinon.assert.calledWith(incrementCountMetricStub, TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY, {
         type,
         expected_provider: expectedProvider,
         discrepant_provider: discrepantProvider
       })
     })
-    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { matched: false })
+    sinon.assert.calledWith(incrementCountMetricStub, TELEMETRY_GIT_SHA_MATCH, { matched: false })
   })
 
   it('return true if the CI/Git Client commit SHA is different from the user provided commit SHA', () => {
@@ -633,13 +634,13 @@ describe('checkShaDiscrepancies', () => {
     ]
 
     expectedCalls.forEach(({ type, expectedProvider, discrepantProvider }) => {
-      expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY, {
+      sinon.assert.calledWith(incrementCountMetricStub, TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY, {
         type,
         expected_provider: expectedProvider,
         discrepant_provider: discrepantProvider
       })
     })
-    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { matched: false })
+    sinon.assert.calledWith(incrementCountMetricStub, TELEMETRY_GIT_SHA_MATCH, { matched: false })
   })
 
   it('increment TELEMETRY_GIT_SHA_MATCH with match: true when all values match', () => {
@@ -668,6 +669,6 @@ describe('checkShaDiscrepancies', () => {
 
     checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
 
-    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { matched: true })
+    sinon.assert.calledWith(incrementCountMetricStub, TELEMETRY_GIT_SHA_MATCH, { matched: true })
   })
 })

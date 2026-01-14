@@ -1,10 +1,10 @@
 'use strict'
 
-const { sandboxCwd, useSandbox, spawnProc, FakeAgent } = require('../helpers')
+const assert = require('node:assert/strict')
+
 const path = require('path')
 const Axios = require('axios')
-const { assert } = require('chai')
-
+const { sandboxCwd, useSandbox, spawnProc, FakeAgent } = require('../helpers')
 describe('ESM Security controls', () => {
   let axios, cwd, appFile, agent, proc
 
@@ -51,8 +51,8 @@ describe('ESM Security controls', () => {
         await agent.assertMessageReceived(({ payload }) => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
           spans.forEach(span => {
-            assert.property(span.meta, '_dd.iast.json')
-            assert.include(span.meta['_dd.iast.json'], '"COMMAND_INJECTION"')
+            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+            assert.match(span.meta['_dd.iast.json'], /"COMMAND_INJECTION"/)
           })
         }, null, 1, true)
       })
@@ -63,8 +63,8 @@ describe('ESM Security controls', () => {
         await agent.assertMessageReceived(({ payload }) => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
           spans.forEach(span => {
-            assert.notProperty(span.meta, '_dd.iast.json')
-            assert.property(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection')
+            assert.ok(!('_dd.iast.json' in span.meta))
+            assert.ok(Object.hasOwn(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection'))
           })
         }, null, 1, true)
       })
@@ -75,8 +75,8 @@ describe('ESM Security controls', () => {
         await agent.assertMessageReceived(({ payload }) => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
           spans.forEach(span => {
-            assert.notProperty(span.meta, '_dd.iast.json')
-            assert.property(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection')
+            assert.ok(!('_dd.iast.json' in span.meta))
+            assert.ok(Object.hasOwn(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection'))
           })
         }, null, 1, true)
       })
@@ -87,8 +87,8 @@ describe('ESM Security controls', () => {
         await agent.assertMessageReceived(({ payload }) => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
           spans.forEach(span => {
-            assert.property(span.meta, '_dd.iast.json')
-            assert.include(span.meta['_dd.iast.json'], '"COMMAND_INJECTION"')
+            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+            assert.match(span.meta['_dd.iast.json'], /"COMMAND_INJECTION"/)
           })
         }, null, 1, true)
       })
@@ -99,8 +99,8 @@ describe('ESM Security controls', () => {
         await agent.assertMessageReceived(({ payload }) => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
           spans.forEach(span => {
-            assert.notProperty(span.meta, '_dd.iast.json')
-            assert.property(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection')
+            assert.ok(!('_dd.iast.json' in span.meta))
+            assert.ok(Object.hasOwn(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection'))
           })
         }, null, 1, true)
       })
@@ -111,8 +111,8 @@ describe('ESM Security controls', () => {
         await agent.assertMessageReceived(({ payload }) => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
           spans.forEach(span => {
-            assert.notProperty(span.meta, '_dd.iast.json')
-            assert.property(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection')
+            assert.ok(!('_dd.iast.json' in span.meta))
+            assert.ok(Object.hasOwn(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection'))
           })
         }, null, 1, true)
       })

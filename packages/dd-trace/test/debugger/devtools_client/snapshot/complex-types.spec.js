@@ -1,10 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
 
+const { afterEach, beforeEach, describe, it } = require('mocha')
+const NODE_20_PLUS = require('semver').gte(process.version, '20.0.0')
+
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../setup/mocha')
-
 const {
   session,
   getTargetCodePath,
@@ -14,7 +16,6 @@ const {
   getLocalStateForCallFrame
 } = require('./utils')
 
-const NODE_20_PLUS = require('semver').gte(process.version, '20.0.0')
 const target = getTargetCodePath(__filename)
 
 describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', function () {
@@ -30,9 +31,12 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       const localState = new Promise((_resolve) => { resolve = _resolve })
 
       session.once('Debugger.paused', async ({ params }) => {
-        expect(params.hitBreakpoints.length).to.eq(1)
+        assert.strictEqual(params.hitBreakpoints.length, 1)
 
-        resolve((await getLocalStateForCallFrame(params.callFrames[0], { maxFieldCount: Number.MAX_SAFE_INTEGER }))())
+        resolve((await getLocalStateForCallFrame(
+          params.callFrames[0],
+          { maxFieldCount: Number.MAX_SAFE_INTEGER })
+        ).processLocalState())
       })
 
       await setAndTriggerBreakpoint(target, 10)
@@ -41,13 +45,14 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('should contain expected properties from closure scope', function () {
-      expect(Object.keys(state).length).to.equal(28)
+      assert.strictEqual(Object.keys(state).length, 28)
 
       // from block scope
       // ... tested individually in the remaining it-blocks inside this describe-block
 
       // from closure scope
-      expect(state).to.have.deep.property('ref', {
+      assert.ok('ref' in state)
+      assert.deepStrictEqual(state.ref, {
         type: 'Object',
         fields: {
           wmo1: { type: 'Object', fields: { a: { type: 'number', value: '1' } } },
@@ -57,7 +62,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           wso3: { type: 'Object', fields: { a: { type: 'number', value: '3' } } }
         }
       })
-      expect(state).to.have.deep.property('get', {
+      assert.ok('get' in state)
+      assert.deepStrictEqual(state.get, {
         type: 'Function',
         fields: {
           length: { type: 'number', value: '0' },
@@ -67,7 +73,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('object literal', function () {
-      expect(state).to.have.deep.property('oblit', {
+      assert.ok('oblit' in state)
+      assert.deepStrictEqual(state.oblit, {
         type: 'Object',
         fields: {
           a: { type: 'number', value: '1' },
@@ -82,7 +89,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('custom object from class', function () {
-      expect(state).to.have.deep.property('obnew', {
+      assert.ok('obnew' in state)
+      assert.deepStrictEqual(state.obnew, {
         type: 'MyClass',
         fields: {
           foo: { type: 'number', value: '42' },
@@ -92,7 +100,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('Array', function () {
-      expect(state).to.have.deep.property('arr', {
+      assert.ok('arr' in state)
+      assert.deepStrictEqual(state.arr, {
         type: 'Array',
         elements: [
           { type: 'number', value: '1' },
@@ -103,18 +112,21 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('RegExp', function () {
-      expect(state).to.have.deep.property('regex', { type: 'RegExp', value: '/foo/' })
+      assert.ok('regex' in state)
+      assert.deepStrictEqual(state.regex, { type: 'RegExp', value: '/foo/' })
     })
 
     it('Date', function () {
-      expect(state).to.have.deep.property('date', {
+      assert.ok('date' in state)
+      assert.deepStrictEqual(state.date, {
         type: 'Date',
         value: '2024-09-20T07:22:59Z' // missing milliseconds due to API limitation (should have been `998`)
       })
     })
 
     it('Map', function () {
-      expect(state).to.have.deep.property('map', {
+      assert.ok('map' in state)
+      assert.deepStrictEqual(state.map, {
         type: 'Map',
         entries: [
           [{ type: 'number', value: '1' }, { type: 'number', value: '2' }],
@@ -124,7 +136,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('Set', function () {
-      expect(state).to.have.deep.property('set', {
+      assert.ok('set' in state)
+      assert.deepStrictEqual(state.set, {
         type: 'Set',
         elements: [
           {
@@ -141,11 +154,13 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('WeakMap', function () {
-      expect(state).to.have.property('wmap')
-      expect(state.wmap).to.have.keys('type', 'entries')
-      expect(state.wmap.entries).to.be.an('array')
+      assert.ok(Object.hasOwn(state, 'wmap'))
+      assert.strictEqual(Object.keys(state.wmap).length, (['type', 'entries']).length)
+      assert.ok((['type', 'entries']).every(k => Object.hasOwn(state.wmap, k)))
+      assert.ok(Array.isArray(state.wmap.entries))
       state.wmap.entries = state.wmap.entries.sort((a, b) => a[1].value - b[1].value)
-      expect(state).to.have.deep.property('wmap', {
+      assert.ok('wmap' in state)
+      assert.deepStrictEqual(state.wmap, {
         type: 'WeakMap',
         entries: [[
           { type: 'Object', fields: { a: { type: 'number', value: '1' } } },
@@ -158,11 +173,13 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('WeakSet', function () {
-      expect(state).to.have.property('wset')
-      expect(state.wset).to.have.keys('type', 'elements')
-      expect(state.wset.elements).to.be.an('array')
+      assert.ok(Object.hasOwn(state, 'wset'))
+      assert.strictEqual(Object.keys(state.wset).length, (['type', 'elements']).length)
+      assert.ok((['type', 'elements']).every(k => Object.hasOwn(state.wset, k)))
+      assert.ok(Array.isArray(state.wset.elements))
       state.wset.elements = state.wset.elements.sort((a, b) => a.fields.a.value - b.fields.a.value)
-      expect(state).to.have.deep.property('wset', {
+      assert.ok('wset' in state)
+      assert.deepStrictEqual(state.wset, {
         type: 'WeakSet',
         elements: [
           { type: 'Object', fields: { a: { type: 'number', value: '1' } } },
@@ -173,35 +190,40 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('Generator', function () {
-      expect(state).to.have.deep.property('gen', {
+      assert.ok('gen' in state)
+      assert.deepStrictEqual(state.gen, {
         type: 'generator',
         fields: { foo: { type: 'number', value: '42' } }
       })
     })
 
     it('Error', function () {
-      expect(state).to.have.property('err')
-      expect(state.err).to.have.keys('type', 'fields')
-      expect(state.err).to.have.property('type', 'CustomError')
-      expect(state.err.fields).to.be.an('object')
-      expect(state.err.fields).to.have.keys('stack', 'message', 'foo')
-      expect(state.err.fields).to.deep.include({
+      assert.ok(Object.hasOwn(state, 'err'))
+      assert.strictEqual(Object.keys(state.err).length, (['type', 'fields']).length)
+      assert.ok((['type', 'fields']).every(k => Object.hasOwn(state.err, k)))
+      assert.strictEqual(state.err.type, 'CustomError')
+      assert.ok(typeof state.err.fields === 'object' && state.err.fields !== null)
+      assert.strictEqual(Object.keys(state.err.fields).length, (['stack', 'message', 'foo']).length)
+      assert.ok((['stack', 'message', 'foo']).every(k => Object.hasOwn(state.err.fields, k)))
+      assertObjectContains(state.err.fields, {
         message: { type: 'string', value: 'boom!' },
         foo: { type: 'number', value: '42' }
       })
-      expect(state.err.fields.stack).to.have.keys('type', 'value', 'truncated', 'size')
-      expect(state.err.fields.stack.value).to.be.a('string')
-      expect(state.err.fields.stack.value).to.match(/^Error: boom!/)
-      expect(state.err.fields.stack.size).to.be.a('number')
-      expect(state.err.fields.stack.size).to.above(255)
-      expect(state.err.fields.stack).to.deep.include({
+      assert.strictEqual(Object.keys(state.err.fields.stack).length, (['type', 'value', 'truncated', 'size']).length)
+      assert.ok((['type', 'value', 'truncated', 'size']).every(k => Object.hasOwn(state.err.fields.stack, k)))
+      assert.strictEqual(typeof state.err.fields.stack.value, 'string')
+      assert.match(state.err.fields.stack.value, /^Error: boom!/)
+      assert.strictEqual(typeof state.err.fields.stack.size, 'number')
+      assert.ok(((state.err.fields.stack.size) > (255)))
+      assertObjectContains(state.err.fields.stack, {
         type: 'string',
         truncated: true
       })
     })
 
     it('Function', function () {
-      expect(state).to.have.deep.property('fn', {
+      assert.ok('fn' in state)
+      assert.deepStrictEqual(state.fn, {
         type: 'Function',
         fields: {
           foo: {
@@ -215,7 +237,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('Bound function', function () {
-      expect(state).to.have.deep.property('bfn', {
+      assert.ok('bfn' in state)
+      assert.deepStrictEqual(state.bfn, {
         type: 'Function',
         fields: {
           length: { type: 'number', value: '0' },
@@ -225,7 +248,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('Arrow function', function () {
-      expect(state).to.have.deep.property('afn', {
+      assert.ok('afn' in state)
+      assert.deepStrictEqual(state.afn, {
         type: 'Function',
         fields: {
           length: { type: 'number', value: '0' },
@@ -235,15 +259,18 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('Class', function () {
-      expect(state).to.have.deep.property('cls', { type: 'class MyClass' })
+      assert.ok('cls' in state)
+      assert.deepStrictEqual(state.cls, { type: 'class MyClass' })
     })
 
     it('Anonymous class', function () {
-      expect(state).to.have.deep.property('acls', { type: 'class' })
+      assert.ok('acls' in state)
+      assert.deepStrictEqual(state.acls, { type: 'class' })
     })
 
     it('Proxy for object literal', function () {
-      expect(state).to.have.deep.property('prox', {
+      assert.ok('prox' in state)
+      assert.deepStrictEqual(state.prox, {
         type: NODE_20_PLUS ? 'Proxy(Object)' : 'Proxy',
         fields: {
           target: { type: 'boolean', value: 'true' }
@@ -252,7 +279,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('Proxy for custom class', function () {
-      expect(state).to.have.deep.property('custProx', {
+      assert.ok('custProx' in state)
+      assert.deepStrictEqual(state.custProx, {
         type: NODE_20_PLUS ? 'Proxy(MyClass)' : 'Proxy',
         fields: {
           foo: { type: 'number', value: '42' }
@@ -261,7 +289,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('Promise: Pending', function () {
-      expect(state).to.have.deep.property('pPen', {
+      assert.ok('pPen' in state)
+      assert.deepStrictEqual(state.pPen, {
         type: 'Promise',
         fields: {
           '[[PromiseState]]': { type: 'string', value: 'pending' },
@@ -271,7 +300,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('Promise: Resolved', function () {
-      expect(state).to.have.deep.property('pRes', {
+      assert.ok('pRes' in state)
+      assert.deepStrictEqual(state.pRes, {
         type: 'Promise',
         fields: {
           '[[PromiseState]]': { type: 'string', value: 'fulfilled' },
@@ -281,7 +311,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('Promise: Rejected', function () {
-      expect(state).to.have.deep.property('pRej', {
+      assert.ok('pRej' in state)
+      assert.deepStrictEqual(state.pRej, {
         type: 'Promise',
         fields: {
           '[[PromiseState]]': { type: 'string', value: 'rejected' },
@@ -291,7 +322,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('TypedArray', function () {
-      expect(state).to.have.deep.property('tarr', {
+      assert.ok('tarr' in state)
+      assert.deepStrictEqual(state.tarr, {
         type: 'Int8Array',
         elements: [
           { type: 'number', value: '72' },
@@ -302,31 +334,34 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('ArrayBuffer', function () {
-      expect(state).to.have.deep.property('ab', {
+      assert.ok('ab' in state)
+      assert.deepStrictEqual(state.ab, {
         type: 'ArrayBuffer',
         value: 'HAL'
       })
     })
 
     it('SharedArrayBuffer', function () {
-      expect(state).to.have.deep.property('sab', {
+      assert.ok('sab' in state)
+      assert.deepStrictEqual(state.sab, {
         type: 'SharedArrayBuffer',
         value: 'hello\x01\x02\x03world'
       })
     })
 
     it('circular reference in object', function () {
-      expect(state).to.have.property('circular')
-      expect(state.circular).to.have.property('type', 'Object')
-      expect(state.circular).to.have.property('fields')
+      assert.ok(Object.hasOwn(state, 'circular'))
+      assert.strictEqual(state.circular.type, 'Object')
+      assert.ok(Object.hasOwn(state.circular, 'fields'))
       // For the circular field, just check that at least one of the expected properties are present
-      expect(state.circular.fields).to.deep.include({
+      assertObjectContains(state.circular.fields, {
         regex: { type: 'RegExp', value: '/foo/' }
       })
     })
 
     it('non-enumerable property', function () {
-      expect(state).to.have.deep.property('hidden', { type: 'string', value: 'secret' })
+      assert.ok('hidden' in state)
+      assert.deepStrictEqual(state.hidden, { type: 'string', value: 'secret' })
     })
   })
 })

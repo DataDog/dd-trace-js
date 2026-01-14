@@ -1,9 +1,10 @@
 'use strict'
 
-const { FakeAgent, spawnProc, sandboxCwd, useSandbox, curl, assertObjectContains } = require('./helpers')
+const assert = require('node:assert/strict')
+
 const path = require('path')
-const { assert } = require('chai')
 const { once } = require('events')
+const { FakeAgent, spawnProc, sandboxCwd, useSandbox, curl, assertObjectContains } = require('./helpers')
 
 describe('pino test', () => {
   let agent
@@ -55,22 +56,18 @@ describe('pino test', () => {
         cwd,
         env: {
           AGENT_PORT: agent.port,
-          lOG_INJECTION: true,
+          lOG_INJECTION: 'true',
         },
         stdio: 'pipe',
       })
       const [data] = await Promise.all([once(proc.stdout, 'data'), curl(proc)])
       const stdoutData = JSON.parse(data.toString())
-      assert.containsAllKeys(stdoutData, ['dd'])
-      assert.containsAllKeys(stdoutData.dd, ['trace_id', 'span_id'])
-      assert.strictEqual(
-        stdoutData.dd.trace_id,
-        stdoutData.custom.trace_id
-      )
-      assert.strictEqual(
-        stdoutData.dd.span_id,
-        stdoutData.custom.span_id
-      )
+      assertObjectContains(stdoutData, {
+        dd: {
+          trace_id: stdoutData.custom.trace_id,
+          span_id: stdoutData.custom.span_id
+        }
+      })
     })
 
     it('Log injection disabled', async () => {
@@ -84,7 +81,7 @@ describe('pino test', () => {
       })
       const [data] = await Promise.all([once(proc.stdout, 'data'), curl(proc)])
       const stdoutData = JSON.parse(data.toString())
-      assert.doesNotHaveAnyKeys(stdoutData, ['dd'])
+      assert.ok(!('dd' in stdoutData))
     })
   })
 })

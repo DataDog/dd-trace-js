@@ -3,15 +3,17 @@
 // Increase max listeners to avoid warnings in tests
 process.setMaxListeners(50)
 
-require('../setup/core')
 const assert = require('assert')
 const os = require('os')
 const http = require('http')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { logs } = require('@opentelemetry/api-logs')
 const { trace, context } = require('@opentelemetry/api')
+
+require('../setup/core')
 const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 
@@ -496,7 +498,7 @@ describe('OpenTelemetry Logs', () => {
 
       const { loggerProvider } = setupTracer()
       assert.strictEqual(loggerProvider.processor.exporter.transformer.protocol, 'http/protobuf')
-      assert(logMock.getMessage().includes('OTLP gRPC protocol is not supported'))
+      assert.match(logMock.getMessage(), /OTLP gRPC protocol is not supported/)
 
       logMock.restore()
     })

@@ -1,10 +1,10 @@
 'use strict'
 
+const dc = require('dc-polyfill')
+const shimmer = require('../../datadog-shimmer')
 const {
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
-const dc = require('dc-polyfill')
 
 const producerCh = dc.tracingChannel('apm:azure-event-hubs:send')
 
@@ -13,6 +13,7 @@ addHook({
   versions: ['>=6.0.0']
 }, obj => {
   const EventHubProducerClient = obj.EventHubProducerClient
+
   shimmer.wrap(EventHubProducerClient.prototype, 'createBatch',
     createBatch => async function () {
       const batch = await createBatch.apply(this, arguments)
@@ -20,7 +21,7 @@ addHook({
         tryAdd => function (eventData) {
           const config = this._context.config
           const functionName = tryAdd.name
-          return producerCh.tracePromise(
+          return producerCh.traceSync(
             tryAdd,
             { functionName, eventData, batch: this, config },
             this, ...arguments)

@@ -22,9 +22,9 @@ const tracer = require('dd-trace')
 tracer.init(options)
 
 const http = require('http')
-const express = require('express')
 const childProcess = require('child_process')
 
+const express = require('express')
 const multer = require('multer')
 const uploadToMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200000 } })
 
@@ -59,6 +59,6 @@ app.get('/', (req, res) => {
 })
 
 const server = http.createServer(app).listen(0, () => {
-  const port = server.address().port
+  const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
   process.send?.({ port })
 })

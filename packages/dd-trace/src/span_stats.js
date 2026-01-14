@@ -1,15 +1,19 @@
 'use strict'
 
-const os = require('os')
-const { version } = require('./pkg')
+const os = require('node:os')
 const pkg = require('../../../package.json')
 
-const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
-const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('./constants')
+const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
 const {
   MEASURED,
-  HTTP_STATUS_CODE
+  HTTP_STATUS_CODE,
+  HTTP_ENDPOINT,
+  HTTP_ROUTE,
+  HTTP_METHOD
 } = require('../../../ext/tags')
+const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('./constants')
+const { version } = require('./pkg')
+const processTags = require('./process-tags')
 
 const { SpanStatsExporter } = require('./exporters/span-stats')
 
@@ -53,7 +57,9 @@ class SpanAggStats {
       resource,
       type,
       statusCode,
-      synthetics
+      synthetics,
+      method,
+      endpoint
     } = this.aggKey
 
     return {
@@ -63,6 +69,8 @@ class SpanAggStats {
       Type: type,
       HTTPStatusCode: statusCode,
       Synthetics: synthetics,
+      HTTPMethod: method,
+      HTTPEndpoint: endpoint,
       Hits: this.hits,
       TopLevelHits: this.topLevelHits,
       Errors: this.errors,
@@ -81,6 +89,8 @@ class SpanAggKey {
     this.type = span.type || ''
     this.statusCode = span.meta[HTTP_STATUS_CODE] || 0
     this.synthetics = span.meta[ORIGIN_KEY] === 'synthetics'
+    this.endpoint = span.meta[HTTP_ROUTE] || span.meta[HTTP_ENDPOINT] || ''
+    this.method = span.meta[HTTP_METHOD] || ''
   }
 
   toString () {
@@ -90,7 +100,9 @@ class SpanAggKey {
       this.resource,
       this.type,
       this.statusCode,
-      this.synthetics
+      this.synthetics,
+      this.method,
+      this.endpoint
     ].join(',')
   }
 }
@@ -165,7 +177,8 @@ class SpanStatsProcessor {
       Lang: 'javascript',
       TracerVersion: pkg.version,
       RuntimeID: this.tags['runtime-id'],
-      Sequence: ++this.sequence
+      Sequence: ++this.sequence,
+      ProcessTags: processTags.serialized
     })
   }
 

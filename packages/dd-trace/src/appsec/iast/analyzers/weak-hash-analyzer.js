@@ -3,8 +3,8 @@
 const path = require('path')
 
 const { getNodeModulesPaths } = require('../path-line')
-const Analyzer = require('./vulnerability-analyzer')
 const { WEAK_HASH } = require('../vulnerabilities')
+const Analyzer = require('./vulnerability-analyzer')
 
 const INSECURE_HASH_ALGORITHMS = new Set([
   'md4', 'md4WithRSAEncryption', 'RSA-MD4',
@@ -23,7 +23,8 @@ const EXCLUDED_LOCATIONS = getNodeModulesPaths(
   'ws/lib/websocket-server.js',
   'google-gax/build/src/grpc.js',
   'cookie-signature/index.js',
-  'express-session/index.js'
+  'express-session/index.js',
+  'node-preload/preload-list-env.js'
 )
 
 const EXCLUDED_PATHS_FROM_STACK = [

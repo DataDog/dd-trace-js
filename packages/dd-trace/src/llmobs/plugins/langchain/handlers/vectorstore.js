@@ -1,7 +1,7 @@
 'use strict'
 
-const LangChainLLMObsHandler = require('.')
 const { spanHasError } = require('../../../util')
+const LangChainLLMObsHandler = require('.')
 
 class LangChainLLMObsVectorStoreHandler extends LangChainLLMObsHandler {
   setMetaTags ({ span, inputs, results }) {

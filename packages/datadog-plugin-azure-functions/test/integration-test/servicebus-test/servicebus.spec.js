@@ -1,15 +1,17 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
+const { spawn } = require('child_process')
 const {
   FakeAgent,
+  assertObjectContains,
   hookFile,
   sandboxCwd,
   useSandbox,
   curlAndAssertMessage
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
-const { spawn } = require('child_process')
-const { assert, expect } = require('chai')
 const { NODE_MAJOR } = require('../../../../../version')
 
 describe('esm', () => {
@@ -45,12 +47,16 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-1', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest1')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.1')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'ServiceBus queueTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
       })
     }).timeout(60000)
@@ -63,19 +69,27 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-messages-1', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest1')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.1')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'ServiceBus queueTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[2][0].resource, 'ServiceBus queueTest1')
-        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[2][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'queue.1')
-        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[2][0], {
+          name: 'azure.functions.invoke',
+          resource: 'ServiceBus queueTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
     }).timeout(60000)
@@ -88,12 +102,16 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-amqp-message-1', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest1')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.1')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'ServiceBus queueTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
       })
     }).timeout(60000)
@@ -106,19 +124,27 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-amqp-messages-1', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest1')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.1')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'ServiceBus queueTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[2][0].resource, 'ServiceBus queueTest1')
-        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[2][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'queue.1')
-        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[2][0], {
+          name: 'azure.functions.invoke',
+          resource: 'ServiceBus queueTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
     }).timeout(60000)
@@ -131,19 +157,27 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-batch-1', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest1')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.1')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'ServiceBus queueTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[2][0].resource, 'ServiceBus queueTest1')
-        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[2][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'queue.1')
-        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[2][0], {
+          name: 'azure.functions.invoke',
+          resource: 'ServiceBus queueTest1',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.1',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
     }).timeout(60000)
@@ -156,12 +190,16 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-2', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest2')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.2')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'ServiceBus queueTest2',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.2',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
       })
     }).timeout(60000)
@@ -174,12 +212,16 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-messages-2', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest2')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.2')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'ServiceBus queueTest2',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.2',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
     }).timeout(60000)
@@ -192,12 +234,16 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-amqp-message-2', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest2')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.2')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'ServiceBus queueTest2',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.2',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
       })
     }).timeout(60000)
@@ -210,12 +256,16 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-amqp-messages-2', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest2')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.2')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'ServiceBus queueTest2',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.2',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
     }).timeout(60000)
@@ -228,12 +278,16 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-batch-2', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest2')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.2')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'ServiceBus queueTest2',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.2',
+            'span.kind': 'consumer'
+          }
+        })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
     }).timeout(60000)
@@ -241,26 +295,26 @@ describe('esm', () => {
     it('should not create a tryAdd span or add span links to arrays when batch links are disabled', async () => {
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: false
+        DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: 'false'
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-messages-2', ({ headers, payload }) => {
         const hasCreateSpan = payload[0].some(obj => obj.name === 'azure.functions.create')
         assert.strictEqual(hasCreateSpan, false)
-        expect(payload[1][0].meta).to.not.have.property('_dd.span_links')
+        assert.ok(!('_dd.span_links' in payload[1][0].meta))
       })
     }).timeout(60000)
 
     it('should not create a tryAdd span or add span links to batches when batch links are disabled', async () => {
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: false
+        DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: 'false'
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-batch-2', ({ headers, payload }) => {
         const hasCreateSpan = payload[0].some(obj => obj.name === 'azure.functions.create')
         assert.strictEqual(hasCreateSpan, false)
-        expect(payload[1][0].meta).to.not.have.property('_dd.span_links')
+        assert.ok(!('_dd.span_links' in payload[1][0].meta))
       })
     }).timeout(60000)
   })

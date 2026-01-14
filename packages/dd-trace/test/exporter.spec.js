@@ -1,12 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
-const sinon = require('sinon')
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 
-require('./setup/core')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 
+require('./setup/core')
 const AgentExporter = require('../src/exporters/agent')
 const LogExporter = require('../src/exporters/log')
 
@@ -25,7 +25,7 @@ describe('exporter', () => {
   it('should create an AgentExporter by default', () => {
     const Exporter = require('../src/exporter')()
 
-    expect(Exporter).to.be.equal(AgentExporter)
+    assert.strictEqual(Exporter, AgentExporter)
   })
 
   it('should create an LogExporter when in Lambda environment', () => {
@@ -33,7 +33,7 @@ describe('exporter', () => {
 
     const Exporter = require('../src/exporter')()
 
-    expect(Exporter).to.be.equal(LogExporter)
+    assert.strictEqual(Exporter, LogExporter)
   })
 
   it('should create an AgentExporter when in Lambda environment with an extension', () => {
@@ -43,13 +43,13 @@ describe('exporter', () => {
 
     const Exporter = require('../src/exporter')()
 
-    expect(Exporter).to.be.equal(AgentExporter)
+    assert.strictEqual(Exporter, AgentExporter)
     stub.restore()
   })
 
   it('should allow configuring the exporter', () => {
     const Exporter = require('../src/exporter')('log')
 
-    expect(Exporter).to.be.equal(LogExporter)
+    assert.strictEqual(Exporter, LogExporter)
   })
 })

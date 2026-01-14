@@ -1,21 +1,21 @@
 'use strict'
 
+const { URL, format } = require('node:url')
 const request = require('../../exporters/common/request')
 const { safeJSONStringify } = require('../../exporters/common/util')
-const { URL, format } = require('node:url')
 
 const log = require('../../log')
 
 /**
- * @typedef {Object} BaseFFEWriterOptions
+ * @typedef {object} BaseFFEWriterOptions
  * @property {number} [interval] - Flush interval in milliseconds
  * @property {number} [timeout] - Request timeout in milliseconds
- * @property {Object} config - Tracer configuration object
+ * @property {object} config - Tracer configuration object
  * @property {string} endpoint - API endpoint path
  * @property {URL} [agentUrl] - Base URL for the agent
  * @property {number} [payloadSizeLimit] - Maximum payload size in bytes
  * @property {number} [eventSizeLimit] - Maximum individual event size in bytes
- * @property {Object} [headers] - Additional HTTP headers
+ * @property {object} [headers] - Additional HTTP headers
  */
 
 /**
@@ -67,7 +67,7 @@ class BaseFFEWriter {
 
   /**
    * Appends an event array to the buffer
-   * @param {Array|Object} events - Event object(s) to append to buffer
+   * @param {Array | object} events - Event object(s) to append to buffer
    */
   append (events) {
     const eventArray = Array.isArray(events) ? events : [events]

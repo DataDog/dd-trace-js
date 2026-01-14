@@ -1,21 +1,21 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-
-const path = require('node:path')
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
+const path = require('node:path')
 
-const agent = require('../../../plugins/agent')
-const { getConfigFresh } = require('../../../helpers/config')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
+const iast = require('../../../../src/appsec/iast')
 const { NameAndValue, ValueOnly } = require('../../../../src/appsec/iast/analyzers/hardcoded-rule-type')
 const hardcodedSecretAnalyzer = require('../../../../src/appsec/iast/analyzers/hardcoded-secret-analyzer')
-const { suite } = require('./resources/hardcoded-secrets-suite.json')
-const iast = require('../../../../src/appsec/iast')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
+const { getConfigFresh } = require('../../../helpers/config')
+const agent = require('../../../plugins/agent')
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
+const { suite } = require('./resources/hardcoded-secrets-suite.json')
 
 describe('Hardcoded Secret Analyzer', () => {
   describe('unit test', () => {
@@ -35,7 +35,7 @@ describe('Hardcoded Secret Analyzer', () => {
     suite.forEach((testCase) => {
       testCase.samples.forEach((sample, sampleIndex) => {
         // sample values are arrays containing the parts of the original token
-        it(`should match rule ${testCase.id} with #${sampleIndex + 1} value ${sample[0]}...`, () => {
+        it(`should match rule ${testCase.id} with #${sampleIndex + 1}`, () => {
           const value = sample.join('')
           const ident = testCase.type === NameAndValue ? value.split(' = ')[0] : undefined
 
@@ -51,18 +51,18 @@ describe('Hardcoded Secret Analyzer', () => {
             }]
           })
 
-          expect([NameAndValue, ValueOnly]).to.be.include(testCase.type)
-          expect(report).to.have.been.calledOnceWithExactly({ file: relFile, line, column, ident, data: testCase.id })
+          assertObjectContains([NameAndValue, ValueOnly], [testCase.type])
+          sinon.assert.calledOnceWithExactly(report, { file: relFile, line, column, ident, data: testCase.id })
         })
       })
     })
 
     it('should not fail with an malformed secrets', () => {
-      expect(() => hardcodedSecretAnalyzer.analyze(undefined)).not.to.throw()
-      expect(() => hardcodedSecretAnalyzer.analyze({ file: undefined })).not.to.throw()
-      expect(() => hardcodedSecretAnalyzer.analyze({ file, literals: undefined })).not.to.throw()
-      expect(() => hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: undefined }] })).not.to.throw()
-      expect(() => hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: 'test' }] })).not.to.throw()
+      assert.doesNotThrow(() => hardcodedSecretAnalyzer.analyze(undefined))
+      assert.doesNotThrow(() => hardcodedSecretAnalyzer.analyze({ file: undefined }))
+      assert.doesNotThrow(() => hardcodedSecretAnalyzer.analyze({ file, literals: undefined }))
+      assert.doesNotThrow(() => hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: undefined }] }))
+      assert.doesNotThrow(() => hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: 'test' }] }))
     })
 
     it('should not report secrets in line 0', () => {
@@ -71,7 +71,7 @@ describe('Hardcoded Secret Analyzer', () => {
         literals: [{ value: 'test', line: 0 }]
       })
 
-      expect(report).not.to.have.been.called
+      sinon.assert.notCalled(report)
     })
   })
 
@@ -121,7 +121,10 @@ describe('Hardcoded Secret Analyzer', () => {
       it('should detect vulnerability', (done) => {
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0].meta['_dd.iast.json']).to.include('"HARDCODED_SECRET"')
+            assertObjectContains(
+              JSON.parse(traces[0][0].meta['_dd.iast.json']),
+              { vulnerabilities: [{ type: 'HARDCODED_SECRET' }] }
+            )
           })
           .then(done)
           .catch(done)

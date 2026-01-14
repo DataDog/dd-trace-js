@@ -1,12 +1,12 @@
 'use strict'
 
 const path = require('path')
-const parse = require('module-details-from-path')
-const requirePackageJson = require('../require-package-json')
-const { sendData } = require('./send-data')
-const dc = require('dc-polyfill')
 const { fileURLToPath } = require('url')
+const dc = require('dc-polyfill')
+const parse = require('../../../../vendor/dist/module-details-from-path')
+const requirePackageJson = require('../require-package-json')
 const { isTrue } = require('../../src/util')
+const { sendData } = require('./send-data')
 
 /** @type {Set<string>} */
 const savedDependenciesToSend = new Set()

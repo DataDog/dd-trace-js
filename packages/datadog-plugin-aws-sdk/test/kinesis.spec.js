@@ -1,18 +1,16 @@
-/* eslint-disable @stylistic/max-len */
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-const sinon = require('sinon')
+const assert = require('node:assert/strict')
 
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
+const id = require('../../dd-trace/src/id')
 const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
-const id = require('../../dd-trace/src/id')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 
 describe('Kinesis', function () {
   this.timeout(10000)
@@ -21,7 +19,6 @@ describe('Kinesis', function () {
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let AWS
     let kinesis
-    let tracer
 
     const kinesisClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
 
@@ -59,7 +56,11 @@ describe('Kinesis', function () {
       let streamName
 
       beforeEach(() => {
-        return agent.load('aws-sdk', { kinesis: { dsmEnabled: false, batchPropagationEnabled: true } }, { dsmEnabled: true })
+        return agent.load('aws-sdk', {
+          kinesis: { dsmEnabled: false, batchPropagationEnabled: true }
+        }, {
+          dsmEnabled: true
+        })
       })
 
       beforeEach(done => {
@@ -91,8 +92,8 @@ describe('Kinesis', function () {
           helpers.getTestData(kinesis, streamName, data, (err, data) => {
             if (err) return done(err)
 
-            expect(data).to.have.property('_datadog')
-            expect(data._datadog).to.have.property('x-datadog-trace-id')
+            assert.ok(Object.hasOwn(data, '_datadog'))
+            assert.ok(Object.hasOwn(data._datadog, 'x-datadog-trace-id'))
 
             done()
           })
@@ -108,8 +109,8 @@ describe('Kinesis', function () {
 
             for (const record in data.Records) {
               const recordData = JSON.parse(Buffer.from(data.Records[record].Data).toString())
-              expect(recordData).to.have.property('_datadog')
-              expect(recordData._datadog).to.have.property('x-datadog-trace-id')
+              assert.ok(Object.hasOwn(recordData, '_datadog'))
+              assert.ok(Object.hasOwn(recordData._datadog, 'x-datadog-trace-id'))
             }
 
             done()
@@ -124,8 +125,8 @@ describe('Kinesis', function () {
           helpers.getTestData(kinesis, streamName, data, (err, data) => {
             if (err) return done(err)
 
-            expect(data).to.have.property('_datadog')
-            expect(data._datadog).to.have.property('x-datadog-trace-id')
+            assert.ok(Object.hasOwn(data, '_datadog'))
+            assert.ok(Object.hasOwn(data._datadog, 'x-datadog-trace-id'))
 
             done()
           })
@@ -143,7 +144,7 @@ describe('Kinesis', function () {
           helpers.getTestData(kinesis, streamName, data, (err, data) => {
             if (err) return done(err)
 
-            expect(data).to.not.have.property('_datadog')
+            assert.ok(!('_datadog' in data))
 
             done()
           })
@@ -153,13 +154,13 @@ describe('Kinesis', function () {
       it('generates tags for proper input', done => {
         agent.assertSomeTraces(traces => {
           const span = traces[0][0]
-          expect(span.meta).to.include({
+          assertObjectContains(span.meta, {
             streamname: streamName,
             aws_service: 'Kinesis',
             region: 'us-east-1'
           })
-          expect(span.resource).to.equal(`putRecord ${streamName}`)
-          expect(span.meta).to.have.property('streamname', streamName)
+          assert.strictEqual(span.resource, `putRecord ${streamName}`)
+          assert.strictEqual(span.meta.streamname, streamName)
         }).then(done, done)
 
         helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, () => {})
@@ -181,196 +182,11 @@ describe('Kinesis', function () {
             helpers.getTestData(kinesis, streamName, data, (err, data) => {
               if (err) return done(err)
 
-              expect(data).not.to.have.property('_datadog')
+              assert.ok(!('_datadog' in data))
 
               done()
             })
           })
-        })
-      })
-    })
-
-    describe('DSM Context Propagation', () => {
-      let expectedProducerHash
-      let expectedConsumerHash
-      let nowStub
-      let streamNameDSM
-
-      beforeEach(() => {
-        return agent.load('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
-      })
-
-      beforeEach(done => {
-        tracer = require('../../dd-trace')
-        tracer.use('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
-
-        streamNameDSM = `MyStreamDSM-${id()}`
-
-        const producerHash = computePathwayHash(
-          'test',
-          'tester',
-          ['direction:out', 'topic:' + streamNameDSM, 'type:kinesis'],
-          ENTRY_PARENT_HASH
-        )
-
-        expectedProducerHash = producerHash.readBigUInt64LE(0).toString()
-        expectedConsumerHash = computePathwayHash(
-          'test',
-          'tester',
-          ['direction:in', 'topic:' + streamNameDSM, 'type:kinesis'],
-          producerHash
-        ).readBigUInt64LE(0).toString()
-
-        createResources(streamNameDSM, done)
-      })
-
-      afterEach(done => {
-        kinesis.deleteStream({
-          StreamName: streamNameDSM
-        }, (err, res) => {
-          if (err) return done(err)
-
-          helpers.waitForDeletedStream(kinesis, streamNameDSM, done)
-        })
-      })
-
-      afterEach(() => {
-        try {
-          nowStub.restore()
-        } catch {
-          // pass
-        }
-        agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
-      })
-
-      it('injects DSM pathway hash during Kinesis getRecord to the span', done => {
-        let getRecordSpanMeta = {}
-        agent.assertSomeTraces(traces => {
-          const span = traces[0][0]
-
-          if (span.name === 'aws.response') {
-            getRecordSpanMeta = span.meta
-          }
-
-          expect(getRecordSpanMeta).to.include({
-            'pathway.hash': expectedConsumerHash
-          })
-        }, { timeoutMs: 10000 }).then(done, done)
-
-        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
-          if (err) return done(err)
-
-          helpers.getTestData(kinesis, streamNameDSM, data, () => {})
-        })
-      })
-
-      it('injects DSM pathway hash during Kinesis putRecord to the span', done => {
-        let putRecordSpanMeta = {}
-        agent.assertSomeTraces(traces => {
-          const span = traces[0][0]
-
-          if (span.resource.startsWith('putRecord')) {
-            putRecordSpanMeta = span.meta
-          }
-
-          expect(putRecordSpanMeta).to.include({
-            'pathway.hash': expectedProducerHash
-          })
-        }).then(done, done)
-
-        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, () => {})
-      })
-
-      it('emits DSM stats to the agent during Kinesis putRecord', done => {
-        agent.expectPipelineStats(dsmStats => {
-          let statsPointsReceived = 0
-          // we should have only have 1 stats point since we only had 1 put operation
-          dsmStats.forEach((timeStatsBucket) => {
-            if (timeStatsBucket && timeStatsBucket.Stats) {
-              timeStatsBucket.Stats.forEach((statsBuckets) => {
-                statsPointsReceived += statsBuckets.Stats.length
-              })
-            }
-          })
-          expect(statsPointsReceived).to.be.at.least(1)
-          expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
-        }, { timeoutMs: 10000 }).then(done, done)
-
-        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, () => {})
-      })
-
-      it('emits DSM stats to the agent during Kinesis getRecord', done => {
-        agent.expectPipelineStats(dsmStats => {
-          let statsPointsReceived = 0
-          // we should have only have 1 stats point since we only had 1 put operation
-          dsmStats.forEach((timeStatsBucket) => {
-            if (timeStatsBucket && timeStatsBucket.Stats) {
-              timeStatsBucket.Stats.forEach((statsBuckets) => {
-                statsPointsReceived += statsBuckets.Stats.length
-              })
-            }
-          }, { timeoutMs: 10000 })
-          expect(statsPointsReceived).to.be.at.least(2)
-          expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
-        }, { timeoutMs: 10000 }).then(done, done)
-
-        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
-          if (err) return done(err)
-
-          helpers.getTestData(kinesis, streamNameDSM, data, () => {})
-        })
-      })
-
-      it('emits DSM stats to the agent during Kinesis getRecord when the putRecord was done without DSM enabled', done => {
-        agent.expectPipelineStats(dsmStats => {
-          let statsPointsReceived = 0
-          // we should have only have 1 stats point since we only had 1 put operation
-          dsmStats.forEach((timeStatsBucket) => {
-            if (timeStatsBucket && timeStatsBucket.Stats) {
-              timeStatsBucket.Stats.forEach((statsBuckets) => {
-                statsPointsReceived += statsBuckets.Stats.length
-              })
-            }
-          }, { timeoutMs: 10000 })
-          expect(statsPointsReceived).to.equal(1)
-          expect(agent.dsmStatsExistWithParentHash(agent, '0')).to.equal(true)
-        }, { timeoutMs: 10000 }).then(done, done)
-
-        agent.reload('aws-sdk', { kinesis: { dsmEnabled: false } }, { dsmEnabled: false })
-        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
-          if (err) return done(err)
-
-          agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
-          helpers.getTestData(kinesis, streamNameDSM, data, () => {})
-        })
-      })
-
-      it('emits DSM stats to the agent during Kinesis putRecords', done => {
-        // we need to stub Date.now() to ensure a new stats bucket is created for each call
-        // otherwise, all stats checkpoints will be combined into a single stats points
-        let now = Date.now()
-        nowStub = sinon.stub(Date, 'now')
-        nowStub.callsFake(() => {
-          now += 1000000
-          return now
-        })
-
-        agent.expectPipelineStats(dsmStats => {
-          let statsPointsReceived = 0
-          // we should have only have 3 stats points since we only had 3 records published
-          dsmStats.forEach((timeStatsBucket) => {
-            if (timeStatsBucket && timeStatsBucket.Stats) {
-              timeStatsBucket.Stats.forEach((statsBuckets) => {
-                statsPointsReceived += statsBuckets.Stats.length
-              })
-            }
-          })
-          expect(statsPointsReceived).to.be.at.least(3)
-          expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
-        }, { timeoutMs: 10000 }).then(done, done)
-
-        helpers.putTestRecords(kinesis, streamNameDSM, (err, data) => {
-          // Swallow the error as it doesn't matter for this test.
         })
       })
     })

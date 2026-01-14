@@ -1,6 +1,5 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -68,8 +67,8 @@ describe('IastContextPlugin', () => {
     it('should add a subscription to the channel', () => {
       plugin.startCtxOn(channelName, tag)
 
-      expect(addSub).to.be.calledOnceWith(channelName)
-      expect(getAndRegisterSubscription).to.be.calledOnceWith({ channelName, tag, tagKey: TagKey.SOURCE_TYPE })
+      sinon.assert.calledOnceWithMatch(addSub, channelName)
+      sinon.assert.calledOnceWithExactly(getAndRegisterSubscription, { channelName, tag, tagKey: TagKey.SOURCE_TYPE })
     })
 
     it('should call startContext when event is published', () => {
@@ -80,7 +79,7 @@ describe('IastContextPlugin', () => {
 
       addSub.firstCall.args[1]()
 
-      expect(startContext).to.be.calledOnce
+      sinon.assert.calledOnce(startContext)
     })
   })
 
@@ -90,7 +89,7 @@ describe('IastContextPlugin', () => {
     it('should add a subscription to the channel', () => {
       plugin.finishCtxOn(channelName)
 
-      expect(addSub).to.be.calledOnceWith(channelName)
+      sinon.assert.calledOnceWithMatch(addSub, channelName)
     })
 
     it('should call finishContext when event is published', () => {
@@ -101,7 +100,7 @@ describe('IastContextPlugin', () => {
 
       addSub.firstCall.args[1]()
 
-      expect(finishContext).to.be.calledOnce
+      sinon.assert.calledOnce(finishContext)
     })
   })
 
@@ -134,21 +133,21 @@ describe('IastContextPlugin', () => {
 
       plugin.startContext()
 
-      expect(plugin.getTopContext).to.be.calledOnce
-      expect(plugin.getRootSpan).to.be.calledWith(store)
+      sinon.assert.calledOnce(plugin.getTopContext)
+      sinon.assert.calledWith(plugin.getRootSpan, store)
     })
 
     it('should call overheadController before starting iast context', () => {
       plugin.startContext()
 
-      expect(acquireRequest).to.be.calledOnceWith(rootSpan)
+      sinon.assert.calledOnceWithExactly(acquireRequest, rootSpan)
     })
 
     it('should add _dd.iast.enabled:0 tag in the rootSpan', () => {
       const addTags = sinon.stub(rootSpan, 'addTags')
       plugin.startContext()
 
-      expect(addTags).to.be.calledOnceWith({ [IAST_ENABLED_TAG_KEY]: 0 })
+      sinon.assert.calledOnceWithExactly(addTags, { [IAST_ENABLED_TAG_KEY]: 0 })
     })
 
     it('should not fail if store does not contain span', () => {
@@ -156,7 +155,7 @@ describe('IastContextPlugin', () => {
 
       plugin.startContext()
 
-      expect(acquireRequest).to.be.calledOnceWith(undefined)
+      sinon.assert.calledOnceWithExactly(acquireRequest, undefined)
     })
 
     describe('if acquireRequest', () => {
@@ -175,26 +174,26 @@ describe('IastContextPlugin', () => {
         const addTags = sinon.stub(rootSpan, 'addTags')
         plugin.startContext()
 
-        expect(addTags).to.be.calledOnceWith({ [IAST_ENABLED_TAG_KEY]: 1 })
+        sinon.assert.calledOnceWithExactly(addTags, { [IAST_ENABLED_TAG_KEY]: 1 })
       })
 
       it('should create and save new IAST context and store it', () => {
         plugin.startContext()
 
-        expect(newIastContext).to.be.calledOnceWith(rootSpan)
-        expect(saveIastContext).to.be.calledOnceWith(store, topContext, context)
+        sinon.assert.calledOnceWithExactly(newIastContext, rootSpan)
+        sinon.assert.calledOnceWithExactly(saveIastContext, store, topContext, context)
       })
 
       it('should create new taint-tracking transaction', () => {
         plugin.startContext()
 
-        expect(createTransaction).to.be.calledOnceWith('span-id', context)
+        sinon.assert.calledOnceWithExactly(createTransaction, 'span-id', context)
       })
 
       it('should obtain needed info from data before starting iast context', () => {
         plugin.startContext()
 
-        expect(initializeRequestContext).to.be.calledOnceWith(context)
+        sinon.assert.calledOnceWithExactly(initializeRequestContext, context)
       })
     })
   })
@@ -217,7 +216,7 @@ describe('IastContextPlugin', () => {
 
       plugin.finishContext()
 
-      expect(sendVulnerabilities).to.be.calledOnceWith(vulnerabilities, rootSpan)
+      sinon.assert.calledOnceWithExactly(sendVulnerabilities, vulnerabilities, rootSpan)
     })
 
     it('should remove the taint-tracking transaction', () => {
@@ -230,7 +229,7 @@ describe('IastContextPlugin', () => {
 
       plugin.finishContext()
 
-      expect(removeTransaction).to.be.calledOnceWith(iastContext)
+      sinon.assert.calledOnceWithExactly(removeTransaction, iastContext)
     })
 
     it('should clear iastContext and releaseRequest from OCE', () => {
@@ -244,8 +243,8 @@ describe('IastContextPlugin', () => {
 
       plugin.finishContext()
 
-      expect(cleanIastContext).to.be.calledOnce
-      expect(releaseRequest).to.be.calledOnce
+      sinon.assert.calledOnce(cleanIastContext)
+      sinon.assert.calledOnce(releaseRequest)
     })
 
     it('should not fail if there is no iastContext', () => {
@@ -253,7 +252,7 @@ describe('IastContextPlugin', () => {
 
       plugin.finishContext()
 
-      expect(cleanIastContext).to.be.calledOnce
+      sinon.assert.calledOnce(cleanIastContext)
     })
   })
 })

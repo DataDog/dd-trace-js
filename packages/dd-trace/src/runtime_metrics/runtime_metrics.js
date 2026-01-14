@@ -5,9 +5,9 @@
 const v8 = require('v8')
 const os = require('os')
 const process = require('process')
+const { performance, PerformanceObserver, monitorEventLoopDelay } = require('perf_hooks')
 const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
-const { performance, PerformanceObserver, monitorEventLoopDelay } = require('perf_hooks')
 const { getEnvironmentVariable } = require('../config-helper')
 
 const { NODE_MAJOR } = require('../../../../version')

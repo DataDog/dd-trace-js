@@ -1,8 +1,10 @@
 'use strict'
 
 const fs = require('fs')
+const assert = require('node:assert/strict')
 const path = require('path')
-const { expect } = require('chai')
+
+const sinon = require('sinon')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const {
@@ -13,9 +15,8 @@ const {
   SCHEMA_WEIGHT,
   SCHEMA_TYPE
 } = require('../../dd-trace/src/constants')
-const sinon = require('sinon')
-const { loadMessage } = require('./helpers')
 const { SchemaBuilder } = require('../../dd-trace/src/datastreams/schemas/schema_builder')
+const { loadMessage } = require('./helpers')
 
 const schemas = JSON.parse(fs.readFileSync(path.join(__dirname, 'schemas/expected_schemas.json'), 'utf8'))
 const MESSAGE_SCHEMA_DEF = schemas.MESSAGE_SCHEMA_DEF
@@ -72,14 +73,14 @@ describe('Plugin', () => {
           tracer.trace('other_message.serialize', span => {
             loadedMessages.OtherMessage.type.encode(loadedMessages.OtherMessage.instance).finish()
 
-            expect(span._name).to.equal('other_message.serialize')
+            assert.strictEqual(span._name, 'other_message.serialize')
 
-            expect(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span)).to.equal(true)
-            expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
-            expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'OtherMessage')
-            expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'serialization')
-            expect(span.context()._tags).to.have.property(SCHEMA_ID, OTHER_MESSAGE_SCHEMA_ID)
-            expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+            assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
+            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'OtherMessage')
+            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
+            assert.strictEqual(span.context()._tags[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -88,14 +89,14 @@ describe('Plugin', () => {
             tracer.trace('other_message.serialize', span => {
               loadedMessages.OtherMessage.type.encode(loadedMessages.OtherMessage.instance).finish()
 
-              expect(span._name).to.equal('other_message.serialize')
+              assert.strictEqual(span._name, 'other_message.serialize')
 
-              expect(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span)).to.equal(true)
-              expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
-              expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'OtherMessage')
-              expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'serialization')
-              expect(span.context()._tags).to.have.property(SCHEMA_ID, OTHER_MESSAGE_SCHEMA_ID)
-              expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+              assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
+              assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
+              assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'OtherMessage')
+              assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
+              assert.strictEqual(span.context()._tags[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
+              assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
             })
           })
         })
@@ -106,14 +107,14 @@ describe('Plugin', () => {
           tracer.trace('message_pb2.serialize', span => {
             loadedMessages.MyMessage.type.encode(loadedMessages.MyMessage.instance).finish()
 
-            expect(span._name).to.equal('message_pb2.serialize')
+            assert.strictEqual(span._name, 'message_pb2.serialize')
 
-            expect(compareJson(MESSAGE_SCHEMA_DEF, span)).to.equal(true)
-            expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
-            expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'MyMessage')
-            expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'serialization')
-            expect(span.context()._tags).to.have.property(SCHEMA_ID, MESSAGE_SCHEMA_ID)
-            expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+            assert.strictEqual(compareJson(MESSAGE_SCHEMA_DEF, span), true)
+            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'MyMessage')
+            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
+            assert.strictEqual(span.context()._tags[SCHEMA_ID], MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -123,14 +124,14 @@ describe('Plugin', () => {
           tracer.trace('all_types.serialize', span => {
             loadedMessages.MainMessage.type.encode(loadedMessages.MainMessage.instance).finish()
 
-            expect(span._name).to.equal('all_types.serialize')
+            assert.strictEqual(span._name, 'all_types.serialize')
 
-            expect(compareJson(ALL_TYPES_MESSAGE_SCHEMA_DEF, span)).to.equal(true)
-            expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
-            expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'example.MainMessage')
-            expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'serialization')
-            expect(span.context()._tags).to.have.property(SCHEMA_ID, ALL_TYPES_MESSAGE_SCHEMA_ID)
-            expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+            assert.strictEqual(compareJson(ALL_TYPES_MESSAGE_SCHEMA_DEF, span), true)
+            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.MainMessage')
+            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
+            assert.strictEqual(span.context()._tags[SCHEMA_ID], ALL_TYPES_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -142,14 +143,14 @@ describe('Plugin', () => {
           tracer.trace('other_message.deserialize', span => {
             loadedMessages.OtherMessage.type.decode(bytes)
 
-            expect(span._name).to.equal('other_message.deserialize')
+            assert.strictEqual(span._name, 'other_message.deserialize')
 
-            expect(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span)).to.equal(true)
-            expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
-            expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'OtherMessage')
-            expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'deserialization')
-            expect(span.context()._tags).to.have.property(SCHEMA_ID, OTHER_MESSAGE_SCHEMA_ID)
-            expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+            assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
+            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'OtherMessage')
+            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context()._tags[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -161,14 +162,14 @@ describe('Plugin', () => {
           tracer.trace('my_message.deserialize', span => {
             loadedMessages.MyMessage.type.decode(bytes)
 
-            expect(span._name).to.equal('my_message.deserialize')
+            assert.strictEqual(span._name, 'my_message.deserialize')
 
-            expect(compareJson(MESSAGE_SCHEMA_DEF, span)).to.equal(true)
-            expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
-            expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'MyMessage')
-            expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'deserialization')
-            expect(span.context()._tags).to.have.property(SCHEMA_ID, MESSAGE_SCHEMA_ID)
-            expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+            assert.strictEqual(compareJson(MESSAGE_SCHEMA_DEF, span), true)
+            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'MyMessage')
+            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context()._tags[SCHEMA_ID], MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -180,14 +181,14 @@ describe('Plugin', () => {
           tracer.trace('all_types.deserialize', span => {
             loadedMessages.MainMessage.type.decode(bytes)
 
-            expect(span._name).to.equal('all_types.deserialize')
+            assert.strictEqual(span._name, 'all_types.deserialize')
 
-            expect(compareJson(ALL_TYPES_MESSAGE_SCHEMA_DEF, span)).to.equal(true)
-            expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
-            expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'example.MainMessage')
-            expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'deserialization')
-            expect(span.context()._tags).to.have.property(SCHEMA_ID, ALL_TYPES_MESSAGE_SCHEMA_ID)
-            expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+            assert.strictEqual(compareJson(ALL_TYPES_MESSAGE_SCHEMA_DEF, span), true)
+            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.MainMessage')
+            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context()._tags[SCHEMA_ID], ALL_TYPES_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -205,14 +206,14 @@ describe('Plugin', () => {
           tracer.trace('other_message.deserialize', span => {
             OtherMessage.decode(bytes)
 
-            expect(span._name).to.equal('other_message.deserialize')
+            assert.strictEqual(span._name, 'other_message.deserialize')
 
-            expect(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span)).to.equal(true)
-            expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
-            expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'OtherMessage')
-            expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'deserialization')
-            expect(span.context()._tags).to.have.property(SCHEMA_ID, OTHER_MESSAGE_SCHEMA_ID)
-            expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+            assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
+            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'OtherMessage')
+            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context()._tags[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -229,14 +230,14 @@ describe('Plugin', () => {
           tracer.trace('other_message.deserialize', span => {
             OtherMessage.decodeDelimited(bytes)
 
-            expect(span._name).to.equal('other_message.deserialize')
+            assert.strictEqual(span._name, 'other_message.deserialize')
 
-            expect(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span)).to.equal(true)
-            expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
-            expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'OtherMessage')
-            expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'deserialization')
-            expect(span.context()._tags).to.have.property(SCHEMA_ID, OTHER_MESSAGE_SCHEMA_ID)
-            expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+            assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
+            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'OtherMessage')
+            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context()._tags[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -255,14 +256,14 @@ describe('Plugin', () => {
           tracer.trace('other_message.deserialize', span => {
             OtherMessage.decodeDelimited(bytes)
 
-            expect(span._name).to.equal('other_message.deserialize')
+            assert.strictEqual(span._name, 'other_message.deserialize')
 
-            expect(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span)).to.equal(true)
-            expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
-            expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'OtherMessage')
-            expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'deserialization')
-            expect(span.context()._tags).to.have.property(SCHEMA_ID, OTHER_MESSAGE_SCHEMA_ID)
-            expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+            assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
+            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'OtherMessage')
+            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context()._tags[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -281,14 +282,14 @@ describe('Plugin', () => {
           tracer.trace('other_message.deserialize', span => {
             OtherMessage.decodeDelimited(bytes)
 
-            expect(span._name).to.equal('other_message.deserialize')
+            assert.strictEqual(span._name, 'other_message.deserialize')
 
-            expect(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span)).to.equal(true)
-            expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
-            expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'OtherMessage')
-            expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'deserialization')
-            expect(span.context()._tags).to.have.property(SCHEMA_ID, OTHER_MESSAGE_SCHEMA_ID)
-            expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+            assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
+            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'OtherMessage')
+            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context()._tags[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -314,36 +315,36 @@ describe('Plugin', () => {
             tracer.trace('message_pb2.serialize', span => {
               loadedMessages.MyMessage.type.encode(loadedMessages.MyMessage.instance).finish()
 
-              expect(span._name).to.equal('message_pb2.serialize')
+              assert.strictEqual(span._name, 'message_pb2.serialize')
 
-              expect(compareJson(MESSAGE_SCHEMA_DEF, span)).to.equal(true)
-              expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
-              expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'MyMessage')
-              expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'serialization')
-              expect(span.context()._tags).to.have.property(SCHEMA_ID, MESSAGE_SCHEMA_ID)
-              expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+              assert.strictEqual(compareJson(MESSAGE_SCHEMA_DEF, span), true)
+              assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
+              assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'MyMessage')
+              assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
+              assert.strictEqual(span.context()._tags[SCHEMA_ID], MESSAGE_SCHEMA_ID)
+              assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
 
               // we sampled 1 schema with 1 subschema, so the constructor should've only been called twice
-              expect(cacheSetSpy.callCount).to.equal(2)
-              expect(cacheGetSpy.callCount).to.equal(2)
+              assert.strictEqual(cacheSetSpy.callCount, 2)
+              assert.strictEqual(cacheGetSpy.callCount, 2)
             })
 
             tracer.trace('message_pb2.serialize', span => {
               loadedMessages.MyMessage.type.encode(loadedMessages.MyMessage.instance).finish()
 
-              expect(span._name).to.equal('message_pb2.serialize')
+              assert.strictEqual(span._name, 'message_pb2.serialize')
 
-              expect(compareJson(MESSAGE_SCHEMA_DEF, span)).to.equal(true)
-              expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
-              expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'MyMessage')
-              expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'serialization')
-              expect(span.context()._tags).to.have.property(SCHEMA_ID, MESSAGE_SCHEMA_ID)
-              expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+              assert.strictEqual(compareJson(MESSAGE_SCHEMA_DEF, span), true)
+              assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
+              assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'MyMessage')
+              assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
+              assert.strictEqual(span.context()._tags[SCHEMA_ID], MESSAGE_SCHEMA_ID)
+              assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
 
               // ensure schema was sampled and returned via the cache, so no extra cache set
               // calls were needed, only gets
-              expect(cacheSetSpy.callCount).to.equal(2)
-              expect(cacheGetSpy.callCount).to.equal(3)
+              assert.strictEqual(cacheSetSpy.callCount, 2)
+              assert.strictEqual(cacheGetSpy.callCount, 3)
             })
           })
         })

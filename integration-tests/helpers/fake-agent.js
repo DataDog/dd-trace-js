@@ -57,12 +57,12 @@ module.exports = class FakeAgent extends EventEmitter {
 
   /**
    * Add a config object to be returned by the fake Remote Config endpoint.
-   * @param {Object} config - Object containing the Remote Config "file" and metadata
+   * @param {object} config - Object containing the Remote Config "file" and metadata
    * @param {number} [config.orgId=2] - The Datadog organization ID
    * @param {string} config.product - The Remote Config product name
    * @param {string} config.id - The Remote Config config ID
    * @param {string} [config.name] - The Remote Config "name". Defaults to the sha256 hash of `config.id`
-   * @param {Object} config.config - The Remote Config "file" object
+   * @param {object} config.config - The Remote Config "file" object
    */
   addRemoteConfig (config) {
     config = { ...config }
@@ -84,7 +84,7 @@ module.exports = class FakeAgent extends EventEmitter {
   /**
    * Update an existing config object
    * @param {string} id - The Remote Config config ID
-   * @param {Object} config - The Remote Config "file" object
+   * @param {object} config - The Remote Config "file" object
    */
   updateRemoteConfig (id, config) {
     config = JSON.stringify(config)
@@ -299,6 +299,9 @@ function buildExpressServer (agent) {
       cached_target_files: cachedTargetFiles
     } = req.body
 
+    // Emit the remote config request payload for testing
+    agent.emit('remote-config-request', req.body)
+
     if (state.has_error) {
       // Print the error sent by the client in case it's useful in debugging tests
       console.error(state.error) // eslint-disable-line no-console
@@ -318,7 +321,7 @@ function buildExpressServer (agent) {
     }
 
     res.on('close', () => {
-      agent.emit('remote-confg-responded')
+      agent.emit('remote-config-responded')
     })
 
     if (agent._rcTargetsVersion === state.targets_version) {

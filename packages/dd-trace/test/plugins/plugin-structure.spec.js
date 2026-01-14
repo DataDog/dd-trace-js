@@ -1,12 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, before } = require('tap').mocha
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
-require('../setup/core')
+const { describe, it } = require('mocha')
 
+require('../setup/core')
 const hooks = require('../../../datadog-instrumentations/src/helpers/hooks')
 
 const abstractPlugins = [
@@ -48,22 +48,16 @@ describe('Plugin Structure Validation', () => {
   const packagesDir = path.join(__dirname, '..', '..', '..')
   const instrumentationsDir = path.join(packagesDir, 'datadog-instrumentations', 'src')
 
-  let pluginDirs
-  let instrumentationFiles
-  let allPluginIds
+  const pluginDirs = fs.readdirSync(packagesDir)
+    .filter(dir => dir.startsWith('datadog-plugin-') && !missingPlugins.includes(dir))
 
-  before(() => {
-    pluginDirs = fs.readdirSync(packagesDir)
-      .filter(dir => dir.startsWith('datadog-plugin-') && !missingPlugins.includes(dir))
+  const instrumentationFiles = new Set(
+    fs.readdirSync(instrumentationsDir)
+      .filter(file => file.endsWith('.js'))
+      .map(file => file.replace('.js', ''))
+  )
 
-    instrumentationFiles = new Set(
-      fs.readdirSync(instrumentationsDir)
-        .filter(file => file.endsWith('.js'))
-        .map(file => file.replace('.js', ''))
-    )
-
-    allPluginIds = new Set(pluginDirs.map(dir => dir.replace('datadog-plugin-', '')))
-  })
+  const allPluginIds = new Set(pluginDirs.map(dir => dir.replace('datadog-plugin-', '')))
 
   pluginDirs.forEach(pluginDir => {
     const expectedId = pluginDir.replace('datadog-plugin-', '')
@@ -74,7 +68,7 @@ describe('Plugin Structure Validation', () => {
       const pluginId = Plugin.id
 
       it('should have an id that matches the directory name', () => {
-        expect(pluginId).to.equal(expectedId)
+        assert.strictEqual(pluginId, expectedId)
       })
 
       it('should have a corresponding instrumentation file', () => {
@@ -82,8 +76,7 @@ describe('Plugin Structure Validation', () => {
           return
         }
 
-        expect(instrumentationFiles.has(pluginId))
-          .to.equal(true, `Missing instrumentation file: ${pluginId}.js`)
+        assert.strictEqual(instrumentationFiles.has(pluginId), true, `Missing instrumentation file: ${pluginId}.js`)
       })
     })
   })
@@ -97,7 +90,7 @@ describe('Plugin Structure Validation', () => {
       }
     })
 
-    expect(missingInstrumentations).to.be.empty
+    assert.strictEqual(missingInstrumentations.length, 0)
   })
 
   it('should have all plugins accounted for with a hook', () => {
@@ -123,6 +116,6 @@ describe('Plugin Structure Validation', () => {
       }
     })
 
-    expect(missingHooks).to.deep.equal(missingInstrumentationHooks)
+    assert.deepStrictEqual(missingHooks, missingInstrumentationHooks)
   })
 })

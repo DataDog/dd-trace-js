@@ -1,17 +1,17 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-
+const assert = require('node:assert/strict')
 const Readable = require('node:stream').Readable
 const path = require('node:path')
 
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_SERVER_ERROR_STATUSES } = require('../../dd-trace/src/constants')
-
 const { NODE_MAJOR } = require('../../../version')
+
 const pkgs = NODE_MAJOR > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
 describe('Plugin', () => {
@@ -108,20 +108,20 @@ describe('Plugin', () => {
 
           return agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.deep.include({
+              assertObjectContains(traces[0][0], {
                 name: 'grpc.server',
                 service: 'test',
                 resource: '/test.TestService/getUnary',
                 type: 'web'
               })
-              expect(traces[0][0].meta).to.have.property('grpc.method.name', 'getUnary')
-              expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
-              expect(traces[0][0].meta).to.have.property('grpc.method.package', 'test')
-              expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getUnary')
-              expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'unary')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-              expect(traces[0][0].meta).to.have.property('component', 'grpc')
-              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
+              assert.strictEqual(traces[0][0].meta['grpc.method.name'], 'getUnary')
+              assert.strictEqual(traces[0][0].meta['grpc.method.service'], 'TestService')
+              assert.strictEqual(traces[0][0].meta['grpc.method.package'], 'test')
+              assert.strictEqual(traces[0][0].meta['grpc.method.path'], '/test.TestService/getUnary')
+              assert.strictEqual(traces[0][0].meta['grpc.method.kind'], 'unary')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
+              assert.strictEqual(traces[0][0].meta.component, 'grpc')
+              assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 0)
             })
         })
 
@@ -134,19 +134,19 @@ describe('Plugin', () => {
 
           return agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.deep.include({
+              assertObjectContains(traces[0][0], {
                 name: 'grpc.server',
                 service: 'test',
                 resource: '/test.TestService/getServerStream',
                 type: 'web'
               })
-              expect(traces[0][0].meta).to.have.property('grpc.method.name', 'getServerStream')
-              expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
-              expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getServerStream')
-              expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'server_streaming')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
-              expect(traces[0][0].meta).to.have.property('component', 'grpc')
+              assert.strictEqual(traces[0][0].meta['grpc.method.name'], 'getServerStream')
+              assert.strictEqual(traces[0][0].meta['grpc.method.service'], 'TestService')
+              assert.strictEqual(traces[0][0].meta['grpc.method.path'], '/test.TestService/getServerStream')
+              assert.strictEqual(traces[0][0].meta['grpc.method.kind'], 'server_streaming')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
+              assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 0)
+              assert.strictEqual(traces[0][0].meta.component, 'grpc')
             })
         })
 
@@ -160,19 +160,19 @@ describe('Plugin', () => {
 
           return agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.deep.include({
+              assertObjectContains(traces[0][0], {
                 name: 'grpc.server',
                 service: 'test',
                 resource: '/test.TestService/getBidi',
                 type: 'web'
               })
-              expect(traces[0][0].meta).to.have.property('grpc.method.name', 'getBidi')
-              expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
-              expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getBidi')
-              expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'bidi_streaming')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
-              expect(traces[0][0].meta).to.have.property('component', 'grpc')
+              assert.strictEqual(traces[0][0].meta['grpc.method.name'], 'getBidi')
+              assert.strictEqual(traces[0][0].meta['grpc.method.service'], 'TestService')
+              assert.strictEqual(traces[0][0].meta['grpc.method.path'], '/test.TestService/getBidi')
+              assert.strictEqual(traces[0][0].meta['grpc.method.kind'], 'bidi_streaming')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
+              assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 0)
+              assert.strictEqual(traces[0][0].meta.component, 'grpc')
             })
         })
 
@@ -187,7 +187,7 @@ describe('Plugin', () => {
 
           return agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
+              assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 1)
             })
         })
 
@@ -202,7 +202,7 @@ describe('Plugin', () => {
 
           return agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
+              assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 1)
             })
         })
 
@@ -216,7 +216,7 @@ describe('Plugin', () => {
 
           return agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
+              assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 1)
             })
         })
 
@@ -235,10 +235,10 @@ describe('Plugin', () => {
 
           return agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('error', 1)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'foobar')
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, 'Error')
-              expect(traces[0][0].meta).to.not.have.property('grpc.status.code')
+              assert.strictEqual(traces[0][0].error, 1)
+              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], 'foobar')
+              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], 'Error')
+              assert.ok(!('grpc.status.code' in traces[0][0].meta))
             })
         })
 
@@ -267,12 +267,12 @@ describe('Plugin', () => {
 
           return agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('error', 1)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'foobar')
-              expect(traces[0][0].meta[ERROR_STACK]).to.match(/^Error: foobar\n {4}at Object.getUnary.*/)
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, 'Error')
-              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
-              expect(traces[0][0].meta).to.have.property('component', 'grpc')
+              assert.strictEqual(traces[0][0].error, 1)
+              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], 'foobar')
+              assert.match(traces[0][0].meta[ERROR_STACK], /^Error: foobar\n {4}at Object.getUnary.*/)
+              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], 'Error')
+              assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 5)
+              assert.strictEqual(traces[0][0].meta.component, 'grpc')
             })
         })
 
@@ -302,8 +302,8 @@ describe('Plugin', () => {
 
           return agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
+              assert.strictEqual(traces[0][0].error, 0)
+              assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 5)
               tracer._tracer._config.grpc.server.error.statuses = GRPC_SERVER_ERROR_STATUSES
             })
         })
@@ -323,9 +323,9 @@ describe('Plugin', () => {
 
           return agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('error', 1)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'foobar')
-              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
+              assert.strictEqual(traces[0][0].error, 1)
+              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], 'foobar')
+              assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 5)
             })
         })
 
@@ -346,11 +346,11 @@ describe('Plugin', () => {
 
           return agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('error', 1)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'foobar')
-              expect(traces[0][0].meta[ERROR_STACK]).to.equal(error.stack)
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, 'Error')
-              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
+              assert.strictEqual(traces[0][0].error, 1)
+              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], 'foobar')
+              assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], 'Error')
+              assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 5)
             })
         })
 
@@ -359,7 +359,7 @@ describe('Plugin', () => {
             getUnary: (_, callback) => {
               try {
                 callback()
-                expect(tracer.scope().active()).to.not.be.null
+                assert.notStrictEqual(tracer.scope().active(), null)
                 done()
               } catch (e) {
                 done(e)
@@ -377,8 +377,8 @@ describe('Plugin', () => {
 
               emitter = call
               emitter.on('test', () => {
-                expect(tracer.scope().active()).to.equal(span)
-                expect(span).to.not.be.null
+                assert.strictEqual(tracer.scope().active(), span)
+                assert.notStrictEqual(span, null)
                 done()
               })
 
@@ -418,12 +418,9 @@ describe('Plugin', () => {
 
           client.getUnary({ first: 'foobar' }, () => {})
 
-          return agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.deep.include({
-                service: 'custom'
-              })
-            })
+          return agent.assertFirstTraceSpan({
+            service: 'custom'
+          })
         })
       })
 
@@ -459,7 +456,7 @@ describe('Plugin', () => {
 
           return agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property('grpc.request.metadata.foo', 'bar')
+              assert.strictEqual(traces[0][0].meta['grpc.request.metadata.foo'], 'bar')
             })
         })
 
@@ -478,7 +475,7 @@ describe('Plugin', () => {
 
           return agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property('grpc.response.metadata.foo', 'bar')
+              assert.strictEqual(traces[0][0].meta['grpc.response.metadata.foo'], 'bar')
             })
         })
 
@@ -488,7 +485,8 @@ describe('Plugin', () => {
               callback(null, {})
 
               try {
-                expect(call.metadata.getMap()).to.have.property('foo', 'bar')
+                assert.ok('foo' in call.metadata.getMap())
+                assert.strictEqual(call.metadata.getMap().foo, 'bar')
                 done()
               } catch (e) {
                 done(e)

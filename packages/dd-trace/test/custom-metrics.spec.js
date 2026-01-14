@@ -1,14 +1,12 @@
 'use strict'
 
-/* eslint-disable no-console */
-
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
-
+const assert = require('node:assert/strict')
 const http = require('node:http')
 const path = require('node:path')
 const os = require('node:os')
 const { exec } = require('node:child_process')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 
 require('./setup/core')
 
@@ -53,10 +51,12 @@ describe('Custom Metrics', () => {
       }
     }, (err, stdout, stderr) => {
       if (err) return done(err)
+      // eslint-disable-next-line no-console
       if (stdout) console.log(stdout)
+      // eslint-disable-next-line no-console
       if (stderr) console.error(stderr)
 
-      expect(metricsData.split('#')[0]).to.equal('page.views.data:1|c|')
+      assert.strictEqual(metricsData.split('#')[0], 'page.views.data:1|c|')
 
       done()
     })

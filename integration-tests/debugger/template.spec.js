@@ -1,9 +1,9 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const semver = require('semver')
-const { setup } = require('./utils')
 const { NODE_MAJOR } = require('../../version')
+const { setup } = require('./utils')
 
 const NODE_24_11_1_OR_LATER = semver.gte(process.version, '24.11.1')
 
@@ -11,7 +11,7 @@ describe('Dynamic Instrumentation', function () {
   describe('template evaluation', function () {
     const t = setup({ dependencies: ['fastify'] })
 
-    beforeEach(t.triggerBreakpoint)
+    beforeEach(() => { t.triggerBreakpoint() })
 
     it('should evaluate template if it requires evaluation', function (done) {
       t.agent.on('debugger-input', ({ payload: [payload] }) => {
@@ -202,7 +202,7 @@ describe('Dynamic Instrumentation', function () {
 
         const { evaluationErrors } = payload.debugger.snapshot
 
-        assert.isArray(evaluationErrors)
+        assert.ok(Array.isArray(evaluationErrors))
         assert.strictEqual(evaluationErrors.length, 2)
         assert.strictEqual(evaluationErrors[0].expr, 'request.invalid.name')
         assert.strictEqual(evaluationErrors[0].message, 'TypeError: Cannot convert undefined or null to object')

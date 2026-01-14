@@ -1,9 +1,9 @@
 'use strict'
 
-const Plugin = require('./plugin')
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT } = require('../constants')
+const Plugin = require('./plugin')
 
 class TracingPlugin extends Plugin {
   constructor (...args) {

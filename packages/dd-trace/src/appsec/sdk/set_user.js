@@ -1,9 +1,9 @@
 'use strict'
 
-const { getRootSpan } = require('./utils')
 const log = require('../../log')
 const waf = require('../waf')
 const addresses = require('../addresses')
+const { getRootSpan } = require('./utils')
 
 function setUserTags (user, rootSpan) {
   for (const k of Object.keys(user)) {

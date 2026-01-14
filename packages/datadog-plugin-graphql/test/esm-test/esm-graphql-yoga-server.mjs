@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
-import { createSchema, createYoga } from 'graphql-yoga'
 import { createServer } from 'node:http'
+import { createSchema, createYoga } from 'graphql-yoga'
 
 const typeDefs = /* GraphQL */ `
   type Query {
@@ -31,7 +31,7 @@ const server = createServer(yoga)
 const port = process.env.PORT || 0
 
 server.listen(port, () => {
-  const actualPort = server.address().port
+  const actualPort = (/** @type {import('net').AddressInfo} */ (server.address())).port
   // Send port to parent process for integration tests
   if (process.send) {
     process.send({ port: actualPort })

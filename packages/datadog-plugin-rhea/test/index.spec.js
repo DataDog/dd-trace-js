@@ -1,12 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
@@ -65,7 +67,7 @@ describe('Plugin', () => {
                 produceSpanMeta = span.meta
               }
 
-              expect(produceSpanMeta).to.include({
+              assertObjectContains(produceSpanMeta, {
                 'pathway.hash': expectedProducerHash
               })
             }, { timeoutMs: 2000 }).then(done, done)
@@ -85,7 +87,7 @@ describe('Plugin', () => {
                   consumeSpanMeta = span.meta
                 }
 
-                expect(consumeSpanMeta).to.include({
+                assertObjectContains(consumeSpanMeta, {
                   'pathway.hash': expectedConsumerHash
                 })
               }, { timeoutMs: 2000 }).then(done, done)
@@ -103,8 +105,8 @@ describe('Plugin', () => {
                   })
                 }
               }, { timeoutMs: 2000 })
-              expect(statsPointsReceived).to.be.at.least(1)
-              expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+              assert.ok(((statsPointsReceived) >= (1)))
+              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
             }).then(done, done)
 
             context.sender.send({ body: 'hello from DSM' })
@@ -121,8 +123,8 @@ describe('Plugin', () => {
                   })
                 }
               })
-              expect(statsPointsReceived).to.be.at.least(2)
-              expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+              assert.ok(((statsPointsReceived) >= (2)))
+              assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
             }, { timeoutMs: 2000 }).then(done, done)
 
             context.sender.send({ body: 'hello from DSM' })
@@ -146,14 +148,14 @@ describe('Plugin', () => {
             it('should automatically instrument', (done) => {
               agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
-                expect(span).to.include({
+                assertObjectContains(span, {
                   name: expectedSchema.send.opName,
                   resource: 'amq.topic',
                   error: 0,
                   service: expectedSchema.send.serviceName
                 })
-                expect(span).to.not.have.property('type')
-                expect(span.meta).to.include({
+                assert.ok(!('type' in span))
+                assertObjectContains(span.meta, {
                   'span.kind': 'producer',
                   'amqp.link.target.address': 'amq.topic',
                   'amqp.link.role': 'sender',
@@ -161,7 +163,7 @@ describe('Plugin', () => {
                   'out.host': 'localhost',
                   component: 'rhea'
                 })
-                expect(span.metrics).to.include({
+                assertObjectContains(span.metrics, {
                   'network.destination.port': 5673
                 })
               })
@@ -172,8 +174,7 @@ describe('Plugin', () => {
             it('should inject span context', (done) => {
               container.once('message', msg => {
                 const keys = Object.keys(msg.message.delivery_annotations)
-                expect(keys).to.include('x-datadog-trace-id')
-                expect(keys).to.include('x-datadog-parent-id')
+                assertObjectContains(keys, ['x-datadog-trace-id', 'x-datadog-parent-id'])
                 done()
               })
               context.sender.send({ body: 'Hello World!' })
@@ -182,8 +183,7 @@ describe('Plugin', () => {
             it('should inject span context with encoded messages', (done) => {
               container.once('message', msg => {
                 const keys = Object.keys(msg.message.delivery_annotations)
-                expect(keys).to.include('x-datadog-trace-id')
-                expect(keys).to.include('x-datadog-parent-id')
+                assertObjectContains(keys, ['x-datadog-trace-id', 'x-datadog-parent-id'])
                 done()
               })
               tracer.trace('web.request', () => {
@@ -202,14 +202,14 @@ describe('Plugin', () => {
             it('should automatically instrument', done => {
               agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
-                expect(span).to.include({
+                assertObjectContains(span, {
                   name: expectedSchema.receive.opName,
                   resource: 'amq.topic',
                   error: 0,
                   service: expectedSchema.receive.serviceName,
                   type: 'worker'
                 })
-                expect(span.meta).to.include({
+                assertObjectContains(span.meta, {
                   'span.kind': 'consumer',
                   'amqp.link.source.address': 'amq.topic',
                   'amqp.link.role': 'receiver',
@@ -223,7 +223,7 @@ describe('Plugin', () => {
             it('should extract the span context', done => {
               container.once('message', msg => {
                 const span = tracer.scope().active()
-                expect(span._spanContext._parentId).to.not.be.null
+                assert.notStrictEqual(span._spanContext._parentId, null)
                 done()
               })
               context.sender.send({ body: 'Hello World!' })
@@ -275,8 +275,10 @@ describe('Plugin', () => {
           it('should use the configuration for the receiver', (done) => {
             agent.assertSomeTraces(traces => {
               const span = traces[0][0]
-              expect(span).to.have.property('name', expectedSchema.receive.opName)
-              expect(span).to.have.property('service', 'a_test_service')
+              assert.ok('name' in span)
+              assert.strictEqual(span.name, expectedSchema.receive.opName)
+              assert.ok('service' in span)
+              assert.strictEqual(span.service, 'a_test_service')
             })
               .then(done, done)
             context.sender.send({ body: 'Hello World!' })
@@ -285,8 +287,10 @@ describe('Plugin', () => {
           it('should use the configuration for the sender', (done) => {
             agent.assertSomeTraces(traces => {
               const span = traces[0][0]
-              expect(span).to.have.property('name', expectedSchema.send.opName)
-              expect(span).to.have.property('service', 'a_test_service')
+              assert.ok('name' in span)
+              assert.strictEqual(span.name, expectedSchema.send.opName)
+              assert.ok('service' in span)
+              assert.strictEqual(span.service, 'a_test_service')
             })
               .then(done, done)
             context.sender.send({ body: 'Hello World!' })
@@ -324,11 +328,11 @@ describe('Plugin', () => {
         it('should automatically instrument', (done) => {
           agent.assertSomeTraces(traces => {
             const beforeFinishContext = rheaInstumentation.contexts.get(spy.firstCall.firstArg)
-            expect(spy).to.have.been.called
-            expect(beforeFinishContext).to.have.property('connection')
-            expect(beforeFinishContext.connection).to.have.property(rheaInstumentation.inFlightDeliveries)
-            expect(beforeFinishContext.connection[rheaInstumentation.inFlightDeliveries]).to.be.instanceof(Set)
-            expect(beforeFinishContext.connection[rheaInstumentation.inFlightDeliveries].size).to.equal(0)
+            sinon.assert.called(spy)
+            assert.ok('connection' in beforeFinishContext)
+            assert.ok(rheaInstumentation.inFlightDeliveries in beforeFinishContext.connection)
+            assert.ok(beforeFinishContext.connection[rheaInstumentation.inFlightDeliveries] instanceof Set)
+            assert.strictEqual(beforeFinishContext.connection[rheaInstumentation.inFlightDeliveries].size, 0)
           })
             .then(done, done)
           context.sender.send({ body: 'Hello World!' })
@@ -445,13 +449,16 @@ describe('Plugin', () => {
 
                 agent.assertSomeTraces(traces => {
                   const span = traces[0][0]
-                  expect(span.error).to.equal(1)
-                  expect(span.meta).to.include({
-                    [ERROR_MESSAGE]: 'this is an error',
-                    [ERROR_TYPE]: 'Error',
-                    [ERROR_STACK]: error.stack,
-                    component: 'rhea'
+                  assertObjectContains(span, {
+                    error: 1,
+                    meta: {
+                      [ERROR_MESSAGE]: 'this is an error',
+                      [ERROR_TYPE]: 'Error',
+                      [ERROR_STACK]: error.stack,
+                      component: 'rhea'
+                    }
                   })
+
                   Session.prototype.on_transfer = onTransfer
                 }).then(done, done)
 
@@ -645,13 +652,13 @@ describe('Plugin', () => {
             const err = new Error('fake protocol error')
             agent.assertSomeTraces(traces => {
               const span = traces[0][0]
-              expect(span).to.include({
+              assertObjectContains(span, {
                 name: expectedSchema.send.opName,
                 resource: 'amq.topic',
                 error: 1,
                 service: expectedSchema.send.serviceName
               })
-              expect(span.meta).to.include({
+              assertObjectContains(span.meta, {
                 'span.kind': 'producer',
                 'amqp.link.target.address': 'amq.topic',
                 'amqp.link.role': 'sender',
@@ -660,7 +667,7 @@ describe('Plugin', () => {
                 [ERROR_STACK]: err.stack,
                 component: 'rhea'
               })
-              expect(span.metrics).to.include({
+              assertObjectContains(span.metrics, {
                 'network.destination.port': expectedServerPort
               })
             }).then(done, done)
@@ -677,13 +684,13 @@ describe('Plugin', () => {
             const err = new Error('fake protocol error')
             agent.assertSomeTraces(traces => {
               const span = traces[0][0]
-              expect(span).to.include({
+              assertObjectContains(span, {
                 name: expectedSchema.receive.opName,
                 resource: 'amq.topic',
                 error: 1,
                 service: expectedSchema.receive.serviceName
               })
-              expect(span.meta).to.include({
+              assertObjectContains(span.meta, {
                 'span.kind': 'consumer',
                 'amqp.link.source.address': 'amq.topic',
                 'amqp.link.role': 'receiver',
@@ -712,7 +719,7 @@ function expectReceiving (agent, expectedSchema, deliveryState, topic) {
   topic = topic || 'amq.topic'
   return Promise.resolve().then(() => agent.assertSomeTraces(traces => {
     const span = traces[0][0]
-    expect(span).to.include({
+    assertObjectContains(span, {
       name: expectedSchema.receive.opName,
       resource: topic,
       error: 0,
@@ -728,7 +735,7 @@ function expectReceiving (agent, expectedSchema, deliveryState, topic) {
     if (deliveryState) {
       expectedMeta['amqp.delivery.state'] = deliveryState
     }
-    expect(span.meta).to.include(expectedMeta)
+    assertObjectContains(span.meta, expectedMeta)
   }))
 }
 
@@ -737,13 +744,13 @@ function expectSending (agent, expectedSchema, deliveryState, topic) {
   topic = topic || 'amq.topic'
   return Promise.resolve().then(() => agent.assertSomeTraces(traces => {
     const span = traces[0][0]
-    expect(span).to.include({
+    assertObjectContains(span, {
       name: expectedSchema.send.opName,
       resource: topic,
       error: 0,
       service: expectedSchema.send.serviceName
     })
-    expect(span).to.not.have.property('type')
+    assert.ok(!('type' in span))
     const expectedMeta = {
       'span.kind': 'producer',
       'amqp.link.target.address': topic,
@@ -753,6 +760,6 @@ function expectSending (agent, expectedSchema, deliveryState, topic) {
     if (deliveryState) {
       expectedMeta['amqp.delivery.state'] = deliveryState
     }
-    expect(span.meta).to.include(expectedMeta)
+    assertObjectContains(span.meta, expectedMeta)
   }))
 }

@@ -2,25 +2,30 @@
 
 const fs = require('fs')
 const os = require('os')
-const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const { URL } = require('url')
+const path = require('path')
+const uuid = require('../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 
+const set = require('../../datadog-core/src/utils/src/set')
+const { DD_MAJOR } = require('../../../version')
 const log = require('./log')
 const tagger = require('./tagger')
-const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
   require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
-const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
+const {
+  isInServerlessEnvironment,
+  getIsGCPFunction,
+  getIsAzureFunction,
+  enableGCPPubSubPushSubscription
+} = require('./serverless')
 const { ORIGIN_KEY } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./config-helper')
 const defaults = require('./config_defaults')
-const path = require('path')
-const { DD_MAJOR } = require('../../../version')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -182,7 +187,7 @@ function validateNamingVersion (versionString) {
  * @param {string | string[]} input
  */
 function splitJSONPathRules (input) {
-  if (!input) return
+  if (!input || input === '$') return
   if (Array.isArray(input)) return input
   if (input === 'all') return []
   return input.split(',')
@@ -276,8 +281,6 @@ class Config {
       this.stableConfig = new StableConfig()
     }
 
-    const envs = getEnvironmentVariables()
-
     options = {
       ...options,
       appsec: options.appsec == null ? options.experimental?.appsec : options.appsec,
@@ -321,7 +324,7 @@ class Config {
     this.#defaults = defaults
     this.#applyDefaults()
     this.#applyStableConfig(this.stableConfig?.localEntries ?? {}, this.#localStableConfig)
-    this.#applyEnvironment(envs)
+    this.#applyEnvironment()
     this.#applyStableConfig(this.stableConfig?.fleetEntries ?? {}, this.#fleetStableConfig)
     this.#applyOptions(options)
     this.#applyCalculated()
@@ -342,7 +345,7 @@ class Config {
     }
 
     if (this.gitMetadataEnabled) {
-      this.#loadGitMetadata(envs)
+      this.#loadGitMetadata()
     }
   }
 
@@ -446,6 +449,7 @@ class Config {
       DD_DBM_PROPAGATION_MODE,
       DD_DOGSTATSD_HOST,
       DD_DOGSTATSD_PORT,
+      DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS,
       DD_DYNAMIC_INSTRUMENTATION_ENABLED,
       DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE,
       DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS,
@@ -453,6 +457,7 @@ class Config {
       DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS,
       DD_ENV,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
+      DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED,
       DD_PROFILING_ENABLED,
       DD_GRPC_CLIENT_ERROR_STATUSES,
       DD_GRPC_SERVER_ERROR_STATUSES,
@@ -477,6 +482,7 @@ class Config {
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
       DD_LOGS_OTEL_ENABLED,
+      DD_METRICS_OTEL_ENABLED,
       DD_LANGCHAIN_SPAN_CHAR_LIMIT,
       DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
       DD_LLMOBS_AGENTLESS_ENABLED,
@@ -543,6 +549,7 @@ class Config {
       DD_TRACE_RATE_LIMIT,
       DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,
       DD_TRACE_REPORT_HOSTNAME,
+      DD_TRACE_RESOURCE_RENAMING_ENABLED,
       DD_TRACE_SAMPLE_RATE,
       DD_TRACE_SAMPLING_RULES,
       DD_TRACE_SCOPE,
@@ -571,12 +578,20 @@ class Config {
       OTEL_EXPORTER_OTLP_LOGS_HEADERS,
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
       OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS,
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,
+      OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE,
+      OTEL_METRIC_EXPORT_TIMEOUT,
       OTEL_EXPORTER_OTLP_PROTOCOL,
       OTEL_EXPORTER_OTLP_ENDPOINT,
       OTEL_EXPORTER_OTLP_HEADERS,
       OTEL_EXPORTER_OTLP_TIMEOUT,
       OTEL_BSP_SCHEDULE_DELAY,
-      OTEL_BSP_MAX_EXPORT_BATCH_SIZE
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE,
+      OTEL_BSP_MAX_QUEUE_SIZE,
+      OTEL_METRIC_EXPORT_INTERVAL
     } = source
 
     const tags = {}
@@ -603,16 +618,51 @@ class Config {
     this.#setString(target, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || target.otelHeaders)
     this.#setString(target, 'otelProtocol', OTEL_EXPORTER_OTLP_PROTOCOL)
     this.#setString(target, 'otelLogsProtocol', OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || target.otelProtocol)
-    target.otelTimeout = maybeInt(OTEL_EXPORTER_OTLP_TIMEOUT)
-    target.otelLogsTimeout = maybeInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT) || target.otelTimeout
-    target.otelLogsBatchTimeout = maybeInt(OTEL_BSP_SCHEDULE_DELAY)
-    target.otelLogsMaxExportBatchSize = maybeInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
+    const otelTimeout = nonNegInt(OTEL_EXPORTER_OTLP_TIMEOUT, 'OTEL_EXPORTER_OTLP_TIMEOUT')
+    if (otelTimeout !== undefined) {
+      target.otelTimeout = otelTimeout
+    }
+    const otelLogsTimeout = nonNegInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT, 'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT')
+    target.otelLogsTimeout = otelLogsTimeout === undefined ? target.otelTimeout : otelLogsTimeout
+    const otelBatchTimeout = nonNegInt(OTEL_BSP_SCHEDULE_DELAY, 'OTEL_BSP_SCHEDULE_DELAY', false)
+    if (otelBatchTimeout !== undefined) {
+      target.otelBatchTimeout = otelBatchTimeout
+    }
+    target.otelMaxExportBatchSize = nonNegInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE, 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE', false)
+    target.otelMaxQueueSize = nonNegInt(OTEL_BSP_MAX_QUEUE_SIZE, 'OTEL_BSP_MAX_QUEUE_SIZE', false)
+
+    const otelMetricsExporterEnabled = OTEL_METRICS_EXPORTER?.toLowerCase() !== 'none'
+    this.#setBoolean(
+      target,
+      'otelMetricsEnabled',
+      DD_METRICS_OTEL_ENABLED && isTrue(DD_METRICS_OTEL_ENABLED) && otelMetricsExporterEnabled
+    )
+    // Set OpenTelemetry metrics configuration with specific _METRICS_ vars
+    // taking precedence over generic _EXPORTERS_ vars
+    if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) {
+      this.#setString(target, 'otelMetricsUrl', OTEL_EXPORTER_OTLP_METRICS_ENDPOINT || target.otelUrl)
+    }
+    this.#setString(target, 'otelMetricsHeaders', OTEL_EXPORTER_OTLP_METRICS_HEADERS || target.otelHeaders)
+    this.#setString(target, 'otelMetricsProtocol', OTEL_EXPORTER_OTLP_METRICS_PROTOCOL || target.otelProtocol)
+    const otelMetricsTimeout = nonNegInt(OTEL_EXPORTER_OTLP_METRICS_TIMEOUT, 'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT')
+    target.otelMetricsTimeout = otelMetricsTimeout === undefined ? target.otelTimeout : otelMetricsTimeout
+    target.otelMetricsExportTimeout = nonNegInt(OTEL_METRIC_EXPORT_TIMEOUT, 'OTEL_METRIC_EXPORT_TIMEOUT')
+    target.otelMetricsExportInterval = nonNegInt(OTEL_METRIC_EXPORT_INTERVAL, 'OTEL_METRIC_EXPORT_INTERVAL', false)
+
+    // Parse temporality preference (default to DELTA for Datadog)
+    if (OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE) {
+      const temporalityPref = OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE.toUpperCase()
+      if (['DELTA', 'CUMULATIVE', 'LOWMEMORY'].includes(temporalityPref)) {
+        this.#setString(target, 'otelMetricsTemporalityPreference', temporalityPref)
+      }
+    }
     this.#setBoolean(
       target,
       'apmTracingEnabled',
       DD_APM_TRACING_ENABLED ??
         (DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED))
     )
+    this.#setBoolean(target, 'propagateProcessTags.enabled', DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED)
     this.#setString(target, 'appKey', DD_APP_KEY)
     this.#setBoolean(target, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
     target['appsec.apiSecurity.sampleDelay'] = maybeFloat(DD_API_SECURITY_SAMPLE_DELAY)
@@ -684,6 +734,8 @@ class Config {
     this.#setString(target, 'dogstatsd.hostname', DD_DOGSTATSD_HOST)
     this.#setString(target, 'dogstatsd.port', DD_DOGSTATSD_PORT)
     this.#setBoolean(target, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
+    target['dynamicInstrumentation.captureTimeoutMs'] = maybeInt(DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS)
+    unprocessedTarget['dynamicInstrumentation.captureTimeoutMs'] = DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS
     this.#setBoolean(target, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
     this.#setString(target, 'dynamicInstrumentation.probeFile', DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE)
     this.#setArray(target, 'dynamicInstrumentation.redactedIdentifiers',
@@ -752,6 +804,7 @@ class Config {
     this.#setBoolean(target, 'injectForce', DD_INJECT_FORCE)
     this.#setBoolean(target, 'isAzureFunction', getIsAzureFunction())
     this.#setBoolean(target, 'isGCPFunction', getIsGCPFunction())
+    this.#setBoolean(target, 'gcpPubSubPushSubscriptionEnabled', enableGCPPubSubPushSubscription())
     target['langchain.spanCharLimit'] = maybeInt(DD_LANGCHAIN_SPAN_CHAR_LIMIT)
     target['langchain.spanPromptCompletionSampleRate'] = maybeFloat(DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
     this.#setBoolean(target, 'legacyBaggageEnabled', DD_TRACE_LEGACY_BAGGAGE_ENABLED)
@@ -787,6 +840,9 @@ class Config {
     target['remoteConfig.pollInterval'] = maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)
     unprocessedTarget['remoteConfig.pollInterval'] = DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     this.#setBoolean(target, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
+    if (DD_TRACE_RESOURCE_RENAMING_ENABLED !== undefined) {
+      this.#setBoolean(target, 'resourceRenamingEnabled', DD_TRACE_RESOURCE_RENAMING_ENABLED)
+    }
     // only used to explicitly set runtimeMetrics to false
     const otelSetRuntimeMetrics = String(OTEL_METRICS_EXPORTER).toLowerCase() === 'none'
       ? false
@@ -984,6 +1040,8 @@ class Config {
       this.#setString(opts, 'dogstatsd.port', options.dogstatsd.port)
     }
     this.#setBoolean(opts, 'dsmEnabled', options.dsmEnabled)
+    opts['dynamicInstrumentation.captureTimeoutMs'] = maybeInt(options.dynamicInstrumentation?.captureTimeoutMs)
+    this.#optsUnprocessed['dynamicInstrumentation.captureTimeoutMs'] = options.dynamicInstrumentation?.captureTimeoutMs
     this.#setBoolean(opts, 'dynamicInstrumentation.enabled', options.dynamicInstrumentation?.enabled)
     this.#setString(opts, 'dynamicInstrumentation.probeFile', options.dynamicInstrumentation?.probeFile)
     this.#setArray(
@@ -1098,9 +1156,8 @@ class Config {
     // This is reliant on environment config being set before options.
     // This is to make sure the origins of each value are tracked appropriately for telemetry.
     // We'll only set `llmobs.enabled` on the opts when it's not set on the environment, and options.llmobs is provided.
-    const llmobsEnabledEnv = this.#env['llmobs.enabled']
-    if (llmobsEnabledEnv == null && options.llmobs) {
-      this.#setBoolean(opts, 'llmobs.enabled', !!options.llmobs)
+    if (this.#env['llmobs.enabled'] == null && options.llmobs) {
+      this.#setBoolean(opts, 'llmobs.enabled', true)
     }
   }
 
@@ -1201,13 +1258,23 @@ class Config {
 
     calc['dogstatsd.hostname'] = this.#getHostname()
 
-    // Compute OTLP logs URL to send payloads to the active Datadog Agent
+    // Compute OTLP logs and metrics URLs to send payloads to the active Datadog Agent
     const agentHostname = this.#getHostname()
     calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
+    calc.otelMetricsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`
     calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
 
     this.#setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(getEnv('DD_CIVISIBILITY_GIT_UPLOAD_ENABLED')))
+
+    // Enable resourceRenamingEnabled when appsec is enabled and only
+    // if DD_TRACE_RESOURCE_RENAMING_ENABLED is not explicitly set
+    if (this.#env.resourceRenamingEnabled === undefined) {
+      const appsecEnabled = this.#options['appsec.enabled'] ?? this.#env['appsec.enabled']
+      if (appsecEnabled) {
+        this.#setBoolean(calc, 'resourceRenamingEnabled', true)
+      }
+    }
 
     this.#setBoolean(calc, 'spanComputePeerService', this.#getSpanComputePeerService())
     this.#setBoolean(calc, 'stats.enabled', this.#isTraceStatsComputationEnabled())
@@ -1409,26 +1476,24 @@ class Config {
     }
   }
 
-  #loadGitMetadata (envs) {
+  #loadGitMetadata () {
     // try to read Git metadata from the environment variables
     this.repositoryUrl = removeUserSensitiveInfo(
-      envs.DD_GIT_REPOSITORY_URL ??
-      this.tags[GIT_REPOSITORY_URL]
+      getEnv('DD_GIT_REPOSITORY_URL') ?? this.tags[GIT_REPOSITORY_URL]
     )
-    this.commitSHA = envs.DD_GIT_COMMIT_SHA ??
-      this.tags[GIT_COMMIT_SHA]
+    this.commitSHA = getEnv('DD_GIT_COMMIT_SHA') ?? this.tags[GIT_COMMIT_SHA]
 
     // otherwise, try to read Git metadata from the git.properties file
     if (!this.repositoryUrl || !this.commitSHA) {
-      const DD_GIT_PROPERTIES_FILE = envs.DD_GIT_PROPERTIES_FILE ??
-        `${process.cwd()}/git.properties`
+      const DD_GIT_PROPERTIES_FILE = getEnv('DD_GIT_PROPERTIES_FILE')
+      const gitPropertiesFile = DD_GIT_PROPERTIES_FILE ?? `${process.cwd()}/git.properties`
       let gitPropertiesString
       try {
-        gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
+        gitPropertiesString = fs.readFileSync(gitPropertiesFile, 'utf8')
       } catch (e) {
         // Only log error if the user has set a git.properties path
-        if (envs.DD_GIT_PROPERTIES_FILE) {
-          log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, e)
+        if (DD_GIT_PROPERTIES_FILE) {
+          log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', gitPropertiesFile, e)
         }
       }
       if (gitPropertiesString) {
@@ -1439,11 +1504,11 @@ class Config {
     }
     // otherwise, try to read Git metadata from the .git/ folder
     if (!this.repositoryUrl || !this.commitSHA) {
-      const DD_GIT_FOLDER_PATH = envs.DD_GIT_FOLDER_PATH ??
-        path.join(process.cwd(), '.git')
+      const DD_GIT_FOLDER_PATH = getEnv('DD_GIT_FOLDER_PATH')
+      const gitFolderPath = DD_GIT_FOLDER_PATH ?? path.join(process.cwd(), '.git')
       if (!this.repositoryUrl) {
         // try to read git config (repository URL)
-        const gitConfigPath = path.join(DD_GIT_FOLDER_PATH, 'config')
+        const gitConfigPath = path.join(gitFolderPath, 'config')
         try {
           const gitConfigContent = fs.readFileSync(gitConfigPath, 'utf8')
           if (gitConfigContent) {
@@ -1451,14 +1516,14 @@ class Config {
           }
         } catch (e) {
           // Only log error if the user has set a .git/ path
-          if (envs.DD_GIT_FOLDER_PATH) {
+          if (DD_GIT_FOLDER_PATH) {
             log.error('Error reading git config: %s', gitConfigPath, e)
           }
         }
       }
       if (!this.commitSHA) {
         // try to read git HEAD (commit SHA)
-        const gitHeadSha = resolveGitHeadSHA(DD_GIT_FOLDER_PATH)
+        const gitHeadSha = resolveGitHeadSHA(gitFolderPath)
         if (gitHeadSha) {
           this.commitSHA = gitHeadSha
         }
@@ -1490,6 +1555,16 @@ function maybeInt (number) {
 function maybeFloat (number) {
   const parsed = Number.parseFloat(number)
   return Number.isNaN(parsed) ? undefined : parsed
+}
+
+function nonNegInt (value, envVarName, allowZero = true) {
+  if (value === undefined) return
+  const parsed = Number.parseInt(value)
+  if (Number.isNaN(parsed) || parsed < 0 || (parsed === 0 && !allowZero)) {
+    log.warn(`Invalid value ${parsed} for ${envVarName}. Using default value.`)
+    return
+  }
+  return parsed
 }
 
 function getAgentUrl (url, options) {

@@ -1,10 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 
 describe('sendData', () => {
@@ -30,10 +32,10 @@ describe('sendData', () => {
       tags: { 'runtime-id': '123' }
     }, application, 'test', 'req-type')
 
-    expect(request).to.have.been.calledOnce
+    sinon.assert.calledOnce(request)
     const options = request.getCall(0).args[1]
 
-    expect(options).to.deep.equal({
+    assert.deepStrictEqual(options, {
       method: 'POST',
       path: '/telemetry/proxy/api/v2/apmtelemetry',
       headers: {
@@ -55,10 +57,10 @@ describe('sendData', () => {
       tags: { 'runtime-id': '123' }
     }, application, 'test', 'req-type')
 
-    expect(request).to.have.been.calledOnce
+    sinon.assert.calledOnce(request)
     const options = request.getCall(0).args[1]
 
-    expect(options).to.deep.equal({
+    assert.deepStrictEqual(options, {
       method: 'POST',
       path: '/telemetry/proxy/api/v2/apmtelemetry',
       headers: {
@@ -81,10 +83,10 @@ describe('sendData', () => {
       telemetry: { debug: true }
     }, application, 'test', 'req-type')
 
-    expect(request).to.have.been.calledOnce
+    sinon.assert.calledOnce(request)
     const options = request.getCall(0).args[1]
 
-    expect(options).to.deep.equal({
+    assert.deepStrictEqual(options, {
       method: 'POST',
       path: '/telemetry/proxy/api/v2/apmtelemetry',
       headers: {
@@ -110,11 +112,11 @@ describe('sendData', () => {
     }
     sendDataModule.sendData({ tags: { 'runtime-id': '123' } }, 'test', 'test', 'req-type', payload)
 
-    expect(request).to.have.been.calledOnce
+    sinon.assert.calledOnce(request)
     const data = JSON.parse(request.getCall(0).args[0])
 
     const { logger, tags, serviceMapping, ...trimmedPayload } = payload
-    expect(data.payload).to.deep.equal(trimmedPayload)
+    assert.deepStrictEqual(data.payload, trimmedPayload)
   })
 
   it('should send batch request with retryPayload', () => {
@@ -133,7 +135,7 @@ describe('sendData', () => {
     sendDataModule.sendData({ tags: { 'runtime-id': '123' } },
       { language: 'js' }, 'test', 'message-batch', payload) /
 
-    expect(request).to.have.been.calledOnce
+    sinon.assert.calledOnce(request)
 
     const data = JSON.parse(request.getCall(0).args[0])
     const expectedPayload = [{
@@ -148,8 +150,8 @@ describe('sendData', () => {
       request_type: 'req-type-1',
       payload: { foo: 'bar' }
     }]
-    expect(data.request_type).to.equal('message-batch')
-    expect(data.payload).to.deep.equal(expectedPayload)
+    assert.strictEqual(data.request_type, 'message-batch')
+    assert.deepStrictEqual(data.payload, expectedPayload)
   })
 
   it('should also work in CI Visibility agentless mode', () => {
@@ -165,14 +167,14 @@ describe('sendData', () => {
       'test', 'req-type'
     )
 
-    expect(request).to.have.been.calledOnce
+    sinon.assert.calledOnce(request)
     const options = request.getCall(0).args[1]
-    expect(options).to.include({
+    assertObjectContains(options, {
       method: 'POST',
       path: '/api/v2/apmtelemetry'
     })
     const { url } = options
-    expect(url).to.eql(new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
+    assert.deepStrictEqual(url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
     delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
   })
 })

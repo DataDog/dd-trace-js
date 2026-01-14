@@ -2,8 +2,8 @@
 
 const { workerData: { config: parentConfig, parentThreadId, configPort } } = require('node:worker_threads')
 const { format } = require('node:url')
-const log = require('./log')
 const defaults = require('../../config_defaults')
+const log = require('./log')
 
 const config = module.exports = {
   ...parentConfig,
@@ -24,4 +24,6 @@ function updateUrl (updates) {
     hostname: updates.hostname || defaults.hostname,
     port: updates.port
   })
+
+  config.dynamicInstrumentation.captureTimeoutNs = BigInt(updates.dynamicInstrumentation.captureTimeoutMs) * 1_000_000n
 }

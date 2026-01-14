@@ -3,7 +3,7 @@
  * Modifications copyright 2022 Datadog, Inc.
  *
  * Some functions are part of aws-lambda-nodejs-runtime-interface-client
- * https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/main/src/utils/UserFunction.ts
+ * https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/v2.1.0/src/utils/UserFunction.ts
  */
 'use strict'
 
@@ -61,7 +61,7 @@ function _extractModuleNameAndHandlerPath (handler) {
 /**
  * Returns all possible paths of the files to be patched when required.
  *
- * @param {*} lambdaStylePath the path comprised of the `LAMBDA_TASK_ROOT`,
+ * @param {string} lambdaStylePath the path comprised of the `LAMBDA_TASK_ROOT`,
  * the root of the module of the Lambda handler, and the module name.
  * @returns the lambdaStylePath with appropiate extensions for the hook.
  */

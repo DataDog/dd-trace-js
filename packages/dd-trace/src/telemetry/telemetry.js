@@ -1,14 +1,17 @@
 'use strict'
-const tracerVersion = require('../../../../package.json').version
-const dc = require('dc-polyfill')
+
 const os = require('os')
+const dc = require('dc-polyfill')
+
+const tracerVersion = require('../../../../package.json').version
+const { errors } = require('../startup-log')
+const logger = require('../log')
+const processTags = require('../process-tags')
 const dependencies = require('./dependencies')
 const endpoints = require('./endpoints')
 const { sendData } = require('./send-data')
-const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
 const telemetryLogger = require('./logs')
-const logger = require('../log')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
@@ -78,7 +81,8 @@ function getIntegrations () {
     newIntegrations.push({
       name: pluginName,
       enabled: pluginManager._pluginsByName[pluginName]._enabled,
-      auto_enabled: true
+      auto_enabled: true,
+      [processTags.TELEMETRY_FIELD_NAME]: processTags.tagsObject
     })
     sentIntegrations.add(pluginName)
   }
@@ -155,7 +159,8 @@ function createAppObject (config) {
     service_version: config.version,
     tracer_version: tracerVersion,
     language_name: 'nodejs',
-    language_version: process.versions.node
+    language_version: process.versions.node,
+    process_tags: processTags.tagsObject
   }
 }
 
@@ -339,8 +344,17 @@ const nameMapping = {
   otelLogsProtocol: 'OTEL_EXPORTER_OTLP_LOGS_PROTOCOL',
   otelLogsTimeout: 'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT',
   otelLogsUrl: 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT',
-  otelLogsBatchTimeout: 'OTEL_BSP_SCHEDULE_DELAY',
-  otelLogsMaxExportBatchSize: 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE',
+  otelBatchTimeout: 'OTEL_BSP_SCHEDULE_DELAY',
+  otelMaxExportBatchSize: 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE',
+  otelMaxQueueSize: 'OTEL_BSP_MAX_QUEUE_SIZE',
+  otelMetricsEnabled: 'DD_METRICS_OTEL_ENABLED',
+  otelMetricsHeaders: 'OTEL_EXPORTER_OTLP_METRICS_HEADERS',
+  otelMetricsProtocol: 'OTEL_EXPORTER_OTLP_METRICS_PROTOCOL',
+  otelMetricsTimeout: 'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT',
+  otelMetricsExportTimeout: 'OTEL_METRIC_EXPORT_TIMEOUT',
+  otelMetricsUrl: 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT',
+  otelMetricsExportInterval: 'OTEL_METRIC_EXPORT_INTERVAL',
+  otelMetricsTemporalityPreference: 'OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE',
 }
 
 const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])

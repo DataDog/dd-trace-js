@@ -1,7 +1,7 @@
 'use strict'
 
 const { join, dirname } = require('path')
-const { normalize } = require('source-map/lib/util')
+const { normalize } = require('../../../../../vendor/dist/source-map/lib/util')
 const { loadSourceMapSync } = require('./source-maps')
 const session = require('./session')
 const log = require('./log')
@@ -24,7 +24,7 @@ module.exports = {
    * Find the script to inspect based on a partial or absolute path. Handles both Windows and POSIX paths.
    *
    * @param {string} path - Partial or absolute path to match against loaded scripts
-   * @returns {Object | null} - Object containing `url`, `scriptId`, `sourceMapURL`, and `source` - or null if no match
+   * @returns {object | null} - Object containing `url`, `scriptId`, `sourceMapURL`, and `source` - or null if no match
    */
   findScriptFromPartialPath (path) {
     if (!path) return null // This shouldn't happen, but better safe than sorry
@@ -81,9 +81,14 @@ module.exports = {
       }
 
       // If we found a valid match and it's better than our previous best
+      // Note: bestMatch.url cannot be null when comparing lengths because:
+      // - The first time we enter this block, lastBoundaryPos > maxMatchLength is always true
+      // - We set bestMatch.url before we could evaluate the second condition
+      // - Subsequent evaluations have bestMatch.url already set
       if (atBoundary && (
         lastBoundaryPos > maxMatchLength ||
-        (lastBoundaryPos === maxMatchLength && url.length < bestMatch.url.length) // Prefer shorter paths
+        (lastBoundaryPos === maxMatchLength &&
+          url.length < /** @type {string} */ (/** @type {unknown} */ (bestMatch.url)).length) // Prefer shorter paths
       )) {
         maxMatchLength = lastBoundaryPos
         bestMatch.url = sourceUrl || url

@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it } = require('mocha')
 
 require('../setup/core')
 
@@ -21,8 +22,7 @@ describe('encoding', () => {
     // given the tag resolution we do on the backend, this is not a big issue.
     const hash = computePathwayHash('test-service', 'test-env',
       ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
-    expect(hash)
-      .to.deep.equal(Buffer.from('67b0b35e65c0acfa', 'hex'))
+    assert.deepStrictEqual(hash, Buffer.from('67b0b35e65c0acfa', 'hex'))
   })
 
   it('encoding and decoding should be a no op', () => {
@@ -33,9 +33,9 @@ describe('encoding', () => {
     }
     const encoded = encodePathwayContext(expectedContext)
     const decoded = decodePathwayContext(encoded)
-    expect(decoded.hash.toString()).to.equal(expectedContext.hash.toString())
-    expect(decoded.pathwayStartNs).to.equal(expectedContext.pathwayStartNs)
-    expect(decoded.edgeStartNs).to.equal(expectedContext.edgeStartNs)
+    assert.strictEqual(decoded.hash.toString(), expectedContext.hash.toString())
+    assert.strictEqual(decoded.pathwayStartNs, expectedContext.pathwayStartNs)
+    assert.strictEqual(decoded.edgeStartNs, expectedContext.edgeStartNs)
   })
 
   it('decoding of a context should be consistent between languages', () => {
@@ -47,9 +47,9 @@ describe('encoding', () => {
       pathwayStartNs: 1685673482722000000,
       edgeStartNs: 1685673506404000000
     }
-    expect(decoded.hash.toString()).to.equal(expectedContext.hash.toString())
-    expect(decoded.pathwayStartNs).to.equal(expectedContext.pathwayStartNs)
-    expect(decoded.edgeStartNs).to.equal(expectedContext.edgeStartNs)
+    assert.strictEqual(decoded.hash.toString(), expectedContext.hash.toString())
+    assert.strictEqual(decoded.pathwayStartNs, expectedContext.pathwayStartNs)
+    assert.strictEqual(decoded.edgeStartNs, expectedContext.edgeStartNs)
   })
 
   it('should encode and decode to the same value when using base64', () => {
@@ -63,9 +63,9 @@ describe('encoding', () => {
     const encodedPathway = encodePathwayContextBase64(ctx)
     const decodedPathway = decodePathwayContextBase64(encodedPathway)
 
-    expect(decodedPathway.hash.toString()).to.equal(ctx.hash.toString())
-    expect(decodedPathway.pathwayStartNs).to.equal(ctx.pathwayStartNs)
-    expect(decodedPathway.edgeStartNs).to.equal(ctx.edgeStartNs)
+    assert.strictEqual(decodedPathway.hash.toString(), ctx.hash.toString())
+    assert.strictEqual(decodedPathway.pathwayStartNs, ctx.pathwayStartNs)
+    assert.strictEqual(decodedPathway.edgeStartNs, ctx.edgeStartNs)
   })
 
   it('should encode and decode to the same value when using the PathwayCodec', () => {
@@ -80,9 +80,9 @@ describe('encoding', () => {
     DsmPathwayCodec.encode(ctx, carrier)
     const decodedCtx = DsmPathwayCodec.decode(carrier)
 
-    expect(decodedCtx.hash.toString()).to.equal(ctx.hash.toString())
-    expect(decodedCtx.pathwayStartNs).to.equal(ctx.pathwayStartNs)
-    expect(decodedCtx.edgeStartNs).to.equal(ctx.edgeStartNs)
+    assert.strictEqual(decodedCtx.hash.toString(), ctx.hash.toString())
+    assert.strictEqual(decodedCtx.pathwayStartNs, ctx.pathwayStartNs)
+    assert.strictEqual(decodedCtx.edgeStartNs, ctx.edgeStartNs)
   })
 
   it('should encode/decode to the same value when using the PathwayCodec, base64 and the deprecated ctx key', () => {
@@ -99,9 +99,9 @@ describe('encoding', () => {
     delete carrier['dd-pathway-ctx-base64']
     const decodedCtx = DsmPathwayCodec.decode(carrier)
 
-    expect(decodedCtx.hash.toString()).to.equal(ctx.hash.toString())
-    expect(decodedCtx.pathwayStartNs).to.equal(ctx.pathwayStartNs)
-    expect(decodedCtx.edgeStartNs).to.equal(ctx.edgeStartNs)
+    assert.strictEqual(decodedCtx.hash.toString(), ctx.hash.toString())
+    assert.strictEqual(decodedCtx.pathwayStartNs, ctx.pathwayStartNs)
+    assert.strictEqual(decodedCtx.edgeStartNs, ctx.edgeStartNs)
   })
 
   it('should encode/decode to the same value when using the PathwayCodec and the deprecated encoding', () => {
@@ -116,9 +116,9 @@ describe('encoding', () => {
     carrier['dd-pathway-ctx'] = encodePathwayContext(ctx)
     const decodedCtx = DsmPathwayCodec.decode(carrier)
 
-    expect(decodedCtx.hash.toString()).to.equal(ctx.hash.toString())
-    expect(decodedCtx.pathwayStartNs).to.equal(ctx.pathwayStartNs)
-    expect(decodedCtx.edgeStartNs).to.equal(ctx.edgeStartNs)
+    assert.strictEqual(decodedCtx.hash.toString(), ctx.hash.toString())
+    assert.strictEqual(decodedCtx.pathwayStartNs, ctx.pathwayStartNs)
+    assert.strictEqual(decodedCtx.edgeStartNs, ctx.edgeStartNs)
   })
 
   it('should inject the base64 encoded string to the carrier', () => {
@@ -133,7 +133,7 @@ describe('encoding', () => {
     DsmPathwayCodec.encode(ctx, carrier)
 
     const expectedBase64Hash = 'Z7CzXmXArPrE58Cfj2LI2cOfj2I='
-    expect(carrier['dd-pathway-ctx-base64']).to.equal(expectedBase64Hash)
+    assert.strictEqual(carrier['dd-pathway-ctx-base64'], expectedBase64Hash)
   })
 
   it('should extract the base64 encoded string from the carrier', () => {
@@ -149,6 +149,6 @@ describe('encoding', () => {
     carrier['dd-pathway-ctx-base64'] = expectedBase64Hash
     const decodedCtx = DsmPathwayCodec.decode(carrier)
 
-    expect(decodedCtx.hash.toString()).to.equal(ctx.hash.toString())
+    assert.strictEqual(decodedCtx.hash.toString(), ctx.hash.toString())
   })
 })

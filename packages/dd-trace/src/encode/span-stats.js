@@ -31,7 +31,7 @@ class SpanStatsEncoder extends AgentEncoder {
   }
 
   _encodeStat (bytes, stat) {
-    this._encodeMapPrefix(bytes, 12)
+    this._encodeMapPrefix(bytes, 14)
 
     this._encodeString(bytes, 'Service')
     const service = stat.Service || DEFAULT_SERVICE_NAME
@@ -70,6 +70,12 @@ class SpanStatsEncoder extends AgentEncoder {
 
     this._encodeString(bytes, 'TopLevelHits')
     this._encodeLong(bytes, stat.TopLevelHits)
+
+    this._encodeString(bytes, 'HTTPMethod')
+    this._encodeString(bytes, stat.HTTPMethod)
+
+    this._encodeString(bytes, 'HTTPEndpoint')
+    this._encodeString(bytes, stat.HTTPEndpoint)
   }
 
   _encodeBucket (bytes, bucket) {
@@ -89,7 +95,7 @@ class SpanStatsEncoder extends AgentEncoder {
   }
 
   _encode (bytes, stats) {
-    this._encodeMapPrefix(bytes, 8)
+    this._encodeMapPrefix(bytes, stats.ProcessTags ? 9 : 8)
 
     this._encodeString(bytes, 'Hostname')
     this._encodeString(bytes, stats.Hostname)
@@ -117,6 +123,11 @@ class SpanStatsEncoder extends AgentEncoder {
 
     this._encodeString(bytes, 'Sequence')
     this._encodeLong(bytes, stats.Sequence)
+
+    if (stats.ProcessTags) {
+      this._encodeString(bytes, 'ProcessTags')
+      this._encodeString(bytes, stats.ProcessTags)
+    }
   }
 }
 

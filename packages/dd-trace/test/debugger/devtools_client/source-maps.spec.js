@@ -1,10 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { after, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
-
 require('../../setup/mocha')
 
 const parsedSourceMap = {
@@ -41,8 +41,8 @@ describe('source map utils', function () {
     describe('loadSourceMap', function () {
       it('should return parsed inline source map', async function () {
         const sourceMap = await loadSourceMap(dir, inlineSourceMap)
-        expect(sourceMap).to.deep.equal(parsedSourceMap)
-        expect(readFile).to.not.have.been.called
+        assert.deepStrictEqual(sourceMap, parsedSourceMap)
+        sinon.assert.notCalled(readFile)
       })
 
       it('should throw is inline source map is invalid', function (done) {
@@ -57,28 +57,28 @@ describe('source map utils', function () {
 
       it('should return parsed source map', async function () {
         const sourceMap = await loadSourceMap(dir, sourceMapURL)
-        expect(sourceMap).to.deep.equal(parsedSourceMap)
-        expect(readFile).to.have.been.calledOnceWith('/foo/index.map.js', 'utf8')
+        assert.deepStrictEqual(sourceMap, parsedSourceMap)
+        sinon.assert.calledOnceWithExactly(readFile, '/foo/index.map.js', 'utf8')
       })
     })
 
     describe('loadSourceMapSync', function () {
       it('should return parsed inline source map', function () {
         const sourceMap = loadSourceMapSync(dir, inlineSourceMap)
-        expect(sourceMap).to.deep.equal(parsedSourceMap)
-        expect(readFileSync).to.not.have.been.called
+        assert.deepStrictEqual(sourceMap, parsedSourceMap)
+        sinon.assert.notCalled(readFileSync)
       })
 
       it('should throw if inline source map is invalid', function () {
-        expect(() => {
+        assert.throws(() => {
           loadSourceMapSync(dir, inlineSourceMap.slice(0, -10))
-        }).to.throw()
+        })
       })
 
       it('should return parsed source map', function () {
         const sourceMap = loadSourceMapSync(dir, sourceMapURL)
-        expect(sourceMap).to.deep.equal(parsedSourceMap)
-        expect(readFileSync).to.have.been.calledOnceWith('/foo/index.map.js', 'utf8')
+        assert.deepStrictEqual(sourceMap, parsedSourceMap)
+        sinon.assert.calledOnceWithExactly(readFileSync, '/foo/index.map.js', 'utf8')
       })
     })
 
@@ -89,12 +89,12 @@ describe('source map utils', function () {
 
       it('should return expected line for inline source map', async function () {
         const pos = await getGeneratedPosition(url, source, line, sourceMapURL)
-        expect(pos).to.deep.equal({ line: 2, column: 0, lastColumn: 5 })
+        assert.deepStrictEqual(pos, { line: 2, column: 0, lastColumn: 5 })
       })
 
       it('should return expected line for non-inline source map', async function () {
         const pos = await getGeneratedPosition(url, source, line, inlineSourceMap)
-        expect(pos).to.deep.equal({ line: 2, column: 0, lastColumn: 5 })
+        assert.deepStrictEqual(pos, { line: 2, column: 0, lastColumn: 5 })
       })
     })
   })
@@ -129,21 +129,21 @@ describe('source map utils', function () {
 
       it('should read from disk on the fist call', async function () {
         const sourceMap = await loadSourceMap(dir, sourceMapURL)
-        expect(sourceMap).to.deep.equal(parsedSourceMap)
-        expect(readFile.callCount).to.equal(1)
+        assert.deepStrictEqual(sourceMap, parsedSourceMap)
+        assert.strictEqual(readFile.callCount, 1)
       })
 
       it('should not read from disk on the second call', async function () {
         const sourceMap = await loadSourceMap(dir, sourceMapURL)
-        expect(sourceMap).to.deep.equal(parsedSourceMap)
-        expect(readFile.callCount).to.equal(1)
+        assert.deepStrictEqual(sourceMap, parsedSourceMap)
+        assert.strictEqual(readFile.callCount, 1)
       })
 
       it('should clear cache after 5 seconds', async function () {
         clock.tick(5_000)
         const sourceMap = await loadSourceMap(dir, sourceMapURL)
-        expect(sourceMap).to.deep.equal(parsedSourceMap)
-        expect(readFile.callCount).to.equal(2)
+        assert.deepStrictEqual(sourceMap, parsedSourceMap)
+        assert.strictEqual(readFile.callCount, 2)
       })
     })
 
@@ -154,21 +154,21 @@ describe('source map utils', function () {
 
       it('should read from disk on the fist call', function () {
         const sourceMap = loadSourceMapSync(dir, sourceMapURL)
-        expect(sourceMap).to.deep.equal(parsedSourceMap)
-        expect(readFileSync.callCount).to.equal(1)
+        assert.deepStrictEqual(sourceMap, parsedSourceMap)
+        assert.strictEqual(readFileSync.callCount, 1)
       })
 
       it('should not read from disk on the second call', function () {
         const sourceMap = loadSourceMapSync(dir, sourceMapURL)
-        expect(sourceMap).to.deep.equal(parsedSourceMap)
-        expect(readFileSync.callCount).to.equal(1)
+        assert.deepStrictEqual(sourceMap, parsedSourceMap)
+        assert.strictEqual(readFileSync.callCount, 1)
       })
 
       it('should clear cache after 5 seconds', function () {
         clock.tick(5_000)
         const sourceMap = loadSourceMapSync(dir, sourceMapURL)
-        expect(sourceMap).to.deep.equal(parsedSourceMap)
-        expect(readFileSync.callCount).to.equal(2)
+        assert.deepStrictEqual(sourceMap, parsedSourceMap)
+        assert.strictEqual(readFileSync.callCount, 2)
       })
     })
   })

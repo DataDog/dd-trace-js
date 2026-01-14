@@ -1,9 +1,9 @@
 'use strict'
 
-const { before, beforeEach, after } = require('mocha')
 const util = require('node:util')
-const agent = require('../plugins/agent')
 const assert = require('node:assert')
+const { before, beforeEach, after } = require('mocha')
+const agent = require('../plugins/agent')
 const { useEnv } = require('../../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../src/constants')
 
@@ -18,23 +18,36 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
  * @typedef {{
  *   spanKind: 'llm' | 'embedding' | 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval',
  *   name: string,
- *   inputMessages: { [key: string]: any },
- *   outputMessages: { [key: string]: any },
- *   inputDocuments: { [key: string]: any },
- *   outputDocuments: { [key: string]: any },
- *   inputValue: { [key: string]: any },
- *   outputValue: { [key: string]: any },
+ *   inputMessages: Record<string, unknown>,
+ *   outputMessages: Record<string, unknown>,
+ *   inputDocuments: Record<string, unknown>,
+ *   outputDocuments: Record<string, unknown>,
+ *   inputValue: Record<string, unknown>,
+ *   outputValue: Record<string, unknown>,
  *   metrics: { [key: string]: number },
- *   metadata: { [key: string]: any },
+ *   metadata: Record<string, unknown>,
  *   modelName?: string,
  *   modelProvider?: string,
  *   parentId?: string,
  *   error?: { message: string, type: string, stack: string },
  *   span: unknown,
  *   sessionId?: string,
- *   tags: { [key: string]: any },
+ *   tags: Record<string, unknown>,
  *   traceId?: string,
  * }} ExpectedLLMObsSpanEvent
+ */
+
+/**
+ * @typedef {{
+ *   label: string,
+ *   traceId: string,
+ *   spanId: string,
+ *   metricType: 'categorical' | 'score',
+ *   mlApp: string,
+ *   timestamp?: number,
+ *   value: string | number,
+ *   tags?: { [key: string]: string },
+ * }} ExpectedLLMObsEvaluationMetrics
  */
 
 /**
@@ -65,7 +78,7 @@ function assertWithMockValues (actual, expected, key) {
     for (let i = 0; i < expected.length; i++) {
       assertWithMockValues(actual[i], expected[i], `${key}.${i}`)
     }
-  } else if (typeof expected === 'object') {
+  } else if (typeof expected === 'object' && expected !== null) {
     if (typeof actual !== 'object') {
       assert.fail(`${actualWithName} is not an object`)
     }
@@ -202,6 +215,11 @@ function assertLlmObsSpanEvent (actual, expected) {
   const expectedTags = expectedLLMObsTags({ span, tags, error, sessionId })
   const sortedExpectedTags = [...expectedTags.sort()]
   const sortedActualTags = [...actualTags.sort()]
+  if (sortedExpectedTags.length !== sortedActualTags.length) {
+    assert.fail(
+      `tags have different length than expected (${sortedExpectedTags.length} !== ${sortedActualTags.length})`
+    )
+  }
   for (let i = 0; i < sortedExpectedTags.length; i++) {
     assert.equal(
       sortedActualTags[i],
@@ -251,6 +269,66 @@ function assertLlmObsSpanEvent (actual, expected) {
   assert.deepStrictEqual(actual, expectedSpanEvent)
 }
 
+/**
+ * Asserts that the actual LLMObs evaluation metric matches the evaluation metric created from the expected fields.
+ *
+ * Dynamic fields, like tags and timestamp, can be asserted with mock values.
+ * @param {object} actual
+ * @param {ExpectedLLMObsEvaluationMetrics} expected
+ */
+function assertLlmObsEvaluationMetric (actual, expected) {
+  const {
+    label,
+    traceId = MOCK_STRING,
+    spanId = MOCK_STRING,
+    metricType,
+    mlApp,
+    timestamp = MOCK_NUMBER,
+    value,
+    tags
+  } = expected
+
+  const actualTags = actual.tags
+  const actualTimestamp = actual.timestamp_ms
+
+  delete actual.tags
+  delete actual.timestamp_ms
+
+  assertWithMockValues(actualTimestamp, timestamp, 'timestamp_ms')
+
+  const expectedTags = [
+    `ddtrace.version:${tracerVersion}`,
+    `ml_app:${mlApp}`,
+    ...Object.entries(tags ?? {}).map(([key, value]) => `${key}:${value}`),
+  ]
+  const sortedExpectedTags = [...expectedTags.sort()]
+  const sortedActualTags = [...actualTags.sort()]
+  if (sortedExpectedTags.length !== sortedActualTags.length) {
+    assert.fail(
+      `Tags have different length than expected (${sortedExpectedTags.length} !== ${sortedActualTags.length}).
+      Diff: ${util.inspect(sortedExpectedTags)} !== ${util.inspect(sortedActualTags)}.`
+    )
+  }
+  for (let i = 0; i < sortedExpectedTags.length; i++) {
+    assert.equal(
+      sortedActualTags[i],
+      sortedExpectedTags[i],
+      `tags[${i}] does not match expected (${sortedExpectedTags[i]} !== ${sortedActualTags[i]})`
+    )
+  }
+
+  const expectedEvaluationMetric = {
+    span_id: spanId,
+    trace_id: traceId,
+    label,
+    metric_type: metricType,
+    ml_app: mlApp,
+    [`${metricType}_value`]: value,
+  }
+
+  assert.deepStrictEqual(actual, expectedEvaluationMetric)
+}
+
 function expectedLLMObsTags ({
   span,
   error,
@@ -290,18 +368,21 @@ function fromBuffer (spanProperty, isNumber = false) {
 }
 
 /**
- * @param {Object} options
+ * @param {object} options
  * @param {string} options.plugin
- * @param {Object} options.tracerConfigOptions
- * @param {Object} options.closeOptions
- * @returns {function(): Promise<{ apmSpans: Array, llmobsSpans: Array }>}
+ * @param {object} options.tracerConfigOptions
+ * @param {object} options.closeOptions
+ * @returns {{
+ *   getEvents: () => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
+ *   getEvaluationMetrics: () => Promise<Array<ExpectedLLMObsEvaluationMetrics>>
+ * }}
  */
 function useLlmObs ({
   plugin,
   tracerConfigOptions = {},
   closeOptions = {}
 } = {}) {
-  /** @type {Promise<Array<Array<Object>>>} */
+  /** @type {Promise<Array<Array<object>>>} */
   let apmTracesPromise
 
   const resetTracesPromises = () => {
@@ -332,24 +413,33 @@ function useLlmObs ({
     return agent.close({ ritmReset: false, ...closeOptions })
   })
 
-  return async function (numLlmObsSpans = 1) {
-    // get apm spans from the agent
-    const apmSpans = await apmTracesPromise
-    resetTracesPromises()
+  return {
+    getEvents: async function (numLlmObsSpans = 1) {
+      // get apm spans from the agent
+      const apmSpans = await apmTracesPromise
+      resetTracesPromises()
 
-    // get llmobs span events requests from the agent
-    // because llmobs process spans on span finish and submits periodically,
-    // we need to aggregate all of the span events
-    // tests should know how many spans they expect to see, otherwise tests will timeout
-    const llmobsSpans = []
+      // get llmobs span events requests from the agent
+      // because llmobs process spans on span finish and submits periodically,
+      // we need to aggregate all of the span events
+      // tests should know how many spans they expect to see, otherwise tests will timeout
+      const llmobsSpans = []
 
-    while (llmobsSpans.length < numLlmObsSpans) {
-      await new Promise(resolve => setImmediate(resolve))
-      const llmobsSpanEventsRequests = agent.getLlmObsSpanEventsRequests(true)
-      llmobsSpans.push(...getLlmObsSpansFromRequests(llmobsSpanEventsRequests))
+      while (llmobsSpans.length < numLlmObsSpans) {
+        await new Promise(resolve => setImmediate(resolve))
+        const llmobsSpanEventsRequests = agent.getLlmObsSpanEventsRequests(true)
+        llmobsSpans.push(...getLlmObsSpansFromRequests(llmobsSpanEventsRequests))
+      }
+
+      return { apmSpans, llmobsSpans: llmobsSpans.sort((a, b) => a.start_ns - b.start_ns) }
+    },
+
+    getEvaluationMetrics: function () {
+      const evaluationMetricsRequests = agent.getLlmObsEvaluationMetricsRequests(true)
+      return evaluationMetricsRequests
+        .flatMap(request => request.data.attributes.metrics)
+        .sort((a, b) => a.timestamp_ms - b.timestamp_ms)
     }
-
-    return { apmSpans, llmobsSpans: llmobsSpans.sort((a, b) => a.start_ns - b.start_ns) }
   }
 }
 
@@ -359,8 +449,55 @@ function getLlmObsSpansFromRequests (llmobsSpanEventsRequests) {
     .map(request => request.spans[0])
 }
 
+/**
+ * Verifies prompt tracking metadata in span events.
+ * Note: Prompt IDs (pmpt_*) are real reusable prompts created on "Datadog Staging" OpenAI's dashboard for testing.
+ *
+ * @param {object} spanEvent - The LLMObs span event to verify
+ * @param {object} expectedPrompt - Expected prompt metadata (id, version, variables, chat_template)
+ * @param {Array<{role: string, content: string}>} expectedInputMessages - Expected input messages
+ * @param {object} options - Optional configuration
+ * @param {string} options.promptTrackingInstrumentationMethod - Expected prompt tracking instrumentation method
+ * ('auto' or 'manual'), defaults to 'auto'
+ * @param {boolean} options.promptMultimodal - Whether prompt contains multimodal inputs,
+ *   defaults to false
+ */
+function assertPromptTracking (
+  spanEvent,
+  expectedPrompt,
+  expectedInputMessages,
+  { promptTrackingInstrumentationMethod = 'auto', promptMultimodal = false } = {}
+) {
+  // Verify input messages are captured from instructions
+  assert(spanEvent.meta.input.messages, 'Input messages should be present')
+  assert(Array.isArray(spanEvent.meta.input.messages), 'Input messages should be an array')
+
+  for (const expected of expectedInputMessages) {
+    const message = spanEvent.meta.input.messages.find(m => m.role === expected.role)
+    assert(message, `Should have a ${expected.role} message`)
+    assert.strictEqual(message.content, expected.content)
+  }
+
+  // Verify prompt metadata
+  assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
+  const prompt = spanEvent.meta.input.prompt
+  assert.strictEqual(prompt.id, expectedPrompt.id)
+  assert.strictEqual(prompt.version, expectedPrompt.version)
+  assert.deepStrictEqual(prompt.variables, expectedPrompt.variables)
+  assert.deepStrictEqual(prompt.chat_template, expectedPrompt.chat_template)
+
+  // Verify tags
+  assert(spanEvent.tags, 'Span event should include tags')
+  assert(spanEvent.tags.includes(`prompt_tracking_instrumentation_method:${promptTrackingInstrumentationMethod}`))
+  if (promptMultimodal) {
+    assert(spanEvent.tags.includes('prompt_multimodal:true'))
+  }
+}
+
 module.exports = {
+  assertLlmObsEvaluationMetric,
   assertLlmObsSpanEvent,
+  assertPromptTracking,
   useLlmObs,
   MOCK_NOT_NULLISH,
   MOCK_NUMBER,

@@ -1,17 +1,19 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it } = require('tap').mocha
-const sinon = require('sinon')
+const assert = require('node:assert/strict')
 const { performance } = require('perf_hooks')
+
+const api = require('@opentelemetry/api')
+const { describe, it } = require('mocha')
+const sinon = require('sinon')
+
 const { timeOrigin } = performance
-const { timeInputToHrTime } = require('@opentelemetry/core')
+const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
 require('../setup/core')
 
 const tracer = require('../../').init()
 
-const api = require('@opentelemetry/api')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
@@ -41,21 +43,21 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
 
     const context = span._ddSpan.context()
-    expect(context._tags[SERVICE_NAME]).to.equal(tracer._tracer._service)
-    expect(context._hostname).to.equal(tracer._hostname)
+    assert.strictEqual(context._tags[SERVICE_NAME], tracer._tracer._service)
+    assert.strictEqual(context._hostname, tracer._hostname)
   })
 
   it('should expose parent span id', () => {
     tracer.trace('outer', (outer) => {
       const span = makeSpan('name', {})
-      expect(span.parentSpanId).to.equal(outer.context()._spanId.toString(16))
+      assert.strictEqual(span.parentSpanId, outer.context()._spanId.toString(16))
     })
   })
 
   it('should expose span name', () => {
     const span = makeSpan('name')
 
-    expect(span.name).to.equal('name')
+    assert.strictEqual(span.name, 'name')
   })
 
   describe('span name default mapping', () => {
@@ -67,7 +69,7 @@ describe('OTel Span', () => {
         }
       })
 
-      expect(span.name).to.equal('test')
+      assert.strictEqual(span.name, 'test')
     })
 
     // HTTP server and client requests
@@ -76,7 +78,7 @@ describe('OTel Span', () => {
         const kindName = spanKindNames[kind]
         it(`should map span name from ${kindName} kind with ${key}`, () => {
           const span = makeSpan(undefined, { kind, attributes: { [key]: 'GET' } })
-          expect(span.name).to.equal(`http.${kindName}.request`)
+          assert.strictEqual(span.name, `http.${kindName}.request`)
         })
       }
     }
@@ -90,7 +92,7 @@ describe('OTel Span', () => {
         }
       })
 
-      expect(span.name).to.equal('mysql.query')
+      assert.strictEqual(span.name, 'mysql.query')
     })
 
     // Messaging systems
@@ -107,7 +109,7 @@ describe('OTel Span', () => {
           'messaging.operation': 'send'
         }
         const span = makeSpan(undefined, { kind, attributes })
-        expect(span.name).to.equal(`${kindName}.send`)
+        assert.strictEqual(span.name, `${kindName}.send`)
       })
     }
 
@@ -120,7 +122,7 @@ describe('OTel Span', () => {
         }
       })
 
-      expect(span.name).to.equal('aws.client.request')
+      assert.strictEqual(span.name, 'aws.client.request')
     })
 
     it('should map span name from rpc.system of aws-api with rpc.service if client kind', () => {
@@ -132,7 +134,7 @@ describe('OTel Span', () => {
         }
       })
 
-      expect(span.name).to.equal('aws.s3.request')
+      assert.strictEqual(span.name, 'aws.s3.request')
     })
 
     // RPC client and server requests
@@ -146,7 +148,7 @@ describe('OTel Span', () => {
           }
         })
 
-        expect(span.name).to.equal(`system.${kindName}.request`)
+        assert.strictEqual(span.name, `system.${kindName}.request`)
       })
     }
 
@@ -160,7 +162,7 @@ describe('OTel Span', () => {
         }
       })
 
-      expect(span.name).to.equal('provider.name.invoke')
+      assert.strictEqual(span.name, 'provider.name.invoke')
     })
 
     it('should map span name from faas.trigger if server kind', () => {
@@ -171,7 +173,7 @@ describe('OTel Span', () => {
         }
       })
 
-      expect(span.name).to.equal('trigger.invoke')
+      assert.strictEqual(span.name, 'trigger.invoke')
     })
 
     // GraphQL
@@ -182,7 +184,7 @@ describe('OTel Span', () => {
         }
       })
 
-      expect(span.name).to.equal('graphql.server.request')
+      assert.strictEqual(span.name, 'graphql.server.request')
     })
 
     // Network
@@ -197,7 +199,7 @@ describe('OTel Span', () => {
           }
         })
 
-        expect(span.name).to.equal(`protocol.${kindName}.request`)
+        assert.strictEqual(span.name, `protocol.${kindName}.request`)
       })
 
       it(`should map span name when ${kindName} kind without network.protocol.name`, () => {
@@ -205,7 +207,7 @@ describe('OTel Span', () => {
           kind
         })
 
-        expect(span.name).to.equal(`${kindName}.request`)
+        assert.strictEqual(span.name, `${kindName}.request`)
       })
     }
 
@@ -218,13 +220,13 @@ describe('OTel Span', () => {
       const kindName = spanKindNames[kind]
       it(`should map span name with ${kindName} kind`, () => {
         const span = makeSpan(undefined, { kind })
-        expect(span.name).to.equal(kindName)
+        assert.strictEqual(span.name, kindName)
       })
     }
 
     it('should map span name with default span kind of internal', () => {
       const span = makeSpan()
-      expect(span.name).to.equal('internal')
+      assert.strictEqual(span.name, 'internal')
     })
   })
 
@@ -232,29 +234,29 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
 
     const context = span._ddSpan.context()
-    expect(context._tags[RESOURCE_NAME]).to.equal('name')
+    assert.strictEqual(context._tags[RESOURCE_NAME], 'name')
   })
 
   it('should copy span kind to span.kind', () => {
     const span = makeSpan('name', { kind: api.SpanKind.CONSUMER })
 
     const context = span._ddSpan.context()
-    expect(context._tags[SPAN_KIND]).to.equal(kinds.CONSUMER)
+    assert.strictEqual(context._tags[SPAN_KIND], kinds.CONSUMER)
   })
 
   it('should expose span context', () => {
     const span = makeSpan('name')
 
     const spanContext = span.spanContext()
-    expect(spanContext).to.be.an.instanceOf(SpanContext)
-    expect(spanContext._ddContext).to.be.equal(span._ddSpan.context())
+    assert.ok(spanContext instanceof SpanContext)
+    assert.strictEqual(spanContext._ddContext, span._ddSpan.context())
   })
 
   it('should expose duration', () => {
     const span = makeSpan('name')
     span.end()
 
-    expect(span.duration).to.equal(span._ddSpan._duration)
+    assert.strictEqual(span.duration, span._ddSpan._duration)
   })
 
   it('should expose trace provider resource', () => {
@@ -266,7 +268,7 @@ describe('OTel Span', () => {
 
     const span = tracer.startSpan('name')
 
-    expect(span.resource).to.equal(resource)
+    assert.strictEqual(span.resource, resource)
   })
 
   it('should expose tracer instrumentation library', () => {
@@ -275,7 +277,7 @@ describe('OTel Span', () => {
 
     const span = tracer.startSpan('name')
 
-    expect(span.instrumentationLibrary).to.eql({
+    assert.deepStrictEqual(span.instrumentationLibrary, {
       name: 'library name',
       version: '1.2.3'
     })
@@ -285,7 +287,7 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
     span.updateName('new name')
 
-    expect(span.name).to.equal('new name')
+    assert.strictEqual(span.name, 'new name')
   })
 
   it('should set attributes', () => {
@@ -294,10 +296,10 @@ describe('OTel Span', () => {
     const { _tags } = span._ddSpan.context()
 
     span.setAttribute('foo', 'bar')
-    expect(_tags).to.have.property('foo', 'bar')
+    assert.strictEqual(_tags.foo, 'bar')
 
     span.setAttributes({ baz: 'buz' })
-    expect(_tags).to.have.property('baz', 'buz')
+    assert.strictEqual(_tags.baz, 'buz')
   })
 
   describe('should remap http.response.status_code', () => {
@@ -307,7 +309,7 @@ describe('OTel Span', () => {
       const { _tags } = span._ddSpan.context()
 
       span.setAttributes({ 'http.response.status_code': 200 })
-      expect(_tags).to.have.property('http.status_code', '200')
+      assert.strictEqual(_tags['http.status_code'], '200')
     })
 
     it('should remap when setting singular attribute', () => {
@@ -316,7 +318,7 @@ describe('OTel Span', () => {
       const { _tags } = span._ddSpan.context()
 
       span.setAttribute('http.response.status_code', 200)
-      expect(_tags).to.have.property('http.status_code', '200')
+      assert.strictEqual(_tags['http.status_code'], '200')
     })
   })
 
@@ -328,10 +330,10 @@ describe('OTel Span', () => {
     const { _links } = span._ddSpan
 
     span.addLink({ context: span2.spanContext() })
-    expect(_links).to.have.lengthOf(1)
+    assert.strictEqual(_links.length, 1)
 
     span.addLink({ context: span3.spanContext() })
-    expect(_links).to.have.lengthOf(2)
+    assert.strictEqual(_links.length, 2)
   })
 
   it('should add span pointers', () => {
@@ -339,45 +341,45 @@ describe('OTel Span', () => {
     const { _links } = span._ddSpan
 
     span.addSpanPointer('pointer_kind', 'd', 'abc123')
-    expect(_links).to.have.lengthOf(1)
-    expect(_links[0].attributes).to.deep.equal({
+    assert.strictEqual(_links.length, 1)
+    assert.deepStrictEqual(_links[0].attributes, {
       'ptr.kind': 'pointer_kind',
       'ptr.dir': 'd',
       'ptr.hash': 'abc123',
       'link.kind': 'span-pointer'
     })
-    expect(_links[0].context.toTraceId()).to.equal('0')
-    expect(_links[0].context.toSpanId()).to.equal('0')
+    assert.strictEqual(_links[0].context.toTraceId(), '0')
+    assert.strictEqual(_links[0].context.toSpanId(), '0')
 
     span.addSpanPointer('another_kind', 'd', '1234567')
-    expect(_links).to.have.lengthOf(2)
-    expect(_links[1].attributes).to.deep.equal({
+    assert.strictEqual(_links.length, 2)
+    assert.deepStrictEqual(_links[1].attributes, {
       'ptr.kind': 'another_kind',
       'ptr.dir': 'd',
       'ptr.hash': '1234567',
       'link.kind': 'span-pointer'
     })
-    expect(_links[1].context.toTraceId()).to.equal('0')
-    expect(_links[1].context.toSpanId()).to.equal('0')
+    assert.strictEqual(_links[1].context.toTraceId(), '0')
+    assert.strictEqual(_links[1].context.toSpanId(), '0')
   })
 
   it('should set status', () => {
     const unset = makeSpan('name')
     const unsetCtx = unset._ddSpan.context()
     unset.setStatus({ code: 0, message: 'unset' })
-    expect(unsetCtx._tags).to.not.have.property(ERROR_MESSAGE)
+    assert.ok(!(ERROR_MESSAGE in unsetCtx._tags))
 
     const ok = makeSpan('name')
     const okCtx = ok._ddSpan.context()
     ok.setStatus({ code: 1, message: 'ok' })
-    expect(okCtx._tags).to.not.have.property(ERROR_MESSAGE)
-    expect(okCtx._tags).to.not.have.property(IGNORE_OTEL_ERROR)
+    assert.ok(!(ERROR_MESSAGE in okCtx._tags))
+    assert.ok(!(IGNORE_OTEL_ERROR in okCtx._tags))
 
     const error = makeSpan('name')
     const errorCtx = error._ddSpan.context()
     error.setStatus({ code: 2, message: 'error' })
-    expect(errorCtx._tags).to.have.property(ERROR_MESSAGE, 'error')
-    expect(errorCtx._tags).to.have.property(IGNORE_OTEL_ERROR, false)
+    assert.strictEqual(errorCtx._tags[ERROR_MESSAGE], 'error')
+    assert.strictEqual(errorCtx._tags[IGNORE_OTEL_ERROR], false)
   })
 
   it('should record exceptions', () => {
@@ -390,14 +392,14 @@ describe('OTel Span', () => {
     span.recordException(error, datenow)
 
     const { _tags } = span._ddSpan.context()
-    expect(_tags).to.have.property(ERROR_TYPE, error.name)
-    expect(_tags).to.have.property(ERROR_MESSAGE, error.message)
-    expect(_tags).to.have.property(ERROR_STACK, error.stack)
-    expect(_tags).to.have.property(IGNORE_OTEL_ERROR, true)
+    assert.strictEqual(_tags[ERROR_TYPE], error.name)
+    assert.strictEqual(_tags[ERROR_MESSAGE], error.message)
+    assert.strictEqual(_tags[ERROR_STACK], error.stack)
+    assert.strictEqual(_tags[IGNORE_OTEL_ERROR], true)
 
     const events = span._ddSpan._events
-    expect(events).to.have.lengthOf(1)
-    expect(events).to.deep.equal([{
+    assert.strictEqual(events.length, 1)
+    assert.deepStrictEqual(events, [{
       name: error.name,
       attributes: {
         'exception.message': error.message,
@@ -407,22 +409,22 @@ describe('OTel Span', () => {
     }])
 
     let formatted = spanFormat(span._ddSpan)
-    expect(formatted).to.have.property('error', 0)
-    expect(formatted.meta).to.not.have.property('doNotSetTraceError')
+    assert.strictEqual(formatted.error, 0)
+    assert.ok(!('doNotSetTraceError' in formatted.meta))
 
     // Set error code
     span.setStatus({ code: 2, message: 'error' })
 
     formatted = spanFormat(span._ddSpan)
-    expect(formatted).to.have.property('error', 1)
+    assert.strictEqual(formatted.error, 1)
 
     span.recordException(new Error('foobar'), Date.now())
 
     // Keep the error set to 1
     formatted = spanFormat(span._ddSpan)
-    expect(formatted).to.have.property('error', 1)
-    expect(formatted).to.have.property('meta')
-    expect(formatted.meta).to.have.property('error.message', 'foobar')
+    assert.strictEqual(formatted.error, 1)
+    assert.ok(Object.hasOwn(formatted, 'meta'))
+    assert.strictEqual(formatted.meta['error.message'], 'foobar')
   })
 
   it('should record exception without passing in time', () => {
@@ -442,13 +444,13 @@ describe('OTel Span', () => {
     span.recordException(error)
 
     const { _tags } = span._ddSpan.context()
-    expect(_tags).to.have.property(ERROR_TYPE, error.name)
-    expect(_tags).to.have.property(ERROR_MESSAGE, error.message)
-    expect(_tags).to.have.property(ERROR_STACK, error.stack)
+    assert.strictEqual(_tags[ERROR_TYPE], error.name)
+    assert.strictEqual(_tags[ERROR_MESSAGE], error.message)
+    assert.strictEqual(_tags[ERROR_STACK], error.stack)
 
     const events = span._ddSpan._events
-    expect(events).to.have.lengthOf(1)
-    expect(events).to.deep.equal([{
+    assert.strictEqual(events.length, 1)
+    assert.deepStrictEqual(events, [{
       name: error.name,
       attributes: {
         'exception.message': error.message,
@@ -466,21 +468,21 @@ describe('OTel Span', () => {
     const { _tags } = span._ddSpan.context()
 
     span.setStatus({ code: 2, message: 'error' })
-    expect(_tags).to.not.have.property(ERROR_MESSAGE, 'error')
+    assert.ok(!(ERROR_MESSAGE in _tags) || _tags[ERROR_MESSAGE] !== 'error')
   })
 
   it('should mark ended and expose recording state', () => {
     const span = makeSpan('name')
 
-    expect(span.ended).to.equal(false)
-    expect(span.isRecording()).to.equal(true)
-    expect(span._ddSpan).to.have.property('_duration', undefined)
+    assert.strictEqual(span.ended, false)
+    assert.strictEqual(span.isRecording(), true)
+    assert.strictEqual(span._ddSpan._duration, undefined)
 
     span.end()
 
-    expect(span.ended).to.equal(true)
-    expect(span.isRecording()).to.equal(false)
-    expect(span._ddSpan).to.have.property('_duration')
+    assert.strictEqual(span.ended, true)
+    assert.strictEqual(span.isRecording(), false)
+    assert.ok(Object.hasOwn(span._ddSpan, '_duration'))
   })
 
   it('should trigger span processor events', () => {
@@ -492,18 +494,18 @@ describe('OTel Span', () => {
     processor.onEnd = sinon.stub()
     tracerProvider.addSpanProcessor(processor)
 
-    expect(processor.onStart).to.have.not.been.called
-    expect(processor.onEnd).to.have.not.been.called
+    sinon.assert.notCalled(processor.onStart)
+    sinon.assert.notCalled(processor.onEnd)
 
     const span = tracer.startSpan('name')
 
-    expect(processor.onStart).to.have.been.calledWith(span, span._context)
-    expect(processor.onEnd).to.have.not.been.called
+    sinon.assert.calledWith(processor.onStart, span, span._context)
+    sinon.assert.notCalled(processor.onEnd)
 
     span.end()
 
-    expect(processor.onStart).to.have.been.calledWith(span, span._context)
-    expect(processor.onEnd).to.have.been.calledWith(span)
+    sinon.assert.calledWith(processor.onStart, span, span._context)
+    sinon.assert.calledWith(processor.onEnd, span)
   })
 
   it('should add span events', () => {
@@ -516,8 +518,8 @@ describe('OTel Span', () => {
     span2.addEvent('Button changed color', { colors: [112, 215, 70], 'response.time': 134.3, success: true })
     const events1 = span1._ddSpan._events
     const events2 = span2._ddSpan._events
-    expect(events1).to.have.lengthOf(1)
-    expect(events1).to.deep.equal([{
+    assert.strictEqual(events1.length, 1)
+    assert.deepStrictEqual(events1, [{
       name: 'Web page unresponsive',
       startTime: datenow,
       attributes: {
@@ -525,6 +527,6 @@ describe('OTel Span', () => {
         'unknown values': [1]
       }
     }])
-    expect(events2).to.have.lengthOf(2)
+    assert.strictEqual(events2.length, 2)
   })
 })

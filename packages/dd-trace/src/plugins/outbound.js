@@ -6,9 +6,9 @@ const {
   PEER_SERVICE_SOURCE_KEY,
   PEER_SERVICE_REMAP_KEY
 } = require('../constants')
-const TracingPlugin = require('./tracing')
 const { exitTags } = require('../../../datadog-code-origin')
 const { storage } = require('../../../datadog-core')
+const TracingPlugin = require('./tracing')
 
 const COMMON_PEER_SVC_SOURCE_TAGS = [
   'net.peer.name',

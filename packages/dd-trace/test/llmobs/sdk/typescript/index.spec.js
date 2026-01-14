@@ -1,8 +1,8 @@
 'use strict'
 
-const { describe, it, beforeEach, afterEach } = require('mocha')
 const path = require('node:path')
 const { execSync } = require('node:child_process')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 
 const {
   FakeAgent,
@@ -74,8 +74,9 @@ describe('typescript', () => {
   for (const version of testVersions) {
     // TODO: Figure out the real version without using `npm show` as it causes rate limit errors.
     context(`with version ${version}`, () => {
+      const packages = ['@types/node', `typescript@${version}`, '@opentelemetry/api']
       useSandbox(
-        [`typescript@${version}`, '@opentelemetry/api'], false, ['./packages/dd-trace/test/llmobs/sdk/typescript/*']
+        packages, false, ['./packages/dd-trace/test/llmobs/sdk/typescript/*']
       )
 
       beforeEach(async () => {

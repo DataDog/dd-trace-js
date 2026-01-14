@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
-import express from 'express'
 import { runInThisContext } from 'node:vm'
+import express from 'express'
 import dc from 'dc-polyfill'
 
 const runScriptCh = dc.channel('datadog:vm:run-script:start')
@@ -20,6 +20,6 @@ app.get('/', (req, res) => {
 })
 
 const server = app.listen(0, () => {
-  const port = server.address().port
+  const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
   process.send({ port })
 })

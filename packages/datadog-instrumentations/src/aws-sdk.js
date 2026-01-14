@@ -1,7 +1,9 @@
 'use strict'
 
-const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { channel, addHook } = require('./helpers/instrument')
+
+const patchedClientConfigProtocols = new WeakSet()
 
 function wrapRequest (send) {
   return function wrappedRequest (cb) {
@@ -67,12 +69,14 @@ function wrapSmithySend (send) {
 
     if (typeof command.deserialize === 'function') {
       shimmer.wrap(command, 'deserialize', deserialize => wrapDeserialize(deserialize, channelSuffix))
-    } else if (this.config?.protocol?.deserializeResponse) {
+    } else if (this.config?.protocol?.deserializeResponse && !patchedClientConfigProtocols.has(this.config.protocol)) {
       shimmer.wrap(
         this.config.protocol,
         'deserializeResponse',
         deserializeResponse => wrapDeserialize(deserializeResponse, channelSuffix, 2)
       )
+
+      patchedClientConfigProtocols.add(this.config.protocol)
     }
 
     const ctx = {

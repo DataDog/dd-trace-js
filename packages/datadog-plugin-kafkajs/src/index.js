@@ -1,9 +1,9 @@
 'use strict'
 
+const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const ProducerPlugin = require('./producer')
 const ConsumerPlugin = require('./consumer')
 const BatchConsumerPlugin = require('./batch-consumer')
-const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
 class KafkajsPlugin extends CompositePlugin {
   static id = 'kafkajs'

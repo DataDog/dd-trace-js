@@ -1,5 +1,8 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const {
   FakeAgent,
   sandboxCwd,
@@ -8,8 +11,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
 
 describe('esm', () => {
   let agent
@@ -33,8 +34,8 @@ describe('esm', () => {
 
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(checkSpansForServiceName(payload, 'anthropic.request'), true)
       })
 

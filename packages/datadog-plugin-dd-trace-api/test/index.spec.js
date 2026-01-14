@@ -1,14 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const dc = require('dc-polyfill')
-const { describe, it, before, after } = require('mocha')
-const sinon = require('sinon')
-
 const assert = require('node:assert')
 
-const agent = require('../../dd-trace/test/plugins/agent')
+const dc = require('dc-polyfill')
+const { after, before, describe, it } = require('mocha')
+const sinon = require('sinon')
 
+const agent = require('../../dd-trace/test/plugins/agent')
 const SELF = Symbol('self')
 
 describe('Plugin', () => {
@@ -286,8 +284,8 @@ describe('Plugin', () => {
       if (payload.ret.error) {
         throw payload.ret.error
       }
-      expect(payload.ret.value).to.equal(ret)
-      expect(fn).to.have.been.calledOnceWithExactly(...args)
+      assert.strictEqual(payload.ret.value, ret)
+      sinon.assert.calledOnceWithExactly(fn, ...args)
     }
   })
 })

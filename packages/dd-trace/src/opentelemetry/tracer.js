@@ -1,15 +1,15 @@
 'use strict'
 
 const api = require('@opentelemetry/api')
-const { sanitizeAttributes } = require('@opentelemetry/core')
+const { sanitizeAttributes } = require('../../../../vendor/dist/@opentelemetry/core')
 
-const Sampler = require('./sampler')
-const Span = require('./span')
 const id = require('../id')
 const log = require('../log')
-const SpanContext = require('./span_context')
 const TextMapPropagator = require('../opentracing/propagation/text_map')
 const TraceState = require('../opentracing/propagation/tracestate')
+const SpanContext = require('./span_context')
+const Span = require('./span')
+const Sampler = require('./sampler')
 
 class Tracer {
   constructor (library, config, tracerProvider) {

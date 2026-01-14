@@ -5,8 +5,9 @@ tracer.init({
   flushInterval: 1
 })
 
-const express = require('express')
 const childProcess = require('child_process')
+
+const express = require('express')
 
 const app = express()
 
@@ -53,5 +54,5 @@ app.get('/cmdi/execFileSync/out-of-express-scope', async (req, res) => {
 })
 
 const server = app.listen(process.env.APP_PORT || 0, () => {
-  process.send?.({ port: server.address().port })
+  process.send?.({ port: (/** @type {import('net').AddressInfo} */ (server.address())).port })
 })

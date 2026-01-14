@@ -1,11 +1,11 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
 const path = require('node:path')
 const { Worker } = require('node:worker_threads')
+
+const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
@@ -40,8 +40,8 @@ describe('crashtracking', () => {
       crashtracking.start(config)
       crashtracking.configure(config)
 
-      expect(crashtracker.start).to.have.been.calledWith(config)
-      expect(crashtracker.configure).to.have.been.calledWith(config)
+      sinon.assert.calledWith(crashtracker.start, config)
+      sinon.assert.calledWith(crashtracker.configure, config)
     })
   })
 
@@ -57,8 +57,8 @@ describe('crashtracking', () => {
       crashtracking.start(config)
       crashtracking.configure(config)
 
-      expect(noop.start).to.have.been.calledWith(config)
-      expect(noop.configure).to.have.been.calledWith(config)
+      sinon.assert.calledWith(noop.start, config)
+      sinon.assert.calledWith(noop.configure, config)
     })
   })
 

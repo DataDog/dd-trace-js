@@ -1,7 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -64,7 +63,7 @@ describe('CI Visibility Writer', () => {
     it('should encode a trace', () => {
       writer.append([span])
 
-      expect(encoder.encode).to.have.been.calledWith([span])
+      sinon.assert.calledWith(encoder.encode, [span])
     })
   })
 
@@ -72,7 +71,7 @@ describe('CI Visibility Writer', () => {
     it('should skip flushing if empty', () => {
       writer.flush()
 
-      expect(encoder.makePayload).to.not.have.been.called
+      sinon.assert.notCalled(encoder.makePayload)
     })
 
     it('should empty the internal queue', () => {
@@ -80,7 +79,7 @@ describe('CI Visibility Writer', () => {
 
       writer.flush()
 
-      expect(encoder.makePayload).to.have.been.called
+      sinon.assert.called(encoder.makePayload)
     })
 
     it('should call callback when empty', (done) => {
@@ -94,7 +93,7 @@ describe('CI Visibility Writer', () => {
       encoder.makePayload.returns(expectedData)
 
       writer.flush(() => {
-        expect(request).to.have.been.calledWithMatch(expectedData, {
+        sinon.assert.calledWithMatch(request, expectedData, {
           url,
           path: '/api/v2/citestcycle',
           method: 'POST',
@@ -115,7 +114,7 @@ describe('CI Visibility Writer', () => {
         encoder.count.returns(1)
 
         writer.flush(() => {
-          expect(log.error).to.have.been.calledWith('Error sending CI agentless payload', error)
+          sinon.assert.calledWith(log.error, 'Error sending CI agentless payload', error)
           done()
         })
       })

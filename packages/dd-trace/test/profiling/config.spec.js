@@ -1,12 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const assert = require('node:assert/strict')
 const os = require('node:os')
 const path = require('node:path')
 
-require('../setup/core')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const satisfies = require('semifies')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+require('../setup/core')
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
 const WallProfiler = require('../../src/profiling/profilers/wall')
@@ -16,6 +18,8 @@ const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 
 const samplingContextsAvailable = process.platform !== 'win32'
 const oomMonitoringSupported = process.platform !== 'win32'
+const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
+const zstdOrGzip = isAtLeast24 ? 'zstd' : 'gzip'
 
 describe('config', () => {
   let Config
@@ -40,25 +44,25 @@ describe('config', () => {
   it('should have the correct defaults', () => {
     const config = new Config()
 
-    expect(config).to.deep.include({
+    assertObjectContains(config, {
       service: 'node',
       flushInterval: 65 * 1000
     })
 
-    expect(config.tags).to.deep.equal({
+    assert.deepStrictEqual(config.tags, {
       service: 'node',
       host: os.hostname()
     })
 
-    expect(config.logger).to.be.an.instanceof(ConsoleLogger)
-    expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
-    expect(config.profilers[0]).to.be.an.instanceof(SpaceProfiler)
-    expect(config.profilers[1]).to.be.an.instanceof(WallProfiler)
-    expect(config.profilers[1].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
-    expect(config.v8ProfilerBugWorkaroundEnabled).true
-    expect(config.cpuProfilingEnabled).to.equal(samplingContextsAvailable)
-    expect(config.uploadCompression.method).to.equal('gzip')
-    expect(config.uploadCompression.level).to.be.undefined
+    assert.ok(config.logger instanceof ConsoleLogger)
+    assert.ok(config.exporters[0] instanceof AgentExporter)
+    assert.ok(config.profilers[0] instanceof SpaceProfiler)
+    assert.ok(config.profilers[1] instanceof WallProfiler)
+    assert.strictEqual(config.profilers[1].codeHotspotsEnabled(), samplingContextsAvailable)
+    assert.strictEqual(config.v8ProfilerBugWorkaroundEnabled, true)
+    assert.strictEqual(config.cpuProfilingEnabled, samplingContextsAvailable)
+    assert.strictEqual(config.uploadCompression.method, zstdOrGzip)
+    assert.strictEqual(config.uploadCompression.level, undefined)
   })
 
   it('should support configuration options', () => {
@@ -74,26 +78,26 @@ describe('config', () => {
 
     const config = new Config(options)
 
-    expect(config.service).to.equal(options.service)
-    expect(config.host).to.be.a('string')
-    expect(config.version).to.equal(options.version)
-    expect(config.tags).to.be.an('object')
-    expect(config.tags.host).to.be.a('string')
-    expect(config.tags.service).to.equal(options.service)
-    expect(config.tags.version).to.equal(options.version)
-    expect(config.flushInterval).to.equal(65 * 1000)
-    expect(config.exporters).to.be.an('array')
-    expect(config.exporters.length).to.equal(2)
-    expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
-    expect(config.exporters[0]._url.toString()).to.equal(options.url)
-    expect(config.exporters[1]).to.be.an.instanceof(FileExporter)
-    expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(2 + (samplingContextsAvailable ? 1 : 0))
-    expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
-    expect(config.profilers[1]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[1].codeHotspotsEnabled()).false
+    assert.strictEqual(config.service, options.service)
+    assert.strictEqual(typeof config.host, 'string')
+    assert.strictEqual(config.version, options.version)
+    assert.ok(typeof config.tags === 'object' && config.tags !== null)
+    assert.strictEqual(typeof config.tags.host, 'string')
+    assert.strictEqual(config.tags.service, options.service)
+    assert.strictEqual(config.tags.version, options.version)
+    assert.strictEqual(config.flushInterval, 65 * 1000)
+    assert.ok(Array.isArray(config.exporters))
+    assert.strictEqual(config.exporters.length, 2)
+    assert.ok(config.exporters[0] instanceof AgentExporter)
+    assert.strictEqual(config.exporters[0]._url.toString(), options.url)
+    assert.ok(config.exporters[1] instanceof FileExporter)
+    assert.ok(Array.isArray(config.profilers))
+    assert.strictEqual(config.profilers.length, 2 + (samplingContextsAvailable ? 1 : 0))
+    assert.ok(config.profilers[0] instanceof SpaceProfiler)
+    assert.ok(config.profilers[1] instanceof WallProfiler)
+    assert.strictEqual(config.profilers[1].codeHotspotsEnabled(), false)
     if (samplingContextsAvailable) {
-      expect(config.profilers[2]).to.be.an.instanceOf(EventsProfiler)
+      assert.ok(config.profilers[2] instanceof EventsProfiler)
     }
   })
 
@@ -113,12 +117,12 @@ describe('config', () => {
 
     const config = new Config(options)
 
-    expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(0)
+    assert.ok(Array.isArray(config.profilers))
+    assert.strictEqual(config.profilers.length, 0)
 
-    expect(errors.length).to.equal(2)
-    expect(errors[0]).to.equal('Unknown profiler "nope"')
-    expect(errors[1]).to.equal('Unknown profiler "also_nope"')
+    assert.strictEqual(errors.length, 2)
+    assert.strictEqual(errors[0], 'Unknown profiler "nope"')
+    assert.strictEqual(errors[1], 'Unknown profiler "also_nope"')
   })
 
   it('should support profiler config with empty DD_PROFILING_PROFILERS', () => {
@@ -131,8 +135,8 @@ describe('config', () => {
 
     const config = new Config(options)
 
-    expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(0)
+    assert.ok(Array.isArray(config.profilers))
+    assert.strictEqual(config.profilers.length, 0)
   })
 
   it('should support profiler config with DD_PROFILING_PROFILERS', () => {
@@ -149,15 +153,15 @@ describe('config', () => {
 
     const config = new Config(options)
 
-    expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(1 + (samplingContextsAvailable ? 1 : 0))
-    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
+    assert.ok(Array.isArray(config.profilers))
+    assert.strictEqual(config.profilers.length, 1 + (samplingContextsAvailable ? 1 : 0))
+    assert.ok(config.profilers[0] instanceof WallProfiler)
+    assert.strictEqual(config.profilers[0].codeHotspotsEnabled(), samplingContextsAvailable)
     if (samplingContextsAvailable) {
-      expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
+      assert.ok(config.profilers[1] instanceof EventsProfiler)
     }
-    expect(config.v8ProfilerBugWorkaroundEnabled).false
-    expect(config.cpuProfilingEnabled).to.equal(samplingContextsAvailable)
+    assert.strictEqual(config.v8ProfilerBugWorkaroundEnabled, false)
+    assert.strictEqual(config.cpuProfilingEnabled, samplingContextsAvailable)
   })
 
   it('should support profiler config with DD_PROFILING_XXX_ENABLED', () => {
@@ -172,9 +176,9 @@ describe('config', () => {
 
     const config = new Config(options)
 
-    expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(1)
-    expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
+    assert.ok(Array.isArray(config.profilers))
+    assert.strictEqual(config.profilers.length, 1)
+    assert.ok(config.profilers[0] instanceof SpaceProfiler)
   })
 
   it('should ensure space profiler is ordered first with DD_PROFILING_HEAP_ENABLED', () => {
@@ -188,10 +192,10 @@ describe('config', () => {
 
     const config = new Config(options)
 
-    expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(2 + (samplingContextsAvailable ? 1 : 0))
-    expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
-    expect(config.profilers[1]).to.be.an.instanceOf(WallProfiler)
+    assert.ok(Array.isArray(config.profilers))
+    assert.strictEqual(config.profilers.length, 2 + (samplingContextsAvailable ? 1 : 0))
+    assert.ok(config.profilers[0] instanceof SpaceProfiler)
+    assert.ok(config.profilers[1] instanceof WallProfiler)
   })
 
   it('should ensure space profiler order is preserved when explicitly set with DD_PROFILING_PROFILERS', () => {
@@ -205,10 +209,10 @@ describe('config', () => {
 
     const config = new Config(options)
 
-    expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(2 + (samplingContextsAvailable ? 1 : 0))
-    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[1]).to.be.an.instanceOf(SpaceProfiler)
+    assert.ok(Array.isArray(config.profilers))
+    assert.strictEqual(config.profilers.length, 2 + (samplingContextsAvailable ? 1 : 0))
+    assert.ok(config.profilers[0] instanceof WallProfiler)
+    assert.ok(config.profilers[1] instanceof SpaceProfiler)
   })
 
   it('should be able to read some env vars', () => {
@@ -226,11 +230,11 @@ describe('config', () => {
     }
 
     const config = new Config(options)
-    expect(config.debugSourceMaps).to.be.true
-    expect(config.heapSamplingInterval).to.equal(1000)
-    expect(config.pprofPrefix).to.equal('test-prefix')
-    expect(config.uploadTimeout).to.equal(10000)
-    expect(config.timelineEnabled).to.be.false
+    assert.strictEqual(config.debugSourceMaps, true)
+    assert.strictEqual(config.heapSamplingInterval, 1000)
+    assert.strictEqual(config.pprofPrefix, 'test-prefix')
+    assert.strictEqual(config.uploadTimeout, 10000)
+    assert.strictEqual(config.timelineEnabled, false)
 
     process.env = oldenv
   })
@@ -246,11 +250,11 @@ describe('config', () => {
 
     const config = new Config(options)
 
-    expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(1 + (samplingContextsAvailable ? 1 : 0))
-    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
+    assert.ok(Array.isArray(config.profilers))
+    assert.strictEqual(config.profilers.length, 1 + (samplingContextsAvailable ? 1 : 0))
+    assert.ok(config.profilers[0] instanceof WallProfiler)
     if (samplingContextsAvailable) {
-      expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
+      assert.ok(config.profilers[1] instanceof EventsProfiler)
     }
   })
 
@@ -272,12 +276,12 @@ describe('config', () => {
 
     const config = new Config(options)
 
-    expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(2)
-    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).false
-    expect(config.profilers[0].endpointCollectionEnabled()).false
-    expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
+    assert.ok(Array.isArray(config.profilers))
+    assert.strictEqual(config.profilers.length, 2)
+    assert.ok(config.profilers[0] instanceof WallProfiler)
+    assert.strictEqual(config.profilers[0].codeHotspotsEnabled(), false)
+    assert.strictEqual(config.profilers[0].endpointCollectionEnabled(), false)
+    assert.ok(config.profilers[1] instanceof EventsProfiler)
   })
 
   it('should prioritize non-experimental env variables and warn about experimental ones', () => {
@@ -306,12 +310,12 @@ describe('config', () => {
 
     const config = new Config(options)
 
-    expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(2)
-    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).false
-    expect(config.profilers[0].endpointCollectionEnabled()).false
-    expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
+    assert.ok(Array.isArray(config.profilers))
+    assert.strictEqual(config.profilers.length, 2)
+    assert.ok(config.profilers[0] instanceof WallProfiler)
+    assert.strictEqual(config.profilers[0].codeHotspotsEnabled(), false)
+    assert.strictEqual(config.profilers[0].endpointCollectionEnabled(), false)
+    assert.ok(config.profilers[1] instanceof EventsProfiler)
   })
 
   function optionOnlyWorksWithGivenCondition (property, name, condition) {
@@ -326,7 +330,7 @@ describe('config', () => {
     } else {
       // should throw
       // eslint-disable-next-line no-new
-      expect(() => { new Config(options) }).to.throw(`${name} not supported on `)
+      assert.throws(() => { new Config(options) }, `${name} not supported on `)
     }
   }
 
@@ -361,7 +365,7 @@ describe('config', () => {
 
     const config = new Config({ tags })
 
-    expect(config.tags).to.include(tags)
+    assertObjectContains(config.tags, tags)
   })
 
   it('should prioritize options over tags', () => {
@@ -376,7 +380,7 @@ describe('config', () => {
 
     const config = new Config({ env, service, version, tags })
 
-    expect(config.tags).to.include({ env, service, version })
+    assertObjectContains(config.tags, { env, service, version })
   })
 
   it('should add source code integration tags if git metadata is available', () => {
@@ -388,7 +392,7 @@ describe('config', () => {
       commitSHA: DUMMY_GIT_SHA
     })
 
-    expect(config.tags).to.include({ 'git.repository_url': DUMMY_REPOSITORY_URL, 'git.commit.sha': DUMMY_GIT_SHA })
+    assertObjectContains(config.tags, { 'git.repository_url': DUMMY_REPOSITORY_URL, 'git.commit.sha': DUMMY_GIT_SHA })
   })
 
   it('should support IPv6 hostname', () => {
@@ -400,7 +404,7 @@ describe('config', () => {
     const exporterUrl = config.exporters[0]._url.toString()
     const expectedUrl = new URL('http://[::1]:8126').toString()
 
-    expect(exporterUrl).to.equal(expectedUrl)
+    assert.strictEqual(exporterUrl, expectedUrl)
   })
 
   it('should support OOM heap profiler configuration', () => {
@@ -409,7 +413,7 @@ describe('config', () => {
     }
     const config = new Config({})
 
-    expect(config.oomMonitoring).to.deep.equal({
+    assert.deepStrictEqual(config.oomMonitoring, {
       enabled: false,
       heapLimitExtensionSize: 0,
       maxHeapExtensionCount: 0,
@@ -422,7 +426,7 @@ describe('config', () => {
     const config = new Config()
 
     if (oomMonitoringSupported) {
-      expect(config.oomMonitoring).to.deep.equal({
+      assert.deepStrictEqual(config.oomMonitoring, {
         enabled: oomMonitoringSupported,
         heapLimitExtensionSize: 0,
         maxHeapExtensionCount: 0,
@@ -436,7 +440,7 @@ describe('config', () => {
         ]
       })
     } else {
-      expect(config.oomMonitoring.enabled).to.be.false
+      assert.strictEqual(config.oomMonitoring.enabled, false)
     }
   })
 
@@ -452,7 +456,7 @@ describe('config', () => {
         exporters
       })
 
-      expect(config.exporters[0].export).to.be.a('function')
+      assert.strictEqual(typeof config.exporters[0].export, 'function')
     }
   })
 
@@ -472,9 +476,9 @@ describe('config', () => {
         profilers
       })
 
-      expect(config.profilers.length).to.equal(expected.length)
+      assert.strictEqual(config.profilers.length, expected.length)
       for (let i = 0; i < expected.length; i++) {
-        expect(config.profilers[i]).to.be.instanceOf(expected[i])
+        assert.ok(config.profilers[i] instanceof expected[i])
       }
     }
   })
@@ -490,7 +494,7 @@ describe('config', () => {
 
       const config = new Config({})
 
-      expect(config.oomMonitoring).to.deep.equal({
+      assert.deepStrictEqual(config.oomMonitoring, {
         enabled: true,
         heapLimitExtensionSize: 1000000,
         maxHeapExtensionCount: 2,
@@ -505,6 +509,59 @@ describe('config', () => {
       })
     })
   }
+
+  describe('async context', () => {
+    const isSupported = samplingContextsAvailable && isAtLeast24
+    describe('where supported', () => {
+      it('should be on by default', function () {
+        if (!isSupported) {
+          this.skip()
+        } else {
+          const config = new Config({})
+          assert.strictEqual(config.asyncContextFrameEnabled, true)
+        }
+      })
+
+      it('can be turned off by env var', function () {
+        if (!isSupported) {
+          this.skip()
+        } else {
+          process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = '0'
+          try {
+            const config = new Config({})
+            assert.strictEqual(config.asyncContextFrameEnabled, false)
+          } finally {
+            delete process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
+          }
+        }
+      })
+    })
+
+    describe('where not supported', function () {
+      it('should be off by default', function () {
+        if (isSupported) {
+          this.skip()
+        } else {
+          const config = new Config({})
+          assert.strictEqual(config.asyncContextFrameEnabled, false)
+        }
+      })
+
+      it('can not be turned on by env var', function () {
+        if (isSupported) {
+          this.skip()
+        } else {
+          process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = '1'
+          try {
+            const config = new Config({})
+            assert.strictEqual(config.asyncContextFrameEnabled, false)
+          } finally {
+            delete process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
+          }
+        }
+      })
+    })
+  })
 
   describe('upload compression settings', () => {
     const expectConfig = (env, method, level, warning) => {
@@ -524,25 +581,25 @@ describe('config', () => {
       const config = new Config({ logger })
 
       if (warning) {
-        expect(logger.warnings.length).to.equals(1)
-        expect(logger.warnings[0]).to.equal(warning)
+        assert.strictEqual(logger.warnings.length, 1)
+        assert.strictEqual(logger.warnings[0], warning)
       } else {
-        expect(logger.warnings.length).to.equals(0)
+        assert.strictEqual(logger.warnings.length, 0)
       }
 
-      expect(config.uploadCompression).to.deep.equal({ method, level })
+      assert.deepStrictEqual(config.uploadCompression, { method, level })
     }
 
     it('should accept known methods', () => {
-      expectConfig(undefined, 'gzip', undefined)
+      expectConfig(undefined, zstdOrGzip, undefined)
       expectConfig('off', 'off', undefined)
-      expectConfig('on', 'gzip', undefined)
+      expectConfig('on', zstdOrGzip, undefined)
       expectConfig('gzip', 'gzip', undefined)
       expectConfig('zstd', 'zstd', undefined)
     })
 
     it('should reject unknown methods', () => {
-      expectConfig('foo', 'gzip', undefined, 'Invalid profile upload compression method "foo". Will use "on".')
+      expectConfig('foo', zstdOrGzip, undefined, 'Invalid profile upload compression method "foo". Will use "on".')
     })
 
     it('should accept supported compression levels in methods that support levels', () => {
@@ -562,7 +619,7 @@ describe('config', () => {
 
     it('should reject compression levels in methods that do not support levels', () => {
       ['on', 'off'].forEach((method) => {
-        const effectiveMethod = method === 'on' ? 'gzip' : method
+        const effectiveMethod = method === 'on' ? zstdOrGzip : method
         expectConfig(`${method}-3`, effectiveMethod, undefined,
           `Compression levels are not supported for "${method}".`)
         expectConfig(`${method}-foo`, effectiveMethod, undefined,

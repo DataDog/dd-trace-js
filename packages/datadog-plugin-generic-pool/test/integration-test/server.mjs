@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
+import { AsyncLocalStorage } from 'async_hooks'
 import express from 'express'
 import genericPool from 'generic-pool'
-import { AsyncLocalStorage } from 'async_hooks'
 
 const asyncStore = new AsyncLocalStorage()
 const app = express()
@@ -35,6 +35,6 @@ app.get('/', (req, res) => {
 })
 
 const server = app.listen(0, () => {
-  const port = server.address().port
+  const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
   process.send({ port })
 })

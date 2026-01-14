@@ -1,12 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
-
 const id = require('../src/id')
 
 describe('span sampler', () => {
@@ -52,7 +52,7 @@ describe('span sampler', () => {
 
     try {
       const ingested = sampler.sample(spanContext)
-      expect(ingested).to.be.undefined
+      assert.strictEqual(ingested, undefined)
       done()
     } catch (err) { done(err) }
   })
@@ -88,12 +88,12 @@ describe('span sampler', () => {
 
     sampler.sample(spanContext)
 
-    expect(spies.match).to.be.called
-    expect(spies.sample).to.be.called
-    expect(spies.sampleRate.get).to.be.called
-    expect(spies.maxPerSecond.get).to.be.called
+    sinon.assert.called(spies.match)
+    sinon.assert.called(spies.sample)
+    sinon.assert.called(spies.sampleRate.get)
+    sinon.assert.called(spies.maxPerSecond.get)
 
-    expect(spanContext._spanSampling).to.eql({
+    assert.deepStrictEqual(spanContext._spanSampling, {
       sampleRate: 1.0,
       maxPerSecond: 5
     })
@@ -142,12 +142,12 @@ describe('span sampler', () => {
 
     sampler.sample(spanContext)
 
-    expect(spies.match).to.be.called
-    expect(spies.sample).to.be.called
-    expect(spies.sampleRate.get).to.be.called
-    expect(spies.maxPerSecond.get).to.be.called
+    sinon.assert.called(spies.match)
+    sinon.assert.called(spies.sample)
+    sinon.assert.called(spies.sampleRate.get)
+    sinon.assert.called(spies.maxPerSecond.get)
 
-    expect(spanContext._spanSampling).to.eql({
+    assert.deepStrictEqual(spanContext._spanSampling, {
       sampleRate: 1.0,
       maxPerSecond: 5
     })
@@ -200,16 +200,16 @@ describe('span sampler', () => {
 
     sampler.sample(firstSpanContext)
 
-    expect(spies.match).to.be.called
-    expect(spies.sample).to.be.called
-    expect(spies.sampleRate.get).to.be.called
-    expect(spies.maxPerSecond.get).to.be.called
+    sinon.assert.called(spies.match)
+    sinon.assert.called(spies.sample)
+    sinon.assert.called(spies.sampleRate.get)
+    sinon.assert.called(spies.maxPerSecond.get)
 
-    expect(firstSpanContext._spanSampling).to.eql({
+    assert.deepStrictEqual(firstSpanContext._spanSampling, {
       sampleRate: 1.0,
       maxPerSecond: 5
     })
-    expect(secondSpanContext._spanSampling).to.eql({
+    assert.deepStrictEqual(secondSpanContext._spanSampling, {
       sampleRate: 1.0,
       maxPerSecond: 5
     })
@@ -268,16 +268,16 @@ describe('span sampler', () => {
 
     sampler.sample(firstSpanContext)
 
-    expect(spies.match).to.be.called
-    expect(spies.sample).to.be.called
-    expect(spies.sampleRate.get).to.be.called
-    expect(spies.maxPerSecond.get).to.be.called
+    sinon.assert.called(spies.match)
+    sinon.assert.called(spies.sample)
+    sinon.assert.called(spies.sampleRate.get)
+    sinon.assert.called(spies.maxPerSecond.get)
 
-    expect(firstSpanContext._spanSampling).to.eql({
+    assert.deepStrictEqual(firstSpanContext._spanSampling, {
       sampleRate: 1.0,
       maxPerSecond: 5
     })
-    expect(secondSpanContext._spanSampling).to.eql({
+    assert.deepStrictEqual(secondSpanContext._spanSampling, {
       sampleRate: 1.0,
       maxPerSecond: 3
     })

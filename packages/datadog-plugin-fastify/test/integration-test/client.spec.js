@@ -1,5 +1,8 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
+const { join } = require('path')
 const {
   FakeAgent,
   curlAndAssertMessage,
@@ -7,8 +10,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
-const { join } = require('path')
 
 describe('esm', () => {
   let agent
@@ -34,8 +35,8 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(__dirname, 'server.mjs', agent.port, env)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(checkSpansForServiceName(payload, 'fastify.request'), true)
       })
     }).timeout(20000)
@@ -44,8 +45,8 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(__dirname, 'server1.mjs', agent.port, env)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(checkSpansForServiceName(payload, 'fastify.request'), true)
       })
     }).timeout(20000)
@@ -54,8 +55,8 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(__dirname, 'server2.mjs', agent.port, env)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(checkSpansForServiceName(payload, 'fastify.request'), true)
       })
     }).timeout(20000)

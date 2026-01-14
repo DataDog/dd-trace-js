@@ -1,12 +1,9 @@
 'use strict'
 
-const {
-  channel,
-  addHook
-} = require('./helpers/instrument')
-
-const prismaEngineStart = channel('apm:prisma:engine:start')
 const tracingChannel = require('dc-polyfill').tracingChannel
+
+const { channel, addHook } = require('./helpers/instrument')
+const prismaEngineStart = channel('apm:prisma:engine:start')
 const clientCH = tracingChannel('apm:prisma:client')
 
 const allowedClientSpanOperations = new Set([
@@ -15,14 +12,20 @@ const allowedClientSpanOperations = new Set([
   'transaction'
 ])
 
-class TracingHelper {
+class DatadogTracingHelper {
   dbConfig = null
+
+  constructor (dbConfig = null) {
+    this.dbConfig = dbConfig
+  }
+
   isEnabled () {
     return true
   }
 
   // needs a sampled tracecontext to generate engine spans
   getTraceParent (context) {
+    // TODO: Fix the id
     return '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01' // valid sampled traceparent
   }
 
@@ -34,7 +37,9 @@ class TracingHelper {
     }
   }
 
-  getActiveContext () {}
+  getActiveContext () {
+    // TODO: Fix context
+  }
 
   runInChildSpan (options, callback) {
     if (typeof options === 'string') {
@@ -63,42 +68,52 @@ class TracingHelper {
   }
 }
 
-addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, (prisma, version) => {
-  const tracingHelper = new TracingHelper()
+const prismaHook = (runtime, versions, name, isIitm) => {
+  const originalGetPrismaClient = runtime.getPrismaClient
 
-  // we need to patch the prototype to get db config since this works for ESM and CJS alike.
-  const originalRequest = prisma.PrismaClient.prototype._request
-  prisma.PrismaClient.prototype._request = function () {
-    if (!tracingHelper.dbConfig) {
-      const inlineDatasources = this._engine?.config.inlineDatasources
-      const overrideDatasources = this._engine?.config.overrideDatasources
-      const datasources = inlineDatasources?.db.url?.value ?? overrideDatasources?.db?.url
-      if (datasources) {
-        const result = parseDBString(datasources)
-        tracingHelper.setDbString(result)
+  if (!originalGetPrismaClient) return runtime
+  const datadogTracingHelper = new DatadogTracingHelper()
+
+  const wrappedGetPrismaClient = function (config) {
+    const datasources = config.inlineDatasources?.db.url?.value
+    if (datasources) {
+      const dbConfig = parseDBString(datasources)
+      datadogTracingHelper.setDbString(dbConfig)
+    }
+
+    const PrismaClient = originalGetPrismaClient.call(this, config)
+    return class WrappedPrismaClientClass extends PrismaClient {
+      constructor (clientConfig) {
+        super(clientConfig)
+        this._tracingHelper = datadogTracingHelper
+        this._engine.tracingHelper = datadogTracingHelper
       }
     }
-    return originalRequest.apply(this, arguments)
   }
 
-  /*
-    * This is taking advantage of the built in tracing support from Prisma.
-    * The below variable is setting a global tracing helper that Prisma uses
-    * to enable OpenTelemetry.
-  */
-  // https://github.com/prisma/prisma/blob/478293bbfce91e41ceff02f2a0b03bb8acbca03e/packages/instrumentation/src/PrismaInstrumentation.ts#L42
-  const versions = version.split('.')
-  if (versions[0] === '6' && versions[1] < 4) {
-    global.PRISMA_INSTRUMENTATION = {
-      helper: tracingHelper
-    }
-  } else {
-    global[`V${versions[0]}_PRISMA_INSTRUMENTATION`] = {
-      helper: tracingHelper
-    }
+  if (isIitm) {
+    runtime.getPrismaClient = wrappedGetPrismaClient
+    return runtime
   }
 
-  return prisma
+  return new Proxy(runtime, {
+    get (target, prop) {
+      if (prop === 'getPrismaClient') {
+        return wrappedGetPrismaClient
+      }
+      return target[prop]
+    }
+  })
+}
+
+const prismaConfigs = [
+  { name: '@prisma/client', versions: ['>=6.1.0 <7.0.0'], filePattern: 'runtime/library.*' },
+  { name: './runtime/library.js', versions: ['>=6.1.0 <7.0.0'], file: 'runtime/library.js' },
+  { name: '@prisma/client', versions: ['>=7.0.0'], filePattern: 'runtime/client.*' }
+]
+
+prismaConfigs.forEach(config => {
+  addHook(config, prismaHook)
 })
 
 function parseDBString (dbString) {

@@ -1,12 +1,12 @@
 'use strict'
 
-const { assert } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
-
 const { USER_KEEP, AUTO_KEEP } = require('../../../../ext/priority')
 const DatadogSpan = require('../../src/opentracing/span')
 const TraceSourcePrioritySampler = require('../../src/standalone/tracesource_priority_sampler')
@@ -55,7 +55,7 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
     })
 
     it('should return undefined if manual.keep or _dd.p.ts are not present', () => {
-      assert.isUndefined(prioritySampler._getPriorityFromTags(tags, context))
+      assert.strictEqual(prioritySampler._getPriorityFromTags(tags, context), undefined)
     })
   })
 

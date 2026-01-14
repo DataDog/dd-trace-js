@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
+import { AsyncLocalStorage } from 'async_hooks'
 import express from 'express'
 import knex from 'knex'
-import { AsyncLocalStorage } from 'async_hooks'
 
 let counter = 0
 const asyncStore = new AsyncLocalStorage()
@@ -29,6 +29,6 @@ app.get('/', (req, res) => {
 })
 
 const server = app.listen(0, () => {
-  const port = server.address().port
+  const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
   process.send({ port })
 })
