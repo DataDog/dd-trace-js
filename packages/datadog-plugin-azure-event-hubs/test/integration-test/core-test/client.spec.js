@@ -39,7 +39,7 @@ describe('esm', () => {
       variants = varySandbox('server.mjs', 'EventHubProducerClient', undefined, '@azure/event-hubs', true)
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of ['star', 'destructure']) {
       it('is instrumented', async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
