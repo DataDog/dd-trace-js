@@ -2,33 +2,15 @@
 
 ## Prerequisites
 
-- Node.js >= 18 (recommended: use `.nvmrc` via `nvm use`; supported range is in `package.json#engines`)
+- Node.js >= 18
 - yarn 1.x
 - Docker + docker-compose (for running service dependencies in tests)
 
 ## Setup
 
-- If you use nvm: `nvm use`
 - Install dependencies: `yarn install`
 
 **This project uses yarn, not npm. Always use `yarn` commands instead of `npm` commands.**
-
-## Common Commands (copy/paste)
-
-```bash
-# Use repo-pinned Node (optional)
-nvm use
-
-# Install deps
-yarn install
-
-# Lint
-npm run lint
-npm run lint:fix
-
-# Typecheck
-npm run type:check
-```
 
 ## Project Overview
 
