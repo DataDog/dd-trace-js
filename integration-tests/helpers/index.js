@@ -575,68 +575,34 @@ function checkSpansForServiceName (spans, name) {
  * @param {(data: Buffer) => void} [stdioHandler]
  * @param {Record<string, string|undefined>} [additionalEnvArgs]
  */
-async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
+async function spawnPluginIntegrationTestProc (
+  cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
   if (typeof stdioHandler !== 'function' && !additionalEnvArgs) {
     additionalEnvArgs = stdioHandler
     stdioHandler = undefined
   }
-  additionalEnvArgs = additionalEnvArgs || {}
+  additionalEnvArgs = { ...additionalEnvArgs }
 
-  // Extract --loader and --import flags from NODE_OPTIONS to pass via execArgv
-  // This ensures dd-debug interceptors work in sandbox subprocess
-  const existingNodeOptions = process.env.NODE_OPTIONS || ''
-  const execArgvFlags = []
-  const remainingOptions = []
-
-  const parts = existingNodeOptions.split(/\s+/).filter(Boolean)
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i]
-    if (part.startsWith('--loader=') || part.startsWith('--import=')) {
-      execArgvFlags.push(part)
-    } else if (part === '--loader' || part === '--import') {
-      // Handle space-separated format: --loader path
-      if (i + 1 < parts.length && !parts[i + 1].startsWith('-')) {
-        execArgvFlags.push(`${part}=${parts[i + 1]}`)
-        i++
-      }
-    } else if (part.startsWith('-r')) {
-      // Handle -r flag (CJS require)
-      if (part === '-r' && i + 1 < parts.length && !parts[i + 1].startsWith('-')) {
-        execArgvFlags.push('-r', parts[i + 1])
-        i++
-      } else if (part.startsWith('-r=')) {
-        execArgvFlags.push('-r', part.slice(3))
-      } else {
-        remainingOptions.push(part)
-      }
+  let NODE_OPTIONS = `--loader=${hookFile}`
+  if (additionalEnvArgs.NODE_OPTIONS !== undefined) {
+    if (/--(loader|import)/.test(additionalEnvArgs.NODE_OPTIONS ?? '')) {
+      NODE_OPTIONS = additionalEnvArgs.NODE_OPTIONS
     } else {
-      remainingOptions.push(part)
+      NODE_OPTIONS += ` ${additionalEnvArgs.NODE_OPTIONS}`
     }
+    delete additionalEnvArgs.NODE_OPTIONS
   }
 
   let env = /** @type {Record<string, string|undefined>} */ ({
-    NODE_OPTIONS: `--loader=${hookFile}`,
+    NODE_OPTIONS,
     DD_TRACE_AGENT_PORT: String(agentPort),
     DD_TRACE_FLUSH_INTERVAL: '0'
   })
-
-  // Preserve remaining NODE_OPTIONS (non-loader flags)
-  if (remainingOptions.length > 0) {
-    env.NODE_OPTIONS = remainingOptions.join(' ') + ' ' + env.NODE_OPTIONS
-  }
-
   env = { ...process.env, ...env, ...additionalEnvArgs }
-
-  // Merge execArgv: dd-debug flags + existing + additional
-  const finalExecArgv = [
-    ...execArgvFlags,
-    ...(additionalEnvArgs.execArgv || [])
-  ]
-
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
     env,
-    execArgv: finalExecArgv
+    execArgv: additionalEnvArgs.execArgv
   }, stdioHandler)
 }
 
