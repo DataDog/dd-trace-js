@@ -180,7 +180,7 @@
     "retry": "^0.13.1",
     "semifies": "^1.0.0",
     "semver": "^7.7.2",
-    "sinon": "^21.0.0",
+    "sinon": "^21.0.1",
     "tiktoken": "^1.0.21",
     "typescript": "^5.9.2",
     "workerpool": "^10.0.0",
