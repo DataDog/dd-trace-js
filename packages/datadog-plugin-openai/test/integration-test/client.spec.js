@@ -7,7 +7,7 @@ const {
   sandboxCwd,
   useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc,
+  spawnPluginIntegrationTestProcAndExpectExit,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
@@ -48,11 +48,10 @@ describe('esm', () => {
         )
       })
 
-      proc = await spawnPluginIntegrationTestProc(
+      proc = await spawnPluginIntegrationTestProcAndExpectExit(
         sandboxCwd(),
         'server.mjs',
         agent.port,
-        null,
         {
           NODE_OPTIONS: '--import dd-trace/initialize.mjs',
         }
