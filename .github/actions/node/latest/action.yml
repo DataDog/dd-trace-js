@@ -5,4 +5,4 @@ runs:
   steps:
     - uses: ./.github/actions/node
       with:
-        version: 22.22.0
+        version: 20.20.0
