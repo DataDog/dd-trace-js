@@ -11,6 +11,9 @@ const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
+// @ts-expect-error We expect the test to be started with --expose-gc
+const gc = global.gc ?? (() => {})
+
 describe('Push Subscription Plugin', () => {
   let appListener
   let http
@@ -272,11 +275,11 @@ describe('Push Subscription Plugin', () => {
             await wait(100)
 
             // Force garbage collection multiple times
-            global.gc()
+            gc()
             await wait(100)
-            global.gc()
+            gc()
             await wait(100)
-            global.gc()
+            gc()
             await wait(500)
 
             assert.strictEqual(requestWasCollected, true)
@@ -310,9 +313,9 @@ describe('Push Subscription Plugin', () => {
             await wait(500)
 
             // Force GC
-            global.gc()
+            gc()
             await wait(100)
-            global.gc()
+            gc()
 
             const afterMemory = process.memoryUsage().heapUsed
             const memoryIncrease = afterMemory - initialMemory

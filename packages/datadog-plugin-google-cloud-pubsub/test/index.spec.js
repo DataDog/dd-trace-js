@@ -15,6 +15,9 @@ const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { DataStreamsProcessor, ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
+// @ts-expect-error We expect the test to be started with --expose-gc
+const gc = global.gc ?? (() => {})
+
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
 const TIMEOUT = 30000
 const dsmTopicName = 'dsm-topic'
@@ -514,11 +517,11 @@ describe('Plugin', () => {
             })()
 
             // Force garbage collection multiple times
-            global.gc()
+            gc()
             await new Promise(resolve => setTimeout(resolve, 100))
-            global.gc()
+            gc()
             await new Promise(resolve => setTimeout(resolve, 100))
-            global.gc()
+            gc()
 
             // Wait a bit for FinalizationRegistry callback
             await new Promise(resolve => setTimeout(resolve, 500))
@@ -564,9 +567,9 @@ describe('Plugin', () => {
             subscription.close()
 
             // Force GC
-            global.gc()
+            gc()
             await new Promise(resolve => setTimeout(resolve, 100))
-            global.gc()
+            gc()
 
             const afterMemory = process.memoryUsage().heapUsed
             const memoryIncrease = afterMemory - initialMemory
