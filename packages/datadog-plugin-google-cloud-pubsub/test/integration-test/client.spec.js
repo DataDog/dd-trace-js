@@ -26,7 +26,7 @@ describe('esm', () => {
     })
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'PubSub', undefined, '@google-cloud/pubsub')
+      variants = varySandbox('server.mjs', 'pubLib', undefined, '@google-cloud/pubsub')
     })
 
     afterEach(async () => {

@@ -30,7 +30,7 @@ describe('esm', () => {
     })
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'Antrophic', null, '@anthropic-ai/sdk')
+      variants = varySandbox('server.mjs', 'Anthropic', null, '@anthropic-ai/sdk')
     })
 
     afterEach(async () => {

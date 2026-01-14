@@ -1,8 +1,8 @@
 import 'dd-trace/init.js'
-import PubSub from '@google-cloud/pubsub'
+import pubLib from '@google-cloud/pubsub'
 import id from './id.js'
 
-const pubsub = new PubSub({ projectId: `test-project-${id()}` })
+const pubsub = new pubLib.PubSub({ projectId: `test-project-${id()}` })
 const [topic] = await pubsub.createTopic(`test-topic-${id()}`)
 const [subscription] = await topic.createSubscription('foo')
 
