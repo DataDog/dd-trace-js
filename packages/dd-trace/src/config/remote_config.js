@@ -38,8 +38,9 @@ class RCClientLibConfigManager {
   }
 
   /**
-   * Calculate priority based on target specificity
-   * Priority order: Service+Env (5) > Service (4) > Env (3) > Cluster (2) > Org (1)
+   * Calculate priority based on target specificity. Higher values take precedence.
+   * Priority order (highest → lowest):
+   *   Service+Env (5) > Service (4) > Env (3) > Cluster (2) > Org (1)
    *
    * @param {object} conf - Remote config object with service_target and k8s_target_v2 properties
    * @returns {number} Priority value from 1 (org-level) to 5 (service+env specific)
