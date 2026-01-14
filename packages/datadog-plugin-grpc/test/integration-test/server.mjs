@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
 import path from 'path'
-import * as grpc from '@grpc/grpc-js'
+import grpc from '@grpc/grpc-js'
 import * as protoLoader from '@grpc/proto-loader'
 
 const currentDirectoryPath = path.dirname(new URL(import.meta.url).pathname)
