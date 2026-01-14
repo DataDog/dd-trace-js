@@ -294,34 +294,14 @@ describe('Plugin', () => {
           agent.close({ ritmReset: false, wipe: true })
         })
 
-        it('should not produce message spans when traceWebsocketMessagesEnabled is not set to true', () => {
-          wsServer.on('connection', (ws) => {
-            ws.send('test message')
-          })
-          messageReceived = false
+        it('should not initialize sub-plugins when traceWebsocketMessagesEnabled is false', () => {
+          const tracer = require('../../dd-trace')
+          const wsPlugin = tracer._pluginManager._pluginsByName.ws
 
-          client.on('message', (data) => {
-            assert.strictEqual(data.toString(), 'test message')
-            messageReceived = true
-          })
-
-          return agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
-            assert.strictEqual(traces[0][0].name, 'web.request')
-            assert.strictEqual(traces[0][0].type, 'websocket')
-          })
-        })
-
-        it('should not produce close event spans when traceWebsocketMessagesEnabled is not set to true', () => {
-          wsServer.on('connection', (ws) => {
-            ws.close()
-          })
-
-          return agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
-            assert.strictEqual(traces[0][0].name, 'web.request')
-            assert.strictEqual(traces[0][0].type, 'websocket')
-          })
+          assert.strictEqual(wsPlugin.server._enabled, false)
+          assert.strictEqual(wsPlugin.producer._enabled, false)
+          assert.strictEqual(wsPlugin.receiver._enabled, false)
+          assert.strictEqual(wsPlugin.close._enabled, false)
         })
       })
       describe('with WebSocket configurations settings', () => {
