@@ -56,9 +56,9 @@ Each package under `packages/` follows a consistent structure:
 
 ### Running Individual Tests
 
-**IMPORTANT**: Avoid running the root `npm test` unless you explicitly want the full repo test run. Prefer targeted `npm run test:<area>` scripts or running mocha on specific test files.
+**IMPORTANT**: Never run the root `npm test`. Run specific related test files directly or run targeted related `npm run test:<area>` scripts.
 
-**Mocha unit tests:**
+**Unit tests:**
 
 ```bash
 ./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" path/to/test.spec.js
@@ -137,10 +137,9 @@ assert.equal(actual, expected)
 assertObjectContains(response, { status: 200, body: { user: { name: 'Alice' } } })
 ```
 
-When writing assertions, use the minimal amount of individual assertion calls possible.
-So instead of writing multiple assert.strictEqual calls, use a single assert.deepStrictEqual call or assertObjectContains.
+Favor fewer `assert.deepStrictEqual`/`assertObjectContains` calls over many `assert.strictEqual` calls. Combine with existing `assert.strictEqual` calls, if possible.
 
-Never use a `doesNotThrow()` assertion. Instead, just write execute the method directly.
+Never use the `doesNotThrow()` assertion. Instead, execute the method directly.
 
 ### Time-Based Testing
 
@@ -200,8 +199,9 @@ const log = require('../log')
 
 **CRITICAL: Tracer runs in application hot paths - every operation counts.**
 
-- Use fast paths and most performant APIs
-- Understanding the context to write CPU performant code and skip unnecessary steps
+- Use fast paths to skip unnecessary steps
+- Use most performant APIs
+- Understand the use case to write ideal CPU and memory performant code
 
 **Async/Await:**
 
@@ -264,7 +264,7 @@ Avoid try/catch in hot paths - validate inputs early
 - **Descriptive code**: Self-documenting with verbs in function names; comment when needed
 - **Readable formatting**: Empty lines for grouping, split complex objects, extract variables
 - **Avoid large refactors**: Iterative changes, gradual pattern introduction
-- **Test changes**: Test logic (not mocks), failure cases, edge cases - always update tests. Write blackbox tests instead of exporting specific test logic
+- **Test changes**: Test logic (not mocks), failure cases, edge cases - always update tests. Write blackbox tests instead of testing internal exports directly
 
 ### Implementation and Testing Workflow
 
