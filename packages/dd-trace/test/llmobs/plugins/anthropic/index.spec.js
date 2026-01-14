@@ -42,7 +42,7 @@ describe('Plugin', () => {
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '<not-a-real-key>'
   })
 
-  const getEvents = useLlmObs({ plugin: 'anthropic' })
+  const { getEvents } = useLlmObs({ plugin: 'anthropic' })
 
   withVersions('anthropic', '@anthropic-ai/sdk', (version, moduleName, realVersion) => {
     let client

@@ -12,7 +12,7 @@ const {
 } = require('../../util')
 
 describe('Plugin', () => {
-  const getEvents = useLlmObs({ plugin: 'google-genai' })
+  const { getEvents } = useLlmObs({ plugin: 'google-genai' })
 
   withVersions('google-genai', '@google/genai', (version) => {
     let client

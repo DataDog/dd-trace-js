@@ -273,7 +273,8 @@ describe('Plugin', () => {
           age: { type: 'number' },
           height: { type: 'string' }
         },
-        required: ['name', 'age', 'height']
+        required: ['name', 'age', 'height'],
+        additionalProperties: false
       })
 
       const result = await ai.generateObject({
@@ -429,7 +430,8 @@ describe('Plugin', () => {
           age: { type: 'number' },
           height: { type: 'string' }
         },
-        required: ['name', 'age', 'height']
+        required: ['name', 'age', 'height'],
+        additionalProperties: false
       })
 
       const result = await ai.streamObject({

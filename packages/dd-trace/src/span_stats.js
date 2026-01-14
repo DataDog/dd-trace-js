@@ -1,6 +1,6 @@
 'use strict'
 
-const os = require('os')
+const os = require('node:os')
 const pkg = require('../../../package.json')
 
 const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
@@ -13,6 +13,7 @@ const {
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('./constants')
 const { version } = require('./pkg')
+const processTags = require('./process-tags')
 
 const { SpanStatsExporter } = require('./exporters/span-stats')
 
@@ -176,7 +177,8 @@ class SpanStatsProcessor {
       Lang: 'javascript',
       TracerVersion: pkg.version,
       RuntimeID: this.tags['runtime-id'],
-      Sequence: ++this.sequence
+      Sequence: ++this.sequence,
+      ProcessTags: processTags.serialized
     })
   }
 
