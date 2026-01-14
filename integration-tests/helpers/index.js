@@ -37,6 +37,7 @@ const ANY_VALUE = Symbol('test.ANY_VALUE')
  */
 async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
+  assert(proc.pid !== undefined, 'Process PID is not available')
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
     proc.on('error', reject)
@@ -123,15 +124,11 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
    */
   function getPoints (...args) {
     const expectedPoints = []
-    let currentPoint = /** @type {{ name?: string, tags?: string[] }} */ ({})
-    for (const arg of args) {
-      if (!currentPoint.name) {
-        currentPoint.name = 'library_entrypoint.' + arg
-      } else {
-        currentPoint.tags = arg.split(',').filter(Boolean)
-        expectedPoints.push(currentPoint)
-        currentPoint = {}
-      }
+    for (let i = 0; i < args.length; i += 2) {
+      expectedPoints.push({
+        name: 'library_entrypoint.' + args[i],
+        tags: args[i + 1].split(',').filter(Boolean)
+      })
     }
     return expectedPoints
   }
@@ -147,7 +144,7 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
       runtime_name: 'nodejs',
       runtime_version: process.versions.node,
       tracer_version: require('../../package.json').version,
-      pid: Number(pid)
+      pid
     }
 
     // Validate basic metadata
@@ -156,9 +153,12 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
     }
 
     // Validate result metadata is present and has valid values
-    assert(actualMetadata.result, 'result field should be present')
-    assert(actualMetadata.result_class, 'result_class field should be present')
-    assert(actualMetadata.result_reason, 'result_reason field should be present')
+    if (typeof actualMetadata.result !== 'string') {
+      throw new assert.AssertionError({ message: 'result field should be a string' })
+    }
+    if (typeof actualMetadata.result_class !== 'string') {
+      throw new assert.AssertionError({ message: 'result_class should be a string' })
+    }
 
     // Check that result metadata has expected values for telemetry scenarios
     const validResults = ['success', 'abort', 'error', 'unknown']
@@ -217,7 +217,7 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 
   return new Promise((resolve, reject) => {
     proc
-      .on('message', ({ port }) => {
+      .on('message', (/** @type {{ port?: unknown }} */ { port }) => {
         if (typeof port !== 'number' && typeof port !== 'string') {
           return reject(new Error(`${filename} sent invalid port: ${port}. Expected a number or string.`))
         }
@@ -342,6 +342,9 @@ async function createSandbox (
     if (builtinModules.includes(dep)) return dep
 
     const match = dep.replaceAll(/['"]/g, '').match(/^(@?[^@]+)(@(.+))?$/)
+
+    assert(match !== null, `Invalid dependency format: ${dep}`)
+
     const name = match[1]
     const range = match[3] || ''
     const cappedRange = getCappedRange(name, range)
@@ -503,9 +506,10 @@ varySandbox.VARIANTS = ['default', 'star', 'destructure']
  * @param {boolean} shouldExpectTelemetryPoints
  */
 function telemetryForwarder (shouldExpectTelemetryPoints = true) {
-  process.env.DD_TELEMETRY_FORWARDER_PATH =
-    path.join(__dirname, '..', 'telemetry-forwarder.sh')
-  process.env.FORWARDER_OUT = path.join(__dirname, 'output', `forwarder-${Date.now()}.out`)
+  const forwarderOut = path.join(__dirname, 'output', `forwarder-${Date.now()}.out`)
+
+  process.env.DD_TELEMETRY_FORWARDER_PATH = path.join(__dirname, '..', 'telemetry-forwarder.sh')
+  process.env.FORWARDER_OUT = forwarderOut
 
   let retries = 0
 
@@ -516,17 +520,20 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   }
 
   const cleanup = function () {
-    let msgs
+    /** @type {string[]} */
+    let lines
     try {
-      msgs = readFileSync(process.env.FORWARDER_OUT, 'utf8').trim().split('\n')
+      lines = readFileSync(forwarderOut, 'utf8').trim().split('\n')
     } catch (e) {
       if (shouldExpectTelemetryPoints && e.code === 'ENOENT' && retries < 10) {
         return tryAgain()
       }
       return []
     }
-    for (let i = 0; i < msgs.length; i++) {
-      const [telemetryType, data] = msgs[i].split('\t')
+    /** @type {Array<[string, unknown]>} */
+    const msgs = []
+    for (const line of lines) {
+      const [telemetryType, data] = line.split('\t')
       if (!data && retries < 10) {
         return tryAgain()
       }
@@ -539,9 +546,9 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
         }
         throw new SyntaxError(`error parsing data: ${e.message}\n${data}`)
       }
-      msgs[i] = [telemetryType, parsed]
+      msgs.push([telemetryType, parsed])
     }
-    unlinkSync(process.env.FORWARDER_OUT)
+    unlinkSync(forwarderOut)
     delete process.env.FORWARDER_OUT
     delete process.env.DD_TELEMETRY_FORWARDER_PATH
     return msgs
@@ -551,14 +558,17 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
 }
 
 /**
- * @param {string|{ then: (callback: () => Promise<string>) => Promise<string> }|URL} url
+ * @param {string | URL | Promise<string | URL | { url: string }> | { url: string }} url
+ * @returns {Promise<import('http').IncomingMessage & { body: string }>}
  */
 async function curl (url) {
   if (url !== null && typeof url === 'object') {
-    if (url.then) {
+    if ('then' in url) {
       return curl(await url)
     }
-    url = url.url
+    if ('url' in url) {
+      url = url.url
+    }
   }
 
   return new Promise((resolve, reject) => {
@@ -566,8 +576,7 @@ async function curl (url) {
       const bufs = []
       res.on('data', d => bufs.push(d))
       res.on('end', () => {
-        res.body = Buffer.concat(bufs).toString('utf8')
-        resolve(res)
+        resolve(Object.assign(res, { body: Buffer.concat(bufs).toString('utf8') }))
       })
       res.on('error', reject)
     }).on('error', reject)
@@ -576,7 +585,7 @@ async function curl (url) {
 
 /**
  * @param {FakeAgent} agent
- * @param {string|{ then: (callback: () => Promise<string>) => Promise<string> }|URL} procOrUrl
+ * @param {string | URL | Promise<string | URL | { url: string }> | { url: string }} procOrUrl
  * @param {(res: { headers: Record<string, string>, payload: unknown[] }) => void} fn
  * @param {number} [timeout]
  * @param {number} [expectedMessageCount]
