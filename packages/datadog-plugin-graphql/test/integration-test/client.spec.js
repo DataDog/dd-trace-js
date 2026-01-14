@@ -25,7 +25,7 @@ describe('esm', () => {
     })
 
     before(async function () {
-      variants = varySandbox('serer.mjs', 'graphql')
+      variants = varySandbox('server.mjs', 'graphql')
     })
 
     afterEach(async () => {

@@ -25,7 +25,7 @@ describe('esm integration test', () => {
     })
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'hono')
+      variants = varySandbox('server.mjs', 'Hono', 'Hono', 'hono', true)
     })
 
     afterEach(async () => {
@@ -33,7 +33,7 @@ describe('esm integration test', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of ['destructure', 'star']) {
       it('is instrumented', async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, {
           VERSION: version

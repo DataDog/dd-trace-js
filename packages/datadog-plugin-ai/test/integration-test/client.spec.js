@@ -38,7 +38,7 @@ describe('esm', () => {
     })
 
     before(async function () {
-      varySandbox('server.mjs', 'aiLib', 'generateText', 'ai')
+      variants = varySandbox('server.mjs', 'aiLib', 'generateText', 'ai')
     })
 
     afterEach(async () => {

@@ -1,9 +1,9 @@
 import 'dd-trace/init.js'
 import process from 'node:process'
-import hono from 'hono'
+import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 
-const app = new hono.Hono()
+const app = new Hono()
 
 const version = process.env.VERSION.split('.').map(Number)
 
