@@ -10,8 +10,6 @@ const axios = require('axios')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-
-// @ts-expect-error We expect the test to be started with --expose-gc
 const gc = global.gc ?? (() => {})
 
 describe('Push Subscription Plugin', () => {

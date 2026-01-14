@@ -14,8 +14,6 @@ const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/he
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { DataStreamsProcessor, ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-
-// @ts-expect-error We expect the test to be started with --expose-gc
 const gc = global.gc ?? (() => {})
 
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
