@@ -3,39 +3,19 @@
 const log = require('../log')
 
 /**
- * Checks if OpenTelemetry Core and Resources peer dependencies are available.
- * @returns {boolean} True if dependencies are available, false otherwise
- */
-function checkOpenTelemetryHelpers () {
-  let available = true
-  try {
-    require.resolve('@opentelemetry/core')
-  } catch {
-    log.warn('Failed to resolve @opentelemetry/core. Install it with: npm install @opentelemetry/core')
-    available = false
-  }
-  try {
-    require.resolve('@opentelemetry/resources')
-  } catch {
-    log.warn('Failed to resolve @opentelemetry/resources. Install it with: npm install @opentelemetry/resources')
-    available = false
-  }
-  return available
-}
-
-/**
- * Checks if OpenTelemetry peer dependencies are available.
- * @returns {boolean} True if dependencies are available, false otherwise
+ * Checks if OpenTelemetry API peer dependency is available.
+ * Note: @opentelemetry/core and @opentelemetry/resources are vendored (bundled),
+ * so they are not checked as peer dependencies.
+ * @returns {boolean} True if dependency is available, false otherwise
  */
 function checkOpenTelemetryAPIDeps () {
   try {
     require.resolve('@opentelemetry/api')
   } catch {
     log.warn('Failed to resolve @opentelemetry/api. Install it with: npm install @opentelemetry/api')
-    checkOpenTelemetryHelpers()
     return false
   }
-  return checkOpenTelemetryHelpers()
+  return true
 }
 
 /**
