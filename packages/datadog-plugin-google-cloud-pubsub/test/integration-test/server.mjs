@@ -1,5 +1,5 @@
 import 'dd-trace/init.js'
-import { PubSub } from '@google-cloud/pubsub'
+import PubSub from '@google-cloud/pubsub'
 import id from './id.js'
 
 const pubsub = new PubSub({ projectId: `test-project-${id()}` })

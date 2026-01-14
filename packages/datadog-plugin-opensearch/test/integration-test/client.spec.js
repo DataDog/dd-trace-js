@@ -7,12 +7,14 @@ const {
   sandboxCwd,
   useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProcAndExpectExit
+  spawnPluginIntegrationTestProcAndExpectExit,
+  varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
+  let variants
 
   withVersions('opensearch', '@opensearch-project/opensearch', version => {
     useSandbox([`'@opensearch-project/opensearch@${version}'`], false, [
@@ -20,6 +22,10 @@ describe('esm', () => {
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
+    })
+
+    before(async function () {
+      variants = varySandbox('server.mjs', 'opensearch', undefined, '@opensearch-project/opensearch')
     })
 
     afterEach(async () => {
