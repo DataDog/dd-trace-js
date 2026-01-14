@@ -49,7 +49,7 @@ const prismaClientConfigs = [{
   ts: true
 }]
 
-describe.only('esm', () => {
+describe('esm', () => {
   let agent
   let proc
   prismaClientConfigs.forEach(config => {
