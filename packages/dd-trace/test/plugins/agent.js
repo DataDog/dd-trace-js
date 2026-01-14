@@ -17,6 +17,7 @@ const ritm = require('../../src/ritm')
 const traceHandlers = new Set()
 const statsHandlers = new Set()
 let llmobsSpanEventsRequests = []
+let llmobsEvaluationMetricsRequests = []
 let sockets = []
 let agent = null
 let listener = null
@@ -468,6 +469,12 @@ module.exports = {
       res.status(200).send()
     })
 
+    // LLM Observability evaluation metrics endpoint
+    agent.post('/evp_proxy/v2/api/intake/llm-obs/v1/eval-metric', (req, res) => {
+      llmobsEvaluationMetricsRequests.push(JSON.parse(req.body))
+      res.status(200).send()
+    })
+
     // DSM Checkpoint endpoint
     dsmStats = []
     agent.post('/v0.1/pipeline_stats', (req, res) => {
@@ -627,12 +634,27 @@ module.exports = {
   },
 
   /**
+   * Get the LLM Observability evaluation metrics requests.
+   * @param {boolean} clear - Clear the requests after getting them.
+   * @returns {Array<object>} The LLM Observability evaluation metrics requests.
+   */
+  getLlmObsEvaluationMetricsRequests (clear = false) {
+    const requests = llmobsEvaluationMetricsRequests
+    if (clear) {
+      llmobsEvaluationMetricsRequests = []
+    }
+
+    return requests
+  },
+
+  /**
    * Unregister any outstanding expectation callbacks.
    */
   reset () {
     traceHandlers.clear()
     statsHandlers.clear()
     llmobsSpanEventsRequests = []
+    llmobsEvaluationMetricsRequests = []
   },
 
   /**
@@ -662,6 +684,7 @@ module.exports = {
     traceHandlers.clear()
     statsHandlers.clear()
     llmobsSpanEventsRequests = []
+    llmobsEvaluationMetricsRequests = []
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
