@@ -242,9 +242,9 @@ async function main () {
     code: /** @type {number|null} */ (null),
     signal: /** @type {NodeJS.Signals|null} */ (null),
 
-    // Output buffers (in-memory)
-    stdoutBuf: /** @type {string[]} */ ([]),
-    stderrWarnBuf: /** @type {string[]} */ ([]),
+    // Output buffers (in-memory). For non-active entries, preserve stdout/stderr warning ordering
+    // by buffering a merged stream with per-line ordering.
+    outBuf: /** @type {{stream:'stdout'|'stderr', text:string}[]} */ ([]),
     stderrErrBuf: /** @type {string[]} */ ([]),
     failureBuf: /** @type {string[]} */ ([]),
 
@@ -262,13 +262,12 @@ async function main () {
     const entry = entries[activeIndex]
     if (!entry) return
 
-    if (entry.stderrWarnBuf.length) {
-      process.stderr.write(entry.stderrWarnBuf.join(''))
-      entry.stderrWarnBuf.length = 0
-    }
-    if (entry.stdoutBuf.length) {
-      process.stdout.write(entry.stdoutBuf.join(''))
-      entry.stdoutBuf.length = 0
+    if (entry.outBuf.length) {
+      for (const { stream, text } of entry.outBuf) {
+        if (stream === 'stderr') process.stderr.write(text)
+        else process.stdout.write(text)
+      }
+      entry.outBuf.length = 0
     }
   }
 
@@ -295,7 +294,7 @@ async function main () {
       entry.failureBuf.push(line)
     } else {
       if (isActive(entryIndex)) process.stdout.write(line)
-      else entry.stdoutBuf.push(line)
+      else entry.outBuf.push({ stream: 'stdout', text: line })
     }
   }
 
@@ -310,7 +309,7 @@ async function main () {
     const entry = entries[entryIndex]
     if (isWarningLine(line)) {
       if (isActive(entryIndex)) process.stderr.write(line)
-      else entry.stderrWarnBuf.push(line)
+      else entry.outBuf.push({ stream: 'stderr', text: line })
     } else {
       entry.stderrErrBuf.push(line)
     }
@@ -454,6 +453,7 @@ async function main () {
   flushActiveBuffers()
 
   // Print buffered error output (non-warning stderr + mocha failure blocks) after all output has been streamed.
+  let globalFailureIndex = 0
   let hasConsolidatedErrors = false
   for (const entry of entries) {
     const stderrErrors = entry.stderrErrBuf.join('').trim()
@@ -471,7 +471,32 @@ async function main () {
       if (last && !last.endsWith('\n')) process.stdout.write('\n')
     }
     if (hasFailures) {
-      process.stdout.write(entry.failureBuf.join(''))
+      let appendedFilenameToFailingLine = false
+
+      for (const line of entry.failureBuf) {
+        let out = line
+
+        // Print `n failing in <file>` while ensuring the appended filename stays uncolored.
+        if (!appendedFilenameToFailingLine && isFailureStartLine(out)) {
+          appendedFilenameToFailingLine = true
+
+          const hasNewline = out.endsWith('\n')
+          const base = hasNewline ? out.slice(0, -1) : out
+          // Ensure `in <file>` is not red by resetting ANSI styles before printing the filename.
+          // Avoid double-resetting if the line already ends with a reset.
+          const reset = '\u001b[0m'
+          out = (base.endsWith(reset) ? base : base + reset) + ' in ' + entry.file + (hasNewline ? '\n' : '')
+        }
+
+        // Prefix local `n)` failure lines with a deterministic global counter `[n]`.
+        if (/^\s*\d+\)/.test(stripAnsi(out))) {
+          globalFailureIndex++
+          out = `[${globalFailureIndex}] ` + out
+        }
+
+        process.stdout.write(out)
+      }
+
       const last = entry.failureBuf[entry.failureBuf.length - 1]
       if (last && !last.endsWith('\n')) process.stdout.write('\n')
     }
@@ -490,8 +515,16 @@ async function main () {
   let totalPending = 0
   let totalTests = 0
   let totalDuration = 0
+  let crashedFiles = 0
 
   for (const entry of entries) {
+    // If a child exited non-zero but never reported mocha stats (or reported 0 failures),
+    // treat it as a "crash/harness failure" so summary reflects failure even when Mocha
+    // couldn't produce a failing test count (e.g., hard crash, early process.exit()).
+    if ((entry.code || entry.signal) && (!entry.stats || (entry.stats.failures || 0) === 0)) {
+      crashedFiles++
+    }
+
     const result = entry.stats
     if (!result) continue
     totalPasses += result.passes || 0
@@ -503,16 +536,20 @@ async function main () {
 
   process.stdout.write('\n=== Summary ===\n')
   process.stdout.write(`Passed: ${totalPasses}\n`)
-  process.stdout.write(`Failed: ${totalFailures}\n`)
+  process.stdout.write(`Failed: ${totalFailures + crashedFiles}\n`)
   process.stdout.write(`Pending: ${totalPending}\n`)
   process.stdout.write(`Total: ${totalTests}\n`)
   process.stdout.write(`Duration(ms): ${totalDuration}\n`)
+  if (crashedFiles) process.stdout.write(`Crashed files: ${crashedFiles}\n`)
 
   if (failed.length) {
     process.stdout.write('\n=== Failed files ===\n')
     for (const { file, code, signal } of failed) {
       process.stdout.write(`- ${file} (exit=${code ?? 'null'} signal=${signal ?? 'null'})\n`)
     }
+    process.stdout.write(
+      'Legend: [n] = global failure index across all files; n) = local failure index within a file.\n'
+    )
   }
 
   process.exit(failures ? 1 : 0)
