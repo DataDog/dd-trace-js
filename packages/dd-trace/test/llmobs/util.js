@@ -414,10 +414,18 @@ function useLlmObs ({
   })
 
   return {
-    getEvents: async function (numLlmObsSpans = 1) {
+    getEvents: async function (numLlmObsSpans = 1, numApmSpans = 1) {
       // get apm spans from the agent
-      const apmSpans = await apmTracesPromise
-      resetTracesPromises()
+      // For nested workflows, APM spans may arrive in separate batches so we collect until we have enough
+      const apmSpans = []
+
+      while (apmSpans.length < numApmSpans) {
+        const newApmSpans = await apmTracesPromise
+        if (newApmSpans && newApmSpans.length > 0) {
+          apmSpans.push(...newApmSpans)
+        }
+        resetTracesPromises()
+      }
 
       // get llmobs span events requests from the agent
       // because llmobs process spans on span finish and submits periodically,
@@ -431,7 +439,10 @@ function useLlmObs ({
         llmobsSpans.push(...getLlmObsSpansFromRequests(llmobsSpanEventsRequests))
       }
 
-      return { apmSpans, llmobsSpans: llmobsSpans.sort((a, b) => a.start_ns - b.start_ns) }
+      return {
+        apmSpans: apmSpans.sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0)),
+        llmobsSpans: llmobsSpans.sort((a, b) => a.start_ns - b.start_ns)
+      }
     },
 
     getEvaluationMetrics: function () {

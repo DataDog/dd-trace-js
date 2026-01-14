@@ -4,6 +4,11 @@
 // function (async *_streamIterator) which cannot be wrapped by the current rewriter.
 // The rewriter creates non-generator wrapper functions which causes 'yield' statements
 // to fail with "Unexpected strict mode reserved word" errors.
+//
+// NOTE: The stream() method also CANNOT be instrumented because it uses `super.stream()`
+// which breaks when the rewriter transforms the method - causing "'super' keyword unexpected here".
+// Streaming functionality needs to be instrumented via a different approach (e.g., wrapping
+// the returned iterable or using diagnostic channels within the library itself).
 
 module.exports = [
   {
