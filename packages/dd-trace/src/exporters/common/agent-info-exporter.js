@@ -66,7 +66,7 @@ class AgentInfoExporter {
       this[timerKey] = setTimeout(() => {
         writer.flush()
         this[timerKey] = undefined
-      }, flushInterval).unref()
+      }, flushInterval).unref?.()
     }
   }
 

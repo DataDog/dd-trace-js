@@ -214,7 +214,7 @@ class Profiler extends EventEmitter {
     this.#lastStart = start
     if (!this.#timer || timeout !== this._timeoutInterval) {
       this.#timer = setTimeout(() => this._collect(snapshotKinds.PERIODIC), timeout)
-      this.#timer.unref()
+      this.#timer.unref?.()
     } else {
       this.#timer.refresh()
     }

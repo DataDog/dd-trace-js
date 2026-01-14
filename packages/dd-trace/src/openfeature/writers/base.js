@@ -54,7 +54,7 @@ class BaseFFEWriter {
 
     this._periodic = setInterval(() => {
       this.flush()
-    }, this._interval).unref()
+    }, this._interval).unref?.()
 
     this._beforeExitHandler = () => {
       this.destroy()

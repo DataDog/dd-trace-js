@@ -114,7 +114,7 @@ class TestVisDynamicInstrumentation {
     })
 
     // Allow the parent to exit even if the worker is still running
-    this.worker.unref()
+    this.worker.unref?.()
 
     this.breakpointSetChannel.port2.on('message', (probeId) => {
       const resolve = probeIdToResolveBreakpointSet.get(probeId)
@@ -122,7 +122,7 @@ class TestVisDynamicInstrumentation {
         resolve()
         probeIdToResolveBreakpointSet.delete(probeId)
       }
-    }).unref()
+    }).unref?.()
 
     this.breakpointHitChannel.port2.on('message', ({ snapshot }) => {
       const { probe: { id: probeId } } = snapshot
@@ -132,7 +132,7 @@ class TestVisDynamicInstrumentation {
       } else {
         log.warn('Received a breakpoint hit for an unknown probe')
       }
-    }).unref()
+    }).unref?.()
 
     this.breakpointRemoveChannel.port2.on('message', (probeId) => {
       const resolve = probeIdToResolveBreakpointRemove.get(probeId)
@@ -140,7 +140,7 @@ class TestVisDynamicInstrumentation {
         resolve()
         probeIdToResolveBreakpointRemove.delete(probeId)
       }
-    }).unref()
+    }).unref?.()
   }
 }
 

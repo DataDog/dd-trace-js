@@ -29,7 +29,7 @@ function endpointKey (method, path) {
 function scheduleFlush () {
   if (flushScheduled) return
   flushScheduled = true
-  setImmediate(flushAndSend).unref()
+  setImmediate(flushAndSend).unref?.()
 }
 
 function recordEndpoint (method, path, operationName) {

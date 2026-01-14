@@ -173,7 +173,7 @@ session.on('Debugger.scriptParsed', ({ params }) => {
     if (reEvaluateProbesTimer === null) {
       reEvaluateProbesTimer = setTimeout(() => {
         session.emit('scriptLoadingStabilized')
-      }, 500).unref()
+      }, 500).unref?.()
     } else {
       reEvaluateProbesTimer.refresh()
     }

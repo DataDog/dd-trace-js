@@ -226,7 +226,7 @@ function heartbeat (config, application, host) {
     const { reqType, payload } = createPayload('app-heartbeat')
     sendData(config, application, host, reqType, payload, updateRetryData)
     heartbeat(config, application, host)
-  }, heartbeatInterval).unref()
+  }, heartbeatInterval).unref?.()
   return heartbeatTimeout
 }
 
@@ -239,7 +239,7 @@ function extendedHeartbeat (config) {
     }
     sendData(config, application, host, 'app-extended-heartbeat', payload)
     Object.keys(extendedHeartbeatPayload).forEach(key => delete extendedHeartbeatPayload[key])
-  }, 1000 * 60 * 60 * 24).unref()
+  }, 1000 * 60 * 60 * 24).unref?.()
   return extendedInterval
 }
 
