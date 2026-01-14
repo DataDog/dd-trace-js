@@ -82,6 +82,8 @@ withVersions('express', 'express', version => {
 
     afterEach(() => {
       appsec.disable()
+      // TODO: Remove the workaround once https://github.com/sinonjs/sinon/issues/2671 is resolved
+      paramCallbackSpy.resetHistory()
       sinon.reset()
     })
 
