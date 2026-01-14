@@ -7,7 +7,7 @@ const {
   sandboxCwd,
   useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -36,7 +36,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'bullmq.add'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server-queue-add.mjs', agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'server-queue-add.mjs', agent.port)
 
         await res
       }).timeout(60000)
@@ -50,7 +50,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'bullmq.addBulk'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server-queue-add-bulk.mjs', agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'server-queue-add-bulk.mjs', agent.port)
 
         await res
       }).timeout(60000)
@@ -64,7 +64,11 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'bullmq.add'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server-flow-producer-add.mjs', agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(
+          sandboxCwd(),
+          'server-flow-producer-add.mjs',
+          agent.port
+        )
 
         await res
       }).timeout(60000)
@@ -78,11 +82,10 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'bullmq.processJob'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),
           'server-worker-process-job.mjs',
           agent.port,
-          undefined,
           // Disable Redis/ioredis instrumentation to avoid hitting max active requests limit
           { DD_TRACE_REDIS_ENABLED: 'false', DD_TRACE_IOREDIS_ENABLED: 'false' }
         )
