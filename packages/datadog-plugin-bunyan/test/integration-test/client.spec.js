@@ -37,6 +37,8 @@ describe('esm', () => {
           sandboxCwd(),
           variants[variant],
           agent.port,
+          undefined,
+          undefined,
           (data) => {
             const jsonObject = JSON.parse(data.toString())
             assert.ok(Object.hasOwn(jsonObject, 'dd'))

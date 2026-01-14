@@ -28,9 +28,7 @@ describe('esm integration test', () => {
     })
 
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, undefined, {
-        VERSION: version
-      })
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, { VERSION: version })
       proc.url += '/hello'
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
@@ -40,9 +38,7 @@ describe('esm integration test', () => {
     }).timeout(50000)
 
     it('receives missing route trace', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, undefined, {
-        VERSION: version
-      })
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, { VERSION: version })
       proc.url += '/missing'
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {

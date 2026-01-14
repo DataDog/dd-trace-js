@@ -52,7 +52,6 @@ describe('esm', () => {
         sandboxCwd(),
         'server.mjs',
         agent.port,
-        null,
         {
           NODE_OPTIONS: '--import dd-trace/initialize.mjs',
         }

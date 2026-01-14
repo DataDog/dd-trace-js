@@ -630,7 +630,7 @@ function checkSpansForServiceName (spans, name) {
 }
 
 /**
- * @typedef {Record<string, string|undefined> & { execArgv?: string[] }} AdditionalSpawnOptions
+ * @typedef {Record<string, string|undefined>} AdditionalEnvArgs
  */
 
 /**
@@ -639,19 +639,15 @@ function checkSpansForServiceName (spans, name) {
  * @param {string} cwd
  * @param {string} serverFile
  * @param {string|number} agentPort
- * @param {((data: Buffer) => void) | AdditionalSpawnOptions} [stdioHandler]
- * @param {AdditionalSpawnOptions} [additionalEnvArgs]
+ * @param {AdditionalEnvArgs} [additionalEnvArgs]
+ * @param {string[]} [execArgv]
+ * @param {(data: Buffer) => void} [stdioHandler]
  * @returns {{ filename: string, options: childProcess.ForkOptions,
  *   stdioHandler: ((data: Buffer) => void) | undefined }}
  */
-function preparePluginIntegrationTestSpawnOptions (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
-  /** @type {((data: Buffer) => void) | undefined} */
-  let handler
-  if (typeof stdioHandler === 'function') {
-    handler = stdioHandler
-  } else if (!additionalEnvArgs) {
-    additionalEnvArgs = stdioHandler
-  }
+function preparePluginIntegrationTestSpawnOptions (
+  cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler
+) {
   additionalEnvArgs = { ...additionalEnvArgs }
 
   let NODE_OPTIONS = `--loader=${hookFile}`
@@ -664,17 +660,20 @@ function preparePluginIntegrationTestSpawnOptions (cwd, serverFile, agentPort, s
     delete additionalEnvArgs.NODE_OPTIONS
   }
 
-  let env = /** @type {Record<string, string|undefined>} */ ({
-    NODE_OPTIONS,
-    DD_TRACE_AGENT_PORT: String(agentPort),
-    DD_TRACE_FLUSH_INTERVAL: '0'
-  })
-  env = { ...process.env, ...env, ...additionalEnvArgs }
-
   return {
     filename: path.join(cwd, serverFile),
-    options: { cwd, env, execArgv: additionalEnvArgs.execArgv },
-    stdioHandler: handler
+    options: {
+      cwd,
+      env: {
+        ...process.env,
+        NODE_OPTIONS,
+        DD_TRACE_AGENT_PORT: String(agentPort),
+        DD_TRACE_FLUSH_INTERVAL: '0',
+        ...additionalEnvArgs
+      },
+      execArgv
+    },
+    stdioHandler
   }
 }
 
@@ -686,22 +685,16 @@ function preparePluginIntegrationTestSpawnOptions (cwd, serverFile, agentPort, s
  *
  * For short-lived scripts that run and exit, use `spawnPluginIntegrationTestProcAndExpectExit` instead.
  *
- * @overload
  * @param {string} cwd
  * @param {string} serverFile
  * @param {string|number} agentPort
- * @param {AdditionalSpawnOptions} [additionalEnvArgs]
- */
-/**
- * @param {string} cwd
- * @param {string} serverFile
- * @param {string|number} agentPort
+ * @param {AdditionalEnvArgs} [additionalEnvArgs]
+ * @param {string[]} [execArgv]
  * @param {(data: Buffer) => void} [stdioHandler]
- * @param {AdditionalSpawnOptions} [additionalEnvArgs]
  */
-function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
+function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler) {
   const { filename, options, stdioHandler: handler } =
-    preparePluginIntegrationTestSpawnOptions(cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs)
+    preparePluginIntegrationTestSpawnOptions(cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler)
   return spawnProc(filename, options, handler)
 }
 
@@ -713,22 +706,18 @@ function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandle
  *
  * For tests that spawn a server which should stay alive, use `spawnPluginIntegrationTestProc` instead.
  *
- * @overload
  * @param {string} cwd
  * @param {string} serverFile
  * @param {string|number} agentPort
- * @param {AdditionalSpawnOptions} [additionalEnvArgs]
- */
-/**
- * @param {string} cwd
- * @param {string} serverFile
- * @param {string|number} agentPort
+ * @param {AdditionalEnvArgs} [additionalEnvArgs]
+ * @param {string[]} [execArgv]
  * @param {(data: Buffer) => void} [stdioHandler]
- * @param {AdditionalSpawnOptions} [additionalEnvArgs]
  */
-function spawnPluginIntegrationTestProcAndExpectExit (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
+function spawnPluginIntegrationTestProcAndExpectExit (
+  cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler
+) {
   const { filename, options, stdioHandler: handler } =
-    preparePluginIntegrationTestSpawnOptions(cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs)
+    preparePluginIntegrationTestSpawnOptions(cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler)
   return spawnProcAndExpectExit(filename, options, handler)
 }
 
