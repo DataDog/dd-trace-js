@@ -1,4 +1,18 @@
 {
+  "openai-agents": [
+    {
+      "name": "@openai/agents-core",
+      "versions": [">=0.3.7"]
+    },
+    {
+      "name": "@openai/agents-openai",
+      "versions": [">=0.3.7"]
+    },
+    {
+      "name": "openai",
+      "versions": [">=4.87.0"]
+    }
+  ],
   "ai": [
     {
       "name": "ai",
