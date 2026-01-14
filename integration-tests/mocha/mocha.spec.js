@@ -4038,6 +4038,62 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       ])
       assert.match(testOutput, /Test management tests could not be fetched/)
     })
+
+    onlyLatestIt('works in parallel mode with test management enabled but ITR and suite skipping disabled', async () => {
+      // This test reproduces the bug from issue #7222 where a missing 'else' keyword
+      // caused onFinishRequest() to be called twice when test management is enabled
+      // but ITR and suite skipping are disabled, resulting in the error:
+      // "invalid state transition: RUNNING => RUNNING"
+      let testOutput = ''
+      receiver.setSettings({
+        test_management: { enabled: true },
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: false
+      })
+      receiver.setTestManagementTests({
+        mocha: {
+          suites: {}
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+          assert.strictEqual(testSession.meta[MOCHA_IS_PARALLEL], 'true')
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.ok(tests.length > 0)
+        })
+
+      childProcess = exec(
+        'node node_modules/mocha/bin/mocha --parallel --jobs 2 ./ci-visibility/test/ci-visibility-test*',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
+        eventsPromise
+      ])
+
+      // Verify no "invalid state transition" error occurred
+      assert.doesNotMatch(testOutput, /invalid state transition/)
+    })
   })
 
   context('libraries capabilities', () => {

@@ -282,7 +282,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     if (config.isTestManagementTestsEnabled) {
       ctx.onDone = onReceivedTestManagementTests
       testManagementTestsCh.runStores(ctx, () => {})
-    } if (config.isImpactedTestsEnabled) {
+    } else if (config.isImpactedTestsEnabled) {
       ctx.onDone = onReceivedImpactedTests
       modifiedFilesCh.runStores(ctx, () => {})
     } else if (config.isSuitesSkippingEnabled) {
