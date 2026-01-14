@@ -54,6 +54,8 @@ const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const log = require('../../dd-trace/src/log')
+const { discoverCoverageReports } = require('../../dd-trace/src/ci-visibility/coverage-report-discovery')
+const CoverageReportWriter = require('../../dd-trace/src/ci-visibility/exporters/agentless/coverage-report-writer')
 
 const {
   TELEMETRY_EVENT_CREATED,
@@ -330,7 +332,8 @@ class CypressPlugin {
               isKnownTestsEnabled,
               isTestManagementEnabled,
               testManagementAttemptToFixRetries,
-              isImpactedTestsEnabled
+              isImpactedTestsEnabled,
+              isCoverageReportUploadEnabled
             }
           } = libraryConfigurationResponse
           this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
@@ -345,6 +348,7 @@ class CypressPlugin {
           this.isTestManagementTestsEnabled = isTestManagementEnabled
           this.testManagementAttemptToFixRetries = testManagementAttemptToFixRetries
           this.isImpactedTestsEnabled = isImpactedTestsEnabled
+          this.isCoverageReportUploadEnabled = isCoverageReportUploadEnabled
         }
         return this.cypressConfig
       })
@@ -655,16 +659,42 @@ class CypressPlugin {
       if (!exporter) {
         return resolve(null)
       }
+
+      const onFlushComplete = () => {
+        appClosingTelemetry()
+
+        // Upload coverage reports if enabled
+        if (this.isCoverageReportUploadEnabled) {
+          const reports = discoverCoverageReports(this.rootDir)
+
+          if (reports && reports.length > 0) {
+            log.debug(() => `Found ${reports.length} coverage reports to upload`)
+            const url = exporter._url
+            const evpProxyPrefix = exporter._evpProxyPrefix
+
+            const writer = new CoverageReportWriter({
+              url,
+              evpProxyPrefix,
+              tags: this.testEnvironmentMetadata
+            })
+
+            writer.uploadCoverageReports(reports, (err) => {
+              if (err) {
+                log.error('Error uploading coverage reports:', err)
+              }
+              resolve(null)
+            })
+            return
+          }
+        }
+
+        resolve(null)
+      }
+
       if (exporter.flush) {
-        exporter.flush(() => {
-          appClosingTelemetry()
-          resolve(null)
-        })
+        exporter.flush(onFlushComplete)
       } else if (exporter._writer) {
-        exporter._writer.flush(() => {
-          appClosingTelemetry()
-          resolve(null)
-        })
+        exporter._writer.flush(onFlushComplete)
       }
     })
   }

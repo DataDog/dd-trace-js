@@ -2254,5 +2254,69 @@ versions.forEach((version) => {
         ])
       })
     })
+
+    context('coverage report upload', () => {
+      it('uploads coverage reports when enabled', (done) => {
+        receiver.setCoverageReportUploadEnabled(true)
+
+        let coverageReportUploaded = false
+
+        receiver.on('message', ({ url, payload }) => {
+          if (url === '/api/v2/cicovreprt') {
+            coverageReportUploaded = true
+            assert.ok(payload.coverageReports)
+            assert.ok(payload.coverageReports.length > 0)
+          }
+        })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port)
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          setTimeout(() => {
+            assert.ok(coverageReportUploaded)
+            done()
+          }, 1000)
+        })
+      })
+
+      it('does not upload when feature is disabled', (done) => {
+        receiver.setCoverageReportUploadEnabled(false)
+
+        let coverageReportUploaded = false
+
+        receiver.on('message', ({ url }) => {
+          if (url === '/api/v2/cicovreprt') {
+            coverageReportUploaded = true
+          }
+        })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port)
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          setTimeout(() => {
+            assert.ok(!coverageReportUploaded)
+            done()
+          }, 1000)
+        })
+      })
+    })
   })
 })

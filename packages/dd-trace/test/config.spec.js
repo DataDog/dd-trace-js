@@ -2575,6 +2575,7 @@ describe('Config', () => {
       delete process.env.JEST_WORKER_ID
       delete process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED
       delete process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED
+      delete process.env.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED
       options = {}
     })
     context('ci visibility mode is enabled', () => {
@@ -2681,6 +2682,16 @@ describe('Config', () => {
           process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED = 'false'
           const config = getConfig(options)
           assert.strictEqual(config.isTestDynamicInstrumentationEnabled, false)
+        })
+      it('should enable coverage report upload by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.isCoverageReportUploadEnabled, true)
+      })
+      it('should disable coverage report upload if DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED is false',
+        () => {
+          process.env.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED = 'false'
+          const config = getConfig(options)
+          assert.strictEqual(config.isCoverageReportUploadEnabled, false)
         })
     })
     context('ci visibility mode is not enabled', () => {

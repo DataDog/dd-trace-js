@@ -100,7 +100,8 @@ function getLibraryConfiguration ({
               di_enabled: isDiEnabled,
               known_tests_enabled: isKnownTestsEnabled,
               test_management: testManagementConfig,
-              impacted_tests_enabled: isImpactedTestsEnabled
+              impacted_tests_enabled: isImpactedTestsEnabled,
+              coverage_report_upload_enabled: isCoverageReportUploadEnabled
             }
           }
         } = JSON.parse(res)
@@ -121,7 +122,8 @@ function getLibraryConfiguration ({
           isTestManagementEnabled: (testManagementConfig?.enabled ?? false),
           testManagementAttemptToFixRetries:
             testManagementConfig?.attempt_to_fix_retries,
-          isImpactedTestsEnabled
+          isImpactedTestsEnabled,
+          isCoverageReportUploadEnabled
         }
 
         log.debug('Remote settings: %j', settings)

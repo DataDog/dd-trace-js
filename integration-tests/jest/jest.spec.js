@@ -5087,4 +5087,73 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     assert.doesNotMatch(testOutput, /Cannot find module/)
     assert.match(testOutput, /6 passed/)
   })
+
+  context('coverage report upload', () => {
+    it('uploads coverage reports when enabled', (done) => {
+      receiver.setCoverageReportUploadEnabled(true)
+
+      let coverageReportUploaded = false
+
+      receiver.on('message', ({ url, payload }) => {
+        if (url === '/api/v2/cicovreprt') {
+          coverageReportUploaded = true
+          assert.ok(payload.coverageReports, 'Should have coverage reports')
+          assert.ok(payload.coverageReports.length > 0, 'Should have at least one coverage report')
+          assert.ok(payload.events, 'Should have events metadata')
+          assert.ok(Array.isArray(payload.events), 'Events should be an array')
+          assert.ok(payload.events.length > 0, 'Should have at least one event')
+        }
+      })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'ci-visibility/test/ci-visibility-test'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        setTimeout(() => {
+          assert.ok(coverageReportUploaded, 'Coverage report should have been uploaded')
+          done()
+        }, 1000)
+      })
+    })
+
+    it('does not upload when feature is disabled', (done) => {
+      receiver.setCoverageReportUploadEnabled(false)
+
+      let coverageReportUploaded = false
+
+      receiver.on('message', ({ url }) => {
+        if (url === '/api/v2/cicovreprt') {
+          coverageReportUploaded = true
+        }
+      })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'ci-visibility/test/ci-visibility-test'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        setTimeout(() => {
+          assert.ok(!coverageReportUploaded, 'Coverage report should not have been uploaded')
+          done()
+        }, 1000)
+      })
+    })
+  })
 })

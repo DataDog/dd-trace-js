@@ -4522,4 +4522,70 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       ])
     })
   })
+
+  context('coverage report upload', () => {
+    it('uploads coverage reports when enabled', (done) => {
+      receiver.setCoverageReportUploadEnabled(true)
+
+      let coverageReportUploaded = false
+
+      receiver.on('message', ({ url, payload }) => {
+        if (url === '/api/v2/cicovreprt') {
+          coverageReportUploaded = true
+          assert.ok(payload.coverageReports)
+          assert.ok(payload.coverageReports.length > 0)
+        }
+      })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify(['./test/ci-visibility-test.js'])
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        setTimeout(() => {
+          assert.ok(coverageReportUploaded)
+          done()
+        }, 1000)
+      })
+    })
+
+    it('does not upload when feature is disabled', (done) => {
+      receiver.setCoverageReportUploadEnabled(false)
+
+      let coverageReportUploaded = false
+
+      receiver.on('message', ({ url }) => {
+        if (url === '/api/v2/cicovreprt') {
+          coverageReportUploaded = true
+        }
+      })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify(['./test/ci-visibility-test.js'])
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        setTimeout(() => {
+          assert.ok(!coverageReportUploaded)
+          done()
+        }, 1000)
+      })
+    })
+  })
 })
