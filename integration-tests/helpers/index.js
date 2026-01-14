@@ -467,7 +467,8 @@ async function createSandbox (
 function varySandbox (filename, variants, namedVariant, packageName = variants, byPassDefault) {
   if (typeof variants === 'string') {
     const bindingName = variants
-    if (byPassDefault && !namedVariant) throw Error('namedVariant is required when byPassing default export')
+    // Default namedVariant to bindingName when bypassing default export
+    if (byPassDefault && !namedVariant) namedVariant = bindingName
     variants = byPassDefault
       ? {
           // eslint-disable-next-line @stylistic/max-len

@@ -1,6 +1,6 @@
-import genLib from '@google/genai'
+import { GoogleGenAI } from '@google/genai'
 
-const client = new genLib.GoogleGenAI({
+const client = new GoogleGenAI({
   apiKey: process.env.GOOGLE_API_KEY,
   httpOptions: { baseUrl: 'http://127.0.0.1:9126/vcr/genai' }
 })

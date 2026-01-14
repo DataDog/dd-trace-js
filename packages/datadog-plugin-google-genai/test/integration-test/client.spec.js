@@ -29,7 +29,7 @@ describe('esm', () => {
     })
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'genLib', 'GoogleGenAI', '@google/genai')
+      variants = varySandbox('server.mjs', 'GoogleGenAI', undefined, '@google/genai', true)
     })
 
     afterEach(async () => {
@@ -37,8 +37,8 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
-      it('is instrumented', async () => {
+    for (const variant of ['destructure', 'star']) {
+      it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload))

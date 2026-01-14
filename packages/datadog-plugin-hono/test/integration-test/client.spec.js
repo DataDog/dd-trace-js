@@ -25,7 +25,7 @@ describe('esm integration test', () => {
     })
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'Hono', 'Hono', 'hono', true)
+      variants = varySandbox('server.mjs', 'Hono', undefined, 'hono', true)
     })
 
     afterEach(async () => {
