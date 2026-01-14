@@ -6,7 +6,7 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit
 } = require('../../../../integration-tests/helpers')
 const describe = globalThis.fetch ? globalThis.describe : globalThis.describe.skip
 
@@ -35,7 +35,7 @@ describe('esm', () => {
         assert.strictEqual(isFetch, true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'server.mjs', agent.port)
 
       await res
     }).timeout(50000)

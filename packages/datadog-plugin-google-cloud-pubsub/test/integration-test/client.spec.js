@@ -7,7 +7,7 @@ const {
   sandboxCwd,
   useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
@@ -34,8 +34,9 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'pubsub.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, undefined,
-        { PUBSUB_EMULATOR_HOST: 'localhost:8081' })
+      proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'server.mjs', agent.port, {
+        PUBSUB_EMULATOR_HOST: 'localhost:8081'
+      })
 
       await res
     }).timeout(20000)

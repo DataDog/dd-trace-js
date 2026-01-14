@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const {
   FakeAgent,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc,
+  spawnPluginIntegrationTestProcAndExpectExit,
   sandboxCwd,
   useSandbox,
   varySandbox
@@ -41,7 +41,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'mongodb.query'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(30000)
@@ -74,7 +74,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'mongodb.query'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(30000)

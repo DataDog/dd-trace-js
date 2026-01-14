@@ -9,6 +9,7 @@ const semver = require('semver')
 const {
   FakeAgent,
   spawnProc,
+  spawnProcAndExpectExit,
   sandboxCwd,
   useSandbox,
   curlAndAssertMessage
@@ -238,7 +239,7 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
 
     context('with unsupported module', () => {
       it('skips the unsupported module', async () => {
-        await spawnProc(unsupportedTestFile, {
+        await spawnProcAndExpectExit(unsupportedTestFile, {
           cwd,
           execArgv
         })
