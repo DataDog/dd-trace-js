@@ -7,7 +7,7 @@ const {
   sandboxCwd,
   useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit
 } = require('../../../../integration-tests/helpers')
 const version = require('../../../../version.js')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
@@ -42,7 +42,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'tedious.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'server.mjs', agent.port)
 
       await res
     }).timeout(20000)

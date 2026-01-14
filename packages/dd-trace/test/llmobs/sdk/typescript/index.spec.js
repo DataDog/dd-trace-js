@@ -8,7 +8,7 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  spawnProc
+  spawnProcAndExpectExit
 } = require('../../../../../../integration-tests/helpers')
 const { assertLlmObsSpanEvent } = require('../../util')
 
@@ -103,7 +103,7 @@ describe('typescript', () => {
             { cwd, stdio: 'inherit' }
           )
 
-          proc = await spawnProc(
+          proc = await spawnProcAndExpectExit(
             path.join(cwd, `${file}.js`),
             { cwd, env: { DD_TRACE_AGENT_PORT: agent.port, DD_TAGS: 'foo:bar, bar:baz' } }
           )

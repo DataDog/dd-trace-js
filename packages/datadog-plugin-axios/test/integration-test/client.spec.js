@@ -7,7 +7,7 @@ const {
   sandboxCwd,
   useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit
 } = require('../../../../integration-tests/helpers')
 describe('esm', () => {
   let agent
@@ -33,7 +33,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'http.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'server.mjs', agent.port)
 
       await res
     }).timeout(20000)
