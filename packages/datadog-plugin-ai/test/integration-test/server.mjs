@@ -1,5 +1,5 @@
 import assert from 'node:assert'
-import aiLib from 'ai'
+import { generateText } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 
 const openai = createOpenAI({
@@ -7,7 +7,7 @@ const openai = createOpenAI({
   apiKey: '<not-a-real-key>'
 })
 
-const result = await aiLib.generateText({
+const result = await generateText({
   model: openai('gpt-4o-mini'),
   system: 'You are a helpful assistant',
   prompt: 'Hello, OpenAI!',
