@@ -124,6 +124,8 @@ describe('Multi-Tenant Routing', () => {
       process.env.DD_API_KEY = 'test-api-key'
       process.env.DD_SITE = 'datadoghq.com'
 
+      agent.wipe()
+
       tracer = require('../../../../dd-trace')
       tracer.init({
         service: 'service',
@@ -181,18 +183,35 @@ describe('Multi-Tenant Routing', () => {
     })
 
     it('concurrent contexts are isolated', async () => {
-      await Promise.all([
-        llmobs.withRoutingContext({ ddApiKey: 'key-a', ddSite: 'site-a.com' }, async () => {
-          await new Promise(resolve => setTimeout(resolve, 10))
-          llmobs.trace({ kind: 'workflow', name: 'span-a' }, () => {})
-        }),
-        llmobs.withRoutingContext({ ddApiKey: 'key-b', ddSite: 'site-b.com' }, async () => {
-          await new Promise(resolve => setTimeout(resolve, 5))
-          llmobs.trace({ kind: 'workflow', name: 'span-b' }, () => {})
-        })
-      ])
+      let resolveA
+      let resolveB
+      const gateA = new Promise(resolve => { resolveA = resolve })
+      const gateB = new Promise(resolve => { resolveB = resolve })
+
+      const taskA = llmobs.withRoutingContext({ ddApiKey: 'key-a', ddSite: 'site-a.com' }, async () => {
+        await gateA
+        llmobs.trace({ kind: 'workflow', name: 'span-a' }, () => {})
+      })
+      const taskB = llmobs.withRoutingContext({ ddApiKey: 'key-b', ddSite: 'site-b.com' }, async () => {
+        await gateB
+        llmobs.trace({ kind: 'workflow', name: 'span-b' }, () => {})
+      })
+
+      resolveB()
+      resolveA()
+
+      await Promise.all([taskA, taskB])
 
       const calls = appendSpy.getCalls()
+
+      // explicit assertion that span-b is appended before span-a
+      const callNames = calls.map(call => call.args[0].name)
+      const spanBIndex = callNames.indexOf('span-b')
+      const spanAIndex = callNames.indexOf('span-a')
+      assert.ok(spanBIndex !== -1)
+      assert.ok(spanAIndex !== -1)
+      assert.ok(spanBIndex < spanAIndex)
+
       const routingFor = (name) => calls.find(c => c.args[0].name === name).args[1]
 
       assert.deepStrictEqual(routingFor('span-a'), { apiKey: 'key-a', site: 'site-a.com' })

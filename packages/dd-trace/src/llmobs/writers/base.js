@@ -16,6 +16,15 @@ const {
 } = require('../constants/writers')
 const { parseResponseAndLog } = require('./util')
 
+class LLMObsBuffer {
+  constructor ({ events, size, routing, isDefault }) {
+    this.events = events
+    this.size = size
+    this.routing = routing ?? {}
+    this.isDefault = isDefault ?? false
+  }
+}
+
 class BaseLLMObsWriter {
   #destroyer
   #multiTenantBuffers = new Map()
@@ -25,9 +34,8 @@ class BaseLLMObsWriter {
     this._timeout = timeout ?? getEnvironmentVariable('_DD_LLMOBS_TIMEOUT') ?? 5000 // 5s
     this._eventType = eventType
 
-    this._buffer = []
+    this._buffer = new LLMObsBuffer({ events: [], size: 0, isDefault: true })
     this._bufferLimit = 1000
-    this._bufferSize = 0
 
     this._config = config
     this._endpoint = endpoint
@@ -57,17 +65,15 @@ class BaseLLMObsWriter {
 
   _getBuffer (routing) {
     if (!routing?.apiKey) {
-      return { events: this._buffer, size: this._bufferSize, isDefault: true }
+      return this._buffer
     }
     const apiKey = routing.apiKey
-    if (!this.#multiTenantBuffers.has(apiKey)) {
-      this.#multiTenantBuffers.set(apiKey, {
-        events: [],
-        size: 0,
-        routing
-      })
+    let buffer = this.#multiTenantBuffers.get(apiKey)
+    if (!buffer) {
+      buffer = new LLMObsBuffer({ events: [], size: 0, routing })
+      this.#multiTenantBuffers.set(apiKey, buffer)
     }
-    return this.#multiTenantBuffers.get(apiKey)
+    return buffer
   }
 
   append (event, routing, byteLength) {
@@ -81,13 +87,8 @@ class BaseLLMObsWriter {
 
     const eventSize = byteLength || Buffer.byteLength(JSON.stringify(event))
 
-    if (buffer.isDefault) {
-      this._bufferSize += eventSize
-      this._buffer.push(event)
-    } else {
-      buffer.size += eventSize
-      buffer.events.push(event)
-    }
+    buffer.size += eventSize
+    buffer.events.push(event)
   }
 
   flush () {
@@ -96,10 +97,10 @@ class BaseLLMObsWriter {
     }
 
     // Flush default buffer
-    if (this._buffer.length > 0) {
-      const events = this._buffer
-      this._buffer = []
-      this._bufferSize = 0
+    if (this._buffer.events.length > 0) {
+      const events = this._buffer.events
+      this._buffer.events = []
+      this._buffer.size = 0
 
       const payload = this._encode(this.makePayload(events))
 
