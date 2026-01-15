@@ -3,6 +3,8 @@
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { discoverCoverageReports } = require('../../dd-trace/src/ci-visibility/coverage-report-discovery')
+const CoverageReportWriter = require('../../dd-trace/src/ci-visibility/exporters/agentless/coverage-report-writer')
 
 const {
   TEST_STATUS,
@@ -165,6 +167,45 @@ class JestPlugin extends CiPlugin {
       })
 
       this.tracer._exporter.flush(() => {
+        // Upload coverage reports if enabled
+        if (this.libraryConfig?.isCoverageReportUploadEnabled) {
+          log.debug('Coverage report upload is enabled, discovering reports...')
+          const reports = discoverCoverageReports(this.rootDir)
+
+          if (reports && reports.length > 0) {
+            log.debug(() => `Found ${reports.length} coverage report(s), uploading...`)
+
+            // Get the exporter's URL and EVP proxy prefix
+            const url = this.tracer._exporter._url
+            const evpProxyPrefix = this.tracer._exporter._evpProxyPrefix
+
+            // Create writer with test environment metadata as tags
+            const writer = new CoverageReportWriter({
+              url,
+              evpProxyPrefix,
+              tags: this.testEnvironmentMetadata
+            })
+
+            // Upload reports with timeout protection
+            const uploadPromise = new Promise(resolve => {
+              writer.uploadCoverageReports(reports, (err) => {
+                if (err) {
+                  log.error('Error uploading coverage reports:', err)
+                }
+                resolve()
+              })
+            })
+
+            // Use withTimeout to ensure we don't block indefinitely
+            withTimeout(uploadPromise, 30_000).then(() => {
+              if (onDone) onDone()
+            })
+            return
+          }
+          log.debug('No coverage reports found to upload')
+        }
+
+        // If not uploading or no reports found, call onDone immediately
         if (onDone) {
           onDone()
         }

@@ -131,6 +131,7 @@ module.exports = {
   testManagementAttemptToFixRetries: 20,
   isTestManagementEnabled: false,
   isImpactedTestsEnabled: false,
+  isCoverageReportUploadEnabled: true,
   logInjection: true,
   otelLogsEnabled: false,
   otelUrl: undefined,

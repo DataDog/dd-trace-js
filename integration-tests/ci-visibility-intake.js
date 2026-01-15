@@ -27,7 +27,8 @@ const DEFAULT_SETTINGS = {
   test_management: {
     enabled: false
   },
-  impacted_tests_enabled: false
+  impacted_tests_enabled: false,
+  coverage_report_upload_enabled: false
 }
 
 const DEFAULT_SUITES_TO_SKIP = []
@@ -80,6 +81,13 @@ class FakeCiVisIntake extends FakeAgent {
 
   setSettings (newSettings) {
     settings = newSettings
+  }
+
+  setCoverageReportUploadEnabled (enabled) {
+    settings = {
+      ...settings,
+      coverage_report_upload_enabled: enabled
+    }
   }
 
   setWaitingTime (newWaitingTime) {
@@ -171,6 +179,36 @@ class FakeCiVisIntake extends FakeAgent {
       this.emit('message', {
         headers: req.headers,
         payload: coveragePayloads,
+        url: req.url
+      })
+    })
+
+    app.post([
+      '/api/v2/cicovreprt',
+      '/evp_proxy/:version/api/v2/cicovreprt'
+    ], upload.any(), (req, res) => {
+      res.status(200).send('OK')
+
+      const coverageReportFiles = req.files
+        .filter((file) => file.fieldname.startsWith('coverage'))
+        .map((file) => {
+          return {
+            name: file.fieldname,
+            type: file.mimetype,
+            filename: file.originalname,
+            content: file.buffer // Coverage reports are gzipped, not msgpack
+          }
+        })
+
+      const eventFile = req.files.find((file) => file.fieldname === 'event')
+      const events = eventFile ? JSON.parse(eventFile.buffer.toString()) : []
+
+      this.emit('message', {
+        headers: req.headers,
+        payload: {
+          coverageReports: coverageReportFiles,
+          events
+        },
         url: req.url
       })
     })

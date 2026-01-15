@@ -1248,6 +1248,8 @@ class Config {
       calc.testManagementAttemptToFixRetries = maybeInt(getEnv('DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES')) ?? 20
       this.#setBoolean(calc, 'isImpactedTestsEnabled',
         !isFalse(getEnv('DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED')))
+      this.#setBoolean(calc, 'isCoverageReportUploadEnabled',
+        !isFalse(getEnv('DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED')))
     }
 
     // Disable log injection when OTEL logs are enabled

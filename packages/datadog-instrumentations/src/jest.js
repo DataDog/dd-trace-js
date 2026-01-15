@@ -64,6 +64,7 @@ let skippableSuites = []
 let knownTests = {}
 let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
+let isCoverageReportUploadEnabled = false
 let isUserCodeCoverageEnabled = false
 let isSuitesSkipped = false
 let numSkippedSuites = 0
@@ -748,6 +749,7 @@ function getCliWrapper (isNewJestVersion) {
         if (!err) {
           isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
           isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+          isCoverageReportUploadEnabled = libraryConfig.isCoverageReportUploadEnabled
           isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
           earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
           earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
@@ -1169,7 +1171,7 @@ function configureTestEnvironment (readConfigsResult) {
     log.warn("Jest's '--forceExit' flag has been passed. This may cause loss of data.")
   }
 
-  if (isCodeCoverageEnabled) {
+  if (isCodeCoverageEnabled || isCoverageReportUploadEnabled) {
     const globalConfig = {
       ...readConfigsResult.globalConfig,
       collectCoverage: true
