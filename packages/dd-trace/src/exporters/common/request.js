@@ -78,7 +78,6 @@ function request (data, options, callback) {
       chunks.push(chunk)
     })
     res.on('end', () => {
-      console.log('exporters common request - res on end decreasing activeRequest', activeRequests)
       activeRequests--
       const buffer = Buffer.concat(chunks)
 
@@ -125,7 +124,7 @@ function request (data, options, callback) {
       log.debug('Maximum number of active requests reached: payload is discarded.')
       return callback(null)
     }
-    console.log('exporters common request - increasing activeRequest', activeRequests)
+
     activeRequests++
 
     const store = storage('legacy').getStore()
@@ -135,7 +134,6 @@ function request (data, options, callback) {
     const req = client.request(options, onResponse)
 
     req.once('error', err => {
-      console.log('exporters common request - res on error decreasing activeRequest', activeRequests)
       activeRequests--
       onError(err)
     })
