@@ -3039,7 +3039,7 @@ declare namespace tracer {
        * @param fn The callback over which to apply the routing context.
        * @returns The result of the function.
        */
-      withRoutingContext<T> (options: llmobs.RoutingContextOptions, fn: () => T): T
+      routingContext<T> (options: llmobs.RoutingContextOptions, fn: () => T): T
 
       /**
        * Flushes any remaining spans and evaluation metrics to LLM Observability.

@@ -440,7 +440,7 @@ class LLMObs extends NoopLLMObs {
     return storage.run(store, fn)
   }
 
-  withRoutingContext (options, fn) {
+  routingContext (options, fn) {
     if (!this.enabled) return fn()
     if (!options?.ddApiKey) {
       throw new Error('ddApiKey is required for routing context')
