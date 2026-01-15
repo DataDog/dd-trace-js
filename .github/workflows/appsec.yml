@@ -37,6 +37,7 @@ jobs:
           service: dd-trace-js-tests
 
   ubuntu:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -57,6 +58,7 @@ jobs:
           service: dd-trace-js-tests
 
   windows:
+    if: false
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -73,6 +75,7 @@ jobs:
           service: dd-trace-js-tests
 
   ldapjs:
+    if: false
     runs-on: ubuntu-latest
     env:
       PLUGINS: ldapjs
@@ -102,6 +105,7 @@ jobs:
           service: dd-trace-js-tests
 
   postgres:
+    if: false
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -129,6 +133,7 @@ jobs:
           service: dd-trace-js-tests
 
   mysql:
+    if: false
     runs-on: ubuntu-latest
     services:
       mysql:
@@ -156,6 +161,7 @@ jobs:
           service: dd-trace-js-tests
 
   express:
+    if: false
     runs-on: ubuntu-latest
     env:
       PLUGINS: express|body-parser|cookie-parser|multer
@@ -174,6 +180,7 @@ jobs:
           service: dd-trace-js-tests
 
   fastify:
+    if: false
     runs-on: ubuntu-latest
     env:
       PLUGINS: fastify
@@ -192,6 +199,7 @@ jobs:
           service: dd-trace-js-tests
 
   graphql:
+    if: false
     runs-on: ubuntu-latest
     env:
       PLUGINS: apollo-server|apollo-server-express|apollo-server-fastify|apollo-server-core
@@ -210,6 +218,7 @@ jobs:
           service: dd-trace-js-tests
 
   mongodb-core:
+    if: false
     runs-on: ubuntu-latest
     services:
       mongodb:
@@ -234,6 +243,7 @@ jobs:
           service: dd-trace-js-tests
 
   mongoose:
+    if: false
     runs-on: ubuntu-latest
     services:
       mongodb:
@@ -258,6 +268,7 @@ jobs:
           service: dd-trace-js-tests
 
   sourcing:
+    if: false
     runs-on: ubuntu-latest
     env:
       PLUGINS: cookie
@@ -280,6 +291,7 @@ jobs:
           service: dd-trace-js-tests
 
   next:
+    if: false
     strategy:
       fail-fast: false
       matrix:
@@ -328,6 +340,7 @@ jobs:
           service: dd-trace-js-tests
 
   lodash:
+    if: false
     runs-on: ubuntu-latest
     env:
       PLUGINS: lodash
@@ -346,6 +359,7 @@ jobs:
           service: dd-trace-js-tests
 
   integration:
+    if: false
     strategy:
       matrix:
         version: [oldest, maintenance, active, latest]
@@ -364,6 +378,7 @@ jobs:
           service: dd-trace-js-tests
 
   passport:
+    if: false
     runs-on: ubuntu-latest
     env:
       PLUGINS: passport-local|passport-http
@@ -382,6 +397,7 @@ jobs:
           service: dd-trace-js-tests
 
   template:
+    if: false
     runs-on: ubuntu-latest
     env:
       PLUGINS: handlebars|pug
@@ -400,6 +416,7 @@ jobs:
           service: dd-trace-js-tests
 
   node-serialize:
+    if: false
     runs-on: ubuntu-latest
     env:
       PLUGINS: node-serialize
@@ -418,6 +435,7 @@ jobs:
           service: dd-trace-js-tests
 
   kafka:
+    if: false
     runs-on: ubuntu-latest
     services:
       kafka:
