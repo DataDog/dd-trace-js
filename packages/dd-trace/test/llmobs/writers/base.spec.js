@@ -221,6 +221,19 @@ describe('BaseLLMObsWriter', () => {
       assert.strictEqual(requestOptions.path, '/evp_proxy/v2/endpoint')
     })
 
+    it('warns when routing is used in agent proxy mode', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(false)
+
+      writer.append({ foo: 'bar' }, { apiKey: 'key-a', site: 'site-a.com' })
+
+      sinon.assert.calledOnce(logger.warn)
+      sinon.assert.calledWith(
+        logger.warn,
+        '[LLM Observability] Routing context is only supported in agentless mode. Spans will be sent to the configured agent org.'
+      )
+    })
+
     it('does not flush when agentless property is not set', () => {
       writer = new BaseLLMObsWriter(options)
       writer.makePayload = (events) => ({ events })
