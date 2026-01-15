@@ -923,18 +923,10 @@ function main () {
   // All :ci scripts should be referenced by CI.
   for (const name of Object.keys(scripts).sort((a, b) => a.localeCompare(b, 'en'))) {
     if (!name.endsWith(':ci')) continue
-    if (!invokedScripts.has(name)) {
-      pushError(`package.json: script "${name}" is not invoked by any GitHub Actions workflow`)
-    }
-  }
-
-  // All test:integration* scripts should be referenced by CI (except test:integration:plugins).
-  for (const name of Object.keys(scripts).sort((a, b) => a.localeCompare(b, 'en'))) {
-    if (!name.startsWith('test:integration')) continue
-    // Skip test:integration:plugins - it's a convenience script for running only plugin integration
+    // Skip test:integration:plugins:ci - it's a convenience script for running only plugin integration
     // tests locally, but in CI these are already covered by test:plugins:ci (which runs all plugin
     // tests including integration tests).
-    if (name === 'test:integration:plugins') continue
+    if (name === 'test:integration:plugins:ci') continue
     if (!invokedScripts.has(name)) {
       pushError(`package.json: script "${name}" is not invoked by any GitHub Actions workflow`)
     }

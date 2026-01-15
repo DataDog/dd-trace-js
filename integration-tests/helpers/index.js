@@ -3,7 +3,7 @@
 const assert = require('assert')
 const childProcess = require('child_process')
 const { execSync, fork, spawn } = childProcess
-const { existsSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
+const { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
 const fs = require('fs/promises')
 const http = require('http')
 const { builtinModules } = require('module')
@@ -18,6 +18,9 @@ const { BUN, withBun } = require('./bun')
 
 const sandboxRoot = path.join(os.tmpdir(), id().toString())
 const hookFile = 'dd-trace/loader-hook.mjs'
+const COVERAGE_ENABLED_ENV = 'INTEGRATION_COVERAGE'
+const COVERAGE_DIR_ENV = 'INTEGRATION_COVERAGE_DIR'
+const COVERAGE_NAME_ENV = 'INTEGRATION_COVERAGE_NAME'
 
 const { DEBUG } = process.env
 
@@ -29,6 +32,91 @@ const ANY_STRING = Symbol('test.ANY_STRING')
 const ANY_NUMBER = Symbol('test.ANY_NUMBER')
 const ANY_VALUE = Symbol('test.ANY_VALUE')
 
+const INHERITED_ENV_KEYS = [
+  'HOME',
+  'PATH',
+  'NODE_OPTIONS',
+  'NODE_PATH',
+  'TMPDIR',
+  'TEMP',
+  'TMP'
+]
+
+function isIntegrationCoverageEnabled () {
+  const value = process.env[COVERAGE_ENABLED_ENV]
+  return value === '1' || value === 'true'
+}
+
+function getIntegrationCoverageDir () {
+  if (process.env[COVERAGE_DIR_ENV]) {
+    return process.env[COVERAGE_DIR_ENV]
+  }
+  const name = process.env[COVERAGE_NAME_ENV] || 'integration'
+  const dir = path.join(process.cwd(), '.coverage', 'integration-v8', name)
+  process.env[COVERAGE_DIR_ENV] = dir
+  return dir
+}
+
+/**
+ * @param {NodeJS.ProcessEnv} env
+ */
+function applyIntegrationCoverageEnv (env) {
+  if (!isIntegrationCoverageEnabled() || env.NODE_V8_COVERAGE) {
+    return env
+  }
+  const dir = getIntegrationCoverageDir()
+  mkdirSync(dir, { recursive: true })
+  env.NODE_V8_COVERAGE = dir
+  return env
+}
+
+/**
+ * Remove nyc preload hooks from child process NODE_OPTIONS to avoid instrumentation side effects.
+ * @param {NodeJS.ProcessEnv} env
+ */
+function stripNycNodeOptions (env) {
+  if (!env.NODE_OPTIONS || !env.NODE_OPTIONS.includes('nyc')) return env
+  let cleaned = env.NODE_OPTIONS
+  cleaned = cleaned.replace(/--require\s+\S*nyc[\\/](?:lib[\\/])?register-env\.js/g, '')
+  cleaned = cleaned.replace(/--require\s+\S*nyc[\\/](?:lib[\\/])?wrap\.js/g, '')
+  cleaned = cleaned.replace(/\s+/g, ' ').trim()
+  if (cleaned) {
+    env.NODE_OPTIONS = cleaned
+  } else {
+    delete env.NODE_OPTIONS
+  }
+  return env
+}
+
+/**
+ * @param {NodeJS.ProcessEnv} env
+ */
+function normalizeEnvValues (env) {
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) {
+      delete env[key]
+      continue
+    }
+    if (typeof value !== 'string') {
+      env[key] = String(value)
+    }
+  }
+  return env
+}
+
+/**
+ * @param {NodeJS.ProcessEnv} env
+ */
+function buildInheritedEnv (env) {
+  const inherited = {}
+  for (const key of INHERITED_ENV_KEYS) {
+    if (env[key] !== undefined) {
+      inherited[key] = env[key]
+    }
+  }
+  return inherited
+}
+
 /**
  * @param {string} filename
  * @param {string} cwd
@@ -36,7 +124,8 @@ const ANY_VALUE = Symbol('test.ANY_VALUE')
  * @param {string} expectedSource
  */
 async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
-  const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
+  const env = normalizeEnvValues(stripNycNodeOptions(applyIntegrationCoverageEnv({ ...process.env })))
+  const proc = spawn(process.execPath, [filename], { cwd, env, stdio: 'pipe' })
   assert(proc.pid !== undefined, 'Process PID is not available')
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
@@ -271,8 +360,11 @@ function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHan
  * @returns {SpawnedProcess}
  */
 function spawnProcImpl (filename, options, stdioHandler, stderrHandler) {
+  const baseEnv = options.env ? buildInheritedEnv(process.env) : { ...process.env }
+  const mergedEnv = { ...baseEnv, ...options.env }
+  const env = normalizeEnvValues(stripNycNodeOptions(applyIntegrationCoverageEnv(mergedEnv)))
   // Cast to SpawnedProcess type - when stdio is 'pipe', stdout/stderr are guaranteed non-null
-  const proc = /** @type {SpawnedProcess} */ (fork(filename, { ...options, stdio: 'pipe' }))
+  const proc = /** @type {SpawnedProcess} */ (fork(filename, { ...options, env, stdio: 'pipe' }))
 
   proc.stdout.on('data', data => {
     if (stdioHandler) {

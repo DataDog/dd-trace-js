@@ -29,7 +29,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:profiler:ci
-      - run: yarn test:integration:profiler
+      - run: yarn test:integration:profiler:ci
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: profiling-macos
@@ -46,16 +46,16 @@ jobs:
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:profiler:ci
-      - run: yarn test:integration:profiler
+      - run: yarn test:integration:profiler:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
       - run: yarn test:profiler:ci
-      - run: yarn test:integration:profiler
+      - run: yarn test:integration:profiler:ci
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:profiler:ci
-      - run: yarn test:integration:profiler
+      - run: yarn test:integration:profiler:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:profiler:ci
-      - run: yarn test:integration:profiler
+      - run: yarn test:integration:profiler:ci
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: profiling-ubuntu
@@ -74,7 +74,7 @@ jobs:
         with:
           cache: 'true'
       - run: yarn test:profiler:ci
-      - run: yarn test:integration:profiler
+      - run: yarn test:integration:profiler:ci
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: profiling-windows
