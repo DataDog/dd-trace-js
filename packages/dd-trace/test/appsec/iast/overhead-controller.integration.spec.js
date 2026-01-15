@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 
+const { setTimeout } = require('node:timers/promises')
 const path = require('path')
 const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
@@ -41,6 +42,7 @@ describe('IAST - overhead-controller - integration', () => {
         }
       })
       axios = Axios.create({ baseURL: proc.url })
+      await setTimeout(500)
     })
 
     async function checkVulnerabilitiesInEndpoint (path, vulnerabilitiesAndCount, method = 'GET') {
