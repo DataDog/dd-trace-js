@@ -3,12 +3,11 @@
 const assert = require('node:assert/strict')
 const http = require('node:http')
 const zlib = require('node:zlib')
-
+const { setTimeout: delay } = require('node:timers/promises')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const nock = require('nock')
 const proxyquire = require('proxyquire')
-const { setTimeout: delay } = require('node:timers/promises')
 
 require('../../setup/core')
 const FormData = require('../../../src/exporters/common/form-data')
