@@ -388,6 +388,7 @@ module.exports = class CiPlugin extends Plugin {
 
     const exporter = this.config.experimental?.exporter
     const workerTestFramework = WORKER_EXPORTER_TO_TEST_FRAMEWORK[exporter]
+    console.log('ci plugin - worker test fw', workerTestFramework, TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION.has(workerTestFramework))
     this.shouldSkipGitMetadataExtraction = workerTestFramework &&
       TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION.has(workerTestFramework)
 

@@ -132,7 +132,6 @@ function request (data, options, callback) {
 
     storage('legacy').enterWith({ noop: true })
 
-    console.log('exporters common request - doing req', options.path, options.headers)
     const req = client.request(options, onResponse)
 
     req.once('error', err => {
@@ -166,7 +165,6 @@ function byteLength (data) {
 
 Object.defineProperty(request, 'writable', {
   get () {
-    console.log('request writable', activeRequests, maxActiveRequests)
     return activeRequests < maxActiveRequests
   }
 })
