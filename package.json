@@ -126,8 +126,10 @@
     "version.js"
   ],
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "dc-polyfill": "^0.1.10",
-    "import-in-the-middle": "2.0.0"
+    "import-in-the-middle": "2.0.0",
+    "zod": "^4.3.5"
   },
   "optionalDependencies": {
     "@datadog/libdatadog": "0.7.0",
