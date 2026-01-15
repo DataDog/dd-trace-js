@@ -157,9 +157,9 @@ describe('BaseLLMObsWriter', () => {
     const event = { foo: 'bar–' }
     writer.append(event)
 
-    assert.strictEqual(writer._buffer.length, 1)
-    assert.deepStrictEqual(writer._buffer[0], event)
-    assert.strictEqual(writer._bufferSize, 16)
+    assert.strictEqual(writer._buffer.events.length, 1)
+    assert.deepStrictEqual(writer._buffer.events[0], event)
+    assert.strictEqual(writer._buffer.size, 16)
   })
 
   it('does not append an event if the buffer is full', () => {
@@ -171,7 +171,7 @@ describe('BaseLLMObsWriter', () => {
     }
 
     writer.append({ foo: 'bar' })
-    assert.strictEqual(writer._buffer.length, 1000)
+    assert.strictEqual(writer._buffer.events.length, 1000)
     sinon.assert.calledWith(logger.warn, 'BaseLLMObsWriter event buffer full (limit is 1000), dropping event')
   })
 
@@ -215,8 +215,8 @@ describe('BaseLLMObsWriter', () => {
       writer.flush()
 
       sinon.assert.notCalled(request)
-      assert.strictEqual(writer._buffer.length, 1)
-      assert.deepStrictEqual(writer._buffer[0], event)
+      assert.strictEqual(writer._buffer.events.length, 1)
+      assert.deepStrictEqual(writer._buffer.events[0], event)
 
       writer.setAgentless(true)
       writer.flush()
