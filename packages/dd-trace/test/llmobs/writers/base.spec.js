@@ -230,7 +230,8 @@ describe('BaseLLMObsWriter', () => {
       sinon.assert.calledOnce(logger.warn)
       sinon.assert.calledWith(
         logger.warn,
-        '[LLM Observability] Routing context is only supported in agentless mode. Spans will be sent to the configured agent org.'
+        '[LLM Observability] Routing context is only supported in agentless mode. ' +
+        'Spans will be sent to the configured agent org.'
       )
     })
 
