@@ -42,7 +42,7 @@ describe('IAST - overhead-controller - integration', () => {
         }
       })
       axios = Axios.create({ baseURL: proc.url })
-      await setTimeout(500)
+      //await setTimeout(500)
     })
 
     async function checkVulnerabilitiesInEndpoint (path, vulnerabilitiesAndCount, method = 'GET') {

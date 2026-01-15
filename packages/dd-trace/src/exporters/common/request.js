@@ -131,6 +131,7 @@ function request (data, options, callback) {
 
     storage('legacy').enterWith({ noop: true })
 
+    console.log('***** exporters common request - doing req', options.path, options.headers)
     const req = client.request(options, onResponse)
 
     req.once('error', err => {
