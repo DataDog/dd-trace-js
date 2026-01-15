@@ -8,6 +8,8 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const AgentInfoExporter = require('../../src/exporters/common/agent-info-exporter')
+const { removeDestroyHandler } = require('./util')
+
 const spanFinishCh = channel('dd-trace:span:finish')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
@@ -49,12 +51,7 @@ describe('module', () => {
       }
     })
 
-    for (const handler of globalThis[Symbol.for('dd-trace')].beforeExitHandlers) {
-      if (handler.name.endsWith('destroy')) {
-        globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(handler)
-        break
-      }
-    }
+    removeDestroyHandler()
   })
 
   afterEach(() => {

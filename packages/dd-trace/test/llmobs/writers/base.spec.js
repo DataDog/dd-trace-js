@@ -8,6 +8,7 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 const { useEnv } = require('../../../../../integration-tests/helpers')
+const { removeDestroyHandler } = require('../util')
 
 describe('BaseLLMObsWriter', () => {
   let BaseLLMObsWriter
@@ -50,12 +51,7 @@ describe('BaseLLMObsWriter', () => {
 
   afterEach(() => {
     clock.restore()
-    for (const handler of globalThis[Symbol.for('dd-trace')].beforeExitHandlers) {
-      if (handler.name.endsWith('destroy')) {
-        globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(handler)
-        break
-      }
-    }
+    removeDestroyHandler()
   })
 
   it('constructs an agentless writer', () => {

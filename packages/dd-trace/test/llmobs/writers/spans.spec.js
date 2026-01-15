@@ -6,6 +6,8 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { removeDestroyHandler } = require('../util')
+
 describe('LLMObsSpanWriter', () => {
   let LLMObsSpanWriter
   let writer
@@ -28,12 +30,7 @@ describe('LLMObsSpanWriter', () => {
   })
 
   afterEach(() => {
-    for (const handler of globalThis[Symbol.for('dd-trace')].beforeExitHandlers) {
-      if (handler.name.endsWith('destroy')) {
-        globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(handler)
-        break
-      }
-    }
+    removeDestroyHandler()
   })
 
   it('is initialized correctly', () => {

@@ -179,10 +179,10 @@ const log = require('../log')
 
 ### Event handlers
 
+- Avoid adding new listeners, if possible
 - Use monitor symbols like `events.errorMonitor` when available
 - Use `.once()` methods instead of `.on()`, if the event is only needed once
-- Limit event additions to the absolute minimum required
-- If new 'beforeExit' events on `process` are needed, add them to globalThis[Symbol.for('dd-trace')].beforeExitHandlers
+- If new `beforeExit` events on `process` are needed, add them to `globalThis[Symbol.for('dd-trace')].beforeExitHandlers`
 
 ### Performance and Memory
 

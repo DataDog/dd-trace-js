@@ -5,6 +5,8 @@ const assert = require('node:assert/strict')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { removeDestroyHandler } = require('../util')
+
 describe('LLMObsEvalMetricsWriter', () => {
   let LLMObsEvalMetricsWriter
   let writer
@@ -16,12 +18,7 @@ describe('LLMObsEvalMetricsWriter', () => {
   })
 
   afterEach(() => {
-    for (const handler of globalThis[Symbol.for('dd-trace')].beforeExitHandlers) {
-      if (handler.name.endsWith('destroy')) {
-        globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(handler)
-        break
-      }
-    }
+    removeDestroyHandler()
   })
 
   it('constructs the url with the correct values', () => {
