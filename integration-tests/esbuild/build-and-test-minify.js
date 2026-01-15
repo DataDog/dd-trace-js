@@ -3,8 +3,6 @@
 
 /* eslint-disable no-console */
 
-process.env.DD_TRACE_DEBUG = 'true'
-
 const fs = require('fs')
 const assert = require('assert')
 
