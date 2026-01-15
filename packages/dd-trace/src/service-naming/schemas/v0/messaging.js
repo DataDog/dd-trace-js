@@ -51,6 +51,10 @@ const messaging = {
     bullmq: {
       opName: () => 'bullmq.add',
       serviceName: ({ tracerService }) => `${tracerService}-bullmq`
+    },
+    'bee-queue': {
+      opName: () => 'bee-queue.send',
+      serviceName: identityService
     }
   },
   consumer: {
@@ -85,6 +89,10 @@ const messaging = {
     bullmq: {
       opName: () => 'bullmq.processJob',
       serviceName: ({ tracerService }) => `${tracerService}-bullmq`
+    },
+    'bee-queue': {
+      opName: () => 'bee-queue.process',
+      serviceName: identityService
     }
   },
   client: {

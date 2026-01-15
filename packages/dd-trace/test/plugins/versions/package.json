@@ -84,6 +84,7 @@
     "aws-sdk": "2.1692.0",
     "axios": "1.13.2",
     "azure-functions-core-tools": "4.4.0",
+    "bee-queue": "2.0.0",
     "bluebird": "3.7.2",
     "body-parser": "2.2.0",
     "bson": "7.0.0",

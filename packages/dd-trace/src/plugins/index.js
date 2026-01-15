@@ -39,6 +39,7 @@ const plugins = {
   get amqplib () { return require('../../../datadog-plugin-amqplib/src') },
   get avsc () { return require('../../../datadog-plugin-avsc/src') },
   get 'aws-sdk' () { return require('../../../datadog-plugin-aws-sdk/src') },
+  get 'bee-queue' () { return require('../../../datadog-plugin-bee-queue/src') },
   get bullmq () { return require('../../../datadog-plugin-bullmq/src') },
   get bunyan () { return require('../../../datadog-plugin-bunyan/src') },
   get 'cassandra-driver' () { return require('../../../datadog-plugin-cassandra-driver/src') },

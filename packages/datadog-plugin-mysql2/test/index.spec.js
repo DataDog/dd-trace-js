@@ -622,6 +622,94 @@ describe('Plugin', () => {
           })
         })
       })
+
+      // Issue #7044
+      describe('with mysql2/promise and appsec abort', () => {
+        let pool
+        let mysql2Promise
+        let abortSubscriber
+
+        afterEach(async function () {
+          // Unsubscribe from abort channel
+          if (abortSubscriber) {
+            const dc = require('node:diagnostics_channel')
+            const startOuterQueryCh = dc.channel('datadog:mysql2:outerquery:start')
+            startOuterQueryCh.unsubscribe(abortSubscriber)
+            abortSubscriber = null
+          }
+
+          if (pool) {
+            await pool.end()
+            pool = null
+          }
+
+          await agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async function () {
+          await agent.load('mysql2')
+          mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
+
+          // Try to load mysql2/promise - skip if not available (very old mysql2 versions)
+          try {
+            const mysql2VersionWrapper = proxyquire(`../../../versions/mysql2@${version}`, {})
+            mysql2Promise = mysql2VersionWrapper.get('mysql2/promise')
+          } catch (e) {
+            this.skip()
+            return
+          }
+
+          pool = mysql2Promise.createPool({
+            connectionLimit: 1,
+            host: '127.0.0.1',
+            user: 'root',
+            database: 'db'
+          })
+
+          // Subscribe to the abort channel to trigger abort behavior
+          const dc = require('node:diagnostics_channel')
+          const startOuterQueryCh = dc.channel('datadog:mysql2:outerquery:start')
+          abortSubscriber = ({ abortController }) => {
+            abortController.abort(new Error('RASP blocked query'))
+          }
+          startOuterQueryCh.subscribe(abortSubscriber)
+        })
+
+        it('should return a rejected Promise when abort is triggered on pool.query()', async () => {
+          // Issue #7044: When using mysql2/promise and appsec abort is triggered,
+          // the instrumentation should return a rejected Promise, not a callback-style Query object
+
+          let caughtError
+          try {
+            await pool.query('SELECT 1 + 1 AS solution')
+          } catch (err) {
+            caughtError = err
+          }
+
+          // Expected behavior: Should catch the abort error
+          assert.ok(caughtError, 'Expected an error to be thrown')
+          assert.strictEqual(caughtError.message, 'RASP blocked query',
+            'Should receive the abort error, not a .then() TypeError')
+        })
+
+        it('should return a rejected Promise when abort is triggered on connection.query()', async () => {
+          const connection = await pool.getConnection()
+
+          let caughtError
+          try {
+            await connection.query('SELECT 1 + 1 AS solution')
+          } catch (err) {
+            caughtError = err
+          } finally {
+            connection.release()
+          }
+
+          // Expected behavior: Should catch the abort error
+          assert.ok(caughtError, 'Expected an error to be thrown')
+          assert.strictEqual(caughtError.message, 'RASP blocked query',
+            'Should receive the abort error, not a .then() TypeError')
+        })
+      })
     })
   })
 })

@@ -1,5 +1,6 @@
 'use strict'
 
+// eslint-disable-next-line n/no-extraneous-require
 require('dd-trace').init()
 
 const express = require('express')
