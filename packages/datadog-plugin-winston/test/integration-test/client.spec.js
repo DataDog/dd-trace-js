@@ -34,7 +34,7 @@ describe('esm', () => {
     })
 
     for (const variant of varySandbox.VARIANTS) {
-      it('is instrumented', async () => {
+      it(`is instrumented ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),
           variants[variant],

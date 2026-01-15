@@ -34,7 +34,7 @@ describe('esm integration test', () => {
     })
 
     for (const variant of ['destructure', 'star']) {
-      it('is instrumented', async () => {
+      it(`is instrumented ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, {
           VERSION: version
         })

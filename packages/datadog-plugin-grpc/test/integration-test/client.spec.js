@@ -28,7 +28,8 @@ describe('esm', () => {
     })
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'grpc', undefined, '@grpc/grpc-js')
+      variants = varySandbox('server.mjs', 'grpc', 'loadPackageDefinition, Server, ServerCredentials, credentials',
+        '@grpc/grpc-js')
     })
 
     afterEach(async () => {

@@ -23,7 +23,7 @@ describe('esm', () => {
   })
 
   before(async function () {
-    variants = varySandbox('server.mjs', 'http')
+    variants = varySandbox('server.mjs', 'http', 'createServer')
   })
 
   afterEach(async () => {

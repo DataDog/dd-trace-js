@@ -25,7 +25,8 @@ describe('esm', () => {
     })
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'graphql')
+      variants = varySandbox('server.mjs', 'graphqlLib', 'GraphQLSchema, GraphQLString, graphql, GraphQLObjectType',
+        'graphql')
     })
 
     afterEach(async () => {
@@ -34,7 +35,7 @@ describe('esm', () => {
     })
 
     for (const variant of varySandbox.VARIANTS) {
-      it('is instrumented', async () => {
+      it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload))

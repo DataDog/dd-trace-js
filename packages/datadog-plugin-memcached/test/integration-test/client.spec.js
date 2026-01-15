@@ -30,7 +30,7 @@ describe('esm', () => {
     })
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'Memcached', null, 'memcached')
+      variants = varySandbox('server.mjs', 'Memcached', undefined, 'memcached')
     })
 
     for (const variant of varySandbox.VARIANTS) {

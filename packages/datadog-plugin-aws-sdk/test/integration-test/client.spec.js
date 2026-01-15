@@ -25,7 +25,7 @@ describe('esm', () => {
     })
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'AWS', null, 'aws-sdk')
+      variants = varySandbox('server.mjs', 'AWS', undefined, 'aws-sdk')
     })
 
     afterEach(async () => {

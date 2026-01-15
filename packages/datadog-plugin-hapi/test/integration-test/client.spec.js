@@ -28,7 +28,7 @@ describe('esm', () => {
     })
 
     before(async () => {
-      variants = varySandbox('server.mjs', 'Hapi', undefined, '@hapi/hapi')
+      variants = varySandbox('server.mjs', 'Hapi', 'server', '@hapi/hapi')
     })
 
     afterEach(async () => {
@@ -37,7 +37,7 @@ describe('esm', () => {
     })
 
     for (const variant of varySandbox.VARIANTS) {
-      it('is instrumented', async () => {
+      it(`is instrumented ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {

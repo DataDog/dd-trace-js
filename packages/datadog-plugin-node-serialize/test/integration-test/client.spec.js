@@ -15,7 +15,7 @@ withVersions('node-serialize', 'node-serialize', version => {
       ['./packages/datadog-plugin-node-serialize/test/integration-test/*'])
 
     before(function () {
-      variants = varySandbox('server.mjs', 'lib', undefined, 'node-serialize')
+      variants = varySandbox('server.mjs', 'lib', 'unserialize, serialize', 'node-serialize')
     })
 
     beforeEach(async () => {

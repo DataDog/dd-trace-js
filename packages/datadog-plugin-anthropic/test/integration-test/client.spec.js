@@ -30,7 +30,7 @@ describe('esm', () => {
     })
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'Anthropic', null, '@anthropic-ai/sdk')
+      variants = varySandbox('server.mjs', 'Anthropic', undefined, '@anthropic-ai/sdk')
     })
 
     afterEach(async () => {
@@ -39,7 +39,7 @@ describe('esm', () => {
     })
 
     for (const variant of varySandbox.VARIANTS) {
-      it('is instrumented', async () => {
+      it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload))

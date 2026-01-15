@@ -31,11 +31,11 @@ describe('esm', () => {
     })
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'Koa', null, 'koa')
+      variants = varySandbox('server.mjs', 'Koa', undefined, 'koa')
     })
 
     for (const variant of varySandbox.VARIANTS) {
-      it('is instrumented', async () => {
+      it(`is instrumented ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
