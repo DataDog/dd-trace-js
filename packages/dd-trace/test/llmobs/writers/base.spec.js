@@ -208,7 +208,7 @@ describe('BaseLLMObsWriter', () => {
       assert.strictEqual(requestOptions.headers['X-Datadog-EVP-Subdomain'], 'intake')
     })
 
-    it('flushes to the agent proxy when routing is provided', () => {
+    it('flushes routed buffers directly to intake in agent proxy mode', () => {
       writer = new BaseLLMObsWriter(options)
       writer.setAgentless(false)
       writer.makePayload = (events) => ({ events })
@@ -217,22 +217,9 @@ describe('BaseLLMObsWriter', () => {
       writer.flush()
 
       const requestOptions = request.getCall(0).args[1]
-      assert.strictEqual(requestOptions.url.href, 'http://localhost:8126/')
-      assert.strictEqual(requestOptions.path, '/evp_proxy/v2/endpoint')
-    })
-
-    it('warns when routing is used in agent proxy mode', () => {
-      writer = new BaseLLMObsWriter(options)
-      writer.setAgentless(false)
-
-      writer.append({ foo: 'bar' }, { apiKey: 'key-a', site: 'site-a.com' })
-
-      sinon.assert.calledOnce(logger.warn)
-      sinon.assert.calledWith(
-        logger.warn,
-        '[LLM Observability] Routing context is only supported in agentless mode. ' +
-        'Spans will be sent to the configured agent org.'
-      )
+      assert.strictEqual(requestOptions.url.href, 'https://intake.site-a.com/')
+      assert.strictEqual(requestOptions.path, '/endpoint')
+      assert.strictEqual(requestOptions.headers['DD-API-KEY'], 'key-a')
     })
 
     it('does not flush when agentless property is not set', () => {

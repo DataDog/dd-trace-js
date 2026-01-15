@@ -17,29 +17,36 @@ const {
 const { parseResponseAndLog } = require('./util')
 
 class LLMObsBuffer {
-  constructor ({ events, size, routing, isDefault }) {
+  constructor ({ events, size, routing = {}, isDefault = false, limit = 1000 }) {
     this.events = events
     this.size = size
-    this.routing = routing ?? {}
-    this.isDefault = isDefault ?? false
+    this.routing = routing
+    this.isDefault = isDefault
+    this.limit = limit
+  }
+
+  clear () {
+    this.events = []
+    this.size = 0
   }
 }
 
 class BaseLLMObsWriter {
   #destroyer
+  /** @type {Map<string, LLMObsBuffer>} */
   #multiTenantBuffers = new Map()
-  #routingContextAgentModeWarned = false
 
   constructor ({ interval, timeout, eventType, config, endpoint, intake }) {
     this._interval = interval ?? getEnvironmentVariable('_DD_LLMOBS_FLUSH_INTERVAL') ?? 1000 // 1s
     this._timeout = timeout ?? getEnvironmentVariable('_DD_LLMOBS_TIMEOUT') ?? 5000 // 5s
     this._eventType = eventType
 
+    /** @type {LLMObsBuffer} */
     this._buffer = new LLMObsBuffer({ events: [], size: 0, isDefault: true })
-    this._bufferLimit = 1000
 
     this._config = config
     this._endpoint = endpoint
+    this._baseEndpoint = endpoint // should not be unset
     this._intake = intake
 
     this._periodic = setInterval(() => {
@@ -78,17 +85,10 @@ class BaseLLMObsWriter {
   }
 
   append (event, routing, byteLength) {
-    if (routing?.apiKey && this._agentless === false && !this.#routingContextAgentModeWarned) {
-      this.#routingContextAgentModeWarned = true
-      logger.warn(
-        '[LLM Observability] Routing context is only supported in agentless mode. ' +
-        'Spans will be sent to the configured agent org.'
-      )
-    }
     const buffer = this._getBuffer(routing)
 
-    if (buffer.events.length >= this._bufferLimit) {
-      logger.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
+    if (buffer.events.length >= buffer.limit) {
+      logger.warn(`${this.constructor.name} event buffer full (limit is ${buffer.limit}), dropping event`)
       telemetry.recordDroppedPayload(1, this._eventType, 'buffer_full')
       return
     }
@@ -107,8 +107,7 @@ class BaseLLMObsWriter {
     // Flush default buffer
     if (this._buffer.events.length > 0) {
       const events = this._buffer.events
-      this._buffer.events = []
-      this._buffer.size = 0
+      this._buffer.clear()
 
       const payload = this._encode(this.makePayload(events))
 
@@ -126,12 +125,24 @@ class BaseLLMObsWriter {
       if (buffer.events.length === 0) continue
 
       const events = buffer.events
-      buffer.events = []
-      buffer.size = 0
+      buffer.clear()
 
       const payload = this._encode(this.makePayload(events))
-      const options = this._agentless ? this._getOptions(buffer.routing) : this._getOptions()
-      const url = this._agentless ? this.#getUrlForRouting(buffer.routing) : this.url
+      const site = buffer.routing.site || this._config.site
+      const options = {
+        headers: {
+          'Content-Type': 'application/json',
+          'DD-API-KEY': apiKey
+        },
+        method: 'POST',
+        timeout: this._timeout,
+        url: new URL(format({
+          protocol: 'https:',
+          hostname: `${this._intake}.${site}`
+        })),
+        path: this._baseEndpoint
+      }
+      const url = this.#buildUrl(options.url.href, options.path)
       const maskedApiKey = apiKey ? `****${apiKey.slice(-4)}` : ''
 
       log.debug('Encoding and flushing multi-tenant buffer for %s', maskedApiKey)
@@ -143,11 +154,6 @@ class BaseLLMObsWriter {
     }
 
     this.#cleanupEmptyBuffers()
-  }
-
-  #getUrlForRouting (routing) {
-    const { url, endpoint } = this._getUrlAndPath(routing)
-    return this.#buildUrl(url.href, endpoint)
   }
 
   #cleanupEmptyBuffers () {
@@ -180,9 +186,9 @@ class BaseLLMObsWriter {
     logger.debug(`Configuring ${this.constructor.name} to ${this.url}`)
   }
 
-  _getUrlAndPath (routing) {
+  _getUrlAndPath () {
     if (this._agentless) {
-      const site = routing?.site || this._config.site
+      const site = this._config.site
       return {
         url: new URL(format({
           protocol: 'https:',
@@ -209,24 +215,19 @@ class BaseLLMObsWriter {
     }
   }
 
-  _getOptions (routing) {
-    const useRouting = this._agentless && routing
-    const { url, endpoint } = useRouting
-      ? this._getUrlAndPath(routing)
-      : { url: this._baseUrl, endpoint: this._endpoint }
-
+  _getOptions () {
     const options = {
       headers: {
         'Content-Type': 'application/json'
       },
       method: 'POST',
       timeout: this._timeout,
-      url,
-      path: endpoint
+      url: this._baseUrl,
+      path: this._endpoint
     }
 
     if (this._agentless) {
-      options.headers['DD-API-KEY'] = routing?.apiKey || this._config.apiKey || ''
+      options.headers['DD-API-KEY'] = this._config.apiKey || ''
     } else {
       options.headers[EVP_SUBDOMAIN_HEADER_NAME] = this._intake
     }
