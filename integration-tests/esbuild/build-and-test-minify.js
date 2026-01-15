@@ -11,11 +11,11 @@ const assert = require('assert')
 const esbuild = require('esbuild')
 const ddPlugin = require('../../esbuild') // dd-trace/esbuild
 
-const consoleWarn = console.warn
+const emitWarning = process.emitWarning
 let didWarn = false
-console.warn = function (message) {
-  console.error(message) // print something just so that we're not hiding any underlying issues
-  if (message.includes('--minify') && message.includes('--keep-names')) {
+process.emitWarning = function (...args) {
+  emitWarning(...args) // print something just so that we're not hiding any underlying issues
+  if (args[1]?.code === 'DATADOG_0001') {
     didWarn = true
   }
 }
@@ -39,6 +39,6 @@ esbuild.build({
   console.error(err)
   process.exit(1)
 }).finally(() => {
-  console.warn = consoleWarn
+  process.emitWarning = emitWarning
   fs.rmSync('./minify-out.js', { force: true })
 })
