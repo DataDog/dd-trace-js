@@ -27,6 +27,7 @@ class LLMObsBuffer {
 
 class BaseLLMObsWriter {
   #multiTenantBuffers = new Map()
+  #routingContextAgentModeWarned = false
 
   constructor ({ interval, timeout, eventType, config, endpoint, intake }) {
     this._interval = interval ?? getEnvironmentVariable('_DD_LLMOBS_FLUSH_INTERVAL') ?? 1000 // 1s
@@ -78,6 +79,13 @@ class BaseLLMObsWriter {
   }
 
   append (event, routing, byteLength) {
+    if (routing?.apiKey && this._agentless === false && !this.#routingContextAgentModeWarned) {
+      this.#routingContextAgentModeWarned = true
+      logger.warn(
+        '[LLM Observability] Routing context is only supported in agentless mode. ' +
+        'Spans will be sent to the configured agent org.'
+      )
+    }
     const buffer = this._getBuffer(routing)
 
     if (buffer.events.length >= this._bufferLimit) {

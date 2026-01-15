@@ -175,8 +175,9 @@ describe('Multi-Tenant Routing', () => {
       assert.deepStrictEqual(routingFor('inner-span'), { apiKey: 'inner-key', site: 'inner-site.com' })
       assert.deepStrictEqual(routingFor('after-inner-span'), { apiKey: 'outer-key', site: 'outer-site.com' })
 
-      sinon.assert.calledOnce(logWarnSpy)
-      sinon.assert.calledWith(logWarnSpy, sinon.match(/Nested routing context detected/))
+      const warningMessages = logWarnSpy.getCalls().map(call => call.args[0])
+      const nestedWarnings = warningMessages.filter(message => /Nested routing context detected/.test(message))
+      assert.strictEqual(nestedWarnings.length, 1)
     })
 
     it('concurrent contexts are isolated', async () => {
