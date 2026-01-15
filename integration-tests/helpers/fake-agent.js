@@ -278,6 +278,11 @@ function buildExpressServer (agent) {
   app.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
   app.use(bodyParser.json({ limit: Infinity, type: 'application/json' }))
 
+  app.use((req, res, next) => {
+    console.log(`Fake agent - endpoint ${req.method} ${req.originalUrl}`)
+    next();
+  })
+
   app.get('/info', (req, res) => {
     res.json({
       endpoints: ['/evp_proxy/v2']
