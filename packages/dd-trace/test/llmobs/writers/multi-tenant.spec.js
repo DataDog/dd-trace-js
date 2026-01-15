@@ -156,10 +156,10 @@ describe('Multi-Tenant Routing', () => {
     })
 
     it('nested contexts route spans correctly and log warning', () => {
-      llmobs.withRoutingContext({ ddApiKey: 'outer-key', ddSite: 'outer-site.com' }, () => {
+      llmobs.routingContext({ ddApiKey: 'outer-key', ddSite: 'outer-site.com' }, () => {
         llmobs.trace({ kind: 'workflow', name: 'outer-span' }, () => {})
 
-        llmobs.withRoutingContext({ ddApiKey: 'inner-key', ddSite: 'inner-site.com' }, () => {
+        llmobs.routingContext({ ddApiKey: 'inner-key', ddSite: 'inner-site.com' }, () => {
           llmobs.trace({ kind: 'workflow', name: 'inner-span' }, () => {})
         })
 
@@ -186,11 +186,11 @@ describe('Multi-Tenant Routing', () => {
       const gateA = new Promise(resolve => { resolveA = resolve })
       const gateB = new Promise(resolve => { resolveB = resolve })
 
-      const taskA = llmobs.withRoutingContext({ ddApiKey: 'key-a', ddSite: 'site-a.com' }, async () => {
+      const taskA = llmobs.routingContext({ ddApiKey: 'key-a', ddSite: 'site-a.com' }, async () => {
         await gateA
         llmobs.trace({ kind: 'workflow', name: 'span-a' }, () => {})
       })
-      const taskB = llmobs.withRoutingContext({ ddApiKey: 'key-b', ddSite: 'site-b.com' }, async () => {
+      const taskB = llmobs.routingContext({ ddApiKey: 'key-b', ddSite: 'site-b.com' }, async () => {
         await gateB
         llmobs.trace({ kind: 'workflow', name: 'span-b' }, () => {})
       })

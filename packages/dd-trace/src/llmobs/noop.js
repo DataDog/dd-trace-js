@@ -82,7 +82,7 @@ class NoopLLMObs {
 
   annotationContext (options, fn) { return fn() }
 
-  withRoutingContext (options, fn) { return fn() }
+  routingContext (options, fn) { return fn() }
 }
 
 module.exports = NoopLLMObs
