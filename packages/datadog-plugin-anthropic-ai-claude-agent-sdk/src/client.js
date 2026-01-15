@@ -28,15 +28,6 @@ class BaseAnthropicAiClaudeAgentSdkClientPlugin extends ClientPlugin {
     }
   }
 
-  // asyncEnd and end delegate to finish() which has the required guard
-  asyncEnd (ctx) {
-    this.finish(ctx)
-  }
-
-  end (ctx) {
-    this.finish(ctx)
-  }
-
   // You may modify this method, but the guard below is REQUIRED and MUST NOT be removed!
   finish (ctx) {
     // CRITICAL GUARD - DO NOT REMOVE: Ensures span only finishes when operation completes

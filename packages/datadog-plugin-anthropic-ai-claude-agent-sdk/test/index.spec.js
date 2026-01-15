@@ -67,11 +67,7 @@ createIntegrationTestSuite('anthropic-ai-claude-agent-sdk', '@anthropic-ai/claud
       )
 
       // Execute operation error variant
-      try {
-        await testSetup.queryError()
-      } catch (err) {
-        // Expected error
-      }
+      await testSetup.queryError().catch(() => {})
 
       return traceAssertion
     })
@@ -117,11 +113,7 @@ createIntegrationTestSuite('anthropic-ai-claude-agent-sdk', '@anthropic-ai/claud
       )
 
       // Execute operation error variant
-      try {
-        await testSetup.unstablev2promptError()
-      } catch (err) {
-        // Expected error
-      }
+      await testSetup.unstablev2promptError().catch(() => {})
 
       return traceAssertion
     })
@@ -167,11 +159,7 @@ createIntegrationTestSuite('anthropic-ai-claude-agent-sdk', '@anthropic-ai/claud
       )
 
       // Execute operation error variant
-      try {
-        await testSetup.sDKSessionSendError()
-      } catch (err) {
-        // Expected error
-      }
+      await testSetup.sDKSessionSendError().catch(() => {})
 
       return traceAssertion
     })
