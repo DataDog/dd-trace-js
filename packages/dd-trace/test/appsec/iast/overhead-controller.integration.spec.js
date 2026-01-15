@@ -47,10 +47,13 @@ describe('IAST - overhead-controller - integration', () => {
       await axios.request(path, { method })
 
       await agent.assertMessageReceived(({ payload }) => {
-        console.log('*** Payload length', payload[0].length)
-        console.log('*** Payload', payload[0][0])
+        // console.log('*** Payload length', payload[0].length)
+        // console.log('*** Payload', payload[0][0])
+        console.log('type', payload[0][0].type)
         assert.strictEqual(payload[0][0].type, 'web')
+        console.log('iast enabled', payload[0][0].metrics['_dd.iast.enabled'])
         assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
+        console.log('iast json', Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
         assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
         const vulnerabilitiesTrace = JSON.parse(payload[0][0].meta['_dd.iast.json'])
         assert.notStrictEqual(vulnerabilitiesTrace, null)
@@ -61,9 +64,11 @@ describe('IAST - overhead-controller - integration', () => {
           vulnerabilities[v.type] = vulnCount ? vulnCount + 1 : 1
         })
 
+        console.log('obj length', Object.keys(vulnerabilities).length, Object.keys(vulnerabilitiesAndCount).length)
         assert.strictEqual(Object.keys(vulnerabilities).length, Object.keys(vulnerabilitiesAndCount).length)
 
         Object.keys(vulnerabilitiesAndCount).forEach((vType) => {
+          console.log('vulns and count', vulnerabilities[vType], vulnerabilitiesAndCount[vType])
           assert.strictEqual(vulnerabilities[vType], vulnerabilitiesAndCount[vType], `route: ${path} - type: ${vType}`)
         })
       }, 1000, 1, true)
