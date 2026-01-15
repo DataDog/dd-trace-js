@@ -11,7 +11,8 @@ let getExportsModulePromise
 
 const loadGetExportsModule = () => {
   if (!getExportsModulePromise) {
-    getExportsModulePromise = import('import-in-the-middle/lib/get-exports.mjs')
+    const getExportsPath = require.resolve('import-in-the-middle/lib/get-exports.js')
+    getExportsModulePromise = import(pathToFileURL(getExportsPath).href)
   }
   return getExportsModulePromise
 }

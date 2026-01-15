@@ -99,7 +99,11 @@ class NoopProxy {
   }
 
   get TracerProvider () {
-    return require('../opentelemetry/tracer_provider')
+    const { checkOpenTelemetryAPIDeps } = require('../opentelemetry/check_peer_deps')
+    if (checkOpenTelemetryAPIDeps()) {
+      return require('../opentelemetry/tracer_provider')
+    }
+    return require('../opentelemetry/noop/tracer_provider')
   }
 }
 
