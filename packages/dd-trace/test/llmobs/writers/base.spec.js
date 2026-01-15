@@ -208,6 +208,19 @@ describe('BaseLLMObsWriter', () => {
       assert.strictEqual(requestOptions.headers['X-Datadog-EVP-Subdomain'], 'intake')
     })
 
+    it('flushes to the agent proxy when routing is provided', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(false)
+      writer.makePayload = (events) => ({ events })
+
+      writer.append({ foo: 'bar' }, { apiKey: 'key-a', site: 'site-a.com' })
+      writer.flush()
+
+      const requestOptions = request.getCall(0).args[1]
+      assert.strictEqual(requestOptions.url.href, 'http://localhost:8126/')
+      assert.strictEqual(requestOptions.path, '/evp_proxy/v2/endpoint')
+    })
+
     it('does not flush when agentless property is not set', () => {
       writer = new BaseLLMObsWriter(options)
       writer.makePayload = (events) => ({ events })

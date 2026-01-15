@@ -122,8 +122,8 @@ class BaseLLMObsWriter {
       buffer.size = 0
 
       const payload = this._encode(this.makePayload(events))
-      const options = this._getOptions(buffer.routing)
-      const url = this.#getUrlForRouting(buffer.routing)
+      const options = this._agentless ? this._getOptions(buffer.routing) : this._getOptions()
+      const url = this._agentless ? this.#getUrlForRouting(buffer.routing) : this.url
       const maskedApiKey = apiKey ? `****${apiKey.slice(-4)}` : ''
 
       log.debug('Encoding and flushing multi-tenant buffer for %s', maskedApiKey)
@@ -202,7 +202,8 @@ class BaseLLMObsWriter {
   }
 
   _getOptions (routing) {
-    const { url, endpoint } = routing
+    const useRouting = this._agentless && routing
+    const { url, endpoint } = useRouting
       ? this._getUrlAndPath(routing)
       : { url: this._baseUrl, endpoint: this._endpoint }
 
