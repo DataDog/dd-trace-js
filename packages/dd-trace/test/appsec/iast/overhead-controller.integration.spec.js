@@ -37,7 +37,6 @@ describe('IAST - overhead-controller - integration', () => {
           DD_IAST_ENABLED: 'true',
           DD_IAST_REQUEST_SAMPLING: '100',
           DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
-          DD_TRACE_DEBUG: 'true',
           NODE_OPTIONS: '--require ./resources/init.js'
         }
       })
