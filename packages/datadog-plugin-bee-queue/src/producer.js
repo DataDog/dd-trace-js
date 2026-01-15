@@ -65,7 +65,6 @@ class BaseBeeQueueProducerPlugin extends ProducerPlugin {
       DsmPathwayCodec.encode(dataStreamsContext, jobData._datadog)
     }
   }
-
 }
 
 class QueueSaveAllPlugin extends BaseBeeQueueProducerPlugin {

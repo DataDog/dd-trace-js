@@ -64,7 +64,6 @@ class BeeQueueConsumerPlugin extends ConsumerPlugin {
       'messaging.operation': 'process'
     }
   }
-
 }
 
 module.exports = BeeQueueConsumerPlugin
