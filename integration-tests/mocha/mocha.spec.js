@@ -4052,7 +4052,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           itr_enabled: false,
           code_coverage: false,
           tests_skipping: false,
-          flaky_test_retries_enabled: false
+          flaky_test_retries_enabled: false,
+          known_tests_enabled: true
         })
         receiver.setTestManagementTests({
           mocha: {
@@ -4068,6 +4069,28 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(testSession.meta[MOCHA_IS_PARALLEL], 'true')
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             assert.ok(tests.length > 0)
+            const suiteEvents = events.filter(event => event.type === 'test_suite_end')
+            assert.strictEqual(suiteEvents.length, 2, 'Expected exactly 2 suites to be reported')
+            // Verify that tests have different runtime IDs, confirming parallel execution in different processes
+            // Group tests by their suite to get one test from each worker
+            const testsBySuite = {}
+            for (const test of tests) {
+              const suiteName = test.meta[TEST_SUITE]
+              if (!testsBySuite[suiteName]) {
+                testsBySuite[suiteName] = test
+              }
+            }
+            const testFromEachWorker = Object.values(testsBySuite)
+            assert.strictEqual(testFromEachWorker.length, 2, 'Expected tests from 2 different suites')
+            const testRuntimeIds = testFromEachWorker.map(test => test.meta['runtime-id'])
+            assert.ok(testRuntimeIds[0], 'First test should have a runtime-id')
+            assert.ok(testRuntimeIds[1], 'Second test should have a runtime-id')
+            // This checks that the two tests come from different workers/processes
+            assert.notStrictEqual(
+              testRuntimeIds[0],
+              testRuntimeIds[1],
+              'Tests from different workers should have different runtime-ids'
+            )
           })
 
         childProcess = exec(
