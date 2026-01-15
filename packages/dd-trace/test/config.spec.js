@@ -3452,6 +3452,72 @@ rules:
     })
   })
 
+  context('NX auto-detection', () => {
+    it('should use NX_TASK_TARGET_PROJECT when DD_IS_NX is true or 1', () => {
+      process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+
+      for (const ddIsNx of ['true', '1']) {
+        process.env.DD_IS_NX = ddIsNx
+
+        const config = getConfig()
+
+        assert.strictEqual(config.service, 'my-nx-project')
+      }
+    })
+
+    it('should give DD_SERVICE precedence over NX_TASK_TARGET_PROJECT', () => {
+      process.env.DD_IS_NX = 'true'
+      process.env.DD_SERVICE = 'explicit-service'
+      process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.service, 'explicit-service')
+    })
+
+    it('should not use NX_TASK_TARGET_PROJECT when DD_IS_NX is falsy', () => {
+      const cases = ['false', '0', undefined]
+
+      for (const ddIsNx of cases) {
+        if (ddIsNx === undefined) {
+          delete process.env.DD_IS_NX
+        } else {
+          process.env.DD_IS_NX = ddIsNx
+        }
+
+        process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+        pkg.name = 'default-service'
+        reloadLoggerAndConfig()
+
+        const config = getConfig()
+
+        assert.strictEqual(config.service, 'default-service')
+        assert.notStrictEqual(config.service, 'my-nx-project')
+      }
+    })
+
+    it('should fallback to default when NX_TASK_TARGET_PROJECT is empty or not set', () => {
+      const cases = ['', undefined]
+
+      for (const nxTaskTargetProject of cases) {
+        process.env.DD_IS_NX = 'true'
+
+        if (nxTaskTargetProject === undefined) {
+          delete process.env.NX_TASK_TARGET_PROJECT
+        } else {
+          process.env.NX_TASK_TARGET_PROJECT = nxTaskTargetProject
+        }
+
+        pkg.name = 'default-service'
+        reloadLoggerAndConfig()
+
+        const config = getConfig()
+
+        assert.strictEqual(config.service, 'default-service')
+      }
+    })
+  })
+
   context('getOrigin', () => {
     let originalAppsecEnabled
 
