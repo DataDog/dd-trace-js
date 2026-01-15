@@ -17,6 +17,7 @@ declare -a plugins=(
   "aerospike"
   "amqp10"
   "amqplib"
+  "anthropic-ai-claude-agent-sdk"
   "apollo"
   "avsc"
   "aws_sdk"

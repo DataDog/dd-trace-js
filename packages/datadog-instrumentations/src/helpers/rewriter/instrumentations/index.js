@@ -2,5 +2,6 @@
 
 module.exports = [
   ...require('./langchain'),
-  ...require('./bullmq')
+  ...require('./bullmq'),
+  ...require('./anthropic-ai-claude-agent-sdk')
 ]

@@ -185,6 +185,7 @@ interface Plugins {
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
   "anthropic": tracer.plugins.anthropic;
+  "anthropic-ai-claude-agent-sdk": tracer.plugins.anthropic_ai_claude_agent_sdk;
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
@@ -1675,6 +1676,12 @@ declare namespace tracer {
      * This module uses graphql operations to service requests & thus generates graphql spans.
      * We recommend disabling the graphql plugin if you only want to trace @apollo/gateway
      */
+    /**
+     * This plugin automatically instruments the
+     * [anthropic-ai-claude-agent-sdk](https://github.com/npmjs/package/@anthropic-ai/claude-agent-sdk) library.
+     */
+    interface anthropic_ai_claude_agent_sdk extends Instrumentation {}
+
     interface apollo extends Instrumentation {
       /**
        * Whether to include the source of the operation within the query as a tag
