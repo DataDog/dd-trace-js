@@ -135,8 +135,6 @@ describe('Multi-Tenant Routing', () => {
         }
       })
       llmobs = tracer.llmobs
-
-      process.removeAllListeners('beforeExit')
     })
 
     beforeEach(() => {
@@ -154,7 +152,6 @@ describe('Multi-Tenant Routing', () => {
     after(() => {
       delete process.env.DD_API_KEY
       delete process.env.DD_SITE
-      llmobs.disable()
       agent.wipe()
     })
 
