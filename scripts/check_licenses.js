@@ -8,6 +8,7 @@ const { execSync } = require('node:child_process')
 const { name: rootPackageName } = require('../package.json')
 
 const filePath = join(__dirname, '..', 'LICENSE-3rdparty.csv')
+const aliasMap = getAliasMap()
 const deps = getProdDeps()
 const licenses = new Set()
 let isHeader = true
@@ -39,7 +40,7 @@ lineReader.on('close', () => {
 
 function getProdDeps () {
   // Add root package (dd-trace) to the set of dependencies manually as it is not included in the yarn list output.
-  const deps = new Set([rootPackageName])
+  const deps = new Set([normalizeDepName(rootPackageName)])
 
   addProdDeps(deps, process.cwd())
   addProdDeps(deps, join(process.cwd(), 'vendor'))
@@ -72,7 +73,7 @@ function collectFromTrees (trees, deps) {
     if (typeof node?.name !== 'string') continue
 
     // Remove version from the package name (e.g. `@protobufjs/pool@1.1.0` -> `@protobufjs/pool`)
-    deps.add(node.name.slice(0, node.name.lastIndexOf('@')))
+    deps.add(normalizeDepName(node.name.slice(0, node.name.lastIndexOf('@'))))
 
     if (Array.isArray(node.children) && node.children.length) {
       collectFromTrees(node.children, deps)
@@ -99,8 +100,48 @@ function addVendoredDeps (deps) {
     const component = columns[0]
 
     // Strip quotes from the component name and add to deps
-    deps.add(component.replaceAll(/^"|"$/g, ''))
+    deps.add(normalizeDepName(component.replaceAll(/^"|"$/g, '')))
   }
+}
+
+function getAliasMap () {
+  const rootPackagePath = join(__dirname, '..', 'package.json')
+  const vendorPackagePath = join(__dirname, '..', 'vendor', 'package.json')
+  const map = new Map()
+
+  collectAliasesFromPackageJson(rootPackagePath, map)
+  collectAliasesFromPackageJson(vendorPackagePath, map)
+
+  return map
+}
+
+function collectAliasesFromPackageJson (packagePath, map) {
+  if (!existsSync(packagePath)) return
+
+  const packageJson = require(packagePath)
+  const deps = packageJson?.dependencies ?? {}
+  const optionalDeps = packageJson?.optionalDependencies ?? {}
+
+  collectAliasesFromDeps(deps, map)
+  collectAliasesFromDeps(optionalDeps, map)
+}
+
+function collectAliasesFromDeps (deps, map) {
+  for (const [alias, spec] of Object.entries(deps)) {
+    if (typeof spec !== 'string' || !spec.startsWith('npm:')) continue
+
+    const rawTarget = spec.slice('npm:'.length)
+    const atIndex = rawTarget.lastIndexOf('@')
+    const target = atIndex > 0 ? rawTarget.slice(0, atIndex) : rawTarget
+
+    if (target) {
+      map.set(alias, target)
+    }
+  }
+}
+
+function normalizeDepName (name) {
+  return aliasMap.get(name) ?? name
 }
 
 function checkLicenses (typeDeps) {

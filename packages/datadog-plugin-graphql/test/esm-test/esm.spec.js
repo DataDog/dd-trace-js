@@ -42,7 +42,6 @@ describe('Plugin (ESM)', () => {
           sandboxCwd(),
           'esm-graphql-server.mjs',
           agent.port,
-          undefined,
           { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
         )
 
@@ -81,7 +80,6 @@ describe('Plugin (ESM)', () => {
             sandboxCwd(),
             'esm-graphql-yoga-server.mjs',
             agent.port,
-            undefined,
             { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
           )
 

@@ -172,11 +172,20 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
 }
 
 /**
- * @typedef {childProcess.ChildProcess & { url: string }} SpawnedProcess
+ * @typedef {childProcess.ChildProcess & {
+ *   url: string,
+ *   stdout: NodeJS.ReadableStream,
+ *   stderr: NodeJS.ReadableStream
+ * }} SpawnedProcess
  */
 
 /**
  * Spawns a Node.js script in a child process and returns a promise that resolves when the process is ready.
+ *
+ * This function expects the spawned process to stay alive (e.g., a server). If the process exits
+ * (even with code 0), the promise will reject with an error.
+ *
+ * For processes that are expected to run and exit cleanly, use `spawnProcAndExpectExit` instead.
  *
  * @param {string|URL} filename - The filename of the Node.js script to spawn in a child process.
  * @param {childProcess.ForkOptions} [options] - The options to pass to the child process.
@@ -184,14 +193,29 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
  *   standard output of the child process. If not provided, the output will be logged to the console.
  * @param {(data: Buffer) => void} [stderrHandler] - A function that's called with one data argument to handle the
  *   standard error of the child process. If not provided, the error will be logged to the console.
- * @returns {Promise<SpawnedProcess|void>} A promise that resolves when the process is either ready or terminated
- *   without an error. If the process is terminated without an error, the promise will resolve with `undefined`. The
- *   returned process will have a `url` property if the process didn't terminate.
+ * @returns {Promise<SpawnedProcess>} A promise that resolves with a SpawnedProcess when the process is ready.
+ *   The returned `SpawnedProcess` will have a `url` property that can be accessed to get the server URL.
+ *   Note: Accessing `url` before the spawned process sends its port message will throw an error.
  */
 function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
-  const proc = fork(filename, { ...options, stdio: 'pipe' })
+  const proc = spawnProcImpl(filename, options, stdioHandler, stderrHandler)
 
-  return /** @type {Promise<SpawnedProcess|void>} */ (new Promise((resolve, reject) => {
+  let urlValue
+  Object.defineProperty(proc, 'url', {
+    get () {
+      if (urlValue === undefined) {
+        throw new Error('Process URL is not available yet. The spawned process has not sent a port message.')
+      }
+      return urlValue
+    },
+    set (value) {
+      urlValue = value
+    },
+    enumerable: true,
+    configurable: true
+  })
+
+  return new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
         if (typeof port !== 'number' && typeof port !== 'string') {
@@ -202,28 +226,72 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
       })
       .on('error', reject)
       .on('exit', code => {
+        reject(new Error(`Process exited with status code ${code}.`))
+      })
+  })
+}
+
+/**
+ * Spawns a Node.js script in a child process that is expected to run and exit cleanly.
+ *
+ * This function expects the process to complete and exit with code 0, in which case the promise resolves
+ * with `undefined`. Use this for short-lived processes like validation scripts or tests that run to completion.
+ *
+ * For long-running processes (like servers) that should not exit, use `spawnProc` instead.
+ *
+ * @param {string|URL} filename - The filename of the Node.js script to spawn in a child process.
+ * @param {childProcess.ForkOptions} [options] - The options to pass to the child process.
+ * @param {(data: Buffer) => void} [stdioHandler] - A function that's called with one data argument to handle the
+ *   standard output of the child process. If not provided, the output will be logged to the console.
+ * @param {(data: Buffer) => void} [stderrHandler] - A function that's called with one data argument to handle the
+ *   standard error of the child process. If not provided, the error will be logged to the console.
+ * @returns {Promise<void>} A promise that resolves when the process exits with code 0.
+ */
+function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHandler) {
+  const proc = spawnProcImpl(filename, options, stdioHandler, stderrHandler)
+
+  return new Promise((resolve, reject) => {
+    proc
+      .on('error', reject)
+      .on('exit', code => {
         if (code !== 0) {
           return reject(new Error(`Process exited with status code ${code}.`))
         }
         resolve()
       })
+  })
+}
 
-    proc.stdout.on('data', data => {
-      if (stdioHandler) {
-        stdioHandler(data)
-      }
-      // eslint-disable-next-line no-console
-      if (!options.silent) console.log(data.toString())
-    })
+/**
+ * Internal implementation for spawnProc and spawnProcAndAllowExit.
+ *
+ * @param {string|URL} filename
+ * @param {childProcess.ForkOptions} options
+ * @param {(data: Buffer) => void} [stdioHandler]
+ * @param {(data: Buffer) => void} [stderrHandler]
+ * @returns {SpawnedProcess}
+ */
+function spawnProcImpl (filename, options, stdioHandler, stderrHandler) {
+  // Cast to SpawnedProcess type - when stdio is 'pipe', stdout/stderr are guaranteed non-null
+  const proc = /** @type {SpawnedProcess} */ (fork(filename, { ...options, stdio: 'pipe' }))
 
-    proc.stderr.on('data', data => {
-      if (stderrHandler) {
-        stderrHandler(data)
-      }
-      // eslint-disable-next-line no-console
-      if (!options.silent) console.error(data.toString())
-    })
-  }))
+  proc.stdout.on('data', data => {
+    if (stdioHandler) {
+      stdioHandler(data)
+    }
+    // eslint-disable-next-line no-console
+    if (!options.silent) console.log(data.toString())
+  })
+
+  proc.stderr.on('data', data => {
+    if (stderrHandler) {
+      stderrHandler(data)
+    }
+    // eslint-disable-next-line no-console
+    if (!options.silent) console.error(data.toString())
+  })
+
+  return proc
 }
 
 function log (...args) {
@@ -562,25 +630,24 @@ function checkSpansForServiceName (spans, name) {
 }
 
 /**
- * @overload
- * @param {string} cwd
- * @param {string} serverFile
- * @param {string|number} agentPort
- * @param {Record<string, string|undefined>} [additionalEnvArgs]
+ * @typedef {Record<string, string|undefined>} AdditionalEnvArgs
  */
+
 /**
+ * Prepares spawn options for plugin integration tests.
+ *
  * @param {string} cwd
  * @param {string} serverFile
  * @param {string|number} agentPort
+ * @param {AdditionalEnvArgs} [additionalEnvArgs]
+ * @param {string[]} [execArgv]
  * @param {(data: Buffer) => void} [stdioHandler]
- * @param {Record<string, string|undefined>} [additionalEnvArgs]
+ * @returns {{ filename: string, options: childProcess.ForkOptions,
+ *   stdioHandler: ((data: Buffer) => void) | undefined }}
  */
-async function spawnPluginIntegrationTestProc (
-  cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
-  if (typeof stdioHandler !== 'function' && !additionalEnvArgs) {
-    additionalEnvArgs = stdioHandler
-    stdioHandler = undefined
-  }
+function preparePluginIntegrationTestSpawnOptions (
+  cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler
+) {
   additionalEnvArgs = { ...additionalEnvArgs }
 
   let NODE_OPTIONS = `--loader=${hookFile}`
@@ -593,17 +660,65 @@ async function spawnPluginIntegrationTestProc (
     delete additionalEnvArgs.NODE_OPTIONS
   }
 
-  let env = /** @type {Record<string, string|undefined>} */ ({
-    NODE_OPTIONS,
-    DD_TRACE_AGENT_PORT: String(agentPort),
-    DD_TRACE_FLUSH_INTERVAL: '0'
-  })
-  env = { ...process.env, ...env, ...additionalEnvArgs }
-  return spawnProc(path.join(cwd, serverFile), {
-    cwd,
-    env,
-    execArgv: additionalEnvArgs.execArgv
-  }, stdioHandler)
+  return {
+    filename: path.join(cwd, serverFile),
+    options: {
+      cwd,
+      env: {
+        ...process.env,
+        NODE_OPTIONS,
+        DD_TRACE_AGENT_PORT: String(agentPort),
+        DD_TRACE_FLUSH_INTERVAL: '0',
+        ...additionalEnvArgs
+      },
+      execArgv
+    },
+    stdioHandler
+  }
+}
+
+/**
+ * Spawns a plugin integration test process that runs a long-lived server.
+ *
+ * The spawned process should call `process.send({ port })` to signal it's ready.
+ * Use this for tests that spawn HTTP servers or other long-running processes.
+ *
+ * For short-lived scripts that run and exit, use `spawnPluginIntegrationTestProcAndExpectExit` instead.
+ *
+ * @param {string} cwd
+ * @param {string} serverFile
+ * @param {string|number} agentPort
+ * @param {AdditionalEnvArgs} [additionalEnvArgs]
+ * @param {string[]} [execArgv]
+ * @param {(data: Buffer) => void} [stdioHandler]
+ */
+function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler) {
+  const { filename, options, stdioHandler: handler } =
+    preparePluginIntegrationTestSpawnOptions(cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler)
+  return spawnProc(filename, options, handler)
+}
+
+/**
+ * Spawns a plugin integration test process that is expected to run and exit cleanly.
+ *
+ * Use this for short-lived test scripts that run instrumented code and exit (e.g., making a
+ * fetch request, DNS lookup, etc.) rather than starting a long-running server.
+ *
+ * For tests that spawn a server which should stay alive, use `spawnPluginIntegrationTestProc` instead.
+ *
+ * @param {string} cwd
+ * @param {string} serverFile
+ * @param {string|number} agentPort
+ * @param {AdditionalEnvArgs} [additionalEnvArgs]
+ * @param {string[]} [execArgv]
+ * @param {(data: Buffer) => void} [stdioHandler]
+ */
+function spawnPluginIntegrationTestProcAndExpectExit (
+  cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler
+) {
+  const { filename, options, stdioHandler: handler } =
+    preparePluginIntegrationTestSpawnOptions(cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler)
+  return spawnProcAndExpectExit(filename, options, handler)
 }
 
 /**
@@ -741,6 +856,7 @@ module.exports = {
   assertObjectContains,
   assertUUID,
   spawnProc,
+  spawnProcAndExpectExit,
   telemetryForwarder,
   assertTelemetryPoints,
   runAndCheckWithTelemetry,
@@ -750,6 +866,7 @@ module.exports = {
   getCiVisEvpProxyConfig,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
+  spawnPluginIntegrationTestProcAndExpectExit,
   useEnv,
   setShouldKill,
   sandboxCwd,

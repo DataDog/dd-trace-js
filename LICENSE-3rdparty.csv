@@ -7,7 +7,6 @@
 "@datadog/openfeature-node-server","https://github.com/DataDog/openfeature-js-client","['Apache-2.0']","['DataDog']"
 "@datadog/pprof","https://github.com/DataDog/pprof-nodejs","['Apache-2.0']","['Google Inc.']"
 "@datadog/sketches-js","https://github.com/DataDog/sketches-js","['Apache-2.0']","['DataDog']"
-"@datadog/source-map","npm:@datadog/source-map","[]","[]"
 "@datadog/wasm-js-rewriter","https://github.com/DataDog/dd-wasm-js-rewriter","['Apache-2.0']","['Datadog Inc.']"
 "@isaacs/ttlcache","https://github.com/isaacs/ttlcache","['BlueOak-1.0.0']","['Isaac Z. Schlueter']"
 "@jsep-plugin/assignment","https://github.com/EricSmekens/jsep","['MIT']","['Shelly']"
