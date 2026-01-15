@@ -44,7 +44,7 @@ describe('IAST - overhead-controller - integration', () => {
     })
 
     async function checkVulnerabilitiesInEndpoint (path, vulnerabilitiesAndCount, method = 'GET') {
-      console.log('checkVulnerabilitiesInEndpoint', path, vulnerabilitiesAndCount, method)
+      console.log('checkVulnerabilitiesInEndpoint', arguments)
       await axios.request(path, { method })
 
       await agent.assertMessageReceived(({ payload }) => {
@@ -76,7 +76,7 @@ describe('IAST - overhead-controller - integration', () => {
     }
 
     async function checkNoVulnerabilitiesInEndpoint (path, method = 'GET') {
-      console.log('check NO VulnerabilitiesInEndpoint', path, method)
+      console.log('check NO VulnerabilitiesInEndpoint', arguments)
       await axios.request(path, { method })
 
       await agent.assertMessageReceived(({ payload }) => {
