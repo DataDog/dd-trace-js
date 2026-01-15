@@ -1,0 +1,39 @@
+name: '[Release Proposal]'
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: 0 5 * * *
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  create-proposal:
+    strategy:
+      fail-fast: false
+      matrix:
+        release-line: ['5']
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: release-proposal
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ steps.octo-sts.outputs.token }}
+      - uses: ./.github/actions/node
+        with:
+          version: ''
+      - uses: ./.github/actions/install/branch-diff
+        with:
+          token: ${{ steps.octo-sts.outputs.token }}
+      - run: node scripts/release/proposal ${{ matrix.release-line }} -y ${{ github.event_name == 'workflow_dispatch' && '-f' || '' }}
+        env:
+          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}

@@ -1,0 +1,35 @@
+name: Retry
+
+on:
+  workflow_run:
+    branches:
+      - dependabot/**
+      - master
+      - v[0-9]+.[0-9]+.[0-9]+-proposal
+      - v[0-9]+.x
+    types:
+      - completed
+    workflows:
+      - APM Capabilities
+      - APM Integrations
+      - AppSec
+      - Debugger
+      - LLMObs
+      - Platform
+      - Profiling
+      - Project
+      - Serverless
+      - System Tests
+      - Test Optimization
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt == 1
+    steps:
+      - run: |
+          gh run rerun ${{ github.event.workflow_run.id }} --repo DataDog/dd-trace-js --failed || exit 0

@@ -1,0 +1,26 @@
+name: All Green
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  schedule:
+    - cron: 0 4 * * *
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+
+  all-green:
+    runs-on: ubuntu-latest
+    permissions:
+      checks: read
+      contents: read
+    steps:
+      - uses: wechuli/allcheckspassed@b0eaef5be76003932c9520e2b3dd03c85cc43d87 # v2.2.0
+        with:
+          retries: 30 # once per minute, some checks take up to 15 min, retries are possible
+          checks_exclude: devflow.*
+          fail_fast: false
