@@ -8,12 +8,14 @@ const {
   useSandbox,
   curlAndAssertMessage,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProc,
+  varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
+  let variants
 
   withVersions('koa', 'koa', version => {
     useSandbox([`'koa@${version}'`], false,
@@ -28,14 +30,20 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port)
+    before(async function () {
+      variants = varySandbox('server.mjs', 'Koa', undefined, 'koa')
+    })
 
-      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-        assert.ok(Array.isArray(payload))
-        assert.strictEqual(checkSpansForServiceName(payload, 'koa.request'), true)
-      })
-    }).timeout(50000)
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented ${variant}`, async () => {
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
+
+        return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
+          assert.strictEqual(checkSpansForServiceName(payload, 'koa.request'), true)
+        })
+      }).timeout(50000)
+    }
   })
 })
