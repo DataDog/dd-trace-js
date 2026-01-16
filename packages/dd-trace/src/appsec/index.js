@@ -29,7 +29,10 @@ const {
   responseSetHeader,
   routerParam,
   fastifyResponseChannel,
-  fastifyPathParams
+  fastifyPathParams,
+  stripeCheckoutSessionCreate,
+  stripePaymentIntentCreate,
+  stripeConstructEvent
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -92,6 +95,9 @@ function enable (_config) {
     fastifyResponseChannel.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
     responseSetHeader.subscribe(onResponseSetHeader)
+    stripeCheckoutSessionCreate.subscribe(onStripeCheckoutSessionCreate)
+    stripePaymentIntentCreate.subscribe(onStripePaymentIntentCreate)
+    stripeConstructEvent.subscribe(onStripeConstructEvent)
 
     isEnabled = true
     config = _config
@@ -354,6 +360,94 @@ function onResponseSetHeader ({ res, abortController }) {
   }
 }
 
+function onStripeCheckoutSessionCreate (payload) {
+  if (payload.mode !== 'payment') return
+  waf.run({
+    persistent: {
+      [addresses.PAYMENT_CREATION]: {
+        integration: 'stripe',
+        id: payload.id,
+        amount_total: payload.amount_total,
+        client_reference_id: payload.client_reference_id,
+        currency: payload.currency,
+        customer_email: payload.customer_email,
+        'discounts.coupon': payload.discounts?.[0]?.coupon,
+        'discounts.promotion_code': payload.discounts?.[0]?.promotion_code,
+        livemode: payload.livemode,
+        'total_details.amount_discount': payload.total_details.amount_discount,
+        'total_details.amount_shipping': payload.total_details.amount_shipping
+      }
+    }
+  })
+}
+
+function onStripePaymentIntentCreate (payload) {
+  waf.run({
+    persistent: {
+      [addresses.PAYMENT_CREATION]: {
+        integration: 'stripe',
+        id: payload.id,
+        amount: payload.amount,
+        currency: payload.currency,
+        livemode: payload.livemode,
+        payment_method: payload.payment_method,
+        receipt_email: payload.receipt_email
+      }
+    }
+  })
+}
+
+function onStripeConstructEvent (payload) {
+  const wafPayload = { persistent: {} }
+
+  const object = payload.data.object
+
+  switch (payload.type) {
+    case 'payment_intent.succeeded':
+      wafPayload.persistent[addresses.PAYMENT_SUCCESS] = {
+        integration: 'stripe',
+        id: object.id,
+        amount: object.amount,
+        currency: object.currency,
+        livemode: object.livemode,
+        payment_method: object.payment_method
+      }
+      break
+
+    case 'payment_intent.payment_failed':
+      wafPayload.persistent[addresses.PAYMENT_FAILURE] = {
+        integration: 'stripe',
+        id: object.id,
+        amount: object.amount,
+        currency: object.currency,
+        'last_payment_error.code': object.last_payment_error?.code,
+        'last_payment_error.decline_code': object.last_payment_error?.decline_code,
+        'last_payment_error.payment_method.id': object.last_payment_error?.payment_method?.id,
+        'last_payment_error.payment_method.billing_details.email': object.last_payment_error?.payment_method?.billing_details?.email,
+        'last_payment_error.payment_method.type': object.last_payment_error?.payment_method?.type,
+        livemode: object.livemode,
+      }
+      break
+
+    case 'payment_intent.canceled':
+      wafPayload.persistent[addresses.PAYMENT_CANCELLATION] = {
+        integration: 'stripe',
+        id: object.id,
+        amount: object.amount,
+        cancellation_reason: object.cancellation_reason,
+        currency: object.currency,
+        livemode: object.livemode,
+        receipt_email: object.receipt_email,
+      }
+      break
+
+    default:
+      return
+  }
+
+  waf.run(wafPayload)
+}
+
 function handleResults (actions, req, res, rootSpan, abortController) {
   if (!actions || !req || !res || !rootSpan || !abortController) return
 
@@ -399,6 +493,9 @@ function disable () {
   if (fastifyResponseChannel.hasSubscribers) fastifyResponseChannel.unsubscribe(onResponseBody)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
   if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
+  if (stripeCheckoutSessionCreate.hasSubscribers) stripeCheckoutSessionCreate.unsubscribe(onStripeCheckoutSessionCreate)
+  if (stripePaymentIntentCreate.hasSubscribers) stripePaymentIntentCreate.unsubscribe(onStripePaymentIntentCreate)
+  if (stripeConstructEvent.hasSubscribers) stripeConstructEvent.unsubscribe(onStripeConstructEvent)
 }
 
 module.exports = {
