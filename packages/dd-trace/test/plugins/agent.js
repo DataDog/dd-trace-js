@@ -414,8 +414,11 @@ module.exports = {
     currentIntegrationName = getCurrentIntegrationName()
 
     const getConfigFresh = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
+    // Reload dogstatsd to avoid adding new events to the global process object
+    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
     const proxy = proxyquire('../../src/proxy', {
-      './config': getConfigFresh
+      './config': getConfigFresh,
+      './dogstatsd': dogstatsd
     })
     const TracerProxy = proxyquire('../../src', {
       './proxy': proxy
@@ -718,6 +721,9 @@ module.exports = {
 
     delete require.cache[require.resolve('../..')]
     delete global._ddtrace
+
+    process.removeAllListeners('exit')
+    process.removeAllListeners('beforeExit')
 
     const basedir = path.join(__dirname, '..', '..', '..', '..', 'versions')
     const exceptions = ['/libpq/', '/grpc/', '/sqlite3/', '/couchbase/'] // wiping native modules results in errors

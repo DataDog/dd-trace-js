@@ -6,6 +6,8 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { removeDestroyHandler } = require('../util')
+
 describe('LLMObsSpanWriter', () => {
   let LLMObsSpanWriter
   let writer
@@ -28,7 +30,7 @@ describe('LLMObsSpanWriter', () => {
   })
 
   afterEach(() => {
-    process.removeAllListeners('beforeExit')
+    removeDestroyHandler()
   })
 
   it('is initialized correctly', () => {

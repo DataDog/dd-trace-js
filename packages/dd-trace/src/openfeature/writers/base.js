@@ -23,6 +23,7 @@ const log = require('../../log')
  * @class BaseFFEWriter
  */
 class BaseFFEWriter {
+  #destroyer
   /**
    * @param {BaseFFEWriterOptions} options - Writer configuration options
    */
@@ -56,12 +57,10 @@ class BaseFFEWriter {
       this.flush()
     }, this._interval).unref()
 
-    this._beforeExitHandler = () => {
-      this.destroy()
-    }
-    process.once('beforeExit', this._beforeExitHandler)
+    const destroyer = this.destroy.bind(this)
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(destroyer)
 
-    this._destroyed = false
+    this.#destroyer = destroyer
     this._droppedEvents = 0
   }
 
@@ -141,12 +140,12 @@ class BaseFFEWriter {
    * Cleans up resources and flushes remaining events
    */
   destroy () {
-    if (!this._destroyed) {
+    if (this.#destroyer) {
       log.debug(() => `Stopping ${this.constructor.name}`)
       clearInterval(this._periodic)
-      process.removeListener('beforeExit', this._beforeExitHandler)
       this.flush()
-      this._destroyed = true
+      globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
+      this.#destroyer = undefined
 
       if (this._droppedEvents > 0) {
         log.warn(`${this.constructor.name} dropped ${this._droppedEvents} events due to buffer overflow`)

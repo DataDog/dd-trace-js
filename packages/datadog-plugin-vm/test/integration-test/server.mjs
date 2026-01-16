@@ -1,5 +1,5 @@
 import 'dd-trace/init.js'
-import { runInThisContext } from 'node:vm'
+import vmLib from 'node:vm'
 import express from 'express'
 import dc from 'dc-polyfill'
 
@@ -14,7 +14,7 @@ const app = express()
 let localVar = 'initial value'
 
 app.get('/', (req, res) => {
-  localVar = runInThisContext('localVar = "anotherValue";')
+  localVar = vmLib.runInThisContext('localVar = "anotherValue";')
   res.setHeader('X-Counter', counter)
   res.end(`ok ${localVar}`)
 })
