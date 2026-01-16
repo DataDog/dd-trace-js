@@ -9,10 +9,11 @@ const ALLOWED_METADATA_KEYS = new Set([
   'maxConcurrency'
 ])
 
-class LangchainLanggraphLLMObsPlugin extends LLMObsPlugin {
+/**
+ * Base class for LangGraph LLMObs plugins with shared tagging logic.
+ */
+class LangchainLanggraphBaseLLMObsPlugin extends LLMObsPlugin {
   static integration = 'langgraph'
-  static id = 'llmobs_langgraph'
-  static prefix = 'tracing:orchestrion:@langchain/langgraph:Pregel_invoke'
 
   getLLMObsSpanRegisterOptions () {
     return {
@@ -32,16 +33,16 @@ class LangchainLanggraphLLMObsPlugin extends LLMObsPlugin {
     const input = args?.[0]
     const config = args?.[1]
 
-    this.#tagInput(span, input)
+    this._tagInput(span, input)
 
     if (!error) {
-      this.#tagOutput(span, result)
+      this._tagOutput(span, result)
     }
 
-    this.#tagMetadata(span, config)
+    this._tagMetadata(span, config)
   }
 
-  #tagInput (span, input) {
+  _tagInput (span, input) {
     if (input === undefined) {
       this._tagger.tagTextIO(span, 'undefined')
       return
@@ -60,7 +61,7 @@ class LangchainLanggraphLLMObsPlugin extends LLMObsPlugin {
     }
   }
 
-  #tagOutput (span, result) {
+  _tagOutput (span, result) {
     if (result === undefined || result === null) return
 
     try {
@@ -71,7 +72,7 @@ class LangchainLanggraphLLMObsPlugin extends LLMObsPlugin {
     }
   }
 
-  #tagMetadata (span, config) {
+  _tagMetadata (span, config) {
     if (!config || typeof config !== 'object') {
       this._tagger.tagMetadata(span, {})
       return
@@ -81,7 +82,7 @@ class LangchainLanggraphLLMObsPlugin extends LLMObsPlugin {
 
     for (const [key, value] of Object.entries(config)) {
       if (!ALLOWED_METADATA_KEYS.has(key)) continue
-      if (!this.#isAllowedValue(value)) continue
+      if (!this._isAllowedValue(value)) continue
 
       metadata[key] = value
     }
@@ -89,7 +90,7 @@ class LangchainLanggraphLLMObsPlugin extends LLMObsPlugin {
     this._tagger.tagMetadata(span, metadata)
   }
 
-  #isAllowedValue (value) {
+  _isAllowedValue (value) {
     if (value === null || value === undefined) return false
 
     const type = typeof value
@@ -109,4 +110,63 @@ class LangchainLanggraphLLMObsPlugin extends LLMObsPlugin {
   }
 }
 
-module.exports = LangchainLanggraphLLMObsPlugin
+/**
+ * LLMObs plugin for Pregel.invoke() operations.
+ */
+class LangchainLanggraphInvokeLLMObsPlugin extends LangchainLanggraphBaseLLMObsPlugin {
+  static id = 'llmobs_langgraph_invoke'
+  static prefix = 'tracing:orchestrion:@langchain/langgraph:Pregel_invoke'
+}
+
+/**
+ * LLMObs plugin for Pregel.stream() operations.
+ * Consumes stream chunks and aggregates them into the final state.
+ */
+class LangchainLanggraphStreamLLMObsPlugin extends LangchainLanggraphBaseLLMObsPlugin {
+  static id = 'llmobs_langgraph_stream'
+  static prefix = 'tracing:apm:langgraph:stream'
+
+  constructor () {
+    super(...arguments)
+
+    // Subscribe to streaming chunk events
+    this.addSub('apm:langgraph:stream:chunk', ({ ctx, chunk, done }) => {
+      ctx.isStreaming = true
+      ctx.chunks = ctx.chunks || []
+
+      if (chunk) ctx.chunks.push(chunk)
+      if (!done) return
+
+      // Aggregate streaming chunks into final state
+      // LangGraph chunks are objects like { nodeName: stateUpdate }
+      // We merge them to reconstruct the final state
+      ctx.result = this._aggregateChunks(ctx.chunks)
+    })
+  }
+
+  /**
+   * Aggregates LangGraph stream chunks into final state.
+   * Each chunk is an object like { nodeName: { stateKey: value, ... } }
+   * We merge all the state updates to get the final state.
+   */
+  _aggregateChunks (chunks) {
+    const finalState = {}
+
+    for (const chunk of chunks) {
+      // Each chunk is { nodeName: stateUpdate }
+      // We need to merge the state updates
+      for (const nodeOutput of Object.values(chunk)) {
+        if (nodeOutput && typeof nodeOutput === 'object') {
+          Object.assign(finalState, nodeOutput)
+        }
+      }
+    }
+
+    return finalState
+  }
+}
+
+module.exports = {
+  LangchainLanggraphInvokeLLMObsPlugin,
+  LangchainLanggraphStreamLLMObsPlugin
+}

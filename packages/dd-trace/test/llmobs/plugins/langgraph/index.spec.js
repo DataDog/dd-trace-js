@@ -277,10 +277,7 @@ describe('Plugin', () => {
           })
         })
 
-        // NOTE: Streaming tests are skipped because LangGraph's bundled code uses internal
-        // relative requires (e.g., require('../pregel/index.cjs')) that bypass the hook system.
-        // See packages/datadog-instrumentations/src/langgraph.js for details.
-        describe.skip('Pregel.stream()', () => {
+        describe('Pregel.stream()', () => {
           it('creates a workflow span for streaming execution', async () => {
             const graphState = {
               messages: {
@@ -320,12 +317,13 @@ describe('Plugin', () => {
             const matchingApmSpan = findMatchingApmSpan(apmSpans, llmobsSpans[0])
 
             // Streaming should produce the same workflow span as invoke
+            // The output is aggregated from stream chunks into the final state
             assertLlmObsSpanEvent(llmobsSpans[0], {
               span: matchingApmSpan,
               spanKind: 'workflow',
               name: 'langgraph.stream',
               inputValue: JSON.stringify(input),
-              outputValue: MOCK_STRING, // Final state from stream
+              outputValue: MOCK_STRING,
               metadata: MOCK_NOT_NULLISH,
               tags: { ml_app: 'test', integration: 'langgraph' }
             })
@@ -570,8 +568,7 @@ describe('Plugin', () => {
           })
         })
 
-        // NOTE: Streaming tests skipped - see Pregel.stream() describe block comment
-        it.skip('captures errors during streaming', async () => {
+        it('captures errors during streaming', async () => {
           const graphState = {
             data: {
               value: (x, y) => y,
@@ -611,7 +608,8 @@ describe('Plugin', () => {
             span: matchingApmSpan,
             spanKind: 'workflow',
             name: 'langgraph.stream',
-            inputValue: MOCK_STRING,
+            inputValue: JSON.stringify({ data: 'input' }),
+            metadata: MOCK_NOT_NULLISH,
             tags: { ml_app: 'test', integration: 'langgraph' },
             error: {
               type: 'Error',
