@@ -330,8 +330,14 @@ describe('Plugin', () => {
           })
         })
 
-        withVersions('koa', ['koa-router', '@koa/router'], (routerVersion, moduleName) => {
+        withVersions('koa', ['koa-router', '@koa/router'], (routerVersion, moduleName, realVersion) => {
           let Router
+
+          if (moduleName === '@koa/router' &&
+            semver.satisfies(realVersion, '>=15.0.0') &&
+            !semver.satisfies(process.version.slice(1), '>=20.0.0')) {
+            return
+          }
 
           beforeEach(() => {
             Router = require(`../../../versions/${moduleName}@${routerVersion}`).get()
@@ -891,9 +897,13 @@ describe('Plugin', () => {
             })
           })
 
-          withVersions('koa', ['koa-router', '@koa/router'], (routerVersion, moduleName) => {
+          withVersions('koa', ['koa-router', '@koa/router'], (routerVersion, moduleName, realVersion) => {
             let Router
-
+            if (moduleName === '@koa/router' &&
+              semver.satisfies(realVersion, '>=15.0.0') &&
+              !semver.satisfies(process.version.slice(1), '>=20.0.0')) {
+              return
+            }
             beforeEach(() => {
               Router = require(`../../../versions/${moduleName}@${routerVersion}`).get()
             })
