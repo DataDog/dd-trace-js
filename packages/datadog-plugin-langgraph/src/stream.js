@@ -5,7 +5,7 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 class LanggraphStreamPlugin extends TracingPlugin {
   static id = '@langchain/langgraph'
   // Use shimmer-based channel (not orchestrion rewriter)
-  static prefix = 'apm:langchain-langgraph:stream'
+  static prefix = 'apm:langgraph:stream'
 
   bindStart (ctx) {
     const meta = this.getTags(ctx)

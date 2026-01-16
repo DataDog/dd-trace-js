@@ -73,6 +73,7 @@ const plugins = {
     return require('../../../datadog-plugin-confluentinc-kafka-javascript/src')
   },
   get langchain () { return require('../../../datadog-plugin-langchain/src') },
+  get langgraph () { return require('../../../datadog-plugin-langgraph/src') },
   get mariadb () { return require('../../../datadog-plugin-mariadb/src') },
   get memcached () { return require('../../../datadog-plugin-memcached/src') },
   get 'microgateway-core' () { return require('../../../datadog-plugin-microgateway-core/src') },

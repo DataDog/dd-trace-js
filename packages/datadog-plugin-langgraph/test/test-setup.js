@@ -69,6 +69,32 @@ class LanggraphTestSetup {
     })
   }
 
+  async pregelStream () {
+    const input = {
+      messages: ['User: What is the weather in SF?'],
+      count: 0
+    }
+    const chunks = []
+    const stream = await this.workflow.stream(input, {
+      runName: 'test-stream'
+    })
+    for await (const chunk of stream) {
+      chunks.push(chunk)
+    }
+    return chunks
+  }
+
+  async pregelStreamError () {
+    // Intentionally pass invalid input to trigger error
+    const stream = await this.workflow.stream(null, {
+      runName: 'test-stream-error'
+    })
+    // eslint-disable-next-line no-unused-vars
+    for await (const _ of stream) {
+      // This should throw during iteration
+    }
+  }
+
   async runWithRetry () {
     const { StateGraph, START, END } = this.module
     // Create a simple workflow to test node execution

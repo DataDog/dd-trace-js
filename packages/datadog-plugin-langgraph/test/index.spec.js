@@ -16,7 +16,7 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
     await testSetup.teardown()
   })
 
-  describe('Pregel.invoke() - invoke', () => {
+  describe('Pregel.invoke()', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = meta.agent.assertFirstTraceSpan(
         {
@@ -70,6 +70,63 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
       // Verify library behavior: error should be thrown when invalid input is passed
       if (!errorThrown) {
         throw new Error('Expected invoke to throw an error with invalid input')
+      }
+      if (!caughtError || typeof caughtError !== 'object') {
+        throw new Error('Expected error to be an Error object')
+      }
+
+      return traceAssertion
+    })
+  })
+
+  describe('Pregel.stream()', () => {
+    it('should generate span with correct tags (happy path)', async () => {
+      const traceAssertion = meta.agent.assertFirstTraceSpan(
+        {
+          name: 'langgraph.stream',
+          meta: {
+            'span.kind': 'client',
+            component: '@langchain/langgraph'
+          },
+          metrics: {}
+        }
+      )
+
+      const chunks = await testSetup.pregelStream()
+
+      // Verify library behavior: stream should return chunks
+      if (!Array.isArray(chunks) || chunks.length === 0) {
+        throw new Error('Expected stream to return an array of chunks')
+      }
+
+      return traceAssertion
+    })
+
+    it('should generate span with error tags (error path)', async () => {
+      const traceAssertion = meta.agent.assertFirstTraceSpan(
+        {
+          name: 'langgraph.stream',
+          meta: {
+            'span.kind': 'client',
+            component: '@langchain/langgraph'
+          },
+          metrics: {},
+          error: 1
+        }
+      )
+
+      let errorThrown = false
+      let caughtError = null
+      try {
+        await testSetup.pregelStreamError()
+      } catch (err) {
+        errorThrown = true
+        caughtError = err
+      }
+
+      // Verify library behavior: error should be thrown when invalid input is passed
+      if (!errorThrown) {
+        throw new Error('Expected stream to throw an error with invalid input')
       }
       if (!caughtError || typeof caughtError !== 'object') {
         throw new Error('Expected error to be an Error object')
