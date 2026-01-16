@@ -343,6 +343,16 @@
       "versions": [">=1.0"]
     }
   ],
+  "@langchain/langgraph": [
+    {
+      "name": "@langchain/core",
+      "dep": true
+    },
+    {
+      "name": "zod",
+      "dep": true
+    }
+  ],
   "ldapjs": [
     {
       "name": "ldapjs",

@@ -377,6 +377,7 @@ tracer.use('koa');
 tracer.use('koa', httpServerOptions);
 tracer.use('langchain');
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
+tracer.use('langgraph');
 tracer.use('memcached');
 tracer.use('microgateway-core');
 tracer.use('microgateway-core', httpServerOptions);

@@ -222,6 +222,7 @@ interface Plugins {
   "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
   "langchain": tracer.plugins.langchain;
+  "langgraph": tracer.plugins.langgraph;
   "mariadb": tracer.plugins.mariadb;
   "memcached": tracer.plugins.memcached;
   "microgateway-core": tracer.plugins.microgateway_core;
@@ -2175,6 +2176,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [ldapjs](https://github.com/ldapjs/node-ldapjs/) module.
      */
+    /**
+     * This plugin automatically instruments the
+     * [langgraph](https://github.com/langchain-ai/langgraph) library.
+     */
+    interface langgraph extends Instrumentation {}
+
     interface ldapjs extends Instrumentation {}
 
     /**
