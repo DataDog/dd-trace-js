@@ -23,10 +23,10 @@ class NoopProxy {
     this.llmobs = noopLLMObs
     this.openfeature = noopOpenFeatureProvider
     this.aiguard = noopAIGuard
-    this.setBaggageItem = () => {}
-    this.getBaggageItem = () => {}
+    this.setBaggageItem = (key, value) => {}
+    this.getBaggageItem = (key) => {}
     this.getAllBaggageItems = () => {}
-    this.removeBaggageItem = () => {}
+    this.removeBaggageItem = (keyToRemove) => {}
     this.removeAllBaggageItems = () => {}
   }
 
