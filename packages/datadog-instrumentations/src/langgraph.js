@@ -1,7 +1,8 @@
 'use strict'
 
+const { tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel, getHooks } = require('./helpers/instrument')
+const { addHook, getHooks } = require('./helpers/instrument')
 
 // Load rewriter-based instrumentation for invoke()
 // The orchestrion rewriter instruments Pregel.invoke() via the hooks defined in
@@ -13,13 +14,11 @@ for (const hook of getHooks('@langchain/langgraph')) {
 // Shimmer-based instrumentation for stream()
 // stream() cannot use the orchestrion rewriter because the method uses super.stream()
 // which causes issues with the rewriter transformation
-const startCh = channel('apm:langgraph:stream:start')
-const asyncEndCh = channel('apm:langgraph:stream:asyncEnd')
-const errorCh = channel('apm:langgraph:stream:error')
+const streamTracingChannel = tracingChannel('apm:langgraph:stream')
 
 function wrapStream (stream) {
   return function (input, options) {
-    if (!startCh.hasSubscribers) {
+    if (!streamTracingChannel.start.hasSubscribers) {
       return stream.apply(this, arguments)
     }
 
@@ -28,29 +27,32 @@ function wrapStream (stream) {
       self: this
     }
 
-    startCh.publish(ctx)
-
-    try {
-      const promise = stream.apply(this, arguments)
+    return streamTracingChannel.start.runStores(ctx, () => {
+      let promise
+      try {
+        promise = stream.apply(this, arguments)
+      } catch (error) {
+        ctx.error = error
+        streamTracingChannel.error.publish(ctx)
+        streamTracingChannel.asyncEnd.publish(ctx)
+        throw error
+      } finally {
+        streamTracingChannel.end.publish(ctx)
+      }
 
       return promise
         .then(result => {
           ctx.result = result
-          asyncEndCh.publish(ctx)
+          streamTracingChannel.asyncEnd.publish(ctx)
           return result
         })
         .catch(error => {
           ctx.error = error
-          errorCh.publish(ctx)
-          asyncEndCh.publish(ctx)
+          streamTracingChannel.error.publish(ctx)
+          streamTracingChannel.asyncEnd.publish(ctx)
           throw error
         })
-    } catch (error) {
-      ctx.error = error
-      errorCh.publish(ctx)
-      asyncEndCh.publish(ctx)
-      throw error
-    }
+    })
   }
 }
 

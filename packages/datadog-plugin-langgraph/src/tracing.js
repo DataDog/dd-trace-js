@@ -35,7 +35,7 @@ class LanggraphInvokePlugin extends LanggraphTracingPlugin {
 
 class LanggraphStreamPlugin extends LanggraphTracingPlugin {
   static id = 'langgraph_stream'
-  static prefix = 'apm:langgraph:stream'
+  static prefix = 'tracing:apm:langgraph:stream'
   static spanName = 'langgraph.stream'
 }
 
