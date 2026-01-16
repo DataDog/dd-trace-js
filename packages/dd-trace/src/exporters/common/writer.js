@@ -12,10 +12,13 @@ class Writer {
   flush (done = () => {}) {
     const count = this._encoder.count()
 
-    if (!request.writable) {
-      this._encoder.reset()
-      done()
-    } else if (count > 0) {
+    if (count > 0) {
+      if (typeof request.isUrlWritable === 'function' && !request.isUrlWritable(this._url)) {
+        this._encoder.reset()
+        done()
+        return
+      }
+
       const payload = this._encoder.makePayload()
 
       this._sendPayload(payload, count, done)
@@ -25,7 +28,7 @@ class Writer {
   }
 
   append (payload) {
-    if (!request.writable) {
+    if (typeof request.isUrlWritable === 'function' && !request.isUrlWritable(this._url)) {
       log.debug(() => `Maximum number of active requests reached. Payload discarded: ${safeJSONStringify(payload)}`)
       return
     }
