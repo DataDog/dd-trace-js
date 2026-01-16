@@ -141,10 +141,10 @@
     "@babel/helper-string-parser" "^7.27.1"
     "@babel/helper-validator-identifier" "^7.28.5"
 
-"@datadog/flagging-core@0.2.0":
-  version "0.2.0"
-  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-0.2.0.tgz#d29d81486068b870c41cebb2524721a71184eb16"
-  integrity sha512-DocYjr8NFJZfsnqzu3MuBUNqgbJquq1doimkKEXI5UImLmz/tR0LO09dd651pBhoz1Pa4SKcnPaxWFLTqxWtsA==
+"@datadog/flagging-core@0.3.1":
+  version "0.3.1"
+  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-0.3.1.tgz#54c5494285067fcb75b7fba6503917faffbd0a51"
+  integrity sha512-GTt0+6c2cBcShh3euYbDb6boz3MJqndq0e+0/DTMozEEUAeiZEiEVagp34shEAax8Lqrtn7+UZ8HGArsXimEcw==
   dependencies:
     spark-md5 "^3.0.2"
 
@@ -175,13 +175,13 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/openfeature-node-server@^0.2.0":
-  version "0.2.0"
-  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-0.2.0.tgz#905032cc6d7d1eb1d6620aabe323ed552366d65a"
-  integrity sha512-Jn8lShFyqNji0tiKntLcCRwu3xrhg93fTTJS3gHSPKMfBDBKxjB9uF8Hu5Ayn2k0QuwJexx5atN9GSiWX0h5qg==
+"@datadog/openfeature-node-server@^0.3.1":
+  version "0.3.1"
+  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-0.3.1.tgz#d02ab2a7a94648bd0cb92b8bca1cfdcab62b16f6"
+  integrity sha512-bY96ej6EINf2rWeM4TdmcbRZEuOD2/V/IhN2rXNmUtAUm5uPzjNFmaShi16TJWdoksWolCO1FdS07WHhf31C4A==
   dependencies:
-    "@datadog/flagging-core" "0.2.0"
-    "@openfeature/server-sdk" "~1.18.0"
+    "@datadog/flagging-core" "0.3.1"
+    "@openfeature/server-sdk" "~1.20.0"
 
 "@datadog/pprof@5.13.1":
   version "5.13.1"
@@ -598,11 +598,6 @@
   version "1.9.1"
   resolved "https://registry.yarnpkg.com/@openfeature/core/-/core-1.9.1.tgz#9925a04ed0745e92dd7b3793b35cff1ed89d54c1"
   integrity sha512-YySPtH4s/rKKnHRU0xyFGrqMU8XA+OIPNWDrlEFxE6DCVWCIrxE5YpiB94YD2jMFn6SSdA0cwQ8vLkCkl8lm8A==
-
-"@openfeature/server-sdk@~1.18.0":
-  version "1.18.0"
-  resolved "https://registry.yarnpkg.com/@openfeature/server-sdk/-/server-sdk-1.18.0.tgz#5fed5f1d0900b2535878db18a78295bbaebb997b"
-  integrity sha512-uP8nqEGBS58s3iWXx6d8vnJ6ZVt3DACJL4PWADOAuwIS4xXpID91783e9f6zQ0i1ijQpj3yx+3ZuCB2LfQMUMA==
 
 "@openfeature/server-sdk@~1.20.0":
   version "1.20.1"
@@ -2301,10 +2296,10 @@ import-fresh@^3.2.1:
     parent-module "^1.0.0"
     resolve-from "^4.0.0"
 
-import-in-the-middle@2.0.0:
-  version "2.0.0"
-  resolved "https://registry.yarnpkg.com/import-in-the-middle/-/import-in-the-middle-2.0.0.tgz#295948cee94d0565314824c6bd75379d13e5b1a5"
-  integrity sha512-yNZhyQYqXpkT0AKq3F3KLasUSK4fHvebNH5hOsKQw2dhGSALvQ4U0BqUc5suziKvydO5u5hgN2hy1RJaho8U5A==
+import-in-the-middle@2.0.1:
+  version "2.0.1"
+  resolved "https://registry.yarnpkg.com/import-in-the-middle/-/import-in-the-middle-2.0.1.tgz#8d1aa2db18374f2c811de2aa4756ebd6e9859243"
+  integrity sha512-bruMpJ7xz+9jwGzrwEhWgvRrlKRYCRDBrfU+ur3FcasYXLJDxTruJ//8g2Noj+QFyRBeqbpj8Bhn4Fbw6HjvhA==
   dependencies:
     acorn "^8.14.0"
     acorn-import-attributes "^1.9.5"
