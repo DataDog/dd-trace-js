@@ -65,11 +65,35 @@ class LangchainLanggraphBaseLLMObsPlugin extends LLMObsPlugin {
     if (result === undefined || result === null) return
 
     try {
-      const outputStr = typeof result === 'string' ? result : JSON.stringify(result)
+      // Sanitize result to exclude internal LangGraph properties
+      const sanitized = this._sanitizeOutput(result)
+      const outputStr = typeof sanitized === 'string' ? sanitized : JSON.stringify(sanitized)
       this._tagger.tagTextIO(span, null, outputStr)
     } catch {
       this._tagger.tagTextIO(span, null, '[Unable to serialize output]')
     }
+  }
+
+  /**
+   * Sanitize output object by removing internal LangGraph properties.
+   * Internal properties start with underscore (e.g., _abortController, _innerReader).
+   */
+  _sanitizeOutput (result) {
+    if (typeof result !== 'object' || result === null) {
+      return result
+    }
+
+    if (Array.isArray(result)) {
+      return result.map(item => this._sanitizeOutput(item))
+    }
+
+    const sanitized = {}
+    for (const [key, value] of Object.entries(result)) {
+      // Skip internal properties (start with _)
+      if (key.startsWith('_')) continue
+      sanitized[key] = value
+    }
+    return sanitized
   }
 
   _tagMetadata (span, config) {

@@ -17,35 +17,67 @@ for (const hook of getHooks('@langchain/langgraph')) {
 const streamTracingChannel = tracingChannel('apm:langgraph:stream')
 const onStreamedChunkCh = channel('apm:langgraph:stream:chunk')
 
-/**
- * Wraps the async iterator to publish chunks as they're consumed.
- */
+function finish (ctx, error) {
+  if (error) {
+    ctx.error = error
+    streamTracingChannel.error.publish(ctx)
+  }
+  streamTracingChannel.asyncEnd.publish(ctx)
+}
+
 function wrapStreamIterator (iterator, ctx) {
   return function () {
     const itr = iterator.apply(this, arguments)
+
+    // Track chunks for aggregation
+    ctx.chunks = ctx.chunks || []
+
     shimmer.wrap(itr, 'next', next => function () {
       return next.apply(this, arguments)
         .then(res => {
           const { done, value: chunk } = res
+
+          // Publish chunk event for LLMObs
           onStreamedChunkCh.publish({ ctx, chunk, done })
 
+          if (chunk) {
+            ctx.chunks.push(chunk)
+          }
+
           if (done) {
-            // Stream completed - publish asyncEnd
-            streamTracingChannel.asyncEnd.publish(ctx)
+            // Aggregate chunks into final result for the tracing plugin
+            // LangGraph chunks are objects like { nodeName: stateUpdate }
+            ctx.result = aggregateChunks(ctx.chunks)
+            finish(ctx)
           }
 
           return res
         })
         .catch(error => {
           ctx.error = error
-          streamTracingChannel.error.publish(ctx)
-          streamTracingChannel.asyncEnd.publish(ctx)
+          finish(ctx, error)
           throw error
         })
     })
 
     return itr
   }
+}
+
+/**
+ * Aggregate LangGraph stream chunks into final state.
+ * Each chunk is { nodeName: { stateKey: value, ... } }
+ */
+function aggregateChunks (chunks) {
+  const finalState = {}
+  for (const chunk of chunks) {
+    for (const nodeOutput of Object.values(chunk)) {
+      if (nodeOutput && typeof nodeOutput === 'object') {
+        Object.assign(finalState, nodeOutput)
+      }
+    }
+  }
+  return finalState
 }
 
 function wrapStream (stream) {
@@ -65,8 +97,7 @@ function wrapStream (stream) {
         promise = stream.apply(this, arguments)
       } catch (error) {
         ctx.error = error
-        streamTracingChannel.error.publish(ctx)
-        streamTracingChannel.asyncEnd.publish(ctx)
+        finish(ctx, error)
         throw error
       } finally {
         streamTracingChannel.end.publish(ctx)
@@ -74,20 +105,19 @@ function wrapStream (stream) {
 
       return promise
         .then(result => {
-          // Wrap the iterator to track chunks
-          if (result[Symbol.asyncIterator]) {
+          // LangGraph stream() returns an async iterator
+          if (result && result[Symbol.asyncIterator]) {
             shimmer.wrap(result, Symbol.asyncIterator, iterator => wrapStreamIterator(iterator, ctx))
           } else {
-            // Not a stream, just set the result
+            // Unexpected - finish immediately
             ctx.result = result
-            streamTracingChannel.asyncEnd.publish(ctx)
+            finish(ctx)
           }
           return result
         })
         .catch(error => {
           ctx.error = error
-          streamTracingChannel.error.publish(ctx)
-          streamTracingChannel.asyncEnd.publish(ctx)
+          finish(ctx, error)
           throw error
         })
     })
