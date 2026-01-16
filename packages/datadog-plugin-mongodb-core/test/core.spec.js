@@ -661,10 +661,10 @@ describe('Plugin', () => {
 
         it('DBM propagation should inject full mode with traceparent as comment', done => {
           agent
-            .assertSomeTraces(traces => {
-              const span = traces[0][0]
+            .assertFirstTraceSpan(span => {
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
+              const samplingPriotrity = span.metrics._sampling_priority_v1 > 0 ? '01' : '00'
 
               assert.strictEqual(startSpy.called, true)
               const { comment } = startSpy.getCall(0).args[0].ops
@@ -676,7 +676,7 @@ describe('Plugin', () => {
                 `ddps='${encodeURIComponent(span.meta.service)}',` +
                 `ddpv='${ddpv}',` +
                 `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
-                `traceparent='00-${traceId}-${spanId}-01'`
+                `traceparent='00-${traceId}-${spanId}-${samplingPriotrity}'`
               )
             })
             .then(done)
