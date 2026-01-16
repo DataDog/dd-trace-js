@@ -54,7 +54,7 @@ describe('esm', () => {
       './packages/datadog-plugin-mongodb-core/test/integration-test/*'])
 
     before(async function () {
-      variants = varySandbox('server2.mjs', 'MongoDBCore')
+      variants = varySandbox('server2.mjs', 'MongoDBCore', undefined, 'mongodb-core')
     })
 
     beforeEach(async () => {

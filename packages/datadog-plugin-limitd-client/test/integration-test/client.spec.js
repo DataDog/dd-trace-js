@@ -21,7 +21,7 @@ describe('esm', () => {
       './packages/datadog-plugin-limitd-client/test/integration-test/*'])
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'limitd-client')
+      variants = varySandbox('server.mjs', 'LimitdClient', undefined, 'limitd-client')
     })
 
     beforeEach(async () => {

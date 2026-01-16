@@ -450,7 +450,7 @@ async function createSandbox (
  * @overload
  * @param {string} filename - The file that will be copied and modified for each variant.
  * @param {string} bindingName - The binding name that will be use to bind to the packageName.
- * @param {string} [namedVariant] - The name of the named variant to use.
+ * @param {string} [namedExport] - The name of the named variant to use.
  * @param {string} [packageName] - The name of the package. If not provided, the binding name will be used.
  * @returns {Variants} A map from variant names to resulting filenames
  */
@@ -466,30 +466,41 @@ async function createSandbox (
  * @param {Variants} variants - The variants.
  * @returns {Variants} A map from variant names to resulting filenames
  */
-function varySandbox (filename, variants, namedVariant, packageName = variants) {
+function varySandbox (filename, variants, namedExport, packageName = variants, byPassDefault) {
   if (typeof variants === 'string') {
-    const bindingName = namedVariant || variants
-    variants = {
-      default: `import ${bindingName} from '${packageName}'`,
-      star: namedVariant
-        ? `import * as ${bindingName} from '${packageName}'`
-        : `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.default`,
-      destructure: namedVariant
-        ? `import { ${namedVariant} } from '${packageName}'; const ${bindingName} = { ${namedVariant} }`
-        : `import { default as ${bindingName}} from '${packageName}'`
-    }
+    const bindingName = variants
+    // Default namedVariant to bindingName when bypassing default export
+    if (byPassDefault && !namedExport) namedExport = bindingName
+    variants = byPassDefault
+      ? {
+          // eslint-disable-next-line @stylistic/max-len
+          star: `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.${namedExport}`,
+          destructure: `import { ${namedExport} } from '${packageName}'`
+        }
+      : {
+          default: `import ${bindingName} from '${packageName}'`,
+          star: namedExport
+            ? `import * as ${bindingName} from '${packageName}'`
+            : `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.default`,
+          destructure: namedExport
+            ? `import { ${namedExport} } from '${packageName}'; const ${bindingName} = { ${namedExport} }`
+            : `import { default as ${bindingName}} from '${packageName}'`
+        }
   }
 
   const origFileData = readFileSync(path.join(sandbox.folder, filename), 'utf8')
   const { name: prefix, ext: suffix } = path.parse(filename)
   const variantFilenames = /** @type {Variants} */ ({})
+  const baseVariant = byPassDefault ? 'destructure' : 'default'
 
   for (const [variant, value] of Object.entries(variants)) {
     const variantFilename = `${prefix}-${variant}${suffix}`
     variantFilenames[variant] = variantFilename
     let newFileData = origFileData
-    if (variant !== 'default') {
-      newFileData = origFileData.replace(variants.default, `${value}`)
+    if (variant !== baseVariant) {
+      newFileData = origFileData.replace(variants[baseVariant], `${value}`)
+      // Error out when the default import does not match that of server.mjs
+      if (newFileData === origFileData) throw Error(`Unable to match ${baseVariant}`)
     }
     writeFileSync(path.join(sandbox.folder, variantFilename), newFileData)
   }

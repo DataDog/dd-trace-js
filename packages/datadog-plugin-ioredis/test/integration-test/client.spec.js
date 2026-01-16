@@ -11,6 +11,7 @@ const {
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+
 describe('esm', () => {
   let agent
   let proc
@@ -20,7 +21,7 @@ describe('esm', () => {
       './packages/datadog-plugin-ioredis/test/integration-test/*'])
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'ioredis')
+      variants = varySandbox('server.mjs', 'Redis', undefined, 'ioredis')
     })
 
     beforeEach(async () => {
