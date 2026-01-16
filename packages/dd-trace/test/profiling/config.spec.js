@@ -32,7 +32,26 @@ describe('config', () => {
   }
 
   beforeEach(() => {
-    Config = require('../../src/profiling/config').Config
+    const ProfilingConfig = require('../../src/profiling/config').Config
+    // Wrap the real profiling Config so tests see a valid default URL when none
+    // is provided, matching what the tracer Config singleton would provide at runtime.
+    Config = class TestConfig extends ProfilingConfig {
+      constructor (options = {}) {
+        const hasAddress =
+          options.url !== undefined ||
+          options.hostname !== undefined ||
+          options.port !== undefined
+
+        if (hasAddress) {
+          super(options)
+        } else {
+          super({
+            url: 'http://127.0.0.1:8126',
+            ...options
+          })
+        }
+      }
+    }
     env = process.env
     process.env = {}
   })
@@ -397,7 +416,8 @@ describe('config', () => {
 
   it('should support IPv6 hostname', () => {
     const options = {
-      hostname: '::1'
+      hostname: '::1',
+      port: '8126'
     }
 
     const config = new Config(options)
@@ -528,7 +548,10 @@ describe('config', () => {
         } else {
           process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = '0'
           try {
-            const config = new Config({})
+            const config = new Config({
+              // In production this comes from the tracer Config singleton; we mimic it here.
+              url: 'http://127.0.0.1:8126'
+            })
             assert.strictEqual(config.asyncContextFrameEnabled, false)
           } finally {
             delete process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
@@ -553,7 +576,7 @@ describe('config', () => {
         } else {
           process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = '1'
           try {
-            const config = new Config({})
+            const config = new Config()
             assert.strictEqual(config.asyncContextFrameEnabled, false)
           } finally {
             delete process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
@@ -578,7 +601,11 @@ describe('config', () => {
         },
         error () {}
       }
-      const config = new Config({ logger })
+      const config = new Config({
+        logger,
+        // In production this comes from the tracer Config singleton; we mimic it here.
+        url: 'http://127.0.0.1:8126'
+      })
 
       if (warning) {
         assert.strictEqual(logger.warnings.length, 1)
