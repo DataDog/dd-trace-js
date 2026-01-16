@@ -928,6 +928,18 @@ function main () {
     }
   }
 
+  // All test:integration* scripts should be referenced by CI (except test:integration:plugins).
+  for (const name of Object.keys(scripts).sort((a, b) => a.localeCompare(b, 'en'))) {
+    if (!name.startsWith('test:integration')) continue
+    // Skip test:integration:plugins - it's a convenience script for running only plugin integration
+    // tests locally, but in CI these are already covered by test:plugins:ci (which runs all plugin
+    // tests including integration tests).
+    if (name === 'test:integration:plugins') continue
+    if (!invokedScripts.has(name)) {
+      pushError(`package.json: script "${name}" is not invoked by any GitHub Actions workflow`)
+    }
+  }
+
   // Validate plugin setup (domain-specific):
   // - test:plugins* expects packages/datadog-plugin-<name>
   // - test:appsec:plugins* expects matching *.plugin.spec.js files
