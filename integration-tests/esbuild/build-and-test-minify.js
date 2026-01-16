@@ -9,15 +9,6 @@ const assert = require('assert')
 const esbuild = require('esbuild')
 const ddPlugin = require('../../esbuild') // dd-trace/esbuild
 
-const emitWarning = process.emitWarning
-let didWarn = false
-process.emitWarning = function (...args) {
-  emitWarning(...args) // print something just so that we're not hiding any underlying issues
-  if (args[1]?.code === 'DATADOG_0001') {
-    didWarn = true
-  }
-}
-
 esbuild.build({
   minify: true,
   // keepNames: false, // the default
@@ -31,12 +22,15 @@ esbuild.build({
     'knex'
   ]
 }).then(() => {
-  assert(didWarn, 'did properly warn user about using minify without keeping names')
-  console.log('ok')
+  console.error('Expected build to throw an error, but it succeeded')
+  process.exitCode = 1
 }).catch((err) => {
-  console.error(err)
-  process.exit(1)
+  assert(
+    err.message.includes('--minify without --keep-names'),
+    'should throw error about minify without keepNames'
+  )
+  console.log('ok')
+  process.exitCode = 0
 }).finally(() => {
-  process.emitWarning = emitWarning
   fs.rmSync('./minify-out.js', { force: true })
 })

@@ -98,9 +98,8 @@ function getGitMetadata () {
 
 module.exports.setup = function (build) {
   if (build.initialOptions.minify && !build.initialOptions.keepNames) {
-    process.emitWarning(
-      'WARNING: using --minify without --keep-names will break some dd-trace behavior.',
-      { code: 'DATADOG_0001' }
+    throw new Error(
+      'Using --minify without --keep-names will break some dd-trace behavior. Refusing to bundle.'
     )
   }
 
