@@ -330,8 +330,14 @@ describe('Plugin', () => {
           })
         })
 
-        withVersions('koa', ['koa-router', '@koa/router'], (routerVersion, moduleName) => {
+        withVersions('koa', ['koa-router', '@koa/router'], (routerVersion, moduleName, realVersion) => {
           let Router
+
+          if (moduleName === '@koa/router' &&
+            semver.satisfies(realVersion, '>=15.0.0') &&
+            !semver.satisfies(process.version.slice(1), '>=20.0.0')) {
+            return
+          }
 
           beforeEach(() => {
             Router = require(`../../../versions/${moduleName}@${routerVersion}`).get()
@@ -359,7 +365,7 @@ describe('Plugin', () => {
                   assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user/123`)
 
                   assert.ok(Object.hasOwn(spans[1], 'resource'))
-                  assert.match(spans[1].resource, /^dispatch/)
+                  assert.match(spans[1].resource, /^(dispatch|bound)/)
 
                   assert.strictEqual(spans[2].resource, 'handle')
                 })
@@ -666,7 +672,7 @@ describe('Plugin', () => {
                   assert.strictEqual(spans[0].error, 1)
 
                   assert.ok(Object.hasOwn(spans[1], 'resource'))
-                  assert.match(spans[1].resource, /^dispatch/)
+                  assert.match(spans[1].resource, /^(dispatch|bound)/)
                   assertObjectContains(spans[1].meta, {
                     [ERROR_TYPE]: error.name,
                     component: 'koa'
@@ -891,9 +897,13 @@ describe('Plugin', () => {
             })
           })
 
-          withVersions('koa', ['koa-router', '@koa/router'], (routerVersion, moduleName) => {
+          withVersions('koa', ['koa-router', '@koa/router'], (routerVersion, moduleName, realVersion) => {
             let Router
-
+            if (moduleName === '@koa/router' &&
+              semver.satisfies(realVersion, '>=15.0.0') &&
+              !semver.satisfies(process.version.slice(1), '>=20.0.0')) {
+              return
+            }
             beforeEach(() => {
               Router = require(`../../../versions/${moduleName}@${routerVersion}`).get()
             })
