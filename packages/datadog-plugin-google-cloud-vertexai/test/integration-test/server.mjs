@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
 
-import { VertexAI } from '@google-cloud/vertexai'
+import vertexLib from '@google-cloud/vertexai'
 import { GoogleAuth } from 'google-auth-library/build/src/auth/googleauth.js'
 
 import sinon from 'sinon'
@@ -42,7 +42,7 @@ global.fetch = async (url, options) => {
 }
 
 try {
-  const client = new VertexAI({
+  const client = new vertexLib.VertexAI({
     project: 'datadog-sandbox',
     location: 'us-central1'
   })
