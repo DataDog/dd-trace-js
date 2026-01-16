@@ -91,7 +91,7 @@ function makeRequest (version, data, count, url, headers, lookup, needsStartupLo
     url
   }
 
-  console.log('Request to the agent: %j', options)
+  log.debug('Request to the agent: %j', options)
 
   request(data, options, (err, res, status) => {
     if (needsStartupLog) {
