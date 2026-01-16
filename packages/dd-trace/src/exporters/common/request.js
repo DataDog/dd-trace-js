@@ -77,7 +77,7 @@ function request (data, options, callback) {
     res.on('data', chunk => {
       chunks.push(chunk)
     })
-    res.on('end', () => {
+    res.once('end', () => {
       activeRequests--
       const buffer = Buffer.concat(chunks)
 

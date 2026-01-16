@@ -59,7 +59,7 @@ describe('OpenTelemetry Logs', () => {
           once: () => {},
           setTimeout: () => {}
         }
-        callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
+        callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
         return mockReq
       }
 
@@ -71,7 +71,7 @@ describe('OpenTelemetry Logs', () => {
         once: () => {},
         setTimeout: () => {}
       }
-      callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
+      callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
       return mockReq
     })
 

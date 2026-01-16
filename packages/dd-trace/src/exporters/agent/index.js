@@ -31,9 +31,7 @@ class AgentExporter {
       config
     })
 
-    process.once('beforeExit', () => {
-      this.flush()
-    })
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
   }
 
   setUrl (url) {

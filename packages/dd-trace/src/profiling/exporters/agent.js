@@ -73,7 +73,7 @@ function getBody (stream, callback) {
     callback(err)
   })
   stream.on('data', chunk => chunks.push(chunk))
-  stream.on('end', () => {
+  stream.once('end', () => {
     callback(null, Buffer.concat(chunks))
   })
 }

@@ -141,11 +141,11 @@ function wrapConnection (Connection, version) {
             finishCh.runStores(ctx, onResult, this, ...arguments)
           })
         } else {
-          this.on(errorMonitor, error => {
+          this.once(errorMonitor, error => {
             ctx.error = error
             errorCh.publish(ctx)
           })
-          this.on('end', () => finishCh.publish(ctx))
+          this.once('end', () => finishCh.publish(ctx))
         }
 
         this.execute = execute

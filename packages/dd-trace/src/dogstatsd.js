@@ -360,7 +360,7 @@ class CustomMetrics {
     // TODO(bengl) this magic number should be configurable
     setInterval(flush, 10 * 1000).unref()
 
-    process.once('beforeExit', flush)
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(flush)
   }
 
   increment (stat, value = 1, tags) {
