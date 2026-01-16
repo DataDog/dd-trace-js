@@ -440,6 +440,28 @@ class LLMObs extends NoopLLMObs {
     return storage.run(store, fn)
   }
 
+  routingContext (options, fn) {
+    if (!this.enabled) return fn()
+    if (!options?.ddApiKey) {
+      throw new Error('ddApiKey is required for routing context')
+    }
+    const currentStore = storage.getStore()
+    if (currentStore?.routingContext) {
+      logger.warn(
+        '[LLM Observability] Nested routing context detected. Inner context will override outer context. ' +
+        'Spans created in the inner context will only be sent to the inner context.'
+      )
+    }
+    const store = {
+      ...currentStore,
+      routingContext: {
+        apiKey: options.ddApiKey,
+        site: options.ddSite
+      }
+    }
+    return storage.run(store, fn)
+  }
+
   flush () {
     if (!this.enabled) return
 
