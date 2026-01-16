@@ -153,12 +153,12 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
     }
 
     // Validate result metadata is present and has valid values
-    if (typeof actualMetadata.result !== 'string') {
-      throw new assert.AssertionError({ message: 'result field should be a string' })
-    }
-    if (typeof actualMetadata.result_class !== 'string') {
-      throw new assert.AssertionError({ message: 'result_class should be a string' })
-    }
+    assert(typeof actualMetadata.result === 'string', 'result should be a string')
+    assert(typeof actualMetadata.result_class === 'string', 'result_class should be a string')
+    assert(typeof actualMetadata.result_reason === 'string', 'result_reason should be a string')
+    assert(actualMetadata.result, 'result field should be present')
+    assert(actualMetadata.result_class, 'result_class field should be present')
+    assert(actualMetadata.result_reason, 'result_reason field should be present')
 
     // Check that result metadata has expected values for telemetry scenarios
     const validResults = ['success', 'abort', 'error', 'unknown']
@@ -167,7 +167,6 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
     assert(validResults.includes(actualMetadata.result), `Invalid result: ${actualMetadata.result}`)
     assert(validResultClasses.includes(actualMetadata.result_class),
       `Invalid result_class: ${actualMetadata.result_class}`)
-    assert(typeof actualMetadata.result_reason === 'string', 'result_reason should be a string')
   }
 }
 
