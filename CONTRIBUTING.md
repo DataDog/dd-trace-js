@@ -432,6 +432,11 @@ If running locally without an internet connection,
 it's possible to use the environment variable `OFFLINE=true` to make `yarn` use the `--prefer-offline` flag,
 which will use the local yarn cache instead of fetching packages from npm.
 
+To collect coverage from integration tests,
+use the `test:integration*:ci` scripts.
+These enable V8 coverage for the app-under-test and then run `scripts/integration-coverage-report.js` using the dedicated config in `integration-tests/nyc-integration.config.js`.
+Reports are written to `coverage/integration-<suite>` with raw output in `.nyc_output/integration-<suite>`.
+
 ### Adding a Plugin Test to CI
 
 The plugin tests run on pull requests in Github Actions. Each plugin test suite has its own Github job, so adding a new suite to CI
