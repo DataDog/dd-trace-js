@@ -177,6 +177,13 @@ const log = require('../log')
   if (NODE_MAJOR >= 20) { /* Use Node.js 20+ API */ }
   ```
 
+### Event handlers
+
+- Avoid adding new listeners, if possible
+- Use monitor symbols like `events.errorMonitor` when available
+- Use `.once()` methods instead of `.on()`, if the event is only needed once
+- If new `beforeExit` events on `process` are needed, add them to `globalThis[Symbol.for('dd-trace')].beforeExitHandlers`
+
 ### Performance and Memory
 
 **CRITICAL: Tracer runs in application hot paths - every operation counts.**
