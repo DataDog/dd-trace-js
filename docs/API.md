@@ -85,6 +85,7 @@ tracer.use('pg', {
 <h5 id="mysql2-config"></h5>
 <h5 id="net"></h5>
 <h5 id="next"></h5>
+<h5 id="openai-agents"></h5>
 <h5 id="opensearch"></h5>
 <h5 id="oracledb"></h5>
 <h5 id="pino"></h5>
@@ -146,6 +147,7 @@ tracer.use('pg', {
 * [mysql2](./interfaces/export_.plugins.mysql2.html)
 * [net](./interfaces/export_.plugins.net.html)
 * [next](./interfaces/export_.plugins.next.html)
+* [openai-agents](./interfaces/export_.plugins.openai_agents.html)
 * [opensearch](./interfaces/export_.plugins.opensearch.html)
 * [openai](./interfaces/export_.plugins.openai.html)
 * [oracledb](./interfaces/export_.plugins.oracledb.html)

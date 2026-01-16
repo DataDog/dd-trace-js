@@ -1,0 +1,1 @@
+{"id":"chatcmpl-result123","object":"chat.completion","created":1768413000,"model":"gpt-4o-mini-2024-07-18","choices":[{"index":0,"message":{"role":"assistant","content":"The weather in San Francisco is sunny and 72 degrees."},"finish_reason":"stop"}],"usage":{"prompt_tokens":80,"completion_tokens":15,"total_tokens":95},"system_fingerprint":"fp_test"}

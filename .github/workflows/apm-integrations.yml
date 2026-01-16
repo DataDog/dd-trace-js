@@ -939,6 +939,17 @@ jobs:
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
+  openai-agents:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: openai-agents
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+
   opensearch:
     runs-on: ubuntu-latest
     services:
