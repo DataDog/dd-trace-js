@@ -73,6 +73,7 @@ tracer.use('pg', {
 <h5 id="memcached-config"></h5>
 <h5 id="microgateway-core"></h5>
 <h5 id="mocha"></h5>
+<h5 id="modelcontextprotocol-sdk"></h5>
 <h5 id="moleculer"></h5>
 <h5 id="mongodb-core"></h5>
 <h5 id="mongodb-core-tags"></h5>
@@ -141,6 +142,7 @@ tracer.use('pg', {
 * [mariadb](./interfaces/export_.plugins.mariadb.html)
 * [microgateway--core](./interfaces/export_.plugins.microgateway_core.html)
 * [mocha](./interfaces/export_.plugins.mocha.html)
+* [modelcontextprotocol-sdk](./interfaces/export_.plugins.modelcontextprotocol_sdk.html)
 * [mongodb-core](./interfaces/export_.plugins.mongodb_core.html)
 * [mysql](./interfaces/export_.plugins.mysql.html)
 * [mysql2](./interfaces/export_.plugins.mysql2.html)

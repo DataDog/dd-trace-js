@@ -58,6 +58,7 @@ declare -a plugins=(
   "memcached"
   "microgateway_core"
   "mocha"
+  "modelcontextprotocol-sdk"
   "mongodb_core"
   "mongoose"
   "mysql"
