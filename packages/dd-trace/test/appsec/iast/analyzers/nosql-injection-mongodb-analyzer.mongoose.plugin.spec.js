@@ -30,10 +30,11 @@ describe('nosql injection detection in mongodb - whole feature', () => {
 
         const connectOptions = {}
 
-        // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 5
-        if (semver.lt(loadedMongooseVersion, '5.0.0')) {
+        // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 6
+        if (semver.lt(loadedMongooseVersion, '6.0.0')) {
           connectOptions.useNewUrlParser = true
           connectOptions.useUnifiedTopology = true
+          connectOptions.useMongoClient = true
         }
 
         await mongoose.connect(`mongodb://localhost:27017/${dbName}`, connectOptions)
