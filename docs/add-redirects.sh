@@ -72,6 +72,7 @@ declare -a plugins=(
   "playwright"
   "prisma"
   "protobufjs"
+  "puppeteer"
   "redis"
   "restify"
   "rhea"

@@ -128,6 +128,7 @@ module.exports = {
   promise: () => require('../promise'),
   protobufjs: () => require('../protobufjs'),
   pug: () => require('../pug'),
+  puppeteer: () => require('../puppeteer'),
   q: () => require('../q'),
   redis: () => require('../redis'),
   restify: () => require('../restify'),

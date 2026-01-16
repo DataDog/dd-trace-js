@@ -241,6 +241,7 @@ interface Plugins {
   "pino": tracer.plugins.pino;
   "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
+  "puppeteer": tracer.plugins.puppeteer;
   "redis": tracer.plugins.redis;
   "restify": tracer.plugins.restify;
   "rhea": tracer.plugins.rhea;
@@ -2369,6 +2370,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [redis](https://github.com/NodeRedis/node_redis) module.
      */
+    /**
+     * This plugin automatically instruments the
+     * [puppeteer](https://github.com/npmjs/package/puppeteer) library.
+     */
+    interface puppeteer extends Instrumentation {}
+
     interface redis extends Instrumentation {
       /**
        * List of commands that should be instrumented.

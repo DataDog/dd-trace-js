@@ -93,6 +93,7 @@ tracer.use('pg', {
 <h5 id="pg-config"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
+<h5 id="puppeteer"></h5>
 <h5 id="redis"></h5>
 <h5 id="redis-tags"></h5>
 <h5 id="redis-config"></h5>
@@ -155,6 +156,7 @@ tracer.use('pg', {
 * [promise](./interfaces/export_.plugins.promise.html)
 * [promise-js](./interfaces/export_.plugins.promise_js.html)
 * [protobufjs](./interfaces/export_.plugins.protobufjs.html)
+* [puppeteer](./interfaces/export_.plugins.puppeteer.html)
 * [q](./interfaces/export_.plugins.q.html)
 * [redis](./interfaces/export_.plugins.redis.html)
 * [restify](./interfaces/export_.plugins.restify.html)

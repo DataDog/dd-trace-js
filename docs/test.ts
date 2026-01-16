@@ -403,6 +403,7 @@ tracer.use('pg', { appendComment: true });
 tracer.use('pino');
 tracer.use('prisma');
 tracer.use('protobufjs');
+tracer.use('puppeteer');
 tracer.use('redis');
 tracer.use('redis', redisOptions);
 tracer.use('restify');
