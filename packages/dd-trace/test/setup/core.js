@@ -36,8 +36,14 @@ if (!globalThis[Symbol.for('dd-trace')]) {
 // Override per-test, if absolutely necessary.
 require('events').defaultMaxListeners = 6
 
+// Warnings that should not be thrown
+const warningExceptions = new Set()
+
 process.on('warning', (warning) => {
   if (warning.name === 'MaxListenersExceededWarning' && !warning.message.includes('[Runner]')) {
+    throw warning
+  }
+  if (warning.name === 'DeprecationWarning' && !warningExceptions.has(warning.message)) {
     throw warning
   }
 })
