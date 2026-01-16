@@ -24,6 +24,7 @@ tracer.use('pg', {
 <h5 id="amqplib"></h5>
 <h5 id="amqplib-tags"></h5>
 <h5 id="amqplib-config"></h5>
+<h5 id="anthropic-ai-claude-agent-sdk"></h5>
 <h5 id="avsc"></h5>
 <h5 id="aws-sdk"></h5>
 <h5 id="aws-sdk-tags"></h5>
@@ -108,6 +109,7 @@ tracer.use('pg', {
 
 * [amqp10](./interfaces/export_.plugins.amqp10.html)
 * [amqplib](./interfaces/export_.plugins.amqplib.html)
+* [anthropic-ai-claude-agent-sdk](./interfaces/export_.plugins.anthropic_ai_claude_agent_sdk.html)
 * [avsc](./interfaces/export_.plugins.avsc.html)
 * [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
 * [azure-functions](./interfaces/export_.plugins.azure_functions.html)

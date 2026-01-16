@@ -305,6 +305,7 @@ tracer.use('ai', true)
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');
+tracer.use('anthropic-ai-claude-agent-sdk');
 tracer.use('avsc');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
