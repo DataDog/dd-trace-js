@@ -387,7 +387,7 @@ describe('end to end sdk integration tests', () => {
           prompt: {
             id: '123',
             version: '1.0.0',
-            template: 'this is a {user_query}. please summarize based on {message_history}',
+            template: 'this is a {{user_query}}. please summarize based on {{message_history}}',
             variables: {
               user_query: 'test',
               message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?'
@@ -404,9 +404,7 @@ describe('end to end sdk integration tests', () => {
       assert.deepEqual(llmobsSpans[0].meta.input.prompt, {
         id: '123',
         version: '1.0.0',
-        chat_template: [
-          { role: 'user', content: 'this is a {user_query}. please summarize based on {message_history}' }
-        ],
+        template: 'this is a {{user_query}}. please summarize based on {{message_history}}',
         variables: {
           user_query: 'test',
           message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?'
@@ -422,7 +420,7 @@ describe('end to end sdk integration tests', () => {
           prompt: {
             id: '123',
             version: '1.0.0',
-            template: 'this is a {user_query}. please summarize based on {message_history}',
+            template: 'this is a {{user_query}}. please summarize based on {{message_history}}',
           }
         })
       })
@@ -437,7 +435,7 @@ describe('end to end sdk integration tests', () => {
         prompt: {
           id: '123',
           version: '1.0.0',
-          template: 'this is a {user_query}. please summarize based on {message_history}',
+          template: 'this is a {{user_query}}. please summarize based on {{message_history}}',
           variables: {
             user_query: 'test',
             message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?',
@@ -454,9 +452,7 @@ describe('end to end sdk integration tests', () => {
       assert.deepEqual(llmobsSpans[0].meta.input.prompt, {
         id: '123',
         version: '1.0.0',
-        chat_template: [
-          { role: 'user', content: 'this is a {user_query}. please summarize based on {message_history}' }
-        ],
+        template: 'this is a {{user_query}}. please summarize based on {{message_history}}',
         variables: {
           user_query: 'test',
           message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?'
