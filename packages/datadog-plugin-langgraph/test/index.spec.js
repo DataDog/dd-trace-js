@@ -5,7 +5,7 @@ const TestSetup = require('./test-setup')
 
 const testSetup = new TestSetup()
 
-createIntegrationTestSuite('langchain-langgraph', '@langchain/langgraph', {
+createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
   category: 'llm'
 }, (meta) => {
   before(async () => {
@@ -20,10 +20,10 @@ createIntegrationTestSuite('langchain-langgraph', '@langchain/langgraph', {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = meta.agent.assertFirstTraceSpan(
         {
-          name: 'langchain-langgraph.invoke',
+          name: 'langgraph.invoke',
           meta: {
             'span.kind': 'client',
-            'component': 'langchain-langgraph'
+            component: '@langchain/langgraph'
           },
           metrics: {}
         }
@@ -48,10 +48,10 @@ createIntegrationTestSuite('langchain-langgraph', '@langchain/langgraph', {
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = meta.agent.assertFirstTraceSpan(
         {
-          name: 'langchain-langgraph.invoke',
+          name: 'langgraph.invoke',
           meta: {
             'span.kind': 'client',
-            'component': 'langchain-langgraph'
+            component: '@langchain/langgraph'
           },
           metrics: {},
           error: 1

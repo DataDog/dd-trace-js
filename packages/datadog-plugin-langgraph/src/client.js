@@ -2,15 +2,14 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-class LangchainLanggraphStreamPlugin extends TracingPlugin {
-  static id = 'langchain-langgraph'
-  // Use shimmer-based channel (not orchestrion rewriter)
-  static prefix = 'apm:langchain-langgraph:stream'
+class BaseLanggraphClientPlugin extends TracingPlugin {
+  static id = '@langchain/langgraph'
+  static prefix = 'tracing:orchestrion:@langchain/langgraph:Pregel_invoke'
 
   bindStart (ctx) {
     const meta = this.getTags(ctx)
 
-    this.startSpan('langchain-langgraph.stream', {
+    this.startSpan('langgraph.invoke', {
       service: this.config.service,
       kind: 'client',
       meta
@@ -21,7 +20,7 @@ class LangchainLanggraphStreamPlugin extends TracingPlugin {
 
   getTags (ctx) {
     return {
-      component: 'langchain-langgraph',
+      component: '@langchain/langgraph',
       'span.kind': 'client'
     }
   }
@@ -37,4 +36,4 @@ class LangchainLanggraphStreamPlugin extends TracingPlugin {
   }
 }
 
-module.exports = LangchainLanggraphStreamPlugin
+module.exports = BaseLanggraphClientPlugin

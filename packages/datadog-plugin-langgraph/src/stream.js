@@ -2,16 +2,17 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-class LangchainLanggraphInternalPlugin extends TracingPlugin {
-  static id = 'langchain-langgraph'
-  static prefix = 'tracing:orchestrion:@langchain/langgraph:_runWithRetry'
+class LanggraphStreamPlugin extends TracingPlugin {
+  static id = '@langchain/langgraph'
+  // Use shimmer-based channel (not orchestrion rewriter)
+  static prefix = 'apm:langchain-langgraph:stream'
 
   bindStart (ctx) {
     const meta = this.getTags(ctx)
 
-    this.startSpan('langchain-langgraph._runWithRetry', {
+    this.startSpan('langgraph.stream', {
       service: this.config.service,
-      kind: 'internal',
+      kind: 'client',
       meta
     }, ctx)
 
@@ -20,8 +21,8 @@ class LangchainLanggraphInternalPlugin extends TracingPlugin {
 
   getTags (ctx) {
     return {
-      component: 'langchain-langgraph',
-      'span.kind': 'internal'
+      component: '@langchain/langgraph',
+      'span.kind': 'client'
     }
   }
 
@@ -36,4 +37,4 @@ class LangchainLanggraphInternalPlugin extends TracingPlugin {
   }
 }
 
-module.exports = LangchainLanggraphInternalPlugin
+module.exports = LanggraphStreamPlugin

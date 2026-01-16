@@ -53,7 +53,7 @@ declare -a plugins=(
   "knex"
   "koa"
   "langchain"
-  "langchain-langgraph"
+  "langgraph"
   "ldapjs"
   "mariadb"
   "memcached"

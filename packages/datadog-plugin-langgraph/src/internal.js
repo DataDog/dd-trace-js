@@ -2,16 +2,16 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-class BaseLangchainLanggraphClientPlugin extends TracingPlugin {
-  static id = 'langchain-langgraph'
-  static prefix = 'tracing:orchestrion:@langchain/langgraph:Pregel_invoke'
+class LanggraphInternalPlugin extends TracingPlugin {
+  static id = '@langchain/langgraph'
+  static prefix = 'tracing:orchestrion:@langchain/langgraph:_runWithRetry'
 
   bindStart (ctx) {
     const meta = this.getTags(ctx)
 
-    this.startSpan('langchain-langgraph.invoke', {
+    this.startSpan('langgraph._runWithRetry', {
       service: this.config.service,
-      kind: 'client',
+      kind: 'internal',
       meta
     }, ctx)
 
@@ -20,8 +20,8 @@ class BaseLangchainLanggraphClientPlugin extends TracingPlugin {
 
   getTags (ctx) {
     return {
-      component: 'langchain-langgraph',
-      'span.kind': 'client'
+      component: '@langchain/langgraph',
+      'span.kind': 'internal'
     }
   }
 
@@ -36,4 +36,4 @@ class BaseLangchainLanggraphClientPlugin extends TracingPlugin {
   }
 }
 
-module.exports = BaseLangchainLanggraphClientPlugin
+module.exports = LanggraphInternalPlugin

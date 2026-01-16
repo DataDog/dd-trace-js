@@ -1,6 +1,6 @@
 'use strict'
 
-class LangchainLanggraphTestSetup {
+class LanggraphTestSetup {
   async setup (module) {
     this.workflow = null
     this.module = module
@@ -130,4 +130,4 @@ class LangchainLanggraphTestSetup {
   }
 }
 
-module.exports = LangchainLanggraphTestSetup
+module.exports = LanggraphTestSetup
