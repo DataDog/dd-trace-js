@@ -323,21 +323,19 @@ class LLMObsTagger {
       }
     }
 
-    const finalChatTemplate = []
-    if (template && typeof template === 'string') {
-      finalChatTemplate.push({ role: 'user', content: template })
-    } else if (template) {
-      for (const message of template) {
-        // copy only the role and content properties of the message
-        finalChatTemplate.push({ role: message.role, content: message.content })
-      }
+    let finalTemplate, finalChatTemplate
+    if (typeof template === 'string') {
+      finalTemplate = template
+    } else if (Array.isArray(template)) {
+      finalChatTemplate = template.map(message => ({ role: message.role, content: message.content }))
     }
 
     const validatedPrompt = {}
     if (finalPromptId) validatedPrompt.id = finalPromptId
     if (version) validatedPrompt.version = version
     if (variables) validatedPrompt.variables = variables
-    if (finalChatTemplate.length) validatedPrompt.chat_template = finalChatTemplate
+    if (finalTemplate) validatedPrompt.template = finalTemplate
+    if (finalChatTemplate?.length) validatedPrompt.chat_template = finalChatTemplate
     if (tags) validatedPrompt.tags = tags
     if (finalCtxVariablesKeys) validatedPrompt[INTERNAL_CONTEXT_VARIABLE_KEYS] = finalCtxVariablesKeys
     if (finalQueryVariablesKeys) validatedPrompt[INTERNAL_QUERY_VARIABLE_KEYS] = finalQueryVariablesKeys
