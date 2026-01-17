@@ -29,6 +29,7 @@ describe('Plugin', () => {
         if (semver.lt(mongooseVersion, '5.0.0')) {
           connectOptions.useNewUrlParser = true
           connectOptions.useUnifiedTopology = true
+          connectOptions.useMongoClient = true
         }
 
         // mongoose.connect('mongodb://username:password@host:port/database?options...');

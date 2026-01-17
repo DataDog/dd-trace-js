@@ -55,7 +55,12 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        server.destroy()
+        // Newer versions of mongodb-core use the close method instead of destroy
+        if (Object.hasOwn(server, 'close')) {
+          server.close()
+        } else {
+          server.destroy()
+        }
       })
 
       describe('without configuration', () => {

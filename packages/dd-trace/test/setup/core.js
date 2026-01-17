@@ -43,11 +43,18 @@ const warningExceptions = new Set([
   'OutgoingMessage.prototype._headers is deprecated',
   "Access to process.binding('http_parser') is deprecated.",
   'SlowBuffer() is deprecated. Please use Buffer.allocUnsafeSlow()',
+  "Mongoose: mpromise (mongoose's default promise library) is deprecated, plug in your own promise library instead: http://mongoosejs.com/docs/promises.html"
 ])
+
+const temporaryWarningExceptions = new Set()
 
 process.on('warning', (warning) => {
   if (warning.name === 'MaxListenersExceededWarning' && !warning.message.includes('[Runner]')) {
     throw warning
+  }
+  if (temporaryWarningExceptions.has(warning.message)) {
+    temporaryWarningExceptions.delete(warning.message)
+    return
   }
   if (warning.name === 'DeprecationWarning' && (
     !warningExceptions.has(warning.message) &&
@@ -61,4 +68,6 @@ process.on('warning', (warning) => {
 
 // Make this file a module for type-aware tooling. It is intentionally imported
 // for side effects only.
-module.exports = {}
+module.exports = {
+  temporaryWarningExceptions,
+}

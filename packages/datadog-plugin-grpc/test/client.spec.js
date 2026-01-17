@@ -22,6 +22,7 @@ describe('Plugin', () => {
   let port = 0
   let server
   let tracer
+  let currentVersion
 
   const clientBuilders = {
     protobuf: buildProtoClient,
@@ -47,7 +48,10 @@ describe('Plugin', () => {
           port = boundPort
 
           server.addService(TestService.service, service)
-          server.start()
+
+          if (semver.satisfies(currentVersion, '<1.10.0')) {
+            server.start()
+          }
 
           resolve(new ClientService(`127.0.0.1:${port}`, grpc.credentials.createInsecure()))
         })
@@ -79,8 +83,10 @@ describe('Plugin', () => {
       server.forceShutdown()
     })
 
-    withVersions('grpc', pkgs, NODE_MAJOR >= 25 && '>=1.3.0', (version, pkg) => {
-      for (const clientName in clientBuilders) {
+    withVersions('grpc', pkgs, NODE_MAJOR >= 25 && '>=1.3.0' || '*', (version, pkg, resolvedVersion) => {
+      currentVersion = resolvedVersion
+
+      for (const clientName of Object.keys(clientBuilders)) {
         const buildClient = clientBuilders[clientName]
 
         describe(`with ${clientName} client`, () => {

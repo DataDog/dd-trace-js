@@ -113,7 +113,7 @@ function wrapQuery (query) {
 
       const retval = query.apply(this, arguments)
       const queryQueue = this._queryQueue || this.queryQueue
-      const activeQuery = this._activeQuery || this.activeQuery
+      const activeQuery = Object.hasOwn(this, '_activeQuery') ? this._activeQuery : this.activeQuery
 
       const newQuery = queryQueue.at(-1) || activeQuery
 

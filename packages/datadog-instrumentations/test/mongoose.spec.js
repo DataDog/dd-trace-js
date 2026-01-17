@@ -9,6 +9,7 @@ const sinon = require('sinon')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { channel } = require('../src/helpers/instrument')
+
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
 
