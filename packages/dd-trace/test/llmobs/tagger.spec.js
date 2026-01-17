@@ -5,7 +5,9 @@ const assert = require('node:assert/strict')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
-function unserializbleObject () {
+const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
+
+function unserializableObject () {
   const obj = {}
   obj.obj = obj
   return obj
@@ -639,7 +641,7 @@ describe('tagger', () => {
       })
 
       it('throws when the value is not JSON serializable', () => {
-        const data = unserializbleObject()
+        const data = unserializableObject()
         assert.throws(() => tagger.tagTextIO(span, data, 'output'))
       })
     })
@@ -666,6 +668,194 @@ describe('tagger', () => {
         })
       })
     })
+
+    describe('tagPrompt', () => {
+      it('tags a span with a string prompt template', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        tagger.tagPrompt(span, {
+          template: 'Write a poem about the weather in {{city}} given {{fact}}.',
+          variables: { city: 'San Francisco', fact: 'San Francisco is in California.' },
+          id: 'city-prompt',
+          version: '1.0.0',
+          contextVariables: ['fact'],
+          queryVariables: ['city']
+        })
+
+        assert.deepEqual(Tagger.tagMap.get(span)[INPUT_PROMPT], {
+          template: 'Write a poem about the weather in {{city}} given {{fact}}.',
+          variables: { city: 'San Francisco', fact: 'San Francisco is in California.' },
+          _dd_context_variable_keys: ['fact'],
+          _dd_query_variable_keys: ['city'],
+          version: '1.0.0',
+          id: 'city-prompt'
+        })
+      })
+
+      it('tags a span with a chat message template list', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        tagger.tagPrompt(span, {
+          template: [
+            { role: 'system', content: 'Please use the following information: \n\n{{context}}' },
+            { role: 'user', content: 'Tell me a bit about {{subject}}.' }
+          ],
+          variables: { context: 'San Francisco is in California.', subject: 'San Francisco' },
+          id: 'info-prompt',
+          version: '1.0.0',
+          contextVariables: ['context'],
+          queryVariables: ['subject']
+        })
+
+        assert.deepEqual(Tagger.tagMap.get(span)[INPUT_PROMPT], {
+          chat_template: [
+            { role: 'system', content: 'Please use the following information: \n\n{{context}}' },
+            { role: 'user', content: 'Tell me a bit about {{subject}}.' }
+          ],
+          variables: { context: 'San Francisco is in California.', subject: 'San Francisco' },
+          _dd_context_variable_keys: ['context'],
+          _dd_query_variable_keys: ['subject'],
+          version: '1.0.0',
+          id: 'info-prompt'
+        })
+      })
+
+      it('throws for a non-string and non-array prompt template', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        assert.throws(() => tagger.tagPrompt(span, {
+          template: 5
+        }), { message: 'Prompt template must be a string or an array of messages.' })
+      })
+
+      it('throws if the prompt template messages are not message objects', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        assert.throws(() => tagger.tagPrompt(span, {
+          template: [
+            { role: 'system', message: 'Please use the following information: \n\n{{context}}' },
+            { role: 'user', content: 'Tell me a bit about {{subject}}.' }
+          ]
+        }), { message: 'Prompt chat template must be an array of objects with role and content properties.' })
+      })
+
+      it('defaults the prompt id', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        tagger.tagPrompt(span, {
+          template: 'Write a poem about the weather in {{city}}.',
+          variables: { city: 'San Francisco' }
+        })
+
+        const promptId = Tagger.tagMap.get(span)[INPUT_PROMPT].id
+        assert.equal(promptId, 'my-default-ml-app_unnamed-prompt')
+      })
+
+      it('throws for a non-string prompt id', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        assert.throws(() => tagger.tagPrompt(span, {
+          template: 'Write a poem about the weather in {{city}}.',
+          variables: { city: 'San Francisco' },
+          id: 123
+        }), { message: 'Prompt ID must be a string.' })
+      })
+
+      it('defaults the query context variables keys', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        tagger.tagPrompt(span, {
+          template: 'Write a poem about the weather in {{city}}.',
+          variables: { city: 'San Francisco' }
+        })
+
+        const contextVariables = Tagger.tagMap.get(span)[INPUT_PROMPT]._dd_context_variable_keys
+        assert.deepEqual(contextVariables, ['context'])
+      })
+
+      it('throws for a non-array prompt context variables keys', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        assert.throws(() => tagger.tagPrompt(span, {
+          template: 'Write a poem about the weather in {{city}}.',
+          variables: { city: 'San Francisco' },
+          contextVariables: 'context'
+        }), { message: 'Prompt context variables keys must be an array.' })
+      })
+
+      it('throws for a non-string prompt context variables key', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        assert.throws(() => tagger.tagPrompt(span, {
+          template: 'Write a poem about the weather in {{city}}.',
+          variables: { city: 'San Francisco' },
+          contextVariables: [5]
+        }), { message: 'Prompt context variables keys must be an array of strings.' })
+      })
+
+      it('defaults the query variables keys', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        tagger.tagPrompt(span, {
+          template: 'Write a poem about the weather in {{city}}.',
+          variables: { city: 'San Francisco' }
+        })
+
+        const queryVariables = Tagger.tagMap.get(span)[INPUT_PROMPT]._dd_query_variable_keys
+        assert.deepEqual(queryVariables, ['question'])
+      })
+
+      it('throws for a non-array prompt query variables key', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        assert.throws(() => tagger.tagPrompt(span, {
+          template: 'Write a poem about the weather in {{city}}.',
+          variables: { city: 'San Francisco' },
+          queryVariables: 'question'
+        }), { message: 'Prompt query variables keys must be an array.' })
+      })
+
+      it('throws for a non-string prompt query variables key', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        assert.throws(() => tagger.tagPrompt(span, {
+          template: 'Write a poem about the weather in {{city}}.',
+          variables: { city: 'San Francisco' },
+          queryVariables: [5]
+        }), { message: 'Prompt query variables keys must be an array of strings.' })
+      })
+
+      it('throws for a non-string prompt version', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        assert.throws(() => tagger.tagPrompt(span, {
+          template: 'Write a poem about the weather in {{city}}.',
+          variables: { city: 'San Francisco' },
+          version: 123
+        }), { message: 'Prompt version must be a string.' })
+      })
+
+      it('throws for a non-object prompt tags', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        assert.throws(() => tagger.tagPrompt(span, {
+          template: 'Write a poem about the weather in {{city}}.',
+          variables: { city: 'San Francisco' },
+          tags: 'tags'
+        }), { message: 'Prompt tags must be an non-Map object.' })
+      })
+
+      it('throws for a non-string prompt tag value', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        assert.throws(() => tagger.tagPrompt(span, {
+          template: 'Write a poem about the weather in {{city}}.',
+          variables: { city: 'San Francisco' },
+          tags: { tag: new Date() }
+        }), { message: 'Prompt tags must be an object of string key-value pairs.' })
+      })
+
+      it('throws for a non-object prompt variables', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        assert.throws(() => tagger.tagPrompt(span, {
+          template: 'Write a poem about the weather in {{city}}.',
+          variables: 'variables'
+        }), { message: 'Prompt variables must be an non-Map object.' })
+      })
+
+      it('throws for a non-string prompt variable value', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        assert.throws(() => tagger.tagPrompt(span, {
+          template: 'Write a poem about the weather in {{city}}.',
+          variables: { city: new Date() }
+        }), { message: 'Prompt variables must be an object of string key-value pairs.' })
+      })
+    })
   })
 
   describe('with softFail', () => {
@@ -674,7 +864,7 @@ describe('tagger', () => {
     })
 
     it('logs a warning when an unexpected value is encountered for text tagging', () => {
-      const data = unserializbleObject()
+      const data = unserializableObject()
       tagger._register(span)
       tagger.tagTextIO(span, data, 'input')
       sinon.assert.calledOnce(logger.warn)

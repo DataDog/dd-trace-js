@@ -26,7 +26,8 @@ const {
   TAGS,
   PARENT_ID_KEY,
   SESSION_ID,
-  NAME
+  NAME,
+  INPUT_PROMPT
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
@@ -122,11 +123,6 @@ class LLMObsSpanProcessor {
       inputType = 'value'
     }
 
-    // Handle prompt metadata for reusable prompts
-    if (mlObsTags['_ml_obs.meta.input.prompt']) {
-      input.prompt = mlObsTags['_ml_obs.meta.input.prompt']
-    }
-
     if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
       llmObsSpan.output = mlObsTags[OUTPUT_MESSAGES]
       outputType = 'messages'
@@ -176,6 +172,15 @@ class LLMObsSpanProcessor {
 
     if (input) meta.input = input
     if (output) meta.output = output
+
+    const prompt = mlObsTags[INPUT_PROMPT]
+    if (prompt) {
+      if (spanKind === 'llm') {
+        meta.input.prompt = prompt
+      } else {
+        logger.warn('Dropping prompt on non-LLM span kind, annotating prompts is only supported for LLM span kinds.')
+      }
+    }
 
     const llmObsSpanEvent = {
       trace_id: span.context().toTraceId(true),
