@@ -43,7 +43,13 @@ const warningExceptions = new Set([
   'OutgoingMessage.prototype._headers is deprecated',
   "Access to process.binding('http_parser') is deprecated.",
   'SlowBuffer() is deprecated. Please use Buffer.allocUnsafeSlow()',
-  "Mongoose: mpromise (mongoose's default promise library) is deprecated, plug in your own promise library instead: http://mongoosejs.com/docs/promises.html"
+  "Mongoose: mpromise (mongoose's default promise library) is deprecated, plug in your own promise library instead: http://mongoosejs.com/docs/promises.html",
+  'collection.count is deprecated, and will be removed in a future version. ' +
+    'Use Collection.countDocuments or Collection.estimatedDocumentCount instead',
+  '`open()` is deprecated in mongoose >= 4.11.0, use `openUri()` instead, or set the `useMongoClient` option if using' +
+    ' `connect()` or `createConnection()`. See http://mongoosejs.com/docs/4.x/docs/connections.html#use-mongo-client',
+  'current URL string parser is deprecated, and will be removed in a future version. ' +
+    'To use the new parser, pass option { useNewUrlParser: true } to MongoClient.connect.'
 ])
 
 const temporaryWarningExceptions = new Set()
