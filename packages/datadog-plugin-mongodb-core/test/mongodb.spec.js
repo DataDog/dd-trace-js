@@ -16,7 +16,7 @@ const withTopologies = fn => {
   withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName, resolvedVersion) => {
     describe('using the default topology', () => {
       fn(async () => {
-        const options = semver.satisfies(resolvedVersion, '>=4 && <6')
+        const options = semver.satisfies(resolvedVersion, '<6')
           ? {
               useUnifiedTopology: true,
               useNewUrlParser: true

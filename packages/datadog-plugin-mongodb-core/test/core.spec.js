@@ -249,7 +249,7 @@ describe('Plugin', () => {
 
             server.insert('', [{ a: 1 }], (err) => {
               error = err
-              server.destroy()
+              ;(server.close ?? server.destroy)()
             })
           })
 

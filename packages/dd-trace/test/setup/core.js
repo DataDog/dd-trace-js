@@ -58,8 +58,8 @@ process.on('warning', (warning) => {
   }
   if (warning.name === 'DeprecationWarning' && (
     !warningExceptions.has(warning.message) &&
-    !warning.message.includes(' DD_') &&
-    !warning.message.includes("Invalid 'main' field in ") &&
+    !warning.message.includes(' DD_') && // Ignore DD environment warnings
+    !warning.message.includes("Invalid 'main' field in ") && // This is always a library warning
     !warning.message.includes('Mongoose:')
   )) {
     throw warning
