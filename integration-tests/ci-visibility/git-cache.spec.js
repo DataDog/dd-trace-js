@@ -222,16 +222,10 @@ describe('git-cache integration tests', () => {
       } finally {
         try {
           fs.chmodSync(tempDir, 0o755)
-          if (fs.existsSync(tempDir)) {
-            rimraf.sync(tempDir)
-          }
-        } catch (cleanupError) {
-          try {
-            rimraf.sync(tempDir)
-          } catch {
-            // Ignore cleanup errors
-          }
+        } catch {
+          // Ignore cleanup errors
         }
+        fs.rmSync(tempDir, { recursive: true, force: true })
       }
     })
   })

@@ -37,13 +37,24 @@ if (!globalThis[Symbol.for('dd-trace')]) {
 require('events').defaultMaxListeners = 6
 
 // Warnings that should not be thrown
-const warningExceptions = new Set()
+// TODO: Handle this better in the future. We should not be throwing warnings in the first place.
+const warningExceptions = new Set([
+  'The `util.isArray` API is deprecated. Please use `Array.isArray()` instead.',
+  'OutgoingMessage.prototype._headers is deprecated',
+  "Access to process.binding('http_parser') is deprecated.",
+  'SlowBuffer() is deprecated. Please use Buffer.allocUnsafeSlow()',
+])
 
 process.on('warning', (warning) => {
   if (warning.name === 'MaxListenersExceededWarning' && !warning.message.includes('[Runner]')) {
     throw warning
   }
-  if (warning.name === 'DeprecationWarning' && !warningExceptions.has(warning.message)) {
+  if (warning.name === 'DeprecationWarning' && (
+    !warningExceptions.has(warning.message) &&
+    !warning.message.includes(' DD_') &&
+    !warning.message.includes("Invalid 'main' field in ") &&
+    !warning.message.includes('Mongoose:')
+  )) {
     throw warning
   }
 })
