@@ -16,12 +16,16 @@ const withTopologies = fn => {
   withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName, resolvedVersion) => {
     describe('using the default topology', () => {
       fn(async () => {
-        const options = semver.satisfies(resolvedVersion, '>=4 && <6') ? { useUnifiedTopology: true } : {}
+        const options = semver.satisfies(resolvedVersion, '>=4 && <6')
+          ? {
+              useUnifiedTopology: true,
+              useNewUrlParser: true
+            }
+          : {}
         const { MongoClient } = require(`../../../versions/${moduleName}@${version}`).get()
         const client = new MongoClient('mongodb://127.0.0.1:27017', options)
 
-        const connectOptions = semver.satisfies(resolvedVersion, '>=5 && <6') ? { useNewUrlParser: true } : {}
-        await client.connect(connectOptions)
+        await client.connect()
 
         return client
       }, version)

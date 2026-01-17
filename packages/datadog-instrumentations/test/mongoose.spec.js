@@ -28,8 +28,8 @@ describe('mongoose instrumentations', () => {
         function connect () {
           const connectOptions = {}
 
-          // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 5
-          if (semver.lt(specificVersion, '5.0.0')) {
+          // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 6
+          if (semver.lt(specificVersion, '6.0.0')) {
             connectOptions.useNewUrlParser = true
             connectOptions.useUnifiedTopology = true
           }
