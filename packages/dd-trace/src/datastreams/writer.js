@@ -7,6 +7,7 @@ const log = require('../log')
 const request = require('../exporters/common/request')
 const { MsgpackEncoder } = require('../msgpack')
 const defaults = require('../config_defaults')
+const propagationHash = require('../propagation-hash')
 
 const msgpack = new MsgpackEncoder()
 
@@ -25,7 +26,15 @@ function makeRequest (data, url, cb) {
 
   log.debug('Request to the intake: %j', options)
 
-  request(data, options, (err, res) => {
+  request(data, options, (err, res, status, headers) => {
+    // Capture container tags hash from agent response headers
+    if (headers) {
+      const containerTagsHash = headers['datadog-container-tags']
+      if (containerTagsHash) {
+        propagationHash.updateContainerTagsHash(containerTagsHash)
+        log.debug('Updated container tags hash from DSM response: %s', containerTagsHash)
+      }
+    }
     cb(err, res)
   })
 }

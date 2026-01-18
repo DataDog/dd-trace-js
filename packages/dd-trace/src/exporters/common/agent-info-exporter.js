@@ -10,7 +10,7 @@ function fetchAgentInfo (url, callback) {
   request('', {
     path: '/info',
     url
-  }, (err, res) => {
+  }, (err, res, status, headers) => {
     if (err) {
       return callback(err)
     }
