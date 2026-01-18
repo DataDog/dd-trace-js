@@ -55,12 +55,18 @@ class SpanProcessor {
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       let isFirstSpanInChunk = true
+      // Only add process tags to the first span of the first chunk
+      const shouldAddProcessTags = this._processTags && !trace._processTagsSent
+      if (shouldAddProcessTags) {
+        trace._processTagsSent = true
+      }
 
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
         } else {
-          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+          const processTagsForSpan = isFirstSpanInChunk && shouldAddProcessTags ? this._processTags : false
+          const formattedSpan = spanFormat(span, isFirstSpanInChunk, processTagsForSpan)
           isFirstSpanInChunk = false
           this._stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
