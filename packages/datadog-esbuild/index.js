@@ -97,6 +97,12 @@ function getGitMetadata () {
 }
 
 module.exports.setup = function (build) {
+  if (build.initialOptions.minify && !build.initialOptions.keepNames) {
+    throw new Error(
+      'Using --minify without --keep-names will break some dd-trace behavior. Refusing to bundle.'
+    )
+  }
+
   if (DD_IAST_ENABLED) {
     const iastRewriter = require('../dd-trace/src/appsec/iast/taint-tracking/rewriter')
     rewriter = iastRewriter.getRewriter()
