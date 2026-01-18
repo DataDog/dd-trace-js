@@ -43,13 +43,13 @@ Each package under `packages/` follows a consistent structure:
 **Unit tests:**
 
 ```bash
-./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" path/to/test.spec.js
+./node_modules/.bin/mocha path/to/test.spec.js
 ```
 
 **Integration tests:**
 
 ```bash
-./node_modules/.bin/mocha --timeout 60000 -r "packages/dd-trace/test/setup/core.js" path/to/test.spec.js
+./node_modules/.bin/mocha --timeout 60000 path/to/test.spec.js
 ```
 
 **If a test expects “spec file is entrypoint” semantics (tap-like):**
@@ -75,7 +75,7 @@ You can inject mocha options via `MOCHA_RUN_FILE_CONFIG` (JSON), including `requ
 ```bash
 PLUGINS="amqplib" npm run test:plugins
 PLUGINS="amqplib|bluebird" npm run test:plugins  # pipe-delimited for multiple
-./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" packages/datadog-plugin-amqplib/test/index.spec.js
+./node_modules/.bin/mocha packages/datadog-plugin-amqplib/test/index.spec.js
 ```
 
 **Narrow within plugin tests (optional):**
@@ -96,7 +96,7 @@ yarn services && npm run test:plugins
 
 ```bash
 ./node_modules/.bin/nyc --include "packages/dd-trace/src/debugger/**/*.js" \
-  ./node_modules/.bin/mocha -r "packages/dd-trace/test/setup/mocha.js" \
+  ./node_modules/.bin/mocha \
   "packages/dd-trace/test/debugger/**/*.spec.js"
 ```
 
