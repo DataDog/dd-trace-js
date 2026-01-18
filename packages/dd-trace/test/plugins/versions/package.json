@@ -45,7 +45,7 @@
     "@jest/reporters": "30.2.0",
     "@jest/test-sequencer": "30.2.0",
     "@jest/transform": "30.2.0",
-    "@koa/router": "14.0.0",
+    "@koa/router": "15.2.0",
     "@langchain/anthropic": "1.0.0",
     "@langchain/classic": "1.0.1",
     "@langchain/cohere": "1.0.0",

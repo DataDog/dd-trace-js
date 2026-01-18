@@ -207,7 +207,7 @@ const propertyAccess = [
     new Error('Possibility of side effect')
   ],
   {
-    before: () => { process[Symbol.for('datadog:node:util:types')] = undefined },
+    before: () => { delete globalThis[Symbol.for('dd-trace')].utilTypes },
     ast: { getmember: [{ ref: 'proxy' }, 'foo'] },
     vars: { proxy: {} },
     expected: new Error('Possibility of side effect')

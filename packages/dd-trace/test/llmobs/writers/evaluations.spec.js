@@ -5,6 +5,8 @@ const assert = require('node:assert/strict')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { removeDestroyHandler } = require('../util')
+
 describe('LLMObsEvalMetricsWriter', () => {
   let LLMObsEvalMetricsWriter
   let writer
@@ -16,7 +18,7 @@ describe('LLMObsEvalMetricsWriter', () => {
   })
 
   afterEach(() => {
-    process.removeAllListeners('beforeExit')
+    removeDestroyHandler()
   })
 
   it('constructs the url with the correct values', () => {

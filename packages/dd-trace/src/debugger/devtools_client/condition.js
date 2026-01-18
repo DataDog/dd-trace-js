@@ -206,7 +206,7 @@ function isTypedArray (variable) {
 }
 
 function isInstanceOfCoreType (type, variable, fallback = `${variable} instanceof ${type}`) {
-  return `(process[Symbol.for('datadog:node:util:types')]?.is${type}?.(${variable}) ?? ${fallback})`
+  return `(globalThis[Symbol.for('dd-trace')].utilTypes?.is${type}?.(${variable}) ?? ${fallback})`
 }
 
 function getSize (variable) {

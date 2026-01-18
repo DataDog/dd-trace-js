@@ -13,7 +13,7 @@ describe('ESM', () => {
     ['./packages/datadog-plugin-process/test/integration-test/*'])
 
   before(function () {
-    variants = varySandbox('server.mjs', 'node:process')
+    variants = varySandbox('server.mjs', 'process', undefined, 'node:process')
   })
 
   beforeEach(async () => {

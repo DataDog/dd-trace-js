@@ -5,13 +5,15 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  spawnPluginIntegrationTestProcAndExpectExit
+  spawnPluginIntegrationTestProcAndExpectExit,
+  varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
   let agent
   let proc
+  let variants
 
   // test against later versions because server.mjs uses newer package syntax
   withVersions('winston', 'winston', '>=3', version => {
@@ -22,23 +24,29 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
+    before(async function () {
+      variants = varySandbox('server.mjs', 'winston', undefined)
+    })
+
     afterEach(async () => {
       proc && proc.kill()
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProcAndExpectExit(
-        sandboxCwd(),
-        'server.mjs',
-        agent.port,
-        undefined,
-        undefined,
-        (data) => {
-          const jsonObject = JSON.parse(data.toString())
-          assert.ok(Object.hasOwn(jsonObject, 'dd'))
-        }
-      )
-    }).timeout(50000)
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented ${variant}`, async () => {
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(
+          sandboxCwd(),
+          variants[variant],
+          agent.port,
+          undefined,
+          undefined,
+          (data) => {
+            const jsonObject = JSON.parse(data.toString())
+            assert.ok(Object.hasOwn(jsonObject, 'dd'))
+          }
+        )
+      }).timeout(50000)
+    }
   })
 })

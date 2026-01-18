@@ -214,7 +214,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
             childProcessChannel.error.publish(context)
           })
 
-          childProcess.on('close', (code = 0) => {
+          childProcess.once('close', (code = 0) => {
             if (!errorExecuted && code !== 0) {
               childProcessChannel.error.publish(context)
             }

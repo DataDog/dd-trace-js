@@ -13,7 +13,7 @@ describe('ESM', () => {
     ['./packages/datadog-plugin-crypto/test/integration-test/*'])
 
   before(function () {
-    variants = varySandbox('server.mjs', 'node:crypto', 'createHash')
+    variants = varySandbox('server.mjs', 'crypto', 'createHash', 'node:crypto')
   })
 
   beforeEach(async () => {

@@ -42,12 +42,14 @@ describe('Plugin', () => {
           if (semver.intersects(version, '>=8') && options.prettyPrint) {
             delete options.prettyPrint // deprecated
 
+            // pino-pretty uses `on-exit-leak-free` and that adds a listener to process.
+            process.setMaxListeners(process.getMaxListeners() + 1)
             const pretty = require('../../../versions/pino-pretty@8.0.0').get()
 
             stream = pretty().pipe(stream)
           }
 
-          logger = pino && pino(options, stream)
+          logger = pino(options, stream)
         }
 
         describe('without configuration', () => {

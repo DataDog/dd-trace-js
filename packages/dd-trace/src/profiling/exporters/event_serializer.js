@@ -6,6 +6,7 @@ const os = require('os')
 const perf = require('perf_hooks').performance
 const version = require('../../../../../package.json').version
 const { availableParallelism, libuvThreadPoolSize } = require('../libuv-size')
+const processTags = require('../../process-tags')
 
 class EventSerializer {
   constructor ({ env, host, service, version, libraryInjected, activation } = {}) {
@@ -22,7 +23,7 @@ class EventSerializer {
   }
 
   getEventJSON ({ profiles, infos, start, end, tags = {}, endpointCounts }) {
-    return JSON.stringify({
+    const event = {
       attachments: Object.keys(profiles).map(t => this.typeToFile(t)),
       start: start.toISOString(),
       end: end.toISOString(),
@@ -77,7 +78,13 @@ class EventSerializer {
           version: process.version.slice(1)
         }
       }
-    })
+    }
+
+    if (processTags.serialized) {
+      event[processTags.PROFILING_FIELD_NAME] = processTags.serialized
+    }
+
+    return JSON.stringify(event)
   }
 }
 

@@ -80,7 +80,7 @@ function sendTelemetry (name, tags, resultMetadata) {
   proc.on('error', function () {
     log.error('Failed to spawn telemetry forwarder')
   })
-  proc.on('exit', function (code) {
+  proc.once('exit', function (code) {
     if (code !== 0) {
       log.error('Telemetry forwarder exited with code', code)
     }

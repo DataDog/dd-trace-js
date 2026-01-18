@@ -73,16 +73,14 @@ function handleUncaughtExceptionMonitor (error) {
     }
   } else {
     const cleanUp = removeAllListeners(process, 'uncaughtException')
-    const handler = () => {
-      process.removeListener('uncaughtException', handler)
-    }
+    const handler = () => {}
 
     setTimeout(() => {
       process.removeListener('uncaughtException', handler)
       cleanUp()
     })
 
-    process.on('uncaughtException', handler)
+    process.once('uncaughtException', handler)
   }
 }
 

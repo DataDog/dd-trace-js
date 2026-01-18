@@ -1,4 +1,4 @@
-import { Anthropic } from '@anthropic-ai/sdk'
+import Anthropic from '@anthropic-ai/sdk'
 
 const client = new Anthropic({ baseURL: 'http://127.0.0.1:9126/vcr/anthropic' })
 
