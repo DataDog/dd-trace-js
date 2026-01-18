@@ -55,7 +55,12 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        server.destroy()
+        // Newer versions of mongodb-core use the close method instead of destroy
+        if ('close' in server) {
+          server.close()
+        } else {
+          server.destroy()
+        }
       })
 
       describe('without configuration', () => {
@@ -244,7 +249,11 @@ describe('Plugin', () => {
 
             server.insert('', [{ a: 1 }], (err) => {
               error = err
-              server.destroy()
+              if ('close' in server) {
+                server.close()
+              } else {
+                server.destroy()
+              }
             })
           })
 

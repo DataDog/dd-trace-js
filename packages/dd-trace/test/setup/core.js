@@ -36,12 +36,44 @@ if (!globalThis[Symbol.for('dd-trace')]) {
 // Override per-test, if absolutely necessary.
 require('events').defaultMaxListeners = 6
 
+// Warnings that should not be thrown
+// TODO: Handle this better in the future. We should not be throwing warnings in the first place.
+const warningExceptions = new Set([
+  'The `util.isArray` API is deprecated. Please use `Array.isArray()` instead.',
+  'OutgoingMessage.prototype._headers is deprecated',
+  "Access to process.binding('http_parser') is deprecated.",
+  'SlowBuffer() is deprecated. Please use Buffer.allocUnsafeSlow()',
+  "Mongoose: mpromise (mongoose's default promise library) is deprecated, plug in your own promise library instead: http://mongoosejs.com/docs/promises.html",
+  'collection.count is deprecated, and will be removed in a future version. ' +
+    'Use Collection.countDocuments or Collection.estimatedDocumentCount instead',
+  '`open()` is deprecated in mongoose >= 4.11.0, use `openUri()` instead, or set the `useMongoClient` option if using' +
+    ' `connect()` or `createConnection()`. See http://mongoosejs.com/docs/4.x/docs/connections.html#use-mongo-client',
+  'current URL string parser is deprecated, and will be removed in a future version. ' +
+    'To use the new parser, pass option { useNewUrlParser: true } to MongoClient.connect.'
+])
+
+const temporaryWarningExceptions = new Set()
+
 process.on('warning', (warning) => {
   if (warning.name === 'MaxListenersExceededWarning' && !warning.message.includes('[Runner]')) {
+    throw warning
+  }
+  if (temporaryWarningExceptions.has(warning.message)) {
+    temporaryWarningExceptions.delete(warning.message)
+    return
+  }
+  if (warning.name === 'DeprecationWarning' && (
+    !warningExceptions.has(warning.message) &&
+    !warning.message.includes(' DD_') && // Ignore DD environment warnings
+    !warning.message.includes("Invalid 'main' field in ") && // This is always a library warning
+    !warning.message.includes('Mongoose:')
+  )) {
     throw warning
   }
 })
 
 // Make this file a module for type-aware tooling. It is intentionally imported
 // for side effects only.
-module.exports = {}
+module.exports = {
+  temporaryWarningExceptions,
+}

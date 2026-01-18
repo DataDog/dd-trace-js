@@ -9,6 +9,7 @@ const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 
 describe('child process', () => {
   const modules = ['child_process', 'node:child_process']
@@ -539,6 +540,10 @@ describe('child process', () => {
                 })
 
                 it('should execute error callback with `exit 1` command with shell: true', () => {
+                  temporaryWarningExceptions.add(
+                    'Passing args to a child process with shell option true can lead to security vulnerabilities, ' +
+                      'as the arguments are not escaped, only concatenated.'
+                  )
                   let childError
                   try {
                     childProcess[methodName]('node -e "process.exit(1)"', { shell: true })

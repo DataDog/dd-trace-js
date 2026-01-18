@@ -13,11 +13,17 @@ const { withNamingSchema, withPeerService, withVersions } = require('../../dd-tr
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const withTopologies = fn => {
-  withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName) => {
+  withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName, resolvedVersion) => {
     describe('using the default topology', () => {
       fn(async () => {
+        const options = semver.satisfies(resolvedVersion, '<6')
+          ? {
+              useUnifiedTopology: true,
+              useNewUrlParser: true
+            }
+          : {}
         const { MongoClient } = require(`../../../versions/${moduleName}@${version}`).get()
-        const client = new MongoClient('mongodb://127.0.0.1:27017')
+        const client = new MongoClient('mongodb://127.0.0.1:27017', options)
 
         await client.connect()
 

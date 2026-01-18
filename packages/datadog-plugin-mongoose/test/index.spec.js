@@ -25,10 +25,11 @@ describe('Plugin', () => {
           bufferCommands: false
         }
 
-        // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 5
-        if (semver.lt(mongooseVersion, '5.0.0')) {
+        // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 6
+        if (semver.lt(mongooseVersion, '6.0.0')) {
           connectOptions.useNewUrlParser = true
           connectOptions.useUnifiedTopology = true
+          connectOptions.useMongoClient = true
         }
 
         // mongoose.connect('mongodb://username:password@host:port/database?options...');

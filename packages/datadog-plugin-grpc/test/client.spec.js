@@ -18,70 +18,75 @@ const getService = require('./service')
 const pkgs = NODE_MAJOR > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
 describe('Plugin', () => {
-  let grpc
-  let port = 0
-  let server
-  let tracer
-
-  const clientBuilders = {
-    protobuf: buildProtoClient,
-    custom: buildCustomClient
-  }
-
-  function buildGenericService (service, TestService, ClientService) {
-    service = Object.assign({
-      getBidi: () => {},
-      getServerStream: () => {},
-      getClientStream: () => {},
-      getUnary: () => {}
-    }, service)
-
-    server = new grpc.Server()
-
-    return new Promise((resolve, reject) => {
-      ClientService = ClientService || TestService
-
-      if (server.bindAsync) {
-        server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), (err, boundPort) => {
-          if (err) return reject(err)
-          port = boundPort
-
-          server.addService(TestService.service, service)
-          server.start()
-
-          resolve(new ClientService(`127.0.0.1:${port}`, grpc.credentials.createInsecure()))
-        })
-      } else {
-        port = server.bind('127.0.0.1:0', grpc.ServerCredentials.createInsecure())
-        server.addService(TestService.service, service)
-        server.start()
-
-        resolve(new ClientService(`127.0.0.1:${port}`, grpc.credentials.createInsecure()))
-      }
-    })
-  }
-
-  function buildProtoClient (service, ClientService) {
-    const definition = loader.loadSync(path.join(__dirname, 'test.proto'))
-    const TestService = grpc.loadPackageDefinition(definition).test.TestService
-
-    return buildGenericService(service, TestService, ClientService)
-  }
-
-  function buildCustomClient (service, ClientService) {
-    const TestService = getService(grpc)
-
-    return buildGenericService(service, TestService, ClientService)
-  }
-
   describe('grpc/client', () => {
-    afterEach(() => {
-      server.forceShutdown()
-    })
+    withVersions('grpc', pkgs, NODE_MAJOR >= 25 && '>=1.3.0' || '*', (version, pkg, resolvedVersion) => {
+      let grpc
+      let port = 0
+      let server
+      let tracer
 
-    withVersions('grpc', pkgs, NODE_MAJOR >= 25 && '>=1.3.0', (version, pkg) => {
-      for (const clientName in clientBuilders) {
-        const buildClient = clientBuilders[clientName]
+      const clientBuilders = {
+        protobuf: buildProtoClient,
+        custom: buildCustomClient
+      }
+
+      function buildGenericService (grpc, service, TestService, ClientService, currentVersion) {
+        service = Object.assign({
+          getBidi: () => {},
+          getServerStream: () => {},
+          getClientStream: () => {},
+          getUnary: () => {}
+        }, service)
+
+        server = new grpc.Server()
+
+        return new Promise((resolve, reject) => {
+          ClientService = ClientService || TestService
+
+          if (server.bindAsync) {
+            server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), (err, boundPort) => {
+              if (err) return reject(err)
+              port = boundPort
+
+              server.addService(TestService.service, service)
+
+              if (semver.satisfies(currentVersion, '<1.10.0')) {
+                server.start()
+              }
+
+              resolve(new ClientService(`127.0.0.1:${port}`, grpc.credentials.createInsecure()))
+            })
+          } else {
+            port = server.bind('127.0.0.1:0', grpc.ServerCredentials.createInsecure())
+            server.addService(TestService.service, service)
+            server.start()
+
+            resolve(new ClientService(`127.0.0.1:${port}`, grpc.credentials.createInsecure()))
+          }
+        })
+      }
+
+      function buildProtoClient (grpc, service, ClientService, currentVersion) {
+        const definition = loader.loadSync(path.join(__dirname, 'test.proto'))
+        const TestService = grpc.loadPackageDefinition(definition).test.TestService
+
+        return buildGenericService(grpc, service, TestService, ClientService, currentVersion)
+      }
+
+      function buildCustomClient (grpc, service, ClientService, currentVersion) {
+        const TestService = getService(grpc)
+
+        return buildGenericService(grpc, service, TestService, ClientService, currentVersion)
+      }
+
+      afterEach(() => {
+        server.forceShutdown()
+      })
+
+      for (const clientName of Object.keys(clientBuilders)) {
+        const buildClient = (service, ClientService) => {
+          return clientBuilders[clientName](grpc, service, ClientService, resolvedVersion)
+        }
 
         describe(`with ${clientName} client`, () => {
           describe('without configuration', () => {

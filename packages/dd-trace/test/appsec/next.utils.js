@@ -2,7 +2,7 @@
 
 const path = require('node:path')
 const { execSync, spawn } = require('node:child_process')
-const { mkdirSync, rmdirSync, unlinkSync, writeFileSync } = require('node:fs')
+const { mkdirSync, rmSync, unlinkSync, writeFileSync } = require('node:fs')
 
 const { satisfies } = require('semver')
 
@@ -78,7 +78,7 @@ function initApp (appName, version, realVersion) {
     ]
     const dirPaths = dirs.map(file => `${appDir}/${file}`)
     dirPaths.forEach(path => {
-      rmdirSync(path, { recursive: true, force: true })
+      rmSync(path, { recursive: true, force: true })
     })
   })
 }
@@ -89,7 +89,7 @@ function startServer (appName, serverPath, version, ddInitFile = 'datadog.js') {
 
   const appDir = path.join(__dirname, 'next', appName)
   const schemaVersion = 'v0'
-  const defaultToGlobalService = false
+  const defaultToGlobalService = 'false'
 
   before(async () => {
     return agent.load('next')
@@ -104,7 +104,7 @@ function startServer (appName, serverPath, version, ddInitFile = 'datadog.js') {
       env: {
         ...process.env,
         VERSION: version,
-        PORT: 0,
+        PORT: '0',
         DD_TRACE_AGENT_PORT: agent.server.address().port,
         DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
         DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
