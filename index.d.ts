@@ -932,6 +932,46 @@ declare namespace tracer {
      * Configuration enabling LLM Observability. Enablement is superseded by the DD_LLMOBS_ENABLED environment variable.
      */
     llmobs?: llmobs.LLMObsEnableOptions
+
+    /**
+     * Configuration for Dynamic Instrumentation (Live Debugging).
+     */
+    dynamicInstrumentation?: {
+      /**
+       * Whether to enable Dynamic Instrumentation.
+       * @default false
+       */
+      enabled?: boolean
+
+      /**
+       * Path to a custom probes configuration file.
+       */
+      probeFile?: string
+
+      /**
+       * Timeout in milliseconds for capturing variable values.
+       * @default 100
+       */
+      captureTimeoutMs?: number
+
+      /**
+       * Interval in seconds between uploads of probe data.
+       * @default 1
+       */
+      uploadIntervalSeconds?: number
+
+      /**
+       * List of identifier names to redact in captured data.
+       * @default []
+       */
+      redactedIdentifiers?: string[]
+
+      /**
+       * List of identifier names to exclude from redaction.
+       * @default []
+       */
+      redactionExcludedIdentifiers?: string[]
+    }
   }
 
   /**
