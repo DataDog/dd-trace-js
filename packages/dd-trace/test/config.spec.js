@@ -3463,6 +3463,116 @@ rules:
     })
   })
 
+  context('NX auto-detection', () => {
+    it('should use NX_TASK_TARGET_PROJECT when DD_ENABLE_NX_SERVICE_NAME is true or 1', () => {
+      process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+
+      for (const ddIsNx of ['true', '1']) {
+        process.env.DD_ENABLE_NX_SERVICE_NAME = ddIsNx
+
+        const config = getConfig()
+
+        assert.strictEqual(config.service, 'my-nx-project')
+      }
+    })
+
+    it('should give DD_SERVICE precedence over NX_TASK_TARGET_PROJECT', () => {
+      process.env.DD_ENABLE_NX_SERVICE_NAME = 'true'
+      process.env.DD_SERVICE = 'explicit-service'
+      process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.service, 'explicit-service')
+    })
+
+    it('should not use NX_TASK_TARGET_PROJECT when DD_ENABLE_NX_SERVICE_NAME is falsy', () => {
+      const cases = ['false', '0', undefined]
+
+      for (const ddIsNx of cases) {
+        if (ddIsNx === undefined) {
+          delete process.env.DD_ENABLE_NX_SERVICE_NAME
+        } else {
+          process.env.DD_ENABLE_NX_SERVICE_NAME = ddIsNx
+        }
+
+        process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+        pkg.name = 'default-service'
+        reloadLoggerAndConfig()
+
+        const config = getConfig()
+
+        assert.strictEqual(config.service, 'default-service')
+        assert.notStrictEqual(config.service, 'my-nx-project')
+      }
+    })
+
+    it('should fallback to default when NX_TASK_TARGET_PROJECT is empty or not set', () => {
+      const cases = ['', undefined]
+
+      for (const nxTaskTargetProject of cases) {
+        process.env.DD_ENABLE_NX_SERVICE_NAME = 'true'
+
+        if (nxTaskTargetProject === undefined) {
+          delete process.env.NX_TASK_TARGET_PROJECT
+        } else {
+          process.env.NX_TASK_TARGET_PROJECT = nxTaskTargetProject
+        }
+
+        pkg.name = 'default-service'
+        reloadLoggerAndConfig()
+
+        const config = getConfig()
+
+        assert.strictEqual(config.service, 'default-service')
+      }
+    })
+
+    it('should warn about v6 behavior change when NX_TASK_TARGET_PROJECT is set without explicit config', () => {
+      process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+      delete process.env.DD_ENABLE_NX_SERVICE_NAME
+      delete process.env.DD_SERVICE
+      pkg.name = 'default-service'
+      reloadLoggerAndConfig()
+
+      getConfig()
+
+      if (DD_MAJOR < 6) {
+        assert.strictEqual(log.warn.called, true)
+        const warningMessage = log.warn.args[0][0]
+        assert.match(warningMessage, /NX_TASK_TARGET_PROJECT is set but no service name was configured/)
+        assert.match(warningMessage, /In v6, NX_TASK_TARGET_PROJECT will be used as the default service name/)
+        assert.match(warningMessage, /Set DD_ENABLE_NX_SERVICE_NAME=true to opt-in/)
+      } else {
+        // In v6+, no warning should be issued
+        assert.strictEqual(log.warn.called, false)
+      }
+    })
+
+    it('should not warn when DD_ENABLE_NX_SERVICE_NAME is explicitly set', () => {
+      process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+      process.env.DD_ENABLE_NX_SERVICE_NAME = 'true'
+      delete process.env.DD_SERVICE
+      pkg.name = 'default-service'
+      reloadLoggerAndConfig()
+
+      getConfig()
+
+      assert.strictEqual(log.warn.called, false)
+    })
+
+    it('should not warn when a service name is explicitly configured', () => {
+      process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
+      process.env.DD_SERVICE = 'explicit-service'
+      delete process.env.DD_ENABLE_NX_SERVICE_NAME
+      reloadLoggerAndConfig()
+
+      getConfig()
+
+      assert.strictEqual(log.warn.called, false)
+    })
+  })
+
   context('getOrigin', () => {
     let originalAppsecEnabled
 

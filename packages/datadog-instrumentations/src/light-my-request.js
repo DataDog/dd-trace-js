@@ -62,8 +62,8 @@ function wrapDispatchFunc (dispatchFunc) {
 
     // light-my-request Response emits 'finish' when done
     if (res.on && typeof res.on === 'function') {
-      res.on('finish', onFinish)
-      res.on('close', onFinish)
+      res.once('finish', onFinish)
+      res.once('close', onFinish)
     }
 
     // Also wrap end() as fallback

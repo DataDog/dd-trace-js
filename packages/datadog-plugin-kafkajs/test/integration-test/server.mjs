@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
-import { Kafka } from 'kafkajs'
+import kafkaLib from 'kafkajs'
 
-const kafka = new Kafka({
+const kafka = new kafkaLib.Kafka({
   clientId: 'my-app',
   brokers: ['127.0.0.1:9092']
 })
