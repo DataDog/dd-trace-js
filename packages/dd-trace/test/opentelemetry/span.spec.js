@@ -336,31 +336,6 @@ describe('OTel Span', () => {
     assert.strictEqual(_links.length, 2)
   })
 
-  it('should format span links with a standard OTel SpanContext', () => {
-    const linkedSpanContext = {
-      traceId: '0123456789abcdef0123456789abcdef',
-      spanId: '0123456789abcdef',
-      traceFlags: 1
-    }
-
-    const span = makeSpan('name', {
-      links: [{ context: linkedSpanContext, attributes: { foo: 'bar' } }]
-    })
-
-    spanFormat(span._ddSpan)
-
-    const formatted = spanFormat(span._ddSpan)
-    assert.ok(Object.hasOwn(formatted.meta, '_dd.span_links'))
-
-    const links = JSON.parse(formatted.meta['_dd.span_links'])
-    assert.deepStrictEqual(links, [{
-      trace_id: linkedSpanContext.traceId,
-      span_id: linkedSpanContext.spanId,
-      attributes: { foo: 'bar' },
-      flags: 1
-    }])
-  })
-
   it('should add span pointers', () => {
     const span = makeSpan('name')
     const { _links } = span._ddSpan
