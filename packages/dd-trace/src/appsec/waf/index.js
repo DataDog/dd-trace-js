@@ -19,7 +19,17 @@ class WafUpdateError extends Error {
 
 let limiter = new Limiter(100)
 
+/** @typedef {import('./waf_manager')} WAFManager */
+
+/** @type {typeof import('./waf_manager') | null} */
+let WAFManager = null
+
+/**
+ * @typedef {import('./waf_manager').WAFManagerConfig & { rateLimit: number }} WAFConfig
+ */
+
 const waf = {
+  /** @type {WAFManager | null} */
   wafManager: null,
   init,
   destroy,
@@ -31,13 +41,17 @@ const waf = {
   WafUpdateError
 }
 
+/**
+ * @param {object} rules
+ * @param {WAFConfig} config
+ */
 function init (rules, config) {
   destroy()
 
   limiter = new Limiter(config.rateLimit)
 
-  // dirty require to make startup faster for serverless
-  const WAFManager = require('./waf_manager')
+  // Lazy loading improves the startup time
+  WAFManager = require('./waf_manager')
 
   waf.wafManager = new WAFManager(rules, config)
 
@@ -70,7 +84,7 @@ function updateConfig (product, configId, configPath, config) {
 
   try {
     if (product === 'ASM_DD') {
-      waf.wafManager.removeConfig(waf.wafManager.constructor.defaultWafConfigPath)
+      waf.wafManager.removeConfig((/** @type {NonNullable<typeof WAFManager>} */ (WAFManager)).defaultWafConfigPath)
     }
 
     const updateSucceeded = waf.wafManager.updateConfig(configPath, config)

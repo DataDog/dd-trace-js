@@ -1,10 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
   const startCh = channel('apm:memcached:command:start')

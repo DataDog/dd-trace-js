@@ -1,7 +1,7 @@
 'use strict'
 
-const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { addHook, channel } = require('./helpers/instrument')
 const names = ['url', 'node:url']
 
 const parseFinishedChannel = channel('datadog:url:parse:finish')

@@ -1,6 +1,9 @@
 'use strict'
 
 const { randomUUID } = require('crypto')
+const { version } = require('../../../../../package.json')
+const { NODE_MAJOR } = require('../../../../../version')
+const processTags = require('../../process-tags')
 const { breakpointToProbes } = require('./state')
 const session = require('./session')
 const { getLocalStateForCallFrame } = require('./snapshot')
@@ -10,9 +13,6 @@ const { ackEmitting } = require('./status')
 const config = require('./config')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
 const log = require('./log')
-const { version } = require('../../../../../package.json')
-const { NODE_MAJOR } = require('../../../../../version')
-const processTags = require('../../process-tags')
 
 require('./remote_config')
 
@@ -216,7 +216,7 @@ session.on('Debugger.paused', async ({ params }) => {
       language: 'javascript'
     }
 
-    if (config.propagateProcessTags?.enabled) {
+    if (config.propagateProcessTags.enabled) {
       snapshot[processTags.DYNAMIC_INSTRUMENTATION_FIELD_NAME] = processTags.tagsObject
     }
 

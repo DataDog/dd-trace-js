@@ -1,24 +1,24 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
-const express = require('express')
-const upload = require('multer')()
-const { Profile } = require('../../../../../vendor/dist/pprof-format')
 const os = require('node:os')
 const path = require('node:path')
 const { request } = require('node:http')
 
-require('../../setup/core')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+const express = require('express')
+const upload = require('multer')()
 
+const { Profile } = require('../../../../../vendor/dist/pprof-format')
+require('../../setup/core')
 const tracer = require('../../../../../init')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
 const logger = require('../../../src/log')
 const version = require('../../../../../package.json').version
+const processTags = require('../../../src/process-tags')
 
 const RUNTIME_ID = 'a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
 const ENV = 'test-env'
@@ -117,6 +117,8 @@ describe('exporters/agent', function () {
     assert.ok(Object.hasOwn(event.info.runtime, 'available_processors'))
     assert.strictEqual(event.info.runtime.engine, 'nodejs')
     assert.strictEqual(event.info.runtime.version, process.version.substring(1))
+    assert.ok(Object.hasOwn(event, 'process_tags'))
+    assert.strictEqual(event.process_tags, processTags.serialized)
 
     assert.strictEqual(req.files[1].fieldname, 'wall.pprof')
     assert.strictEqual(req.files[1].originalname, 'wall.pprof')
@@ -439,7 +441,7 @@ describe('exporters/agent', function () {
     })
   })
 
-  describe('using UDS', () => {
+  ;(os.platform() === 'win32' ? describe.skip : describe)('using UDS', () => {
     let listener
 
     beforeEach(done => {
@@ -487,7 +489,7 @@ describe('exporters/agent', function () {
         exporter.export({ profiles, start, end, tags }).catch(reject)
       }))
     })
-  }, { skip: os.platform() === 'win32' })
+  })
 })
 
 function assertIsProfile (obj, msg) {

@@ -11,11 +11,11 @@
  * to route requests between worker threads using Fastify inject().
  */
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 // Reuse the same channels as HTTP server instrumentation
 const startServerCh = channel('apm:http:server:request:start')
@@ -62,8 +62,8 @@ function wrapDispatchFunc (dispatchFunc) {
 
     // light-my-request Response emits 'finish' when done
     if (res.on && typeof res.on === 'function') {
-      res.on('finish', onFinish)
-      res.on('close', onFinish)
+      res.once('finish', onFinish)
+      res.once('close', onFinish)
     }
 
     // Also wrap end() as fallback

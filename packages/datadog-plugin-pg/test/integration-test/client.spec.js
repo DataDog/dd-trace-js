@@ -2,16 +2,16 @@
 
 const assert = require('node:assert/strict')
 
+const semver = require('semver')
 const {
   FakeAgent,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc,
+  spawnPluginIntegrationTestProcAndExpectExit,
   sandboxCwd,
   useSandbox,
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const semver = require('semver')
 
 describe('esm', () => {
   let agent
@@ -51,7 +51,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'pg.query'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(20000)

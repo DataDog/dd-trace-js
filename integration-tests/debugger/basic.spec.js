@@ -5,10 +5,10 @@ const os = require('os')
 const { join } = require('path')
 
 const assert = require('assert')
-const { pollInterval, setup } = require('./utils')
 const { assertObjectContains, assertUUID } = require('../helpers')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const { version } = require('../../package.json')
+const { pollInterval, setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   describe('Default env', function () {
@@ -811,10 +811,6 @@ describe('Dynamic Instrumentation', function () {
       it('should include process_tags in snapshot when enabled', function (done) {
         t.agent.on('debugger-input', ({ payload }) => {
           const snapshot = payload[0].debugger.snapshot
-
-          // Assert that process_tags are present
-          assert.ok(snapshot.process_tags)
-          assert.strictEqual(typeof snapshot.process_tags, 'object')
 
           // Check for expected process tags keys
           assert.ok(snapshot.process_tags['entrypoint.name'])

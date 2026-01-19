@@ -1,5 +1,19 @@
 'use strict'
 
+const {
+  tags: {
+    MANUAL_KEEP,
+    MANUAL_DROP,
+    SAMPLING_PRIORITY,
+    SERVICE_NAME
+  },
+  priority: {
+    AUTO_REJECT,
+    AUTO_KEEP,
+    USER_REJECT,
+    USER_KEEP
+  }
+} = require('../../../ext')
 const log = require('./log')
 const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
@@ -18,21 +32,6 @@ const {
   SAMPLING_AGENT_DECISION,
   DECISION_MAKER_KEY
 } = require('./constants')
-
-const {
-  tags: {
-    MANUAL_KEEP,
-    MANUAL_DROP,
-    SAMPLING_PRIORITY,
-    SERVICE_NAME
-  },
-  priority: {
-    AUTO_REJECT,
-    AUTO_KEEP,
-    USER_REJECT,
-    USER_KEEP
-  }
-} = require('../../../ext')
 
 const DEFAULT_KEY = 'service:,env:'
 
@@ -54,7 +53,7 @@ class PrioritySampler {
   /**
    * Creates an instance of PrioritySampler.
    *
-   * @typedef {Object} SamplingConfig
+   * @typedef {object} SamplingConfig
    * @property {number} [sampleRate] - The default sample rate for traces.
    * @property {string} [provenance] - Optional rule provenance ("customer" or "dynamic").
    * @property {number} [rateLimit=100] - The maximum number of traces to sample per second.

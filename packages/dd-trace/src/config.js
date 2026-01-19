@@ -2,12 +2,14 @@
 
 const fs = require('fs')
 const os = require('os')
-const uuid = require('../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const { URL } = require('url')
+const path = require('path')
+const uuid = require('../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 
+const set = require('../../datadog-core/src/utils/src/set')
+const { DD_MAJOR } = require('../../../version')
 const log = require('./log')
 const tagger = require('./tagger')
-const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
@@ -24,8 +26,6 @@ const { ORIGIN_KEY } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./config-helper')
 const defaults = require('./config_defaults')
-const path = require('path')
-const { DD_MAJOR } = require('../../../version')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -478,6 +478,7 @@ class Config {
       DD_IAST_STACK_TRACE_ENABLED,
       DD_INJECTION_ENABLED,
       DD_INJECT_FORCE,
+      DD_ENABLE_NX_SERVICE_NAME,
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
@@ -591,7 +592,8 @@ class Config {
       OTEL_BSP_SCHEDULE_DELAY,
       OTEL_BSP_MAX_EXPORT_BATCH_SIZE,
       OTEL_BSP_MAX_QUEUE_SIZE,
-      OTEL_METRIC_EXPORT_INTERVAL
+      OTEL_METRIC_EXPORT_INTERVAL,
+      NX_TASK_TARGET_PROJECT
     } = source
 
     const tags = {}
@@ -862,7 +864,22 @@ class Config {
     this.#setSamplingRule(target, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
     unprocessedTarget['sampler.rules'] = DD_TRACE_SAMPLING_RULES
     this.#setString(target, 'scope', DD_TRACE_SCOPE)
-    this.#setString(target, 'service', DD_SERVICE || tags.service || OTEL_SERVICE_NAME)
+    // Priority:
+    // DD_SERVICE > tags.service > OTEL_SERVICE_NAME > NX_TASK_TARGET_PROJECT (if DD_ENABLE_NX_SERVICE_NAME) > default
+    let serviceName = DD_SERVICE || tags.service || OTEL_SERVICE_NAME
+    if (!serviceName && NX_TASK_TARGET_PROJECT) {
+      if (isTrue(DD_ENABLE_NX_SERVICE_NAME)) {
+        serviceName = NX_TASK_TARGET_PROJECT
+      } else if (DD_MAJOR < 6) {
+        // Warn about v6 behavior change for Nx projects
+        log.warn(
+          'NX_TASK_TARGET_PROJECT is set but no service name was configured. ' +
+          'In v6, NX_TASK_TARGET_PROJECT will be used as the default service name. ' +
+          'Set DD_ENABLE_NX_SERVICE_NAME=true to opt-in to this behavior now, or set a service name explicitly.'
+        )
+      }
+    }
+    this.#setString(target, 'service', serviceName)
     if (DD_SERVICE_MAPPING) {
       target.serviceMapping = Object.fromEntries(
         DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
@@ -1156,9 +1173,8 @@ class Config {
     // This is reliant on environment config being set before options.
     // This is to make sure the origins of each value are tracked appropriately for telemetry.
     // We'll only set `llmobs.enabled` on the opts when it's not set on the environment, and options.llmobs is provided.
-    const llmobsEnabledEnv = this.#env['llmobs.enabled']
-    if (llmobsEnabledEnv == null && options.llmobs) {
-      this.#setBoolean(opts, 'llmobs.enabled', !!options.llmobs)
+    if (this.#env['llmobs.enabled'] == null && options.llmobs) {
+      this.#setBoolean(opts, 'llmobs.enabled', true)
     }
   }
 

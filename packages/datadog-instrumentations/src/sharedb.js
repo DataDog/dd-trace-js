@@ -1,10 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 /**
  * @description The enum values in this map are not exposed from ShareDB, so the keys are hard-coded here.

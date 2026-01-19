@@ -1,10 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { describe, it } = require('tap').mocha
-const sinon = require('sinon')
 const { performance } = require('perf_hooks')
+
+const api = require('@opentelemetry/api')
+const { describe, it } = require('mocha')
+const sinon = require('sinon')
+
 const { timeOrigin } = performance
 const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
@@ -12,7 +14,6 @@ require('../setup/core')
 
 const tracer = require('../../').init()
 
-const api = require('@opentelemetry/api')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')

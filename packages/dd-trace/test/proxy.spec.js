@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -35,7 +36,7 @@ describe('TracerProxy', () => {
   let PluginManager
   let pluginManager
   let flare
-  let remoteConfig
+  let RemoteConfig
   let handlers
   let rc
   let dogStatsD
@@ -45,7 +46,7 @@ describe('TracerProxy', () => {
   let openfeatureProvider
 
   beforeEach(() => {
-    process.env.DD_TRACE_MOCHA_ENABLED = false
+    process.env.DD_TRACE_MOCHA_ENABLED = 'false'
 
     aiguardSdk = {
       evaluate: sinon.stub(),
@@ -212,17 +213,18 @@ describe('TracerProxy', () => {
       cleanup: sinon.spy()
     }
 
-    remoteConfig = {
-      enable: sinon.stub()
-    }
+    RemoteConfig = sinon.stub().returns(rc)
 
     handlers = new Map()
     rc = {
       setProductHandler (product, handler) { handlers.set(product, handler) },
-      removeProductHandler (product) { handlers.delete(product) }
+      removeProductHandler (product) { handlers.delete(product) },
+      updateCapabilities: sinon.spy(),
+      setBatchHandler: sinon.spy(),
+      removeBatchHandler: sinon.spy(),
+      subscribeProducts: sinon.spy(),
+      unsubscribeProducts: sinon.spy()
     }
-
-    remoteConfig.enable.returns(rc)
 
     NoopProxy = proxyquire('../src/noop/proxy', {
       './tracer': NoopTracer,
@@ -242,7 +244,7 @@ describe('TracerProxy', () => {
       './appsec': appsec,
       './appsec/iast': iast,
       './telemetry': telemetry,
-      './remote_config': remoteConfig,
+      './remote_config': RemoteConfig,
       './aiguard/sdk': AIGuardSdk,
       './appsec/sdk': AppsecSdk,
       './dogstatsd': dogStatsD,
@@ -268,7 +270,7 @@ describe('TracerProxy', () => {
 
         sinon.assert.calledWith(Config, options)
         sinon.assert.calledWith(DatadogTracer, config)
-        sinon.assert.calledOnceWithMatch(remoteConfig.enable, config)
+        sinon.assert.calledOnceWithExactly(RemoteConfig, config)
       })
 
       it('should not initialize twice', () => {
@@ -276,7 +278,7 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.calledOnce(DatadogTracer)
-        sinon.assert.calledOnce(remoteConfig.enable)
+        sinon.assert.calledOnce(RemoteConfig)
       })
 
       it('should not enable remote config when disabled', () => {
@@ -285,7 +287,7 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.calledOnce(DatadogTracer)
-        sinon.assert.notCalled(remoteConfig.enable)
+        sinon.assert.notCalled(RemoteConfig)
       })
 
       it('should not initialize when disabled', () => {
@@ -394,7 +396,7 @@ describe('TracerProxy', () => {
           './tracer': DatadogTracer,
           './appsec': appsec,
           './appsec/iast': iast,
-          './remote_config': remoteConfig,
+          './remote_config': RemoteConfig,
           './appsec/sdk': AppsecSdk
         })
 
@@ -425,7 +427,7 @@ describe('TracerProxy', () => {
           './config': Config,
           './appsec': appsec,
           './appsec/iast': iast,
-          './remote_config': remoteConfig,
+          './remote_config': RemoteConfig,
           './appsec/sdk': AppsecSdk
         })
 
@@ -566,7 +568,7 @@ describe('TracerProxy', () => {
           './profiler': null, // this will cause the import failure error
           './appsec': appsec,
           './telemetry': telemetry,
-          './remote_config': remoteConfig
+          './remote_config': RemoteConfig
         })
 
         const profilerImportFailureProxy = new ProfilerImportFailureProxy()
@@ -594,7 +596,7 @@ describe('TracerProxy', () => {
           './config': Config,
           './appsec': appsec,
           './appsec/iast': iast,
-          './remote_config': remoteConfig,
+          './remote_config': RemoteConfig,
           './appsec/sdk': AppsecSdk,
           './standalone': standalone,
           './telemetry': telemetry

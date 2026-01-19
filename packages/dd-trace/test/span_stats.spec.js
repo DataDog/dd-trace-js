@@ -1,20 +1,18 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { hostname } = require('os')
 
-const { describe, it } = require('tap').mocha
+const { describe, it } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
-
-const { hostname } = require('os')
-
 const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
-
 const { version } = require('../src/pkg')
 const pkg = require('../../../package.json')
 const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('../src/constants')
+
 const {
   MEASURED,
   HTTP_STATUS_CODE,
@@ -26,6 +24,7 @@ const {
   DEFAULT_SPAN_NAME,
   DEFAULT_SERVICE_NAME
 } = require('../src/encode/tags-processors')
+const processTags = require('../src/process-tags')
 
 // Mock spans
 const basicSpan = {
@@ -390,7 +389,8 @@ describe('SpanStatsProcessor', () => {
       Lang: 'javascript',
       TracerVersion: pkg.version,
       RuntimeID: processor.tags['runtime-id'],
-      Sequence: processor.sequence
+      Sequence: processor.sequence,
+      ProcessTags: processTags.serialized
     }))
   })
 
@@ -408,7 +408,8 @@ describe('SpanStatsProcessor', () => {
       Lang: 'javascript',
       TracerVersion: pkg.version,
       RuntimeID: processor.tags['runtime-id'],
-      Sequence: processor.sequence
+      Sequence: processor.sequence,
+      ProcessTags: processTags.serialized
     }))
   })
 })

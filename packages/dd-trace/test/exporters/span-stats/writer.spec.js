@@ -1,11 +1,10 @@
 'use strict'
 
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
-
 const pkg = require('../../../../../package.json')
 
 let Writer

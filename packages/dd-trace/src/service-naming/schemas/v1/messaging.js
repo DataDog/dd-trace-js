@@ -44,6 +44,10 @@ const messaging = {
     sns: {
       opName: () => 'aws.sns.send',
       serviceName: identityService
+    },
+    bullmq: {
+      opName: () => 'bullmq.add',
+      serviceName: identityService
     }
   },
   consumer: {
@@ -64,6 +68,10 @@ const messaging = {
     rhea: amqpInbound,
     sqs: {
       opName: () => 'aws.sqs.process',
+      serviceName: identityService
+    },
+    bullmq: {
+      opName: () => 'bullmq.processJob',
       serviceName: identityService
     }
   },

@@ -3,15 +3,17 @@
 // Increase max listeners to avoid warnings in tests
 process.setMaxListeners(50)
 
-require('../setup/core')
 const assert = require('assert')
 const os = require('os')
 const http = require('http')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { logs } = require('@opentelemetry/api-logs')
 const { trace, context } = require('@opentelemetry/api')
+
+require('../setup/core')
 const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 
@@ -57,7 +59,7 @@ describe('OpenTelemetry Logs', () => {
           once: () => {},
           setTimeout: () => {}
         }
-        callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
+        callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
         return mockReq
       }
 
@@ -69,7 +71,7 @@ describe('OpenTelemetry Logs', () => {
         once: () => {},
         setTimeout: () => {}
       }
-      callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
+      callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
       return mockReq
     })
 

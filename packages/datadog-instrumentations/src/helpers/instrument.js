@@ -1,9 +1,9 @@
 'use strict'
 
+const { AsyncResource } = require('async_hooks')
 const dc = require('dc-polyfill')
 const instrumentations = require('./instrumentations')
 const rewriterInstrumentations = require('./rewriter/instrumentations')
-const { AsyncResource } = require('async_hooks')
 
 const channelMap = {}
 exports.channel = function (name) {

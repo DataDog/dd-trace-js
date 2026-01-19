@@ -191,6 +191,7 @@ interface Plugins {
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
+  "bullmq": tracer.plugins.bullmq;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
@@ -931,6 +932,46 @@ declare namespace tracer {
      * Configuration enabling LLM Observability. Enablement is superseded by the DD_LLMOBS_ENABLED environment variable.
      */
     llmobs?: llmobs.LLMObsEnableOptions
+
+    /**
+     * Configuration for Dynamic Instrumentation (Live Debugging).
+     */
+    dynamicInstrumentation?: {
+      /**
+       * Whether to enable Dynamic Instrumentation.
+       * @default false
+       */
+      enabled?: boolean
+
+      /**
+       * Path to a custom probes configuration file.
+       */
+      probeFile?: string
+
+      /**
+       * Timeout in milliseconds for capturing variable values.
+       * @default 100
+       */
+      captureTimeoutMs?: number
+
+      /**
+       * Interval in seconds between uploads of probe data.
+       * @default 1
+       */
+      uploadIntervalSeconds?: number
+
+      /**
+       * List of identifier names to redact in captured data.
+       * @default []
+       */
+      redactedIdentifiers?: string[]
+
+      /**
+       * List of identifier names to exclude from redaction.
+       * @default []
+       */
+      redactionExcludedIdentifiers?: string[]
+    }
   }
 
   /**
@@ -1757,6 +1798,12 @@ declare namespace tracer {
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
      * on the tracer.
      */
+    /**
+     * This plugin automatically instruments the
+     * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
+     */
+    interface bullmq extends Instrumentation {}
+
     interface bunyan extends Integration {}
 
     /**

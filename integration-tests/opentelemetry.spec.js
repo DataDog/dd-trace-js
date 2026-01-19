@@ -2,10 +2,10 @@
 
 const assert = require('node:assert/strict')
 
-const { FakeAgent, sandboxCwd, useSandbox } = require('./helpers')
 const { fork } = require('child_process')
 const { join } = require('path')
 const axios = require('axios')
+const { FakeAgent, sandboxCwd, useSandbox } = require('./helpers')
 
 async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
   const messageReceiver = isMetrics

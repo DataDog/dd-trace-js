@@ -1,15 +1,15 @@
 'use strict'
 
-const { describe, it, before } = require('tap').mocha
 const assert = require('node:assert')
 const os = require('node:os')
 
+const { describe, it, before } = require('mocha')
 const sinon = require('sinon')
-require('./setup/core')
 
-const { getConfigFresh } = require('./helpers/config')
+require('./setup/core')
 const SamplingRule = require('../src/sampling_rule')
 const tracerVersion = require('../../../package.json').version
+const { getConfigFresh } = require('./helpers/config')
 
 describe('startup logging', () => {
   let firstStderrCall

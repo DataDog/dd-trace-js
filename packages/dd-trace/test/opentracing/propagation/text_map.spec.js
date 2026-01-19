@@ -2,21 +2,18 @@
 
 const assert = require('node:assert/strict')
 
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
-
 const { getConfigFresh } = require('../../helpers/config')
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
-const { channel } = require('dc-polyfill')
 const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../../src/baggage')
-
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
 
@@ -95,6 +92,7 @@ describe('TextMapPropagator', () => {
     })
 
     it('should inject the span context into the carrier', () => {
+      /** @type {Record<string, unknown>} */
       const carrier = {}
       const spanContext = createContext()
 
@@ -128,6 +126,25 @@ describe('TextMapPropagator', () => {
       assert.strictEqual(carrier.baggage, undefined)
     })
 
+    it('should skip legacy baggage items that cannot be encoded as a valid HTTP header name', () => {
+      const carrier = {}
+      const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+      const spanContext = createContext({
+        baggageItems: {
+          ok: 'yes',
+          'not ok': 'no'
+        }
+      })
+
+      propagator.inject(spanContext, carrier)
+
+      assert.strictEqual(carrier['ot-baggage-ok'], 'yes')
+      assert.strictEqual(carrier['ot-baggage-not ok'], undefined)
+
+      sinon.assert.calledWith(tracerMetrics.count, 'context_header_style.malformed', ['header_style:baggage'])
+      sinon.assert.called(tracerMetrics.count().inc)
+    })
+
     it('should handle special characters in baggage', () => {
       const carrier = {}
       setBaggageItem('",;\\()/:<=>?@[]{}🐶é我', '",;\\🐶é我')
@@ -137,12 +154,17 @@ describe('TextMapPropagator', () => {
     })
 
     it('should drop excess baggage items when there are too many pairs', () => {
+      /** @type {Record<string, unknown>} */
       const carrier = {}
       for (let i = 0; i < config.baggageMaxItems + 1; i++) {
-        setBaggageItem(`key-${i}`, i)
+        setBaggageItem(`key-${i}`, String(i))
       }
       propagator.inject(undefined, carrier)
-      assert.strictEqual(carrier.baggage.split(',').length, config.baggageMaxItems)
+      const baggage = carrier.baggage
+      if (typeof baggage !== 'string') {
+        throw new Error('Expected baggage header to be a string')
+      }
+      assert.strictEqual(baggage.split(',').length, config.baggageMaxItems)
     })
 
     it('should drop excess baggage items when the resulting baggage header contains many bytes', () => {

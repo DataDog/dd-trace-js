@@ -1,9 +1,9 @@
 'use strict'
 
-const request = require('../../exporters/common/request')
-const { getEnvironmentVariable } = require('../../config-helper')
 const { URL, format } = require('node:url')
 const path = require('node:path')
+const request = require('../../exporters/common/request')
+const { getEnvironmentVariable } = require('../../config-helper')
 
 const logger = require('../../log')
 
@@ -17,6 +17,7 @@ const {
 const { parseResponseAndLog } = require('./util')
 
 class BaseLLMObsWriter {
+  #destroyer
   constructor ({ interval, timeout, eventType, config, endpoint, intake }) {
     this._interval = interval ?? getEnvironmentVariable('_DD_LLMOBS_FLUSH_INTERVAL') ?? 1000 // 1s
     this._timeout = timeout ?? getEnvironmentVariable('_DD_LLMOBS_TIMEOUT') ?? 5000 // 5s
@@ -34,12 +35,10 @@ class BaseLLMObsWriter {
       this.flush()
     }, this._interval).unref()
 
-    this._beforeExitHandler = () => {
-      this.destroy()
-    }
-    process.once('beforeExit', this._beforeExitHandler)
+    const destroyer = this.destroy.bind(this)
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(destroyer)
 
-    this._destroyed = false
+    this.#destroyer = destroyer
   }
 
   get url () {
@@ -89,12 +88,12 @@ class BaseLLMObsWriter {
   makePayload (events) {}
 
   destroy () {
-    if (!this._destroyed) {
+    if (this.#destroyer) {
       logger.debug(`Stopping ${this.constructor.name}`)
       clearInterval(this._periodic)
-      process.removeListener('beforeExit', this._beforeExitHandler)
+      globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
       this.flush()
-      this._destroyed = true
+      this.#destroyer = undefined
     }
   }
 

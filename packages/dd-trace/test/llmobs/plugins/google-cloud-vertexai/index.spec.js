@@ -1,5 +1,7 @@
 'use strict'
 
+const fs = require('node:fs')
+const path = require('node:path')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
@@ -8,9 +10,6 @@ const {
   assertLlmObsSpanEvent,
   useLlmObs
 } = require('../../util')
-
-const fs = require('node:fs')
-const path = require('node:path')
 
 /**
  * `@google-cloud/vertexai` uses `fetch` to call against their API, which cannot
@@ -76,7 +75,7 @@ describe('integrations', () => {
   }
 
   describe('vertexai', () => {
-    const getEvents = useLlmObs({ plugin: 'google-cloud-vertexai' })
+    const { getEvents } = useLlmObs({ plugin: 'google-cloud-vertexai' })
 
     withVersions('google-cloud-vertexai', '@google-cloud/vertexai', '>=1', version => {
       before(() => {

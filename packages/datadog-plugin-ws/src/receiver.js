@@ -2,15 +2,15 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 const {
-  incrementWebSocketCounter,
-  buildWebSocketSpanPointerHash,
-  hasDistributedTracingContext
-} = require('./util')
-const {
   WEBSOCKET_PTR_KIND,
   SPAN_POINTER_DIRECTION,
   SPAN_POINTER_DIRECTION_NAME
 } = require('../../dd-trace/src/constants')
+const {
+  incrementWebSocketCounter,
+  buildWebSocketSpanPointerHash,
+  hasDistributedTracingContext
+} = require('./util')
 
 class WSReceiverPlugin extends TracingPlugin {
   static get id () { return 'ws' }
@@ -20,11 +20,9 @@ class WSReceiverPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const {
-      traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces
     } = this.config
-    if (!traceWebsocketMessagesEnabled) return
 
     const { byteLength, socket, binary } = ctx
     if (!socket.spanContext) return

@@ -1,13 +1,15 @@
 'use strict'
 
+const { URL } = require('url')
+
 // Load binding first to not import other modules if it throws
 const libdatadog = require('@datadog/libdatadog')
 const binding = libdatadog.load('crashtracker')
 
 const log = require('../log')
 const defaults = require('../config_defaults')
-const { URL } = require('url')
 const pkg = require('../../../../package.json')
+const processTags = require('../process-tags')
 
 class Crashtracker {
   #started = false
@@ -76,6 +78,13 @@ class Crashtracker {
 
   #getMetadata (config) {
     const tags = Object.keys(config.tags).map(key => `${key}:${config.tags[key]}`)
+
+    // Add process tags to the tags array
+    for (const [key, value] of processTags.tags) {
+      if (value !== undefined) {
+        tags.push(`${key}:${value}`)
+      }
+    }
 
     return {
       library_name: pkg.name,

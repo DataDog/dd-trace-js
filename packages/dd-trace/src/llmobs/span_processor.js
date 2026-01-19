@@ -1,5 +1,14 @@
 'use strict'
 
+const util = require('node:util')
+
+const tracerVersion = require('../../../../package.json').version
+const logger = require('../log')
+const {
+  ERROR_MESSAGE,
+  ERROR_TYPE,
+  ERROR_STACK
+} = require('../constants')
 const {
   SPAN_KIND,
   MODEL_NAME,
@@ -20,21 +29,8 @@ const {
   NAME
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
-
-const {
-  ERROR_MESSAGE,
-  ERROR_TYPE,
-  ERROR_STACK
-} = require('../constants')
-
 const telemetry = require('./telemetry')
-
 const LLMObsTagger = require('./tagger')
-
-const tracerVersion = require('../../../../package.json').version
-const logger = require('../log')
-
-const util = require('node:util')
 
 class LLMObservabilitySpan {
   constructor () {

@@ -4,6 +4,12 @@ const os = require('os')
 const path = require('path')
 const { URL, format, pathToFileURL } = require('url')
 const satisfies = require('../../../../vendor/dist/semifies')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
+const { getIsAzureFunction } = require('../serverless')
+const { isFalse, isTrue } = require('../util')
+const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
+const { getEnvironmentVariables } = require('../config-helper')
+const defaults = require('../config_defaults')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
@@ -11,13 +17,7 @@ const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
 const EventsProfiler = require('./profilers/events')
 const { oomExportStrategies, snapshotKinds } = require('./constants')
-const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
-const { getIsAzureFunction } = require('../serverless')
 const { tagger } = require('./tagger')
-const { isFalse, isTrue } = require('../util')
-const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
-const { getEnvironmentVariables } = require('../config-helper')
-const defaults = require('../config_defaults')
 
 class Config {
   constructor (options = {}) {
@@ -179,6 +179,9 @@ class Config {
 
     this.heapSamplingInterval = options.heapSamplingInterval ??
       (Number(DD_PROFILING_HEAP_SAMPLING_INTERVAL) || 512 * 1024)
+
+    const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
+
     const uploadCompression0 = options.uploadCompression ?? DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ?? 'on'
     let [uploadCompression, level0] = uploadCompression0.split('-')
     if (!['on', 'off', 'gzip', 'zstd'].includes(uploadCompression)) {
@@ -206,9 +209,12 @@ class Config {
       }
     }
 
-    // Default to gzip
+    // Default to either zstd (on Node.js 24+) or gzip (earlier Node.js). We could default to ztsd
+    // everywhere as we ship a Rust zstd compressor for older Node.js versions, but on 24+ we use
+    // the built-in one that runs asynchronously on libuv worker threads, just as gzip does. This is
+    // the least disruptive choice.
     if (uploadCompression === 'on') {
-      uploadCompression = 'gzip'
+      uploadCompression = isAtLeast24 ? 'zstd' : 'gzip'
     }
 
     this.uploadCompression = { method: uploadCompression, level }
@@ -224,7 +230,7 @@ class Config {
 
     let canUseAsyncContextFrame = false
     if (samplingContextsAvailable) {
-      if (satisfies(process.versions.node, '>=24.0.0')) {
+      if (isAtLeast24) {
         canUseAsyncContextFrame = !hasExecArg('--no-async-context-frame')
       } else if (satisfies(process.versions.node, '>=22.9.0')) {
         canUseAsyncContextFrame = hasExecArg('--experimental-async-context-frame')
@@ -234,7 +240,7 @@ class Config {
     if (this.asyncContextFrameEnabled && !canUseAsyncContextFrame) {
       if (!samplingContextsAvailable) {
         turnOffAsyncContextFrame(`on ${process.platform}`)
-      } else if (satisfies(process.versions.node, '>=24.0.0')) {
+      } else if (isAtLeast24) {
         turnOffAsyncContextFrame('with --no-async-context-frame')
       } else if (satisfies(process.versions.node, '>=22.9.0')) {
         turnOffAsyncContextFrame('without --experimental-async-context-frame')

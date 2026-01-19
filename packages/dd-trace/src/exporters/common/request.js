@@ -8,11 +8,11 @@ const http = require('http')
 const https = require('https')
 const zlib = require('zlib')
 
+const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
 const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
-const { storage } = require('../../../../datadog-core')
-const log = require('../../log')
 
 const maxActiveRequests = 8
 
@@ -77,7 +77,7 @@ function request (data, options, callback) {
     res.on('data', chunk => {
       chunks.push(chunk)
     })
-    res.on('end', () => {
+    res.once('end', () => {
       activeRequests--
       const buffer = Buffer.concat(chunks)
 

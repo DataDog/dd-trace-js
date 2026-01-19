@@ -1,12 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, afterEach } = require('tap').mocha
-const axios = require('axios')
 const { Agent } = require('node:http')
 
-require('../../setup/core')
+const { describe, it, afterEach } = require('mocha')
+const axios = require('axios')
 
+require('../../setup/core')
 const agent = require('../agent')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
@@ -22,7 +22,7 @@ describe('Inferred Proxy Spans', function () {
   let controller
   let port
 
-  // tap was throwing timeout errors when trying to use hooks like `before`, so instead we just use this function
+  // Timeout errors occurred when trying to use hooks like `before`, so instead we just use this function
   // and call before the test starts
   const loadTest = async function ({ inferredProxyServicesEnabled = true } = {}) {
     const options = {
@@ -62,7 +62,7 @@ describe('Inferred Proxy Spans', function () {
       })
     })
 
-    return new Promise((resolve, reject) => {
+    return new Promise(/** @type {() => void} */ (resolve, reject) => {
       appListener = server.listen(0, '127.0.0.1', () => {
         port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         appListener._connections = connections
@@ -82,7 +82,7 @@ describe('Inferred Proxy Spans', function () {
         }
       }
 
-      await new Promise((resolve, reject) => {
+      await new Promise(/** @type {() => void} */ (resolve, reject) => {
         appListener.close((err) => {
           if (err) {
             reject(err)
