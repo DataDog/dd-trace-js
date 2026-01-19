@@ -10,11 +10,11 @@ const { it, describe, beforeEach, afterEach } = require('mocha')
 const context = describe
 const proxyquire = require('proxyquire')
 
-require('./setup/core')
-const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
-const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { DD_MAJOR } = require('../../../version')
+require('../setup/core')
+const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../../src/constants')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/config/helper')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const { DD_MAJOR } = require('../../../../version')
 
 describe('Config', () => {
   let getConfig
@@ -28,33 +28,33 @@ describe('Config', () => {
   let osType
   let updateConfig
 
-  const RECOMMENDED_JSON_PATH = require.resolve('../src/appsec/recommended.json')
-  const RULES_JSON_PATH = require.resolve('./fixtures/config/appsec-rules.json')
-  const BLOCKED_TEMPLATE_HTML_PATH = require.resolve('./fixtures/config/appsec-blocked-template.html')
+  const RECOMMENDED_JSON_PATH = require.resolve('../../src/appsec/recommended.json')
+  const RULES_JSON_PATH = require.resolve('../fixtures/config/appsec-rules.json')
+  const BLOCKED_TEMPLATE_HTML_PATH = require.resolve('../fixtures/config/appsec-blocked-template.html')
   const BLOCKED_TEMPLATE_HTML = readFileSync(BLOCKED_TEMPLATE_HTML_PATH, { encoding: 'utf8' })
-  const BLOCKED_TEMPLATE_JSON_PATH = require.resolve('./fixtures/config/appsec-blocked-template.json')
+  const BLOCKED_TEMPLATE_JSON_PATH = require.resolve('../fixtures/config/appsec-blocked-template.json')
   const BLOCKED_TEMPLATE_JSON = readFileSync(BLOCKED_TEMPLATE_JSON_PATH, { encoding: 'utf8' })
-  const BLOCKED_TEMPLATE_GRAPHQL_PATH = require.resolve('./fixtures/config/appsec-blocked-graphql-template.json')
+  const BLOCKED_TEMPLATE_GRAPHQL_PATH = require.resolve('../fixtures/config/appsec-blocked-graphql-template.json')
   const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
 
   const comparator = (a, b) => a.name.localeCompare(b.name) || a.origin.localeCompare(b.origin)
 
   function reloadLoggerAndConfig () {
-    log = proxyquire('../src/log', {})
+    log = proxyquire('../../src/log', {})
     log.use = sinon.spy()
     log.toggle = sinon.spy()
     log.warn = sinon.spy()
     log.error = sinon.spy()
 
-    const configDefaults = proxyquire('../src/config_defaults', {
-      './pkg': pkg
+    const configDefaults = proxyquire('../../src/config/defaults', {
+      '../pkg': pkg
     })
 
     // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
-    getConfig = (options) => proxyquire.noPreserveCache()('../src/config', {
-      './config_defaults': configDefaults,
-      './log': log,
-      './telemetry': { updateConfig },
+    getConfig = (options) => proxyquire.noPreserveCache()('../../src/config', {
+      './defaults': configDefaults,
+      '../log': log,
+      '../telemetry': { updateConfig },
       fs,
       os
     })(options)
@@ -210,8 +210,8 @@ describe('Config', () => {
       }
     })
 
-    const indexFile = require('../src/index')
-    const proxy = require('../src/proxy')
+    const indexFile = require('../../src/index')
+    const proxy = require('../../src/proxy')
     assert.strictEqual(indexFile, proxy)
   })
 
@@ -249,9 +249,9 @@ describe('Config', () => {
       }
     })
 
-    delete require.cache[require.resolve('../src/index')]
-    const indexFile = require('../src/index')
-    const noop = require('../src/noop/proxy')
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const noop = require('../../src/noop/proxy')
     assert.strictEqual(indexFile, noop)
   })
 
@@ -2401,7 +2401,7 @@ describe('Config', () => {
   })
 
   it('should load span sampling rules from json file', () => {
-    const path = './fixtures/config/span-sampling-rules.json'
+    const path = '../fixtures/config/span-sampling-rules.json'
     process.env.DD_SPAN_SAMPLING_RULES_FILE = require.resolve(path)
 
     const config = getConfig()
@@ -2704,8 +2704,8 @@ describe('Config', () => {
   context('sci embedding', () => {
     const DUMMY_COMMIT_SHA = 'b7b5dfa992008c77ab3f8a10eb8711e0092445b0'
     const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/dd-trace-js.git'
-    const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
-    const DD_GIT_FOLDER_PATH = path.join(__dirname, 'fixtures', 'config', 'git-folder')
+    const DD_GIT_PROPERTIES_FILE = require.resolve('../fixtures/config/git.properties')
+    const DD_GIT_FOLDER_PATH = path.join(__dirname, '..', 'fixtures', 'config', 'git-folder')
     let ddTags
     beforeEach(() => {
       ddTags = process.env.DD_TAGS
@@ -2766,7 +2766,7 @@ describe('Config', () => {
       assert.strictEqual(config.repositoryUrl, DUMMY_REPOSITORY_URL)
     })
     it('reads git.properties and filters out credentials', () => {
-      process.env.DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties.credentials')
+      process.env.DD_GIT_PROPERTIES_FILE = require.resolve('../fixtures/config/git.properties.credentials')
       const config = getConfig({})
       assertObjectContains(config, {
         commitSHA: '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d',
@@ -2871,7 +2871,7 @@ describe('Config', () => {
   context('payload tagging', () => {
     let env
 
-    const staticConfig = require('../src/payload-tagging/config/aws.json')
+    const staticConfig = require('../../src/payload-tagging/config/aws.json')
 
     beforeEach(() => {
       env = process.env
@@ -3073,7 +3073,7 @@ describe('Config', () => {
     const os = require('node:os')
     const path = require('node:path')
 
-    const StableConfig = require('../src/config_stable')
+    const StableConfig = require('../../src/config/stable')
 
     // os.tmpdir returns undefined on Windows somehow
     const baseTempDir = os.platform() !== 'win32' ? os.tmpdir() : 'C:\\Windows\\Temp'

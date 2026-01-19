@@ -1,6 +1,6 @@
 'use strict'
 
-const { getEnvironmentVariable } = require('../config-helper')
+const { getEnvironmentVariable } = require('../config/helper')
 const { Profiler, ServerlessProfiler } = require('./profiler')
 const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')

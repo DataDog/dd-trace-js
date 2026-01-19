@@ -8,7 +8,7 @@ const { URL, format } = require('url')
 const request = require('./exporters/common/request')
 const log = require('./log')
 const Histogram = require('./histogram')
-const defaults = require('./config_defaults')
+const defaults = require('./config/defaults')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
 
