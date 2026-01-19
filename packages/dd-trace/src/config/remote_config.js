@@ -126,47 +126,32 @@ class RCClientLibConfigManager {
   }
 
   /**
-   * Get merged lib_config by taking first non-null value for each field
-   * Configs are sorted by priority (highest first)
+   * Get merged lib_config with higher priority configs overriding lower priority ones
    *
    * @returns {RemoteConfigOptions|null} Merged config object or null if no configs present
    */
   getMergedLibConfig () {
-    if (this.configs.size === 0) {
-      // When no configs are present, return null to signal config.js to reset all RC fields
-      return null
-    }
+    if (this.configs.size === 0) return null
 
-    // Sort configs by priority (highest first)
     const sortedConfigs = [...this.configs.values()]
-      .sort((a, b) => b.priority - a.priority)
+      .sort((a, b) => a.priority - b.priority)
 
     const merged = {}
     let libConfigCount = 0
 
-    // Merge configs: take first non-null/undefined value for each field
-    // If a field is explicitly set to null, that means "reset to default"
     for (const { conf } of sortedConfigs) {
-      const libConfig = conf.lib_config
-      if (libConfig == null) continue
+      if (!conf.lib_config) continue
       libConfigCount++
 
-      for (const [key, value] of Object.entries(libConfig)) {
-        if (Object.hasOwn(merged, key)) continue
-
-        // Set the value even if it's null (to reset) but not if it's undefined (missing)
-        if (value === null) {
-          merged[key] = undefined // TODO: Should this be null?
-        } else if (value !== undefined) {
-          merged[key] = value
+      // Filter out undefined (but keep null) since undefined means "not set" and null means "reset to default"
+      for (const key in conf.lib_config) {
+        if (conf.lib_config[key] !== undefined) {
+          merged[key] = conf.lib_config[key]
         }
       }
     }
 
-    if (libConfigCount === 0) {
-      // When no configs are present, return null to signal config.js to reset all RC fields
-      return null
-    }
+    if (libConfigCount === 0) return null
 
     log.debug('[config/remote_config] Merged %d configs into lib_config', libConfigCount)
     return merged
