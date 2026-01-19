@@ -478,7 +478,7 @@ class Config {
       DD_IAST_STACK_TRACE_ENABLED,
       DD_INJECTION_ENABLED,
       DD_INJECT_FORCE,
-      DD_IS_NX,
+      DD_ENABLE_NX_SERVICE_NAME,
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
@@ -864,10 +864,20 @@ class Config {
     this.#setSamplingRule(target, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
     unprocessedTarget['sampler.rules'] = DD_TRACE_SAMPLING_RULES
     this.#setString(target, 'scope', DD_TRACE_SCOPE)
-    // Priority: DD_SERVICE > tags.service > OTEL_SERVICE_NAME > NX_TASK_TARGET_PROJECT (if DD_IS_NX) > default
+    // Priority:
+    // DD_SERVICE > tags.service > OTEL_SERVICE_NAME > NX_TASK_TARGET_PROJECT (if DD_ENABLE_NX_SERVICE_NAME) > default
     let serviceName = DD_SERVICE || tags.service || OTEL_SERVICE_NAME
-    if (!serviceName && isTrue(DD_IS_NX) && NX_TASK_TARGET_PROJECT) {
-      serviceName = NX_TASK_TARGET_PROJECT
+    if (!serviceName && NX_TASK_TARGET_PROJECT) {
+      if (isTrue(DD_ENABLE_NX_SERVICE_NAME)) {
+        serviceName = NX_TASK_TARGET_PROJECT
+      } else if (DD_MAJOR < 6) {
+        // Warn about v6 behavior change for Nx projects
+        log.warn(
+          'NX_TASK_TARGET_PROJECT is set but no service name was configured. ' +
+          'In v6, NX_TASK_TARGET_PROJECT will be used as the default service name. ' +
+          'Set DD_ENABLE_NX_SERVICE_NAME=true to opt-in to this behavior now, or set a service name explicitly.'
+        )
+      }
     }
     this.#setString(target, 'service', serviceName)
     if (DD_SERVICE_MAPPING) {
