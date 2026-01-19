@@ -44,13 +44,16 @@ describe('config', () => {
   it('should have the correct defaults', () => {
     const config = new Config()
 
+    // When running tests with mocha, defaults.service resolves to 'mocha' because
+    // pkg.name looks up the package.json from require.main (mocha's entry point).
+    // In a real application, it would be the app's package.json name, or 'node' as final fallback.
     assertObjectContains(config, {
-      service: 'node',
+      service: 'mocha',
       flushInterval: 65 * 1000
     })
 
     assert.deepStrictEqual(config.tags, {
-      service: 'node',
+      service: 'mocha',
       host: os.hostname()
     })
 
@@ -435,7 +438,7 @@ describe('config', () => {
           process.execPath,
           path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
           'http://127.0.0.1:8126/',
-          `host:${config.host},service:node,snapshot:on_oom`,
+          `host:${config.host},service:mocha,snapshot:on_oom`,
           'space'
         ]
       })
@@ -503,7 +506,7 @@ describe('config', () => {
           process.execPath,
           path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
           'http://127.0.0.1:8126/',
-          `host:${config.host},service:node,snapshot:on_oom`,
+          `host:${config.host},service:mocha,snapshot:on_oom`,
           'space'
         ]
       })

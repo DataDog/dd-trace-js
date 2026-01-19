@@ -55,7 +55,7 @@ class Config {
     } = getEnvironmentVariables()
 
     const env = options.env ?? DD_ENV
-    const service = options.service || DD_SERVICE || 'node'
+    const service = options.service || DD_SERVICE || defaults.service
     const host = os.hostname()
     const version = options.version ?? DD_VERSION
     // Must be longer than one minute so pad with five seconds
