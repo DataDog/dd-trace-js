@@ -2331,7 +2331,7 @@ describe('Config', () => {
   it('should send empty array when remote config is called on empty options', () => {
     const config = getConfig()
 
-    config.configure({}, true)
+    config.setRemoteConfig({})
 
     sinon.assert.calledTwice(updateConfig)
     assert.deepStrictEqual(updateConfig.getCall(1).args[0], [])
@@ -2340,9 +2340,9 @@ describe('Config', () => {
   it('should send remote config changes to telemetry', () => {
     const config = getConfig()
 
-    config.configure({
+    config.setRemoteConfig({
       tracing_sampling_rate: 0
-    }, true)
+    })
 
     assert.deepStrictEqual(updateConfig.getCall(1).args[0], [
       { name: 'sampleRate', value: 0, origin: 'remote_config' }
@@ -2352,7 +2352,7 @@ describe('Config', () => {
   it('should reformat tags from sampling rules when set through remote configuration', () => {
     const config = getConfig()
 
-    config.configure({
+    config.setRemoteConfig({
       tracing_sampling_rules: [
         {
           resource: '*',
@@ -2363,7 +2363,7 @@ describe('Config', () => {
           provenance: 'customer'
         }
       ]
-    }, true)
+    })
     assert.deepStrictEqual(config.sampler, {
       spanSamplingRules: [],
       rateLimit: 100,
@@ -2381,9 +2381,9 @@ describe('Config', () => {
   it('should have consistent runtime-id after remote configuration updates tags', () => {
     const config = getConfig()
     const runtimeId = config.tags['runtime-id']
-    config.configure({
+    config.setRemoteConfig({
       tracing_tags: { foo: 'bar' }
-    }, true)
+    })
 
     assert.strictEqual(config.tags?.foo, 'bar')
     assert.strictEqual(config.tags?.['runtime-id'], runtimeId)
@@ -3593,6 +3593,127 @@ rules:
       })
 
       assert.strictEqual(config.getOrigin('appsec.enabled'), 'code')
+    })
+  })
+
+  describe('remote config field mapping', () => {
+    it('should map dynamic_instrumentation_enabled to dynamicInstrumentation.enabled', () => {
+      const config = getConfig()
+      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
+      config.setRemoteConfig({ dynamic_instrumentation_enabled: true })
+      assert.strictEqual(config.dynamicInstrumentation.enabled, true)
+    })
+
+    it('should map code_origin_enabled to codeOriginForSpans.enabled', () => {
+      const config = getConfig()
+      assert.strictEqual(config.codeOriginForSpans.enabled, true)
+      config.setRemoteConfig({ code_origin_enabled: false })
+      assert.strictEqual(config.codeOriginForSpans.enabled, false)
+    })
+
+    it('should map tracing_sampling_rate to sampleRate', () => {
+      const config = getConfig()
+      assert.strictEqual(config.sampleRate, undefined)
+      config.setRemoteConfig({ tracing_sampling_rate: 0.5 })
+      assert.strictEqual(config.sampleRate, 0.5)
+    })
+
+    it('should map log_injection_enabled to logInjection', () => {
+      const config = getConfig()
+      assert.strictEqual(config.logInjection, true)
+      config.setRemoteConfig({ log_injection_enabled: false })
+      assert.strictEqual(config.logInjection, false)
+    })
+
+    it('should map tracing_enabled to tracing', () => {
+      const config = getConfig()
+      assert.strictEqual(config.tracing, true)
+      config.setRemoteConfig({ tracing_enabled: false })
+      assert.strictEqual(config.tracing, false)
+    })
+
+    it('should map tracing_sampling_rules to sampler.rules', () => {
+      const config = getConfig()
+      assert.deepStrictEqual(config.sampler.rules, [])
+      config.setRemoteConfig({ tracing_sampling_rules: [{ sample_rate: 0.5 }] })
+      assert.deepStrictEqual(config.sampler.rules, [{ sampleRate: 0.5 }])
+    })
+
+    it('should map tracing_header_tags to headerTags', () => {
+      const config = getConfig({ headerTags: ['foo:bar'] })
+      assert.deepStrictEqual(config.headerTags, ['foo:bar'])
+      config.setRemoteConfig({ tracing_header_tags: [{ header: 'x-custom-header', tag_name: 'custom.tag' }] })
+      assert.deepStrictEqual(config.headerTags, [
+        // TODO: There's an unrelated bug in the tracer resulting in headerTags not being merged.
+        // 'foo:bar',
+        'x-custom-header:custom.tag'
+      ])
+    })
+
+    it('should map tracing_tags to tags', () => {
+      const config = getConfig({ tags: { foo: 'bar' } })
+      assertObjectContains(config.tags, { foo: 'bar' })
+      assert.strictEqual(config.tags.team, undefined)
+      config.setRemoteConfig({ tracing_tags: ['team:backend'] })
+      assertObjectContains(config.tags, {
+        // TODO: There's an unrelated bug in the tracer resulting in tags not being merged.
+        // foo: 'bar',
+        team: 'backend'
+      })
+    })
+  })
+
+  describe('remote config application', () => {
+    it('should clear RC fields when setRemoteConfig is called with null', () => {
+      const config = getConfig({ logInjection: true, sampleRate: 0.5 })
+
+      config.setRemoteConfig({ tracing_enabled: false })
+
+      assert.strictEqual(config.tracing, false)
+      assert.strictEqual(config.logInjection, true)
+      assert.strictEqual(config.sampleRate, 0.5)
+
+      config.setRemoteConfig(null)
+
+      assert.strictEqual(config.tracing, true)
+      assert.strictEqual(config.logInjection, true)
+      assert.strictEqual(config.sampleRate, 0.5)
+    })
+
+    it('should ignore null values', () => {
+      const config = getConfig({ sampleRate: 0.5 })
+      config.setRemoteConfig({ tracing_sampling_rate: null })
+      assert.strictEqual(config.sampleRate, 0.5)
+    })
+
+    it('should treat null values as unset', () => {
+      const config = getConfig({ sampleRate: 0.5 })
+      config.setRemoteConfig({ tracing_sampling_rate: 0.8 })
+      assert.strictEqual(config.sampleRate, 0.8)
+      config.setRemoteConfig({ tracing_sampling_rate: null })
+      assert.strictEqual(config.sampleRate, 0.5)
+    })
+
+    it('should replace all RC fields with each update', () => {
+      const config = getConfig()
+
+      config.setRemoteConfig({
+        tracing_enabled: true,
+        log_injection_enabled: false,
+        tracing_sampling_rate: 0.8
+      })
+
+      assert.strictEqual(config.tracing, true)
+      assert.strictEqual(config.logInjection, false)
+      assert.strictEqual(config.sampleRate, 0.8)
+
+      config.setRemoteConfig({
+        tracing_enabled: false
+      })
+
+      assert.strictEqual(config.tracing, false)
+      assert.strictEqual(config.logInjection, true)
+      assert.strictEqual(config.sampleRate, undefined)
     })
   })
 })
