@@ -1,7 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { addHook, channel } = require('./helpers/instrument')
 
 const codeCoverageWrapCh = channel('ci:nyc:wrap')

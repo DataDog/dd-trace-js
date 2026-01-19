@@ -3,7 +3,7 @@
 const fs = require('fs')
 const { fileURLToPath } = require('url')
 const { SourceMapper, heap, encode } = require('@datadog/pprof')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getEnvironmentVariable } = require('../config/helper')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 

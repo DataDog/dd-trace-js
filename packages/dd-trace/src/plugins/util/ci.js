@@ -1,7 +1,7 @@
 'use strict'
 
 const { readFileSync } = require('fs')
-const { getEnvironmentVariable, getEnvironmentVariables } = require('../../config-helper')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../../config/helper')
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,

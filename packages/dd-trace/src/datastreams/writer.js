@@ -6,7 +6,7 @@ const pkg = require('../../../../package.json')
 const log = require('../log')
 const request = require('../exporters/common/request')
 const { MsgpackEncoder } = require('../msgpack')
-const defaults = require('../config_defaults')
+const defaults = require('../config/defaults')
 
 const msgpack = new MsgpackEncoder()
 
