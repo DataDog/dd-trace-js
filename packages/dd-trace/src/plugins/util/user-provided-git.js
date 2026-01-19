@@ -1,6 +1,6 @@
 'use strict'
 
-const { getEnvironmentVariables } = require('../../config-helper')
+const { getEnvironmentVariables } = require('../../config/helper')
 const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,

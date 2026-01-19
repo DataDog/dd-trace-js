@@ -286,13 +286,13 @@ Avoid try/catch in hot paths - validate inputs early
 
 ## Adding New Configuration Options
 
-1. **Add default value** in `packages/dd-trace/src/config_defaults.js`
-2. **Map environment variable** in `packages/dd-trace/src/config.js` (`#applyEnvironment()` method)
+1. **Add default value** in `packages/dd-trace/src/config/defaults.js`
+2. **Map environment variable** in `packages/dd-trace/src/config/index.js` (`#applyEnvironment()` method)
 3. **Add TypeScript definitions** in `index.d.ts`
 4. **Add to telemetry name mapping** (if applicable) in `packages/dd-trace/src/telemetry/telemetry.js`
-5. **Update** `packages/dd-trace/src/supported-configurations.json`
+5. **Update** `packages/dd-trace/src/config/supported-configurations.json`
 6. **Document** in `docs/API.md` (non-internal/experimental options only)
-7. **Add tests** in `packages/dd-trace/test/config.spec.js`
+7. **Add tests** in `packages/dd-trace/test/config/index.spec.js`
 
 **Naming Convention:** Size/time-based config options should have unit suffixes (e.g., `timeoutMs`, `maxBytes`, `intervalSeconds`).
 
