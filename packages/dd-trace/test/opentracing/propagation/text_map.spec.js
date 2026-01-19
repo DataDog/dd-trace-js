@@ -147,10 +147,11 @@ describe('TextMapPropagator', () => {
 
     it('should handle special characters in baggage', () => {
       const carrier = {}
-      setBaggageItem('",;\\()/:<=>?@[]{}🐶é我', '",;\\🐶é我')
+      // W3C baggage keys must be RFC7230 tokens; keep special chars in the value.
+      setBaggageItem('special', '",;\\🐶é我')
       propagator.inject(undefined, carrier)
       // eslint-disable-next-line @stylistic/max-len
-      assert.strictEqual(carrier.baggage, '%22%2C%3B%5C%28%29%2F%3A%3C%3D%3E%3F%40%5B%5D%7B%7D%F0%9F%90%B6%C3%A9%E6%88%91=%22%2C%3B%5C%F0%9F%90%B6%C3%A9%E6%88%91')
+      assert.strictEqual(carrier.baggage, 'special=%22%2C%3B%5C%F0%9F%90%B6%C3%A9%E6%88%91')
     })
 
     it('should drop excess baggage items when there are too many pairs', () => {
@@ -545,11 +546,11 @@ describe('TextMapPropagator', () => {
       const carrier = {
         'x-datadog-trace-id': '123',
         'x-datadog-parent-id': '456',
-        baggage: '%22%2C%3B%5C%28%29%2F%3A%3C%3D%3E%3F%40%5B%5D%7B%7D=%22%2C%3B%5C'
+        baggage: 'special=%22%2C%3B%5C'
       }
       const spanContext = propagator.extract(carrier)
       assert.deepStrictEqual(spanContext._baggageItems, {})
-      assert.deepStrictEqual(getAllBaggageItems(), { '",;\\()/:<=>?@[]{}': '",;\\' })
+      assert.deepStrictEqual(getAllBaggageItems(), { special: '",;\\' })
     })
 
     it('should not extract baggage when the header is malformed', () => {
@@ -587,7 +588,7 @@ describe('TextMapPropagator', () => {
       }
       const spanContextD = propagator.extract(carrierD)
       assert.deepStrictEqual(spanContextD._baggageItems, {})
-      assert.deepStrictEqual(getAllBaggageItems(), {})
+      assert.deepStrictEqual(getAllBaggageItems(), { 'no-value': '' })
     })
 
     it('should add baggage items to span tags', () => {

@@ -34,6 +34,11 @@ const b3HeaderKey = 'b3'
 const sqsdHeaderHey = 'x-aws-sqsd-attr-_datadog'
 const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)?|[01d])$/i
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
+// W3C Baggage key grammar: key = token (RFC 7230).
+// Spec (up-to-date): "Propagation format for distributed context: Baggage" §3.3.1
+// https://www.w3.org/TR/baggage/#header-content
+// https://www.rfc-editor.org/rfc/rfc7230#section-3.2.6
+const baggageTokenExpr = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 const tagKeyExpr = /^_dd\.p\.[\x21-\x2B\x2D-\x7E]+$/ // ASCII minus spaces and commas
 const tagValueExpr = /^[\x20-\x2B\x2D-\x7E]*$/ // ASCII minus commas
 // RFC7230 token (used by HTTP header field-name) and compatible with Node's header name validation.
@@ -124,13 +129,6 @@ class TextMapPropagator {
     }
   }
 
-  _encodeOtelBaggageKey (key) {
-    let encoded = encodeURIComponent(key)
-    encoded = encoded.replaceAll('(', '%28')
-    encoded = encoded.replaceAll(')', '%29')
-    return encoded
-  }
-
   _injectBaggageItems (spanContext, carrier) {
     if (this._config.legacyBaggageEnabled) {
       const baggageItems = spanContext?._baggageItems
@@ -157,7 +155,13 @@ class TextMapPropagator {
       const baggageItems = getAllBaggageItems()
       if (!baggageItems) return
       for (const [key, value] of Object.entries(baggageItems)) {
-        const item = `${this._encodeOtelBaggageKey(String(key).trim())}=${encodeURIComponent(String(value).trim())},`
+        const baggageKey = String(key).trim()
+        if (!baggageKey || !baggageTokenExpr.test(baggageKey)) continue
+
+        // Do not trim values. If callers include leading/trailing whitespace, it must be percent-encoded.
+        // W3C list-member allows optional properties after ';'.
+        // https://www.w3.org/TR/baggage/#header-content
+        const item = `${baggageKey}=${encodeURIComponent(String(value))},`
         itemCounter += 1
         byteCounter += Buffer.byteLength(item)
 
@@ -640,13 +644,6 @@ class TextMapPropagator {
     }
   }
 
-  _decodeOtelBaggageKey (key) {
-    let decoded = decodeURIComponent(key)
-    decoded = decoded.replaceAll('%28', '(')
-    decoded = decoded.replaceAll('%29', ')')
-    return decoded
-  }
-
   _extractLegacyBaggageItems (carrier, spanContext) {
     if (this._config.legacyBaggageEnabled) {
       Object.keys(carrier).forEach(key => {
@@ -668,19 +665,38 @@ class TextMapPropagator {
       ? undefined
       : new Set(this._config.baggageTagKeys.split(','))
     for (const keyValue of baggages) {
-      if (!keyValue.includes('=')) {
+      if (!keyValue) continue
+
+      // Per W3C baggage, list-members can contain optional properties after `;`.
+      // Example: key=value;prop=1;prop2
+      // https://www.w3.org/TR/baggage/#header-content
+      const semicolonIdx = keyValue.indexOf(';')
+      const member = (semicolonIdx === -1 ? keyValue : keyValue.slice(0, semicolonIdx)).trim()
+      if (!member) continue
+
+      const eqIdx = member.indexOf('=')
+      if (eqIdx === -1) {
         tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
         removeAllBaggageItems()
         return
       }
-      let [key, value] = keyValue.split('=')
-      key = this._decodeOtelBaggageKey(key.trim())
-      value = decodeURIComponent(value.trim())
-      if (!key || !value) {
+
+      const key = member.slice(0, eqIdx).trim()
+      let value = member.slice(eqIdx + 1).trim()
+
+      if (!baggageTokenExpr.test(key)) {
         tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
         removeAllBaggageItems()
         return
       }
+      try {
+        value = decodeURIComponent(value)
+      } catch {
+        tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
+        removeAllBaggageItems()
+        return
+      }
+
       if (spanContext && (tagAllKeys || keysToSpanTag?.has(key))) {
         spanContext._trace.tags['baggage.' + key] = value
       }
