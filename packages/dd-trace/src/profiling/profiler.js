@@ -64,6 +64,8 @@ class Profiler extends EventEmitter {
     this._timeoutInterval = undefined
   }
 
+  get serverless () { return false }
+
   get flushInterval () {
     return this.#config?.flushInterval
   }
@@ -243,6 +245,7 @@ class Profiler extends EventEmitter {
 
   #createInitialInfos () {
     return {
+      serverless: this.serverless,
       settings: this.#config.systemInfoReport
     }
   }
@@ -351,6 +354,8 @@ class ServerlessProfiler extends Profiler {
     this.#interval = 1
     this.#flushAfterIntervals = undefined
   }
+
+  get serverless () { return true }
 
   get profiledIntervals () {
     return this.#profiledIntervals
