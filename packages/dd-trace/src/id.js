@@ -243,5 +243,5 @@ function writeUInt32BE (buffer, value, offset) {
  * @returns {Identifier}
  */
 module.exports = function createIdentifier (value, radix) {
-  return new Identifier(value, radix)
+  return new Identifier(value ?? '', radix)
 }
