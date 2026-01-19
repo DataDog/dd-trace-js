@@ -19,6 +19,7 @@ describe('Tracing Remote Config', () => {
 
     rc = {
       updateCapabilities: sinon.spy(),
+      subscribeProducts: sinon.spy(),
       setBatchHandler: sinon.spy((products, handler) => {
         batchHandlers.set(products[0], handler)
       })
@@ -53,6 +54,7 @@ describe('Tracing Remote Config', () => {
     it('should register APM_TRACING batch handler', () => {
       enable(rc, config, onConfigUpdated)
 
+      sinon.assert.calledOnceWithExactly(rc.subscribeProducts, 'APM_TRACING')
       sinon.assert.calledOnceWithExactly(rc.setBatchHandler, ['APM_TRACING'], sinon.match.func)
     })
 

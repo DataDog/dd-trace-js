@@ -152,7 +152,7 @@ class RCClientLibConfigManager {
       libConfigCount++
 
       for (const [key, value] of Object.entries(libConfig)) {
-        if (key in merged) continue
+        if (Object.hasOwn(merged, key)) continue
 
         // Set the value even if it's null (to reset) but not if it's undefined (missing)
         if (value === null) {
@@ -201,6 +201,9 @@ function enable (rc, config, onConfigUpdated) {
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN, true)
 
   const rcClientLibConfigManager = new RCClientLibConfigManager(config.service, config.env)
+
+  // Subscribe to APM_TRACING product (setBatchHandler used below doesn't automatically subscribe)
+  rc.subscribeProducts('APM_TRACING')
 
   // Use a batch handler to process all changes before updating the config. This is important in case there's
   // conflicting configs between, for example, the org and service level.

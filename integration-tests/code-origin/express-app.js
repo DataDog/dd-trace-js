@@ -1,5 +1,6 @@
 'use strict'
 
+// @ts-expect-error This code is running in a sandbox where dd-trace is available
 const tracer = require('dd-trace')
 
 tracer.init({ flushInterval: 1 })
@@ -19,21 +20,6 @@ app.get('/config', (req, res) => {
   })
 })
 
-app.post('/disable-code-origin', (req, res) => {
-  tracer._tracer._config.setRemoteConfig({ code_origin_enabled: false })
-  tracer._updateTracing(tracer._tracer._config)
-  res.json({ success: true })
-})
-
-app.post('/enable-code-origin', (req, res) => {
-  tracer._tracer._config.setRemoteConfig({ code_origin_enabled: true })
-  tracer._updateTracing(tracer._tracer._config)
-  res.json({ success: true })
-})
-
-const server = app.listen(process.env.APP_PORT || 0, (error) => {
-  if (error) {
-    throw error
-  }
-  process.send?.({ port: server.address().port })
+const server = app.listen(process.env.APP_PORT || 0, () => {
+  process.send?.({ port: (/** @type {import('net').AddressInfo} */ (server.address())).port })
 })

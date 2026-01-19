@@ -953,6 +953,7 @@ function createApmTracingTransaction (configId, libConfig, action = 'apply') {
     toUnapply: action === 'unapply' ? [item] : [],
     toApply: action === 'apply' ? [item] : [],
     toModify: action === 'modify' ? [item] : [],
-    ack: sinon.spy()
+    ack: sinon.spy(),
+    error: sinon.spy()
   }
 }

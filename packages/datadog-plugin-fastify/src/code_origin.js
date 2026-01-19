@@ -15,7 +15,6 @@ class FastifyCodeOriginForSpansPlugin extends Plugin {
     super(...args)
 
     this.addSub('apm:fastify:request:handle', ({ req, routeConfig }) => {
-      if (!this._enabled) return
       const tags = routeConfig?.[kCodeOriginForSpansTagsSym]
       if (!tags) return
       web.getContext(req)?.span?.addTags(tags)

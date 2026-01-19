@@ -5,6 +5,8 @@ const path = require('node:path')
 const Axios = require('axios')
 const { FakeAgent, sandboxCwd, useSandbox, spawnProc } = require('./helpers')
 
+const ACKNOWLEDGED = 2
+
 describe('Code Origin Remote Config', function () {
   this.timeout(20000)
 
@@ -37,6 +39,7 @@ describe('Code Origin Remote Config', function () {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
+        DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: 0.1,
         ...envVars
       }
     })
@@ -44,6 +47,28 @@ describe('Code Origin Remote Config', function () {
       baseURL: proc.url,
       headers: { 'Content-Type': 'application/json' }
     })
+  }
+
+  const addRemoteConfigAndWaitForAck = (libConfig) => {
+    return /** @type {Promise<void>} */ (new Promise((resolve) => {
+      // Random config id - Just needs to be unique between calls to this function
+      const configId = Math.random().toString(36).slice(2)
+      const handler = (id, version, state) => {
+        if (id === configId && state === ACKNOWLEDGED) {
+          agent.removeListener('remote-config-ack-update', handler)
+          resolve()
+        }
+      }
+      agent.on('remote-config-ack-update', handler)
+      agent.addRemoteConfig({
+        product: 'APM_TRACING',
+        id: configId,
+        config: {
+          service_target: { service: 'node', env: '*' },
+          lib_config: libConfig
+        }
+      })
+    }))
   }
 
   const assertCodeOriginPresent = (framework, url = '/hello') => {
@@ -81,7 +106,7 @@ describe('Code Origin Remote Config', function () {
           DD_REMOTE_CONFIG_ENABLED: 'true'
         }))
 
-        it('should disable code origin tags at runtime via setRemoteConfig', async () => {
+        it('should disable code origin tags at runtime via remote config', async () => {
           // Step 1: Make a request with code origin enabled (default)
           await assertCodeOriginPresent(framework)
 
@@ -91,7 +116,7 @@ describe('Code Origin Remote Config', function () {
           assert.strictEqual(configBefore.data.remoteConfigEnabled, true)
 
           // Step 2: Disable code origin via remote config
-          await axios.post('/disable-code-origin', {})
+          await addRemoteConfigAndWaitForAck({ code_origin_enabled: false })
 
           // Verify config shows disabled
           const configAfter = await axios.get('/config')
@@ -132,8 +157,8 @@ describe('Code Origin Remote Config', function () {
           assert.strictEqual(configBefore.data.codeOriginEnabled, false)
           assert.strictEqual(configBefore.data.remoteConfigEnabled, true)
 
-          // Step 2: Enable code origin at runtime
-          await axios.post('/enable-code-origin', {})
+          // Step 2: Enable code origin at runtime via remote config
+          await addRemoteConfigAndWaitForAck({ code_origin_enabled: true })
 
           // Verify config shows CO enabled
           const configAfter = await axios.get('/config')

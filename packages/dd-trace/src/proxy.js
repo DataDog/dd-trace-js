@@ -131,8 +131,8 @@ class Tracer extends NoopProxy {
 
         const tracingRemoteConfig = require('./config/remote_config')
         tracingRemoteConfig.enable(rc, config, () => {
-          this._updateTracing(config, rc)
-          this._updateDebugger(config, rc)
+          this.#updateTracing(config)
+          this.#updateDebugger(config, rc)
         })
 
         rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
@@ -186,7 +186,7 @@ class Tracer extends NoopProxy {
         runtimeMetrics.start(config)
       }
 
-      this._updateTracing(config)
+      this.#updateTracing(config)
 
       this._modules.rewriter.enable(config)
 
@@ -245,7 +245,7 @@ class Tracer extends NoopProxy {
     }
   }
 
-  _updateTracing (config) {
+  #updateTracing (config) {
     if (config.tracing !== false) {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
@@ -297,19 +297,21 @@ class Tracer extends NoopProxy {
    * @param {object} config - The tracer configuration object
    * @param {object} rc - The RemoteConfig instance
    */
-  _updateDebugger (config, rc) {
+  #updateDebugger (config, rc) {
     const shouldBeEnabled = config.dynamicInstrumentation.enabled
     const isCurrentlyStarted = DynamicInstrumentation.isStarted()
 
-    if (shouldBeEnabled && !isCurrentlyStarted) {
-      log.debug('[proxy] Starting Dynamic Instrumentation via remote config')
-      DynamicInstrumentation.start(config, rc)
-    } else if (!shouldBeEnabled && isCurrentlyStarted) {
+    if (shouldBeEnabled) {
+      if (isCurrentlyStarted) {
+        log.debug('[proxy] Reconfiguring Dynamic Instrumentation via remote config')
+        DynamicInstrumentation.configure(config)
+      } else {
+        log.debug('[proxy] Starting Dynamic Instrumentation via remote config')
+        DynamicInstrumentation.start(config, rc)
+      }
+    } else if (isCurrentlyStarted) {
       log.debug('[proxy] Stopping Dynamic Instrumentation via remote config')
       DynamicInstrumentation.stop()
-    } else if (shouldBeEnabled && isCurrentlyStarted) {
-      log.debug('[proxy] Reconfiguring Dynamic Instrumentation via remote config')
-      DynamicInstrumentation.configure(config)
     }
   }
 

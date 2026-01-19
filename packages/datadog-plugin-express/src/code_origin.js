@@ -16,7 +16,6 @@ class ExpressCodeOriginForSpansPlugin extends Plugin {
 
     // Middleware/request handling: apply pre-computed tags to spans
     const handleMiddlewareEnter = ({ req, layer }) => {
-      if (!this._enabled) return
       const tags = layerTags.get(layer)
       if (!tags) return
       web.getContext(req)?.span?.addTags(tags)

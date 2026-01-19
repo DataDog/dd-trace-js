@@ -375,9 +375,11 @@ class Config {
     this.#merge()
   }
 
+  // TODO: Remove the `updateOptions` method. We don't want to support updating the config this way
   /**
    * Updates the configuration with new programmatic options.
    *
+   * @deprecated This method should not be used and will be removed in a future version.
    * @param {object} options - Configuration options to apply (same format as tracer init options)
    */
   updateOptions (options) {
