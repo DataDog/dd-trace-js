@@ -19,6 +19,7 @@ describe('debugger/index', () => {
   beforeEach(() => {
     Worker = sinon.stub()
     Worker.prototype.on = sinon.stub().returnsThis()
+    Worker.prototype.once = sinon.stub().returnsThis()
     Worker.prototype.unref = sinon.stub()
     Worker.prototype.terminate = sinon.stub()
     Worker.prototype.removeAllListeners = sinon.stub()
@@ -262,7 +263,7 @@ describe('debugger/index', () => {
       assert.strictEqual(DynamicInstrumentation.isStarted(), true)
 
       const firstWorker = Worker.lastCall.returnValue
-      const exitHandler = firstWorker.on.getCalls().find(call => call.args[0] === 'exit').args[1]
+      const exitHandler = firstWorker.once.getCalls().find(call => call.args[0] === 'exit').args[1]
 
       const firstWorkerCall = Worker.callCount
 
@@ -443,7 +444,7 @@ describe('debugger/index', () => {
       sinon.assert.notCalled(ackCallback3)
 
       const worker = Worker.lastCall.returnValue
-      const exitHandler = worker.on.getCalls().find(call => call.args[0] === 'exit').args[1]
+      const exitHandler = worker.once.getCalls().find(call => call.args[0] === 'exit').args[1]
 
       // Simulate worker exit with error code
       exitHandler(1)
