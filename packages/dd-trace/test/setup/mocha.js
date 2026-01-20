@@ -1,10 +1,10 @@
 'use strict'
 
-const assert = require('node:assert')
-const fs = require('node:fs')
-const { platform } = require('node:os')
-const path = require('node:path')
-const util = require('node:util')
+const assert = require('assert')
+const fs = require('fs')
+const { platform } = require('os')
+const path = require('path')
+const util = require('util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
