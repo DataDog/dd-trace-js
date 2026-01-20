@@ -133,28 +133,16 @@ class RCClientLibConfigManager {
   getMergedLibConfig () {
     if (this.configs.size === 0) return null
 
-    const sortedConfigs = [...this.configs.values()]
+    let hasLibConfig = false
+
+    const merged = [...this.configs.values()]
       .sort((a, b) => a.priority - b.priority)
+      .reduce((merged, { conf }) => {
+        if (conf.lib_config != null) hasLibConfig = true
+        return Object.assign(merged, conf.lib_config)
+      }, {})
 
-    const merged = {}
-    let libConfigCount = 0
-
-    for (const { conf } of sortedConfigs) {
-      if (!conf.lib_config) continue
-      libConfigCount++
-
-      // Filter out undefined (but keep null) since undefined means "not set" and null means "reset to default"
-      for (const [key, value] of Object.entries(conf.lib_config)) {
-        if (value !== undefined) {
-          merged[key] = value
-        }
-      }
-    }
-
-    if (libConfigCount === 0) return null
-
-    log.debug('[config/remote_config] Merged %d configs into lib_config', libConfigCount)
-    return merged
+    return hasLibConfig ? merged : null
   }
 }
 
