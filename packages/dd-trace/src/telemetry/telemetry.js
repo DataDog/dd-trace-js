@@ -1,14 +1,17 @@
 'use strict'
-const tracerVersion = require('../../../../package.json').version
-const dc = require('dc-polyfill')
+
 const os = require('os')
+const dc = require('dc-polyfill')
+
+const tracerVersion = require('../../../../package.json').version
+const { errors } = require('../startup-log')
+const logger = require('../log')
+const processTags = require('../process-tags')
 const dependencies = require('./dependencies')
 const endpoints = require('./endpoints')
 const { sendData } = require('./send-data')
-const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
 const telemetryLogger = require('./logs')
-const logger = require('../log')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
@@ -78,7 +81,8 @@ function getIntegrations () {
     newIntegrations.push({
       name: pluginName,
       enabled: pluginManager._pluginsByName[pluginName]._enabled,
-      auto_enabled: true
+      auto_enabled: true,
+      [processTags.TELEMETRY_FIELD_NAME]: processTags.tagsObject
     })
     sentIntegrations.add(pluginName)
   }
@@ -143,11 +147,6 @@ function appClosing () {
   telemetryLogger.send(config, application, host)
 }
 
-function onBeforeExit () {
-  process.removeListener('beforeExit', onBeforeExit)
-  appClosing()
-}
-
 function createAppObject (config) {
   return {
     service_name: config.service,
@@ -155,7 +154,8 @@ function createAppObject (config) {
     service_version: config.version,
     tracer_version: tracerVersion,
     language_name: 'nodejs',
-    language_version: process.versions.node
+    language_version: process.versions.node,
+    process_tags: processTags.tagsObject
   }
 }
 
@@ -268,7 +268,7 @@ function start (aConfig, thePluginManager) {
 
   extendedHeartbeat(config)
 
-  process.on('beforeExit', onBeforeExit)
+  globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(appClosing)
   telemetryStartChannel.publish(getTelemetryData())
 }
 
@@ -278,7 +278,7 @@ function stop () {
   }
   clearInterval(extendedInterval)
   clearTimeout(heartbeatTimeout)
-  process.removeListener('beforeExit', onBeforeExit)
+  globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(appClosing)
 
   telemetryStopChannel.publish(getTelemetryData())
 

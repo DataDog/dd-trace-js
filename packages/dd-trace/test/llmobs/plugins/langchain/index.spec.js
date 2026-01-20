@@ -1,11 +1,12 @@
 'use strict'
 
+const assert = require('node:assert')
 const { describe, it, beforeEach, before, after } = require('mocha')
 
+const semifies = require('semifies')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const iastFilter = require('../../../../src/appsec/iast/taint-tracking/filter')
 const { withVersions } = require('../../../setup/mocha')
-const assert = require('node:assert')
 
 const {
   assertLlmObsSpanEvent,
@@ -13,7 +14,6 @@ const {
   MOCK_STRING,
   useLlmObs
 } = require('../../util')
-const semifies = require('semifies')
 
 const isDdTrace = iastFilter.isDdTrace
 
@@ -74,7 +74,7 @@ describe('integrations', () => {
   }
 
   describe('langchain', () => {
-    const getEvents = useLlmObs({ plugin: 'langchain' })
+    const { getEvents } = useLlmObs({ plugin: 'langchain' })
 
     before(async () => {
       iastFilter.isDdTrace = file => {

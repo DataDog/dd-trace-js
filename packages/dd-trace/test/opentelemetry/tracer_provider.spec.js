@@ -1,17 +1,15 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('tap').mocha
+
+const { describe, it } = require('mocha')
 const sinon = require('sinon')
 const { trace } = require('@opentelemetry/api')
 
 require('../setup/core')
-
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
-
 const { MultiSpanProcessor, NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
-
 require('../../index').init()
 
 describe('OTel TracerProvider', () => {

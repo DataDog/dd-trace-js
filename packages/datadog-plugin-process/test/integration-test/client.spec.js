@@ -1,10 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const {
   useSandbox, sandboxCwd, varySandbox, curl,
   FakeAgent, spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const assert = require('node:assert/strict')
 
 describe('ESM', () => {
   let variants, proc, agent
@@ -13,7 +13,7 @@ describe('ESM', () => {
     ['./packages/datadog-plugin-process/test/integration-test/*'])
 
   before(function () {
-    variants = varySandbox('server.mjs', 'node:process')
+    variants = varySandbox('server.mjs', 'process', undefined, 'node:process')
   })
 
   beforeEach(async () => {

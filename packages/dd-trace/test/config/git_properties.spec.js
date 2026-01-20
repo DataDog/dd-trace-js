@@ -1,17 +1,18 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('tap').mocha
 const path = require('path')
 
-require('./setup/core')
+const { describe, it } = require('mocha')
+
+require('../setup/core')
 
 const {
   getGitMetadataFromGitProperties,
   getGitHeadRef,
   getRemoteOriginURL,
   resolveGitHeadSHA,
-} = require('../src/git_properties')
+} = require('../../src/config/git_properties')
 
 describe('git_properties', () => {
   describe('getGitMetadataFromGitProperties', () => {
@@ -197,9 +198,9 @@ push = +refs/heads/*:refs/heads/*`)
   })
 
   describe('resolveGitHeadSHA', () => {
-    const DD_GIT_FOLDER_PATH = path.join(__dirname, 'fixtures', 'config', 'git-folder')
-    const DD_GIT_FOLDER_DETACHED_PATH = path.join(__dirname, 'fixtures', 'config', 'git-folder-detached')
-    const DD_GIT_FOLDER_INVALID_PATH = path.join(__dirname, 'fixtures', 'config', 'git-folder-invalid')
+    const DD_GIT_FOLDER_PATH = path.join(__dirname, '..', 'fixtures', 'config', 'git-folder')
+    const DD_GIT_FOLDER_DETACHED_PATH = path.join(__dirname, '..', 'fixtures', 'config', 'git-folder-detached')
+    const DD_GIT_FOLDER_INVALID_PATH = path.join(__dirname, '..', 'fixtures', 'config', 'git-folder-invalid')
 
     it('returns SHA from ref file using fixture data', () => {
       const result = resolveGitHeadSHA(DD_GIT_FOLDER_PATH)

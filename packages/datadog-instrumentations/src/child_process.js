@@ -3,11 +3,11 @@
 const { errorMonitor } = require('events')
 const util = require('util')
 
+const dc = require('dc-polyfill')
+const shimmer = require('../../datadog-shimmer')
 const {
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
-const dc = require('dc-polyfill')
 
 const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
 
@@ -214,7 +214,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
             childProcessChannel.error.publish(context)
           })
 
-          childProcess.on('close', (code = 0) => {
+          childProcess.once('close', (code = 0) => {
             if (!errorExecuted && code !== 0) {
               childProcessChannel.error.publish(context)
             }

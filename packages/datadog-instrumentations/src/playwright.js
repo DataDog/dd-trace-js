@@ -2,7 +2,6 @@
 
 const satisfies = require('../../../vendor/dist/semifies')
 
-const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const {
   parseAnnotations,
@@ -13,8 +12,9 @@ const {
 const log = require('../../dd-trace/src/log')
 const {
   getEnvironmentVariable
-} = require('../../dd-trace/src/config-helper')
+} = require('../../dd-trace/src/config/helper')
 const { DD_MAJOR } = require('../../../version')
+const { addHook, channel } = require('./helpers/instrument')
 
 const testStartCh = channel('ci:playwright:test:start')
 const testFinishCh = channel('ci:playwright:test:finish')

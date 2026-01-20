@@ -2,30 +2,30 @@
 
 const fs = require('fs')
 const os = require('os')
-const uuid = require('../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const { URL } = require('url')
+const path = require('path')
+const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 
-const log = require('./log')
-const tagger = require('./tagger')
-const set = require('../../datadog-core/src/utils/src/set')
-const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
-const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
-const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
-  require('./git_properties')
-const { updateConfig } = require('./telemetry')
-const telemetryMetrics = require('./telemetry/metrics')
+const set = require('../../../datadog-core/src/utils/src/set')
+const { DD_MAJOR } = require('../../../../version')
+const log = require('../log')
+const tagger = require('../tagger')
+const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('../util')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
+const { updateConfig } = require('../telemetry')
+const telemetryMetrics = require('../telemetry/metrics')
 const {
   isInServerlessEnvironment,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription
-} = require('./serverless')
-const { ORIGIN_KEY } = require('./constants')
-const { appendRules } = require('./payload-tagging/config')
-const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./config-helper')
-const defaults = require('./config_defaults')
-const path = require('path')
-const { DD_MAJOR } = require('../../../version')
+} = require('../serverless')
+const { ORIGIN_KEY } = require('../constants')
+const { appendRules } = require('../payload-tagging/config')
+const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
+  require('./git_properties')
+const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./helper')
+const defaults = require('./defaults')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -277,7 +277,7 @@ class Config {
   constructor (options = {}) {
     if (!isInServerlessEnvironment()) {
       // Bail out early if we're in a serverless environment, stable config isn't supported
-      const StableConfig = require('./config_stable')
+      const StableConfig = require('./stable')
       this.stableConfig = new StableConfig()
     }
 
@@ -328,7 +328,6 @@ class Config {
     this.#applyStableConfig(this.stableConfig?.fleetEntries ?? {}, this.#fleetStableConfig)
     this.#applyOptions(options)
     this.#applyCalculated()
-    this.#applyRemote({})
     this.#merge()
 
     tagger.add(this.tags, {
@@ -353,15 +352,38 @@ class Config {
     return this.#parsedDdTags
   }
 
-  // Supports only a subset of options for now.
-  configure (options, remote) {
-    if (remote) {
-      this.#applyRemote(options)
-    } else {
-      this.#applyOptions(options)
+  /**
+   * Set the configuration with remote config settings.
+   * Applies remote configuration, recalculates derived values, and merges all configuration sources.
+   *
+   * @param {import('./config/remote_config').RemoteConfigOptions|null} options - Configurations received via Remote
+   *   Config or null to reset all remote configuration
+   */
+  setRemoteConfig (options) {
+    // Clear all RC-managed fields to ensure previous values don't persist.
+    // State is instead managed by the `RCClientLibConfigManager` class
+    this.#remote = {}
+    this.#remoteUnprocessed = {}
+
+    // Special case: if options is null, nothing to apply
+    // This happens when all remote configs are removed
+    if (options !== null) {
+      this.#applyRemoteConfig(options)
     }
 
-    // TODO: test
+    this.#applyCalculated()
+    this.#merge()
+  }
+
+  // TODO: Remove the `updateOptions` method. We don't want to support updating the config this way
+  /**
+   * Updates the configuration with new programmatic options.
+   *
+   * @deprecated This method should not be used and will be removed in a future version.
+   * @param {object} options - Configuration options to apply (same format as tracer init options)
+   */
+  updateOptions (options) {
+    this.#applyOptions(options)
     this.#applyCalculated()
     this.#merge()
   }
@@ -478,6 +500,7 @@ class Config {
       DD_IAST_STACK_TRACE_ENABLED,
       DD_INJECTION_ENABLED,
       DD_INJECT_FORCE,
+      DD_ENABLE_NX_SERVICE_NAME,
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
@@ -591,7 +614,8 @@ class Config {
       OTEL_BSP_SCHEDULE_DELAY,
       OTEL_BSP_MAX_EXPORT_BATCH_SIZE,
       OTEL_BSP_MAX_QUEUE_SIZE,
-      OTEL_METRIC_EXPORT_INTERVAL
+      OTEL_METRIC_EXPORT_INTERVAL,
+      NX_TASK_TARGET_PROJECT
     } = source
 
     const tags = {}
@@ -862,7 +886,22 @@ class Config {
     this.#setSamplingRule(target, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
     unprocessedTarget['sampler.rules'] = DD_TRACE_SAMPLING_RULES
     this.#setString(target, 'scope', DD_TRACE_SCOPE)
-    this.#setString(target, 'service', DD_SERVICE || tags.service || OTEL_SERVICE_NAME)
+    // Priority:
+    // DD_SERVICE > tags.service > OTEL_SERVICE_NAME > NX_TASK_TARGET_PROJECT (if DD_ENABLE_NX_SERVICE_NAME) > default
+    let serviceName = DD_SERVICE || tags.service || OTEL_SERVICE_NAME
+    if (!serviceName && NX_TASK_TARGET_PROJECT) {
+      if (isTrue(DD_ENABLE_NX_SERVICE_NAME)) {
+        serviceName = NX_TASK_TARGET_PROJECT
+      } else if (DD_MAJOR < 6) {
+        // Warn about v6 behavior change for Nx projects
+        log.warn(
+          'NX_TASK_TARGET_PROJECT is set but no service name was configured. ' +
+          'In v6, NX_TASK_TARGET_PROJECT will be used as the default service name. ' +
+          'Set DD_ENABLE_NX_SERVICE_NAME=true to opt-in to this behavior now, or set a service name explicitly.'
+        )
+      }
+    }
+    this.#setString(target, 'service', serviceName)
     if (DD_SERVICE_MAPPING) {
       target.serviceMapping = Object.fromEntries(
         DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
@@ -1156,9 +1195,8 @@ class Config {
     // This is reliant on environment config being set before options.
     // This is to make sure the origins of each value are tracked appropriately for telemetry.
     // We'll only set `llmobs.enabled` on the opts when it's not set on the environment, and options.llmobs is provided.
-    const llmobsEnabledEnv = this.#env['llmobs.enabled']
-    if (llmobsEnabledEnv == null && options.llmobs) {
-      this.#setBoolean(opts, 'llmobs.enabled', !!options.llmobs)
+    if (this.#env['llmobs.enabled'] == null && options.llmobs) {
+      this.#setBoolean(opts, 'llmobs.enabled', true)
     }
   }
 
@@ -1288,31 +1326,36 @@ class Config {
     }
   }
 
-  #applyRemote (options) {
+  /**
+   * Applies remote configuration options from APM_TRACING configs.
+   *
+   * @param {import('./config/remote_config').RemoteConfigOptions} options - Configurations received via Remote Config
+   */
+  #applyRemoteConfig (options) {
     const opts = this.#remote
-    const tags = {}
-    const headerTags = options.tracing_header_tags
-      ? options.tracing_header_tags.map(tag => {
-        return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
-      })
-      : undefined
 
-    tagger.add(tags, options.tracing_tags)
-    if (Object.keys(tags).length) tags['runtime-id'] = runtimeId
-
+    this.#setBoolean(opts, 'dynamicInstrumentation.enabled', options.dynamic_instrumentation_enabled)
+    this.#setBoolean(opts, 'codeOriginForSpans.enabled', options.code_origin_enabled)
     this.#setUnit(opts, 'sampleRate', options.tracing_sampling_rate)
     this.#setBoolean(opts, 'logInjection', options.log_injection_enabled)
-    opts.headerTags = headerTags
-    this.#setTags(opts, 'tags', tags)
     this.#setBoolean(opts, 'tracing', options.tracing_enabled)
     this.#remoteUnprocessed['sampler.rules'] = options.tracing_sampling_rules
-    this.#setSamplingRule(opts, 'sampler.rules', this.#reformatTags(options.tracing_sampling_rules))
+    this.#setSamplingRule(opts, 'sampler.rules', this.#reformatTagsFromRC(options.tracing_sampling_rules))
+
+    opts.headerTags = options.tracing_header_tags?.map(tag => {
+      return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
+    })
+
+    const tags = {}
+    tagger.add(tags, options.tracing_tags)
+    if (Object.keys(tags).length) tags['runtime-id'] = runtimeId
+    this.#setTags(opts, 'tags', tags)
   }
 
-  #reformatTags (samplingRules) {
+  #reformatTagsFromRC (samplingRules) {
     for (const rule of (samplingRules || [])) {
-      const reformattedTags = {}
       if (rule.tags) {
+        const reformattedTags = {}
         for (const tag of rule.tags) {
           reformattedTags[tag.key] = tag.value_glob
         }

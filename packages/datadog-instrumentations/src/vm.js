@@ -1,7 +1,7 @@
 'use strict'
 
-const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { channel, addHook } = require('./helpers/instrument')
 const names = ['vm', 'node:vm']
 
 const runScriptStartChannel = channel('datadog:vm:run-script:start')

@@ -3,8 +3,8 @@
 // Modeled after https://github.com/DataDog/libdatadog/blob/f3994857a59bb5679a65967138c5a3aec418a65f/ddcommon/src/azure_app_services.rs
 
 const os = require('os')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../../dd-trace/src/config/helper')
 const { getIsAzureFunction, getIsFlexConsumptionAzureFunction } = require('./serverless')
-const { getEnvironmentVariable, getEnvironmentVariables } = require('../../dd-trace/src/config-helper')
 
 function extractSubscriptionID (ownerName) {
   if (ownerName !== undefined) {

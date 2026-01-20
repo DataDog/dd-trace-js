@@ -1,10 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('apm:redis:command:start')
 const finishCh = channel('apm:redis:command:finish')

@@ -4,14 +4,14 @@ const os = require('os')
 const pkg = require('../../../../package.json')
 
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
+const { PATHWAY_HASH } = require('../../../../ext/tags')
+const log = require('../log')
 const { DsmPathwayCodec } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
 const { getAmqpMessageSize, getHeadersSize, getMessageSize, getSizeOrZero } = require('./size')
-const { PATHWAY_HASH } = require('../../../../ext/tags')
 const { SchemaBuilder } = require('./schemas/schema_builder')
 const { SchemaSampler } = require('./schemas/schema_sampler')
-const log = require('../log')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
@@ -156,7 +156,7 @@ class DataStreamsProcessor {
       this.timer = setInterval(this.onInterval.bind(this), flushInterval)
       this.timer.unref()
     }
-    process.once('beforeExit', () => this.onInterval())
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.onInterval.bind(this))
   }
 
   onInterval () {

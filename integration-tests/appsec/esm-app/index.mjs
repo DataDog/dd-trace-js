@@ -1,6 +1,6 @@
 import childProcess from 'node:child_process'
-import express from 'express'
 import Module from 'node:module'
+import express from 'express'
 import './worker.mjs'
 
 const app = express()

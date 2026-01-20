@@ -1,7 +1,7 @@
 'use strict'
 
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { isFalse } = require('./util')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 // Global `jest` is only present in Jest workers.
 const inJestWorker = typeof jest !== 'undefined'

@@ -1,7 +1,7 @@
 'use strict'
 
+const { getEnvironmentVariable } = require('../config/helper')
 const { registerLambdaHook } = require('./runtime/ritm')
-const { getEnvironmentVariable } = require('../config-helper')
 
 /**
  * It is safe to do it this way, since customers will never be expected to disable

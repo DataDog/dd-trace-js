@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const {
   FakeAgent,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc,
+  spawnPluginIntegrationTestProcAndExpectExit,
   sandboxCwd,
   useSandbox,
   varySandbox
@@ -21,7 +21,7 @@ describe('esm', () => {
       './packages/datadog-plugin-limitd-client/test/integration-test/*'])
 
     before(async function () {
-      variants = varySandbox('server.mjs', 'limitd-client')
+      variants = varySandbox('server.mjs', 'LimitdClient', undefined, 'limitd-client')
     })
 
     beforeEach(async () => {
@@ -42,7 +42,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'tcp.connect'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(20000)

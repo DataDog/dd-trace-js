@@ -1,15 +1,14 @@
 'use strict'
 
 const { EventEmitter } = require('events')
+const { promisify } = require('util')
+const zlib = require('zlib')
+const dc = require('dc-polyfill')
+const crashtracker = require('../crashtracking')
 const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./webspan-utils')
-const dc = require('dc-polyfill')
-const crashtracker = require('../crashtracking')
-
-const { promisify } = require('util')
-const zlib = require('zlib')
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')
@@ -63,6 +62,8 @@ class Profiler extends EventEmitter {
     super()
     this._timeoutInterval = undefined
   }
+
+  get serverless () { return false }
 
   get flushInterval () {
     return this.#config?.flushInterval
@@ -243,6 +244,7 @@ class Profiler extends EventEmitter {
 
   #createInitialInfos () {
     return {
+      serverless: this.serverless,
       settings: this.#config.systemInfoReport
     }
   }
@@ -351,6 +353,8 @@ class ServerlessProfiler extends Profiler {
     this.#interval = 1
     this.#flushAfterIntervals = undefined
   }
+
+  get serverless () { return true }
 
   get profiledIntervals () {
     return this.#profiledIntervals

@@ -1,11 +1,11 @@
 'use strict'
 
-const NoopTracer = require('./tracer')
 const NoopAppsecSdk = require('../appsec/sdk/noop')
-const NoopDogStatsDClient = require('./dogstatsd')
 const NoopLLMObsSDK = require('../llmobs/noop')
 const NoopFlaggingProvider = require('../openfeature/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
+const NoopDogStatsDClient = require('./dogstatsd')
+const NoopTracer = require('./tracer')
 
 const noop = new NoopTracer()
 const noopAppsec = new NoopAppsecSdk()
@@ -23,10 +23,10 @@ class NoopProxy {
     this.llmobs = noopLLMObs
     this.openfeature = noopOpenFeatureProvider
     this.aiguard = noopAIGuard
-    this.setBaggageItem = () => {}
-    this.getBaggageItem = () => {}
+    this.setBaggageItem = (key, value) => {}
+    this.getBaggageItem = (key) => {}
     this.getAllBaggageItems = () => {}
-    this.removeBaggageItem = () => {}
+    this.removeBaggageItem = (keyToRemove) => {}
     this.removeAllBaggageItems = () => {}
   }
 

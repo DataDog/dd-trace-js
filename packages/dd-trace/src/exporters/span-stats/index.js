@@ -2,8 +2,8 @@
 
 const { URL, format } = require('url')
 
+const defaults = require('../../config/defaults')
 const { Writer } = require('./writer')
-const defaults = require('../../config_defaults')
 
 class SpanStatsExporter {
   constructor (config) {

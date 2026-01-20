@@ -1,19 +1,19 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
-const { describe, it, beforeEach, afterEach, before, after } = require('tap').mocha
-const sinon = require('sinon')
-const proxyquire = require('proxyquire').noPreserveCache()
 const http = require('node:http')
 const { once } = require('node:events')
 const os = require('node:os')
 
-require('../setup/core')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire').noPreserveCache()
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+require('../setup/core')
 const { storage } = require('../../../datadog-core')
 const tracerVersion = require('../../../../package.json').version
+const processTags = require('../../src/process-tags')
 
 const DEFAULT_HEARTBEAT_INTERVAL = 60000
 
@@ -106,9 +106,9 @@ describe('telemetry', () => {
       bar2: { _enabled: false }
     }
     /**
-     * @type {Object} CircularObject
+     * @type {object} CircularObject
      * @property {string} field
-     * @property {Object} child
+     * @property {object} child
      * @property {string} child.field
      * @property {CircularObject | null} child.parent
      */
@@ -164,12 +164,48 @@ describe('telemetry', () => {
     })
   })
 
+  it('should include process_tags in telemetry application object', async () => {
+    // Wait for the app-started request
+    while (traceAgent.reqs.length < 1) {
+      await once(traceAgent, 'handled-req')
+    }
+    const req = traceAgent.reqs[0]
+
+    // Verify process_tags exists in application object
+    assert.ok(req.body.application, 'application object should exist')
+    assert.ok(req.body.application.process_tags, 'process_tags should exist in application object')
+    assert.strictEqual(typeof req.body.application.process_tags, 'object', 'process_tags should be an object')
+
+    // Verify specific process tag fields by name
+    const processTags = req.body.application.process_tags
+    assert.ok(Object.hasOwn(processTags, 'entrypoint.type'), 'should have entrypoint.type field')
+    assert.strictEqual(processTags['entrypoint.type'], 'script', 'entrypoint.type should be "script"')
+
+    assert.ok(Object.hasOwn(processTags, 'entrypoint.workdir'), 'should have entrypoint.workdir field')
+    assert.strictEqual(typeof processTags['entrypoint.workdir'], 'string', 'entrypoint.workdir should be a string')
+
+    assert.ok(Object.hasOwn(processTags, 'entrypoint.name'), 'should have entrypoint.name field')
+    assert.strictEqual(typeof processTags['entrypoint.name'], 'string', 'entrypoint.name should be a string')
+
+    assert.ok(Object.hasOwn(processTags, 'entrypoint.basedir'), 'should have entrypoint.basedir field')
+    assert.strictEqual(typeof processTags['entrypoint.basedir'], 'string', 'entrypoint.basedir should be a string')
+
+    // package.json.name should exist
+    assert.ok(Object.hasOwn(processTags, 'package.json.name'), 'should have package.json.name field')
+    assert.strictEqual(typeof processTags['package.json.name'], 'string', 'package.json.name should be a string')
+
+    // Verify no undefined values in process_tags
+    Object.entries(processTags).forEach(([key, value]) => {
+      assert.notStrictEqual(value, undefined, `process_tags.${key} should not be undefined`)
+    })
+  })
+
   it('should send app-integrations', () => {
     return testSeq(2, 'app-integrations-change', payload => {
       assert.deepStrictEqual(payload, {
         integrations: [
-          { name: 'foo2', enabled: true, auto_enabled: true },
-          { name: 'bar2', enabled: false, auto_enabled: true }
+          { name: 'foo2', enabled: true, auto_enabled: true, process_tags: processTags.tagsObject },
+          { name: 'bar2', enabled: false, auto_enabled: true, process_tags: processTags.tagsObject }
         ]
       })
     })
@@ -182,7 +218,7 @@ describe('telemetry', () => {
     return testSeq(3, 'app-integrations-change', payload => {
       assert.deepStrictEqual(payload, {
         integrations: [
-          { name: 'baz2', enabled: true, auto_enabled: true }
+          { name: 'baz2', enabled: true, auto_enabled: true, process_tags: processTags.tagsObject }
         ]
       })
     })
@@ -195,7 +231,7 @@ describe('telemetry', () => {
     return testSeq(4, 'app-integrations-change', payload => {
       assert.deepStrictEqual(payload, {
         integrations: [
-          { name: 'boo2', enabled: true, auto_enabled: true }
+          { name: 'boo2', enabled: true, auto_enabled: true, process_tags: processTags.tagsObject }
         ]
       })
     })
@@ -561,7 +597,8 @@ describe('Telemetry retry', () => {
       integrations: [{
         name: 'boo3',
         enabled: true,
-        auto_enabled: true
+        auto_enabled: true,
+        process_tags: processTags.tagsObject
       }]
     })
 
@@ -574,7 +611,8 @@ describe('Telemetry retry', () => {
         integrations: [{
           name: 'boo5',
           enabled: true,
-          auto_enabled: true
+          auto_enabled: true,
+          process_tags: processTags.tagsObject
         }]
       }
 
@@ -584,7 +622,8 @@ describe('Telemetry retry', () => {
         integrations: [{
           name: 'boo3',
           enabled: true,
-          auto_enabled: true
+          auto_enabled: true,
+          process_tags: processTags.tagsObject
         }]
       }
 
@@ -651,12 +690,14 @@ describe('Telemetry retry', () => {
         integrations: [{
           name: 'foo2',
           enabled: true,
-          auto_enabled: true
+          auto_enabled: true,
+          process_tags: processTags.tagsObject
         },
         {
           name: 'bar2',
           enabled: false,
-          auto_enabled: true
+          auto_enabled: true,
+          process_tags: processTags.tagsObject
         }]
       }
 
@@ -719,7 +760,8 @@ describe('Telemetry retry', () => {
       integrations: [{
         name: 'zoo1',
         enabled: true,
-        auto_enabled: true
+        auto_enabled: true,
+        process_tags: processTags.tagsObject
       }]
     })
   })
@@ -783,7 +825,8 @@ describe('Telemetry retry', () => {
         integrations: [{
           name: 'zoo1',
           enabled: true,
-          auto_enabled: true
+          auto_enabled: true,
+          process_tags: processTags.tagsObject
         }]
       }
 
@@ -793,7 +836,8 @@ describe('Telemetry retry', () => {
         integrations: [{
           name: 'foo1',
           enabled: true,
-          auto_enabled: true
+          auto_enabled: true,
+          process_tags: processTags.tagsObject
         }]
       }
 
@@ -860,8 +904,18 @@ describe('Telemetry retry', () => {
     assertObjectContains(extendedHeartbeatPayload, {
       integrations: [{
         integrations: [
-          { name: 'foo2', enabled: true, auto_enabled: true },
-          { name: 'bar2', enabled: false, auto_enabled: true }
+          {
+            name: 'foo2',
+            enabled: true,
+            auto_enabled: true,
+            process_tags: processTags.tagsObject
+          },
+          {
+            name: 'bar2',
+            enabled: false,
+            auto_enabled: true,
+            process_tags: processTags.tagsObject
+          }
         ]
       }]
     })

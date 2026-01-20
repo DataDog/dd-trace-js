@@ -2,7 +2,6 @@
 
 const URL = require('url').URL
 
-const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
@@ -11,6 +10,7 @@ const { getTestManagementTests: getTestManagementTestsRequest } =
 const log = require('../../log')
 const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
+const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 
 function getTestConfigurationTags (tags) {
   if (!tags) {
@@ -68,7 +68,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       }
     })
 
-    process.once('beforeExit', () => {
+    const flush = () => {
       if (this._writer) {
         this._writer.flush()
       }
@@ -78,7 +78,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       if (this._logsWriter) {
         this._logsWriter.flush()
       }
-    })
+    }
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(flush.bind(this))
   }
 
   shouldRequestSkippableSuites () {

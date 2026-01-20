@@ -4,16 +4,16 @@
 const { performance } = require('perf_hooks')
 const now = performance.now.bind(performance)
 const dateNow = Date.now
-const SpanContext = require('./span_context')
+const util = require('util')
+const { channel } = require('dc-polyfill')
 const id = require('../id')
 const tagger = require('../tagger')
 const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
-const { channel } = require('dc-polyfill')
-const util = require('util')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getEnvironmentVariable } = require('../config/helper')
+const SpanContext = require('./span_context')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 

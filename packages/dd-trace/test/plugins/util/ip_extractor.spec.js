@@ -1,12 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, before, after } = require('tap').mocha
-const axios = require('axios')
 const http = require('node:http')
 
-require('../../setup/core')
+const { describe, it, before, after } = require('mocha')
+const axios = require('axios')
 
+require('../../setup/core')
 const { extractIp } = require('../../../src/plugins/util/ip_extractor')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 

@@ -2,11 +2,11 @@
 
 const crypto = require('crypto')
 const log = require('../log')
+const { keepTrace } = require('../priority_sampler')
+const { ASM } = require('../standalone/product')
 const telemetry = require('./telemetry')
 const addresses = require('./addresses')
-const { keepTrace } = require('../priority_sampler')
 const waf = require('./waf')
-const { ASM } = require('../standalone/product')
 
 // the RFC doesn't include '_id', but it's common in MongoDB
 const USER_ID_FIELDS = ['id', '_id', 'email', 'username', 'login', 'user']

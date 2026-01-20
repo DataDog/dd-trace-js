@@ -90,7 +90,7 @@ class OtlpHttpExporterBase {
         data += chunk
       })
 
-      res.on('end', () => {
+      res.once('end', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resultCallback({ code: 0 })
         } else {
@@ -105,7 +105,7 @@ class OtlpHttpExporterBase {
       resultCallback({ code: 1, error })
     })
 
-    req.on('timeout', () => {
+    req.once('timeout', () => {
       req.destroy()
       const error = new Error('Request timeout')
       resultCallback({ code: 1, error })

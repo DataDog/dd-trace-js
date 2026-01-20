@@ -1,14 +1,14 @@
 'use strict'
 
+const fs = require('fs')
+const { fileURLToPath } = require('url')
+const { SourceMapper, heap, encode } = require('@datadog/pprof')
+const { getEnvironmentVariable } = require('../config/helper')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 
-const { SourceMapper, heap, encode } = require('@datadog/pprof')
 const { ConsoleLogger } = require('./loggers/console')
 const { tagger } = require('./tagger')
-const fs = require('fs')
-const { fileURLToPath } = require('url')
-const { getEnvironmentVariable } = require('../config-helper')
 
 const logger = new ConsoleLogger()
 const timeoutMs = 15 * 1000

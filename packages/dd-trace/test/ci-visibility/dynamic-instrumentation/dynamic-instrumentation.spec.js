@@ -1,9 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, afterEach } = require('tap').mocha
 const { fork } = require('node:child_process')
 const path = require('node:path')
+
+const { describe, it, afterEach } = require('mocha')
 
 require('../../../../dd-trace/test/setup/core')
 

@@ -1,13 +1,13 @@
 'use strict'
 
+const assert = require('assert')
 const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
-const assert = require('assert')
 
 const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000' }
 
@@ -40,7 +40,7 @@ describe('esm', () => {
       })
 
       // This test file will throw an error if tryAddMessage returns a Promise instead of a boolean
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, spawnEnv)
+      proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'server.mjs', agent.port, spawnEnv)
 
       await res
     }).timeout(60000)

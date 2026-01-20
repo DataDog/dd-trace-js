@@ -3,6 +3,7 @@
 const tracer = require('../../')
 tracer.init()
 
+// eslint-disable-next-line import/order
 const http = require('http')
 
 http.createServer((req, res) => {

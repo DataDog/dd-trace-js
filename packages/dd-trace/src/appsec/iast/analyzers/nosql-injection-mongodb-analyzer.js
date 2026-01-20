@@ -1,16 +1,16 @@
 'use strict'
 
-const InjectionAnalyzer = require('./injection-analyzer')
 const { NOSQL_MONGODB_INJECTION } = require('../vulnerabilities')
 const { getRanges, addSecureMark } = require('../taint-tracking/operations')
 const { getNodeModulesPaths } = require('../path-line')
 const { storage } = require('../../../../../datadog-core')
 const { getIastContext } = require('../iast-context')
 const { HTTP_REQUEST_PARAMETER, HTTP_REQUEST_BODY } = require('../taint-tracking/source-types')
-
-const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose', 'mquery')
 const { NOSQL_MONGODB_INJECTION_MARK } = require('../taint-tracking/secure-marks')
 const { iterateObjectStrings } = require('../utils')
+const InjectionAnalyzer = require('./injection-analyzer')
+
+const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose', 'mquery')
 
 const SAFE_OPERATORS = new Set(['$eq', '$gt', '$gte', '$in', '$lt', '$lte', '$ne', '$nin',
   '$exists', '$type', '$mod', '$bitsAllClear', '$bitsAllSet', '$bitsAnyClear', '$bitsAnySet'])
