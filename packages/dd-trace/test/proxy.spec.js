@@ -716,6 +716,19 @@ describe('TracerProxy', () => {
           const baggage = proxy.setBaggageItem('key2', 'value2')
           assert.deepStrictEqual(baggage, { key1: 'value1', key2: 'value2' })
         })
+
+        it('should ignore invalid key or value', () => {
+          proxy.setBaggageItem(null, 'value')
+          proxy.setBaggageItem(123, 'value')
+
+          // Valid
+          proxy.setBaggageItem('key1', 'value1')
+
+          proxy.setBaggageItem('key2', 333)
+          const baggage = proxy.setBaggageItem('key3', {})
+
+          assert.deepStrictEqual(baggage, { key1: 'value1' })
+        })
       })
 
       describe('getBaggageItem', () => {
@@ -761,7 +774,7 @@ describe('TracerProxy', () => {
           proxy.setBaggageItem('key1', 'value1')
           proxy.setBaggageItem('key2', 'value2')
           const baggage = proxy.removeAllBaggageItems()
-          assert.strictEqual(baggage, undefined)
+          assert.strictEqual(baggage, {})
         })
       })
     })

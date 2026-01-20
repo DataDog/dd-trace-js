@@ -149,8 +149,8 @@ describe('TextMapPropagator', () => {
       const carrier = {}
       // W3C baggage keys must be RFC7230 tokens; keep special chars in the value.
       setBaggageItem('special', '",;\\🐶é我')
+      // setBaggageItem('",;\\()/:<=>?@[]{}🐶é我', '",;\\🐶é我')
       propagator.inject(undefined, carrier)
-      // eslint-disable-next-line @stylistic/max-len
       assert.strictEqual(carrier.baggage, 'special=%22%2C%3B%5C%F0%9F%90%B6%C3%A9%E6%88%91')
     })
 
