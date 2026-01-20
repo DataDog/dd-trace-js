@@ -11,7 +11,6 @@ const sinon = require('sinon')
 const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 
 describe('Plugin', () => {
   let tracer
@@ -27,7 +26,6 @@ describe('Plugin', () => {
 
       beforeEach(() => {
         tracer = require('../../dd-trace')
-        temporaryWarningExceptions.add("Access to process.binding('http_parser') is deprecated.")
         restify = require(`../../../versions/restify@${version}`).get()
       })
 

@@ -50,14 +50,14 @@ const warningExceptions = new Set([
 const temporaryWarningExceptions = new Set()
 const originalAdd = temporaryWarningExceptions.add.bind(temporaryWarningExceptions)
 /**
- * Add a warning to the temporary warning exceptions. It will be removed after 2ms if it is not emitted.
+ * Add a warning to the temporary warning exceptions. It will be removed after 1ms if it is not emitted.
  *
  * @param {string} warning
  */
 temporaryWarningExceptions.add = (warning) => {
   setTimeout(() => {
     temporaryWarningExceptions.delete(warning)
-  }, 2)
+  }, 1)
   return originalAdd(warning)
 }
 
