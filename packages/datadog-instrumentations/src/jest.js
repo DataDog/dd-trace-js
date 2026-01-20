@@ -442,7 +442,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const isAttemptToFix = this.isTestManagementTestsEnabled &&
           this.testManagementTestsForThisSuite?.attemptToFix?.includes(testFullName)
         if (
-          this.isTestManagementTestsEnabled &&
           isAttemptToFix &&
           !isSkipped &&
           !retriedTestsToNumAttempts.has(testFullName)
