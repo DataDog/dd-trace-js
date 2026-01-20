@@ -2055,7 +2055,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('early flake detection', () => {
-    it('takes precedence over flaky test retries for new tests', (done) => {
+    it('takes precedence over flaky test retries for new tests', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // All tests are considered new
       receiver.setKnownTests({ jest: {} })
@@ -2091,9 +2091,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           stdio: 'inherit'
         }
       )
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => done()).catch(done)
-      })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
     })
     it('retries new tests', (done) => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
