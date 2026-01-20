@@ -418,7 +418,9 @@ class LLMObs extends NoopLLMObs {
         timestamp_ms: timestampMs,
         tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
       }
-      evalMetricAppendCh.publish(payload)
+      const currentStore = storage.getStore()
+      const routing = currentStore?.routingContext
+      evalMetricAppendCh.publish({ payload, routing })
     } finally {
       telemetry.recordSubmitEvaluation(options, err)
     }

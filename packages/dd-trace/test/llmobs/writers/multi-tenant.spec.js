@@ -6,6 +6,7 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const LLMObsSpanWriter = require('../../../src/llmobs/writers/spans')
+const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
 const log = require('../../../src/log')
 const agent = require('../../plugins/agent')
 
@@ -137,15 +138,22 @@ describe('Multi-Tenant Routing', () => {
       llmobs = tracer.llmobs
     })
 
+    let evalAppendSpy
+    let evalFlushStub
+
     beforeEach(() => {
       appendSpy = sinon.spy(LLMObsSpanWriter.prototype, 'append')
       flushStub = sinon.stub(LLMObsSpanWriter.prototype, 'flush')
+      evalAppendSpy = sinon.spy(LLMObsEvalMetricsWriter.prototype, 'append')
+      evalFlushStub = sinon.stub(LLMObsEvalMetricsWriter.prototype, 'flush')
       logWarnSpy = sinon.spy(log, 'warn')
     })
 
     afterEach(() => {
       appendSpy.restore()
       flushStub.restore()
+      evalAppendSpy.restore()
+      evalFlushStub.restore()
       logWarnSpy.restore()
     })
 
@@ -214,6 +222,38 @@ describe('Multi-Tenant Routing', () => {
 
       assert.deepStrictEqual(routingFor('span-a'), { apiKey: 'key-a', site: 'site-a.com' })
       assert.deepStrictEqual(routingFor('span-b'), { apiKey: 'key-b', site: 'site-b.com' })
+    })
+
+    it('routes evaluations to correct tenant', () => {
+      const spanContext = { traceId: '123', spanId: '456' }
+
+      llmobs.routingContext({ ddApiKey: 'eval-key', ddSite: 'eval-site.com' }, () => {
+        llmobs.submitEvaluation(spanContext, {
+          label: 'test-label',
+          metricType: 'score',
+          value: 0.9
+        })
+      })
+
+      assert.strictEqual(evalAppendSpy.callCount, 1)
+      const [payload, routing] = evalAppendSpy.firstCall.args
+      assert.strictEqual(payload.label, 'test-label')
+      assert.deepStrictEqual(routing, { apiKey: 'eval-key', site: 'eval-site.com' })
+    })
+
+    it('evaluations outside routing context have no routing', () => {
+      const spanContext = { traceId: '123', spanId: '456' }
+
+      llmobs.submitEvaluation(spanContext, {
+        label: 'default-label',
+        metricType: 'categorical',
+        value: 'good'
+      })
+
+      assert.strictEqual(evalAppendSpy.callCount, 1)
+      const [payload, routing] = evalAppendSpy.firstCall.args
+      assert.strictEqual(payload.label, 'default-label')
+      assert.strictEqual(routing, undefined)
     })
   })
 })
