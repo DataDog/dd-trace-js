@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 
+const { setTimeout } = require('timers/promises')
 const childProcess = require('child_process')
 const fs = require('fs')
 const path = require('path')
@@ -16,7 +17,7 @@ const retry = async fn => {
   try {
     await fn()
   } catch {
-    await exec('sleep 60')
+    await setTimeout(60_000)
     await fn()
   }
 }
