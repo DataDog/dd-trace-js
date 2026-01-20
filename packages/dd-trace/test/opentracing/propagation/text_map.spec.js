@@ -145,6 +145,21 @@ describe('TextMapPropagator', () => {
       sinon.assert.called(tracerMetrics.count().inc)
     })
 
+    it('should encode legacy baggage values that are not valid HTTP header content', () => {
+      const carrier = {}
+      const value = 'foo@2025.0122.110223\n'
+      const spanContext = createContext({
+        baggageItems: {
+          'sentry-release': value
+        }
+      })
+
+      propagator.inject(spanContext, carrier)
+
+      assert.strictEqual(carrier['ot-baggage-sentry-release'], encodeURIComponent(value))
+      assert.ok(!carrier['ot-baggage-sentry-release'].includes('\n'))
+    })
+
     it('should handle special characters in baggage', () => {
       const carrier = {}
       setBaggageItem('",;\\()/:<=>?@[]{}🐶é我', '",;\\🐶é我')
