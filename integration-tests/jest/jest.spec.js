@@ -4180,8 +4180,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             faulty_session_threshold: 100
           },
           known_tests_enabled: true
-        }
-        )
+        })
 
         receiver.setTestManagementTests({
           jest: {
