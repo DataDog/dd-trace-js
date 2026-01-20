@@ -25,7 +25,7 @@ const baggageStorage =
  * @param {object} [metadata] Not used yet
  */
 function setBaggageItem (key, value, metadata) {
-  if (typeof key !== 'string' || typeof value !== 'string') {
+  if (typeof key !== 'string' || typeof value !== 'string' || key === '') {
     return baggageStorage.getStore() ?? {}
   }
 

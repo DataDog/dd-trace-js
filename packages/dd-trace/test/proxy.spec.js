@@ -774,7 +774,7 @@ describe('TracerProxy', () => {
           proxy.setBaggageItem('key1', 'value1')
           proxy.setBaggageItem('key2', 'value2')
           const baggage = proxy.removeAllBaggageItems()
-          assert.strictEqual(baggage, {})
+          assert.deepStrictEqual(baggage, {})
         })
       })
     })

@@ -684,7 +684,7 @@ class TextMapPropagator {
       const key = member.slice(0, eqIdx).trim()
       let value = member.slice(eqIdx + 1).trim()
 
-      if (!baggageTokenExpr.test(key)) {
+      if (!baggageTokenExpr.test(key) || !value) {
         tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
         removeAllBaggageItems()
         return
