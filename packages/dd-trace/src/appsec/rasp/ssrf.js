@@ -20,21 +20,27 @@ function disable () {
 
 function analyzeSsrf (ctx) {
   const store = storage('legacy').getStore()
-  const req = store?.req
+  const req = getValue(store && store.req)
   const outgoingUrl = (ctx.args.options?.uri && format(ctx.args.options.uri)) ?? ctx.args.uri
 
   if (!req || !outgoingUrl) return
 
   const ephemeral = {
-    [addresses.HTTP_OUTGOING_URL]: outgoingUrl
+    [addresses.HTTP_OUTGOING_URL]: ctx.args.options && typeof ctx.args.options === 'object'
+      ? ctx.args.options
+      : outgoingUrl
   }
 
   const raspRule = { type: RULE_TYPES.SSRF }
 
   const result = waf.run({ ephemeral }, req, raspRule)
 
-  const res = store?.res
+  const res = getValue(store && store.res)
   handleResult(result, req, res, ctx.abortController, config, raspRule)
+}
+
+function getValue (maybeWeakRef) {
+  return maybeWeakRef && typeof maybeWeakRef.deref === 'function' ? maybeWeakRef.deref() : maybeWeakRef
 }
 
 module.exports = { enable, disable }

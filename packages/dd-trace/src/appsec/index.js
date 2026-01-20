@@ -1,5 +1,7 @@
 'use strict'
 
+const querystring = require('node:querystring')
+
 const log = require('../log')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
@@ -109,7 +111,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
 
   if (!req) {
     const store = storage('legacy').getStore()
-    req = store?.req
+    req = getValue(store && store.req)
   }
 
   const rootSpan = web.root(req)
@@ -148,6 +150,15 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
+  // If no framework parser has populated `req.query`, parse the query string once.
+  // This is used by RASP SSRF (it needs request inputs + the outgoing URL in the same WAF run).
+  if (req.query === undefined && typeof req.url === 'string') {
+    const qIndex = req.url.indexOf('?')
+    if (qIndex !== -1) {
+      req.query = querystring.parse(req.url.slice(qIndex + 1))
+    }
+  }
+
   const clientIp = extractIp(config, req)
 
   rootSpan.addTags({
@@ -163,6 +174,10 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     [addresses.HTTP_INCOMING_URL]: req.url,
     [addresses.HTTP_INCOMING_HEADERS]: requestHeaders,
     [addresses.HTTP_INCOMING_METHOD]: req.method
+  }
+
+  if (req.query && typeof req.query === 'object' && Object.keys(req.query).length) {
+    persistent[addresses.HTTP_INCOMING_QUERY] = req.query
   }
 
   if (clientIp) {
@@ -215,9 +230,15 @@ function incomingHttpEndTranslator ({ req, res }) {
   storedBodies.delete(req)
 }
 
+function getValue (maybeWeakRef) {
+  return maybeWeakRef && typeof maybeWeakRef.deref === 'function' ? maybeWeakRef.deref() : maybeWeakRef
+}
+
 function onPassportVerify ({ framework, login, user, success, abortController }) {
   const store = storage('legacy').getStore()
-  const rootSpan = store?.req && web.root(store.req)
+  const req = getValue(store && store.req)
+  const res = getValue(store && store.res)
+  const rootSpan = req && web.root(req)
 
   if (!rootSpan) {
     log.warn('[ASM] No rootSpan found in onPassportVerify')
@@ -226,12 +247,14 @@ function onPassportVerify ({ framework, login, user, success, abortController })
 
   const results = UserTracking.trackLogin(framework, login, user, success, rootSpan)
 
-  handleResults(results?.actions, store.req, store.req.res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onPassportDeserializeUser ({ user, abortController }) {
   const store = storage('legacy').getStore()
-  const rootSpan = store?.req && web.root(store.req)
+  const req = getValue(store && store.req)
+  const res = getValue(store && store.res)
+  const rootSpan = req && web.root(req)
 
   if (!rootSpan) {
     log.warn('[ASM] No rootSpan found in onPassportDeserializeUser')
@@ -240,7 +263,7 @@ function onPassportDeserializeUser ({ user, abortController }) {
 
   const results = UserTracking.trackUser(user, rootSpan)
 
-  handleResults(results?.actions, store.req, store.req.res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onExpressSession ({ req, res, sessionId, abortController }) {
@@ -267,11 +290,18 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
 
   if (!req) {
     const store = storage('legacy').getStore()
-    req = store?.req
+    req = getValue(store && store.req)
   }
 
   const rootSpan = web.root(req)
   if (!rootSpan) return
+
+  // Ensure the raw request carries the query so other AppSec modules (e.g. RASP SSRF)
+  // can access it later when building WAF inputs.
+  // Frameworks like Fastify expose the query on their own request object, not on `req.raw`.
+  if (req.query === undefined) {
+    req.query = query
+  }
 
   const results = waf.run({
     persistent: {

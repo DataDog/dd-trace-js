@@ -35,8 +35,8 @@ function blockRequest (tracer, req, res) {
   if (!req || !res) {
     const store = storage('legacy').getStore()
     if (store) {
-      req = req || store.req
-      res = res || store.res
+      req = req || getValue(store.req)
+      res = res || getValue(store.res)
     }
   }
 
@@ -52,6 +52,10 @@ function blockRequest (tracer, req, res) {
   }
 
   return block(req, res, rootSpan)
+}
+
+function getValue (maybeWeakRef) {
+  return maybeWeakRef && typeof maybeWeakRef.deref === 'function' ? maybeWeakRef.deref() : maybeWeakRef
 }
 
 module.exports = {
