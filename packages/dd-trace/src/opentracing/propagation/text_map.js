@@ -44,6 +44,9 @@ const tagValueExpr = /^[\x20-\x2B\x2D-\x7E]*$/ // ASCII minus commas
 // RFC7230 token (used by HTTP header field-name) and compatible with Node's header name validation.
 // See https://www.rfc-editor.org/rfc/rfc7230#section-3.2.6
 const httpHeaderNameExpr = /^[0-9A-Za-z!#$%&'*+\-.^_`|~]+$/
+// Compatible with Node's internal header value validation (allows HTAB, SP-~, and \x80-\xFF only)
+// https://github.com/nodejs/node/blob/main/lib/_http_common.js
+const invalidHeaderValueCharExpr = /[^\t\x20-\x7E\x80-\xFF]/
 const traceparentExpr = /^([a-f0-9]{2})-([a-f0-9]{32})-([a-f0-9]{16})-([a-f0-9]{2})(-.*)?$/i
 const traceparentKey = 'traceparent'
 const tracestateKey = 'tracestate'
@@ -143,7 +146,12 @@ class TextMapPropagator {
             continue
           }
 
-          carrier[headerName] = String(baggageItems[key])
+          let headerValue = String(baggageItems[key])
+          // Avoid Node throwing ERR_INVALID_CHAR when setting header values (e.g. newline from decoded OTEL baggage).
+          if (invalidHeaderValueCharExpr.test(headerValue)) {
+            headerValue = encodeURIComponent(headerValue)
+          }
+          carrier[headerName] = headerValue
         }
       }
     }
