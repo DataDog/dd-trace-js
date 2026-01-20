@@ -8,9 +8,14 @@
 
 ## Setup
 
-- Install dependencies: `yarn install`
+**Package manager policy:**
 
-**This project uses yarn, not npm. Always use `yarn` commands instead of `npm` commands.**
+- Use **yarn only for installing dependencies and services**:
+  - `yarn install`
+  - `yarn services`
+- Use **npm for running scripts and other commands**: `npm run <script>`
+- In this repo, **everything else** (tests, lint, build, etc.) should use **npm**, not yarn.
+- `yarn services` is the only non-install yarn command: it sets up test service/plugin dependencies.
 
 ## Project Overview
 
@@ -25,20 +30,13 @@ dd-trace is the Datadog client library for Node.js.
 - `integration-tests/` - E2E integration tests
 - `benchmark/` - Performance benchmarks
 
-**Package Structure:**
-
-Each package under `packages/` follows a consistent structure:
-
-- `src/` - Source code for the package
-- `test/` - Unit tests for the package
-- Unit test files always follow the `*.spec.js` naming convention
-- Test directories may also contain helper files
+**Packages:** under `packages/`, each package generally has `src/` and `test/`, and unit tests are `*.spec.js`.
 
 ## Testing Instructions
 
 ### Running Individual Tests
 
-**IMPORTANT**: Never run the root `npm test`. Run specific related test files directly or run targeted related `npm run test:<area>` scripts.
+**IMPORTANT**: Never run the root `npm test`. Prefer running a specific `*.spec.js` file, or a targeted `npm run test:<area>` script.
 
 **Unit tests:**
 
@@ -46,13 +44,13 @@ Each package under `packages/` follows a consistent structure:
 ./node_modules/.bin/mocha path/to/test.spec.js
 ```
 
-**Integration tests:**
+**Integration test file (usually needs higher timeout):**
 
 ```bash
 ./node_modules/.bin/mocha --timeout 60000 path/to/test.spec.js
 ```
 
-**If a test expects “spec file is entrypoint” semantics (tap-like):**
+**If a test expects “spec file is entrypoint” semantics:**
 
 ```bash
 node scripts/mocha-run-file.js path/to/test.spec.js
@@ -60,13 +58,10 @@ node scripts/mocha-run-file.js path/to/test.spec.js
 
 You can inject mocha options via `MOCHA_RUN_FILE_CONFIG` (JSON), including `require` hooks.
 
-**Target specific tests:**
+**Common options:**
 
-- Add `--grep "test name pattern"` flag
-
-**Enable debug logging:**
-
-- Prefix with `DD_TRACE_DEBUG=true`
+- `--grep "pattern"` to target tests
+- `DD_TRACE_DEBUG=true` to enable debug logging
 
 ### Plugin Tests
 
@@ -74,8 +69,13 @@ You can inject mocha options via `MOCHA_RUN_FILE_CONFIG` (JSON), including `requ
 
 ```bash
 PLUGINS="amqplib" npm run test:plugins
-PLUGINS="amqplib|bluebird" npm run test:plugins  # pipe-delimited for multiple
-./node_modules/.bin/mocha packages/datadog-plugin-amqplib/test/index.spec.js
+# pipe-delimited for multiple: PLUGINS="amqplib|bluebird"
+```
+
+To run a single test file directly:
+
+```bash
+./node_modules/.bin/mocha packages/datadog-plugin-<name>/test/index.spec.js
 ```
 
 **Narrow within plugin tests (optional):**
@@ -108,18 +108,9 @@ yarn services && npm run test:plugins
 
 ### Test Assertions
 
-Use `node:assert/strict` for standard assertions. For partial deep object checks, use `assertObjectContains` from `integration-tests/helpers/index.js`:
+Use `node:assert/strict` for standard assertions. For partial deep object checks, use `assertObjectContains` from `integration-tests/helpers/index.js`.
 
-```js
-const assert = require('node:assert/strict')
-
-const { assertObjectContains } = require('../helpers')
-
-assert.equal(actual, expected)
-assertObjectContains(response, { status: 200, body: { user: { name: 'Alice' } } })
-```
-
-Favor fewer `assert.deepStrictEqual`/`assertObjectContains` calls over many `assert.strictEqual` calls. Combine with existing `assert.strictEqual` calls, if possible.
+Favor fewer `assert.deepStrictEqual`/`assertObjectContains` calls over many `assert.strictEqual` calls. Combine existing calls, when touching test files.
 
 Never use the `doesNotThrow()` assertion. Instead, execute the method directly.
 
@@ -129,6 +120,16 @@ Never use the `doesNotThrow()` assertion. Instead, execute the method directly.
 
 ## Code Style & Linting
 
+### Style
+
+- Prefer optional chaining
+- Prefer `#private` class fields for new/internal-only code (no cross-module access needed).
+- If other modules need access, prefer a small explicit method API over accessing internal fields.
+- Avoid large refactors of existing `_underscore` fields unless you can prove they are not accessed externally (excluding tests).
+- Files shall end with a single new line at the end
+- Use destructuring for better code readability
+- Line length is capped at 120 characters
+
 ### Linting & Naming
 
 - Lint: `npm run lint` / `npm run lint:fix`
@@ -137,18 +138,18 @@ Never use the `doesNotThrow()` assertion. Instead, execute the method directly.
 ### JSDoc
 
 - Use TypeScript-compatible syntax (`@param {string}`, `@returns {Promise<void>}`, `@typedef`)
-- Never use `any` (be specific or use `unknown` if type is truly unknown)
+- Never use `any` (be specific; use `unknown` only if the type is truly unknown)
+- Prefer the most specific type you can infer/identify from context; reuse existing types/typedefs instead of defaulting to `unknown`
 - Write the most specific types possible by reading the overall context
-- Always define types for method arguments as method params
-- Never define argument types inside of a method
-- Only define types inside of a method, if it can not be inferred otherwise
+- Always define argument types via `@param` on the method/function JSDoc
+- Avoid adding inline JSDoc type comments inside method bodies (e.g. `/** @type {...} */ x`).
+  - Prefer `@typedef` at file scope + small helper/type-guard functions, then type parameters/returns at the method boundary.
+- Prefer type casting over adding runtime type-guard code when the checks are only needed for static typing (e.g., comparisons). Never add extra runtime work just to satisfy types.
+- Only add types inside of a method if they cannot be inferred otherwise
 - Only rewrite code for better types in case it was explicitly requested by the user
-
-### Class Properties and Methods
-- Use `#privateField` syntax for private properties and methods in new code
-- Do not use underscore prefix (`_property`) for new private members
-- Existing underscore properties should be refactored, when a file is touched for other
-   code changes, if no other files rely on these properties (test files do not count).
+- All new methods should receive a full JSDoc comment
+- Reuse existing types, if possible (check appropriate sources)
+- Only define the type for a property on a class once
 
 ### Import Ordering
 
@@ -158,30 +159,13 @@ Separate groups with empty line, sort alphabetically within each:
 2. Third-party modules
 3. Internal imports (by path proximity, then alpha)
 
-Use destructuring for utility modules when appropriate.
-
-```js
-const fs = require('node:fs')
-const path = require('node:path')
-
-const express = require('express')
-
-const { myConf } = require('./config')
-const log = require('../log')
-```
-
 ### ECMAScript and Node.js API Standards
 
-**Target Node.js 18.0.0 compatibility:**
+**Target Node.js 18.0.0 compatibility.**
 
 - Use modern JS features supported by Node.js (e.g., optional chaining `?.`, nullish coalescing `??`)
 - Use `undefined` over `null`, if not required otherwise
-- Guard newer APIs with version checks using [`version.js`](./version.js):
-
-  ```js
-  const { NODE_MAJOR } = require('./version')
-  if (NODE_MAJOR >= 20) { /* Use Node.js 20+ API */ }
-  ```
+- Guard newer APIs with version checks using [`version.js`](./version.js)
 
 ### Event handlers
 
@@ -194,53 +178,19 @@ const log = require('../log')
 
 **CRITICAL: Tracer runs in application hot paths - every operation counts.**
 
-- Use fast paths to skip unnecessary steps
-- Use most performant APIs
-- Understand the use case to write ideal CPU and memory performant code
-
-**Async/Await:**
-
+- Use fast paths to skip unnecessary steps; use the most performant APIs
+- Use V8 knowledge about fast and slow APIs
+- Avoid unnecessary allocations/objects/closures; reuse objects/buffers when possible
+- Prefer `for-of` / `for` / `while` loops over `forEach`/`map`/`filter` in production code
+- `map` may be used if there is just a single transformation for all entries
+- **Never** use `for-in` (use `for-of`)
 - Do NOT use `async/await` or promises in production code (npm package)
-- Allowed ONLY in: test files, worker threads (e.g., `packages/dd-trace/src/debugger/devtools_client/`)
-- Use callbacks or synchronous patterns instead
-
-**Memory:**
-
-- Minimize allocations in frequently-called paths
-- Avoid unnecessary objects, closures, arrays
-- Reuse objects and buffers
-- Minimize GC pressure
-
-#### Array Iteration
-
-**Prefer `for-of`, `for`, `while` loops over functional methods (`map()`, `forEach()`, `filter()`):**
-
-- Avoid `items.forEach(item => process(item))` → use `for (const item of items) { process(item) }`
-- Avoid chaining `items.filter(...).map(...)` → use single loop with conditional push
-- Functional methods create closures and intermediate arrays
-
-**Functional methods acceptable in:**
-
-- Test files
-- Non-hot-path code where readability benefits
-- One-time initialization code
-
-**Loop selection:**
-
-- `for-of` - Simple iteration
-- `for` with index - Need index or better performance in hot paths
-- `while` - Custom iteration logic
+  - Allowed ONLY in: test files, worker threads (e.g., `packages/dd-trace/src/debugger/devtools_client/`)
+  - Use callbacks or synchronous patterns instead
 
 ### Debugging and Logging
 
-Use `log` module (`packages/dd-trace/src/log/index.js`) with printf-style formatting (not template strings):
-
-```js
-const log = require('../log')
-log.debug('Value: %s', someValue)  // printf-style
-log.debug(() => `Expensive: ${expensive()}`)  // callback for expensive ops
-log.error('Error: %s', msg, err)  // error as last arg
-```
+Use `log` (`packages/dd-trace/src/log/index.js`) with printf-style formatting (not template strings). Use the callback form for expensive formatting.
 
 Enable: `DD_TRACE_DEBUG=true DD_TRACE_LOG_LEVEL=info node app.js`
 Levels: `trace`, `debug`, `info`, `warn`, `error`
@@ -255,6 +205,7 @@ Avoid try/catch in hot paths - validate inputs early
 ### Core Principles
 
 - **Search first**: Check for existing utilities/patterns before creating new code
+- **Avoid diverging implementations**: If behavior already exists elsewhere, reuse it or extract a shared helper instead of reimplementing it in a second place.
 - **Small PRs**: Break large efforts into incremental, reviewable changes
 - **Descriptive code**: Self-documenting with verbs in function names; comment when needed
 - **Readable formatting**: Empty lines for grouping, split complex objects, extract variables
@@ -267,7 +218,7 @@ Avoid try/catch in hot paths - validate inputs early
 
 1. **Understand** - Read relevant code and tests to understand the current implementation
 2. **Optimize** - Identify the cleanest architectural approach to solve the request
-3. **Ask** - Make a proposal with the two best solutions to the user and let them choose. Explain trade-offs
+3. **Ask (when there are meaningful trade-offs)** - Make a proposal with the two best solutions and explain trade-offs
 4. **Implement** - Make the necessary code changes
 5. **Update Tests** - Modify or add tests to cover the changes
 6. **Run Tests** - Execute the relevant test files to verify everything works
@@ -279,16 +230,7 @@ Avoid try/catch in hot paths - validate inputs early
 
 - Keep breaking changes to a minimum
 - Don't use language/runtime features that are too new
-- **Guard breaking changes with version checks** using [`version.js`](./version.js):
-
-  ```js
-  const { DD_MAJOR } = require('./version')
-  if (DD_MAJOR >= 6) {
-    // New behavior for v6+
-  } else {
-    // Old behavior for v5 and earlier
-  }
-  ```
+- **Guard breaking changes with version checks** using [`version.js`](./version.js) (e.g., `DD_MAJOR`)
 
 ## Adding New Configuration Options
 
@@ -311,31 +253,8 @@ In case an issue is actually happening outside of dd-trace, suggest to fix it up
 **New instrumentations go in `packages/datadog-instrumentations/`.** The instrumentation system uses diagnostic channels for communication.
 
 Many integrations have corresponding plugins in `packages/datadog-plugin-*/` that work with the instrumentation layer.
-
-### What Are Plugins?
-
-Plugins are modular code components in `packages/datadog-plugin-*/` directories that:
-
-- Subscribe to diagnostic channels to receive instrumentation events
-- Handle APM tracing logic (spans, metadata, error tracking)
-- Manage feature-specific logic (e.g., code origin tracking, LLM observability)
-
-**Plugin Base Classes:**
-
-- **`Plugin`** - Base class with diagnostic channel subscription, storage binding, enable/disable lifecycle. Use for non-tracing functionality.
-- **`TracingPlugin`** - Extends `Plugin` with APM tracing helpers (`startSpan()`, automatic trace events, `activeSpan` getter). Use for plugins creating trace spans.
-- **`CompositePlugin`** - Extends `Plugin` to compose multiple sub-plugins. Use when one integration needs multiple feature plugins (e.g., `express` combines tracing and code origin plugins).
-
-**Plugin Loading:**
-
-- Plugins load lazily when application `require()`s the corresponding library
-- Disable with `DD_TRACE_DISABLED_PLUGINS` or `DD_TRACE_<PLUGIN>_ENABLED=false`
-- Test framework plugins only load when Test Optimization mode (`isCiVisibility`) is enabled
-
-**When to Create a New Plugin:**
-
-1. Adding support for a new third-party library/framework
-2. Adding a new product feature that integrates with existing libraries (use `CompositePlugin`)
+For registration patterns, see `packages/dd-trace/src/plugins/index.js`.
+For instrumentation hook helpers, see `packages/datadog-instrumentations/src/helpers/instrument.js`.
 
 ### Creating a New Plugin
 
