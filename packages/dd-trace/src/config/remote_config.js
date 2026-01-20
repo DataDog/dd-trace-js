@@ -144,9 +144,9 @@ class RCClientLibConfigManager {
       libConfigCount++
 
       // Filter out undefined (but keep null) since undefined means "not set" and null means "reset to default"
-      for (const key in conf.lib_config) {
-        if (conf.lib_config[key] !== undefined) {
-          merged[key] = conf.lib_config[key]
+      for (const [key, value] of Object.entries(conf.lib_config)) {
+        if (value !== undefined) {
+          merged[key] = value
         }
       }
     }
