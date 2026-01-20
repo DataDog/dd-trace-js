@@ -1,10 +1,10 @@
 'use strict'
 
-const proxyquire = require('proxyquire')
-const { beforeEach, describe, it } = require('mocha')
 const { readFileSync } = require('node:fs')
 const { resolve, join } = require('node:path')
 const Module = require('node:module')
+const { beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 const { tracingChannel } = require('dc-polyfill')
 
 // TODO: Test actual functionality and not just the start channel.

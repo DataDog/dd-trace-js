@@ -2,8 +2,8 @@
 
 const log = require('../../../log')
 const { Namespace } = require('../../../telemetry/metrics')
-const { addMetricsToSpan } = require('./span-tags')
 const { IAST_TRACE_METRIC_PREFIX } = require('../tags')
+const { addMetricsToSpan } = require('./span-tags')
 
 const DD_IAST_METRICS_NAMESPACE = Symbol('_dd.iast.request.metrics.namespace')
 

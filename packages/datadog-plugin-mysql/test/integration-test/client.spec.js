@@ -5,12 +5,13 @@ const assert = require('node:assert/strict')
 const {
   FakeAgent,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc,
+  spawnPluginIntegrationTestProcAndExpectExit,
   sandboxCwd,
   useSandbox,
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+
 describe('esm', () => {
   let agent
   let proc
@@ -41,7 +42,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'mysql.query'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(20000)

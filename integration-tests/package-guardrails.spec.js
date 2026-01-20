@@ -1,14 +1,14 @@
 'use strict'
 
+const path = require('path')
+const fs = require('fs')
+const assert = require('assert')
 const {
   runAndCheckWithTelemetry: testFile,
   useEnv,
   useSandbox,
   sandboxCwd
 } = require('./helpers')
-const path = require('path')
-const fs = require('fs')
-const assert = require('assert')
 
 const NODE_OPTIONS = '--require dd-trace/init.js'
 const DD_TRACE_DEBUG = 'true'

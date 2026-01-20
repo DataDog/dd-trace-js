@@ -4,16 +4,16 @@ const assert = require('node:assert/strict')
 const os = require('os')
 const path = require('path')
 
+const fs = require('fs')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
 const pathTraversalAnalyzer = require('../../../../src/appsec/iast/analyzers/path-traversal-analyzer')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 
 const { prepareTestServerForIast } = require('../utils')
-const fs = require('fs')
 const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
 const iastContext = {

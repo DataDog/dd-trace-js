@@ -2,13 +2,15 @@
 
 process.setMaxListeners(50)
 
-require('../setup/core')
 const assert = require('assert')
 const http = require('http')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { metrics } = require('@opentelemetry/api')
+
+require('../setup/core')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')
@@ -28,8 +30,11 @@ describe('OpenTelemetry Meter Provider', () => {
     }
     Object.assign(process.env, envOverrides)
 
+    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
+
     const proxy = proxyquire.noPreserveCache()('../../src/proxy', {
       './config': getConfigFresh,
+      './dogstatsd': dogstatsd
     })
     const TracerProxy = proxyquire.noPreserveCache()('../../src', {
       './proxy': proxy
@@ -53,14 +58,15 @@ describe('OpenTelemetry Meter Provider', () => {
 
     httpStub = sinon.stub(http, 'request').callsFake((options, callback) => {
       const baseMockReq = { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
-      const baseMockRes = { statusCode: 200, on: () => {}, setTimeout: () => {} }
+      const baseMockRes = { statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} }
 
       if (options.path && options.path.includes('/v1/metrics')) {
         capturedHeaders = options.headers
         const responseHandlers = {}
         const mockRes = {
           ...baseMockRes,
-          on: (event, handler) => { responseHandlers[event] = handler; return mockRes }
+          on: (event, handler) => { responseHandlers[event] = handler; return mockRes },
+          once: (event, handler) => { responseHandlers[event] = handler; return mockRes }
         }
 
         const mockReq = {
@@ -1019,14 +1025,16 @@ describe('OpenTelemetry Meter Provider', () => {
         requestCount++
         assert(options.headers['Content-Length'] > 0)
 
+        const handler = (event, handler) => {
+          handlers[event] = handler
+          return mockReq
+        }
         const handlers = {}
         const mockReq = {
           write: sinon.stub(),
           end: sinon.stub(),
-          on: (event, handler) => {
-            handlers[event] = handler
-            return mockReq
-          },
+          on: handler,
+          once: handler,
           destroy: sinon.stub(),
           setTimeout: sinon.stub()
         }

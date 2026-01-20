@@ -1,13 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
-
 const http = require('node:http')
 const path = require('node:path')
 const os = require('node:os')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 
 require('./setup/core')
 
@@ -67,7 +67,7 @@ describe('dogstatsd', () => {
       callback(null, hostname, 6)
     })
 
-    const dogstatsd = proxyquire('../src/dogstatsd', {
+    const dogstatsd = proxyquire.noPreserveCache()('../src/dogstatsd', {
       dgram,
       dns
     })

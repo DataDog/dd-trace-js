@@ -1,9 +1,9 @@
 'use strict'
 
-const { describe, before, it } = require('mocha')
-const { withVersions } = require('../../../setup/mocha')
 const assert = require('node:assert')
+const { describe, before, it } = require('mocha')
 const semifies = require('semifies')
+const { withVersions } = require('../../../setup/mocha')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 
 const {
@@ -42,7 +42,7 @@ describe('Plugin', () => {
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '<not-a-real-key>'
   })
 
-  const getEvents = useLlmObs({ plugin: 'anthropic' })
+  const { getEvents } = useLlmObs({ plugin: 'anthropic' })
 
   withVersions('anthropic', '@anthropic-ai/sdk', (version, moduleName, realVersion) => {
     let client

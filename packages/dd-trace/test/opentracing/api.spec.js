@@ -1,8 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const Module = require('node:module')
 
-require('tap').mochaGlobals()
+const { describe } = require('mocha')
+
 require('../setup/core')
 
 // OpenTracing's upstream API compatibility checks depend on `chai`, but this
@@ -28,7 +30,6 @@ function createChaiShim () {
   }
 }
 
-const Module = require('module')
 // @ts-expect-error - `Module._load` is an internal Node API used only for this test shim.
 const originalLoad = Module._load
 // @ts-expect-error - `Module._load` is an internal Node API used only for this test shim.
@@ -48,10 +49,12 @@ try {
 
 const tracer = require('../..')
 
-apiCompatibilityChecks(() => {
-  return tracer.init({
-    service: 'test',
-    flushInterval: 0,
-    plugins: false
+describe('OpenTracing API', () => {
+  apiCompatibilityChecks(() => {
+    return tracer.init({
+      service: 'test',
+      flushInterval: 0,
+      plugins: false
+    })
   })
 })

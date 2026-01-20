@@ -72,7 +72,7 @@ function parseUserLandFrames (stack, limit = Infinity) {
  * @param {number} end - The end index of the line to parse within the stack trace.
  * @returns {StackFrame|undefined} The parsed frame if it is a user frame, `undefined` otherwise.
  *
- * @typedef {Object} StackFrame
+ * @typedef {object} StackFrame
  * @property {string} fileName - The file name of the frame.
  * @property {string} lineNumber - The line number of the frame.
  * @property {string} columnNumber - The column number of the frame.

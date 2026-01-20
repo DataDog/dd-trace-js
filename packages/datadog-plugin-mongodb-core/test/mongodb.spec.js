@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const ddpv = require('mocha/package.json').version
 const semver = require('semver')
 const sinon = require('sinon')
 
@@ -10,7 +11,6 @@ const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const ddpv = require('mocha/package.json').version
 
 const withTopologies = fn => {
   withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName) => {
@@ -51,6 +51,7 @@ describe('Plugin', () => {
   let db
   let BSON
   let startSpy
+  let injectCommentSpy
   let usesDelete
 
   describe('mongodb-core', () => {
@@ -564,9 +565,8 @@ describe('Plugin', () => {
 
       describe('with dbmPropagationMode full', () => {
         before(() => {
-          return agent.load('mongodb-core', {
-            dbmPropagationMode: 'full'
-          })
+          tracer._tracer.configure({ sampler: { sampleRate: 1 } })
+          return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
         })
 
         after(() => {
@@ -579,21 +579,24 @@ describe('Plugin', () => {
           collection = db.collection(collectionName)
 
           startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+          injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
           startSpy?.restore()
+          injectCommentSpy?.restore()
         })
 
         it('DBM propagation should inject full mode with traceparent as comment', done => {
           agent
-            .assertSomeTraces(traces => {
-              const span = traces[0][0]
+            .assertFirstTraceSpan(span => {
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
 
               assert.strictEqual(startSpy.called, true)
-              const { comment } = startSpy.getCall(0).args[0].ops
+              assert.strictEqual(injectCommentSpy.called, true)
+
+              const comment = injectCommentSpy.getCall(0).returnValue
               assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
@@ -683,7 +686,7 @@ describe('Plugin', () => {
             db = client.db('test')
           })
 
-          it('should NOT create a span for heartbeat commands', (done) => {
+          it('should NOT create a span for heartbeat commands (hello, helloOk, ismaster, isMaster)', (done) => {
             const parentSpan = tracer.startSpan('test.parent')
 
             agent
@@ -694,15 +697,15 @@ describe('Plugin', () => {
                 assert.strictEqual(span.name, 'test.parent')
               })
               .then(done)
+              .catch(done)
 
-            // Activate parent span scope and trigger heartbeat command
-            tracer.scope().activate(parentSpan, async () => {
-              // Admin connect should be all that is needed to trigger heartbeat command for newer versions of mongo
-              client = await createClient()
-              db = client.db('test')
-
-              // but we should send a test heartbeat command since older versions of mongo don't auto-send heartbeats
-              db.command({ hello: 1 })
+            // Activate parent span scope and trigger heartbeat commands
+            tracer.scope().activate(parentSpan, () => {
+              // Test all heartbeat command variations
+              db.command({ hello: 1 }).catch(() => {})
+              db.command({ helloOk: true }).catch(() => {})
+              db.command({ ismaster: 1 }).catch(() => {})
+              db.command({ isMaster: 1 }).catch(() => {})
               setTimeout(() => parentSpan.finish(), 50)
             })
           })
@@ -724,7 +727,7 @@ describe('Plugin', () => {
             db = client.db('test')
           })
 
-          it('should create a child span for heartbeat commands', (done) => {
+          it('should create a child span for heartbeat commands (hello, helloOk, ismaster, isMaster)', (done) => {
             const parentSpan = tracer.startSpan('test.parent')
 
             agent
@@ -742,15 +745,15 @@ describe('Plugin', () => {
                 }
               })
               .then(done)
+              .catch(done)
 
-            // Activate parent span scope and trigger heartbeat command
-            tracer.scope().activate(parentSpan, async () => {
-              // Admin connect should be all that is needed to trigger heartbeat command for newer versions of mongo
-              client = await createClient()
-              db = client.db('test')
-
-              // but we should send a test heartbeat command since older versions of mongo don't auto-send heartbeats
-              db.command({ hello: 1 })
+            // Activate parent span scope and trigger heartbeat commands
+            tracer.scope().activate(parentSpan, () => {
+              // Test all heartbeat command variations
+              db.command({ hello: 1 }).catch(() => {})
+              db.command({ helloOk: true }).catch(() => {})
+              db.command({ ismaster: 1 }).catch(() => {})
+              db.command({ isMaster: 1 }).catch(() => {})
               setTimeout(() => parentSpan.finish(), 200)
             })
           })
@@ -771,7 +774,7 @@ describe('Plugin', () => {
             db = client.db('test')
           })
 
-          it('should NOT create a span for heartbeat commands', (done) => {
+          it('should NOT create a span for heartbeat commands (hello, helloOk, ismaster, isMaster)', (done) => {
             const parentSpan = tracer.startSpan('test.parent')
 
             agent
@@ -782,15 +785,15 @@ describe('Plugin', () => {
                 assert.strictEqual(span.name, 'test.parent')
               })
               .then(done)
+              .catch(done)
 
-            // Activate parent span scope and trigger heartbeat command
-            tracer.scope().activate(parentSpan, async () => {
-              // Admin connect should be all that is needed to trigger heartbeat command for newer versions of mongo
-              client = await createClient()
-              db = client.db('test')
-
-              // but we should send a test heartbeat command since older versions of mongo don't auto-send heartbeats
-              db.command({ hello: 1 })
+            // Activate parent span scope and trigger heartbeat commands
+            tracer.scope().activate(parentSpan, () => {
+              // Test all heartbeat command variations
+              db.command({ hello: 1 }).catch(() => {})
+              db.command({ helloOk: true }).catch(() => {})
+              db.command({ ismaster: 1 }).catch(() => {})
+              db.command({ isMaster: 1 }).catch(() => {})
               setTimeout(() => parentSpan.finish(), 50)
             })
           })
@@ -811,7 +814,7 @@ describe('Plugin', () => {
             db = client.db('test')
           })
 
-          it('should create a child span for heartbeat commands', (done) => {
+          it('should create a child span for heartbeat commands (hello, helloOk, ismaster, isMaster)', (done) => {
             const parentSpan = tracer.startSpan('test.parent')
 
             agent
@@ -829,15 +832,15 @@ describe('Plugin', () => {
                 }
               })
               .then(done)
+              .catch(done)
 
-            // Activate parent span scope and trigger heartbeat command
-            tracer.scope().activate(parentSpan, async () => {
-              // Admin connect should be all that is needed to trigger heartbeat command for newer versions of mongo
-              client = await createClient()
-              db = client.db('test')
-
-              // but we should send a test heartbeat command since older versions of mongo don't auto-send heartbeats
-              db.command({ hello: 1 })
+            // Activate parent span scope and trigger heartbeat commands
+            tracer.scope().activate(parentSpan, () => {
+              // Test all heartbeat command variations
+              db.command({ hello: 1 }).catch(() => {})
+              db.command({ helloOk: true }).catch(() => {})
+              db.command({ ismaster: 1 }).catch(() => {})
+              db.command({ isMaster: 1 }).catch(() => {})
               setTimeout(() => parentSpan.finish(), 200)
             })
           })

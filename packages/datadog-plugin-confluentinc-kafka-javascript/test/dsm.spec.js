@@ -1,10 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { randomUUID } = require('node:crypto')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
-
-const { randomUUID } = require('node:crypto')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')

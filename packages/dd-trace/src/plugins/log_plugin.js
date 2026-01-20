@@ -1,8 +1,8 @@
 'use strict'
 
 const { LOG } = require('../../../../ext/formats')
-const Plugin = require('./plugin')
 const { storage } = require('../../../datadog-core')
+const Plugin = require('./plugin')
 
 function messageProxy (message, holder) {
   return new Proxy(message, {

@@ -9,8 +9,8 @@ const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
-const { rawExpectedSchema } = require('./naming')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { rawExpectedSchema } = require('./naming')
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 

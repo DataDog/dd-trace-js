@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
-import graphql from 'graphql'
 import { createServer } from 'node:http'
+import graphql from 'graphql'
 
 const schema = new graphql.GraphQLSchema({
   query: new graphql.GraphQLObjectType({

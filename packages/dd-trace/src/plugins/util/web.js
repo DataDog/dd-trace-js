@@ -7,10 +7,10 @@ const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
-const urlFilter = require('./urlfilter')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
-const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const TracingPlugin = require('../tracing')
+const urlFilter = require('./urlfilter')
+const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
 
 let extractIp
@@ -279,9 +279,9 @@ const web = {
     const reqCtx = contexts.get(req)
     const { storage } = require('../../../../datadog-core')
     const store = storage('legacy').getStore()
-    const deliverySpan = store?.span?._name === 'pubsub.delivery' ? store.span : null
+    const pubsubSpan = store?.span?._name === 'pubsub.push.receive' ? store.span : null
 
-    let childOf = deliverySpan || tracer.extract(FORMAT_HTTP_HEADERS, headers)
+    let childOf = pubsubSpan || tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.inferredProxyServicesEnabled) {
@@ -506,7 +506,7 @@ function addResourceTag (context) {
   const { req, span } = context
   const tags = span.context()._tags
 
-  if (tags['resource.name']) return
+  if (tags[RESOURCE_NAME]) return
 
   const resource = [req.method, tags[HTTP_ROUTE]]
     .filter(Boolean)

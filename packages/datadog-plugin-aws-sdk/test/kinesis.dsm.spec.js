@@ -8,11 +8,11 @@ const sinon = require('sinon')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
-const helpers = require('./kinesis_helpers')
 const id = require('../../dd-trace/src/id')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const helpers = require('./kinesis_helpers')
+const { setup } = require('./spec_helpers')
 
 describe('Kinesis', function () {
   this.timeout(10000)

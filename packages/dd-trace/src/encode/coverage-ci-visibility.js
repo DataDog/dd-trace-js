@@ -1,5 +1,4 @@
 'use strict'
-const { AgentEncoder } = require('./0.4')
 const { MsgpackChunk } = require('../msgpack')
 
 const {
@@ -8,6 +7,7 @@ const {
   TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT
 } = require('../ci-visibility/telemetry')
 const FormData = require('../exporters/common/form-data')
+const { AgentEncoder } = require('./0.4')
 
 const COVERAGE_PAYLOAD_VERSION = 2
 const COVERAGE_KEYS_LENGTH = 2

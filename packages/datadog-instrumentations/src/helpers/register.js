@@ -1,15 +1,15 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
 const path = require('path')
+const { channel } = require('dc-polyfill')
 const satisfies = require('../../../../vendor/dist/semifies')
-const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
-const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
-const { getEnvironmentVariables } = require('../../../dd-trace/src/config-helper')
+const { getEnvironmentVariables } = require('../../../dd-trace/src/config/helper')
+const checkRequireCache = require('./check-require-cache')
+const Hook = require('./hook')
 const { isRelativeRequire } = require('./shared-utils')
 const rewriter = require('./rewriter')
 

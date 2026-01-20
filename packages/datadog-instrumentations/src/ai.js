@@ -1,9 +1,9 @@
 'use strict'
 
-const { addHook } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
-
 const { channel, tracingChannel } = require('dc-polyfill')
+const shimmer = require('../../datadog-shimmer')
+const { addHook } = require('./helpers/instrument')
+
 const toolCreationChannel = channel('dd-trace:vercel-ai:tool')
 
 const TRACED_FUNCTIONS = {
@@ -41,8 +41,14 @@ const noopTracer = {
   }
 }
 
+const tracers = new WeakSet()
+
 function wrapTracer (tracer) {
-  if (Object.hasOwn(tracer, Symbol.for('_dd.wrapped'))) return
+  if (tracers.has(tracer)) {
+    return
+  }
+
+  tracers.add(tracer)
 
   shimmer.wrap(tracer, 'startActiveSpan', function (startActiveSpan) {
     return function () {
@@ -90,8 +96,6 @@ function wrapTracer (tracer) {
       })
     }
   })
-
-  Object.defineProperty(tracer, Symbol.for('_dd.wrapped'), { value: true })
 }
 
 function wrapWithTracer (fn) {

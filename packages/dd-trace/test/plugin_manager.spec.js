@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -75,7 +76,7 @@ describe('Plugin Manager', () => {
     PluginManager = proxyquire.noPreserveCache()('../src/plugin_manager', {
       './plugins': { ...plugins, '@noCallThru': true },
       '../../datadog-instrumentations': {},
-      '../../dd-trace/src/config-helper': {
+      '../../dd-trace/src/config/helper': {
         getEnvironmentVariable (name) {
           return process.env[name]
         }

@@ -5,18 +5,18 @@ const { execSync } = require('node:child_process')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
+const semifies = require('semifies')
+const semver = require('semver')
 const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  spawnPluginIntegrationTestProc,
+  spawnPluginIntegrationTestProcAndExpectExit,
   assertObjectContains,
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { SCHEMA_FIXTURES, TEST_DATABASE_URL } = require('../prisma-fixtures')
-const semifies = require('semifies')
-const semver = require('semver')
 
 const prismaClientConfigs = [{
   name: 'prisma-generator-js with no output',
@@ -74,7 +74,8 @@ describe('esm', () => {
         useSandbox(deps, false, paths)
 
         before(function () {
-          variants = varySandbox(config.serverFile, config.importPath, 'PrismaClient')
+          variants = varySandbox(config.serverFile, config.ts ? 'PrismaClient' : 'prismaLib',
+            config.ts ? 'PrismaClient' : undefined, config.importPath, config.ts)
         })
 
         beforeEach(async function () {
@@ -127,6 +128,7 @@ describe('esm', () => {
         })
 
         for (const variant of varySandbox.VARIANTS) {
+          if (config.ts && variant === 'default') { continue }
           it(`is instrumented with ${variant} import`, async function () {
             this.timeout(60000)
             const res = agent.assertMessageReceived(({ headers, payload }) => {
@@ -146,10 +148,12 @@ describe('esm', () => {
               }]])
             })
 
-            const procPromise = spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, {
-              DD_TRACE_FLUSH_INTERVAL: '2000',
-              ...config.env
-            })
+            const procPromise = spawnPluginIntegrationTestProcAndExpectExit(
+              sandboxCwd(),
+              variants[variant],
+              agent.port,
+              { DD_TRACE_FLUSH_INTERVAL: '2000', ...config.env }
+            )
 
             await Promise.all([
               procPromise.then((res) => {

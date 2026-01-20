@@ -1,13 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const dc = require('dc-polyfill')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 
 const originalSetImmediate = global.setImmediate
@@ -107,21 +107,21 @@ describe('endpoints telemetry', () => {
           type: 'REST',
           method: 'GET',
           path: '/api',
-          operation_name: 'http.request',
+          operation_name: 'fastify.request',
           resource_name: 'GET /api'
         },
         {
           type: 'REST',
           method: 'POST',
           path: '/api',
-          operation_name: 'http.request',
+          operation_name: 'fastify.request',
           resource_name: 'POST /api'
         },
         {
           type: 'REST',
           method: 'PUT',
           path: '/api',
-          operation_name: 'http.request',
+          operation_name: 'fastify.request',
           resource_name: 'PUT /api'
         }
       ])
@@ -168,6 +168,42 @@ describe('endpoints telemetry', () => {
       const payload = sendData.firstCall.args[4]
       const resources = payload.endpoints.map(e => e.resource_name)
       assert.deepStrictEqual(resources, ['GET /test', 'HEAD /test'])
+    })
+
+    it('should use express.request as operation_name for express routes', () => {
+      expressRouteCh.publish({ method: 'POST', path: '/express-test' })
+
+      scheduledCallbacks.forEach(cb => cb())
+
+      sinon.assert.calledOnce(sendData)
+      const payload = sendData.firstCall.args[4]
+      assertObjectContains(payload.endpoints, [
+        {
+          type: 'REST',
+          method: 'POST',
+          path: '/express-test',
+          operation_name: 'express.request',
+          resource_name: 'POST /express-test'
+        }
+      ])
+    })
+
+    it('should use express.request as operation_name for router routes', () => {
+      routerRouteCh.publish({ method: 'DELETE', path: '/router-test' })
+
+      scheduledCallbacks.forEach(cb => cb())
+
+      sinon.assert.calledOnce(sendData)
+      const payload = sendData.firstCall.args[4]
+      assertObjectContains(payload.endpoints, [
+        {
+          type: 'REST',
+          method: 'DELETE',
+          path: '/router-test',
+          operation_name: 'express.request',
+          resource_name: 'DELETE /router-test'
+        }
+      ])
     })
 
     it('should record express wildcard and ignore subsequent specific methods for same path', () => {

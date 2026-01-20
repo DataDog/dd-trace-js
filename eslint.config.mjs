@@ -1,3 +1,4 @@
+import { readFileSync } from 'fs'
 import eslintPluginJs from '@eslint/js'
 import eslintPluginStylistic from '@stylistic/eslint-plugin'
 import eslintPluginCypress from 'eslint-plugin-cypress'
@@ -7,7 +8,6 @@ import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
 import eslintPluginPromise from 'eslint-plugin-promise'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
-import { readFileSync } from 'fs'
 import globals from 'globals'
 
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
@@ -48,6 +48,7 @@ export default [
       '**/versions', // This is effectively a node_modules tree.
       '**/acmeair-nodejs', // We don't own this.
       '**/vendor', // Generally, we didn't author this code.
+      '**/.analysis', // Ignore apm-instrumentation-toolkit analysis results
       'integration-tests/code-origin/typescript.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/bundle.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/hello/world.js', // Generated
@@ -219,16 +220,30 @@ export default [
       'import/export': 'error',
       'import/first': 'error',
       'import/no-absolute-path': ['error', { esmodule: true, commonjs: true, amd: false }],
+      'import/no-cycle': 'error',
       'import/no-duplicates': 'error',
       'import/no-named-default': 'error',
+      'import/no-self-import': 'error',
+      'import/order': ['error', {
+        // `dd-trace` must be allowed first (and is often intentionally required before any other module).
+        // eslint-plugin-import defaults can exclude some import types (notably `builtin`) from `pathGroups`,
+        // which would make the `dd-trace` exception below a no-op. Make this explicit.
+        pathGroupsExcludedImportTypes: [],
+        pathGroups: [
+          {
+            pattern: 'dd-trace',
+            group: 'builtin',
+            position: 'before'
+          }
+        ]
+      }],
+      'import/no-useless-path-segments': 'error',
       'import/no-webpack-loader-syntax': 'error',
       'jsdoc/check-tag-names': ['error', { definedTags: ['datadog'] }],
       // TODO: Enable the rules that we want to use.
-      'jsdoc/check-types': 'off', // Should be activated, but it needs a couple of fixes.
       // no-defaults: This should be activated, since the defaults will not be picked up in a description.
       'jsdoc/no-defaults': 'off',
       'jsdoc/no-undefined-types': 'off',
-      'jsdoc/reject-any-type': 'off', // Should be activated, but it needs a couple of fixes.
       'jsdoc/reject-function-type': 'off',
       'jsdoc/require-jsdoc': 'off',
       'jsdoc/require-param-description': 'off', // Having a description is not crucial for now.
@@ -342,7 +357,8 @@ export default [
         // major release line at the same time, we need to specify the lowest version here to ensure backporting will
         // not fail.
         version: '>=18.0.0'
-      }
+      },
+      jsdoc: { mode: 'typescript' }
     },
     rules: {
       '@stylistic/max-len': ['error', { code: 120, tabWidth: 2, ignoreUrls: true, ignoreRegExpLiterals: true }],
@@ -406,11 +422,11 @@ export default [
       'n/no-restricted-require': ['error', [
         {
           name: 'diagnostics_channel',
-          message: 'Please use dc-polyfill instead.'
+          message: 'Please use `dc-polyfill` instead.'
         },
         {
           name: 'semver',
-          message: 'Please use semifies instead.'
+          message: 'Please use `semifies` instead.'
         },
         {
           name: 'get-port',
@@ -418,12 +434,20 @@ export default [
         },
         {
           name: 'rimraf',
-          message: 'Please use fs.rm(path, { recursive: true, force: true }) instead.'
+          message: 'Please use `fs.rm(path, { recursive: true, force: true })` instead.'
         },
         {
           name: 'koalas',
           message: 'Please use nullish coalescing operator (??) instead.'
-        }
+        },
+        {
+          name: 'chai',
+          message: 'Please use `node:assert/strict` instead.'
+        },
+        {
+          name: 'tap',
+          message: 'Please use `mocha` instead.'
+        },
       ]],
 
       'no-await-in-loop': 'error',
