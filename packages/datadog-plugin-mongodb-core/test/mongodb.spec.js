@@ -565,6 +565,7 @@ describe('Plugin', () => {
 
       describe('with dbmPropagationMode full', () => {
         before(() => {
+          tracer._tracer.configure({ sampler: { sampleRate: 1 } })
           return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
         })
 
@@ -591,7 +592,6 @@ describe('Plugin', () => {
             .assertFirstTraceSpan(span => {
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
-              const samplingPriotrity = span.metrics._sampling_priority_v1 > 0 ? '01' : '00'
 
               assert.strictEqual(startSpy.called, true)
               assert.strictEqual(injectCommentSpy.called, true)
@@ -605,7 +605,7 @@ describe('Plugin', () => {
                 `ddps='${encodeURIComponent(span.meta.service)}',` +
                 `ddpv='${ddpv}',` +
                 `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
-                `traceparent='00-${traceId}-${spanId}-${samplingPriotrity}'`
+                `traceparent='00-${traceId}-${spanId}-01'`
               )
             })
             .then(done)
