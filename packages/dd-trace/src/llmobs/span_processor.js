@@ -26,7 +26,9 @@ const {
   TAGS,
   PARENT_ID_KEY,
   SESSION_ID,
-  NAME
+  NAME,
+  ROUTING_API_KEY,
+  ROUTING_SITE
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
@@ -78,7 +80,13 @@ class LLMObsSpanProcessor {
       telemetry.incrementLLMObsSpanFinishedCount(span)
       if (formattedEvent == null) return
 
-      this.#writer.append(formattedEvent)
+      const mlObsTags = LLMObsTagger.tagMap.get(span)
+      const routing = {
+        apiKey: mlObsTags[ROUTING_API_KEY],
+        site: mlObsTags[ROUTING_SITE]
+      }
+
+      this.#writer.append(formattedEvent, routing)
     } catch (e) {
       // this should be a rare case
       // we protect against unserializable properties in the format function, and in
