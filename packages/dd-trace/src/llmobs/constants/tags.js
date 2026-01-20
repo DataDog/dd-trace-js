@@ -42,5 +42,8 @@ module.exports = {
   PROMPT_MULTIMODAL: 'prompt_multimodal',
   INSTRUMENTATION_METHOD_AUTO: 'auto',
   INSTRUMENTATION_METHOD_ANNOTATED: 'annotated',
-  INSTRUMENTATION_METHOD_UNKNOWN: 'unknown'
+  INSTRUMENTATION_METHOD_UNKNOWN: 'unknown',
+
+  ROUTING_API_KEY: '_dd.llmobs.routing.api_key',
+  ROUTING_SITE: '_dd.llmobs.routing.site'
 }
