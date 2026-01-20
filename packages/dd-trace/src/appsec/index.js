@@ -370,7 +370,6 @@ function onStripeCheckoutSessionCreate (payload) {
         amount_total: payload.amount_total,
         client_reference_id: payload.client_reference_id,
         currency: payload.currency,
-        customer_email: payload.customer_email,
         'discounts.coupon': payload.discounts?.[0]?.coupon,
         'discounts.promotion_code': payload.discounts?.[0]?.promotion_code,
         livemode: payload.livemode,
@@ -390,8 +389,7 @@ function onStripePaymentIntentCreate (payload) {
         amount: payload.amount,
         currency: payload.currency,
         livemode: payload.livemode,
-        payment_method: payload.payment_method,
-        receipt_email: payload.receipt_email
+        payment_method: payload.payment_method
       }
     }
   })
@@ -423,9 +421,8 @@ function onStripeConstructEvent (payload) {
         'last_payment_error.code': object.last_payment_error?.code,
         'last_payment_error.decline_code': object.last_payment_error?.decline_code,
         'last_payment_error.payment_method.id': object.last_payment_error?.payment_method?.id,
-        'last_payment_error.payment_method.billing_details.email': object.last_payment_error?.payment_method?.billing_details?.email,
         'last_payment_error.payment_method.type': object.last_payment_error?.payment_method?.type,
-        livemode: object.livemode,
+        livemode: object.livemode
       }
       break
 
@@ -436,8 +433,7 @@ function onStripeConstructEvent (payload) {
         amount: object.amount,
         cancellation_reason: object.cancellation_reason,
         currency: object.currency,
-        livemode: object.livemode,
-        receipt_email: object.receipt_email,
+        livemode: object.livemode
       }
       break
 
