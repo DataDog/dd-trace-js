@@ -428,7 +428,7 @@ describe('profiler', function () {
     it('should flush when flush after intervals is reached', async () => {
       await profiler._start(makeStartOptions())
 
-      // flushAfterIntervals + 1 becauses flushes after last interval
+      // flushAfterIntervals + 1 because it flushes after last interval
       for (let i = 0; i < flushAfterIntervals + 1; i++) {
         clock.tick(interval)
       }
@@ -450,9 +450,9 @@ describe('profiler', function () {
         }
       })
 
-      await profiler._start({ profilers, exporters })
+      await profiler._start(makeStartOptions())
 
-      // flushAfterIntervals + 1 becauses flushes after last interval
+      // flushAfterIntervals + 1 because it flushes after last interval
       for (let i = 0; i < flushAfterIntervals + 1; i++) {
         clock.tick(interval)
       }
