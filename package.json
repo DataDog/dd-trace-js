@@ -148,12 +148,6 @@
     },
     "@opentelemetry/api-logs": {
       "optional": true
-    },
-    "@opentelemetry/core": {
-      "optional": true
-    },
-    "@opentelemetry/resources": {
-      "optional": true
     }
   },
   "devDependencies": {
