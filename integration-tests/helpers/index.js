@@ -314,7 +314,7 @@ function execHelper (command, options) {
         execSync('sleep 60')
         log('Exec RETRY START: ', command)
         execSync(command, options)
-        log('Exec RETRY SUCESS: ', command)
+        log('Exec RETRY SUCCESS: ', command)
       } catch (retryError) {
         error('Exec RETRY ERROR', command, retryError)
         throw retryError
@@ -611,6 +611,7 @@ async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMess
 
 /**
  * @param {number} port
+ * @returns {NodeJS.ProcessEnv}
  */
 function getCiVisAgentlessConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
@@ -619,7 +620,7 @@ function getCiVisAgentlessConfig (port) {
   return {
     ...rest,
     DD_API_KEY: '1',
-    DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
+    DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
     NODE_OPTIONS: '-r dd-trace/ci/init',
     DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
@@ -628,6 +629,7 @@ function getCiVisAgentlessConfig (port) {
 
 /**
  * @param {number} port
+ * @returns {NodeJS.ProcessEnv}
  */
 function getCiVisEvpProxyConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
@@ -635,7 +637,7 @@ function getCiVisEvpProxyConfig (port) {
   const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
-    DD_TRACE_AGENT_PORT: port,
+    DD_TRACE_AGENT_PORT: String(port),
     NODE_OPTIONS: '-r dd-trace/ci/init',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
     DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
@@ -843,19 +845,25 @@ function assertObjectContainsImpl (actual, expected, msg, useMatchers) {
 
 // Main assertObjectContains: tries partialDeepStrictEqual or strict first, falls back to matchers
 const assertObjectContains = function assertObjectContains (actual, expected, msg) {
-  // @ts-expect-error assert.partialDeepStrictEqual does not exist on older Node.js versions
   // eslint-disable-next-line n/no-unsupported-features/node-builtins
   const assertionFn = assert.partialDeepStrictEqual ||
     ((actual, expected, msg) => assertObjectContainsImpl(actual, expected, msg, false))
 
   try {
     assertionFn(actual, expected, msg)
-  } catch (originalError) {
+  } catch {
     // First attempt failed, retry with matcher support
     try {
       assertObjectContainsImpl(actual, expected, msg, true)
-    } catch {
-      throw originalError
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error)
+
+      throw new assert.AssertionError({
+        actual,
+        expected,
+        operator: 'partialDeepStrictEqual',
+      })
     }
   }
 }

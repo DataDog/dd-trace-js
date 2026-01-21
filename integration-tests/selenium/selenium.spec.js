@@ -42,7 +42,11 @@ versionRange.forEach(version => {
       cwd = sandboxCwd()
 
       webAppServer.listen(0, () => {
-        webAppPort = webAppServer.address().port
+        const address = webAppServer.address()
+        if (!address || typeof address === 'string') {
+          return done(new Error('Failed to determine web app server port'))
+        }
+        webAppPort = address.port
         done()
       })
     })
@@ -106,7 +110,6 @@ versionRange.forEach(version => {
                 WEB_APP_URL: `http://localhost:${webAppPort}`,
                 TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*'
               },
-              stdio: 'inherit'
             }
           )
 
@@ -130,7 +133,6 @@ versionRange.forEach(version => {
             WEB_APP_URL: `http://localhost:${webAppPort}`,
             TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*'
           },
-          stdio: 'pipe'
         }
       )
 
@@ -140,10 +142,10 @@ versionRange.forEach(version => {
         done()
       })
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
     })

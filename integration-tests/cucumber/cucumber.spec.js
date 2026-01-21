@@ -271,7 +271,6 @@ describe(`cucumber@${version} commonJS`, () => {
             ...envVars,
             DD_SERVICE: 'cucumber-test-service'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -438,7 +437,6 @@ describe(`cucumber@${version} commonJS`, () => {
                 DD_TEST_SESSION_NAME: 'my-test-session',
                 DD_SERVICE: undefined
               },
-              stdio: 'pipe'
             }
           )
 
@@ -485,7 +483,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'pipe'
             }
           )
         })
@@ -558,13 +555,12 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'pipe'
             }
           )
-          childProcess.stdout.on('data', (chunk) => {
+          childProcess.stdout?.on('data', (chunk) => {
             testOutput += chunk.toString()
           })
-          childProcess.stderr.on('data', (chunk) => {
+          childProcess.stderr?.on('data', (chunk) => {
             testOutput += chunk.toString()
           })
           childProcess.on('exit', () => {
@@ -605,7 +601,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'inherit'
             }
           )
         })
@@ -679,7 +674,6 @@ describe(`cucumber@${version} commonJS`, () => {
               {
                 cwd,
                 env: envVars,
-                stdio: 'inherit'
               }
             )
           })
@@ -722,7 +716,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'inherit'
             }
           )
         })
@@ -761,7 +754,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: getCiVisAgentlessConfig(receiver.port),
-              stdio: 'inherit'
             }
           )
         })
@@ -824,7 +816,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'inherit'
             }
           )
 
@@ -887,7 +878,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'inherit'
             }
           )
 
@@ -925,7 +915,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'inherit'
             }
           )
           childProcess.on('exit', () => {
@@ -977,7 +966,6 @@ describe(`cucumber@${version} commonJS`, () => {
                 {
                   cwd,
                   env: getCiVisEvpProxyConfig(receiver.port),
-                  stdio: 'inherit'
                 }
               )
             })
@@ -1001,7 +989,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'inherit'
             }
           )
           childProcess.on('exit', () => {
@@ -1039,7 +1026,6 @@ describe(`cucumber@${version} commonJS`, () => {
               env: {
                 ...getCiVisAgentlessConfig(receiver.port)
               },
-              stdio: 'inherit'
             }
           )
 
@@ -1103,7 +1089,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'pipe'
             }
           )
           childProcess.on('exit', () => {
@@ -1155,7 +1140,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: { ...envVars, DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false' },
-              stdio: 'pipe'
             }
           )
           childProcess.on('exit', () => {
@@ -1211,7 +1195,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'pipe'
             }
           )
           childProcess.on('exit', (exitCode) => {
@@ -1262,7 +1245,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'pipe'
             }
           )
           childProcess.on('exit', () => {
@@ -1304,7 +1286,7 @@ describe(`cucumber@${version} commonJS`, () => {
 
           childProcess = exec(
             runTestsCommand,
-            { cwd, env: envVars, stdio: 'pipe' }
+            { cwd, env: envVars }
           )
 
           childProcess.on('exit', () => {
@@ -1356,7 +1338,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'pipe'
             }
           )
 
@@ -1408,7 +1389,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'pipe'
             }
           )
 
@@ -1471,7 +1451,6 @@ describe(`cucumber@${version} commonJS`, () => {
               {
                 cwd,
                 env: envVars,
-                stdio: 'pipe'
               }
             )
 
@@ -1532,7 +1511,6 @@ describe(`cucumber@${version} commonJS`, () => {
               {
                 cwd,
                 env: envVars,
-                stdio: 'pipe'
               }
             )
 
@@ -1588,7 +1566,6 @@ describe(`cucumber@${version} commonJS`, () => {
               {
                 cwd,
                 env: envVars,
-                stdio: 'pipe'
               }
             )
 
@@ -1640,7 +1617,6 @@ describe(`cucumber@${version} commonJS`, () => {
               {
                 cwd,
                 env: envVars,
-                stdio: 'pipe'
               }
             )
             childProcess.on('exit', () => {
@@ -1693,7 +1669,6 @@ describe(`cucumber@${version} commonJS`, () => {
               {
                 cwd,
                 env: envVars,
-                stdio: 'pipe'
               }
             )
 
@@ -1745,7 +1720,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'pipe'
             }
           )
 
@@ -1789,7 +1763,6 @@ describe(`cucumber@${version} commonJS`, () => {
                 ...envVars,
                 DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false'
               },
-              stdio: 'pipe'
             }
           )
 
@@ -1840,7 +1813,6 @@ describe(`cucumber@${version} commonJS`, () => {
                 ...envVars,
                 DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
               },
-              stdio: 'pipe'
             }
           )
 
@@ -1893,7 +1865,6 @@ describe(`cucumber@${version} commonJS`, () => {
                 ...envVars,
                 DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
               },
-              stdio: 'pipe'
             }
           )
 
@@ -1940,7 +1911,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'pipe'
             }
           )
 
@@ -2023,13 +1993,12 @@ describe(`cucumber@${version} commonJS`, () => {
                 DD_TRACE_DEBUG: '1',
                 DD_TRACE_LOG_LEVEL: 'warn',
               },
-              stdio: 'pipe'
             }
           )
 
           // TODO: remove once we figure out flakiness
-          childProcess.stdout.pipe(process.stdout)
-          childProcess.stderr.pipe(process.stderr)
+          childProcess.stdout?.pipe(process.stdout)
+          childProcess.stderr?.pipe(process.stderr)
 
           childProcess.on('exit', () => {
             Promise.all([eventsPromise, logsPromise]).then(() => {
@@ -2078,7 +2047,6 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd,
               env: envVars,
-              stdio: 'pipe'
             }
           )
 
@@ -2113,7 +2081,6 @@ describe(`cucumber@${version} commonJS`, () => {
         env: {
           ...getCiVisAgentlessConfig(receiver.port)
         },
-        stdio: 'inherit'
       }
     )
 
@@ -2152,20 +2119,19 @@ describe(`cucumber@${version} commonJS`, () => {
             ]
           )
         },
-        stdio: 'inherit'
       }
     )
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
 
     childProcess.on('exit', () => {
       linesPctMatch = testOutput.match(linesPctMatchRegex)
-      linesPctFromNyc = linesPctMatch ? Number(linesPctMatch[1]) : null
+      linesPctFromNyc = linesPctMatch ? Number(linesPctMatch[1]) : -Infinity
 
       assert.strictEqual(linesPctFromNyc, codeCoverageWithUntestedFiles,
         'nyc --all output does not match the reported coverage')
@@ -2187,7 +2153,6 @@ describe(`cucumber@${version} commonJS`, () => {
               ]
             )
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2198,16 +2163,16 @@ describe(`cucumber@${version} commonJS`, () => {
           codeCoverageWithoutUntestedFiles = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
         })
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
 
       childProcess.on('exit', () => {
         linesPctMatch = testOutput.match(linesPctMatchRegex)
-        linesPctFromNyc = linesPctMatch ? Number(linesPctMatch[1]) : null
+        linesPctFromNyc = linesPctMatch ? Number(linesPctMatch[1]) : -Infinity
 
         assert.strictEqual(linesPctFromNyc, codeCoverageWithoutUntestedFiles,
           'nyc output does not match the reported coverage (no --all flag)')
@@ -2257,7 +2222,6 @@ describe(`cucumber@${version} commonJS`, () => {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'pipe'
         }
       )
 
@@ -2288,7 +2252,6 @@ describe(`cucumber@${version} commonJS`, () => {
           ...getCiVisAgentlessConfig(receiver.port),
           DD_SERVICE: 'my-service'
         },
-        stdio: 'pipe'
       }
     )
 
@@ -2393,6 +2356,17 @@ describe(`cucumber@${version} commonJS`, () => {
             }
           })
 
+      /**
+       * @param {() => void} done
+       * @param {{
+       *   isAttemptToFix?: boolean,
+       *   isQuarantined?: boolean,
+       *   isDisabled?: boolean,
+       *   extraEnvVars?: Record<string, string>,
+       *   shouldAlwaysPass?: boolean,
+       *   shouldFailSometimes?: boolean
+       * }} [options]
+       */
       const runTest = (done, {
         isAttemptToFix,
         isQuarantined,
@@ -2420,11 +2394,10 @@ describe(`cucumber@${version} commonJS`, () => {
               ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
               ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {})
             },
-            stdio: 'inherit'
           }
         )
 
-        childProcess.stdout.on('data', (data) => {
+        childProcess.stdout?.on('data', (data) => {
           stdout += data.toString()
         })
 
@@ -2581,11 +2554,10 @@ describe(`cucumber@${version} commonJS`, () => {
               ...getCiVisAgentlessConfig(receiver.port),
               ...extraEnvVars
             },
-            stdio: 'inherit'
           }
         )
 
-        childProcess.stdout.on('data', (data) => {
+        childProcess.stdout?.on('data', (data) => {
           stdout += data.toString()
         })
 
@@ -2678,11 +2650,10 @@ describe(`cucumber@${version} commonJS`, () => {
               ...getCiVisAgentlessConfig(receiver.port),
               ...extraEnvVars
             },
-            stdio: 'inherit'
           }
         )
 
-        childProcess.stdout.on('data', (data) => {
+        childProcess.stdout?.on('data', (data) => {
           stdout += data.toString()
         })
 
@@ -2746,14 +2717,13 @@ describe(`cucumber@${version} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             DD_TRACE_DEBUG: '1'
           },
-          stdio: 'inherit'
         }
       )
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
 
@@ -2809,7 +2779,6 @@ describe(`cucumber@${version} commonJS`, () => {
               ...getCiVisAgentlessConfig(receiver.port),
               DD_TEST_SESSION_NAME: 'my-test-session-name'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2926,6 +2895,15 @@ describe(`cucumber@${version} commonJS`, () => {
           }
         })
 
+    /**
+     * @param {{
+     *   isModified?: boolean,
+     *   isEfd?: boolean,
+     *   isParallel?: boolean,
+     *   isNew?: boolean
+     * }} options
+     * @param {Record<string, string>} [extraEnvVars]
+     */
     const runImpactedTest = async (
       { isModified, isEfd, isParallel, isNew },
       extraEnvVars = {}
@@ -2945,7 +2923,6 @@ describe(`cucumber@${version} commonJS`, () => {
             GITHUB_BASE_REF: '',
             ...extraEnvVars
           },
-          stdio: 'inherit'
         }
       )
 
