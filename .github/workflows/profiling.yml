@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       latest-version:
-        description: 'Node version to use'
+        description: "Node version to use"
         required: false
         type: string
 
@@ -33,7 +33,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: profiling-macos
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@v2
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -59,7 +59,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: profiling-ubuntu
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@v2
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -72,13 +72,13 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
         with:
-          cache: 'true'
+          cache: "true"
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: profiling-windows
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@v2
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}

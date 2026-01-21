@@ -35,7 +35,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: openfeature-unit-${{ matrix.version }}
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@v2
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -48,7 +48,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:integration:openfeature
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@v2
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -67,7 +67,7 @@ jobs:
       - run: yarn test:integration:openfeature
       - uses: ./.github/actions/node/latest
       - run: yarn test:integration:openfeature
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@v2
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -80,9 +80,9 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
         with:
-          cache: 'true'
+          cache: "true"
       - run: yarn test:integration:openfeature
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@v2
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
