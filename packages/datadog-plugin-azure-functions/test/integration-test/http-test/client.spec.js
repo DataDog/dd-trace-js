@@ -75,6 +75,7 @@ async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, st
   let env = {
     NODE_OPTIONS: `--loader=${hookFile} func start`,
     DD_TRACE_AGENT_PORT: agentPort,
+    DD_TRACE_FLUSH_INTERVAL: '0'
   }
   env = { ...env, ...additionalEnvArgs }
   return spawnProc(command, args, {
