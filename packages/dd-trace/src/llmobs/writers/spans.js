@@ -24,7 +24,7 @@ class LLMObsSpanWriter extends BaseWriter {
     })
   }
 
-  append (event) {
+  append (event, routing) {
     const eventSizeBytes = Buffer.byteLength(JSON.stringify(event))
     telemetry.recordLLMObsRawSpanSize(event, eventSizeBytes)
 
@@ -39,12 +39,13 @@ class LLMObsSpanWriter extends BaseWriter {
 
     telemetry.recordLLMObsSpanSize(event, processedEventSizeBytes, shouldTruncate)
 
-    if (this._bufferSize + eventSizeBytes > EVP_PAYLOAD_SIZE_LIMIT) {
+    const buffer = this._getBuffer(routing)
+    if (buffer.size + processedEventSizeBytes > EVP_PAYLOAD_SIZE_LIMIT) {
       logger.debug('Flushing queue because queuing next event will exceed EvP payload limit')
       this.flush()
     }
 
-    super.append(event, processedEventSizeBytes)
+    super.append(event, routing, processedEventSizeBytes)
   }
 
   makePayload (events) {

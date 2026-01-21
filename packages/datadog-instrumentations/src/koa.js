@@ -90,7 +90,8 @@ function wrapMiddleware (fn, layer) {
     const req = ctx.req
 
     const path = layer && layer.path
-    const route = typeof path === 'string' && !path.endsWith('(.*)') && !path.endsWith('([^/]*)') && path
+    const route = typeof path === 'string' && !path.endsWith('(.*)') && !path.endsWith('([^/]*)') &&
+      !path.includes('(?:') && path
 
     enterChannel.publish({ req, name, route })
 

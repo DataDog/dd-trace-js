@@ -1,6 +1,6 @@
 'use strict'
 
-const { getEnvironmentVariable } = require('../../../config-helper')
+const { getEnvironmentVariable } = require('../../../config/helper')
 
 const largeObjectSkipThreshold = Number(
   getEnvironmentVariable('_DD_DYNAMIC_INSTRUMENTATION_EXPERIMENTAL_LARGE_OBJECT_SKIP_THRESHOLD')

@@ -19,6 +19,10 @@ class WSPlugin extends CompositePlugin {
   }
 
   configure (config) {
+    if (!config.traceWebsocketMessagesEnabled) {
+      super.configure(false)
+      return
+    }
     return super.configure(config)
   }
 }

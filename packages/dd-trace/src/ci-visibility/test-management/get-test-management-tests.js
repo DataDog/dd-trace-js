@@ -2,7 +2,7 @@
 
 const request = require('../../exporters/common/request')
 const id = require('../../id')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getEnvironmentVariable } = require('../../config/helper')
 const log = require('../../log')
 
 function getTestManagementTests ({

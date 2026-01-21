@@ -2,7 +2,7 @@
 
 const { URL, format } = require('url')
 
-const defaults = require('../../config_defaults')
+const defaults = require('../../config/defaults')
 const { Writer } = require('./writer')
 
 class SpanStatsExporter {

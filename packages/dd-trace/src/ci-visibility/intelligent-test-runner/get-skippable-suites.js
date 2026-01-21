@@ -2,7 +2,7 @@
 
 const request = require('../../exporters/common/request')
 const log = require('../../log')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getEnvironmentVariable } = require('../../config/helper')
 const {
   incrementCountMetric,
   distributionMetric,

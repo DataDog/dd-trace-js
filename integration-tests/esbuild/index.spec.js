@@ -100,6 +100,12 @@ esbuildVersions.forEach((version) => {
       })
     })
 
+    it('prints a warning when user opts to minify output without retaining class names', () => {
+      execSync('node ./build-and-test-minify.js', {
+        timeout
+      })
+    })
+
     describe('ESM', () => {
       afterEach(() => {
         rmSync('./out.mjs', { force: true })

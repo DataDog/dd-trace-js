@@ -68,7 +68,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       }
     })
 
-    process.once('beforeExit', () => {
+    const flush = () => {
       if (this._writer) {
         this._writer.flush()
       }
@@ -78,7 +78,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       if (this._logsWriter) {
         this._logsWriter.flush()
       }
-    })
+    }
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(flush.bind(this))
   }
 
   shouldRequestSkippableSuites () {

@@ -12,8 +12,9 @@ const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations
 const LLMObsSpanWriter = require('../../../src/llmobs/writers/spans')
 const { getConfigFresh } = require('../../helpers/config')
 const tracerVersion = require('../../../../../package.json').version
-
 const agent = require('../../plugins/agent')
+const { removeDestroyHandler } = require('../util')
+
 const injectCh = channel('dd-trace:span:inject')
 
 describe('sdk', () => {
@@ -50,7 +51,7 @@ describe('sdk', () => {
     LLMObsSDK = require('../../../src/llmobs/sdk')
 
     // remove max listener warnings, we don't care about the writer anyways
-    process.removeAllListeners('beforeExit')
+    removeDestroyHandler()
 
     clock = sinon.useFakeTimers({
       toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
@@ -68,7 +69,7 @@ describe('sdk', () => {
     LLMObsSpanWriter.prototype.append.resetHistory()
     LLMObsSpanWriter.prototype.flush.resetHistory()
 
-    process.removeAllListeners('beforeExit')
+    removeDestroyHandler()
   })
 
   after(() => {

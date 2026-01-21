@@ -494,10 +494,20 @@ function assertPromptTracking (
   }
 }
 
+function removeDestroyHandler () {
+  for (const handler of globalThis[Symbol.for('dd-trace')].beforeExitHandlers) {
+    if (handler.name.endsWith('destroy')) {
+      globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(handler)
+      break
+    }
+  }
+}
+
 module.exports = {
   assertLlmObsEvaluationMetric,
   assertLlmObsSpanEvent,
   assertPromptTracking,
+  removeDestroyHandler,
   useLlmObs,
   MOCK_NOT_NULLISH,
   MOCK_NUMBER,

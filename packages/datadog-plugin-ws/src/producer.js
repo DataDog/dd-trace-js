@@ -19,9 +19,6 @@ class WSProducerPlugin extends TracingPlugin {
   static get kind () { return 'producer' }
 
   bindStart (ctx) {
-    const messagesEnabled = this.config.traceWebsocketMessagesEnabled
-    if (!messagesEnabled) return
-
     const { byteLength, socket, binary } = ctx
     if (!socket.spanContext) return
 

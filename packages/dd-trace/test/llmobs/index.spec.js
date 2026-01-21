@@ -8,6 +8,8 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const AgentInfoExporter = require('../../src/exporters/common/agent-info-exporter')
+const { removeDestroyHandler } = require('./util')
+
 const spanFinishCh = channel('dd-trace:span:finish')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
@@ -49,7 +51,7 @@ describe('module', () => {
       }
     })
 
-    process.removeAllListeners('beforeExit')
+    removeDestroyHandler()
   })
 
   afterEach(() => {
@@ -254,9 +256,9 @@ describe('module', () => {
 
     const payload = {}
 
-    evalMetricAppendCh.publish(payload)
+    evalMetricAppendCh.publish({ payload })
 
-    sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().append, payload)
+    sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().append, payload, undefined)
   })
 
   it('removes all subscribers when disabling', () => {

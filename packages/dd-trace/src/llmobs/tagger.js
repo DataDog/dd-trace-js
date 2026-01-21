@@ -28,7 +28,9 @@ const {
   REASONING_OUTPUT_TOKENS_METRIC_KEY,
   INTEGRATION,
   DECORATOR,
-  PROPAGATED_ML_APP_KEY
+  PROPAGATED_ML_APP_KEY,
+  ROUTING_API_KEY,
+  ROUTING_SITE
 } = require('./constants/tags')
 const { storage } = require('./storage')
 
@@ -110,6 +112,14 @@ class LLMObsTagger {
     // apply annotation context name
     const annotationContextName = annotationContext?.name
     if (annotationContextName) this._setTag(span, NAME, annotationContextName)
+
+    const routing = storage.getStore()?.routingContext
+    if (routing) {
+      this._setTag(span, ROUTING_API_KEY, routing.apiKey)
+      if (routing.site) {
+        this._setTag(span, ROUTING_SITE, routing.site)
+      }
+    }
   }
 
   // TODO: similarly for the following `tag` methods,

@@ -15,7 +15,7 @@ withVersions('ldapjs', 'ldapjs', '>=2', version => {
       ['./packages/datadog-plugin-ldapjs/test/integration-test/*'])
 
     before(function () {
-      variants = varySandbox('server.mjs', 'ldapjs', 'createClient')
+      variants = varySandbox('server.mjs', 'ldapjs')
     })
 
     beforeEach(async () => {

@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
-import { connect } from 'couchbase'
+import couch from 'couchbase'
 
-const cluster = await connect(
+const cluster = await couch.connect(
   'couchbase://127.0.0.1',
   {
     username: 'Administrator',

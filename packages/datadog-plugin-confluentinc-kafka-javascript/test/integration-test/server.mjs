@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
-import { KafkaJS } from '@confluentinc/kafka-javascript'
-const { Kafka } = KafkaJS
+import kafkaLib from '@confluentinc/kafka-javascript'
+const { Kafka } = kafkaLib.KafkaJS
 
 const kafka = new Kafka({
   kafkaJS: {

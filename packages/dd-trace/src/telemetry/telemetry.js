@@ -147,11 +147,6 @@ function appClosing () {
   telemetryLogger.send(config, application, host)
 }
 
-function onBeforeExit () {
-  process.removeListener('beforeExit', onBeforeExit)
-  appClosing()
-}
-
 function createAppObject (config) {
   return {
     service_name: config.service,
@@ -273,7 +268,7 @@ function start (aConfig, thePluginManager) {
 
   extendedHeartbeat(config)
 
-  process.on('beforeExit', onBeforeExit)
+  globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(appClosing)
   telemetryStartChannel.publish(getTelemetryData())
 }
 
@@ -283,7 +278,7 @@ function stop () {
   }
   clearInterval(extendedInterval)
   clearTimeout(heartbeatTimeout)
-  process.removeListener('beforeExit', onBeforeExit)
+  globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(appClosing)
 
   telemetryStopChannel.publish(getTelemetryData())
 

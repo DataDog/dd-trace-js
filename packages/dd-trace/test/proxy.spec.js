@@ -166,7 +166,7 @@ describe('TracerProxy', () => {
       runtimeMetrics: {
         enabled: false
       },
-      configure: sinon.spy(),
+      setRemoteConfig: sinon.spy(),
       llmobs: {},
       heapSnapshot: {}
     }
@@ -213,18 +213,22 @@ describe('TracerProxy', () => {
       cleanup: sinon.spy()
     }
 
-    RemoteConfig = sinon.stub().returns(rc)
-
     handlers = new Map()
     rc = {
       setProductHandler (product, handler) { handlers.set(product, handler) },
       removeProductHandler (product) { handlers.delete(product) },
       updateCapabilities: sinon.spy(),
-      setBatchHandler: sinon.spy(),
+      setBatchHandler (products, handler) {
+        for (const product of products) {
+          handlers.set(product, handler)
+        }
+      },
       removeBatchHandler: sinon.spy(),
       subscribeProducts: sinon.spy(),
       unsubscribeProducts: sinon.spy()
     }
+
+    RemoteConfig = sinon.stub().returns(rc)
 
     NoopProxy = proxyquire('../src/noop/proxy', {
       './tracer': NoopTracer,
@@ -309,9 +313,9 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        handlers.get('APM_TRACING')('apply', { lib_config: conf })
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config', conf))
 
-        sinon.assert.calledWith(config.configure, conf)
+        sinon.assert.calledWith(config.setRemoteConfig, conf)
         sinon.assert.calledWith(tracer.configure, config)
         sinon.assert.calledWith(pluginManager.configure, config)
       })
@@ -409,12 +413,12 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(iast.enable)
 
         let conf = { tracing_enabled: false }
-        handlers.get('APM_TRACING')('apply', { lib_config: conf })
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf))
         sinon.assert.notCalled(appsec.disable)
         sinon.assert.notCalled(iast.disable)
 
         conf = { tracing_enabled: true }
-        handlers.get('APM_TRACING')('apply', { lib_config: conf })
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf, 'modify'))
         sinon.assert.calledOnce(DatadogTracer)
         sinon.assert.calledOnce(AppsecSdk)
         sinon.assert.notCalled(appsec.enable)
@@ -434,7 +438,7 @@ describe('TracerProxy', () => {
         config.telemetry = {}
         config.appsec.enabled = true
         config.iast.enabled = true
-        config.configure = conf => {
+        config.setRemoteConfig = conf => {
           config.tracing = conf.tracing_enabled
         }
 
@@ -445,12 +449,12 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnceWithExactly(iast.enable, config, tracer)
 
         let conf = { tracing_enabled: false }
-        handlers.get('APM_TRACING')('apply', { lib_config: conf })
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf))
         sinon.assert.called(appsec.disable)
         sinon.assert.called(iast.disable)
 
         conf = { tracing_enabled: true }
-        handlers.get('APM_TRACING')('apply', { lib_config: conf })
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf, 'modify'))
         sinon.assert.calledTwice(appsec.enable)
         sinon.assert.calledWithExactly(appsec.enable.secondCall, config)
         sinon.assert.calledTwice(iast.enable)
@@ -936,3 +940,20 @@ describe('TracerProxy', () => {
     })
   })
 })
+
+// Helper function to create APM_TRACING batch transaction objects
+function createApmTracingTransaction (configId, libConfig, action = 'apply') {
+  const item = {
+    id: configId,
+    file: { lib_config: libConfig },
+    path: `datadog/1/APM_TRACING/${configId}`
+  }
+
+  return {
+    toUnapply: action === 'unapply' ? [item] : [],
+    toApply: action === 'apply' ? [item] : [],
+    toModify: action === 'modify' ? [item] : [],
+    ack: sinon.spy(),
+    error: sinon.spy()
+  }
+}

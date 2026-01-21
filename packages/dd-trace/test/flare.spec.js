@@ -161,4 +161,22 @@ describe('Flare', () => {
 
     flare.send(task)
   })
+
+  it('should not send an empty file', done => {
+    const timer = setTimeout(() => done(), 100)
+
+    handler = req => {
+      const file = req.files[0]
+
+      if (file.originalname !== 'tracer_logs.txt') return
+
+      clearTimeout(timer)
+
+      done(new Error('Received empty file.'))
+    }
+
+    flare.enable(tracerConfig)
+    flare.prepare('debug')
+    flare.send(task)
+  })
 })

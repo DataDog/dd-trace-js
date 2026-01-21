@@ -40,6 +40,8 @@ jobs:
         with:
           suffix: llmobs-${{ github.job }}-${{ matrix.version }}
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: llmobs-sdk-${{ matrix.version }}
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -63,6 +65,8 @@ jobs:
       - run: yarn test:llmobs:plugins:ci
         shell: bash
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: llmobs-${{ github.job }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -90,6 +94,8 @@ jobs:
       - run: yarn test:llmobs:plugins:ci
         shell: bash
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: llmobs-${{ github.job }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -115,6 +121,8 @@ jobs:
       - run: yarn test:llmobs:plugins:ci
         shell: bash
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: llmobs-${{ github.job }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -142,6 +150,8 @@ jobs:
       - run: yarn test:llmobs:plugins:ci
         shell: bash
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: llmobs-${{ github.job }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -169,6 +179,8 @@ jobs:
       - run: yarn test:llmobs:plugins:ci
         shell: bash
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: llmobs-${{ github.job }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -196,6 +208,8 @@ jobs:
       - run: yarn test:llmobs:plugins:ci
         shell: bash
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: llmobs-${{ github.job }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -223,6 +237,8 @@ jobs:
       - run: yarn test:llmobs:plugins:ci
         shell: bash
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: llmobs-${{ github.job }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:

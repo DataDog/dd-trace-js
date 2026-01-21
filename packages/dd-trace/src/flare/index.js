@@ -64,7 +64,7 @@ const flare = {
   },
 
   _sendFile (task, file, filename) {
-    if (!file) return
+    if (!file || file.length === 0) return
 
     const form = new FormData()
 

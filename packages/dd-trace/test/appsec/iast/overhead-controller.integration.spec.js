@@ -36,7 +36,7 @@ describe('IAST - overhead-controller - integration', () => {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_IAST_ENABLED: 'true',
           DD_IAST_REQUEST_SAMPLING: '100',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
           NODE_OPTIONS: '--require ./resources/init.js'
         }
       })

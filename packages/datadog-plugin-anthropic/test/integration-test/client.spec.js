@@ -8,13 +8,15 @@ const {
   sandboxCwd,
   useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit,
+  varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
   let agent
   let proc
+  let variants
 
   withVersions('anthropic', ['@anthropic-ai/sdk'], version => {
     useSandbox([
@@ -27,24 +29,30 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
+    before(async function () {
+      variants = varySandbox('server.mjs', 'Anthropic', undefined, '@anthropic-ai/sdk')
+    })
+
     afterEach(async () => {
       proc?.kill()
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
-      const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-        assert.ok(Array.isArray(payload))
-        assert.strictEqual(checkSpansForServiceName(payload, 'anthropic.request'), true)
-      })
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented ${variant}`, async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
+          assert.strictEqual(checkSpansForServiceName(payload, 'anthropic.request'), true)
+        })
 
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, null, {
-        NODE_OPTIONS: '--import dd-trace/initialize.mjs',
-        ANTHROPIC_API_KEY: '<not-a-real-key>'
-      })
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
+          NODE_OPTIONS: '--import dd-trace/initialize.mjs',
+          ANTHROPIC_API_KEY: '<not-a-real-key>'
+        })
 
-      await res
-    }).timeout(20000)
+        await res
+      }).timeout(20000)
+    }
   })
 })

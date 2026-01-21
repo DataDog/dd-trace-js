@@ -5,7 +5,7 @@ const { channel } = require('dc-polyfill')
 const { isTrue, isError } = require('../util')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getEnvironmentVariable } = require('../config/helper')
 const Span = require('../opentracing/span')
 const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
 const {
@@ -62,7 +62,7 @@ class LLMObs extends NoopLLMObs {
     }
     // TODO: This will update config telemetry with the origin 'code', which is not ideal when `enable()` is called
     // based on `APM_TRACING` RC product updates.
-    this._config.configure({ llmobs })
+    this._config.updateOptions({ llmobs })
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)
@@ -418,7 +418,9 @@ class LLMObs extends NoopLLMObs {
         timestamp_ms: timestampMs,
         tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
       }
-      evalMetricAppendCh.publish(payload)
+      const currentStore = storage.getStore()
+      const routing = currentStore?.routingContext
+      evalMetricAppendCh.publish({ payload, routing })
     } finally {
       telemetry.recordSubmitEvaluation(options, err)
     }
@@ -437,6 +439,28 @@ class LLMObs extends NoopLLMObs {
       }
     }
 
+    return storage.run(store, fn)
+  }
+
+  routingContext (options, fn) {
+    if (!this.enabled) return fn()
+    if (!options?.ddApiKey) {
+      throw new Error('ddApiKey is required for routing context')
+    }
+    const currentStore = storage.getStore()
+    if (currentStore?.routingContext) {
+      logger.warn(
+        '[LLM Observability] Nested routing context detected. Inner context will override outer context. ' +
+        'Spans created in the inner context will only be sent to the inner context.'
+      )
+    }
+    const store = {
+      ...currentStore,
+      routingContext: {
+        apiKey: options.ddApiKey,
+        site: options.ddSite
+      }
+    }
     return storage.run(store, fn)
   }
 

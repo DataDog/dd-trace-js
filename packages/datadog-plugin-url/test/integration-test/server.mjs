@@ -1,5 +1,5 @@
 import 'dd-trace/init.js'
-import { URL } from 'node:url'
+import urlLib from 'node:url'
 import express from 'express'
 import dc from 'dc-polyfill'
 
@@ -13,7 +13,7 @@ const app = express()
 
 app.get('/', (req, res) => {
   const urlString = req.query.url || 'https://example.com:8080/path?query=value'
-  const url = new URL(urlString)
+  const url = new urlLib.URL(urlString)
   res.setHeader('X-Counter', counter)
   res.send(`URL parsed successfully ${url}`)
 })

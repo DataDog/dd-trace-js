@@ -20,11 +20,9 @@ class WSReceiverPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const {
-      traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces
     } = this.config
-    if (!traceWebsocketMessagesEnabled) return
 
     const { byteLength, socket, binary } = ctx
     if (!socket.spanContext) return

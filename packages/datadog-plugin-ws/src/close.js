@@ -20,11 +20,9 @@ class WSClosePlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const {
-      traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces
     } = this.config
-    if (!traceWebsocketMessagesEnabled) return
 
     const { code, data, socket, isPeerClose } = ctx
     if (!socket?.spanContext) return

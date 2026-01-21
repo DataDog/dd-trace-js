@@ -6,6 +6,7 @@ module.exports = {
   entryPoints: ['app.js'],
   bundle: true,
   minify: true,
+  keepNames: true,
   plugins: [ddPlugin],
   platform: 'node',
   target: ['node18'],

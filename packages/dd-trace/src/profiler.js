@@ -3,8 +3,7 @@
 const log = require('./log')
 const { profiler } = require('./profiling')
 
-// Stop profiler upon exit in order to collect and export the current profile
-process.once('beforeExit', () => { profiler.stop() })
+globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => { profiler.stop() })
 
 module.exports = {
   start: config => {
