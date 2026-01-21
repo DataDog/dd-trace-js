@@ -6,7 +6,7 @@ const {
   channel
 } = require('./helpers/instrument')
 
-const ddGlobal = globalThis[Symbol.for('dd-trace')] ??= {}
+const ddGlobal = globalThis[Symbol.for('dd-trace')]
 
 /** cached objects */
 

@@ -354,6 +354,27 @@ describe('profiler', function () {
       assert.strictEqual(consoleLogger.error.args[0][0], error)
       assert.strictEqual(profiler.enabled, true)
     })
+
+    it('should have serverless property set to false', () => {
+      assert.strictEqual(profiler.serverless, false)
+    })
+
+    it('should include serverless: false in export infos', async () => {
+      exporterPromise = new Promise(resolve => {
+        exporter.export = (exportSpec) => {
+          resolve(exportSpec)
+          return Promise.resolve()
+        }
+      })
+
+      await profiler._start({ profilers, exporters })
+
+      clock.tick(interval)
+
+      const { infos } = await exporterPromise
+
+      assert.strictEqual(infos.serverless, false)
+    })
   })
 
   describe('serverless', function () {
@@ -406,6 +427,30 @@ describe('profiler', function () {
       await waitForExport()
 
       sinon.assert.calledOnce(exporter.export)
+    })
+
+    it('should have serverless property set to true', () => {
+      assert.strictEqual(profiler.serverless, true)
+    })
+
+    it('should include serverless: true in export infos', async () => {
+      exporterPromise = new Promise(resolve => {
+        exporter.export = (exportSpec) => {
+          resolve(exportSpec)
+          return Promise.resolve()
+        }
+      })
+
+      await profiler._start({ profilers, exporters })
+
+      // flushAfterIntervals + 1 becauses flushes after last interval
+      for (let i = 0; i < flushAfterIntervals + 1; i++) {
+        clock.tick(interval)
+      }
+
+      const { infos } = await exporterPromise
+
+      assert.strictEqual(infos.serverless, true)
     })
   })
 })

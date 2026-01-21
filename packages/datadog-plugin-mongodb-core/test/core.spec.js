@@ -631,6 +631,7 @@ describe('Plugin', () => {
 
       describe('with dbmPropagationMode full', () => {
         before(() => {
+          tracer._tracer.configure({ sampler: { sampleRate: 1 } })
           return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
         })
 
@@ -661,8 +662,7 @@ describe('Plugin', () => {
 
         it('DBM propagation should inject full mode with traceparent as comment', done => {
           agent
-            .assertSomeTraces(traces => {
-              const span = traces[0][0]
+            .assertFirstTraceSpan(span => {
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
 

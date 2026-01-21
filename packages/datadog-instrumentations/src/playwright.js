@@ -12,7 +12,7 @@ const {
 const log = require('../../dd-trace/src/log')
 const {
   getEnvironmentVariable
-} = require('../../dd-trace/src/config-helper')
+} = require('../../dd-trace/src/config/helper')
 const { DD_MAJOR } = require('../../../version')
 const { addHook, channel } = require('./helpers/instrument')
 

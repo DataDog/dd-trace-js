@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
-import { ServiceBroker } from 'moleculer'
+import moleculer from 'moleculer'
 
-const broker = new ServiceBroker({
+const broker = new moleculer.ServiceBroker({
   namespace: 'multi',
   nodeID: `server-${process.pid}`,
   logger: false,
