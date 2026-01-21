@@ -43,6 +43,8 @@ jobs:
         with:
           suffix: lambda
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: serverless-lambda
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -118,6 +120,8 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.spec }}
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: serverless-aws-sdk-${{ matrix.node-version }}-${{ matrix.spec }}
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
