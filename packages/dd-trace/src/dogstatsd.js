@@ -25,6 +25,7 @@ class DogStatsDClient {
   constructor (options = {}) {
     if (options.metricsProxyUrl) {
       this._httpOptions = {
+        method: 'POST',
         url: options.metricsProxyUrl.toString(),
         path: '/dogstatsd/v2/proxy'
       }
