@@ -5,7 +5,7 @@ const sinon = require('sinon')
 const { it, describe, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 
-require('./setup/core')
+require('../setup/core')
 
 describe('config-helper stable config sources', () => {
   let isInServerlessEnvironmentStub
@@ -36,7 +36,7 @@ describe('config-helper stable config sources', () => {
       this.warnings = []
     })
 
-    const { getStableConfigSources } = proxyquire('../src/config/helper', {
+    const { getStableConfigSources } = proxyquire('../../src/config/helper', {
       '../serverless': {
         isInServerlessEnvironment: isInServerlessEnvironmentStub
       },
@@ -61,7 +61,7 @@ describe('config-helper stable config sources', () => {
   it('does not load stable config in serverless environment', () => {
     isInServerlessEnvironmentStub.returns(true)
 
-    const { getStableConfigSources } = proxyquire('../src/config/helper', {
+    const { getStableConfigSources } = proxyquire('../../src/config/helper', {
       '../serverless': {
         isInServerlessEnvironment: isInServerlessEnvironmentStub
       },
@@ -76,7 +76,7 @@ describe('config-helper stable config sources', () => {
   })
 
   it('handles empty or missing stable config entries', () => {
-    const { getStableConfigSources } = require('../src/config/helper')
+    const { getStableConfigSources } = require('../../src/config/helper')
 
     const sources = getStableConfigSources()
 
@@ -94,7 +94,7 @@ describe('config-helper env resolution', () => {
 
   function loadModule (overrides = {}) {
     // Ensure we always get a fresh copy of the module when needed
-    const mod = proxyquire('../src/config/helper', overrides)
+    const mod = proxyquire('../../src/config/helper', overrides)
     getValueFromEnvSources = mod.getValueFromEnvSources
     getEnvironmentVariable = mod.getEnvironmentVariable
     resetModule = () => {}
@@ -200,7 +200,7 @@ describe('config-helper env resolution', () => {
 
       const isInServerlessStub = sinon.stub().returns(false)
 
-      const mod = proxyquire('../src/config/helper', {
+      const mod = proxyquire('../../src/config/helper', {
         '../serverless': {
           isInServerlessEnvironment: isInServerlessStub
         },
@@ -231,7 +231,7 @@ describe('config-helper env resolution', () => {
 
       const isInServerlessStub = sinon.stub().returns(false)
 
-      const mod = proxyquire('../src/config/helper', {
+      const mod = proxyquire('../../src/config/helper', {
         '../serverless': {
           isInServerlessEnvironment: isInServerlessStub
         },
@@ -259,7 +259,7 @@ describe('config-helper env resolution', () => {
 
       const isInServerlessStub = sinon.stub().returns(false)
 
-      const mod = proxyquire('../src/config/helper', {
+      const mod = proxyquire('../../src/config/helper', {
         '../serverless': {
           isInServerlessEnvironment: isInServerlessStub
         },

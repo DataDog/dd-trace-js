@@ -24,7 +24,7 @@ class Config {
     const AWS_LAMBDA_FUNCTION_NAME = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
     const NODE_OPTIONS = getEnvironmentVariable('NODE_OPTIONS')
 
-    // TODO: Move initialization of these values to packages/dd-trace/src/config.js, and just read from config
+    // TODO: Move initialization of these values to packages/dd-trace/src/config/index.js, and just read from config
     const {
       DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED,
       DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED,
@@ -53,9 +53,9 @@ class Config {
     // Must be longer than one minute so pad with five seconds
     const flushInterval = options.interval ?? (Number(DD_PROFILING_UPLOAD_PERIOD) * 1000 || 65 * 1000)
     const uploadTimeout = options.uploadTimeout ?? (Number(DD_PROFILING_UPLOAD_TIMEOUT) || 60 * 1000)
-    const sourceMap = options.sourceMap
     const pprofPrefix = options.pprofPrefix ?? DD_PROFILING_PPROF_PREFIX ?? ''
 
+    // TODO: Remove the fallback. Just use the value from the config.
     this.service = options.service || 'node'
     this.env = options.env
     this.host = host
@@ -102,7 +102,7 @@ class Config {
 
     this.flushInterval = flushInterval
     this.uploadTimeout = uploadTimeout
-    this.sourceMap = sourceMap
+    this.sourceMap = options.sourceMap
     this.debugSourceMaps = isTrue(options.debugSourceMaps ?? DD_PROFILING_DEBUG_SOURCE_MAPS)
     this.endpointCollectionEnabled = isTrue(options.endpointCollection ??
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED ?? samplingContextsAvailable)

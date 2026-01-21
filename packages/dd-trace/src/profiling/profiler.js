@@ -86,6 +86,7 @@ class Profiler extends EventEmitter {
     const { enabled, sourceMap, exporters } = config.profiling
     const { heartbeatInterval } = config.telemetry
 
+    // TODO: Unify with main logger and rewrite template strings to use printf formatting.
     const logger = {
       debug (message) { log.debug(message) },
       info (message) { log.info(message) },
