@@ -9,6 +9,7 @@ const sinon = require('sinon')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { channel } = require('../src/helpers/instrument')
+
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
 
@@ -27,10 +28,11 @@ describe('mongoose instrumentations', () => {
         function connect () {
           const connectOptions = {}
 
-          // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 5
-          if (semver.lt(specificVersion, '5.0.0')) {
+          // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 6
+          if (semver.lt(specificVersion, '6.0.0')) {
             connectOptions.useNewUrlParser = true
             connectOptions.useUnifiedTopology = true
+            connectOptions.useMongoClient = true
           }
 
           mongoose.connect(`mongodb://localhost:27017/${dbName}`, connectOptions)
