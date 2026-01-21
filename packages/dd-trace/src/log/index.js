@@ -98,7 +98,7 @@ const log = {
 
   errorWithoutTelemetry (...args) {
     args.push(NO_TRANSMIT)
-    publishFormatted(errorChannel, ...args)
+    publishFormatted(errorChannel, null, ...args)
     return log
   },
 
