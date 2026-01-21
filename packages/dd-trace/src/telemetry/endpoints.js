@@ -29,7 +29,9 @@ function endpointKey (method, path) {
 function scheduleFlush () {
   if (flushScheduled) return
   flushScheduled = true
-  setImmediate(flushAndSend).unref()
+  // this used to be setImmediate() instead, but it was making the system test flaky
+  // don't ask me why
+  setTimeout(flushAndSend).unref()
 }
 
 function recordEndpoint (method, path, operationName) {
