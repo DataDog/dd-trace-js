@@ -2050,10 +2050,9 @@ versions.forEach((version) => {
        *   isModified?: boolean,
        *   isEfd?: boolean,
        *   isNew?: boolean,
-       *   isParallel?: boolean
        * }} options
        */
-      const getTestAssertions = ({ isModified, isEfd, isNew, isParallel }) =>
+      const getTestAssertions = ({ isModified, isEfd, isNew }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -2113,10 +2112,6 @@ versions.forEach((version) => {
               assert.strictEqual(retriedTestNew, isNew ? NUM_RETRIES_EFD : 0)
               assert.strictEqual(retriedTestsWithReason, NUM_RETRIES_EFD)
             }
-
-            if (isParallel) {
-              // TODO: Add assertions for parallel mode
-            }
           })
 
       const runImpactedTest = (
@@ -2124,7 +2119,7 @@ versions.forEach((version) => {
         { isModified, isEfd = false, isParallel = false, isNew = false },
         extraEnvVars = {}
       ) => {
-        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isParallel, isNew })
+        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isNew })
 
         childProcess = exec(
           './node_modules/.bin/vitest run',
