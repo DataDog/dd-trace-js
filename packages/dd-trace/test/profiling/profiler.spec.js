@@ -247,9 +247,9 @@ describe('profiler', function () {
       assert.ok(Object.hasOwn(profiles, 'space'))
       assert.ok(profiles.space instanceof Buffer)
       assert.strictEqual(profiles.space.indexOf(magicBytes), 0)
-      assert.ok((start) instanceof Date)
-      assert.ok((end) instanceof Date)
-      assert.strictEqual(end - start, 65000)
+      assert.ok(start instanceof Date)
+      assert.ok(end instanceof Date)
+      assert.strictEqual(end.getTime() - start.getTime(), 65000)
       assert.strictEqual(tags.foo, 'foo')
     }
 
@@ -319,9 +319,9 @@ describe('profiler', function () {
       await waitForExport()
 
       const { start, end } = exporter.export.args[0][0]
-      assert.ok((start) instanceof Date)
-      assert.ok((end) instanceof Date)
-      assert.strictEqual(end - start, 65000)
+      assert.ok(start instanceof Date)
+      assert.ok(end instanceof Date)
+      assert.strictEqual(end.getTime() - start.getTime(), 65000)
 
       sinon.assert.calledOnce(exporter.export)
 
@@ -332,9 +332,9 @@ describe('profiler', function () {
 
       const { start: start2, end: end2 } = exporter.export.args[0][0]
       assert.ok(start2 >= end)
-      assert.ok((start2) instanceof Date)
-      assert.ok((end2) instanceof Date)
-      assert.strictEqual(end2 - start2, 65000)
+      assert.ok(start2 instanceof Date)
+      assert.ok(end2 instanceof Date)
+      assert.strictEqual(end2.getTime() - start2.getTime(), 65000)
 
       sinon.assert.calledOnce(exporter.export)
     })
@@ -376,7 +376,7 @@ describe('profiler', function () {
         }
       })
 
-      await profiler._start({ profilers, exporters })
+      await profiler._start(makeStartOptions())
 
       clock.tick(interval)
 
