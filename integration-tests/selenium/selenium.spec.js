@@ -126,7 +126,6 @@ versionRange.forEach(version => {
               cwd,
               env: {
                 ...getCiVisEvpProxyConfig(receiver.port),
-                DD_TRACE_AGENT_PORT: String(receiver.port),
                 WEB_APP_URL: `http://localhost:${webAppPort}`,
                 TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*',
                 DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true'
@@ -151,7 +150,6 @@ versionRange.forEach(version => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
             WEB_APP_URL: `http://localhost:${webAppPort}`,
             TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*'
           }
@@ -164,16 +162,12 @@ versionRange.forEach(version => {
         done()
       })
 
-      if (childProcess.stdout) {
-        childProcess.stdout.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-      }
-      if (childProcess.stderr) {
-        childProcess.stderr.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-      }
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
     })
   })
 })
