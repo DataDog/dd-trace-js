@@ -56,11 +56,11 @@ function error (err) {
 }
 
 function warn (log) {
-  withNoop(() => logger.warn?.(log) || logger.debug(log))
+  withNoop(() => logger.warn ? logger.warn(log) : logger.debug(log))
 }
 
 function info (log) {
-  withNoop(() => logger.info?.(log) || logger.debug(log))
+  withNoop(() => logger.info ? logger.info(log) : logger.debug(log))
 }
 
 function debug (log) {
