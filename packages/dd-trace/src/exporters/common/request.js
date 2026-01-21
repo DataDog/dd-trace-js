@@ -69,7 +69,7 @@ function request (data, options, callback) {
 
   options.agent = isSecure ? httpsAgent : httpAgent
 
-  const onResponse = res => {
+  const onResponse = (res, finalize) => {
     const chunks = []
 
     res.setTimeout(timeout)
@@ -77,8 +77,10 @@ function request (data, options, callback) {
     res.on('data', chunk => {
       chunks.push(chunk)
     })
+    res.once('close', () => {
+      finalize()
+    })
     res.once('end', () => {
-      activeRequests--
       const buffer = Buffer.concat(chunks)
 
       if (res.statusCode >= 200 && res.statusCode <= 299) {
@@ -126,16 +128,29 @@ function request (data, options, callback) {
     }
 
     activeRequests++
+    const finalize = (() => {
+      // Ensures decrementing activeRequests only once across multiple event handlers
+      let called = false
+      return () => {
+        if (!called) {
+          activeRequests--
+          called = true
+        }
+      }
+    })()
 
     const store = storage('legacy').getStore()
 
     storage('legacy').enterWith({ noop: true })
 
-    const req = client.request(options, onResponse)
+    const req = client.request(options, res => onResponse(res, finalize))
 
     req.once('error', err => {
-      activeRequests--
+      finalize()
       onError(err)
+    })
+    req.once('close', () => {
+      finalize()
     })
 
     req.setTimeout(timeout, req.abort)
