@@ -43,7 +43,11 @@ versionRange.forEach(version => {
       cwd = sandboxCwd()
 
       webAppServer.listen(0, () => {
-        webAppPort = webAppServer.address().port
+        const address = webAppServer.address()
+        if (!address || typeof address === 'string') {
+          return done(new Error('Failed to determine web app server port'))
+        }
+        webAppPort = address.port
         done()
       })
     })
@@ -102,6 +106,11 @@ versionRange.forEach(version => {
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
               const telemetryEvents = payloads.flatMap(({ payload }) => payload.payload.series)
 
+              const testSessionMetric = telemetryEvents.find(
+                ({ metric }) => metric === 'test_session'
+              )
+              assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+
               const eventFinishedTestEvents = telemetryEvents
                 .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
 
@@ -117,11 +126,11 @@ versionRange.forEach(version => {
               cwd,
               env: {
                 ...getCiVisEvpProxyConfig(receiver.port),
+                DD_TRACE_AGENT_PORT: String(receiver.port),
                 WEB_APP_URL: `http://localhost:${webAppPort}`,
                 TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*',
                 DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true'
-              },
-              stdio: 'inherit'
+              }
             }
           )
 
@@ -142,10 +151,10 @@ versionRange.forEach(version => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
+            DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
             WEB_APP_URL: `http://localhost:${webAppPort}`,
             TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*'
-          },
-          stdio: 'pipe'
+          }
         }
       )
 
@@ -155,12 +164,16 @@ versionRange.forEach(version => {
         done()
       })
 
-      childProcess.stdout.on('data', (chunk) => {
-        testOutput += chunk.toString()
-      })
-      childProcess.stderr.on('data', (chunk) => {
-        testOutput += chunk.toString()
-      })
+      if (childProcess.stdout) {
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+      }
+      if (childProcess.stderr) {
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+      }
     })
   })
 })
