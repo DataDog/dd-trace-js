@@ -277,6 +277,38 @@ versions.forEach((version) => {
       })
     })
 
+    it('sends telemetry with test_session metric when telemetry is enabled', async () => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+          const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+
+          const testSessionMetric = telemetryMetrics.find(
+            ({ metric }) => metric === 'test_session'
+          )
+
+          assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+        })
+
+      childProcess = exec(
+        './node_modules/.bin/playwright test -c playwright.config.js --project chromium ' +
+        '--grep "should work with passing tests"',
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise
+      ])
+    })
+
     it('works when tests are compiled to a different location', function (done) {
       // this has shown some flakiness
       this.retries(1)

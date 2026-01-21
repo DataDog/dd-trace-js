@@ -362,18 +362,19 @@ class CucumberPlugin extends CiPlugin {
         }
       }
 
+      const spanTags = span.context()._tags
+      const telemetryTags = {
+        hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
+        isNew,
+        isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+        browserDriver: spanTags[TEST_BROWSER_DRIVER]
+      }
       span.finish()
       if (!isStep) {
-        const spanTags = span.context()._tags
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
-          {
-            hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
-            isNew,
-            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
-            browserDriver: spanTags[TEST_BROWSER_DRIVER]
-          }
+          telemetryTags
         )
         finishAllTraceSpans(span)
         // If it's a worker, flushing is cheap, as it's just sending data to the main process

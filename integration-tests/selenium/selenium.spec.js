@@ -1,13 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
+const { once } = require('node:events')
 const { exec } = require('child_process')
 const {
   sandboxCwd,
   useSandbox,
   getCiVisAgentlessConfig,
-  assertObjectContains
+  assertObjectContains,
+  getCiVisEvpProxyConfig
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
@@ -78,7 +79,7 @@ versionRange.forEach(version => {
       if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && name === 'cucumber') return
 
       context(`with ${name}`, () => {
-        it('identifies tests using selenium as browser tests', (done) => {
+        it('identifies tests using selenium as browser tests', async () => {
           const assertionPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
@@ -97,24 +98,38 @@ versionRange.forEach(version => {
               assert.ok(Object.hasOwn(seleniumTest.meta, TEST_BROWSER_DRIVER_VERSION))
             })
 
+          const telemetryPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+              const telemetryEvents = payloads.flatMap(({ payload }) => payload.payload.series)
+
+              const eventFinishedTestEvents = telemetryEvents
+                .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
+
+              eventFinishedTestEvents.forEach(({ tags }) => {
+                assert.ok(tags.includes('is_rum'))
+                assert.ok(tags.includes('browser_driver:selenium'))
+              })
+            })
+
           childProcess = exec(
             command,
             {
               cwd,
               env: {
-                ...getCiVisAgentlessConfig(receiver.port),
+                ...getCiVisEvpProxyConfig(receiver.port),
                 WEB_APP_URL: `http://localhost:${webAppPort}`,
-                TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*'
+                TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*',
+                DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true'
               },
               stdio: 'inherit'
             }
           )
 
-          childProcess.on('exit', () => {
-            assertionPromise.then(() => {
-              done()
-            }).catch(done)
-          })
+          await Promise.all([
+            once(childProcess, 'exit'),
+            assertionPromise,
+            telemetryPromise
+          ])
         })
       })
     })
