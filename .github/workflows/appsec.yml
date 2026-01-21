@@ -32,7 +32,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-macos
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -54,7 +54,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-ubuntu
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -72,7 +72,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-windows
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -103,7 +103,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-ldapjs
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -132,7 +132,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-postgres
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -161,7 +161,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-mysql
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -181,7 +181,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-express
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -201,7 +201,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-fastify
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -221,7 +221,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-graphql
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -247,7 +247,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-mongodb-core
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -273,7 +273,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-mongoose
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -297,7 +297,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-sourcing
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -357,7 +357,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-next-${{ matrix.version }}-${{ matrix.range_clean }}
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -377,7 +377,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-lodash
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -395,7 +395,7 @@ jobs:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
       - run: yarn test:integration:appsec
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -415,7 +415,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-passport
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -435,7 +435,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-template
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -455,7 +455,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-node-serialize
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -494,7 +494,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: appsec-kafka
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}

@@ -9,10 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       latest-version:
-        description: 'Node version to use'
+        description: "Node version to use"
         required: false
         type: string
-
 
 concurrency:
   group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}"
@@ -21,7 +20,6 @@ concurrency:
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
   LATEST_VERSION: ${{ inputs.latest-version }}
-
 
 jobs:
   lambda:
@@ -45,7 +43,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: serverless-lambda
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -79,8 +77,8 @@ jobs:
           EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           AWS_DEFAULT_REGION: us-east-1
-          FORCE_NONINTERACTIVE: 'true'
-          START_WEB: '0'
+          FORCE_NONINTERACTIVE: "true"
+          START_WEB: "0"
         ports:
           - 4566:4566
         volumes:
@@ -96,9 +94,9 @@ jobs:
           EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           AWS_DEFAULT_REGION: us-east-1
-          FORCE_NONINTERACTIVE: 'true'
+          FORCE_NONINTERACTIVE: "true"
           LAMBDA_EXECUTOR: local
-          START_WEB: '0'
+          START_WEB: "0"
           GATEWAY_LISTEN: 127.0.0.1:4567
           EDGE_PORT: 4567
           EDGE_PORT_HTTP: 4567
@@ -122,7 +120,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: serverless-aws-sdk-${{ matrix.node-version }}-${{ matrix.spec }}
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -131,64 +129,64 @@ jobs:
   azure-event-hubs:
     runs-on: ubuntu-latest
     services:
-        azurite:
-          image: mcr.microsoft.com/azure-storage/azurite:3.35.0
-          ports:
-            - "127.0.0.1:10000:10000"
-            - "127.0.0.1:10001:10001"
-            - "127.0.0.1:10002:10002"
-        azureeventhubsemulator:
-          image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
-          ports:
-            - "127.0.0.1:5673:5672"
-            - "127.0.0.1:9092:9092"
-          env:
-            BLOB_SERVER: azurite
-            METADATA_SERVER: azurite
-            ACCEPT_EULA: "Y"
+      azurite:
+        image: mcr.microsoft.com/azure-storage/azurite:3.35.0
+        ports:
+          - "127.0.0.1:10000:10000"
+          - "127.0.0.1:10001:10001"
+          - "127.0.0.1:10002:10002"
+      azureeventhubsemulator:
+        image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
+        ports:
+          - "127.0.0.1:5673:5672"
+          - "127.0.0.1:9092:9092"
+        env:
+          BLOB_SERVER: azurite
+          METADATA_SERVER: azurite
+          ACCEPT_EULA: "Y"
     env:
       PLUGINS: azure-event-hubs
       SERVICES: azurite,azureeventhubsemulator
     steps:
-        - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-        - uses: ./.github/actions/plugins/test
-          with:
-            dd_api_key: ${{ secrets.DD_API_KEY }}
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   azure-functions:
     runs-on: ubuntu-latest
     services:
-        azurite:
-          image: mcr.microsoft.com/azure-storage/azurite:3.34.0
-          ports:
-              - "127.0.0.1:10000:10000"
-              - "127.0.0.1:10001:10001"
-              - "127.0.0.1:10002:10002"
-        azureeventhubsemulator:
-          image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
-          ports:
-            - "127.0.0.1:5673:5672"
-            - "127.0.0.1:9092:9092"
-          env:
-            BLOB_SERVER: azurite
-            METADATA_SERVER: azurite
-            ACCEPT_EULA: "Y"
-        azuresqledge:
-          image: mcr.microsoft.com/azure-sql-edge:1.0.7
-          ports:
-              - "127.0.0.1:1433:1433"
-          env:
-              ACCEPT_EULA: "Y"
-              MSSQL_SA_PASSWORD: "Localtestpass1!"
-        azureservicebusemulator:
-          image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
-          ports:
-              - "127.0.0.1:5672:5672"
-              - "127.0.0.1:5300:5300"
-          env:
-              ACCEPT_EULA: "Y"
-              MSSQL_SA_PASSWORD: "Localtestpass1!"
-              SQL_SERVER: azuresqledge
+      azurite:
+        image: mcr.microsoft.com/azure-storage/azurite:3.34.0
+        ports:
+          - "127.0.0.1:10000:10000"
+          - "127.0.0.1:10001:10001"
+          - "127.0.0.1:10002:10002"
+      azureeventhubsemulator:
+        image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
+        ports:
+          - "127.0.0.1:5673:5672"
+          - "127.0.0.1:9092:9092"
+        env:
+          BLOB_SERVER: azurite
+          METADATA_SERVER: azurite
+          ACCEPT_EULA: "Y"
+      azuresqledge:
+        image: mcr.microsoft.com/azure-sql-edge:1.0.7
+        ports:
+          - "127.0.0.1:1433:1433"
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Localtestpass1!"
+      azureservicebusemulator:
+        image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
+        ports:
+          - "127.0.0.1:5672:5672"
+          - "127.0.0.1:5300:5300"
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Localtestpass1!"
+          SQL_SERVER: azuresqledge
     env:
       PLUGINS: azure-functions
       SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator
@@ -205,7 +203,7 @@ jobs:
           ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/fixtures/servicebus-emulator-config.json \
           ${{ job.services.azureservicebusemulator.id }}:/ServiceBus_Emulator/ConfigFiles/Config.json
       - name: Restart emulators to pick up config changes
-        run : |
+        run: |
           docker restart ${{ job.services.azureeventhubsemulator.id }}
           docker restart ${{ job.services.azureservicebusemulator.id }}
       - uses: ./.github/actions/node/newest-maintenance-lts
@@ -213,7 +211,7 @@ jobs:
       - run: npm install -g azure-functions-core-tools@4.3.0
       - run: echo "$(dirname $(which func))" >> $GITHUB_PATH
       - run: yarn test:plugins:ci
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@a0226c9f1a3bd34f24ee659fec9639ab8cdc4789 # v2.1.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -222,22 +220,22 @@ jobs:
   azure-service-bus:
     runs-on: ubuntu-latest
     services:
-        azureservicebusemulator:
-          image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
-          ports:
-              - "127.0.0.1:5672:5672"
-              - "127.0.0.1:5300:5300"
-          env:
-              ACCEPT_EULA: "Y"
-              MSSQL_SA_PASSWORD: "Localtestpass1!"
-              SQL_SERVER: azuresqledge
-        azuresqledge:
-          image: mcr.microsoft.com/azure-sql-edge:1.0.7
-          ports:
-              - "127.0.0.1:1433:1433"
-          env:
-              ACCEPT_EULA: "Y"
-              MSSQL_SA_PASSWORD: "Localtestpass1!"
+      azureservicebusemulator:
+        image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
+        ports:
+          - "127.0.0.1:5672:5672"
+          - "127.0.0.1:5300:5300"
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Localtestpass1!"
+          SQL_SERVER: azuresqledge
+      azuresqledge:
+        image: mcr.microsoft.com/azure-sql-edge:1.0.7
+        ports:
+          - "127.0.0.1:1433:1433"
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Localtestpass1!"
     env:
       PLUGINS: azure-service-bus
       SERVICES: azureservicebusemulator,azuresqledge
