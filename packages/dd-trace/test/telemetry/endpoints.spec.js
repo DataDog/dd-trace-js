@@ -10,7 +10,7 @@ const dc = require('dc-polyfill')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 
-const originalSetImmediate = global.setImmediate
+const originalSetTimeout = global.setTimeout
 
 describe('endpoints telemetry', () => {
   const fastifyRouteCh = dc.channel('apm:fastify:route:added')
@@ -61,7 +61,7 @@ describe('endpoints telemetry', () => {
         './send-data': { sendData }
       })
       scheduledCallbacks = []
-      global.setImmediate = function (callback) {
+      global.setTimeout = function (callback) {
         scheduledCallbacks.push(callback)
         return { unref () {} }
       }
@@ -83,7 +83,7 @@ describe('endpoints telemetry', () => {
       sendData.reset()
       getRetryData.reset()
       updateRetryData.reset()
-      global.setImmediate = originalSetImmediate
+      global.setTimeout = originalSetTimeout
     })
 
     it('should not fail with invalid data', () => {
