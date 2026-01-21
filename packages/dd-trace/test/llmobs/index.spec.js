@@ -256,9 +256,9 @@ describe('module', () => {
 
     const payload = {}
 
-    evalMetricAppendCh.publish(payload)
+    evalMetricAppendCh.publish({ payload })
 
-    sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().append, payload)
+    sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().append, payload, undefined)
   })
 
   it('removes all subscribers when disabling', () => {
