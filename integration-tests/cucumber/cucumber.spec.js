@@ -110,36 +110,46 @@ describe(`cucumber@${version} commonJS`, () => {
     await receiver.stop()
   })
 
-  it('sends telemetry with test_session metric when telemetry is enabled', async () => {
-    receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
-
-    const telemetryPromise = receiver
-      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
-        const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
-
-        const testSessionMetric = telemetryMetrics.find(
-          ({ metric }) => metric === 'test_session'
-        )
-
-        assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
-      })
-
-    childProcess = exec(
-      runTestsCommand,
-      {
-        cwd,
-        env: {
-          ...getCiVisEvpProxyConfig(receiver.port),
-          DD_TRACE_AGENT_PORT: String(receiver.port),
-          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true'
-        }
+  ;['evp proxy', 'agentless'].forEach((reportingOption) => {
+    it(`sends telemetry with test_session metric when telemetry is enabled (${reportingOption})`, async () => {
+      const envVars = reportingOption === 'agentless'
+        ? getCiVisAgentlessConfig(receiver.port)
+        : getCiVisEvpProxyConfig(receiver.port)
+      if (reportingOption === 'evp proxy') {
+        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       }
-    )
 
-    await Promise.all([
-      once(childProcess, 'exit'),
-      telemetryPromise
-    ])
+      const telemetryPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+          const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+
+          const testSessionMetric = telemetryMetrics.find(
+            ({ metric }) => metric === 'test_session'
+          )
+
+          assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+          assert.ok(
+            Array.isArray(testSessionMetric.tags) && testSessionMetric.tags.includes('test_framework:cucumber'),
+            'test_session telemetry metric should include the test_framework tag'
+          )
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true'
+          }
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        telemetryPromise
+      ])
+    })
   })
 
   context('with APM protocol (old agents)', () => {

@@ -83,61 +83,73 @@ versionRange.forEach(version => {
       if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && name === 'cucumber') return
 
       context(`with ${name}`, () => {
-        it('identifies tests using selenium as browser tests', async () => {
-          const assertionPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const seleniumTest = events.find(event => event.type === 'test').content
+        ;['evp proxy', 'agentless'].forEach((reportingOption) => {
+          it(`identifies tests using selenium as browser tests (${reportingOption})`, async () => {
+            const envVars = reportingOption === 'agentless'
+              ? getCiVisAgentlessConfig(receiver.port)
+              : getCiVisEvpProxyConfig(receiver.port)
 
-              assertObjectContains(seleniumTest, {
-                meta: {
-                  [TEST_BROWSER_DRIVER]: 'selenium',
-                  [TEST_BROWSER_NAME]: 'chrome',
-                  [TEST_TYPE]: 'browser',
-                  [TEST_IS_RUM_ACTIVE]: 'true',
+            const assertionPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const seleniumTest = events.find(event => event.type === 'test').content
+
+                assertObjectContains(seleniumTest, {
+                  meta: {
+                    [TEST_BROWSER_DRIVER]: 'selenium',
+                    [TEST_BROWSER_NAME]: 'chrome',
+                    [TEST_TYPE]: 'browser',
+                    [TEST_IS_RUM_ACTIVE]: 'true',
+                  }
+                })
+
+                assert.ok(Object.hasOwn(seleniumTest.meta, TEST_BROWSER_VERSION))
+                assert.ok(Object.hasOwn(seleniumTest.meta, TEST_BROWSER_DRIVER_VERSION))
+              })
+
+            const telemetryPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+                const telemetryEvents = payloads.flatMap(({ payload }) => payload.payload.series)
+
+                const testSessionMetric = telemetryEvents.find(
+                  ({ metric }) => metric === 'test_session'
+                )
+                assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+                assert.ok(
+                  Array.isArray(testSessionMetric.tags) && testSessionMetric.tags.includes(`test_framework:${name}`),
+                  'test_session telemetry metric should include the test_framework tag'
+                )
+
+                const eventFinishedTestEvents = telemetryEvents
+                  .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
+
+                eventFinishedTestEvents.forEach(({ tags }) => {
+                  assert.ok(tags.includes('event_type:test'))
+                  assert.ok(tags.includes('is_rum'))
+                  assert.ok(tags.includes('browser_driver:selenium'))
+                  assert.ok(tags.includes(`test_framework:${name}`))
+                })
+              })
+
+            childProcess = exec(
+              command,
+              {
+                cwd,
+                env: {
+                  ...envVars,
+                  WEB_APP_URL: `http://localhost:${webAppPort}`,
+                  TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*',
+                  DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true'
                 }
-              })
-
-              assert.ok(Object.hasOwn(seleniumTest.meta, TEST_BROWSER_VERSION))
-              assert.ok(Object.hasOwn(seleniumTest.meta, TEST_BROWSER_DRIVER_VERSION))
-            })
-
-          const telemetryPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
-              const telemetryEvents = payloads.flatMap(({ payload }) => payload.payload.series)
-
-              const testSessionMetric = telemetryEvents.find(
-                ({ metric }) => metric === 'test_session'
-              )
-              assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
-
-              const eventFinishedTestEvents = telemetryEvents
-                .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
-
-              eventFinishedTestEvents.forEach(({ tags }) => {
-                assert.ok(tags.includes('is_rum'))
-                assert.ok(tags.includes('browser_driver:selenium'))
-              })
-            })
-
-          childProcess = exec(
-            command,
-            {
-              cwd,
-              env: {
-                ...getCiVisEvpProxyConfig(receiver.port),
-                WEB_APP_URL: `http://localhost:${webAppPort}`,
-                TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*',
-                DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true'
               }
-            }
-          )
+            )
 
-          await Promise.all([
-            once(childProcess, 'exit'),
-            assertionPromise,
-            telemetryPromise
-          ])
+            await Promise.all([
+              once(childProcess, 'exit'),
+              assertionPromise,
+              telemetryPromise
+            ])
+          })
         })
       })
     })
