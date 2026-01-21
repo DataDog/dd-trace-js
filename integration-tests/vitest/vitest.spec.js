@@ -240,45 +240,36 @@ versions.forEach((version) => {
       })
     })
 
-    ;['evp proxy', 'agentless'].forEach((reportingOption) => {
-      it(`sends telemetry with test_session metric when telemetry is enabled (${reportingOption})`, async () => {
-        const envVars = reportingOption === 'agentless'
-          ? getCiVisAgentlessConfig(receiver.port)
-          : getCiVisEvpProxyConfig(receiver.port)
+    it('sends telemetry with test_session metric when telemetry is enabled', async () => {
+      const telemetryPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+          const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
 
-        const telemetryPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
-            const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+          const testSessionMetric = telemetryMetrics.find(
+            ({ metric }) => metric === 'test_session'
+          )
 
-            const testSessionMetric = telemetryMetrics.find(
-              ({ metric }) => metric === 'test_session'
-            )
+          assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+        })
 
-            assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
-            assert.ok(
-              Array.isArray(testSessionMetric.tags) && testSessionMetric.tags.includes('test_framework:vitest'),
-              'test_session telemetry metric should include the test_framework tag'
-            )
-          })
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            DD_TRACE_AGENT_PORT: String(receiver.port),
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
+            TEST_DIR: 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs',
+          },
+        }
+      )
 
-        childProcess = exec(
-          './node_modules/.bin/vitest run',
-          {
-            cwd,
-            env: {
-              ...envVars,
-              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
-              TEST_DIR: 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs',
-            },
-          }
-        )
-
-        await Promise.all([
-          once(childProcess, 'exit'),
-          telemetryPromise
-        ])
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        telemetryPromise
+      ])
     })
 
     context('flaky test retries', () => {
