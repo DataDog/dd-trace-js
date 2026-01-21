@@ -257,7 +257,6 @@ moduleTypes.forEach(({
               customTag: 'customValue',
               addTagsBeforeEach: 'customBeforeEach',
               addTagsAfterEach: 'customAfterEach',
-              addTagsAfterFailure: 'customAfterFailure'
             },
           })
           assert.match(failedTestSpan.meta[TEST_SOURCE_FILE], /cypress\/e2e\/basic-fail\.js/)

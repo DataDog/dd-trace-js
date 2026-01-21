@@ -845,6 +845,7 @@ function assertObjectContainsImpl (actual, expected, msg, useMatchers) {
 
 // Main assertObjectContains: tries partialDeepStrictEqual or strict first, falls back to matchers
 const assertObjectContains = function assertObjectContains (actual, expected, msg) {
+  // @ts-expect-error assert.partialDeepStrictEqual does not exist on older Node.js versions
   // eslint-disable-next-line n/no-unsupported-features/node-builtins
   const assertionFn = assert.partialDeepStrictEqual ||
     ((actual, expected, msg) => assertObjectContainsImpl(actual, expected, msg, false))
