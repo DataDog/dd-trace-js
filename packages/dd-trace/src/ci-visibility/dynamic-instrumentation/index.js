@@ -4,7 +4,7 @@ const { join } = require('path')
 const { Worker, threadId: parentThreadId } = require('worker_threads')
 const { randomUUID } = require('crypto')
 const log = require('../../log')
-const { getEnvironmentVariables } = require('../../config-helper')
+const { getEnvironmentVariables } = require('../../config/helper')
 const getDebuggerConfig = require('../../debugger/config')
 
 const probeIdToResolveBreakpointSet = new Map()

@@ -7,7 +7,7 @@ const SpanProcessor = require('../../../packages/dd-trace/src/span_processor')
 const Exporter = require('../../../packages/dd-trace/src/exporters/agent/index')
 const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler')
 const id = require('../../../packages/dd-trace/src/id')
-const defaults = require('../../../packages/dd-trace/src/config_defaults')
+const defaults = require('../../../packages/dd-trace/src/config/defaults')
 
 const config = {
   url: `http://${defaults.hostname}:${defaults.port}`,

@@ -3,7 +3,7 @@
 const request = require('../exporters/common/request')
 const log = require('../log')
 const { isTrue } = require('../util')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getEnvironmentVariable } = require('../config/helper')
 
 let agentTelemetry = true
 

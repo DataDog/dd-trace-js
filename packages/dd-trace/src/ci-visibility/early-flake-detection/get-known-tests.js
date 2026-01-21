@@ -3,7 +3,7 @@
 const request = require('../../exporters/common/request')
 const id = require('../../id')
 const log = require('../../log')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getEnvironmentVariable } = require('../../config/helper')
 
 const {
   incrementCountMetric,

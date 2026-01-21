@@ -4,7 +4,7 @@ const log = require('./log')
 const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
-const { getEnvironmentVariable } = require('./config-helper')
+const { getEnvironmentVariable } = require('./config/helper')
 const processTags = require('./process-tags')
 
 const startedSpans = new WeakSet()

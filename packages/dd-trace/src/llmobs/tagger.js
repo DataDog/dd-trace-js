@@ -32,7 +32,9 @@ const {
   DEFAULT_PROMPT_NAME,
   INTERNAL_CONTEXT_VARIABLE_KEYS,
   INTERNAL_QUERY_VARIABLE_KEYS,
-  INPUT_PROMPT
+  INPUT_PROMPT,
+  ROUTING_API_KEY,
+  ROUTING_SITE
 } = require('./constants/tags')
 const { storage } = require('./storage')
 
@@ -118,6 +120,14 @@ class LLMObsTagger {
     // apply annotation context prompt
     const annotationContextPrompt = annotationContext?.prompt
     if (annotationContextPrompt) this.tagPrompt(span, annotationContextPrompt)
+
+    const routing = storage.getStore()?.routingContext
+    if (routing) {
+      this._setTag(span, ROUTING_API_KEY, routing.apiKey)
+      if (routing.site) {
+        this._setTag(span, ROUTING_SITE, routing.site)
+      }
+    }
   }
 
   // TODO: similarly for the following `tag` methods,

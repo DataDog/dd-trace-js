@@ -444,7 +444,7 @@ async function createSandbox (
 }
 
 /**
- * @typedef {{ default: string, star: string, destructure: string }} Variants
+ * @typedef {{ default?: string, star: string, destructure: string }} Variants
  */
 /**
  * @overload
@@ -498,7 +498,9 @@ function varySandbox (filename, variants, namedExport, packageName = variants, b
     variantFilenames[variant] = variantFilename
     let newFileData = origFileData
     if (variant !== baseVariant) {
-      newFileData = origFileData.replace(variants[baseVariant], `${value}`)
+      const baseValue = variants[baseVariant]
+      assert(baseValue, `Missing ${baseVariant} variant`)
+      newFileData = origFileData.replace(baseValue, `${value}`)
       // Error out when the default import does not match that of server.mjs
       if (newFileData === origFileData) throw Error(`Unable to match ${baseVariant}`)
     }

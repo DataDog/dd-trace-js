@@ -932,6 +932,46 @@ declare namespace tracer {
      * Configuration enabling LLM Observability. Enablement is superseded by the DD_LLMOBS_ENABLED environment variable.
      */
     llmobs?: llmobs.LLMObsEnableOptions
+
+    /**
+     * Configuration for Dynamic Instrumentation (Live Debugging).
+     */
+    dynamicInstrumentation?: {
+      /**
+       * Whether to enable Dynamic Instrumentation.
+       * @default false
+       */
+      enabled?: boolean
+
+      /**
+       * Path to a custom probes configuration file.
+       */
+      probeFile?: string
+
+      /**
+       * Timeout in milliseconds for capturing variable values.
+       * @default 100
+       */
+      captureTimeoutMs?: number
+
+      /**
+       * Interval in seconds between uploads of probe data.
+       * @default 1
+       */
+      uploadIntervalSeconds?: number
+
+      /**
+       * List of identifier names to redact in captured data.
+       * @default []
+       */
+      redactedIdentifiers?: string[]
+
+      /**
+       * List of identifier names to exclude from redaction.
+       * @default []
+       */
+      redactionExcludedIdentifiers?: string[]
+    }
   }
 
   /**
@@ -2994,6 +3034,14 @@ declare namespace tracer {
       annotationContext<T> (options: llmobs.AnnotationContextOptions, fn: () => T): T
 
       /**
+       * Execute a function within a routing context, directing all LLMObs spans to a specific Datadog organization.
+       * @param options The routing context options containing the target API key and optional site.
+       * @param fn The callback over which to apply the routing context.
+       * @returns The result of the function.
+       */
+      routingContext<T> (options: llmobs.RoutingContextOptions, fn: () => T): T
+
+      /**
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
       flush (): void
@@ -3217,6 +3265,18 @@ declare namespace tracer {
        * A Prompt object that represents the prompt used for an LLM call. Only used on `llm` spans.
        */
       prompt?: Prompt,
+    }
+
+    interface RoutingContextOptions {
+      /**
+       * The Datadog API key for the target organization.
+       */
+      ddApiKey: string,
+
+      /**
+       * The Datadog site for the target organization (e.g., 'datadoghq.eu').
+       */
+      ddSite?: string,
     }
 
     /**
