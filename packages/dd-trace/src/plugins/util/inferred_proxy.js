@@ -18,6 +18,10 @@ const PROXY_HEADER_DOMAIN = 'x-dd-proxy-domain-name'
 const PROXY_HEADER_STAGE = 'x-dd-proxy-stage'
 const PROXY_HEADER_REGION = 'x-dd-proxy-region'
 const PROXY_HEADER_RESOURCE_PATH = 'x-dd-proxy-resource-path'
+const PROXY_HEADER_ACCOUNT_ID = 'x-dd-proxy-account-id'
+const PROXY_HEADER_API_ID = 'x-dd-proxy-api-id'
+const PROXY_HEADER_REGION = 'x-dd-proxy-region'
+const PROXY_HEADER_AWS_USER = 'x-dd-proxy-user'
 
 const supportedProxies = {
   'aws-apigateway': {
@@ -67,7 +71,11 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
       [HTTP_URL]: 'https://' + proxyContext.domainName + proxyContext.path,
       stage: proxyContext.stage,
       region: proxyContext.region,
-      ...(proxyContext.resourcePath && { [HTTP_ROUTE]: proxyContext.resourcePath })
+      ...(proxyContext.resourcePath && { [HTTP_ROUTE]: proxyContext.resourcePath }),
+      ...(proxyContext.accountId && { account_id: proxyContext.accountId }),
+      ...(proxyContext.apiId && { apiid: proxyContext.apiId }),
+      ...(proxyContext.region && { region: proxyContext.region }),
+      ...(proxyContext.awsUser && { aws_user: proxyContext.awsUser })
     },
   }, traceCtx, config)
 
@@ -85,6 +93,16 @@ function setInferredProxySpanTags (span, proxyContext) {
   const resourcePath = proxyContext.resourcePath || proxyContext.path
   span.setTag(RESOURCE_NAME, `${proxyContext.method} ${resourcePath}`)
   span.setTag('_dd.inferred_span', 1)
+
+  // Set dd_resource_key as API Gateway ARN if we have the required components
+  if (proxyContext.apiId && proxyContext.region) {
+    const partition = 'aws'
+    // API Gateway v1 (REST): arn:{partition}:apigateway:{region}::/restapis/{api-id}
+    // API Gateway v2 (HTTP): arn:{partition}:apigateway:{region}::/apis/{api-id}
+    const apiType = proxyContext.proxySystemName === 'aws-httpapi' ? 'apis' : 'restapis'
+    span.setTag('dd_resource_key', `arn:${partition}:apigateway:${proxyContext.region}::/${apiType}/${proxyContext.apiId}`)
+  }
+
   return span
 }
 
@@ -109,6 +127,10 @@ function extractInferredProxyContext (headers) {
     proxySystemName: headers[PROXY_HEADER_SYSTEM],
     region: headers[PROXY_HEADER_REGION],
     resourcePath: headers[PROXY_HEADER_RESOURCE_PATH],
+    accountId: headers[PROXY_HEADER_ACCOUNT_ID],
+    apiId: headers[PROXY_HEADER_API_ID],
+    region: headers[PROXY_HEADER_REGION],
+    awsUser: headers[PROXY_HEADER_AWS_USER],
   }
 }
 

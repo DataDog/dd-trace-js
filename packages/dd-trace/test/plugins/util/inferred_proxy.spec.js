@@ -160,6 +160,20 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
     'x-dd-proxy-resource-path': '/users/{id}'
   }
 
+  const inferredHeadersWithOptionalTags = {
+    'x-dd-proxy': 'aws-apigateway',
+    'x-dd-proxy-request-time-ms': '1729780025473',
+    'x-dd-proxy-path': '/users/123',
+    'x-dd-proxy-httpmethod': 'GET',
+    'x-dd-proxy-domain-name': 'example.com',
+    'x-dd-proxy-stage': 'prod',
+    'x-dd-proxy-resource-path': '/users/{id}',
+    'x-dd-proxy-account-id': '123456789012',
+    'x-dd-proxy-api-id': 'abc123def4',
+    'x-dd-proxy-region': 'us-east-1',
+    'x-dd-proxy-user': 'arn:aws:iam::123456789012:user/testuser'
+  }
+
   afterEach(async () => {
     await cleanupTest()
   })
@@ -290,6 +304,31 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           },
           metrics: {
             '_dd.inferred_span': 1
+          }
+        })
+      })
+    })
+
+    it('should include optional tags when corresponding headers are present', async () => {
+      await loadTest({})
+
+      await httpClient.get(`http://127.0.0.1:${port}/`, {
+        headers: inferredHeadersWithOptionalTags
+      })
+
+      await agent.assertSomeTraces(traces => {
+        const spans = traces[0]
+
+        assert.strictEqual(spans.length, 2)
+        assert.strictEqual(spans[0].name, 'aws.apigateway')
+
+        assertObjectContains(spans[0], {
+          meta: {
+            account_id: '123456789012',
+            apiid: 'abc123def4',
+            region: 'us-east-1',
+            aws_user: 'arn:aws:iam::123456789012:user/testuser',
+            dd_resource_key: 'arn:aws:apigateway:us-east-1::/restapis/abc123def4'
           }
         })
       })
