@@ -4,10 +4,19 @@ const { NativeSpanState, OpCode } = require('./index')
 const log = require('../log')
 
 // Default buffer sizes
-const CHANGE_QUEUE_BUFFER_SIZE = 64 * 1024 // 64KB
+const CHANGE_QUEUE_BUFFER_SIZE = 8 * 1024 * 1024 // 64KB
 const STRING_TABLE_INPUT_BUFFER_SIZE = 10 * 1024 // 10KB
 const SAMPLING_BUFFER_SIZE = 1024 // 1KB
 const FLUSH_BUFFER_SIZE = 10 * 1024 // 10KB
+
+// Pre-compute BigInt versions of opcodes to avoid allocation in hot path
+// Index by opcode number for O(1) lookup
+const OpCodeBigInt = []
+if (OpCode) {
+  for (const value of Object.values(OpCode)) {
+    OpCodeBigInt[value] = BigInt(value)
+  }
+}
 
 /**
  * NativeSpansInterface provides the JavaScript bridge to the native span storage.
@@ -54,6 +63,9 @@ class NativeSpansInterface {
     // First 8 bytes store the count of operations
     this._cqbIndex = 8
     this._cqbCount = 0
+
+    // Create DataView for efficient typed writes
+    this._cqbView = new DataView(this._changeQueueBuffer.buffer, this._changeQueueBuffer.byteOffset)
 
     // String table state
     this._stringMap = new Map()
@@ -189,12 +201,12 @@ class NativeSpansInterface {
    * [Count:u64][OpCode:u64, SpanId:u64, Args...]...
    *
    * @param {number} op The OpCode value
-   * @param {bigint} spanId The span ID (as BigInt)
+   * @param {Uint8Array|number[]} spanId The span ID as a byte buffer (big-endian)
    * @param {...(string|Array)} args Operation arguments
    */
   queueOp (op, spanId, ...args) {
     // Check if Rust flushed the queue (wrote 0 to count position)
-    if (this._changeQueueBuffer.readBigUInt64LE(0) === 0n && this._cqbCount > 0) {
+    if (this._cqbView.getUint32(0, true) === 0 && this._cqbCount > 0) {
       this._cqbIndex = 8
       this._cqbCount = 0
     }
@@ -206,64 +218,141 @@ class NativeSpansInterface {
       this.flushChangeQueue()
     }
 
-    // Write opcode
-    this._changeQueueBuffer.writeBigUInt64LE(BigInt(op), this._cqbIndex)
-    this._cqbIndex += 8
+    const buf = this._changeQueueBuffer
+    const view = this._cqbView
+    let idx = this._cqbIndex
 
-    // Write span ID
-    this._changeQueueBuffer.writeBigUInt64LE(spanId, this._cqbIndex)
-    this._cqbIndex += 8
+    // Write opcode (use pre-computed BigInt)
+    view.setBigUint64(idx, OpCodeBigInt[op] ?? BigInt(op), true)
+    idx += 8
+
+    // Write span ID (convert from big-endian buffer to little-endian)
+    buf[idx] = spanId[7]
+    buf[idx + 1] = spanId[6]
+    buf[idx + 2] = spanId[5]
+    buf[idx + 3] = spanId[4]
+    buf[idx + 4] = spanId[3]
+    buf[idx + 5] = spanId[2]
+    buf[idx + 6] = spanId[1]
+    buf[idx + 7] = spanId[0]
+    idx += 8
 
     // Write arguments
-    for (const arg of args) {
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i]
       if (typeof arg === 'string') {
         const stringId = this.getStringId(arg)
-        this._changeQueueBuffer.writeUInt32LE(stringId, this._cqbIndex)
-        this._cqbIndex += 4
-      } else if (Array.isArray(arg)) {
-        const [type, value] = arg
+        view.setUint32(idx, stringId, true)
+        idx += 4
+      } else {
+        const type = arg[0]
+        const value = arg[1]
         switch (type) {
-          case 'u64':
-            this._changeQueueBuffer.writeBigUInt64LE(value, this._cqbIndex)
-            this._cqbIndex += 8
+          case 'id64': {
+            // value is an Identifier, its _buffer (big-endian bytes), or null
+            if (value === null || value === undefined) {
+              // Write 8 zero bytes
+              view.setBigUint64(idx, 0n, true)
+            } else {
+              const b = value._buffer ?? value
+              // Write 8 bytes as little-endian (reverse big-endian buffer)
+              buf[idx] = b[7]
+              buf[idx + 1] = b[6]
+              buf[idx + 2] = b[5]
+              buf[idx + 3] = b[4]
+              buf[idx + 4] = b[3]
+              buf[idx + 5] = b[2]
+              buf[idx + 6] = b[1]
+              buf[idx + 7] = b[0]
+            }
+            idx += 8
             break
-          case 'u128':
-            // u128 is passed as array of two BigInts [high, low]
-            // For little-endian u128, low bytes come first, then high bytes
-            this._changeQueueBuffer.writeBigUInt64LE(value[1], this._cqbIndex)  // low part first
-            this._cqbIndex += 8
-            this._changeQueueBuffer.writeBigUInt64LE(value[0], this._cqbIndex)  // high part second
-            this._cqbIndex += 8
+          }
+          case 'id128': {
+            // value is an Identifier or its _buffer (big-endian bytes)
+            const b = value._buffer ?? value
+            if (b.length > 8) {
+              // 128-bit: write low 8 bytes as LE, then high 8 bytes as LE
+              buf[idx] = b[15]
+              buf[idx + 1] = b[14]
+              buf[idx + 2] = b[13]
+              buf[idx + 3] = b[12]
+              buf[idx + 4] = b[11]
+              buf[idx + 5] = b[10]
+              buf[idx + 6] = b[9]
+              buf[idx + 7] = b[8]
+              idx += 8
+              buf[idx] = b[7]
+              buf[idx + 1] = b[6]
+              buf[idx + 2] = b[5]
+              buf[idx + 3] = b[4]
+              buf[idx + 4] = b[3]
+              buf[idx + 5] = b[2]
+              buf[idx + 6] = b[1]
+              buf[idx + 7] = b[0]
+              idx += 8
+            } else {
+              // 64-bit: write as LE, high part is zero
+              buf[idx] = b[7]
+              buf[idx + 1] = b[6]
+              buf[idx + 2] = b[5]
+              buf[idx + 3] = b[4]
+              buf[idx + 4] = b[3]
+              buf[idx + 5] = b[2]
+              buf[idx + 6] = b[1]
+              buf[idx + 7] = b[0]
+              idx += 8
+              // High part is zero
+              view.setBigUint64(idx, 0n, true)
+              idx += 8
+            }
+            break
+          }
+          case 'u64':
+            view.setBigUint64(idx, value, true)
+            idx += 8
             break
           case 'i64':
-            this._changeQueueBuffer.writeBigInt64LE(value, this._cqbIndex)
-            this._cqbIndex += 8
+            view.setBigInt64(idx, value, true)
+            idx += 8
             break
+          case 'ns': {
+            // Nanoseconds from milliseconds - avoid BigInt allocation
+            // Split into low and high 32-bit parts using Math ops (bitwise only works up to 2^32)
+            const ns = Math.round(value * 1e6)
+            const low = ns % 0x100000000
+            const high = Math.floor(ns / 0x100000000)
+            view.setUint32(idx, low, true)
+            view.setUint32(idx + 4, high, true)
+            idx += 8
+            break
+          }
           case 'i32':
-            this._changeQueueBuffer.writeInt32LE(value, this._cqbIndex)
-            this._cqbIndex += 4
+            view.setInt32(idx, value, true)
+            idx += 4
             break
           case 'f64':
-            this._changeQueueBuffer.writeDoubleLE(value, this._cqbIndex)
-            this._cqbIndex += 8
+            view.setFloat64(idx, value, true)
+            idx += 8
             break
           default:
             throw new Error(`Unsupported argument type: ${type}`)
         }
-      } else {
-        throw new Error(`Invalid argument: ${arg}`)
       }
     }
 
-    // Update count
+    this._cqbIndex = idx
+
+    // Update count (write as two 32-bit values to avoid BigInt allocation)
     this._cqbCount++
-    this._changeQueueBuffer.writeBigUInt64LE(BigInt(this._cqbCount), 0)
+    view.setUint32(0, this._cqbCount, true)
+    view.setUint32(4, 0, true) // high 32 bits are always 0
   }
 
   /**
    * Flush spans to the Datadog agent.
    *
-   * @param {bigint[]} spanIds Array of span IDs to flush
+   * @param {Array<Uint8Array|number[]>} spanIds Array of span ID buffers (big-endian)
    * @param {boolean} [firstIsLocalRoot=true] Whether the first span is the local root
    * @returns {Promise<string>} Response from the agent
    */
@@ -281,10 +370,12 @@ class NativeSpansInterface {
       this._flushBuffer = Buffer.alloc(requiredSize)
     }
 
-    // Write span IDs to flush buffer
+    // Write span IDs to flush buffer (convert from big-endian to little-endian)
     let index = 0
     for (const spanId of spanIds) {
-      this._flushBuffer.writeBigUInt64LE(spanId, index)
+      for (let i = 0; i < 8; i++) {
+        this._flushBuffer[index + i] = spanId[7 - i]
+      }
       index += 8
     }
 
@@ -298,139 +389,155 @@ class NativeSpansInterface {
   }
 
   /**
+   * Convert a big-endian span ID buffer to BigInt for native calls.
+   * @param {Uint8Array|number[]} buf The span ID buffer
+   * @returns {bigint}
+   */
+  #bufferToBigInt (buf) {
+    return (BigInt(buf[0]) << 56n) |
+           (BigInt(buf[1]) << 48n) |
+           (BigInt(buf[2]) << 40n) |
+           (BigInt(buf[3]) << 32n) |
+           (BigInt(buf[4]) << 24n) |
+           (BigInt(buf[5]) << 16n) |
+           (BigInt(buf[6]) << 8n) |
+           BigInt(buf[7])
+  }
+
+  /**
    * Get a meta (string) attribute from a span.
    *
-   * @param {bigint} spanId The span ID
+   * @param {Uint8Array|number[]} spanId The span ID buffer
    * @param {string} key The attribute key
    * @returns {string|null} The attribute value or null
    */
   getMetaAttr (spanId, key) {
     this.flushChangeQueue()
-    return this._state.getMetaAttr(spanId, key)
+    return this._state.getMetaAttr(this.#bufferToBigInt(spanId), key)
   }
 
   /**
    * Get a metric (numeric) attribute from a span.
    *
-   * @param {bigint} spanId The span ID
+   * @param {Uint8Array|number[]} spanId The span ID buffer
    * @param {string} key The attribute key
    * @returns {number|null} The attribute value or null
    */
   getMetricAttr (spanId, key) {
     this.flushChangeQueue()
-    return this._state.getMetricAttr(spanId, key)
+    return this._state.getMetricAttr(this.#bufferToBigInt(spanId), key)
   }
 
   /**
    * Get the span name.
    *
-   * @param {bigint} spanId The span ID
+   * @param {Uint8Array|number[]} spanId The span ID buffer
    * @returns {string} The span name
    */
   getName (spanId) {
     this.flushChangeQueue()
-    return this._state.getName(spanId)
+    return this._state.getName(this.#bufferToBigInt(spanId))
   }
 
   /**
    * Get the service name.
    *
-   * @param {bigint} spanId The span ID
+   * @param {Uint8Array|number[]} spanId The span ID buffer
    * @returns {string} The service name
    */
   getServiceName (spanId) {
     this.flushChangeQueue()
-    return this._state.getServiceName(spanId)
+    return this._state.getServiceName(this.#bufferToBigInt(spanId))
   }
 
   /**
    * Get the resource name.
    *
-   * @param {bigint} spanId The span ID
+   * @param {Uint8Array|number[]} spanId The span ID buffer
    * @returns {string} The resource name
    */
   getResourceName (spanId) {
     this.flushChangeQueue()
-    return this._state.getResourceName(spanId)
+    return this._state.getResourceName(this.#bufferToBigInt(spanId))
   }
 
   /**
    * Get the span type.
    *
-   * @param {bigint} spanId The span ID
+   * @param {Uint8Array|number[]} spanId The span ID buffer
    * @returns {string} The span type
    */
   getType (spanId) {
     this.flushChangeQueue()
-    return this._state.getType(spanId)
+    return this._state.getType(this.#bufferToBigInt(spanId))
   }
 
   /**
    * Get the error flag.
    *
-   * @param {bigint} spanId The span ID
+   * @param {Uint8Array|number[]} spanId The span ID buffer
    * @returns {number} The error flag (0 or 1)
    */
   getError (spanId) {
     this.flushChangeQueue()
-    return this._state.getError(spanId)
+    return this._state.getError(this.#bufferToBigInt(spanId))
   }
 
   /**
    * Get the start time.
    *
-   * @param {bigint} spanId The span ID
+   * @param {Uint8Array|number[]} spanId The span ID buffer
    * @returns {number} The start time in nanoseconds
    */
   getStart (spanId) {
     this.flushChangeQueue()
-    return this._state.getStart(spanId)
+    return this._state.getStart(this.#bufferToBigInt(spanId))
   }
 
   /**
    * Get the duration.
    *
-   * @param {bigint} spanId The span ID
+   * @param {Uint8Array|number[]} spanId The span ID buffer
    * @returns {number} The duration in nanoseconds
    */
   getDuration (spanId) {
     this.flushChangeQueue()
-    return this._state.getDuration(spanId)
+    return this._state.getDuration(this.#bufferToBigInt(spanId))
   }
 
   /**
    * Get a trace-level meta attribute.
    *
-   * @param {bigint} spanId A span ID in the trace
+   * @param {Uint8Array|number[]} spanId A span ID buffer in the trace
    * @param {string} key The attribute key
    * @returns {string|null} The attribute value or null
    */
   getTraceMetaAttr (spanId, key) {
     this.flushChangeQueue()
-    return this._state.getTraceMetaAttr(spanId, key)
+    return this._state.getTraceMetaAttr(this.#bufferToBigInt(spanId), key)
   }
 
   /**
    * Get a trace-level metric attribute.
    *
-   * @param {bigint} spanId A span ID in the trace
+   * @param {Uint8Array|number[]} spanId A span ID buffer in the trace
    * @param {string} key The attribute key
    * @returns {number|null} The attribute value or null
    */
   getTraceMetricAttr (spanId, key) {
     this.flushChangeQueue()
-    return this._state.getTraceMetricAttr(spanId, key)
+    return this._state.getTraceMetricAttr(this.#bufferToBigInt(spanId), key)
   }
 
   /**
    * Get the trace origin.
    *
-   * @param {bigint} spanId A span ID in the trace
+   * @param {Uint8Array|number[]} spanId A span ID buffer in the trace
    * @returns {string|null} The trace origin or null
    */
   getTraceOrigin (spanId) {
     this.flushChangeQueue()
-    return this._state.getTraceOrigin(spanId)
+    return this._state.getTraceOrigin(this.#bufferToBigInt(spanId))
   }
 
   /**
@@ -439,15 +546,17 @@ class NativeSpansInterface {
    * This delegates to the native Rust sampling implementation which
    * makes the sampling decision based on configured rules and rates.
    *
-   * @param {bigint} spanId The span ID to sample
+   * @param {Uint8Array|number[]} spanId The span ID buffer to sample
    * @returns {number} The sampling priority (-1=AUTO_REJECT, 0=AUTO_KEEP, 1=USER_REJECT, 2=USER_KEEP)
    */
   sample (spanId) {
     // Flush pending changes so native has current span state
     this.flushChangeQueue()
 
-    // Write span ID to sampling buffer as u64 LE (required by native side)
-    this._samplingBuffer.writeBigUInt64LE(spanId, 0)
+    // Write span ID to sampling buffer as u64 LE (convert from big-endian)
+    for (let i = 0; i < 8; i++) {
+      this._samplingBuffer[i] = spanId[7 - i]
+    }
 
     return this._state.sample()
   }

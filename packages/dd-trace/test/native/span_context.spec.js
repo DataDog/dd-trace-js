@@ -13,6 +13,7 @@ describe('NativeSpanContext', () => {
   let nativeSpans
   let OpCode
   let id
+  let idBuffer
 
   beforeEach(() => {
     OpCode = {
@@ -32,11 +33,13 @@ describe('NativeSpanContext', () => {
       queueOp: sinon.stub()
     }
 
-    // Create a mock ID object
+    // Create a mock ID object with proper 8-byte buffer (big-endian)
+    idBuffer = Buffer.from([0x00, 0x00, 0x00, 0x00, 0x07, 0x5b, 0xcd, 0x15]) // 123456789 as BE
     id = {
       toString: () => '123456789',
       toBigInt: () => 123456789n,
-      toBuffer: () => Buffer.from('123456789')
+      toBuffer: () => idBuffer,
+      _buffer: idBuffer
     }
 
     NativeSpanContext = proxyquire('../../src/native/span_context', {
@@ -66,13 +69,13 @@ describe('NativeSpanContext', () => {
       assert.deepStrictEqual(spanContext._baggageItems, { foo: 'bar' })
     })
 
-    it('should set native span ID from spanId', () => {
+    it('should set native span ID buffer from spanId', () => {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: id,
         spanId: id
       })
 
-      assert.strictEqual(spanContext._nativeSpanId, 123456789n)
+      assert.deepStrictEqual(spanContext._nativeSpanId, id.toBuffer())
     })
   })
 
@@ -90,7 +93,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetServiceName,
-        123456789n,
+        idBuffer,
         'my-service'
       )
     })
@@ -101,7 +104,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetResourceName,
-        123456789n,
+        idBuffer,
         'GET /api/users'
       )
     })
@@ -112,7 +115,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetType,
-        123456789n,
+        idBuffer,
         'web'
       )
     })
@@ -123,7 +126,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetError,
-        123456789n,
+        idBuffer,
         ['i32', 1]
       )
     })
@@ -134,7 +137,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetError,
-        123456789n,
+        idBuffer,
         ['i32', 0]
       )
     })
@@ -145,21 +148,33 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetMetaAttr,
-        123456789n,
+        idBuffer,
         'http.url',
         'https://example.com'
       )
     })
 
     it('should sync number tags via SetMetricAttr', () => {
-      spanContext.setTag('http.status_code', 200)
+      spanContext.setTag('response.size', 1024)
 
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetMetricAttr,
-        123456789n,
+        idBuffer,
+        'response.size',
+        ['f64', 1024]
+      )
+    })
+
+    it('should sync http.status_code as meta string (special case)', () => {
+      spanContext.setTag('http.status_code', 200)
+
+      sinon.assert.calledWith(
+        nativeSpans.queueOp,
+        OpCode.SetMetaAttr,
+        idBuffer,
         'http.status_code',
-        ['f64', 200]
+        '200'
       )
     })
 
@@ -169,7 +184,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetMetricAttr,
-        123456789n,
+        idBuffer,
         'some.flag',
         ['f64', 1]
       )
@@ -280,7 +295,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetName,
-        123456789n,
+        idBuffer,
         'my-operation'
       )
     })
@@ -311,7 +326,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetTraceMetaAttr,
-        123456789n,
+        idBuffer,
         '_dd.p.tid',
         'abc123'
       )
@@ -323,7 +338,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetTraceMetricsAttr,
-        123456789n,
+        idBuffer,
         '_sampling_priority_v1',
         ['f64', 2]
       )
@@ -344,7 +359,7 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetTraceOrigin,
-        123456789n,
+        idBuffer,
         'synthetics'
       )
     })
@@ -357,7 +372,7 @@ describe('NativeSpanContext', () => {
         spanId: id
       })
 
-      assert.strictEqual(spanContext.nativeSpanId, 123456789n)
+      assert.strictEqual(spanContext.nativeSpanId, idBuffer)
     })
   })
 

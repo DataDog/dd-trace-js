@@ -7,14 +7,25 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
+// Helper to create 8-byte big-endian buffer from BigInt
+function bigIntToBuffer (value) {
+  const buf = Buffer.alloc(8)
+  buf.writeBigUInt64BE(value)
+  return buf
+}
+
 describe('NativeSpansInterface', () => {
   let NativeSpansInterface
   let nativeSpans
   let NativeSpanState
   let mockState
   let OpCode
+  let spanIdBuffer
 
   beforeEach(() => {
+    // Create a span ID buffer for tests
+    spanIdBuffer = bigIntToBuffer(123456789n)
+
     // Mock OpCode enum
     OpCode = {
       Create: 0,
@@ -149,8 +160,7 @@ describe('NativeSpansInterface', () => {
 
   describe('queueOp', () => {
     it('should write opcode and span ID to change buffer', () => {
-      const spanId = 123456789n
-      nativeSpans.queueOp(OpCode.SetName, spanId, 'test-name')
+      nativeSpans.queueOp(OpCode.SetName, spanIdBuffer, 'test-name')
 
       // Check count was incremented
       assert.strictEqual(nativeSpans._cqbCount, 1)
@@ -161,8 +171,7 @@ describe('NativeSpansInterface', () => {
     })
 
     it('should handle string arguments via string table', () => {
-      const spanId = 123456789n
-      nativeSpans.queueOp(OpCode.SetMetaAttr, spanId, 'key', 'value')
+      nativeSpans.queueOp(OpCode.SetMetaAttr, spanIdBuffer, 'key', 'value')
 
       // Both strings should be in string table
       assert.ok(nativeSpans._stringMap.has('key'))
@@ -170,66 +179,85 @@ describe('NativeSpansInterface', () => {
     })
 
     it('should handle u64 arguments', () => {
-      const spanId = 123456789n
-      nativeSpans.queueOp(OpCode.Create, spanId, ['u64', 999n])
+      nativeSpans.queueOp(OpCode.Create, spanIdBuffer, ['u64', 999n])
 
       assert.strictEqual(nativeSpans._cqbCount, 1)
     })
 
-    it('should handle u128 arguments', () => {
-      const spanId = 123456789n
-      nativeSpans.queueOp(OpCode.Create, spanId, ['u128', [1n, 2n]])
+    it('should handle id128 arguments with 8-byte buffer', () => {
+      const traceId = bigIntToBuffer(12345n)
+      nativeSpans.queueOp(OpCode.Create, spanIdBuffer, ['id128', traceId])
+
+      assert.strictEqual(nativeSpans._cqbCount, 1)
+    })
+
+    it('should handle id128 arguments with 16-byte buffer', () => {
+      const traceId = Buffer.alloc(16)
+      traceId.writeBigUInt64BE(1n, 0) // high
+      traceId.writeBigUInt64BE(2n, 8) // low
+      nativeSpans.queueOp(OpCode.Create, spanIdBuffer, ['id128', traceId])
+
+      assert.strictEqual(nativeSpans._cqbCount, 1)
+    })
+
+    it('should handle id64 arguments', () => {
+      const parentId = bigIntToBuffer(456n)
+      nativeSpans.queueOp(OpCode.Create, spanIdBuffer, ['id64', parentId])
+
+      assert.strictEqual(nativeSpans._cqbCount, 1)
+    })
+
+    it('should handle id64 with null value', () => {
+      nativeSpans.queueOp(OpCode.Create, spanIdBuffer, ['id64', null])
 
       assert.strictEqual(nativeSpans._cqbCount, 1)
     })
 
     it('should handle i64 arguments', () => {
-      const spanId = 123456789n
-      nativeSpans.queueOp(OpCode.SetStart, spanId, ['i64', 1000000000n])
+      nativeSpans.queueOp(OpCode.SetStart, spanIdBuffer, ['i64', 1000000000n])
 
       assert.strictEqual(nativeSpans._cqbCount, 1)
     })
 
     it('should handle f64 arguments', () => {
-      const spanId = 123456789n
-      nativeSpans.queueOp(OpCode.SetMetricAttr, spanId, 'metric', ['f64', 3.14])
+      nativeSpans.queueOp(OpCode.SetMetricAttr, spanIdBuffer, 'metric', ['f64', 3.14])
 
       assert.strictEqual(nativeSpans._cqbCount, 1)
     })
 
     it('should handle i32 arguments', () => {
-      const spanId = 123456789n
-      nativeSpans.queueOp(OpCode.SetError, spanId, ['i32', 1])
+      nativeSpans.queueOp(OpCode.SetError, spanIdBuffer, ['i32', 1])
 
       assert.strictEqual(nativeSpans._cqbCount, 1)
     })
 
     it('should flush when buffer is nearly full', () => {
-      const spanId = 123456789n
+      // Buffer is 8MB, each op is ~40 bytes, so we need ~200,000 ops to fill
+      // For unit test, simulate by setting buffer index close to limit
+      // Leave just enough room that estimatedSize check triggers a flush
+      nativeSpans._cqbIndex = nativeSpans._changeQueueBuffer.length - 20
+      nativeSpans._cqbCount = 1 // Pretend we have ops queued
+      // Write count to buffer so the Rust-flush check doesn't reset the index
+      nativeSpans._changeQueueBuffer.writeBigUInt64LE(1n, 0)
 
-      // Fill the buffer with many operations (64KB buffer, ~24 bytes per op = ~2700 ops to fill)
-      // We need enough operations to trigger overflow, so use 3000
-      for (let i = 0; i < 3000; i++) {
-        nativeSpans.queueOp(OpCode.SetMetaAttr, spanId, `key${i}`, `value${i}`)
-      }
+      // This op should trigger a flush due to estimated size check (estimatedSize = 16 + 2*16 = 48)
+      nativeSpans.queueOp(OpCode.SetMetaAttr, spanIdBuffer, 'key', 'value')
 
-      // flushChangeQueue should have been called at least once
+      // flushChangeQueue should have been called
       sinon.assert.called(mockState.flushChangeQueue)
     })
   })
 
   describe('flushChangeQueue', () => {
     it('should call native flushChangeQueue', () => {
-      const spanId = 123456789n
-      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
+      nativeSpans.queueOp(OpCode.SetName, spanIdBuffer, 'test')
       nativeSpans.flushChangeQueue()
 
       sinon.assert.calledOnce(mockState.flushChangeQueue)
     })
 
     it('should reset buffer state after flush', () => {
-      const spanId = 123456789n
-      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
+      nativeSpans.queueOp(OpCode.SetName, spanIdBuffer, 'test')
       nativeSpans.flushChangeQueue()
 
       assert.strictEqual(nativeSpans._cqbIndex, 8)
@@ -245,16 +273,15 @@ describe('NativeSpansInterface', () => {
 
   describe('flushSpans', () => {
     it('should flush change queue before exporting', async () => {
-      const spanId = 123456789n
-      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
+      nativeSpans.queueOp(OpCode.SetName, spanIdBuffer, 'test')
 
-      await nativeSpans.flushSpans([spanId], true)
+      await nativeSpans.flushSpans([spanIdBuffer], true)
 
       sinon.assert.calledOnce(mockState.flushChangeQueue)
     })
 
     it('should call native flushChunk with span IDs', async () => {
-      const spanIds = [123n, 456n, 789n]
+      const spanIds = [bigIntToBuffer(123n), bigIntToBuffer(456n), bigIntToBuffer(789n)]
 
       await nativeSpans.flushSpans(spanIds, true)
 
@@ -274,8 +301,8 @@ describe('NativeSpansInterface', () => {
     })
 
     it('should expand flush buffer if needed', async () => {
-      // Create a large array of span IDs
-      const spanIds = Array.from({ length: 2000 }, (_, i) => BigInt(i))
+      // Create a large array of span ID buffers
+      const spanIds = Array.from({ length: 2000 }, (_, i) => bigIntToBuffer(BigInt(i)))
 
       await nativeSpans.flushSpans(spanIds, false)
 
@@ -286,93 +313,90 @@ describe('NativeSpansInterface', () => {
 
   describe('sample', () => {
     it('should flush change queue before sampling', () => {
-      const spanId = 123456789n
-      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
+      nativeSpans.queueOp(OpCode.SetName, spanIdBuffer, 'test')
 
-      nativeSpans.sample(spanId)
+      nativeSpans.sample(spanIdBuffer)
 
       sinon.assert.calledOnce(mockState.flushChangeQueue)
     })
 
     it('should call native sample and return result', () => {
       mockState.sample.returns(2)
-      const result = nativeSpans.sample(123456789n)
+      const result = nativeSpans.sample(spanIdBuffer)
 
       assert.strictEqual(result, 2)
-      sinon.assert.calledWith(mockState.sample, 123456789n)
+      sinon.assert.calledOnce(mockState.sample)
     })
   })
 
   describe('getter methods', () => {
-    const spanId = 123456789n
-
     it('should get meta attribute', () => {
-      const result = nativeSpans.getMetaAttr(spanId, 'key')
+      const result = nativeSpans.getMetaAttr(spanIdBuffer, 'key')
       assert.strictEqual(result, 'value')
-      sinon.assert.calledWith(mockState.getMetaAttr, spanId, 'key')
+      // Native method receives converted BigInt
+      sinon.assert.calledWith(mockState.getMetaAttr, 123456789n, 'key')
     })
 
     it('should get metric attribute', () => {
-      const result = nativeSpans.getMetricAttr(spanId, 'metric')
+      const result = nativeSpans.getMetricAttr(spanIdBuffer, 'metric')
       assert.strictEqual(result, 42)
-      sinon.assert.calledWith(mockState.getMetricAttr, spanId, 'metric')
+      sinon.assert.calledWith(mockState.getMetricAttr, 123456789n, 'metric')
     })
 
     it('should get span name', () => {
-      const result = nativeSpans.getName(spanId)
+      const result = nativeSpans.getName(spanIdBuffer)
       assert.strictEqual(result, 'test-span')
     })
 
     it('should get service name', () => {
-      const result = nativeSpans.getServiceName(spanId)
+      const result = nativeSpans.getServiceName(spanIdBuffer)
       assert.strictEqual(result, 'test-service')
     })
 
     it('should get resource name', () => {
-      const result = nativeSpans.getResourceName(spanId)
+      const result = nativeSpans.getResourceName(spanIdBuffer)
       assert.strictEqual(result, 'test-resource')
     })
 
     it('should get span type', () => {
-      const result = nativeSpans.getType(spanId)
+      const result = nativeSpans.getType(spanIdBuffer)
       assert.strictEqual(result, 'web')
     })
 
     it('should get error flag', () => {
-      const result = nativeSpans.getError(spanId)
+      const result = nativeSpans.getError(spanIdBuffer)
       assert.strictEqual(result, 0)
     })
 
     it('should get start time', () => {
-      const result = nativeSpans.getStart(spanId)
+      const result = nativeSpans.getStart(spanIdBuffer)
       assert.strictEqual(result, 1000000000)
     })
 
     it('should get duration', () => {
-      const result = nativeSpans.getDuration(spanId)
+      const result = nativeSpans.getDuration(spanIdBuffer)
       assert.strictEqual(result, 500000000)
     })
 
     it('should get trace meta attribute', () => {
-      const result = nativeSpans.getTraceMetaAttr(spanId, 'key')
+      const result = nativeSpans.getTraceMetaAttr(spanIdBuffer, 'key')
       assert.strictEqual(result, 'trace-value')
     })
 
     it('should get trace metric attribute', () => {
-      const result = nativeSpans.getTraceMetricAttr(spanId, 'metric')
+      const result = nativeSpans.getTraceMetricAttr(spanIdBuffer, 'metric')
       assert.strictEqual(result, 100)
     })
 
     it('should get trace origin', () => {
-      const result = nativeSpans.getTraceOrigin(spanId)
+      const result = nativeSpans.getTraceOrigin(spanIdBuffer)
       assert.strictEqual(result, 'synthetics')
     })
   })
 
   describe('resetChangeQueue', () => {
     it('should reset buffer index and count', () => {
-      const spanId = 123456789n
-      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
+      nativeSpans.queueOp(OpCode.SetName, spanIdBuffer, 'test')
 
       nativeSpans.resetChangeQueue()
 

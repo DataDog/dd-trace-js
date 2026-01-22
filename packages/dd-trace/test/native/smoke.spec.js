@@ -102,11 +102,13 @@ describe('Native Spans Smoke Tests', () => {
 
   describe('NativeSpansInterface integration', () => {
     it('should queue operations and flush to native', () => {
-      const spanId = 12345n
+      // Create an 8-byte big-endian buffer for span ID
+      const spanIdBuffer = Buffer.alloc(8)
+      spanIdBuffer.writeBigUInt64BE(12345n)
 
-      nativeSpans.queueOp(OpCode.Create, spanId, ['u128', [0n, spanId]], ['u64', 0n])
-      nativeSpans.queueOp(OpCode.SetName, spanId, 'test-operation')
-      nativeSpans.queueOp(OpCode.SetServiceName, spanId, 'test-service')
+      nativeSpans.queueOp(OpCode.Create, spanIdBuffer, ['id128', spanIdBuffer], ['id64', null])
+      nativeSpans.queueOp(OpCode.SetName, spanIdBuffer, 'test-operation')
+      nativeSpans.queueOp(OpCode.SetServiceName, spanIdBuffer, 'test-service')
 
       assert.strictEqual(nativeSpans._cqbCount, 3)
 
@@ -251,11 +253,11 @@ describe('Native Spans Smoke Tests', () => {
       spanContext.setTag('span.type', 'web')
       spanContext._syncNameToNative('http.request')
 
-      // 3. Queue start time
-      nativeSpans.queueOp(OpCode.SetStart, 999n, ['i64', 1500000000000000000n])
+      // 3. Queue start time (use buffer from spanContext)
+      nativeSpans.queueOp(OpCode.SetStart, spanContext._nativeSpanId, ['i64', 1500000000000000000n])
 
       // 4. Simulate span finishing - queue duration
-      nativeSpans.queueOp(OpCode.SetDuration, 999n, ['i64', 100000000n])
+      nativeSpans.queueOp(OpCode.SetDuration, spanContext._nativeSpanId, ['i64', 100000000n])
 
       // 5. Export via NativeExporter
       const exporter = new NativeExporter({ url: 'http://localhost:8126', flushInterval: 0 }, {}, nativeSpans)
@@ -317,10 +319,15 @@ describe('Native Spans Smoke Tests', () => {
   })
 
   // Helper to create mock spans
-  function createMockSpan (nativeSpanId) {
+  function createMockSpan (nativeSpanIdValue) {
+    // Create an 8-byte buffer for the span ID (big-endian)
+    const nativeSpanId = Buffer.alloc(8)
+    nativeSpanId.writeBigUInt64BE(BigInt(nativeSpanIdValue))
+
     const spanId = {
-      toString: () => String(nativeSpanId),
-      toBigInt: () => nativeSpanId
+      toString: () => String(nativeSpanIdValue),
+      toBigInt: () => BigInt(nativeSpanIdValue),
+      toBuffer: () => nativeSpanId
     }
 
     const context = {
@@ -333,7 +340,16 @@ describe('Native Spans Smoke Tests', () => {
         finished: [],
         tags: {}
       },
-      _tags: {}
+      _tags: {},
+      hasTag: function (key) {
+        return key in this._tags
+      },
+      setTag: function (key, value) {
+        this._tags[key] = value
+      },
+      getTag: function (key) {
+        return this._tags[key]
+      }
     }
 
     return {
