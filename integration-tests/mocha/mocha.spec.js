@@ -3558,8 +3558,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
        *   isDisabled?: boolean,
        *   shouldAlwaysPass?: boolean,
        *   shouldFailSometimes?: boolean,
-       *   extraEnvVars?: Record<string, string>,
-       *   isParallel?: boolean
+       *   extraEnvVars?: Record<string, string>
        * }} [options]
        */
       const runAttemptToFixTest = (done, {
