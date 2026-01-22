@@ -1,7 +1,7 @@
 'use strict'
 
 const { readFileSync } = require('fs')
-const { getEnvironmentVariable, getEnvironmentVariables } = require('../../config/helper')
+const { getEnvironmentVariable, getEnvironmentVariables, getValueFromEnvSources } = require('../../config/helper')
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,
@@ -120,12 +120,12 @@ module.exports = {
         GIT_COMMIT: JENKINS_GIT_COMMIT,
         GIT_URL: JENKINS_GIT_REPOSITORY_URL,
         GIT_URL_1: JENKINS_GIT_REPOSITORY_URL_1,
-        DD_CUSTOM_TRACE_ID,
         NODE_NAME,
         NODE_LABELS,
         CHANGE_ID,
         CHANGE_TARGET
       } = env
+      const DD_CUSTOM_TRACE_ID = getValueFromEnvSources('DD_CUSTOM_TRACE_ID')
 
       tags = {
         [CI_PIPELINE_ID]: BUILD_TAG,
@@ -689,16 +689,13 @@ module.exports = {
     }
 
     if (env.CODEBUILD_INITIATOR?.startsWith('codepipeline/')) {
-      const {
-        CODEBUILD_BUILD_ARN,
-        DD_ACTION_EXECUTION_ID,
-        DD_PIPELINE_EXECUTION_ID
-      } = env
+      const DD_ACTION_EXECUTION_ID = getValueFromEnvSources('DD_ACTION_EXECUTION_ID')
+      const DD_PIPELINE_EXECUTION_ID = getValueFromEnvSources('DD_PIPELINE_EXECUTION_ID')
       tags = {
         [CI_PROVIDER_NAME]: 'awscodepipeline',
         [CI_PIPELINE_ID]: DD_PIPELINE_EXECUTION_ID,
         [CI_ENV_VARS]: JSON.stringify({
-          CODEBUILD_BUILD_ARN,
+          CODEBUILD_BUILD_ARN: env.CODEBUILD_BUILD_ARN,
           DD_PIPELINE_EXECUTION_ID,
           DD_ACTION_EXECUTION_ID
         }),

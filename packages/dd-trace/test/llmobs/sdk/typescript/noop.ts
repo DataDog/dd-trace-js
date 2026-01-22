@@ -1,4 +1,3 @@
-// @ts-ignore
 import tracer from 'dd-trace';
 import * as assert from 'assert';
 const llmobs = tracer.llmobs;

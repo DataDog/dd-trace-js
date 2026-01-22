@@ -240,7 +240,7 @@ describe('Plugin', () => {
             })
           })
 
-          it('shoud sanitize BigInts when doing a multi statement update', async () => {
+          it('should sanitize BigInts when doing a multi statement update', async () => {
             collection.bulkWrite([
               { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } },
               { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } }
