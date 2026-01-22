@@ -3,7 +3,7 @@
 const fs = require('fs')
 const { fileURLToPath } = require('url')
 const { SourceMapper, heap, encode } = require('@datadog/pprof')
-const { getEnvironmentVariable } = require('../config/helper')
+const { getValueFromEnvSources } = require('../config/helper')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 
@@ -17,9 +17,9 @@ function exporterFromURL (url) {
   if (url.protocol === 'file:') {
     return new FileExporter({ pprofPrefix: fileURLToPath(url) })
   }
-  const injectionEnabled = (getEnvironmentVariable('DD_INJECTION_ENABLED') ?? '').split(',')
+  const injectionEnabled = (getValueFromEnvSources('DD_INJECTION_ENABLED') ?? '').split(',')
   const libraryInjected = injectionEnabled.length > 0
-  const profilingEnabled = (getEnvironmentVariable('DD_PROFILING_ENABLED') ?? '').toLowerCase()
+  const profilingEnabled = (getValueFromEnvSources('DD_PROFILING_ENABLED') ?? '').toLowerCase()
   const activation = ['true', '1'].includes(profilingEnabled)
     ? 'manual'
     : profilingEnabled === 'auto'
@@ -62,12 +62,12 @@ async function exportProfile (urls, tags, profileType, profile) {
  * Expected command line arguments are:
  * - Comma separated list of URLs (eg. "http://127.0.0.1:8126/,file:///tmp/foo.pprof")
  * - Tags (eg. "service:nodejs_oom_test,version:1.0.0")
- * - Profiletype (eg. space,wall,cpu)
+ * - Profile type (eg. space,wall,cpu)
  * - JSON profile filepath
  */
 const urls = process.argv[2].split(',').map(s => new URL(s))
 const tags = tagger.parse(process.argv[3])
 const profileType = process.argv[4]
-const profile = JSON.parse(fs.readFileSync(process.argv[5]))
+const profile = JSON.parse(fs.readFileSync(process.argv[5], 'utf8'))
 
 exportProfile(urls, tags, profileType, profile)

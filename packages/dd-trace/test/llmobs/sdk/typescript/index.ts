@@ -1,4 +1,3 @@
-// @ts-ignore
 import tracer from 'dd-trace';
 
 const llmobs = tracer.init({

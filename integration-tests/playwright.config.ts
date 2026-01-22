@@ -1,5 +1,4 @@
 // Playwright typescript config file for integration tests
-// @ts-ignore
 import { devices } from '@playwright/test'
 
 export default {

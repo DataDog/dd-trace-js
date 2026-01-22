@@ -4,6 +4,7 @@ const { readFileSync, mkdtempSync, rmSync, writeFileSync } = require('node:fs')
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const path = require('node:path')
+const os = require('node:os')
 
 const sinon = require('sinon')
 const { it, describe, beforeEach, afterEach } = require('mocha')
@@ -15,6 +16,7 @@ const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../.
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/config/helper')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../../version')
+const StableConfig = require('../../src/config/stable')
 
 describe('Config', () => {
   let getConfig
@@ -22,10 +24,8 @@ describe('Config', () => {
   let pkg
   let env
   let fs
-  let os
   let existsSyncParam
   let existsSyncReturn
-  let osType
   let updateConfig
 
   const RECOMMENDED_JSON_PATH = require.resolve('../../src/appsec/recommended.json')
@@ -51,13 +51,16 @@ describe('Config', () => {
     })
 
     // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
-    getConfig = (options) => proxyquire.noPreserveCache()('../../src/config', {
-      './defaults': configDefaults,
-      '../log': log,
-      '../telemetry': { updateConfig },
-      fs,
-      os
-    })(options)
+    getConfig = (options) => {
+      const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {})
+      return proxyquire.noPreserveCache()('../../src/config', {
+        './defaults': configDefaults,
+        '../log': log,
+        '../telemetry': { updateConfig },
+        fs,
+        './helper': configHelper
+      })(options)
+    }
   }
 
   beforeEach(() => {
@@ -79,12 +82,6 @@ describe('Config', () => {
       mkdtempSync,
       writeFileSync,
     }
-    os = {
-      type () {
-        return osType
-      }
-    }
-    osType = 'Linux'
 
     reloadLoggerAndConfig()
   })
@@ -2475,14 +2472,6 @@ describe('Config', () => {
   })
 
   context('auto configuration w/ unix domain sockets', () => {
-    context('on windows', () => {
-      it('should not be used', () => {
-        osType = 'Windows_NT'
-        const config = getConfig()
-
-        assert.strictEqual(config.url, undefined)
-      })
-    })
     context('socket does not exist', () => {
       it('should not be used', () => {
         const config = getConfig()
@@ -2490,6 +2479,7 @@ describe('Config', () => {
         assert.strictEqual(config.url, undefined)
       })
     })
+
     context('socket exists', () => {
       beforeEach(() => {
         existsSyncReturn = true
@@ -2498,8 +2488,13 @@ describe('Config', () => {
       it('should be used when no options and no env vars', () => {
         const config = getConfig()
 
-        assert.strictEqual(existsSyncParam, '/var/run/datadog/apm.socket')
-        assert.strictEqual(config.url.toString(), 'unix:///var/run/datadog/apm.socket')
+        if (os.type() === 'Windows_NT') {
+          assert.strictEqual(existsSyncParam, undefined)
+          assert.strictEqual(config.url, undefined)
+        } else {
+          assert.strictEqual(existsSyncParam, '/var/run/datadog/apm.socket')
+          assert.strictEqual(config.url.toString(), 'unix:///var/run/datadog/apm.socket')
+        }
       })
 
       it('should not be used when DD_TRACE_AGENT_URL provided', () => {
@@ -3069,18 +3064,13 @@ describe('Config', () => {
   })
 
   context('library config', () => {
-    const fs = require('node:fs')
-    const os = require('node:os')
-    const path = require('node:path')
-
-    const StableConfig = require('../../src/config/stable')
-
-    // os.tmpdir returns undefined on Windows somehow
-    const baseTempDir = os.platform() !== 'win32' ? os.tmpdir() : 'C:\\Windows\\Temp'
+    // os.tmpdir() could return a falsy value on Windows, if process.env.TEMP or process.env.TMP are malformed.
+    const baseTempDir = os.tmpdir() || 'C:\\Windows\\Temp'
     let env
     let tempDir
     let localConfigPath
     let fleetConfigPath
+
     beforeEach(() => {
       env = process.env
       tempDir = fs.mkdtempSync(path.join(baseTempDir, 'config-test-'))
@@ -3088,6 +3078,7 @@ describe('Config', () => {
       fleetConfigPath = path.join(tempDir, 'fleet.yaml')
       process.env.DD_TEST_LOCAL_CONFIG_PATH = localConfigPath
       process.env.DD_TEST_FLEET_CONFIG_PATH = fleetConfigPath
+      reloadLoggerAndConfig()
     })
 
     afterEach(() => {
@@ -3126,7 +3117,7 @@ rules:
     it('should respect the priority sources', () => {
       // 1. Default
       const config1 = getConfig()
-      assert.strictEqual(config1?.service, 'node')
+      assert.strictEqual(config1.service, 'node')
 
       // 2. Local stable > Default
       fs.writeFileSync(
@@ -3142,12 +3133,12 @@ rules:
       DD_SERVICE: service_local_stable
 `)
       const config2 = getConfig()
-      assert.strictEqual(config2?.service, 'service_local_stable')
+      assert.strictEqual(config2.service, 'service_local_stable')
 
       // 3. Env > Local stable > Default
       process.env.DD_SERVICE = 'service_env'
       const config3 = getConfig()
-      assert.strictEqual(config3?.service, 'service_env')
+      assert.strictEqual(config3.service, 'service_env')
 
       // 4. Fleet Stable > Env > Local stable > Default
       fs.writeFileSync(
@@ -3559,6 +3550,89 @@ rules:
       getConfig()
 
       assert.strictEqual(log.warn.called, false)
+    })
+  })
+
+  context('resourceRenamingEnabled', () => {
+    let originalResourceRenamingEnabled
+    let originalAppsecEnabled
+
+    beforeEach(() => {
+      originalResourceRenamingEnabled = process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED
+      originalAppsecEnabled = process.env.DD_APPSEC_ENABLED
+      delete process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED
+      delete process.env.DD_APPSEC_ENABLED
+    })
+
+    afterEach(() => {
+      if (originalResourceRenamingEnabled !== undefined) {
+        process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = originalResourceRenamingEnabled
+      } else {
+        delete process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED
+      }
+      if (originalAppsecEnabled !== undefined) {
+        process.env.DD_APPSEC_ENABLED = originalAppsecEnabled
+      } else {
+        delete process.env.DD_APPSEC_ENABLED
+      }
+    })
+
+    it('should be false by default', () => {
+      const config = getConfig()
+      assert.strictEqual(config.resourceRenamingEnabled, false)
+    })
+
+    it('should be enabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is true', () => {
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.resourceRenamingEnabled, true)
+    })
+
+    it('should be disabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is false', () => {
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
+      const config = getConfig()
+      assert.strictEqual(config.resourceRenamingEnabled, false)
+    })
+
+    it('should be enabled when appsec is enabled via env var', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.resourceRenamingEnabled, true)
+    })
+
+    it('should be enabled when appsec is enabled via options', () => {
+      const config = getConfig({ appsec: { enabled: true } })
+      assert.strictEqual(config.resourceRenamingEnabled, true)
+    })
+
+    it('should prioritize DD_TRACE_RESOURCE_RENAMING_ENABLED over appsec setting', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
+      const config = getConfig()
+      assert.strictEqual(config.resourceRenamingEnabled, false)
+    })
+
+    it('should prioritize DD_TRACE_RESOURCE_RENAMING_ENABLED over appsec option', () => {
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
+      const config = getConfig({ appsec: { enabled: true } })
+      assert.strictEqual(config.resourceRenamingEnabled, false)
+    })
+
+    it('should enable when appsec is enabled via both env and options', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = getConfig({ appsec: { enabled: true } })
+      assert.strictEqual(config.resourceRenamingEnabled, true)
+    })
+
+    it('should remain false when appsec is disabled', () => {
+      process.env.DD_APPSEC_ENABLED = 'false'
+      const config = getConfig()
+      assert.strictEqual(config.resourceRenamingEnabled, false)
+    })
+
+    it('should remain false when appsec is disabled via options', () => {
+      const config = getConfig({ appsec: { enabled: false } })
+      assert.strictEqual(config.resourceRenamingEnabled, false)
     })
   })
 
