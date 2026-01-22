@@ -422,16 +422,15 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     // Handle prompt tracking for reusable prompts
     if (inputs.prompt && response?.prompt) {
       const { id, version } = response.prompt // ResponsePrompt
-      // TODO: Add proper tagger API for prompt metadata
       if (id && version) {
         const normalizedVariables = normalizePromptVariables(inputs.prompt.variables)
         const chatTemplate = extractChatTemplateFromInstructions(response.instructions, normalizedVariables)
-        this._tagger._setTag(span, '_ml_obs.meta.input.prompt', {
+        this._tagger.tagPrompt(span, {
           id,
           version,
           variables: normalizedVariables,
-          chat_template: chatTemplate
-        })
+          template: chatTemplate
+        }, true)
         const tags = { [PROMPT_TRACKING_INSTRUMENTATION_METHOD]: INSTRUMENTATION_METHOD_AUTO }
         if (hasMultimodalInputs(inputs.prompt.variables)) {
           tags[PROMPT_MULTIMODAL] = 'true'

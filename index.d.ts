@@ -3203,6 +3203,49 @@ declare namespace tracer {
     }
 
     /**
+     * A Prompt object that represents the prompt template used for an LLM call.
+     * Used to power LLM Observability prompts and hallucination evaluations.
+     */
+    interface Prompt {
+      /**
+       * Version of the prompt
+       */
+      version?: string,
+
+
+      /**
+       * The id of the prompt set by the user. Should be unique per mlApp.
+       */
+      id?: string,
+
+      /**
+       * An object of string key-value pairs that will be used to render the prompt
+       */
+      variables?: Record<string, string>,
+
+      /**
+       * List of tags to add to the prompt run.
+       */
+      tags?: Record<string, string>,
+
+
+      /**
+       * A list of variable key names that contains query information
+       */
+      queryVariables?: string[],
+
+      /**
+       * A list of variable key names that contain ground truth context information.
+       */
+      contextVariables?: string[],
+
+      /**
+       * A template string or chat message template list.
+       */
+      template?: string | Message[]
+    }
+
+    /**
      * Annotation options for LLM Observability spans.
      */
     interface AnnotationOptions {
@@ -3235,7 +3278,12 @@ declare namespace tracer {
       /**
        * Object of JSON serializable key-value tag pairs to set or update on the LLM Observability span regarding the span's context.
        */
-      tags?: { [key: string]: any }
+      tags?: { [key: string]: any },
+
+      /**
+       * A Prompt object that represents the prompt used for an LLM call. Only used on `llm` spans.
+       */
+      prompt?: Prompt,
     }
 
     interface AnnotationContextOptions {
@@ -3248,6 +3296,11 @@ declare namespace tracer {
        * Set to override the span name for any spans annotated within the returned context.
        */
       name?: string,
+
+      /**
+       * A Prompt object that represents the prompt used for an LLM call. Only used on `llm` spans.
+       */
+      prompt?: Prompt,
     }
 
     interface RoutingContextOptions {
