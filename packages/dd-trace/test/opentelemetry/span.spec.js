@@ -336,6 +336,39 @@ describe('OTel Span', () => {
     assert.strictEqual(_links.length, 2)
   })
 
+  it('should accept standard OTel SpanContext objects in startSpan links', () => {
+    // Regression test for https://github.com/DataDog/dd-trace-js/issues/7193
+    // Standard OTel SpanContext objects do not have Datadog methods like toTraceId()/toSpanId().
+    const otelSpanContext = {
+      traceId: '0123456789abcdef0123456789abcdef',
+      spanId: '0123456789abcdef',
+      traceFlags: 1
+    }
+
+    const span = makeSpan('name', {
+      links: [{
+        context: otelSpanContext,
+        attributes: {
+          foo: 'bar'
+        }
+      }]
+    })
+
+    span.end()
+
+    const formatted = spanFormat(span._ddSpan)
+    assert.ok(Object.hasOwn(formatted.meta, '_dd.span_links'))
+
+    const links = JSON.parse(formatted.meta['_dd.span_links'])
+    assert.strictEqual(links.length, 1)
+    assert.deepStrictEqual(links[0], {
+      trace_id: otelSpanContext.traceId,
+      span_id: otelSpanContext.spanId,
+      attributes: { foo: 'bar' },
+      flags: 1
+    })
+  })
+
   it('should add span pointers', () => {
     const span = makeSpan('name')
     const { _links } = span._ddSpan

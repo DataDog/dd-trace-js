@@ -36,12 +36,51 @@ if (!globalThis[Symbol.for('dd-trace')]) {
 // Override per-test, if absolutely necessary.
 require('events').defaultMaxListeners = 6
 
+// Warnings that should not be thrown
+const warningExceptions = new Set([
+  // Node.js core warnings. Ignore them.
+  'OutgoingMessage.prototype._headers is deprecated',
+  "Access to process.binding('http_parser') is deprecated.",
+  // TODO: We should not be throwing warnings in the first place. Fix the following warnings instead.
+  "Mongoose: mpromise (mongoose's default promise library) is deprecated, plug in your own promise library instead: http://mongoosejs.com/docs/promises.html",
+  'collection.count is deprecated, and will be removed in a future version. ' +
+    'Use Collection.countDocuments or Collection.estimatedDocumentCount instead',
+])
+
+const temporaryWarningExceptions = new Set()
+const originalAdd = temporaryWarningExceptions.add.bind(temporaryWarningExceptions)
+/**
+ * Add a warning to the temporary warning exceptions. It will be removed after 1ms if it is not emitted.
+ *
+ * @param {string} warning
+ */
+temporaryWarningExceptions.add = (warning) => {
+  setTimeout(() => {
+    temporaryWarningExceptions.delete(warning)
+  }, 1)
+  return originalAdd(warning)
+}
+
 process.on('warning', (warning) => {
   if (warning.name === 'MaxListenersExceededWarning' && !warning.message.includes('[Runner]')) {
+    throw warning
+  }
+  if (temporaryWarningExceptions.has(warning.message)) {
+    temporaryWarningExceptions.delete(warning.message)
+    return
+  }
+  if (warning.name === 'DeprecationWarning' && (
+    !warningExceptions.has(warning.message) &&
+    !warning.message.includes(' DD_') && // Ignore DD environment warnings
+    !warning.message.includes("Invalid 'main' field in ") && // This is always a library warning
+    !warning.message.includes('Mongoose:') // Too many warnings from Mongoose...
+  )) {
     throw warning
   }
 })
 
 // Make this file a module for type-aware tooling. It is intentionally imported
 // for side effects only.
-module.exports = {}
+module.exports = {
+  temporaryWarningExceptions,
+}

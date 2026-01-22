@@ -2,7 +2,7 @@
 const request = require('../../../exporters/common/request')
 const log = require('../../../log')
 const { safeJSONStringify } = require('../../../exporters/common/util')
-const { getEnvironmentVariable } = require('../../../config/helper')
+const { getValueFromEnvSources } = require('../../../config/helper')
 
 const { CoverageCIVisibilityEncoder } = require('../../../encode/coverage-ci-visibility')
 const BaseWriter = require('../../../exporters/common/writer')
@@ -29,7 +29,7 @@ class Writer extends BaseWriter {
       path: '/api/v2/citestcov',
       method: 'POST',
       headers: {
-        'dd-api-key': getEnvironmentVariable('DD_API_KEY'),
+        'dd-api-key': getValueFromEnvSources('DD_API_KEY'),
         ...form.getHeaders()
       },
       timeout: 15_000,

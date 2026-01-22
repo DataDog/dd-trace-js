@@ -10,14 +10,32 @@ const sinon = require('sinon')
 const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const withTopologies = fn => {
-  withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName) => {
+  withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName, resolvedVersion) => {
     describe('using the default topology', () => {
       fn(async () => {
+        // Different warnings for different versions of mongodb-core
+        temporaryWarningExceptions.add(
+          'current Server Discovery and Monitoring engine is deprecated, and will be removed in a future version. ' +
+            'the new Server Discover and Monitoring engine, pass option { useUnifiedTopology: true } to ' +
+            'MongoClient.connect.'
+        )
+        temporaryWarningExceptions.add(
+          'current Server Discovery and Monitoring engine is deprecated, and will be removed in a future version. ' +
+            'To use the new Server Discover and Monitoring engine, pass option { useUnifiedTopology: true } to the ' +
+            'MongoClient constructor.'
+        )
+        temporaryWarningExceptions.add(
+          'current Server Discovery and Monitoring engine is deprecated, and will be removed in a future version. ' +
+            'To use the new Server Discover and Monitoring engine, pass option { useUnifiedTopology: true } to ' +
+            'MongoClient.connect.'
+        )
+        const options = semver.satisfies(resolvedVersion, '<6') ? { useNewUrlParser: true } : {}
         const { MongoClient } = require(`../../../versions/${moduleName}@${version}`).get()
-        const client = new MongoClient('mongodb://127.0.0.1:27017')
+        const client = new MongoClient('mongodb://127.0.0.1:27017', options)
 
         await client.connect()
 
@@ -222,7 +240,7 @@ describe('Plugin', () => {
             })
           })
 
-          it('shoud sanitize BigInts when doing a multi statement update', async () => {
+          it('should sanitize BigInts when doing a multi statement update', async () => {
             collection.bulkWrite([
               { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } },
               { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } }
