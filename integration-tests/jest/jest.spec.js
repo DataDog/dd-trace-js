@@ -525,6 +525,41 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         })
       })
 
+      // TODO: This should also run in agentless mode
+      const maybeSkippped = reportingOption === 'evp proxy' ? it : it.skip
+      maybeSkippped('sends telemetry with test_session metric when telemetry is enabled', async () => {
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
+        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+        const telemetryPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+            const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+
+            const testSessionMetric = telemetryMetrics.find(
+              ({ metric }) => metric === 'test_session'
+            )
+
+            assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+              TESTS_TO_RUN: 'test/ci-visibility-test',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          telemetryPromise
+        ])
+      })
+
       it('should create events for session, suite and test', async () => {
         const envVars = reportingOption === 'agentless'
           ? getCiVisAgentlessConfig(receiver.port)
