@@ -6,6 +6,7 @@
     "aerospike",
     "appsec",
     "backportability",
+    "ddsource",
     "kafkajs",
     "llmobs",
     "microbenchmarks",
