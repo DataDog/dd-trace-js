@@ -118,11 +118,8 @@ class NativeDatadogSpan {
 
     // Create the span context with native backing
     this._spanContext = this.#createContext(parent, fields)
-    this._spanContext._name = operationName
+    this._spanContext._name = operationName // Setter automatically syncs to native
     this._spanContext._hostname = hostname
-
-    // Queue the span name to native storage
-    this._spanContext._syncNameToNative(operationName)
 
     // Note: We do NOT set error:0 here as a tag. Native spans default to error=0
     // in native storage, but the JS tags should not contain 'error' until explicitly
@@ -146,7 +143,7 @@ class NativeDatadogSpan {
     this._nativeSpans.queueOp(
       OpCode.SetStart,
       this._spanContext._nativeSpanId,
-      ['i64', BigInt(Math.round(this._startTime * 1e6))]
+      ['ns', this._startTime]
     )
 
     // Handle span links
@@ -341,7 +338,7 @@ class NativeDatadogSpan {
     this._nativeSpans.queueOp(
       OpCode.SetDuration,
       this._spanContext._nativeSpanId,
-      ['i64', BigInt(Math.round(this._duration * 1e6))]
+      ['ns', this._duration]
     )
 
     this._spanContext._trace.finished.push(this)
@@ -412,9 +409,8 @@ class NativeDatadogSpan {
   #createContext (parent, fields) {
     let spanContext
     let startTime
-    let traceIdHigh = 0n
-    let traceIdLow
-    let parentIdBigInt = 0n
+    let traceId
+    let parentId
 
     let baggage = {}
     if (parent && parent._isRemote && this._parentTracer?._config?.tracePropagationBehaviorExtract !== 'continue') {
@@ -453,18 +449,8 @@ class NativeDatadogSpan {
         startTime = dateNow()
       }
 
-      // Convert trace ID to u128 (high, low)
-      const traceIdBuffer = existingContext._traceId.toBuffer()
-      if (traceIdBuffer.length > 8) {
-        traceIdHigh = BigInt('0x' + Buffer.from(traceIdBuffer.slice(0, 8)).toString('hex'))
-        traceIdLow = BigInt('0x' + Buffer.from(traceIdBuffer.slice(-8)).toString('hex'))
-      } else {
-        traceIdLow = existingContext._traceId.toBigInt()
-      }
-
-      if (existingContext._parentId) {
-        parentIdBigInt = existingContext._parentId.toBigInt()
-      }
+      traceId = existingContext._traceId
+      parentId = existingContext._parentId
     } else if (parent) {
       // Child span - inherit trace ID, generate new span ID
       const spanId = id()
@@ -484,17 +470,8 @@ class NativeDatadogSpan {
         startTime = dateNow()
       }
 
-      // Convert trace ID to u128 (high, low)
-      const traceIdBuffer = parent._traceId.toBuffer()
-      if (traceIdBuffer.length > 8) {
-        // 128-bit trace ID
-        traceIdHigh = BigInt('0x' + Buffer.from(traceIdBuffer.slice(0, 8)).toString('hex'))
-        traceIdLow = BigInt('0x' + Buffer.from(traceIdBuffer.slice(-8)).toString('hex'))
-      } else {
-        traceIdLow = parent._traceId.toBigInt()
-      }
-
-      parentIdBigInt = parent._spanId.toBigInt()
+      traceId = parent._traceId
+      parentId = parent._spanId
     } else {
       // Root span - generate new trace ID and span ID
       const spanId = id()
@@ -513,10 +490,24 @@ class NativeDatadogSpan {
           .padStart(8, '0')
           .padEnd(16, '0')
         spanContext._trace.tags['_dd.p.tid'] = tidHex
-        traceIdHigh = BigInt('0x' + tidHex)
+        // Create 16-byte trace ID buffer: [high 8 bytes from timestamp][low 8 bytes from spanId]
+        const spanIdBuf = spanId.toBuffer()
+        traceId = [
+          parseInt(tidHex.slice(0, 2), 16),
+          parseInt(tidHex.slice(2, 4), 16),
+          parseInt(tidHex.slice(4, 6), 16),
+          parseInt(tidHex.slice(6, 8), 16),
+          parseInt(tidHex.slice(8, 10), 16),
+          parseInt(tidHex.slice(10, 12), 16),
+          parseInt(tidHex.slice(12, 14), 16),
+          parseInt(tidHex.slice(14, 16), 16),
+          spanIdBuf[0], spanIdBuf[1], spanIdBuf[2], spanIdBuf[3],
+          spanIdBuf[4], spanIdBuf[5], spanIdBuf[6], spanIdBuf[7]
+        ]
+      } else {
+        traceId = spanId
       }
-
-      traceIdLow = spanId.toBigInt()
+      parentId = null
 
       if (this._parentTracer?._config?.tracePropagationBehaviorExtract === 'restart') {
         spanContext._baggageItems = baggage
@@ -533,8 +524,8 @@ class NativeDatadogSpan {
     this._nativeSpans.queueOp(
       OpCode.Create,
       spanContext._nativeSpanId,
-      ['u128', [traceIdHigh, traceIdLow]],
-      ['u64', parentIdBigInt]
+      ['id128', traceId],
+      ['id64', parentId]
     )
 
     return spanContext

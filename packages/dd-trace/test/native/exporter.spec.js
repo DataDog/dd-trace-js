@@ -168,11 +168,17 @@ describe('NativeExporter', () => {
       exporter.export([span1, span2])
 
       exporter.flush(() => {
+        // flushSpans should be called with buffer arrays
         sinon.assert.calledWith(
           nativeSpans.flushSpans,
-          [123n, 456n],
+          sinon.match.array,
           sinon.match.any
         )
+        // Verify the arrays contain buffers
+        const call = nativeSpans.flushSpans.getCall(0)
+        assert.strictEqual(call.args[0].length, 2)
+        assert.ok(Buffer.isBuffer(call.args[0][0]))
+        assert.ok(Buffer.isBuffer(call.args[0][1]))
         done()
       })
     })
@@ -241,10 +247,15 @@ describe('NativeExporter', () => {
 
 
   // Helper function to create mock spans
-  function createMockSpan (nativeSpanId) {
+  function createMockSpan (nativeSpanIdValue) {
+    // Create an 8-byte buffer for the span ID (big-endian)
+    const nativeSpanId = Buffer.alloc(8)
+    nativeSpanId.writeBigUInt64BE(BigInt(nativeSpanIdValue))
+
     const spanId = {
-      toString: () => String(nativeSpanId),
-      toBigInt: () => nativeSpanId
+      toString: () => String(nativeSpanIdValue),
+      toBigInt: () => BigInt(nativeSpanIdValue),
+      toBuffer: () => nativeSpanId
     }
 
     const context = {
@@ -257,7 +268,16 @@ describe('NativeExporter', () => {
         finished: [],
         tags: {}
       },
-      _tags: {}
+      _tags: {},
+      hasTag: function (key) {
+        return key in this._tags
+      },
+      setTag: function (key, value) {
+        this._tags[key] = value
+      },
+      getTag: function (key) {
+        return this._tags[key]
+      }
     }
 
     return {

@@ -3,17 +3,31 @@
   "run": "node spans.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node spans.js\"",
   "cachegrind": false,
-  "iterations": 80,
+  "iterations": 2,
   "instructions": true,
   "variants": {
-    "finish-immediately": {
+    "finish-immediately-js": {
       "env": {
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "now"
       }
     },
-    "finish-later": {
+    "finish-later-js": {
       "env": {
+        "DD_TRACE_SCOPE": "noop",
+        "FINISH": "later"
+      }
+    },
+    "finish-immediately-native": {
+      "env": {
+        "DD_TRACE_EXPERIMENTAL_NATIVE_SPANS_ENABLED": "1",
+        "DD_TRACE_SCOPE": "noop",
+        "FINISH": "now"
+      }
+    },
+    "finish-later-native": {
+      "env": {
+        "DD_TRACE_EXPERIMENTAL_NATIVE_SPANS_ENABLED": "1",
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "later"
       }
