@@ -1,9 +1,9 @@
 'use strict'
 
 const fs = require('fs')
-const { getEnvironmentVariable } = require('../../config/helper')
+const { getValueFromEnvSources } = require('../../config/helper')
 
-const DD_EXTERNAL_ENV = getEnvironmentVariable('DD_EXTERNAL_ENV')
+const DD_EXTERNAL_ENV = getValueFromEnvSources('DD_EXTERNAL_ENV')
 
 // The second part is the PCF / Garden regexp. We currently assume no suffix($) to avoid matching pod UIDs
 // See https://github.com/DataDog/datadog-agent/blob/7.40.x/pkg/util/cgroups/reader.go#L50
