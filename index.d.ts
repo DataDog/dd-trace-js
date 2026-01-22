@@ -161,18 +161,54 @@ interface Tracer extends opentracing.Tracer {
 
   /**
    * @experimental
+   *
+   * Set a baggage item and return the new context.
+   *
+   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#set-value
+   *
+   * ----
+   *
    * Provide same functionality as OpenTelemetry Baggage:
    * https://opentelemetry.io/docs/concepts/signals/baggage/
    *
    * Since the equivalent of OTel Context is implicit in dd-trace-js,
    * these APIs act on the currently active baggage
    *
-   * Work with storage('baggage'), therefore do not follow the same continuity as other APIs
+   * Work with storage('baggage'), therefore do not follow the same continuity as other APIs.
    */
-  setBaggageItem (key: string, value: string): Record<string, string>;
+  setBaggageItem (key: string, value: string, metadata?: object): Record<string, string>;
+  /**
+   * @experimental
+   *
+   * Returns a specific baggage item from the current context.
+   *
+   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#get-value
+   */
   getBaggageItem (key: string): string | undefined;
+  /**
+   * @experimental
+   *
+   * Returns all baggage items from the current context.
+   *
+   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#get-all-values
+   */
   getAllBaggageItems (): Record<string, string>;
+  /**
+   * @experimental
+   *
+   * Removes a specific baggage item from the current context and returns the new context.
+   *
+   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#remove-value
+   */
   removeBaggageItem (key: string): Record<string, string>;
+
+  /**
+   * @experimental
+   *
+   * Removes all baggage items from the current context and returns the new context.
+   *
+   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#remove-all-values
+   */
   removeAllBaggageItems (): Record<string, string>;
 }
 

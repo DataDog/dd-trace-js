@@ -10,12 +10,12 @@ const { AsyncLocalStorage } = require('async_hooks')
  * a "handle" object, which is used as a key in a WeakMap, where the values
  * are the real store objects.
  *
- * @typedef {Record<string, unknown>} Store
+ * @template T
+ * @typedef {Record<string, T>} Store
  */
 class DatadogStorage extends AsyncLocalStorage {
   /**
-   *
-   * @param {Store} [store]
+   * @param {Store<unknown>} [store]
    * @override
    */
   enterWith (store) {
@@ -35,7 +35,7 @@ class DatadogStorage extends AsyncLocalStorage {
    *
    * TODO: Refactor the Scope class to use a span-only store and remove this.
    *
-   * @returns {Store}
+   * @returns {Store<unknown>}
    */
   getHandle () {
     return super.getStore()
@@ -48,7 +48,7 @@ class DatadogStorage extends AsyncLocalStorage {
    * key. This is useful if you've stashed a handle somewhere and want to
    * retrieve the store with it.
    * @param {object} [handle]
-   * @returns {Store | undefined}
+   * @returns {Store<unknown> | undefined}
    * @override
    */
   getStore (handle) {
@@ -68,7 +68,7 @@ class DatadogStorage extends AsyncLocalStorage {
    * WeakMap.
    * @template R
    * @template TArgs = unknown[]
-   * @param {Store} store
+   * @param {Store<unknown>} store
    * @param {() => R} fn
    * @param {...TArgs} args
    * @returns {R}
@@ -87,7 +87,7 @@ class DatadogStorage extends AsyncLocalStorage {
 
 /**
  * This is the map from handles to real stores, used in the class above.
- * @type {WeakMap<WeakKey, Store|undefined>}
+ * @type {WeakMap<WeakKey, Store<unknown>|undefined>}
  */
 const stores = new WeakMap()
 

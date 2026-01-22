@@ -9,6 +9,7 @@ const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const ChildProcessPlugin = require('../src')
+const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 
 function noop () {}
 
@@ -784,6 +785,11 @@ describe('Child process plugin', () => {
                 }
 
                 const args = normalizeArgs(methodName, command, options)
+
+                temporaryWarningExceptions.add(
+                  'Passing args to a child process with shell option true can lead to security vulnerabilities, ' +
+                    'as the arguments are not escaped, only concatenated.'
+                )
 
                 if (async) {
                   expectSomeSpan(agent, errorExpected).then(done, done)
