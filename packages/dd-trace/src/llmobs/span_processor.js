@@ -27,6 +27,7 @@ const {
   PARENT_ID_KEY,
   SESSION_ID,
   NAME,
+  INPUT_PROMPT,
   ROUTING_API_KEY,
   ROUTING_SITE
 } = require('./constants/tags')
@@ -130,11 +131,6 @@ class LLMObsSpanProcessor {
       inputType = 'value'
     }
 
-    // Handle prompt metadata for reusable prompts
-    if (mlObsTags['_ml_obs.meta.input.prompt']) {
-      input.prompt = mlObsTags['_ml_obs.meta.input.prompt']
-    }
-
     if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
       llmObsSpan.output = mlObsTags[OUTPUT_MESSAGES]
       outputType = 'messages'
@@ -184,6 +180,12 @@ class LLMObsSpanProcessor {
 
     if (input) meta.input = input
     if (output) meta.output = output
+
+    const prompt = mlObsTags[INPUT_PROMPT]
+    if (prompt && spanKind === 'llm') {
+      // by this point, we should have logged a warning if the span kind was not llm
+      meta.input.prompt = prompt
+    }
 
     const llmObsSpanEvent = {
       trace_id: span.context().toTraceId(true),
