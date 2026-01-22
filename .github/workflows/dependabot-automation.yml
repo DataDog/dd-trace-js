@@ -4,9 +4,11 @@ on:
   pull_request:
     types:
       - opened
+      - reopened
       - synchronize
 
 env:
+  # Add Groups here to enable auto-merge for Dependabot PRs
   GROUPS: '["dev-minor-and-patch-dependencies", "gh-actions-packages", "test-versions"]'
 
 jobs:
@@ -26,15 +28,15 @@ jobs:
         uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # 2.5.0
         with:
           github-token: "${{ steps.octo-sts.outputs.token }}"
-      - name: Enable auto-merge for Dependabot PRs
-        if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
-        run: gh pr merge --auto --squash "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
       - name: Approve a PR
         if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
         run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+      - name: Enable auto-merge for Dependabot PRs
+        if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
+        run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
@@ -68,18 +70,25 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
           persist-credentials: false
+      - name: Restore trusted Node setup actions
+        if: steps.ctx.outputs.is_vendor_group == 'true'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          git checkout "${{ github.event.pull_request.base.sha }}" -- .github/actions/node
       - name: Restore trusted vendoring scripts
         if: steps.ctx.outputs.is_vendor_group == 'true'
         run: |
           git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
           git checkout "${{ github.event.pull_request.base.sha }}" -- vendor/rspack.js vendor/rspack.config.js
+      - uses: ./.github/actions/node/active-lts
+        if: steps.ctx.outputs.is_vendor_group == 'true'
       - name: Install vendoring deps (no lifecycle scripts)
         if: steps.ctx.outputs.is_vendor_group == 'true'
         run: yarn --ignore-scripts --frozen-lockfile --non-interactive
         working-directory: ./vendor
       - name: Build vendored bundles (trusted script)
         if: steps.ctx.outputs.is_vendor_group == 'true'
-        run: node rspack
+        run: node ./rspack.js
         working-directory: ./vendor
       - name: Create patch (restricted paths only)
         id: diff
@@ -119,7 +128,7 @@ jobs:
 
           git diff --binary --no-color > vendor.patch
           echo "has_changes=true" >> $GITHUB_OUTPUT
-      - uses: actions/upload-artifact@ea165f8a6f3f9f5b76b7b70ee0fdd3b5d7d3b6a2 # v4.6.2
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: steps.diff.outputs.has_changes == 'true'
         with:
           name: vendor-patch
@@ -134,13 +143,20 @@ jobs:
     # It only applies the vetted patch artifact and pushes a single commit.
     permissions:
       contents: write
+      id-token: write
     steps:
+      - uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: dependabot-automation
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
+          token: ${{ steps.octo-sts.outputs.token }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@65c5b1180b77f85ea54a67a3d1f4d5f1e2e50bd8 # v4.2.0
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: vendor-patch
       - name: Apply patch
@@ -182,6 +198,8 @@ jobs:
           echo "commits=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
       - name: Push commit
         uses: DataDog/commit-headless@583489e08d78037e7fa256c14adf998d5463f6a0 # action/v2.0.2
+        env:
+          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
         with:
           branch: ${{ github.event.pull_request.head.ref }}
           command: push
