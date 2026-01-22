@@ -11,7 +11,7 @@ const { BASE_SERVICE } = require('../../../../ext/tags')
  * Code should use setTag()/getTag() accessors instead of accessing _tags directly.
  *
  * Key differences from DatadogSpanContext:
- * - Has a _nativeSpanId (BigInt) for native operations
+ * - Has a _nativeSpanId (byte buffer) for native operations
  * - setTag() syncs to native storage immediately
  */
 class NativeSpanContext extends DatadogSpanContext {
@@ -33,7 +33,7 @@ class NativeSpanContext extends DatadogSpanContext {
     super(props)
 
     this.#nativeSpans = nativeSpans
-    this._nativeSpanId = props.spanId.toBigInt()
+    this._nativeSpanId = props.spanId.toBuffer()
     this._tracerService = props.tracerService // Store for BASE_SERVICE check
 
     // Override _name property with getter/setter to sync name changes to native storage.
@@ -99,6 +99,11 @@ class NativeSpanContext extends DatadogSpanContext {
             String(this._tracerService)
           )
         }
+        return
+
+      case 'service':
+        // Skip - this is a duplicate of service.name from tagger expansion
+        // The service is already set via SetServiceName when service.name is set
         return
 
       case 'resource.name':
@@ -257,8 +262,8 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
-   * Get the native span ID as BigInt.
-   * @returns {bigint}
+   * Get the native span ID as a byte buffer.
+   * @returns {Uint8Array|number[]}
    */
   get nativeSpanId () {
     return this._nativeSpanId

@@ -79,7 +79,7 @@ describe('NativeDatadogSpan', () => {
     // Create a mock NativeSpanContext that tracks tags
     NativeSpanContext = function (ns, props) {
       this._nativeSpans = ns
-      this._nativeSpanId = props.spanId.toBigInt()
+      this._nativeSpanId = props.spanId.toBuffer()
       this._traceId = props.traceId
       this._spanId = props.spanId
       this._parentId = props.parentId || null
@@ -178,9 +178,9 @@ describe('NativeDatadogSpan', () => {
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.Create,
-        sinon.match.any, // spanId
-        sinon.match.array, // traceId as u128
-        sinon.match.array // parentId as u64
+        sinon.match.any, // spanId buffer
+        sinon.match.array, // traceId as id128
+        sinon.match.array // parentId as id64
       )
     })
 
