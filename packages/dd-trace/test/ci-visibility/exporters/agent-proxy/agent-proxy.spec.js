@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, beforeEach } = require('mocha')
 const context = describe
 const sinon = require('sinon')
 const nock = require('nock')
@@ -17,7 +17,7 @@ const AgentWriter = require('../../../../src/exporters/agent/writer')
 const { clearCache } = require('../../../../src/agent/info')
 
 describe('AgentProxyCiVisibilityExporter', () => {
-  afterEach(() => {
+  beforeEach(() => {
     clearCache()
   })
 
