@@ -412,6 +412,7 @@ describe('end to end sdk integration tests', () => {
         _dd_context_variable_keys: ['message_history'],
         _dd_query_variable_keys: ['user_query'],
       })
+      assert.equal(llmobsSpans[0].tags.includes('prompt_tracking_instrumentation_method:annotated'), true)
     })
 
     it('does not annotate a non-llm span with a prompt', async () => {
@@ -428,6 +429,7 @@ describe('end to end sdk integration tests', () => {
       const { llmobsSpans } = await getEvents()
       assert.equal(llmobsSpans.length, 1)
       assert.equal(llmobsSpans[0].meta.input.prompt, undefined)
+      assert.equal(llmobsSpans[0].tags.includes('prompt_tracking_instrumentation_method:annotated'), false)
     })
 
     it('is respected via annotationContext', async () => {
@@ -460,6 +462,7 @@ describe('end to end sdk integration tests', () => {
         _dd_context_variable_keys: ['message_history'],
         _dd_query_variable_keys: ['user_query'],
       })
+      assert.equal(llmobsSpans[0].tags.includes('prompt_tracking_instrumentation_method:annotated'), true)
     })
   })
 })

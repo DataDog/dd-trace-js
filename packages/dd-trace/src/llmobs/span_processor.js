@@ -182,12 +182,9 @@ class LLMObsSpanProcessor {
     if (output) meta.output = output
 
     const prompt = mlObsTags[INPUT_PROMPT]
-    if (prompt) {
-      if (spanKind === 'llm') {
-        meta.input.prompt = prompt
-      } else {
-        logger.warn('Dropping prompt on non-LLM span kind, annotating prompts is only supported for LLM span kinds.')
-      }
+    if (prompt && spanKind === 'llm') {
+      // by this point, we should have logged a warning if the span kind was not llm
+      meta.input.prompt = prompt
     }
 
     const llmObsSpanEvent = {

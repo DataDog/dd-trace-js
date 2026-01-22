@@ -34,7 +34,9 @@ const {
   INTERNAL_QUERY_VARIABLE_KEYS,
   INPUT_PROMPT,
   ROUTING_API_KEY,
-  ROUTING_SITE
+  ROUTING_SITE,
+  PROMPT_TRACKING_INSTRUMENTATION_METHOD,
+  INSTRUMENTATION_METHOD_ANNOTATED
 } = require('./constants/tags')
 const { storage } = require('./storage')
 
@@ -220,6 +222,12 @@ class LLMObsTagger {
    *   whether to validate the prompt against the strict schema, used for auto-instrumentation
    */
   tagPrompt (span, prompt, strictValidation = false) {
+    const spanKind = registry.get(span)?.[SPAN_KIND]
+    if (spanKind !== 'llm') {
+      log.warn('Dropping prompt on non-LLM span kind, annotating prompts is only supported for LLM span kinds.')
+      return
+    }
+
     if (!prompt || typeof prompt !== 'object') {
       this.#handleFailure('Prompt must be an object.', 'invalid_prompt')
       return
@@ -356,6 +364,8 @@ class LLMObsTagger {
     } else {
       this._setTag(span, INPUT_PROMPT, validatedPrompt)
     }
+
+    this.tagSpanTags(span, { [PROMPT_TRACKING_INSTRUMENTATION_METHOD]: INSTRUMENTATION_METHOD_ANNOTATED })
   }
 
   changeKind (span, newKind) {
