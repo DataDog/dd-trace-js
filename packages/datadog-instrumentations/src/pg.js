@@ -112,8 +112,10 @@ function wrapQuery (query) {
       arguments[0] = pgQuery
 
       const retval = query.apply(this, arguments)
-      const queryQueue = this._queryQueue || this.queryQueue
-      const activeQuery = Object.hasOwn(this, '_activeQuery') ? this._activeQuery : this.activeQuery
+
+      const deperecated = Object.hasOwn(this, '_activeQuery')
+      const queryQueue = deperecated ? this._queryQueue : this.queryQueue
+      const activeQuery = deperecated ? this._activeQuery : this.activeQuery
 
       const newQuery = queryQueue.at(-1) || activeQuery
 
