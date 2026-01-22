@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const context = describe
 const sinon = require('sinon')
 const nock = require('nock')
@@ -14,8 +14,13 @@ const AgentlessWriter = require('../../../../src/ci-visibility/exporters/agentle
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 const CoverageWriter = require('../../../../src/ci-visibility/exporters/agentless/coverage-writer')
 const AgentWriter = require('../../../../src/exporters/agent/writer')
+const { clearCache } = require('../../../../src/agent/info')
 
 describe('AgentProxyCiVisibilityExporter', () => {
+  afterEach(() => {
+    clearCache()
+  })
+
   const flushInterval = 50
   const port = 8126
   const url = `http://127.0.0.1:${port}`
