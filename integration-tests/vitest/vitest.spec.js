@@ -2116,7 +2116,7 @@ versions.forEach((version) => {
 
       const runImpactedTest = (
         done,
-        { isModified, isEfd = false, isParallel = false, isNew = false },
+        { isModified, isEfd = false, isNew = false },
         extraEnvVars = {}
       ) => {
         const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isNew })
