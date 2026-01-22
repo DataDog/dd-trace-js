@@ -110,6 +110,38 @@ describe(`cucumber@${version} commonJS`, () => {
     await receiver.stop()
   })
 
+  it('sends telemetry with test_session metric when telemetry is enabled', async () => {
+    receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+    const telemetryPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+        const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+
+        const testSessionMetric = telemetryMetrics.find(
+          ({ metric }) => metric === 'test_session'
+        )
+
+        assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+      })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          DD_TRACE_AGENT_PORT: String(receiver.port),
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true'
+        }
+      }
+    )
+
+    await Promise.all([
+      once(childProcess, 'exit'),
+      telemetryPromise
+    ])
+  })
+
   context('with APM protocol (old agents)', () => {
     it('can report tests', async function () {
       receiver.setInfoResponse({ endpoints: [] })

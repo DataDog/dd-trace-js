@@ -7,18 +7,14 @@ const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
-const { getEnvironmentVariables } = require('../../../dd-trace/src/config/helper')
+const { getValueFromEnvSources } = require('../../../dd-trace/src/config/helper')
 const checkRequireCache = require('./check-require-cache')
 const Hook = require('./hook')
 const { isRelativeRequire } = require('./shared-utils')
 const rewriter = require('./rewriter')
 
-const envs = getEnvironmentVariables()
-
-const {
-  DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
-  DD_TRACE_DEBUG = ''
-} = envs
+const DD_TRACE_DISABLED_INSTRUMENTATIONS = getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS') || ''
+const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG') || ''
 
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')

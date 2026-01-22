@@ -11,7 +11,8 @@ const { assertObjectContains } = require('../helpers')
 const {
   sandboxCwd,
   useSandbox,
-  getCiVisAgentlessConfig
+  getCiVisAgentlessConfig,
+  getCiVisEvpProxyConfig
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
@@ -236,6 +237,38 @@ versions.forEach((version) => {
           })
         ])
       })
+    })
+
+    it('sends telemetry with test_session metric when telemetry is enabled', async () => {
+      const telemetryPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+          const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+
+          const testSessionMetric = telemetryMetrics.find(
+            ({ metric }) => metric === 'test_session'
+          )
+
+          assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+        })
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            DD_TRACE_AGENT_PORT: String(receiver.port),
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
+            TEST_DIR: 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs',
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        telemetryPromise
+      ])
     })
 
     context('flaky test retries', () => {
