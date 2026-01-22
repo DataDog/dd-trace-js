@@ -48,7 +48,6 @@ jobs:
     # so it is intentionally restricted to read-only permissions and produces a
     # patch artifact instead of pushing directly.
     permissions:
-      actions: write # upload-artifact uses the Actions API
       contents: read
       pull-requests: read
     outputs:
@@ -143,7 +142,7 @@ jobs:
     # Security: this job has write permissions but never runs installs/builds.
     # It only applies the vetted patch artifact and pushes a single commit.
     permissions:
-      actions: read # download-artifact uses the Actions API
+      contents: write
       id-token: write
     steps:
       - uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
