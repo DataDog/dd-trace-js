@@ -2102,6 +2102,37 @@ versions.forEach((version) => {
         await runRumTest({ isRedirecting: false })
       })
 
+      it('sends telemetry for RUM browser tests when telemetry is enabled', async () => {
+        const telemetryPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+            const telemetryEvents = payloads.flatMap(({ payload }) => payload.payload.series)
+
+            const testSessionMetric = telemetryEvents.find(
+              ({ metric }) => metric === 'test_session'
+            )
+            assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+
+            const eventFinishedTestEvents = telemetryEvents
+              .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
+
+            eventFinishedTestEvents.forEach(({ tags }) => {
+              assert.ok(tags.includes('is_rum'))
+              assert.ok(tags.includes('test_framework:playwright'))
+            })
+          })
+
+        await Promise.all([
+          runRumTest(
+            { isRedirecting: false },
+            {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true'
+            }
+          ),
+          telemetryPromise
+        ])
+      })
+
       it('do not crash when redirecting and RUM sessions are not active', async () => {
         await runRumTest({ isRedirecting: true })
       })
