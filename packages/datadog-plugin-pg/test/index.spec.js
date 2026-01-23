@@ -6,12 +6,12 @@ const net = require('node:net')
 
 const semver = require('semver')
 
+const ddpv = require('mocha/package.json').version
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
-const ddpv = require('mocha/package.json').version
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const clients = {
   pg: pg => pg.Client
@@ -27,7 +27,7 @@ describe('Plugin', () => {
   let tracer
 
   describe('pg', () => {
-    withVersions('pg', 'pg', version => {
+    withVersions('pg', 'pg', (version) => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -509,6 +509,8 @@ describe('Plugin', () => {
 
           client.connect(err => done(err))
 
+          const queryQueueName = Object.hasOwn(client, '_queryQueue') ? '_queryQueue' : 'queryQueue'
+
           client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
             if (err) return done(err)
 
@@ -516,9 +518,9 @@ describe('Plugin', () => {
               if (err) return done(err)
             })
           })
-          if (client.queryQueue[0] !== undefined) {
+          if (client[queryQueueName][0]) {
             try {
-              assert.strictEqual(client.queryQueue[0].text,
+              assert.strictEqual(client[queryQueueName][0].text,
                 '/*dddb=\'postgres\',dddbs=\'serviced\',dde=\'tester\',ddh=\'127.0.0.1\',ddps=\'test\',' +
                 `ddpv='${ddpv}'*/ SELECT $1::text as message`)
             } catch (e) {
@@ -566,6 +568,8 @@ describe('Plugin', () => {
         })
 
         it('DBM propagation should handle special characters', done => {
+          const queryQueueName = Object.hasOwn(clientDBM, '_queryQueue') ? '_queryQueue' : 'queryQueue'
+
           clientDBM.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
             if (err) return done(err)
 
@@ -574,9 +578,9 @@ describe('Plugin', () => {
             })
           })
 
-          if (clientDBM.queryQueue[0] !== undefined) {
+          if (clientDBM[queryQueueName][0]) {
             try {
-              assert.strictEqual(clientDBM.queryQueue[0].text,
+              assert.strictEqual(clientDBM[queryQueueName][0].text,
                 '/*dddb=\'postgres\',dddbs=\'~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E\',dde=\'tester\',' +
                 `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/ SELECT $1::text as message`)
               done()
@@ -682,6 +686,7 @@ describe('Plugin', () => {
 
       describe('DBM propagation enabled with full should handle query config objects', () => {
         const tracer = require('../../dd-trace')
+        let queryQueueName
 
         before(() => {
           return agent.load('pg')
@@ -702,6 +707,9 @@ describe('Plugin', () => {
             password: 'postgres',
             database: 'postgres'
           })
+
+          queryQueueName = Object.hasOwn(client, '_queryQueue') ? '_queryQueue' : 'queryQueue'
+
           client.connect(err => done(err))
         })
 
@@ -717,7 +725,7 @@ describe('Plugin', () => {
           }
 
           const queryPromise = client.query(query, ['Hello world!'])
-          const queryText = client.queryQueue[0].text
+          const queryText = client[queryQueueName][0].text
 
           await queryPromise
 
@@ -739,7 +747,7 @@ describe('Plugin', () => {
           }
 
           const queryPromise = client.query(query, ['Hello world!'])
-          const queryText = client.queryQueue[0].text
+          const queryText = client[queryQueueName][0].text
 
           await queryPromise
 
@@ -770,7 +778,7 @@ describe('Plugin', () => {
           client.query(query, ['Hello world!'], (err) => {
             done(err)
           })
-          assert.strictEqual(client.queryQueue[0].text,
+          assert.strictEqual(client[queryQueueName][0].text,
             `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
             '*/ SELECT $1::text as message'
           )
@@ -785,7 +793,7 @@ describe('Plugin', () => {
           client.query(query, ['Hello world!'], async (err) => {
             done(err)
           })
-          assert.strictEqual(client.queryQueue[0].text,
+          assert.strictEqual(client[queryQueueName][0].text,
             `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
             '*/ SELECT $1::text as message')
         })
@@ -809,7 +817,7 @@ describe('Plugin', () => {
           client.query(query, ['Goodbye'], (err) => {
             done(err)
           })
-          assert.strictEqual(client.queryQueue[0].text,
+          assert.strictEqual(client[queryQueueName][0].text,
             `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
             '*/ SELECT $1::text as greeting')
         })
@@ -844,9 +852,11 @@ describe('Plugin', () => {
         })
 
         it('should append comment in query text', async () => {
+          const queryQueueName = Object.hasOwn(client, '_queryQueue') ? '_queryQueue' : 'queryQueue'
+
           const queryPromise = client.query('SELECT $1::text as message', ['Hello world!'])
 
-          assert.strictEqual(client.queryQueue[0].text,
+          assert.strictEqual(client[queryQueueName][0].text,
             'SELECT $1::text as message /*dddb=\'postgres\',dddbs=\'serviced\',dde=\'tester\',' +
               `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/`
           )

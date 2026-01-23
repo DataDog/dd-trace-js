@@ -7,6 +7,7 @@ const path = require('node:path')
 
 const axios = require('axios')
 const { before, describe } = require('mocha')
+const satisfies = require('semifies')
 
 const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../../setup/mocha')
@@ -27,7 +28,14 @@ describe('nosql injection detection in mongodb - whole feature', () => {
 
       before(async () => {
         const { MongoClient } = mongodb.get()
-        const client = new MongoClient('mongodb://127.0.0.1:27017')
+
+        const options = {}
+        if (satisfies(mongodbVersion, '<6.0.0')) {
+          options.useNewUrlParser = true
+          options.useUnifiedTopology = true
+        }
+        const client = new MongoClient('mongodb://127.0.0.1:27017', options)
+
         await client.connect()
 
         const db = client.db('test')

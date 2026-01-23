@@ -7,7 +7,7 @@ const inspector = require('./inspector_promises_polyfill')
  *   connect: () => void,
  *   connectToMainThread: () => void
  *   disconnect: () => void,
- *   post: (method: string, params?: object) => Promise<any>,
+ *   post: (method: string, params?: object) => Promise<unknown>,
  * }} CDPSession
  */
 const session = /** @type {CDPSession} */ (new inspector.Session())

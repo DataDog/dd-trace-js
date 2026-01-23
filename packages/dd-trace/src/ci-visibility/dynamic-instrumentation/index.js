@@ -4,7 +4,7 @@ const { join } = require('path')
 const { Worker, threadId: parentThreadId } = require('worker_threads')
 const { randomUUID } = require('crypto')
 const log = require('../../log')
-const { getEnvironmentVariables } = require('../../config-helper')
+const { getEnvironmentVariables } = require('../../config/helper')
 const getDebuggerConfig = require('../../debugger/config')
 
 const probeIdToResolveBreakpointSet = new Map()
@@ -74,6 +74,10 @@ class TestVisDynamicInstrumentation {
         // for PnP support, hence why we deviate from the DI pattern here.
         // To avoid infinite initialization loops, we're disabling DI and tracing in the worker.
         env: {
+          // NOTE: We intentionally use `getEnvironmentVariables()` here (raw env)
+          // instead of stable-config resolution helpers. The DI worker is a forked
+          // process that should see exactly the parent process's environment, and
+          // we explicitly override a few DD_ vars below to disable tracing/DI there.
           ...getEnvironmentVariables(),
           DD_CIVISIBILITY_ENABLED: 'false',
           DD_TRACE_ENABLED: 'false',

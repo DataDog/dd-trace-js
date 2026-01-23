@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 
+const { execSync } = require('child_process')
 const {
   FakeAgent,
   curlAndAssertMessage,
@@ -14,7 +15,6 @@ const {
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { NODE_MAJOR } = require('../../../../version')
-const { execSync } = require('child_process')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
@@ -53,7 +53,7 @@ describe('esm', () => {
 
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, undefined, {
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, {
           NODE_OPTIONS: `--loader=${hookFile} --require dd-trace/init --openssl-legacy-provider`
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {

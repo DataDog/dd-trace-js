@@ -2,8 +2,8 @@
 
 const { URL, format } = require('url')
 const log = require('../../log')
+const defaults = require('../../config/defaults')
 const Writer = require('./writer')
-const defaults = require('../../config_defaults')
 
 class AgentExporter {
   #timer
@@ -31,9 +31,7 @@ class AgentExporter {
       config
     })
 
-    process.once('beforeExit', () => {
-      this.flush()
-    })
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
   }
 
   setUrl (url) {

@@ -4,6 +4,11 @@ const os = require('os')
 const path = require('path')
 const { URL, format, pathToFileURL } = require('url')
 const satisfies = require('../../../../vendor/dist/semifies')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
+const { getIsAzureFunction } = require('../serverless')
+const { isFalse, isTrue } = require('../util')
+const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../config/helper')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
@@ -11,21 +16,17 @@ const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
 const EventsProfiler = require('./profilers/events')
 const { oomExportStrategies, snapshotKinds } = require('./constants')
-const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
-const { getIsAzureFunction } = require('../serverless')
 const { tagger } = require('./tagger')
-const { isFalse, isTrue } = require('../util')
-const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
-const { getEnvironmentVariables } = require('../config-helper')
-const defaults = require('../config_defaults')
-
 class Config {
   constructor (options = {}) {
+    // TODO: Remove entries that were already resolved in config.
+    // For the others, move them over to config.
+    const AWS_LAMBDA_FUNCTION_NAME = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
+    const NODE_OPTIONS = getEnvironmentVariable('NODE_OPTIONS')
+
+    // TODO: Move initialization of these values to packages/dd-trace/src/config/index.js, and just read from config
     const {
-      AWS_LAMBDA_FUNCTION_NAME: functionname,
-      DD_AGENT_HOST,
-      DD_ENV,
-      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED, // used for testing
+      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED,
       DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_CPU_ENABLED,
@@ -40,40 +41,37 @@ class Config {
       DD_PROFILING_HEAP_SAMPLING_INTERVAL,
       DD_PROFILING_PPROF_PREFIX,
       DD_PROFILING_PROFILERS,
-      DD_PROFILING_SOURCE_MAP,
       DD_PROFILING_TIMELINE_ENABLED,
       DD_PROFILING_UPLOAD_PERIOD,
       DD_PROFILING_UPLOAD_TIMEOUT,
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
       DD_PROFILING_WALLTIME_ENABLED,
-      DD_SERVICE,
-      DD_TAGS,
-      DD_TRACE_AGENT_PORT,
-      DD_TRACE_AGENT_URL,
-      DD_VERSION,
-      NODE_OPTIONS
-    } = getEnvironmentVariables()
+      DD_TAGS
+    } = getProfilingEnvValues()
 
-    const env = options.env ?? DD_ENV
-    const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
-    const version = options.version ?? DD_VERSION
     // Must be longer than one minute so pad with five seconds
     const flushInterval = options.interval ?? (Number(DD_PROFILING_UPLOAD_PERIOD) * 1000 || 65 * 1000)
     const uploadTimeout = options.uploadTimeout ?? (Number(DD_PROFILING_UPLOAD_TIMEOUT) || 60 * 1000)
-    const sourceMap = options.sourceMap ?? DD_PROFILING_SOURCE_MAP ?? true
     const pprofPrefix = options.pprofPrefix ?? DD_PROFILING_PPROF_PREFIX ?? ''
 
-    this.service = service
-    this.env = env
+    // TODO: Remove the fallback. Just use the value from the config.
+    this.service = options.service || 'node'
+    this.env = options.env
     this.host = host
-    this.functionname = functionname
+    this.functionname = AWS_LAMBDA_FUNCTION_NAME
 
-    this.version = version
+    this.version = options.version
     this.tags = Object.assign(
       tagger.parse(DD_TAGS),
       tagger.parse(options.tags),
-      tagger.parse({ env, host, service, version, functionname }),
+      tagger.parse({
+        env: options.env,
+        host,
+        service: this.service,
+        version: this.version,
+        functionname: AWS_LAMBDA_FUNCTION_NAME
+      }),
       getAzureTagsFromMetadata(getIsAzureFunction() ? getAzureFunctionMetadata() : getAzureAppMetadata())
     )
 
@@ -104,7 +102,7 @@ class Config {
 
     this.flushInterval = flushInterval
     this.uploadTimeout = uploadTimeout
-    this.sourceMap = sourceMap
+    this.sourceMap = options.sourceMap
     this.debugSourceMaps = isTrue(options.debugSourceMaps ?? DD_PROFILING_DEBUG_SOURCE_MAPS)
     this.endpointCollectionEnabled = isTrue(options.endpointCollection ??
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED ?? samplingContextsAvailable)
@@ -113,12 +111,10 @@ class Config {
     this.pprofPrefix = pprofPrefix
     this.v8ProfilerBugWorkaroundEnabled = isTrue(options.v8ProfilerBugWorkaround ??
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND ?? true)
-    const hostname = (options.hostname ?? DD_AGENT_HOST) || defaults.hostname
-    const port = (options.port ?? DD_TRACE_AGENT_PORT) || defaults.port
-    this.url = new URL(options.url ?? DD_TRACE_AGENT_URL ?? format({
+    this.url = new URL(options.url || format({
       protocol: 'http:',
-      hostname,
-      port
+      hostname: options.hostname,
+      port: options.port
     }))
 
     this.libraryInjected = options.libraryInjected
@@ -179,6 +175,9 @@ class Config {
 
     this.heapSamplingInterval = options.heapSamplingInterval ??
       (Number(DD_PROFILING_HEAP_SAMPLING_INTERVAL) || 512 * 1024)
+
+    const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
+
     const uploadCompression0 = options.uploadCompression ?? DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ?? 'on'
     let [uploadCompression, level0] = uploadCompression0.split('-')
     if (!['on', 'off', 'gzip', 'zstd'].includes(uploadCompression)) {
@@ -206,9 +205,12 @@ class Config {
       }
     }
 
-    // Default to gzip
+    // Default to either zstd (on Node.js 24+) or gzip (earlier Node.js). We could default to ztsd
+    // everywhere as we ship a Rust zstd compressor for older Node.js versions, but on 24+ we use
+    // the built-in one that runs asynchronously on libuv worker threads, just as gzip does. This is
+    // the least disruptive choice.
     if (uploadCompression === 'on') {
-      uploadCompression = 'gzip'
+      uploadCompression = isAtLeast24 ? 'zstd' : 'gzip'
     }
 
     this.uploadCompression = { method: uploadCompression, level }
@@ -224,7 +226,7 @@ class Config {
 
     let canUseAsyncContextFrame = false
     if (samplingContextsAvailable) {
-      if (satisfies(process.versions.node, '>=24.0.0')) {
+      if (isAtLeast24) {
         canUseAsyncContextFrame = !hasExecArg('--no-async-context-frame')
       } else if (satisfies(process.versions.node, '>=22.9.0')) {
         canUseAsyncContextFrame = hasExecArg('--experimental-async-context-frame')
@@ -234,7 +236,7 @@ class Config {
     if (this.asyncContextFrameEnabled && !canUseAsyncContextFrame) {
       if (!samplingContextsAvailable) {
         turnOffAsyncContextFrame(`on ${process.platform}`)
-      } else if (satisfies(process.versions.node, '>=24.0.0')) {
+      } else if (isAtLeast24) {
         turnOffAsyncContextFrame('with --no-async-context-frame')
       } else if (satisfies(process.versions.node, '>=22.9.0')) {
         turnOffAsyncContextFrame('without --experimental-async-context-frame')
@@ -432,4 +434,51 @@ function buildExportCommand (options) {
   return [process.execPath,
     path.join(__dirname, 'exporter_cli.js'),
     urls.join(','), tags, 'space']
+}
+
+function getProfilingEnvValues () {
+  return {
+    DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED:
+      getValueFromEnvSources('DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED'),
+    DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED:
+      getValueFromEnvSources('DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED'),
+    DD_PROFILING_CODEHOTSPOTS_ENABLED:
+      getValueFromEnvSources('DD_PROFILING_CODEHOTSPOTS_ENABLED'),
+    DD_PROFILING_CPU_ENABLED:
+      getValueFromEnvSources('DD_PROFILING_CPU_ENABLED'),
+    DD_PROFILING_DEBUG_SOURCE_MAPS:
+      getValueFromEnvSources('DD_PROFILING_DEBUG_SOURCE_MAPS'),
+    DD_PROFILING_DEBUG_UPLOAD_COMPRESSION:
+      getValueFromEnvSources('DD_PROFILING_DEBUG_UPLOAD_COMPRESSION'),
+    DD_PROFILING_ENDPOINT_COLLECTION_ENABLED:
+      getValueFromEnvSources('DD_PROFILING_ENDPOINT_COLLECTION_ENABLED'),
+    DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES:
+      getValueFromEnvSources('DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES'),
+    DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE:
+      getValueFromEnvSources('DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE'),
+    DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT:
+      getValueFromEnvSources('DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT'),
+    DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED:
+      getValueFromEnvSources('DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED'),
+    DD_PROFILING_HEAP_ENABLED:
+      getValueFromEnvSources('DD_PROFILING_HEAP_ENABLED'),
+    DD_PROFILING_HEAP_SAMPLING_INTERVAL:
+      getValueFromEnvSources('DD_PROFILING_HEAP_SAMPLING_INTERVAL'),
+    DD_PROFILING_PPROF_PREFIX:
+      getValueFromEnvSources('DD_PROFILING_PPROF_PREFIX'),
+    DD_PROFILING_PROFILERS:
+      getValueFromEnvSources('DD_PROFILING_PROFILERS'),
+    DD_PROFILING_TIMELINE_ENABLED:
+      getValueFromEnvSources('DD_PROFILING_TIMELINE_ENABLED'),
+    DD_PROFILING_UPLOAD_PERIOD:
+      getValueFromEnvSources('DD_PROFILING_UPLOAD_PERIOD'),
+    DD_PROFILING_UPLOAD_TIMEOUT:
+      getValueFromEnvSources('DD_PROFILING_UPLOAD_TIMEOUT'),
+    DD_PROFILING_V8_PROFILER_BUG_WORKAROUND:
+      getValueFromEnvSources('DD_PROFILING_V8_PROFILER_BUG_WORKAROUND'),
+    DD_PROFILING_WALLTIME_ENABLED:
+      getValueFromEnvSources('DD_PROFILING_WALLTIME_ENABLED'),
+    DD_TAGS:
+      getValueFromEnvSources('DD_TAGS')
+  }
 }

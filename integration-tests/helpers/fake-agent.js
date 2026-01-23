@@ -10,13 +10,37 @@ const upload = require('multer')()
 
 const noop = () => {}
 
+/**
+ * @typedef {object} RemoteConfigFile
+ * @property {number} orgId
+ * @property {string} product
+ * @property {string} id
+ * @property {string} name
+ * @property {string} config
+ * @property {string} path
+ * @property {string} fileHash
+ * @property {object} meta
+ * @property {object} meta.custom
+ * @property {number} meta.custom.v
+ * @property {object} meta.hashes
+ * @property {string} meta.hashes.sha256
+ * @property {number} meta.length
+ */
+
 module.exports = class FakeAgent extends EventEmitter {
+  port = 0
+  /** @type {Set<import('net').Socket>} */
+  #sockets = new Set()
+  /** @type {Record<string, RemoteConfigFile>} */
+  _rcFiles = {}
+  _rcTargetsVersion = 0
+  /** @type {Set<string>} */
+  _rcSeenStates = new Set()
+
   constructor (port = 0) {
     // Redirect rejections to the error event
     super({ captureRejections: true })
     this.port = port
-    this.resetRemoteConfig()
-    this._sockets = new Set()
   }
 
   start () {
@@ -29,14 +53,16 @@ module.exports = class FakeAgent extends EventEmitter {
 
       // Track connections to force close them later
       this.server.on('connection', (socket) => {
-        this._sockets.add(socket)
+        this.#sockets.add(socket)
         socket.on('close', () => {
-          this._sockets.delete(socket)
+          this.#sockets.delete(socket)
         })
       })
 
       this.server.listen(this.port, () => {
-        this.port = this.server.address().port
+        this.port = (/** @type {import('net').AddressInfo} */ (
+          (/** @type {import('http').Server} */ (this.server)).address()
+        )).port
         clearTimeout(timeoutObj)
         resolve(this)
       })
@@ -46,10 +72,10 @@ module.exports = class FakeAgent extends EventEmitter {
   stop () {
     if (!this.server?.listening) return
 
-    for (const socket of this._sockets) {
+    for (const socket of this.#sockets) {
       socket.destroy()
     }
-    this._sockets.clear()
+    this.#sockets.clear()
     this.server.close()
 
     return once(this.server, 'close')
@@ -57,34 +83,42 @@ module.exports = class FakeAgent extends EventEmitter {
 
   /**
    * Add a config object to be returned by the fake Remote Config endpoint.
-   * @param {Object} config - Object containing the Remote Config "file" and metadata
+   * @param {object} config - Object containing the Remote Config "file" and metadata
    * @param {number} [config.orgId=2] - The Datadog organization ID
    * @param {string} config.product - The Remote Config product name
    * @param {string} config.id - The Remote Config config ID
    * @param {string} [config.name] - The Remote Config "name". Defaults to the sha256 hash of `config.id`
-   * @param {Object} config.config - The Remote Config "file" object
+   * @param {object} config.config - The Remote Config "file" object
    */
   addRemoteConfig (config) {
-    config = { ...config }
-    config.orgId = config.orgId || 2
-    config.name = config.name || createHash('sha256').update(config.id).digest('hex')
-    config.config = JSON.stringify(config.config)
-    config.path = `datadog/${config.orgId}/${config.product}/${config.id}/${config.name}`
-    config.fileHash = createHash('sha256').update(config.config).digest('hex')
-    config.meta = {
+    const orgId = config.orgId || 2
+    const name = config.name || createHash('sha256').update(config.id).digest('hex')
+    const configStr = JSON.stringify(config.config)
+    const path = `datadog/${orgId}/${config.product}/${config.id}/${name}`
+    const fileHash = createHash('sha256').update(configStr).digest('hex')
+    const meta = {
       custom: { v: 1 },
-      hashes: { sha256: config.fileHash },
-      length: config.config.length
+      hashes: { sha256: fileHash },
+      length: configStr.length
     }
 
-    this._rcFiles[config.id] = config
+    this._rcFiles[config.id] = {
+      orgId,
+      product: config.product,
+      id: config.id,
+      name,
+      config: configStr,
+      path,
+      fileHash,
+      meta
+    }
     this._rcTargetsVersion++
   }
 
   /**
    * Update an existing config object
    * @param {string} id - The Remote Config config ID
-   * @param {Object} config - The Remote Config "file" object
+   * @param {object} config - The Remote Config "file" object
    */
   updateRemoteConfig (id, config) {
     config = JSON.stringify(config)
@@ -299,6 +333,9 @@ function buildExpressServer (agent) {
       cached_target_files: cachedTargetFiles
     } = req.body
 
+    // Emit the remote config request payload for testing
+    agent.emit('remote-config-request', req.body)
+
     if (state.has_error) {
       // Print the error sent by the client in case it's useful in debugging tests
       console.error(state.error) // eslint-disable-line no-console
@@ -383,7 +420,7 @@ function buildExpressServer (agent) {
     res.status(200).send()
     agent.emit('debugger-diagnostics', {
       headers: req.headers,
-      payload: JSON.parse(req.files[0].buffer.toString())
+      payload: JSON.parse((/** @type {Express.Multer.File[]} */ (req.files))[0].buffer.toString())
     })
   })
 

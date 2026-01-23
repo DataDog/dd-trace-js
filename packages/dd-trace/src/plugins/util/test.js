@@ -4,26 +4,23 @@ const path = require('path')
 const fs = require('fs')
 const { URL } = require('url')
 const log = require('../../log')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getEnvironmentVariable } = require('../../config/helper')
 const satisfies = require('../../../../../vendor/dist/semifies')
 
 const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
 const ignore = require('../../../../../vendor/dist/ignore')
 
+const id = require('../../id')
 const {
-  getGitMetadata,
-  getGitInformationDiscrepancy,
-  getGitDiff,
-  getGitRemoteName,
-  getSourceBranch,
-  checkAndFetchBranch,
-  getLocalBranches,
-  getMergeBase,
-  getCounts
-} = require('./git')
-const { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha } = require('./user-provided-git')
-const { getCIMetadata } = require('./ci')
-const { getRuntimeAndOSMetadata } = require('./env')
+  incrementCountMetric,
+  TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
+  TELEMETRY_GIT_SHA_MATCH
+} = require('../../ci-visibility/telemetry')
+
+const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../ext/tags')
+const { SAMPLING_RULE_DECISION } = require('../../constants')
+const { AUTO_KEEP } = require('../../../../../ext/priority')
+const { version: ddTraceVersion } = require('../../../../../package.json')
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,
@@ -37,17 +34,20 @@ const {
   CI_JOB_NAME,
   GIT_COMMIT_HEAD_SHA
 } = require('./tags')
-const id = require('../../id')
+const { getRuntimeAndOSMetadata } = require('./env')
+const { getCIMetadata } = require('./ci')
+const { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha } = require('./user-provided-git')
 const {
-  incrementCountMetric,
-  TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
-  TELEMETRY_GIT_SHA_MATCH
-} = require('../../ci-visibility/telemetry')
-
-const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../ext/tags')
-const { SAMPLING_RULE_DECISION } = require('../../constants')
-const { AUTO_KEEP } = require('../../../../../ext/priority')
-const { version: ddTraceVersion } = require('../../../../../package.json')
+  getGitMetadata,
+  getGitInformationDiscrepancy,
+  getGitDiff,
+  getGitRemoteName,
+  getSourceBranch,
+  checkAndFetchBranch,
+  getLocalBranches,
+  getMergeBase,
+  getCounts
+} = require('./git')
 
 /**
  * JSDoc types for test environment metadata helpers.
@@ -813,7 +813,7 @@ function getTestEndLine (testFn, startLine = 0) {
 
 /**
  * Gets an object of test tags from an Playwright annotations array.
- * @param {Object[]} annotations - Annotations from a Playwright test.
+ * @param {object[]} annotations - Annotations from a Playwright test.
  * @param {string} annotations[].type - Type of annotation. A string of the shape DD_TAGS[$tag_name].
  * @param {string} annotations[].description - Value of the tag.
  */

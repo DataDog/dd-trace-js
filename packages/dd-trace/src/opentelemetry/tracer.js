@@ -3,13 +3,49 @@
 const api = require('@opentelemetry/api')
 const { sanitizeAttributes } = require('../../../../vendor/dist/@opentelemetry/core')
 
-const Sampler = require('./sampler')
-const Span = require('./span')
 const id = require('../id')
 const log = require('../log')
-const SpanContext = require('./span_context')
+const DatadogSpanContext = require('../opentracing/span_context')
 const TextMapPropagator = require('../opentracing/propagation/text_map')
 const TraceState = require('../opentracing/propagation/tracestate')
+const SpanContext = require('./span_context')
+const Span = require('./span')
+const Sampler = require('./sampler')
+
+function normalizeLinkContext (context) {
+  if (!context) return
+
+  // OTel API bridge SpanContext wrapper
+  if (context._ddContext) return context._ddContext
+
+  // Datadog span context
+  if (typeof context.toTraceId === 'function' && typeof context.toSpanId === 'function') {
+    return context
+  }
+
+  // Standard OTel SpanContext (traceId/spanId)
+  if (typeof context.traceId !== 'string' || typeof context.spanId !== 'string') {
+    // Invalid
+    return
+  }
+
+  let sampling
+  if (typeof context.traceFlags === 'number') {
+    sampling = { priority: context.traceFlags & 1 }
+  }
+
+  let tracestate
+  if (context.traceState?.serialize) {
+    tracestate = TraceState.fromString(context.traceState.serialize())
+  }
+
+  return new DatadogSpanContext({
+    traceId: id(context.traceId, 16),
+    spanId: id(context.spanId, 16),
+    sampling,
+    tracestate
+  })
+}
 
 class Tracer {
   constructor (library, config, tracerProvider) {
@@ -96,7 +132,7 @@ class Tracer {
       context = api.trace.deleteSpan(context)
     }
     const parentSpan = api.trace.getSpan(context)
-    const parentSpanContext = parentSpan && parentSpan.spanContext()
+    const parentSpanContext = parentSpan?.spanContext()
     let spanContext
     if (parentSpanContext && api.trace.isSpanContextValid(parentSpanContext)) {
       spanContext = parentSpanContext._ddContext
@@ -107,12 +143,18 @@ class Tracer {
     }
 
     const spanKind = options.kind || api.SpanKind.INTERNAL
-    const links = (options.links || []).map(link => {
-      return {
-        context: link.context,
-        attributes: sanitizeAttributes(link.attributes)
+    const links = []
+    if (options.links?.length) {
+      for (const link of options.links) {
+        const ddContext = normalizeLinkContext(link?.context)
+        if (!ddContext) continue
+
+        links.push({
+          context: ddContext,
+          attributes: sanitizeAttributes(link.attributes)
+        })
       }
-    })
+    }
     const attributes = sanitizeAttributes(options.attributes)
 
     // TODO: sampling API is not yet supported

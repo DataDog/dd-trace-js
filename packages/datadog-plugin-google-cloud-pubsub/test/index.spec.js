@@ -11,9 +11,10 @@ const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mo
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 
-const { expectedSchema, rawExpectedSchema } = require('./naming')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { DataStreamsProcessor, ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
+const gc = global.gc ?? (() => {})
 
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
 const TIMEOUT = 30000
@@ -34,7 +35,7 @@ describe('Plugin', () => {
     after(() => {
       delete process.env.PUBSUB_EMULATOR_HOST
       delete process.env.DD_DATA_STREAMS_ENABLED
-      delete process.env.K_SERVICE
+      // Don't delete K_SERVICE - pubsub-push-subscription.spec.js needs it
     })
 
     afterEach(() => {
@@ -514,11 +515,11 @@ describe('Plugin', () => {
             })()
 
             // Force garbage collection multiple times
-            global.gc()
+            gc()
             await new Promise(resolve => setTimeout(resolve, 100))
-            global.gc()
+            gc()
             await new Promise(resolve => setTimeout(resolve, 100))
-            global.gc()
+            gc()
 
             // Wait a bit for FinalizationRegistry callback
             await new Promise(resolve => setTimeout(resolve, 500))
@@ -564,9 +565,9 @@ describe('Plugin', () => {
             subscription.close()
 
             // Force GC
-            global.gc()
+            gc()
             await new Promise(resolve => setTimeout(resolve, 100))
-            global.gc()
+            gc()
 
             const afterMemory = process.memoryUsage().heapUsed
             const memoryIncrease = afterMemory - initialMemory

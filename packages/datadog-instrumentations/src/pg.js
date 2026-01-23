@@ -1,10 +1,12 @@
 'use strict'
 
+const { errorMonitor } = require('node:events')
+
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('apm:pg:query:start')
 const finishCh = channel('apm:pg:query:finish')
@@ -12,8 +14,6 @@ const errorCh = channel('apm:pg:query:error')
 
 const startPoolQueryCh = channel('datadog:pg:pool:query:start')
 const finishPoolQueryCh = channel('datadog:pg:pool:query:finish')
-
-const { errorMonitor } = require('node:events')
 
 addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
   shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
@@ -112,8 +112,10 @@ function wrapQuery (query) {
       arguments[0] = pgQuery
 
       const retval = query.apply(this, arguments)
-      const queryQueue = this.queryQueue || this._queryQueue
-      const activeQuery = this.activeQuery || this._activeQuery
+
+      const deperecated = Object.hasOwn(this, '_activeQuery')
+      const queryQueue = deperecated ? this._queryQueue : this.queryQueue
+      const activeQuery = deperecated ? this._activeQuery : this.activeQuery
 
       const newQuery = queryQueue.at(-1) || activeQuery
 

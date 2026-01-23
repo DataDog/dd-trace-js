@@ -79,6 +79,8 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-aerospike-${{ matrix.node-version }}-${{ matrix.range_clean }}
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -152,6 +154,22 @@ jobs:
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
+  bullmq:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.0-alpine
+        ports:
+          - 6379:6379
+    env:
+      PLUGINS: bullmq
+      SERVICES: redis
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
   bunyan:
     runs-on: ubuntu-latest
     env:
@@ -194,6 +212,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-child-process
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -261,6 +281,8 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-confluentinc-kafka-javascript-${{ matrix.node-version }}
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -321,6 +343,8 @@ jobs:
       - run: yarn config set ignore-engines true
       - run: yarn test:plugins:ci --ignore-engines
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-couchbase-${{ matrix.node-version }}
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -358,6 +382,8 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-dns
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -387,6 +413,8 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-elasticsearch
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -534,6 +562,8 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-http-${{ matrix.node-version }}
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -561,6 +591,8 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-http2
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -611,6 +643,8 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-kafkajs-${{ matrix.node-version }}
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -851,6 +885,8 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-net
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -907,6 +943,8 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-next-${{ matrix.range_clean }}
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -985,6 +1023,8 @@ jobs:
       - run: yarn services --ignore-engines
       - run: yarn test:plugins --ignore-engines
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-oracledb
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -1010,6 +1050,8 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-pino
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -1036,6 +1078,15 @@ jobs:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
   prisma:
+    strategy:
+      matrix:
+        include:
+          - node-version: 18
+            range: '>=6.1.0 <7.0.0'
+            range_clean: gte.6.16.0.and.lt.7.0.0
+          - node-version: 'latest'
+            range: ''
+            range_clean: all
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -1047,11 +1098,28 @@ jobs:
     env:
       PLUGINS: prisma
       SERVICES: prisma
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-      - uses: ./.github/actions/plugins/test
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          version: ${{ matrix.node-version }}
+      - uses: ./.github/actions/install
+      - name: Run tests
+        run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-prisma-${{ matrix.node-version }}-${{ matrix.range_clean }}
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always() && github.actor != 'dependabot[bot]'
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   process:
     runs-on: ubuntu-latest
@@ -1202,6 +1270,8 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-sharedb
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
@@ -1234,6 +1304,8 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          flags: apm-integrations-tedious
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:

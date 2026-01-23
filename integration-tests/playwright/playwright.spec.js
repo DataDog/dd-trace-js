@@ -3,9 +3,9 @@
 const assert = require('node:assert')
 const { once } = require('node:events')
 const { exec, execSync } = require('child_process')
-const satisfies = require('semifies')
 const path = require('path')
 const fs = require('fs')
+const satisfies = require('semifies')
 
 const {
   sandboxCwd,
@@ -270,7 +270,6 @@ versions.forEach((version) => {
                 DD_TEST_SESSION_NAME: 'my-test-session',
                 DD_SERVICE: undefined
               },
-              stdio: 'pipe'
             }
           )
         })
@@ -304,13 +303,12 @@ versions.forEach((version) => {
             PW_BASE_URL: `http://localhost:${webAppPort}`,
             PW_RUNNER_DEBUG: '1'
           },
-          stdio: 'inherit'
         }
       )
-      childProcess.stdout.on('data', chunk => {
+      childProcess.stdout?.on('data', chunk => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', chunk => {
+      childProcess.stderr?.on('data', chunk => {
         testOutput += chunk.toString()
       })
     })
@@ -342,7 +340,6 @@ versions.forEach((version) => {
             TEST_DIR: './ci-visibility/playwright-tests-error',
             TEST_TIMEOUT: '3000'
           },
-          stdio: 'pipe'
         }
       )
     })
@@ -457,7 +454,6 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'pipe'
           }
         )
 
@@ -527,7 +523,6 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -599,7 +594,6 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'pipe'
           }
         )
 
@@ -648,7 +642,6 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'pipe'
           }
         )
 
@@ -718,7 +711,6 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'pipe'
           }
         )
 
@@ -774,7 +766,6 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'pipe'
           }
         )
 
@@ -806,7 +797,6 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'pipe'
           }
         )
 
@@ -858,7 +848,6 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-efd-and-retries'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -933,7 +922,6 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-efd-and-retries',
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1001,7 +989,6 @@ versions.forEach((version) => {
             MAX_FAILURES: '1',
             TEST_DIR: './ci-visibility/playwright-tests-max-failures'
           },
-          stdio: 'pipe'
         }
       )
     })
@@ -1048,7 +1035,6 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-automatic-retry'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1091,7 +1077,6 @@ versions.forEach((version) => {
               DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
               TEST_DIR: './ci-visibility/playwright-tests-automatic-retry'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1139,7 +1124,6 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1174,7 +1158,6 @@ versions.forEach((version) => {
             PW_RUNNER_DEBUG: '1',
             TEST_DIR: '.'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -1242,7 +1225,6 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1272,7 +1254,6 @@ versions.forEach((version) => {
             PW_BASE_URL: `http://localhost:${webAppPort}`,
             DD_SERVICE: 'my-service'
           },
-          stdio: 'pipe'
         }
       )
 
@@ -1333,12 +1314,12 @@ versions.forEach((version) => {
                 test => test.meta[TEST_NAME].startsWith('attempt to fix should attempt to fix')
               )
 
-              if (isDisabled) {
+              if (isDisabled && !isAttemptingToFix) {
                 assert.strictEqual(attemptedToFixTests.length, 2)
                 assert.ok(attemptedToFixTests.every(test =>
                   test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'
                 ))
-                // if the test is disabled, there will be no retries
+                // if the test is disabled and not attempting to fix, there will be no retries
                 return
               }
 
@@ -1346,6 +1327,20 @@ versions.forEach((version) => {
                 assert.strictEqual(attemptedToFixTests.length, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
               } else {
                 assert.strictEqual(attemptedToFixTests.length, 2)
+              }
+
+              if (isDisabled) {
+                const numDisabledTests = attemptedToFixTests.filter(test =>
+                  test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'
+                ).length
+                // disabled tests with attemptToFix still run and are retried
+                assert.strictEqual(numDisabledTests, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
+                // disabled tests with attemptToFix should not be skipped - they should run with pass/fail status
+                const skippedDisabledTests = attemptedToFixTests.filter(test =>
+                  test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true' &&
+                  test.meta[TEST_STATUS] === 'skip'
+                ).length
+                assert.strictEqual(skippedDisabledTests, 0, 'disabled tests with attemptToFix should not be skipped')
               }
 
               if (isQuarantined) {
@@ -1417,6 +1412,18 @@ versions.forEach((version) => {
               }
             }, 30000)
 
+        /**
+         * @param {{
+         *   isAttemptingToFix?: boolean,
+         *   isQuarantined?: boolean,
+         *   extraEnvVars?: Record<string, string>,
+         *   shouldAlwaysPass?: boolean,
+         *   shouldFailSometimes?: boolean,
+         *   isDisabled?: boolean,
+         *   shouldIncludeFlakyTest?: boolean,
+         *   cliArgs?: string
+         * }} [options]
+         */
         const runAttemptToFixTest = async ({
           isAttemptingToFix,
           isQuarantined,
@@ -1449,7 +1456,6 @@ versions.forEach((version) => {
                 ...(shouldIncludeFlakyTest ? { SHOULD_INCLUDE_FLAKY_TEST: '1' } : {}),
                 ...extraEnvVars
               },
-              stdio: 'pipe'
             }
           )
 
@@ -1683,14 +1689,13 @@ versions.forEach((version) => {
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
                 ...extraEnvVars
               },
-              stdio: 'pipe'
             }
           )
 
-          childProcess.stdout.on('data', (chunk) => {
+          childProcess.stdout?.on('data', (chunk) => {
             testOutput += chunk.toString()
           })
-          childProcess.stderr.on('data', (chunk) => {
+          childProcess.stderr?.on('data', (chunk) => {
             testOutput += chunk.toString()
           })
 
@@ -1805,6 +1810,14 @@ versions.forEach((version) => {
               }
             }, 25000)
 
+        /**
+         * @param {{
+         *   isQuarantining?: boolean,
+         *   extraEnvVars?: Record<string, string>,
+         *   cliArgs?: string,
+         *   hasFlakyTests?: boolean
+         * }} options
+         */
         const runQuarantineTest = async ({
           isQuarantining,
           extraEnvVars,
@@ -1823,7 +1836,6 @@ versions.forEach((version) => {
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
                 ...extraEnvVars
               },
-              stdio: 'pipe'
             }
           )
 
@@ -1912,14 +1924,13 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-tests-test-management',
               DD_TRACE_DEBUG: '1'
             },
-            stdio: 'pipe'
           }
         )
 
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
 
@@ -1973,7 +1984,6 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-tests-test-capabilities',
               DD_TEST_SESSION_NAME: 'my-test-session-name'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2005,7 +2015,6 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-active-test-span'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2041,7 +2050,6 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-active-test-span'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2088,7 +2096,6 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-tests-rum',
               ...extraEnvVars
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2100,6 +2107,37 @@ versions.forEach((version) => {
 
       it('can correlate tests and RUM sessions', async () => {
         await runRumTest({ isRedirecting: false })
+      })
+
+      it('sends telemetry for RUM browser tests when telemetry is enabled', async () => {
+        const telemetryPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+            const telemetryEvents = payloads.flatMap(({ payload }) => payload.payload.series)
+
+            const testSessionMetric = telemetryEvents.find(
+              ({ metric }) => metric === 'test_session'
+            )
+            assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+
+            const eventFinishedTestEvents = telemetryEvents
+              .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
+
+            eventFinishedTestEvents.forEach(({ tags }) => {
+              assert.ok(tags.includes('is_rum'))
+              assert.ok(tags.includes('test_framework:playwright'))
+            })
+          })
+
+        await Promise.all([
+          runRumTest(
+            { isRedirecting: false },
+            {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true'
+            }
+          ),
+          telemetryPromise
+        ])
       })
 
       it('do not crash when redirecting and RUM sessions are not active', async () => {
@@ -2127,7 +2165,6 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-exit-code'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2270,7 +2307,6 @@ versions.forEach((version) => {
               GITHUB_BASE_REF: '',
               ...extraEnvVars
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2363,7 +2399,6 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-retries-tagging',
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2425,7 +2460,6 @@ versions.forEach((version) => {
                 FULLY_PARALLEL: String(parallelism),
                 PLAYWRIGHT_WORKERS: '2'
               },
-              stdio: 'pipe'
             }
           )
 
@@ -2464,7 +2498,6 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-did-not-run',
               ADD_EXTRA_PLAYWRIGHT_PROJECT: 'true'
             },
-            stdio: 'pipe'
           }
         )
 

@@ -1,11 +1,11 @@
 'use strict'
 
-const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const { MsgpackChunk, MsgpackEncoder } = require('../msgpack')
 const log = require('../log')
 const { isTrue } = require('../util')
 const { memoize } = require('../log/utils')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getValueFromEnvSources } = require('../config/helper')
+const { truncateSpan, normalizeSpan } = require('./tags-processors')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 
@@ -31,7 +31,7 @@ class AgentEncoder {
     this._stringBytes = new MsgpackChunk()
     this._writer = writer
     this._reset()
-    this._debugEncoding = isTrue(getEnvironmentVariable('DD_TRACE_ENCODING_DEBUG'))
+    this._debugEncoding = isTrue(getValueFromEnvSources('DD_TRACE_ENCODING_DEBUG'))
     this._config = this._writer?._config
   }
 

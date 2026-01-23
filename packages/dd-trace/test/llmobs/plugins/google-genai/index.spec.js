@@ -1,8 +1,8 @@
 'use strict'
 
+const assert = require('node:assert')
 const { describe, before, it } = require('mocha')
 const { withVersions } = require('../../../setup/mocha')
-const assert = require('node:assert')
 
 const {
   useLlmObs,
@@ -12,7 +12,7 @@ const {
 } = require('../../util')
 
 describe('Plugin', () => {
-  const getEvents = useLlmObs({ plugin: 'google-genai' })
+  const { getEvents } = useLlmObs({ plugin: 'google-genai' })
 
   withVersions('google-genai', '@google/genai', (version) => {
     let client

@@ -3,8 +3,8 @@
 const assert = require('node:assert')
 const { join, basename } = require('node:path')
 
-const session = require('./stub-session')
 const proxyquire = require('proxyquire')
+const session = require('./stub-session')
 
 const collectorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/collector', {
   '../session': session

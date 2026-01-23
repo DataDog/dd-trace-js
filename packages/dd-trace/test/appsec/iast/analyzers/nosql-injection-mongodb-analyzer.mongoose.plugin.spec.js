@@ -1,13 +1,13 @@
 'use strict'
 
-const { prepareTestServerForIastInExpress } = require('../utils')
-const axios = require('axios')
-const agent = require('../../../plugins/agent')
-const { withVersions } = require('../../../setup/mocha')
-const semver = require('semver')
 const os = require('os')
 const path = require('path')
 const fs = require('fs')
+const axios = require('axios')
+const semver = require('semver')
+const { prepareTestServerForIastInExpress } = require('../utils')
+const agent = require('../../../plugins/agent')
+const { withVersions } = require('../../../setup/mocha')
 
 describe('nosql injection detection in mongodb - whole feature', () => {
   withVersions('mongoose', 'express', expressVersion => {
@@ -30,10 +30,11 @@ describe('nosql injection detection in mongodb - whole feature', () => {
 
         const connectOptions = {}
 
-        // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 5
-        if (semver.lt(loadedMongooseVersion, '5.0.0')) {
+        // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 6
+        if (semver.lt(loadedMongooseVersion, '6.0.0')) {
           connectOptions.useNewUrlParser = true
           connectOptions.useUnifiedTopology = true
+          connectOptions.useMongoClient = true
         }
 
         await mongoose.connect(`mongodb://localhost:27017/${dbName}`, connectOptions)

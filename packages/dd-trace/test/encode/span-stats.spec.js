@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const msgpack = require('@msgpack/msgpack')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -17,6 +17,7 @@ const {
   DEFAULT_SPAN_NAME,
   DEFAULT_SERVICE_NAME
 } = require('../../src/encode/tags-processors')
+const processTags = require('../../src/process-tags')
 
 describe('span-stats-encode', () => {
   let encoder
@@ -71,7 +72,8 @@ describe('span-stats-encode', () => {
       Lang: 'javascript',
       TracerVersion: '1.2.3',
       RuntimeID: 'some-runtime-id',
-      Sequence: 1
+      Sequence: 1,
+      ProcessTags: processTags.serialized
     }
   })
 

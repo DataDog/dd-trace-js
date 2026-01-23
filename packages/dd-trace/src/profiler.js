@@ -1,49 +1,14 @@
 'use strict'
 
-const log = require('./log')
 const { profiler } = require('./profiling')
 
-// Stop profiler upon exit in order to collect and export the current profile
-process.once('beforeExit', () => { profiler.stop() })
+globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => { profiler.stop() })
 
 module.exports = {
   start: config => {
-    const { service, version, env, url, hostname, port, tags, repositoryUrl, commitSHA, injectionEnabled } = config
-    const { enabled, sourceMap, exporters } = config.profiling
-    const { heartbeatInterval } = config.telemetry
-
-    const logger = {
-      debug: (message) => log.debug(message),
-      info: (message) => log.info(message),
-      warn: (message) => log.warn(message),
-      error: (...args) => log.error(...args)
-    }
-
-    const libraryInjected = injectionEnabled.length > 0
-    let activation
-    if (enabled === 'auto') {
-      activation = 'auto'
-    } else if (enabled === 'true') {
-      activation = 'manual'
-    } // else activation = undefined
-
-    return profiler.start({
-      service,
-      version,
-      env,
-      logger,
-      sourceMap,
-      exporters,
-      url,
-      hostname,
-      port,
-      tags,
-      repositoryUrl,
-      commitSHA,
-      libraryInjected,
-      activation,
-      heartbeatInterval
-    })
+    // Forward the full tracer config to the profiling layer.
+    // Profiling code is responsible for deriving the specific options it needs.
+    return profiler.start(config)
   },
 
   stop: () => {

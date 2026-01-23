@@ -6,6 +6,11 @@ const { beforeEach, describe, it } = require('mocha')
 require('../../setup/mocha')
 
 const {
+  compile,
+  compileSegments,
+  templateRequiresEvaluation
+} = require('../../../src/debugger/devtools_client/condition')
+const {
   literals,
   references,
   propertyAccess,
@@ -18,11 +23,6 @@ const {
   membershipAndMatching,
   typeAndDefinitionChecks
 } = require('./condition-test-cases')
-const {
-  compile,
-  compileSegments,
-  templateRequiresEvaluation
-} = require('../../../src/debugger/devtools_client/condition')
 
 // Each test case is either a tuple of [ast, vars, expected] where:
 // - `ast` is the abstract syntax tree to be compiled
@@ -52,7 +52,7 @@ const testCases = [
 describe('Expression language', function () {
   beforeEach(() => {
     // Mock the presence of `util.types` as it would be available when DI is active in the tracer
-    process[Symbol.for('datadog:node:util:types')] = require('util').types
+    globalThis[Symbol.for('dd-trace')].utilTypes ??= require('util').types
   })
 
   describe('condition compilation', function () {

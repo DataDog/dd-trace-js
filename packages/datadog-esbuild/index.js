@@ -2,13 +2,18 @@
 
 /* eslint-disable no-console */
 
+const { execSync } = require('child_process')
+const fs = require('fs')
+const RAW_BUILTINS = require('module').builtinModules
+const path = require('path')
+const { pathToFileURL, fileURLToPath } = require('url')
+
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
-const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
+
 const extractPackageAndModulePath = require(
   '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
 )
-
-const { pathToFileURL, fileURLToPath } = require('url')
+const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
 const { processModule, isESMFile } = require('./src/utils.js')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
@@ -36,11 +41,7 @@ for (const instrumentation of Object.values(instrumentations)) {
   }
 }
 
-const RAW_BUILTINS = require('module').builtinModules
 const CHANNEL = 'dd-trace:bundler:load'
-const path = require('path')
-const fs = require('fs')
-const { execSync } = require('child_process')
 
 const builtins = new Set()
 
@@ -96,6 +97,12 @@ function getGitMetadata () {
 }
 
 module.exports.setup = function (build) {
+  if (build.initialOptions.minify && !build.initialOptions.keepNames) {
+    throw new Error(
+      'Using --minify without --keep-names will break some dd-trace behavior. Refusing to bundle.'
+    )
+  }
+
   if (DD_IAST_ENABLED) {
     const iastRewriter = require('../dd-trace/src/appsec/iast/taint-tracking/rewriter')
     rewriter = iastRewriter.getRewriter()

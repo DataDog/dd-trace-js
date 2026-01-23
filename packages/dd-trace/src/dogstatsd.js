@@ -1,13 +1,14 @@
 'use strict'
 
 const lookup = require('dns').lookup // cache to avoid instrumentation
-const request = require('./exporters/common/request')
 const dgram = require('dgram')
 const isIP = require('net').isIP
-const log = require('./log')
 const { URL, format } = require('url')
+
+const request = require('./exporters/common/request')
+const log = require('./log')
 const Histogram = require('./histogram')
-const defaults = require('./config_defaults')
+const defaults = require('./config/defaults')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
 
@@ -359,7 +360,7 @@ class CustomMetrics {
     // TODO(bengl) this magic number should be configurable
     setInterval(flush, 10 * 1000).unref()
 
-    process.once('beforeExit', flush)
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(flush)
   }
 
   increment (stat, value = 1, tags) {

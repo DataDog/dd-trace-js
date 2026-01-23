@@ -4,26 +4,26 @@
 const { performance } = require('perf_hooks')
 const now = performance.now.bind(performance)
 const dateNow = Date.now
-const SpanContext = require('./span_context')
+const util = require('util')
+const { channel } = require('dc-polyfill')
 const id = require('../id')
 const tagger = require('../tagger')
 const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
-const { channel } = require('dc-polyfill')
-const util = require('util')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getValueFromEnvSources } = require('../config/helper')
+const SpanContext = require('./span_context')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
-const DD_TRACE_EXPERIMENTAL_STATE_TRACKING = getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_STATE_TRACKING')
-const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS')
+const DD_TRACE_EXPERIMENTAL_STATE_TRACKING = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING')
+const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS')
 
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
-const OTEL_ENABLED = !!getEnvironmentVariable('DD_TRACE_OTEL_ENABLED')
+const OTEL_ENABLED = !!getValueFromEnvSources('DD_TRACE_OTEL_ENABLED')
 const ALLOWED = new Set(['string', 'number', 'boolean'])
 
 const integrationCounters = {

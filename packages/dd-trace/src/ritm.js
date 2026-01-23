@@ -1,13 +1,16 @@
 'use strict'
 
 const path = require('path')
+const fs = require('fs')
 const Module = require('module')
-const parse = require('../../../vendor/dist/module-details-from-path')
+
 const dc = require('dc-polyfill')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+
+const parse = require('../../../vendor/dist/module-details-from-path')
+const { isRelativeRequire } = require('../../datadog-instrumentations/src/helpers/shared-utils')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
 const origRequire = Module.prototype.require
-
 // derived from require-in-the-middle@3 with tweaks
 
 module.exports = Hook
@@ -60,18 +63,19 @@ function Hook (modules, options, onrequire) {
     */
     let filename
     try {
+      // @ts-expect-error Module._resolveFilename is not typed
       filename = Module._resolveFilename(request, this)
     } catch {
       return _origRequire.apply(this, arguments)
     }
-
     const core = !filename.includes(path.sep)
     let name, basedir, hooks
     // return known patched modules immediately
     if (cache[filename]) {
+      const externalCacheEntry = require.cache[filename]
       // require.cache was potentially altered externally
-      if (require.cache[filename] && require.cache[filename].exports !== cache[filename].original) {
-        return require.cache[filename].exports
+      if (externalCacheEntry && externalCacheEntry.exports !== cache[filename].original) {
+        return externalCacheEntry.exports
       }
 
       return cache[filename].exports
@@ -111,38 +115,49 @@ function Hook (modules, options, onrequire) {
       name = filename
     } else {
       const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
-      const hasLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER') !== undefined
+      const hasLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER') !== undefined
       const segments = filename.split(path.sep)
       const filenameFromNodeModule = segments.includes('node_modules')
       // decide how to assign the stat
       // first case will only happen when patching an AWS Lambda Handler
       const stat = inAWSLambda && hasLambdaHandler && !filenameFromNodeModule ? { name: filename } : parse(filename)
-      if (!stat) return exports // abort if filename could not be parsed
-      name = stat.name
-      basedir = stat.basedir
 
-      hooks = moduleHooks[name]
-      if (!hooks) return exports // abort if module name isn't on whitelist
+      if (stat) {
+        name = stat.name
+        basedir = stat.basedir
 
-      // figure out if this is the main module file, or a file inside the module
-      const paths = Module._resolveLookupPaths(name, this, true)
-      if (!paths) {
-        // abort if _resolveLookupPaths return null
-        return exports
-      }
+        hooks = moduleHooks[name]
+        if (!hooks) return exports // abort if module name isn't on whitelist
 
-      let res
-      try {
-        res = Module._findPath(name, [basedir, ...paths])
-      } catch {
-        // case where the file specified in package.json "main" doesn't exist
-        // in this case, the file is treated as module-internal
-      }
+        // @ts-expect-error Module._resolveLookupPaths is not typed
+        const paths = Module._resolveLookupPaths(name, this, true)
+        if (!paths) {
+          // abort if _resolveLookupPaths return null
+          return exports
+        }
 
-      if (!res || res !== filename) {
-        // this is a module-internal file
-        // use the module-relative path to the file, prefixed by original module name
-        name = name + path.sep + path.relative(basedir, filename)
+        let res
+        try {
+          // @ts-expect-error Module._findPath is not typed
+          res = Module._findPath(name, [basedir, ...paths])
+        } catch {
+          // case where the file specified in package.json "main" doesn't exist
+          // in this case, the file is treated as module-internal
+        }
+
+        if (!res || res !== filename) {
+          // this is a module-internal file
+          // use the module-relative path to the file, prefixed by original module name
+          name = name + path.sep + path.relative(basedir, filename)
+        }
+      } else {
+        if (isRelativeRequire(request) && moduleHooks[request]) {
+          hooks = moduleHooks[request]
+          name = request
+          basedir = findProjectRoot(filename)
+        }
+
+        if (!hooks) return exports
       }
     }
 
@@ -165,6 +180,18 @@ Hook.reset = function () {
   patching = Object.create(null)
   cache = Object.create(null)
   moduleHooks = Object.create(null)
+}
+
+function findProjectRoot (startDir) {
+  let dir = startDir
+
+  while (!fs.existsSync(path.join(dir, 'package.json'))) {
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+
+  return dir
 }
 
 Hook.prototype.unhook = function () {

@@ -3,19 +3,15 @@
 const assert = require('node:assert/strict')
 const http = require('node:http')
 
-const { channel } = require('dc-polyfill')
 const express = require('express')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
-
 const upload = require('multer')()
 const proxyquire = require('proxyquire').noCallThru()
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
-
+const log = require('../src/log')
 const { getConfigFresh } = require('./helpers/config')
-
-const debugChannel = channel('datadog:log:debug')
 
 describe('Flare', () => {
   let flare
@@ -157,10 +153,28 @@ describe('Flare', () => {
     flare.enable(tracerConfig)
     flare.prepare('debug')
 
-    debugChannel.publish('foo')
-    debugChannel.publish('bar')
-    debugChannel.publish({ foo: 'bar' })
+    log.debug('foo')
+    log.debug('bar')
+    log.debug(JSON.stringify({ foo: 'bar' }))
 
+    flare.send(task)
+  })
+
+  it('should not send an empty file', done => {
+    const timer = setTimeout(() => done(), 100)
+
+    handler = req => {
+      const file = req.files[0]
+
+      if (file.originalname !== 'tracer_logs.txt') return
+
+      clearTimeout(timer)
+
+      done(new Error('Received empty file.'))
+    }
+
+    flare.enable(tracerConfig)
+    flare.prepare('debug')
     flare.send(task)
   })
 })

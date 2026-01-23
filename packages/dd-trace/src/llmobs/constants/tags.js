@@ -17,6 +17,9 @@ module.exports = {
   TRACE_ID: '_ml_obs.trace_id',
   PROPAGATED_TRACE_ID_KEY: '_dd.p.llmobs_trace_id',
   ROOT_PARENT_ID: 'undefined',
+  DEFAULT_PROMPT_NAME: 'unnamed-prompt',
+  INTERNAL_CONTEXT_VARIABLE_KEYS: '_dd_context_variable_keys',
+  INTERNAL_QUERY_VARIABLE_KEYS: '_dd_query_variable_keys',
 
   MODEL_NAME: '_ml_obs.meta.model_name',
   MODEL_PROVIDER: '_ml_obs.meta.model_provider',
@@ -24,6 +27,7 @@ module.exports = {
   INPUT_DOCUMENTS: '_ml_obs.meta.input.documents',
   INPUT_MESSAGES: '_ml_obs.meta.input.messages',
   INPUT_VALUE: '_ml_obs.meta.input.value',
+  INPUT_PROMPT: '_ml_obs.meta.input.prompt',
 
   OUTPUT_DOCUMENTS: '_ml_obs.meta.output.documents',
   OUTPUT_MESSAGES: '_ml_obs.meta.output.messages',
@@ -42,5 +46,8 @@ module.exports = {
   PROMPT_MULTIMODAL: 'prompt_multimodal',
   INSTRUMENTATION_METHOD_AUTO: 'auto',
   INSTRUMENTATION_METHOD_ANNOTATED: 'annotated',
-  INSTRUMENTATION_METHOD_UNKNOWN: 'unknown'
+  INSTRUMENTATION_METHOD_UNKNOWN: 'unknown',
+
+  ROUTING_API_KEY: '_dd.llmobs.routing.api_key',
+  ROUTING_SITE: '_dd.llmobs.routing.site'
 }

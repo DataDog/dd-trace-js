@@ -1,12 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 
 require('./setup/core')
-
-const agent = require('./plugins/agent')
 const { SAMPLING_PRIORITY_KEY, DECISION_MAKER_KEY } = require('../src/constants')
+const agent = require('./plugins/agent')
 
 describe('dd-trace', () => {
   let tracer

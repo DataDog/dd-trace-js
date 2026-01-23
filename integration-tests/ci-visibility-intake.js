@@ -1,12 +1,12 @@
 'use strict'
 
+const http = require('http')
+const zlib = require('zlib')
 const express = require('express')
 const bodyParser = require('body-parser')
 const msgpack = require('@msgpack/msgpack')
-const http = require('http')
 const multer = require('multer')
 const upload = multer()
-const zlib = require('zlib')
 
 const { FakeAgent } = require('./helpers')
 
@@ -257,6 +257,16 @@ class FakeCiVisIntake extends FakeAgent {
       res.status(testManagementResponseStatusCode).send(data)
       this.emit('message', {
         headers: req.headers,
+        url: req.url
+      })
+    })
+
+    app.post('/telemetry/proxy/api/v2/apmtelemetry', express.json(), (req, res) => {
+      res.status(200).send()
+      if (req.body?.payload?.namespace !== 'civisibility') return
+      this.emit('message', {
+        headers: req.headers,
+        payload: req.body,
         url: req.url
       })
     })

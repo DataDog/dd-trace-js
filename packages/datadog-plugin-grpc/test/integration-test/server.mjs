@@ -1,10 +1,9 @@
 import 'dd-trace/init.js'
-import * as grpc from '@grpc/grpc-js'
-import * as protoLoader from '@grpc/proto-loader'
 import path from 'path'
+import grpc from '@grpc/grpc-js'
+import * as protoLoader from '@grpc/proto-loader'
 
 const currentDirectoryPath = path.dirname(new URL(import.meta.url).pathname)
-const parentDirectoryPath = path.resolve(currentDirectoryPath, '..')
 
 let server
 let port = 0
@@ -20,7 +19,7 @@ function buildClient (service, callback) {
     service
   )
 
-  const definition = protoLoader.loadSync(`${parentDirectoryPath}/test.proto`)
+  const definition = protoLoader.loadSync(`${currentDirectoryPath}/test.proto`)
   const TestService = grpc.loadPackageDefinition(definition).test.TestService
 
   server = new grpc.Server()

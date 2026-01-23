@@ -1,6 +1,6 @@
 'use strict'
 
-module.exports = {
+const plugins = {
   get '@anthropic-ai/sdk' () { return require('../../../datadog-plugin-anthropic/src') },
   get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo/src') },
   get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
@@ -26,6 +26,7 @@ module.exports = {
   get '@node-redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@opensearch-project/opensearch' () { return require('../../../datadog-plugin-opensearch/src') },
   get '@prisma/client' () { return require('../../../datadog-plugin-prisma/src') },
+  get './runtime/library.js' () { return require('../../../datadog-plugin-prisma/src') },
   get '@redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@smithy/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@vitest/runner' () { return require('../../../datadog-plugin-vitest/src') },
@@ -35,6 +36,7 @@ module.exports = {
   get amqplib () { return require('../../../datadog-plugin-amqplib/src') },
   get avsc () { return require('../../../datadog-plugin-avsc/src') },
   get 'aws-sdk' () { return require('../../../datadog-plugin-aws-sdk/src') },
+  get bullmq () { return require('../../../datadog-plugin-bullmq/src') },
   get bunyan () { return require('../../../datadog-plugin-bunyan/src') },
   get 'cassandra-driver' () { return require('../../../datadog-plugin-cassandra-driver/src') },
   get child_process () { return require('../../../datadog-plugin-child_process/src') },
@@ -110,3 +112,5 @@ module.exports = {
   get winston () { return require('../../../datadog-plugin-winston/src') },
   get ws () { return require('../../../datadog-plugin-ws/src') }
 }
+
+module.exports = plugins

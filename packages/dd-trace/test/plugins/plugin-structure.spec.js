@@ -1,12 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, before } = require('tap').mocha
 const fs = require('node:fs')
 const path = require('node:path')
 
-require('../setup/core')
+const { describe, it } = require('mocha')
 
+require('../setup/core')
 const hooks = require('../../../datadog-instrumentations/src/helpers/hooks')
 
 const abstractPlugins = [
@@ -37,6 +37,7 @@ const missingPlugins = [
   'datadog-plugin-pug', // pug does not produce spans
   'datadog-plugin-vm', // vm does not produce spans
   'datadog-plugin-sequelize', // sequelize does not produce spans
+  'datadog-plugin-body-parser', // body-parser does not produce spans
 ]
 
 // instrumentations that do not have a hook, but are still instrumented
@@ -48,22 +49,16 @@ describe('Plugin Structure Validation', () => {
   const packagesDir = path.join(__dirname, '..', '..', '..')
   const instrumentationsDir = path.join(packagesDir, 'datadog-instrumentations', 'src')
 
-  let pluginDirs
-  let instrumentationFiles
-  let allPluginIds
+  const pluginDirs = fs.readdirSync(packagesDir)
+    .filter(dir => dir.startsWith('datadog-plugin-') && !missingPlugins.includes(dir))
 
-  before(() => {
-    pluginDirs = fs.readdirSync(packagesDir)
-      .filter(dir => dir.startsWith('datadog-plugin-') && !missingPlugins.includes(dir))
+  const instrumentationFiles = new Set(
+    fs.readdirSync(instrumentationsDir)
+      .filter(file => file.endsWith('.js'))
+      .map(file => file.replace('.js', ''))
+  )
 
-    instrumentationFiles = new Set(
-      fs.readdirSync(instrumentationsDir)
-        .filter(file => file.endsWith('.js'))
-        .map(file => file.replace('.js', ''))
-    )
-
-    allPluginIds = new Set(pluginDirs.map(dir => dir.replace('datadog-plugin-', '')))
-  })
+  const allPluginIds = new Set(pluginDirs.map(dir => dir.replace('datadog-plugin-', '')))
 
   pluginDirs.forEach(pluginDir => {
     const expectedId = pluginDir.replace('datadog-plugin-', '')

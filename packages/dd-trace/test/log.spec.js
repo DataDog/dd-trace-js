@@ -1,12 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
-
 const { storage } = require('../../datadog-core')
 
 /* eslint-disable no-console */
@@ -205,7 +205,7 @@ describe('log', () => {
 
         sinon.assert.calledOnce(console.debug)
         assert.match(console.debug.firstCall.args[0],
-          /^Trace: Test.foo\('argument', { hello: 'world' }, Foo { bar: 'baz' }\)/
+          /^Trace: Context.foo\('argument', { hello: 'world' }, Foo { bar: 'baz' }\)/
         )
         assert.ok(console.debug.firstCall.args[0].split('\n').length >= 3)
       })
@@ -457,8 +457,8 @@ describe('log', () => {
 
         sinon.assert.calledOnce(console.error)
         const consoleErrorArg = console.error.getCall(0).args[0]
-        assert.strictEqual(typeof consoleErrorArg, 'object')
-        assert.strictEqual(consoleErrorArg.message, 'message')
+        assert.strictEqual(typeof consoleErrorArg, 'string')
+        assert.strictEqual(consoleErrorArg, 'message')
       })
 
       it('should only log once for a given code', () => {

@@ -1,6 +1,6 @@
 'use strict'
 
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
 require('./setup/core')

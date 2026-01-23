@@ -1,73 +1,75 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
-
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 const Readable = require('node:stream').Readable
 const path = require('node:path')
 
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const satisfies = require('semifies')
+
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_SERVER_ERROR_STATUSES } = require('../../dd-trace/src/constants')
-
 const { NODE_MAJOR } = require('../../../version')
+
 const pkgs = NODE_MAJOR > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
 describe('Plugin', () => {
-  let grpc
-  let port = 0
-  let server
-  let tracer
-  let call
-
-  function buildClient (service, callback) {
-    service = Object.assign({
-      getBidi: () => {},
-      getServerStream: () => {},
-      getClientStream: () => {},
-      getUnary: () => {}
-    }, service)
-
-    const loader = require('../../../versions/@grpc/proto-loader').get()
-    const definition = loader.loadSync(path.join(__dirname, 'test.proto'))
-    const TestService = grpc.loadPackageDefinition(definition).test.TestService
-
-    server = new grpc.Server()
-
-    return new Promise((resolve, reject) => {
-      if (server.bindAsync) {
-        server.bindAsync('0.0.0.0:0', grpc.ServerCredentials.createInsecure(), (err, boundPort) => {
-          if (err) return reject(err)
-          port = boundPort
-
-          server.addService(TestService.service, service)
-          server.start()
-
-          resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
-        })
-      } else {
-        port = server.bind('0.0.0.0:0', grpc.ServerCredentials.createInsecure())
-        server.addService(TestService.service, service)
-        server.start()
-
-        resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
-      }
-    })
-  }
-
   describe('grpc/server', () => {
-    beforeEach(() => {
-      call = null
-    })
+    withVersions('grpc', pkgs, NODE_MAJOR >= 25 ? '>=1.3.0' : '*', (version, pkg, resolvedVersion) => {
+      let grpc
+      let port = 0
+      let server
+      let tracer
+      let call
 
-    afterEach(() => {
-      server.forceShutdown()
-    })
+      function buildClient (service) {
+        service = Object.assign({
+          getBidi: () => {},
+          getServerStream: () => {},
+          getClientStream: () => {},
+          getUnary: () => {}
+        }, service)
 
-    withVersions('grpc', pkgs, NODE_MAJOR >= 25 && '>=1.3.0', (version, pkg) => {
+        const loader = require('../../../versions/@grpc/proto-loader').get()
+        const definition = loader.loadSync(path.join(__dirname, 'test.proto'))
+        const TestService = grpc.loadPackageDefinition(definition).test.TestService
+
+        server = new grpc.Server()
+
+        return new Promise((resolve, reject) => {
+          if (server.bindAsync) {
+            server.bindAsync('0.0.0.0:0', grpc.ServerCredentials.createInsecure(), (err, boundPort) => {
+              if (err) return reject(err)
+              port = boundPort
+
+              server.addService(TestService.service, service)
+
+              if (satisfies(resolvedVersion, '<1.10.0')) {
+                server.start()
+              }
+
+              resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
+            })
+          } else {
+            port = server.bind('0.0.0.0:0', grpc.ServerCredentials.createInsecure())
+            server.addService(TestService.service, service)
+            server.start()
+
+            resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
+          }
+        })
+      }
+
+      beforeEach(() => {
+        call = null
+      })
+
+      afterEach(() => {
+        server.forceShutdown()
+      })
+
       describe('without configuration', () => {
         before(() => {
           return agent.load('grpc', { client: false })

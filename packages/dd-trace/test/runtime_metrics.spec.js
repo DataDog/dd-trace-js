@@ -1,20 +1,17 @@
 'use strict'
 
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const assert = require('node:assert')
 const os = require('node:os')
-
-const proxyquire = require('proxyquire')
-const sinon = require('sinon')
-const performance = require('node:perf_hooks').performance
+const { performance } = require('node:perf_hooks')
 const { setImmediate, setTimeout } = require('node:timers/promises')
 const util = require('node:util')
 
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 require('./setup/core')
-
 const { DogStatsDClient } = require('../src/dogstatsd')
-
-const isWindows = os.platform() === 'win32'
 
 function createGarbage (count = 50) {
   let last = {}
@@ -134,7 +131,7 @@ function createGarbage (count = 50) {
         sinon.assert.notCalled(runtimeMetrics.decrement)
         sinon.assert.calledOnce(runtimeMetrics.stop)
       })
-    }, { skip: isWindows && !nativeMetrics })
+    })
 
     describe('runtimeMetrics', () => {
       let runtimeMetrics
@@ -180,6 +177,13 @@ function createGarbage (count = 50) {
           proxiedObject['@datadog/native-metrics'] = {
             start () {
               throw new Error('Native metrics are not supported in this environment')
+            },
+          }
+        } else {
+          // The log is called in case native metrics fail to load.
+          proxiedObject['../log'] = {
+            error () {
+              throw new Error('Native metrics should load properly')
             },
           }
         }
@@ -272,6 +276,9 @@ function createGarbage (count = 50) {
           }
 
           global.gc()
+
+          await setImmediate()
+          await setImmediate()
 
           clock.tick(10000 - waitTime)
 
@@ -784,6 +791,6 @@ function createGarbage (count = 50) {
           })
         })
       })
-    }, { skip: isWindows && !nativeMetrics })
+    })
   })
 })

@@ -6,6 +6,8 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { removeDestroyHandler } = require('../util')
+
 describe('LLMObsSpanWriter', () => {
   let LLMObsSpanWriter
   let writer
@@ -28,7 +30,7 @@ describe('LLMObsSpanWriter', () => {
   })
 
   afterEach(() => {
-    process.removeAllListeners('beforeExit')
+    removeDestroyHandler()
   })
 
   it('is initialized correctly', () => {
@@ -60,7 +62,7 @@ describe('LLMObsSpanWriter', () => {
 
     writer.append(event)
 
-    assert.strictEqual(writer._bufferSize, eventSizeBytes)
+    assert.strictEqual(writer._buffer.size, eventSizeBytes)
   })
 
   it('truncates the event if it exceeds the size limit', () => {
@@ -76,7 +78,7 @@ describe('LLMObsSpanWriter', () => {
 
     writer.append(event)
 
-    const bufferEvent = writer._buffer[0]
+    const bufferEvent = writer._buffer.events[0]
     assert.deepStrictEqual(bufferEvent, {
       name: 'test',
       meta: {
@@ -91,8 +93,8 @@ describe('LLMObsSpanWriter', () => {
     writer = new LLMObsSpanWriter(config)
     writer.flush = sinon.stub()
 
-    writer._bufferSize = (5 << 20) - 1
-    writer._buffer = Array.from({ length: 10 })
+    writer._buffer.size = (5 << 20) - 1
+    writer._buffer.events = Array.from({ length: 10 })
     const event = { name: 'test', value: 'a'.repeat(1024) }
 
     writer.append(event)

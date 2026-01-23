@@ -310,6 +310,7 @@ tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
+tracer.use('bullmq');
 tracer.use('bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
@@ -680,7 +681,12 @@ llmobs.annotate({
     outputTokens: 5,
     totalTokens: 15
   },
-  tags: {}
+  tags: {},
+  prompt: {
+    id: '123',
+    version: '1.0.0',
+    template: 'this is a {message}',
+  }
 })
 llmobs.annotate(span, {
   inputData: 'input',

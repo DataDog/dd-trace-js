@@ -21,8 +21,12 @@ const formattedTags = {
 
 // Transform tags dictionary to array of strings.
 // If tag value is true, then only tag key is added to the array.
+/**
+ * @param {Record<string, unknown>} tagsDictionary
+ * @returns {string[]}
+ */
 function formatMetricTags (tagsDictionary) {
-  return Object.keys(tagsDictionary).reduce((acc, tagKey) => {
+  return Object.keys(tagsDictionary).reduce((/** @type {string[]} */ acc, tagKey) => {
     if (tagKey === 'statusCode') {
       const statusCode = tagsDictionary[tagKey]
       if (isStatusCode400(statusCode)) {
@@ -31,7 +35,7 @@ function formatMetricTags (tagsDictionary) {
       acc.push(`error_type:${getErrorTypeFromStatusCode(statusCode)}`)
       return acc
     }
-    const formattedTagKey = formattedTags[tagKey] || tagKey
+    const formattedTagKey = /** @type {string} */(formattedTags[tagKey] || tagKey)
     if (tagsDictionary[tagKey] === true) {
       acc.push(formattedTagKey)
     } else if (tagsDictionary[tagKey] !== undefined && tagsDictionary[tagKey] !== null) {

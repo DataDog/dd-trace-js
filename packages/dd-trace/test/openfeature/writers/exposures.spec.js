@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -129,22 +130,31 @@ describe('OpenFeature Exposures Writer', () => {
 
     it('should flush when payload would exceed 5MB limit', () => {
       // Create events that together exceed 5MB (limit is 5242880 bytes)
+      // Individual event limit is (1MB - 1KB) = 1047552 bytes
+      // Use ~1020KB events to safely stay under individual limit
       const largeEvent = {
         ...exposureEvent,
-        largeData: 'x'.repeat(2 * 1024 * 1024) // 2MB each
+        largeData: 'x'.repeat(1020 * 1024) // ~1020KB each
       }
 
-      writer.append(largeEvent) // First event, buffer = ~2MB
-      assert.strictEqual(writer._buffer?.length, 1)
+      // Add 5 events (~5MB total)
+      // Events 1-5 should accumulate and not trigger flush
+      for (let i = 0; i < 5; i++) {
+        writer.append(largeEvent)
+        assert.strictEqual(writer._buffer.length, i + 1,
+          `Buffer should contain ${i + 1} event(s) after appending event ${i + 1}`)
+      }
 
-      writer.append(largeEvent) // Second event, buffer = ~4MB
-      assert.strictEqual(writer._buffer?.length, 2)
+      // Verify request was not called yet
+      sinon.assert.notCalled(request)
 
-      writer.append(largeEvent) // Third event would make buffer ~6MB, should trigger flush
-
-      sinon.assert.calledWith(log.debug, sinon.match(/buffer size would exceed .* bytes, flushing first/))
-      // After flush is triggered, buffer should be cleared and new event added
-      assert.strictEqual(writer._buffer?.length, 1)
+      // Add 6th event (~6MB total) - should trigger flush
+      writer.append(largeEvent)
+      // Verify request was called (flush happened when limit was reached)
+      sinon.assert.called(request)
+      // 6th event should have triggered flush, leaving only the new event
+      assert.strictEqual(writer._buffer.length, 1,
+        'Buffer should contain 1 event after flush was triggered by 6th event')
     })
 
     it('should buffer events when disabled', () => {
@@ -154,7 +164,7 @@ describe('OpenFeature Exposures Writer', () => {
 
       assert.strictEqual(writer._buffer?.length, 0) // Event should not be in main buffer
       assert.strictEqual(writer._pendingEvents?.length, 1) // Should be in pending events
-      assert.strictEqual(writer._pendingEvents[0].event, exposureEvent)
+      assert.strictEqual(writer._pendingEvents[0], exposureEvent)
     })
   })
 
@@ -244,7 +254,7 @@ describe('OpenFeature Exposures Writer', () => {
     it('should skip flushing when buffer is empty', () => {
       writer.flush()
 
-      sinon.assert.called(request)
+      sinon.assert.notCalled(request)
     })
 
     it('should skip flushing when writer is disabled', () => {
@@ -253,7 +263,7 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.flush()
 
-      sinon.assert.called(request)
+      sinon.assert.notCalled(request)
     })
 
     it('should flush events to agent via EVP proxy', () => {
@@ -337,7 +347,7 @@ describe('OpenFeature Exposures Writer', () => {
     it('should not flush empty buffer periodically', () => {
       clock.tick(1000)
 
-      sinon.assert.called(request)
+      sinon.assert.notCalled(request)
     })
   })
 
@@ -369,10 +379,23 @@ describe('OpenFeature Exposures Writer', () => {
     })
 
     it('should prevent multiple destruction', () => {
-      writer.destroy()
-      writer.destroy() // Should not throw or cause issues
+      writer.setEnabled(true)
+      writer.append(exposureEvent)
 
-      assert.strictEqual(writer._destroyed, true)
+      // Destroy and verify flush happens
+      writer.destroy()
+      sinon.assert.calledOnce(request)
+      request.resetHistory()
+
+      // Advance time to when periodic flush would have happened
+      clock.tick(1000)
+
+      // No additional flush should occur (periodic timer was cleared)
+      sinon.assert.notCalled(request)
+
+      // Second destroy should be safe and not cause additional flushes
+      writer.destroy()
+      sinon.assert.notCalled(request)
     })
   })
 })

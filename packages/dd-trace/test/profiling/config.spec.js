@@ -1,15 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const os = require('node:os')
 const path = require('node:path')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const satisfies = require('semifies')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
-
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
 const WallProfiler = require('../../src/profiling/profilers/wall')
@@ -19,6 +18,8 @@ const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 
 const samplingContextsAvailable = process.platform !== 'win32'
 const oomMonitoringSupported = process.platform !== 'win32'
+const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
+const zstdOrGzip = isAtLeast24 ? 'zstd' : 'gzip'
 
 describe('config', () => {
   let Config
@@ -31,7 +32,26 @@ describe('config', () => {
   }
 
   beforeEach(() => {
-    Config = require('../../src/profiling/config').Config
+    const ProfilingConfig = require('../../src/profiling/config').Config
+    // Wrap the real profiling Config so tests see a valid default URL when none
+    // is provided, matching what the tracer Config singleton would provide at runtime.
+    Config = class TestConfig extends ProfilingConfig {
+      constructor (options = {}) {
+        const hasAddress =
+          options.url !== undefined ||
+          options.hostname !== undefined ||
+          options.port !== undefined
+
+        if (hasAddress) {
+          super(options)
+        } else {
+          super({
+            url: 'http://127.0.0.1:8126',
+            ...options
+          })
+        }
+      }
+    }
     env = process.env
     process.env = {}
   })
@@ -60,7 +80,7 @@ describe('config', () => {
     assert.strictEqual(config.profilers[1].codeHotspotsEnabled(), samplingContextsAvailable)
     assert.strictEqual(config.v8ProfilerBugWorkaroundEnabled, true)
     assert.strictEqual(config.cpuProfilingEnabled, samplingContextsAvailable)
-    assert.strictEqual(config.uploadCompression.method, 'gzip')
+    assert.strictEqual(config.uploadCompression.method, zstdOrGzip)
     assert.strictEqual(config.uploadCompression.level, undefined)
   })
 
@@ -396,7 +416,8 @@ describe('config', () => {
 
   it('should support IPv6 hostname', () => {
     const options = {
-      hostname: '::1'
+      hostname: '::1',
+      port: '8126'
     }
 
     const config = new Config(options)
@@ -510,7 +531,7 @@ describe('config', () => {
   }
 
   describe('async context', () => {
-    const isSupported = samplingContextsAvailable && satisfies(process.versions.node, '>=24.0.0')
+    const isSupported = samplingContextsAvailable && isAtLeast24
     describe('where supported', () => {
       it('should be on by default', function () {
         if (!isSupported) {
@@ -527,7 +548,10 @@ describe('config', () => {
         } else {
           process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = '0'
           try {
-            const config = new Config({})
+            const config = new Config({
+              // In production this comes from the tracer Config singleton; we mimic it here.
+              url: 'http://127.0.0.1:8126'
+            })
             assert.strictEqual(config.asyncContextFrameEnabled, false)
           } finally {
             delete process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
@@ -552,7 +576,7 @@ describe('config', () => {
         } else {
           process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = '1'
           try {
-            const config = new Config({})
+            const config = new Config()
             assert.strictEqual(config.asyncContextFrameEnabled, false)
           } finally {
             delete process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
@@ -577,7 +601,11 @@ describe('config', () => {
         },
         error () {}
       }
-      const config = new Config({ logger })
+      const config = new Config({
+        logger,
+        // In production this comes from the tracer Config singleton; we mimic it here.
+        url: 'http://127.0.0.1:8126'
+      })
 
       if (warning) {
         assert.strictEqual(logger.warnings.length, 1)
@@ -590,15 +618,15 @@ describe('config', () => {
     }
 
     it('should accept known methods', () => {
-      expectConfig(undefined, 'gzip', undefined)
+      expectConfig(undefined, zstdOrGzip, undefined)
       expectConfig('off', 'off', undefined)
-      expectConfig('on', 'gzip', undefined)
+      expectConfig('on', zstdOrGzip, undefined)
       expectConfig('gzip', 'gzip', undefined)
       expectConfig('zstd', 'zstd', undefined)
     })
 
     it('should reject unknown methods', () => {
-      expectConfig('foo', 'gzip', undefined, 'Invalid profile upload compression method "foo". Will use "on".')
+      expectConfig('foo', zstdOrGzip, undefined, 'Invalid profile upload compression method "foo". Will use "on".')
     })
 
     it('should accept supported compression levels in methods that support levels', () => {
@@ -618,7 +646,7 @@ describe('config', () => {
 
     it('should reject compression levels in methods that do not support levels', () => {
       ['on', 'off'].forEach((method) => {
-        const effectiveMethod = method === 'on' ? 'gzip' : method
+        const effectiveMethod = method === 'on' ? zstdOrGzip : method
         expectConfig(`${method}-3`, effectiveMethod, undefined,
           `Compression levels are not supported for "${method}".`)
         expectConfig(`${method}-foo`, effectiveMethod, undefined,

@@ -169,6 +169,7 @@ describe('Endpoints collection', () => {
       assert.strictEqual(trueCount, 1)
 
       // Check that all expected endpoints were found
+      const expectedOperationName = `${framework}.request`
       expectedEndpoints.forEach(expected => {
         const found = endpointsFound.find(e =>
           e.method === expected.method && e.path === expected.path
@@ -176,7 +177,7 @@ describe('Endpoints collection', () => {
 
         assert.ok(found)
         assert.strictEqual(found.type, 'REST')
-        assert.strictEqual(found.operation_name, 'http.request')
+        assert.strictEqual(found.operation_name, expectedOperationName)
         assert.strictEqual(found.resource_name, `${expected.method} ${expected.path}`)
       })
 

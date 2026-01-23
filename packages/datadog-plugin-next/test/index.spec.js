@@ -3,19 +3,19 @@
 const assert = require('node:assert/strict')
 /* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
 
+const path = require('node:path')
+const { execSync, spawn } = require('node:child_process')
+const { writeFileSync, readdirSync } = require('node:fs')
 const axios = require('axios')
 const { after, before, describe, it } = require('mocha')
 const { satisfies } = require('semver')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const path = require('node:path')
-const { execSync, spawn } = require('node:child_process')
-const { writeFileSync, readdirSync } = require('node:fs')
 
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { rawExpectedSchema } = require('./naming')
 const { NODE_MAJOR } = require('../../../version')
+const { rawExpectedSchema } = require('./naming')
 
 const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
 

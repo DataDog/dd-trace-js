@@ -2,7 +2,7 @@
 
 const request = require('../../exporters/common/request')
 const id = require('../../id')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getValueFromEnvSources } = require('../../config/helper')
 const log = require('../../log')
 
 function getTestManagementTests ({
@@ -35,7 +35,7 @@ function getTestManagementTests ({
     options.path = `${evpProxyPrefix}/api/v2/test/libraries/test-management/tests`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const apiKey = getEnvironmentVariable('DD_API_KEY')
+    const apiKey = getValueFromEnvSources('DD_API_KEY')
     if (!apiKey) {
       return done(new Error('Test management tests were not fetched because Datadog API key is not defined.'))
     }

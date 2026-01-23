@@ -15,8 +15,8 @@ const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-re
 const { IAST_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
 const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
-const { testInRequest } = require('./utils')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+const { testInRequest } = require('./utils')
 
 describe('IAST Index', () => {
   beforeEach(() => {

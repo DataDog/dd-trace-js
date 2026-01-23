@@ -1,10 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { describe, it } = require('tap').mocha
-const sinon = require('sinon')
 const { performance } = require('perf_hooks')
+
+const api = require('@opentelemetry/api')
+const { describe, it } = require('mocha')
+const sinon = require('sinon')
+
 const { timeOrigin } = performance
 const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
@@ -12,7 +14,6 @@ require('../setup/core')
 
 const tracer = require('../../').init()
 
-const api = require('@opentelemetry/api')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
@@ -333,6 +334,39 @@ describe('OTel Span', () => {
 
     span.addLink({ context: span3.spanContext() })
     assert.strictEqual(_links.length, 2)
+  })
+
+  it('should accept standard OTel SpanContext objects in startSpan links', () => {
+    // Regression test for https://github.com/DataDog/dd-trace-js/issues/7193
+    // Standard OTel SpanContext objects do not have Datadog methods like toTraceId()/toSpanId().
+    const otelSpanContext = {
+      traceId: '0123456789abcdef0123456789abcdef',
+      spanId: '0123456789abcdef',
+      traceFlags: 1
+    }
+
+    const span = makeSpan('name', {
+      links: [{
+        context: otelSpanContext,
+        attributes: {
+          foo: 'bar'
+        }
+      }]
+    })
+
+    span.end()
+
+    const formatted = spanFormat(span._ddSpan)
+    assert.ok(Object.hasOwn(formatted.meta, '_dd.span_links'))
+
+    const links = JSON.parse(formatted.meta['_dd.span_links'])
+    assert.strictEqual(links.length, 1)
+    assert.deepStrictEqual(links[0], {
+      trace_id: otelSpanContext.traceId,
+      span_id: otelSpanContext.spanId,
+      attributes: { foo: 'bar' },
+      flags: 1
+    })
   })
 
   it('should add span pointers', () => {

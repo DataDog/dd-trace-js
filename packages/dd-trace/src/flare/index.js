@@ -2,10 +2,10 @@
 
 const log = require('../log')
 const startupLog = require('../startup-log')
-const FlareFile = require('./file')
 const { LogChannel } = require('../log/channels')
 const request = require('../exporters/common/request')
 const FormData = require('../exporters/common/form-data')
+const FlareFile = require('./file')
 
 const MAX_LOG_SIZE = 12 * 1024 * 1024 // 12MB soft limit
 const TIMEOUT = 20 * 1000 * 60
@@ -64,7 +64,7 @@ const flare = {
   },
 
   _sendFile (task, file, filename) {
-    if (!file) return
+    if (!file || file.length === 0) return
 
     const form = new FormData()
 

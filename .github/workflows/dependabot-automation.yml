@@ -4,8 +4,11 @@ on:
   pull_request:
     types:
       - opened
+      - reopened
+      - synchronize
 
 env:
+  # Add Groups here to enable auto-merge for Dependabot PRs
   GROUPS: '["dev-minor-and-patch-dependencies", "gh-actions-packages", "test-versions"]'
 
 jobs:
@@ -22,51 +25,182 @@ jobs:
           policy: dependabot-automation
       - name: Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@08eff52bf64351f401fb50d4972fa95b9f2c2d1b # 2.4.0
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # 2.5.0
         with:
           github-token: "${{ steps.octo-sts.outputs.token }}"
-      - name: Enable auto-merge for Dependabot PRs
-        if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
-        run: gh pr merge --auto --squash "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
       - name: Approve a PR
         if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
         run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+      - name: Enable auto-merge for Dependabot PRs
+        if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
 
-  vendor:
+  vendor-build:
     if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    # Security: this job checks out and runs code from the PR (vendoring build),
+    # so it is intentionally restricted to read-only permissions and produces a
+    # patch artifact instead of pushing directly.
     permissions:
-      id-token: write
-      contents: write
+      contents: read
+      pull-requests: read
+    outputs:
+      has_changes: ${{ steps.diff.outputs.has_changes }}
+      is_vendor_group: ${{ steps.ctx.outputs.is_vendor_group }}
     steps:
       - name: Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@08eff52bf64351f401fb50d4972fa95b9f2c2d1b # 2.4.0
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-        if: steps.metadata.outputs.dependency-group == 'vendor-minor-and-patch-dependencies'
-      - run: yarn
-        working-directory: ./vendor
-        if: steps.metadata.outputs.dependency-group == 'vendor-minor-and-patch-dependencies'
-      - name: Create commits
-        id: create-commits
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # 2.5.0
+      - name: Compute vendor context
+        id: ctx
         run: |
+          set -euo pipefail
+
+          echo "is_vendor_group=${{ steps.metadata.outputs.directory == '/vendor' && steps.metadata.outputs.dependency-type == 'direct:production' }}" >> $GITHUB_OUTPUT
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        if: steps.ctx.outputs.is_vendor_group == 'true'
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Restore trusted Node setup actions
+        if: steps.ctx.outputs.is_vendor_group == 'true'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          git checkout "${{ github.event.pull_request.base.sha }}" -- .github/actions/node
+      - name: Restore trusted vendoring scripts
+        if: steps.ctx.outputs.is_vendor_group == 'true'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          git checkout "${{ github.event.pull_request.base.sha }}" -- vendor/rspack.js vendor/rspack.config.js
+      - uses: ./.github/actions/node/active-lts
+        if: steps.ctx.outputs.is_vendor_group == 'true'
+      - name: Install vendoring deps (no lifecycle scripts)
+        if: steps.ctx.outputs.is_vendor_group == 'true'
+        run: yarn --ignore-scripts --frozen-lockfile --non-interactive
+        working-directory: ./vendor
+      - name: Build vendored bundles (trusted script)
+        if: steps.ctx.outputs.is_vendor_group == 'true'
+        run: node ./rspack.js
+        working-directory: ./vendor
+      - name: Create patch (restricted paths only)
+        id: diff
+        run: |
+          set -euo pipefail
+
+          if [ "${{ steps.ctx.outputs.is_vendor_group }}" != "true" ]; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if git diff --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          allowed_prefix_1="vendor/dist/"
+          allowed_file_1="vendor/package.json"
+          allowed_file_2="vendor/yarn.lock"
+
+          bad=0
+          while IFS= read -r file; do
+            case "$file" in
+              "$allowed_file_1" | "$allowed_file_2" | "$allowed_prefix_1"*)
+                ;;
+              *)
+                echo "Unexpected changed path: $file"
+                bad=1
+                ;;
+            esac
+          done < <(git diff --name-only)
+
+          if [ "$bad" -ne 0 ]; then
+            echo "Refusing to proceed: unexpected paths changed during vendoring."
+            exit 1
+          fi
+
+          git diff --binary --no-color > vendor.patch
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: steps.diff.outputs.has_changes == 'true'
+        with:
+          name: vendor-patch
+          path: vendor.patch
+          if-no-files-found: error
+
+  vendor-push:
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && needs.vendor-build.outputs.is_vendor_group == 'true' && needs.vendor-build.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    needs: vendor-build
+    # Security: this job has write permissions but never runs installs/builds.
+    # It only applies the vetted patch artifact and pushes a single commit.
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: dependabot-automation
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          token: ${{ steps.octo-sts.outputs.token }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: vendor-patch
+      - name: Apply patch
+        run: git apply --whitespace=nowarn vendor.patch
+      - name: Validate changed paths
+        run: |
+          set -euo pipefail
+
+          allowed_prefix_1="vendor/dist/"
+          allowed_file_1="vendor/package.json"
+          allowed_file_2="vendor/yarn.lock"
+
+          bad=0
+          while IFS= read -r file; do
+            case "$file" in
+              "$allowed_file_1" | "$allowed_file_2" | "$allowed_prefix_1"*)
+                ;;
+              *)
+                echo "Unexpected changed path after applying patch: $file"
+                bad=1
+                ;;
+            esac
+          done < <(git diff --name-only)
+
+          if [ "$bad" -ne 0 ]; then
+            echo "Refusing to proceed: unexpected paths changed."
+            exit 1
+          fi
+      - name: Create commit
+        id: create-commit
+        run: |
+          set -euo pipefail
+
           git config user.name github-actions
           git config user.email github-actions@github.com
+
           git add -A
           git commit -m "update vendored dependencies with new versions"
-
-          echo "commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-        if: steps.metadata.outputs.dependency-group == 'vendor-minor-and-patch-dependencies'
-      - name: Push commits
-        uses: DataDog/commit-headless@5a0f3876e0fbdd3a86b3e008acf4ec562db59eee # action/v2.0.1
+          echo "commits=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+      - name: Push commit
+        uses: DataDog/commit-headless@583489e08d78037e7fa256c14adf998d5463f6a0 # action/v2.0.2
+        env:
+          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
         with:
-          branch: ${{ github.ref_name }}
+          branch: ${{ github.event.pull_request.head.ref }}
           command: push
-          commits: "${{ steps.create-commits.outputs.commits }}"
-        if: steps.metadata.outputs.dependency-group == 'vendor-minor-and-patch-dependencies'
+          commits: "${{ steps.create-commit.outputs.commits }}"

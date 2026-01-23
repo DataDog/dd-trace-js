@@ -1,24 +1,25 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
-const express = require('express')
-const upload = require('multer')()
-const { Profile } = require('../../../../../vendor/dist/pprof-format')
 const os = require('node:os')
 const path = require('node:path')
 const { request } = require('node:http')
 
-require('../../setup/core')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+const express = require('express')
+const upload = require('multer')()
 
+const { Profile } = require('../../../../../vendor/dist/pprof-format')
+require('../../setup/core')
 const tracer = require('../../../../../init')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
 const logger = require('../../../src/log')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const version = require('../../../../../package.json').version
+const processTags = require('../../../src/process-tags')
 
 const RUNTIME_ID = 'a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
 const ENV = 'test-env'
@@ -74,59 +75,68 @@ describe('exporters/agent', function () {
     assert.strictEqual(req.files[0].size, req.files[0].buffer.length)
 
     const event = JSON.parse(req.files[0].buffer.toString())
-    assert.ok(Object.hasOwn(event, 'attachments'))
-    assert.strictEqual(event.attachments.length, 2)
-    assert.strictEqual(event.attachments[0], 'wall.pprof')
-    assert.strictEqual(event.attachments[1], 'space.pprof')
-    assert.strictEqual(event.start, start.toISOString())
-    assert.strictEqual(event.end, end.toISOString())
-    assert.strictEqual(event.family, 'node')
-    assert.strictEqual(event.version, '4')
-    assert.strictEqual(event.tags_profiler, [
-      'language:javascript',
-      'runtime:nodejs',
-      `runtime_arch:${process.arch}`,
-      `runtime_os:${process.platform}`,
-      `runtime_version:${process.version}`,
-      `process_id:${process.pid}`,
-      `profiler_version:${version}`,
-      'format:pprof',
-      `runtime-id:${RUNTIME_ID}`
-    ].join(','))
-    assert.ok(Object.hasOwn(event, 'info'))
-    assert.ok(Object.hasOwn(event.info, 'application'))
-    assert.strictEqual(Object.keys(event.info.application).length, 4)
-    assert.strictEqual(event.info.application.env, ENV)
-    assert.strictEqual(event.info.application.service, SERVICE)
-    assert.ok(Object.hasOwn(event.info.application, 'start_time'))
-    assert.strictEqual(event.info.application.version, '1.2.3')
-    assert.ok(Object.hasOwn(event.info, 'platform'))
-    assert.strictEqual(Object.keys(event.info.platform).length, 4)
-    assert.strictEqual(event.info.platform.hostname, HOST)
-    assert.strictEqual(event.info.platform.kernel_name, os.type())
-    assert.strictEqual(event.info.platform.kernel_release, os.release())
-    assert.strictEqual(event.info.platform.kernel_version, os.version())
-    assert.ok(Object.hasOwn(event.info, 'profiler'))
-    assert.strictEqual(Object.keys(event.info.profiler).length, 3)
-    assert.strictEqual(event.info.profiler.activation, 'unknown')
-    assert.ok(Object.hasOwn(event.info.profiler, 'ssi'))
-    assert.strictEqual(event.info.profiler.ssi.mechanism, 'none')
-    assert.strictEqual(event.info.profiler.version, version)
-    assert.ok(Object.hasOwn(event.info, 'runtime'))
-    assert.strictEqual(Object.keys(event.info.runtime).length, 3)
-    assert.ok(Object.hasOwn(event.info.runtime, 'available_processors'))
-    assert.strictEqual(event.info.runtime.engine, 'nodejs')
-    assert.strictEqual(event.info.runtime.version, process.version.substring(1))
 
-    assert.strictEqual(req.files[1].fieldname, 'wall.pprof')
-    assert.strictEqual(req.files[1].originalname, 'wall.pprof')
-    assert.strictEqual(req.files[1].mimetype, 'application/octet-stream')
-    assert.strictEqual(req.files[1].size, req.files[1].buffer.length)
+    assert.strictEqual(typeof event.info.application.start_time, 'string')
 
-    assert.strictEqual(req.files[2].fieldname, 'space.pprof')
-    assert.strictEqual(req.files[2].originalname, 'space.pprof')
-    assert.strictEqual(req.files[2].mimetype, 'application/octet-stream')
-    assert.strictEqual(req.files[2].size, req.files[2].buffer.length)
+    delete event.info.application.start_time
+
+    assert.deepStrictEqual(event, {
+      attachments: ['wall.pprof', 'space.pprof'],
+      start: start.toISOString(),
+      end: end.toISOString(),
+      family: 'node',
+      version: '4',
+      tags_profiler: [
+        'language:javascript',
+        'runtime:nodejs',
+        `runtime_arch:${process.arch}`,
+        `runtime_os:${process.platform}`,
+        `runtime_version:${process.version}`,
+        `process_id:${process.pid}`,
+        `profiler_version:${version}`,
+        'format:pprof',
+        `runtime-id:${RUNTIME_ID}`
+      ].join(','),
+      info: {
+        application: {
+          env: ENV,
+          service: SERVICE,
+          version: APP_VERSION
+        },
+        platform: {
+          hostname: HOST,
+          kernel_name: os.type(),
+          kernel_release: os.release(),
+          kernel_version: os.version()
+        },
+        profiler: {
+          activation: 'unknown',
+          ssi: {
+            mechanism: 'none'
+          },
+          version
+        },
+        runtime: {
+          // @ts-expect-error - availableParallelism is only available from node 18.14.0 and above
+          available_processors: os.availableParallelis?.() ?? os.cpus().length,
+          engine: 'nodejs',
+          version: process.version.substring(1)
+        }
+      },
+      process_tags: processTags.serialized
+    })
+
+    assertObjectContains(req.files, [{
+      fieldname: 'wall.pprof',
+      originalname: 'wall.pprof',
+      mimetype: 'application/octet-stream',
+      size: req.files[1].buffer.length
+    }, {
+      fieldname: 'space.pprof',
+      originalname: 'space.pprof',
+      mimetype: 'application/octet-stream',
+      size: req.files[2].buffer.length
+    }])
 
     const wallProfile = Profile.decode(req.files[1].buffer)
     const spaceProfile = Profile.decode(req.files[2].buffer)
@@ -439,7 +449,7 @@ describe('exporters/agent', function () {
     })
   })
 
-  describe('using UDS', () => {
+  ;(os.platform() === 'win32' ? describe.skip : describe)('using UDS', () => {
     let listener
 
     beforeEach(done => {
@@ -487,7 +497,7 @@ describe('exporters/agent', function () {
         exporter.export({ profiles, start, end, tags }).catch(reject)
       }))
     })
-  }, { skip: os.platform() === 'win32' })
+  })
 })
 
 function assertIsProfile (obj, msg) {

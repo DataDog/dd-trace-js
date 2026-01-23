@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 
+const { join } = require('path')
 const {
   FakeAgent,
   curlAndAssertMessage,
@@ -9,7 +10,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
-const { join } = require('path')
 
 describe('esm', () => {
   let agent
