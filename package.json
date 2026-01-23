@@ -130,14 +130,14 @@
   ],
   "dependencies": {
     "dc-polyfill": "^0.1.10",
-    "import-in-the-middle": "2.0.3"
+    "import-in-the-middle": "2.0.4"
   },
   "optionalDependencies": {
     "@datadog/libdatadog": "0.7.0",
     "@datadog/native-appsec": "10.3.0",
     "@datadog/native-iast-taint-tracking": "4.1.0",
     "@datadog/native-metrics": "3.1.1",
-    "@datadog/openfeature-node-server": "^0.2.0",
+    "@datadog/openfeature-node-server": "^0.3.1",
     "@datadog/pprof": "5.13.2",
     "@datadog/wasm-js-rewriter": "5.0.1",
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
