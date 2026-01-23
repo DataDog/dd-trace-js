@@ -1333,12 +1333,12 @@ versions.forEach((version) => {
                 test => test.meta[TEST_NAME].startsWith('attempt to fix should attempt to fix')
               )
 
-              if (isDisabled) {
+              if (isDisabled && !isAttemptingToFix) {
                 assert.strictEqual(attemptedToFixTests.length, 2)
                 assert.ok(attemptedToFixTests.every(test =>
                   test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'
                 ))
-                // if the test is disabled, there will be no retries
+                // if the test is disabled and not attempting to fix, there will be no retries
                 return
               }
 
@@ -1346,6 +1346,14 @@ versions.forEach((version) => {
                 assert.strictEqual(attemptedToFixTests.length, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
               } else {
                 assert.strictEqual(attemptedToFixTests.length, 2)
+              }
+
+              if (isDisabled) {
+                const numDisabledTests = attemptedToFixTests.filter(test =>
+                  test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'
+                ).length
+                // disabled tests with attemptToFix still run and are retried
+                assert.strictEqual(numDisabledTests, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
               }
 
               if (isQuarantined) {
