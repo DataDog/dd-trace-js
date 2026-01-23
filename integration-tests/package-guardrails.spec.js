@@ -149,7 +149,7 @@ addHook({ name: 'bluebird', versions: ['*'] }, Promise => {
           'hi',
           [
             'abort', 'reason:incompatible_bundle',
-            'abort.runtime', ''
+            'abort.bundle', ''
           ],
           undefined
         )
