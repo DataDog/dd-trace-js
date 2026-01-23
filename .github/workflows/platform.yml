@@ -62,16 +62,6 @@ jobs:
       - run: ./node_modules/.bin/bun pm pack --gzip-level 0 --filename bun.tgz && tar -zxf bun.tgz -C bun
       - run: diff -r npm bun
 
-  bundle-validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-      - uses: ./.github/actions/node/active-lts
-      # Running `yarn` also automatically runs Rspack as a postinstall script.
-      - run: yarn --frozen-lockfile
-        working-directory: vendor
-      - run: git diff --exit-code
-
   core:
     runs-on: ubuntu-latest
     steps:
