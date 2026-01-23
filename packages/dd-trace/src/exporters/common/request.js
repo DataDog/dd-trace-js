@@ -128,16 +128,14 @@ function request (data, options, callback) {
     }
 
     activeRequests++
-    const finalize = (() => {
-      // Ensures decrementing activeRequests only once across multiple event handlers
-      let called = false
-      return () => {
-        if (!called) {
-          activeRequests--
-          called = true
-        }
+    // Ensures decrementing activeRequests only once across multiple event handlers
+    let called = false
+    const finalize = () => {
+      if (!called) {
+        activeRequests--
+        called = true
       }
-    })()
+    }
 
     const store = storage('legacy').getStore()
 
