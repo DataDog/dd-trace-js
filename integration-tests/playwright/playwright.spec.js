@@ -64,7 +64,7 @@ const NUM_RETRIES_EFD = 3
 
 const latest = 'latest'
 const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
-const versions = [latest]
+const versions = [oldest, latest]
 
 versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
@@ -80,7 +80,7 @@ versions.forEach((version) => {
   describe(`playwright@${version}`, function () {
     let cwd, receiver, childProcess, webAppPort, webPortWithRedirect, webAppServer, webAppServerWithRedirect
 
-    this.retries(0)
+    this.retries(2)
     this.timeout(80000)
 
     useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript'], true)
@@ -1283,7 +1283,7 @@ versions.forEach((version) => {
 
     contextNewVersions('test management', () => {
       const ATTEMPT_TO_FIX_NUM_RETRIES = 3
-      context.only('attempt to fix', () => {
+      context('attempt to fix', () => {
         beforeEach(() => {
           receiver.setTestManagementTests({
             playwright: {
