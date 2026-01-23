@@ -100,15 +100,14 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
             DD_TRACE_DEBUG: '1',
             ...extraTestContext
           },
-          stdio: 'pipe'
         }
       )
 
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         processOutput += chunk.toString()
       })
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         processOutput += chunk.toString()
       })
 

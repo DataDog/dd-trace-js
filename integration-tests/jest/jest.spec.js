@@ -103,9 +103,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     `jest@${JEST_VERSION}`,
     `jest-jasmine2@${JEST_VERSION}`,
     // jest-environment-jsdom is included in older versions of jest
-    JEST_VERSION === 'latest' && `jest-environment-jsdom@${JEST_VERSION}`,
+    JEST_VERSION === 'latest' ? `jest-environment-jsdom@${JEST_VERSION}` : '',
     // jest-circus is not included in older versions of jest
-    JEST_VERSION !== 'latest' && `jest-circus@${JEST_VERSION}`,
+    JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
     '@happy-dom/jest-environment',
     'office-addin-mock',
     'winston',
@@ -156,10 +156,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         },
         stdio: 'pipe'
       })
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
 
@@ -293,7 +293,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'jest-plugin-tests/jest-test.js',
             DD_SERVICE: 'plugin-tests',
           },
-          stdio: 'inherit'
         }
       )
 
@@ -345,7 +344,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...oldApmProtocolEnvVars,
             TESTS_TO_RUN: 'jest-plugin-tests/jest-hook-failure',
           },
-          stdio: 'inherit'
         }
       )
 
@@ -395,7 +393,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...oldApmProtocolEnvVars,
             TESTS_TO_RUN: 'jest-plugin-tests/jest-focus'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -425,9 +422,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           env: {
             ...oldApmProtocolEnvVars,
             TESTS_TO_RUN: 'jest-plugin-tests/jest-inject-globals',
-            DO_NOT_INJECT_GLOBALS: true
+            DO_NOT_INJECT_GLOBALS: 'true'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -517,12 +513,47 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           },
           stdio: 'pipe'
         })
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
+      })
+
+      // TODO: This should also run in agentless mode
+      const maybeSkippped = reportingOption === 'evp proxy' ? it : it.skip
+      maybeSkippped('sends telemetry with test_session metric when telemetry is enabled', async () => {
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
+        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+        const telemetryPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+            const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+
+            const testSessionMetric = telemetryMetrics.find(
+              ({ metric }) => metric === 'test_session'
+            )
+
+            assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+              TESTS_TO_RUN: 'test/ci-visibility-test',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          telemetryPromise
+        ])
       })
 
       it('should create events for session, suite and test', async () => {
@@ -583,7 +614,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               ...envVars,
               TESTS_TO_RUN: 'jest-plugin-tests/jest-test-suite'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -613,10 +643,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           },
           stdio: 'pipe'
         })
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
         childProcess.on('message', () => {
@@ -637,10 +667,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         },
         stdio: 'pipe'
       })
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
       childProcess.on('message', () => {
@@ -676,7 +706,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             testRunner: 'jest-circus/runner',
           }])
         },
-        stdio: 'pipe'
       }
     )
 
@@ -729,7 +758,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'sharding-test/sharding-test',
             TEST_SHARD: '2/2'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -765,7 +793,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           TESTS_TO_RUN: 'sharding-test/sharding-test',
           TEST_SHARD: '1/2'
         },
-        stdio: 'inherit'
       }
     )
   })
@@ -778,10 +805,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       },
       stdio: 'pipe'
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
@@ -798,14 +825,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ...getCiVisAgentlessConfig(receiver.port),
         OLD_RUNNER: 1,
         NODE_OPTIONS: '-r dd-trace/ci/init',
-        RUN_IN_PARALLEL: true
+        RUN_IN_PARALLEL: 'true'
       },
       stdio: 'pipe'
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
@@ -947,7 +974,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             RUN_IN_PARALLEL: 'true',
           },
-          stdio: 'inherit'
         }
       )
 
@@ -973,10 +999,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       },
       stdio: 'pipe'
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
@@ -1053,7 +1079,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           RUN_IN_PARALLEL: 'true',
           WAIT_FOR_UNHANDLED_REJECTIONS: 'true'
         },
-        stdio: 'inherit'
       })
 
       await Promise.all([
@@ -1104,7 +1129,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           TESTS_TO_RUN: 'jest-bad-import-torn-down/jest-bad-import-test',
           RUN_IN_PARALLEL: 'true',
         },
-        stdio: 'inherit'
       })
 
       await Promise.all([
@@ -1131,7 +1155,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       {
         cwd,
         env: getCiVisAgentlessConfig(receiver.port),
-        stdio: 'inherit'
       }
     )
   })
@@ -1153,7 +1176,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       {
         cwd,
         env: { ...getCiVisAgentlessConfig(receiver.port), ENABLE_CODE_COVERAGE: '1' },
-        stdio: 'inherit'
       }
     )
   })
@@ -1184,7 +1206,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           DD_TRACE_DEBUG: '1',
           DD_TRACE_LOG_LEVEL: 'warn'
         },
-        stdio: 'inherit'
       }
     )
     childProcess.on('exit', () => {
@@ -1192,10 +1213,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         done()
       }).catch(done)
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
   })
@@ -1213,7 +1234,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           DD_TRACE_DEBUG: '1',
           DD_TRACE_LOG_LEVEL: 'warn'
         },
-        stdio: 'inherit'
       }
     )
     childProcess.on('exit', () => {
@@ -1221,10 +1241,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.match(testOutput, /Timeout waiting for the tracer to flush/)
       done()
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
   })
@@ -1255,7 +1275,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       {
         cwd,
         env: getCiVisAgentlessConfig(receiver.port),
-        stdio: 'inherit'
       }
     )
     childProcess.on('exit', () => {
@@ -1282,7 +1301,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           ...getCiVisAgentlessConfig(receiver.port),
           TESTS_TO_RUN: 'test/fail-test'
         },
-        stdio: 'inherit'
       }
     )
     childProcess.on('exit', () => {
@@ -1305,10 +1323,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       },
       stdio: 'pipe'
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
@@ -1452,7 +1470,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             ENABLE_CODE_COVERAGE: '1'
           },
-          stdio: 'pipe'
         }
       )
       await Promise.all([
@@ -1496,7 +1513,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             ENABLE_CODE_COVERAGE: '1'
           },
-          stdio: 'inherit'
         }
       )
     })
@@ -1558,7 +1574,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
     })
@@ -1592,7 +1607,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -1641,7 +1655,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
     })
@@ -1681,7 +1694,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
     })
@@ -1747,7 +1759,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'unskippable-test/test-'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -1813,7 +1824,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'unskippable-test/test-'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -1849,7 +1859,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -1875,7 +1884,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -1922,7 +1930,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
 
@@ -1969,7 +1976,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             COLLECT_COVERAGE_FROM: '**/test-total-code-coverage/**',
             ENABLE_CODE_COVERAGE: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2011,7 +2017,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               testRunner: 'jest-circus/runner',
             }])
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2045,7 +2050,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'jest/mocked-test.js',
           },
-          stdio: 'pipe'
         }
       )
       childProcess.on('exit', () => {
@@ -2088,7 +2092,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: { ...getCiVisAgentlessConfig(receiver.port), TESTS_TO_RUN: 'jest-flaky/flaky-fails.js' },
-          stdio: 'inherit'
         }
       )
 
@@ -2158,7 +2161,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2231,7 +2233,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test-early-flake-detection/test' },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2287,7 +2288,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'test/ci-visibility-test',
             DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2347,7 +2347,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisEvpProxyConfig(receiver.port),
             TESTS_TO_RUN: 'test-early-flake-detection/occasionally-failing-test'
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2405,7 +2404,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisEvpProxyConfig(receiver.port),
             TESTS_TO_RUN: 'test-early-flake-detection/skipped-and-todo-test'
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2469,7 +2467,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisEvpProxyConfig(receiver.port),
             TESTS_TO_RUN: 'test-early-flake-detection/weird-test-names'
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2519,7 +2516,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisEvpProxyConfig(receiver.port),
             TESTS_TO_RUN: 'test/ci-visibility-test'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2578,14 +2574,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisEvpProxyConfig(receiver.port),
             TESTS_TO_RUN: '**/ci-visibility/test-early-flake-detection/occasionally-failing-test*'
           },
-          stdio: 'inherit'
         }
       )
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
 
@@ -2657,7 +2652,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           TESTS_TO_RUN: 'ci-visibility/test-early-flake-detection/jest-snapshot',
           CI: '1' // needs to be run as CI so snapshots are not written
         },
-        stdio: 'inherit'
       })
 
       const [[exitCode]] = await Promise.all([
@@ -2717,7 +2711,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           TESTS_TO_RUN: 'ci-visibility/test-early-flake-detection/jest-image-snapshot',
           CI: '1'
         },
-        stdio: 'inherit'
       })
 
       const [[exitCode]] = await Promise.all([
@@ -2767,7 +2760,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           ...getCiVisEvpProxyConfig(receiver.port),
           TESTS_TO_RUN: 'test/ci-visibility-test'
         },
-        stdio: 'inherit'
       })
 
       childProcess.on('exit', () => {
@@ -2832,11 +2824,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port), // use agentless for this test, just for variety
             TESTS_TO_RUN: 'test/ci-visibility-test',
-            ENABLE_JSDOM: true,
+            ENABLE_JSDOM: 'true',
             DD_TRACE_DEBUG: '1',
             DD_TRACE_LOG_LEVEL: 'warn'
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2906,7 +2897,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'test/ci-visibility-test',
             ENABLE_HAPPY_DOM: 'true',
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2966,7 +2956,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -3029,7 +3018,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'jest/failing-test' },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -3103,9 +3091,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             env: {
               ...getCiVisEvpProxyConfig(receiver.port),
               TESTS_TO_RUN: 'test/efd-parallel/ci-visibility-test',
-              RUN_IN_PARALLEL: true
+              RUN_IN_PARALLEL: 'true'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -3158,9 +3145,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             env: {
               ...getCiVisEvpProxyConfig(receiver.port),
               TESTS_TO_RUN: 'test/efd-parallel/ci-visibility-test',
-              RUN_IN_PARALLEL: true
+              RUN_IN_PARALLEL: 'true'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -3231,10 +3217,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
             TESTS_TO_RUN: 'ci-visibility/test-early-flake-detection/jest-parallel-snapshot',
-            RUN_IN_PARALLEL: true,
+            RUN_IN_PARALLEL: 'true',
             CI: '1' // needs to be run as CI so snapshots are not written
           },
-          stdio: 'inherit'
         })
 
         await Promise.all([
@@ -3326,7 +3311,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisEvpProxyConfig(receiver.port),
             TESTS_TO_RUN: 'jest-flaky/flaky-'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3376,7 +3360,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'jest-flaky/flaky-',
             DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3429,7 +3412,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'jest-flaky/flaky-',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3477,7 +3459,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3524,7 +3505,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3606,7 +3586,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3691,9 +3670,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/parallel-test-hit-breakpoint-',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
-            RUN_IN_PARALLEL: true
+            RUN_IN_PARALLEL: 'true'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3742,7 +3720,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'dynamic-instrumentation/test-not-hit-breakpoint',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3782,7 +3759,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             TEST_SHOULD_PASS_AFTER_RETRY: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3821,7 +3797,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'office-addin-mock/test'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3884,7 +3859,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
-          stdio: 'inherit'
         }
       )
 
@@ -3915,7 +3889,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           TESTS_TO_RUN: 'test/ci-visibility-test',
           DD_SERVICE: 'my-service'
         },
-        stdio: 'inherit'
       }
     )
 
@@ -4030,6 +4003,18 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             }
           })
 
+      /**
+       * @param {() => void} done
+       * @param {{
+       *   isAttemptToFix?: boolean,
+       *   isQuarantined?: boolean,
+       *   isDisabled?: boolean,
+       *   shouldAlwaysPass?: boolean,
+       *   shouldFailSometimes?: boolean,
+       *   extraEnvVars?: Record<string, string>,
+       *   isParallel?: boolean
+       * }} [options]
+       */
       const runAttemptToFixTest = (done, {
         isAttemptToFix,
         isQuarantined,
@@ -4061,15 +4046,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
               ...extraEnvVars
             },
-            stdio: 'inherit'
           }
         )
 
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           stdout += chunk.toString()
         })
 
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           stdout += chunk.toString()
         })
 
@@ -4157,7 +4141,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               ...getCiVisAgentlessConfig(receiver.port),
               TESTS_TO_RUN: 'jest-flaky/flaky-fails.js'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -4216,7 +4199,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               ...getCiVisAgentlessConfig(receiver.port),
               TESTS_TO_RUN: 'jest-flaky/flaky-fails.js'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -4321,7 +4303,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               ...getCiVisAgentlessConfig(receiver.port),
               TESTS_TO_RUN: 'test-management/test-snapshot-attempt-to-fix-1'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -4374,7 +4355,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               TESTS_TO_RUN: 'test-management/test-snapshot-attempt-to-fix-1',
               SHOULD_PASS_ALWAYS: '1'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -4436,7 +4416,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               ...getCiVisAgentlessConfig(receiver.port),
               TESTS_TO_RUN: 'test-management/test-snapshot-image'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -4458,7 +4437,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               extraEnvVars: {
                 // we need to run more than 1 suite for parallel mode to kick in
                 TESTS_TO_RUN: 'test-management/test-attempt-to-fix',
-                RUN_IN_PARALLEL: true
+                RUN_IN_PARALLEL: 'true'
               }
             }
           )
@@ -4524,9 +4503,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TESTS_TO_RUN: 'test-management/test-snapshot-attempt-to-fix-',
-                RUN_IN_PARALLEL: true
+                RUN_IN_PARALLEL: 'true'
               },
-              stdio: 'inherit'
             }
           )
 
@@ -4614,12 +4592,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               SHOULD_CHECK_RESULTS: '1',
               ...extraEnvVars
             },
-            stdio: 'inherit'
           }
         )
 
         // jest uses stderr to output logs
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           stdout += chunk.toString()
         })
 
@@ -4665,7 +4642,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           {
             // we need to run more than 1 suite for parallel mode to kick in
             TESTS_TO_RUN: 'test-management/test-disabled',
-            RUN_IN_PARALLEL: true
+            RUN_IN_PARALLEL: 'true'
           },
           true
         )
@@ -4749,12 +4726,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               SHOULD_CHECK_RESULTS: '1',
               ...extraEnvVars
             },
-            stdio: 'inherit'
           }
         )
 
         // jest uses stderr to output logs
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           stdout += chunk.toString()
         })
 
@@ -4800,7 +4776,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           {
             // we need to run more than 1 suite for parallel mode to kick in
             TESTS_TO_RUN: 'test-management/test-quarantine',
-            RUN_IN_PARALLEL: true
+            RUN_IN_PARALLEL: 'true'
           },
           true
         )
@@ -4832,13 +4808,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           TESTS_TO_RUN: 'test-management/test-attempt-to-fix-1',
           DD_TRACE_DEBUG: '1'
         },
-        stdio: 'inherit'
       })
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
 
@@ -4881,7 +4856,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             DD_TEST_SESSION_NAME: 'my-test-session-name'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -4917,7 +4891,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'ci-visibility/test-custom-tags'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -5064,7 +5037,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             GITHUB_BASE_REF: '',
             ...extraEnvVars
           },
-          stdio: 'inherit'
         }
       )
 
@@ -5139,7 +5111,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               TESTS_TO_RUN: 'test-impacted-test/test-impacted-1',
               GITHUB_BASE_REF: ''
             },
-            stdio: 'inherit'
           }
         )
 
@@ -5170,7 +5141,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         runImpactedTest(done, { isModified: true, isParallel: true }, {
           TESTS_TO_RUN: 'test-impacted-test/test-impacted',
-          RUN_IN_PARALLEL: true
+          RUN_IN_PARALLEL: 'true'
         })
       })
     })
@@ -5277,15 +5248,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           ...getCiVisAgentlessConfig(receiver.port),
           TESTS_TO_RUN: 'jest-package-mock/non-dependency-mock-test',
           SETUP_FILES_AFTER_ENV: '<rootDir>/ci-visibility/jest-setup-files-after-env.js',
-          RUN_IN_PARALLEL: true,
+          RUN_IN_PARALLEL: 'true',
         }
       }
     )
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
 
