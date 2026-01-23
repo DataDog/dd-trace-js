@@ -328,8 +328,7 @@ async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, st
   let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
-    DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net',
-    DD_TRACE_FLUSH_INTERVAL: '100'
+    DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net'
   }
   env = { ...env, ...additionalEnvArgs }
   return spawnProc(command, args, {

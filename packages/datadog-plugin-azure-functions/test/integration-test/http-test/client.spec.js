@@ -74,8 +74,7 @@ describe('esm', () => {
 async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
     NODE_OPTIONS: `--loader=${hookFile} func start`,
-    DD_TRACE_AGENT_PORT: agentPort,
-    DD_TRACE_FLUSH_INTERVAL: '100'
+    DD_TRACE_AGENT_PORT: agentPort
   }
   env = { ...env, ...additionalEnvArgs }
   return spawnProc(command, args, {
