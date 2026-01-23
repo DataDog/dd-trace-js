@@ -150,8 +150,11 @@ function request(data, options, callback) {
 
     req.setTimeout(timeout, () => {
       try {
-        if (typeof req.abort === 'function') req.abort()
-        else req.destroy()
+        if (typeof req.abort === 'function') {
+          req.abort()
+        } else {
+          req.destroy()
+        }
       } catch {
         // ignore
       }
