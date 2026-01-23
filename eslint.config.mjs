@@ -640,8 +640,14 @@ export default [
     plugins: {
       mocha: eslintPluginMocha,
     },
+    languageOptions: {
+      globals: {
+        afterAll: 'readonly',
+        expect: 'readonly',
+        jest: 'readonly',
+      },
+    },
     rules: {
-      'no-undef': 'off',
       'mocha/max-top-level-suites': 'off',
       'mocha/no-pending-tests': 'off',
     }

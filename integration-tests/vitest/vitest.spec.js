@@ -106,7 +106,6 @@ versions.forEach((version) => {
               POOL_CONFIG: poolConfig,
               DD_SERVICE: undefined
             },
-            stdio: 'pipe'
           }
         )
 
@@ -342,7 +341,6 @@ versions.forEach((version) => {
               TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
             },
-            stdio: 'pipe'
           }
         )
       })
@@ -383,7 +381,6 @@ versions.forEach((version) => {
               DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
             },
-            stdio: 'pipe'
           }
         )
       })
@@ -426,7 +423,6 @@ versions.forEach((version) => {
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
             },
-            stdio: 'pipe'
           }
         )
       })
@@ -452,7 +448,6 @@ versions.forEach((version) => {
             NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
             TEST_DIR: './vitest-test.mjs'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -492,14 +487,13 @@ versions.forEach((version) => {
                 COVERAGE_PROVIDER: coverageProvider,
                 TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs'
               },
-              stdio: 'inherit'
             }
           )
 
-          childProcess.stdout.on('data', (chunk) => {
+          childProcess.stdout?.on('data', (chunk) => {
             testOutput += chunk.toString()
           })
-          childProcess.stderr.on('data', (chunk) => {
+          childProcess.stderr?.on('data', (chunk) => {
             testOutput += chunk.toString()
           })
 
@@ -540,14 +534,13 @@ versions.forEach((version) => {
               COVERAGE_PROVIDER: 'istanbul',
               TEST_DIR: 'ci-visibility/vitest-tests/coverage-test-zero.mjs'
             },
-            stdio: 'inherit'
           }
         )
 
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
 
@@ -650,7 +643,6 @@ versions.forEach((version) => {
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               SHOULD_ADD_EVENTUALLY_FAIL: '1'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -730,7 +722,6 @@ versions.forEach((version) => {
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               ALWAYS_FAIL: 'true'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -784,7 +775,6 @@ versions.forEach((version) => {
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -856,7 +846,6 @@ versions.forEach((version) => {
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -917,7 +906,6 @@ versions.forEach((version) => {
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -971,7 +959,6 @@ versions.forEach((version) => {
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
               TEST_DIR: './vitest-test.mjs'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -1048,7 +1035,6 @@ versions.forEach((version) => {
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               SHOULD_REPEAT: '1'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1119,7 +1105,6 @@ versions.forEach((version) => {
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1169,7 +1154,6 @@ versions.forEach((version) => {
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
             },
-            stdio: 'pipe'
           }
         )
         await Promise.all([
@@ -1223,7 +1207,6 @@ versions.forEach((version) => {
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
                 DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
               },
-              stdio: 'pipe'
             }
           )
 
@@ -1273,7 +1256,6 @@ versions.forEach((version) => {
                 TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
               },
-              stdio: 'pipe'
             }
           )
 
@@ -1359,7 +1341,6 @@ versions.forEach((version) => {
                 TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
               },
-              stdio: 'pipe'
             }
           )
 
@@ -1413,7 +1394,6 @@ versions.forEach((version) => {
                 TEST_DIR: 'ci-visibility/vitest-tests/breakpoint-not-hit*',
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
               },
-              stdio: 'pipe'
             }
           )
 
@@ -1484,7 +1464,6 @@ versions.forEach((version) => {
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1518,7 +1497,6 @@ versions.forEach((version) => {
             NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
             DD_SERVICE: 'my-service'
           },
-          stdio: 'pipe'
         }
       )
 
@@ -1620,6 +1598,17 @@ versions.forEach((version) => {
                 }
               })
 
+          /**
+           * @param {() => void} done
+           * @param {{
+           *   isAttemptingToFix?: boolean,
+           *   shouldAlwaysPass?: boolean,
+           *   isQuarantining?: boolean,
+           *   shouldFailSometimes?: boolean,
+           *   isDisabling?: boolean,
+           *   extraEnvVars?: Record<string, string>
+           * }} [options]
+           */
           const runAttemptToFixTest = (done, {
             isAttemptingToFix,
             shouldAlwaysPass,
@@ -1648,11 +1637,10 @@ versions.forEach((version) => {
                   ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
                   ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {})
                 },
-                stdio: 'inherit'
               }
             )
 
-            childProcess.stdout.on('data', (data) => {
+            childProcess.stdout?.on('data', (data) => {
               stdout += data
             })
 
@@ -1813,11 +1801,10 @@ versions.forEach((version) => {
                   NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
                   ...extraEnvVars
                 },
-                stdio: 'inherit'
               }
             )
 
-            childProcess.stdout.on('data', (data) => {
+            childProcess.stdout?.on('data', (data) => {
               stdout += data
             })
 
@@ -1925,11 +1912,10 @@ versions.forEach((version) => {
                   NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
                   ...extraEnvVars
                 },
-                stdio: 'inherit'
               }
             )
 
-            childProcess.stdout.on('data', (data) => {
+            childProcess.stdout?.on('data', (data) => {
               stdout += data
             })
 
@@ -1995,14 +1981,13 @@ versions.forEach((version) => {
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
                 DD_TRACE_DEBUG: '1'
               },
-              stdio: 'inherit'
             }
           )
 
-          childProcess.stdout.on('data', (chunk) => {
+          childProcess.stdout?.on('data', (chunk) => {
             testOutput += chunk.toString()
           })
-          childProcess.stderr.on('data', (chunk) => {
+          childProcess.stderr?.on('data', (chunk) => {
             testOutput += chunk.toString()
           })
 
@@ -2025,16 +2010,19 @@ versions.forEach((version) => {
 
             assert.ok(metadataDicts.length > 0)
             metadataDicts.forEach(metadata => {
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
-              // capabilities logic does not overwrite test session name
-              assert.strictEqual(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
+              assert.ok(!Object.hasOwn(metadata.test, DD_CAPABILITIES_TEST_IMPACT_ANALYSIS))
+
+              assertObjectContains(metadata.test, {
+                [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
+                [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
+                [DD_CAPABILITIES_IMPACTED_TESTS]: '1',
+                [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
+                [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
+                [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: '5',
+                [DD_CAPABILITIES_FAILED_TEST_REPLAY]: '1',
+                // capabilities logic does not overwrite test session name
+                [TEST_SESSION_NAME]: 'my-test-session-name'
+              })
             })
           })
 
@@ -2047,7 +2035,6 @@ versions.forEach((version) => {
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               DD_TEST_SESSION_NAME: 'my-test-session-name'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2091,6 +2078,13 @@ versions.forEach((version) => {
         execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
       })
 
+      /**
+       * @param {{
+       *   isModified?: boolean,
+       *   isEfd?: boolean,
+       *   isNew?: boolean,
+       * }} options
+       */
       const getTestAssertions = ({ isModified, isEfd, isNew }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -2155,10 +2149,10 @@ versions.forEach((version) => {
 
       const runImpactedTest = (
         done,
-        { isModified, isEfd = false, isParallel = false, isNew = false },
+        { isModified, isEfd = false, isNew = false },
         extraEnvVars = {}
       ) => {
-        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isParallel, isNew })
+        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isNew })
 
         childProcess = exec(
           './node_modules/.bin/vitest run',
@@ -2171,7 +2165,6 @@ versions.forEach((version) => {
               GITHUB_BASE_REF: '',
               ...extraEnvVars
             },
-            stdio: 'inherit'
           }
         )
 
@@ -2228,12 +2221,11 @@ versions.forEach((version) => {
       childProcess = exec('node ./ci-visibility/run-tinypool.mjs', {
         cwd,
         env: getCiVisAgentlessConfig(receiver.port),
-        stdio: 'pipe'
       })
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
       childProcess.on('exit', (code) => {
@@ -2277,7 +2269,6 @@ versions.forEach((version) => {
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               TEST_DIR: './test-programmatic-api*'
             },
-            stdio: 'pipe'
           }
         )
 
