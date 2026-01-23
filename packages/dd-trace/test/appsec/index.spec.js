@@ -503,7 +503,7 @@ describe('AppSec Index', function () {
 
       sinon.assert.notCalled(waf.run)
 
-      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, undefined)
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, body)
     })
 
     it('should not propagate incoming http end data with empty framework properties', () => {
@@ -541,7 +541,7 @@ describe('AppSec Index', function () {
 
       sinon.assert.notCalled(waf.run)
 
-      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, undefined)
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, {})
     })
 
     it('should propagate incoming http end data with express', () => {
