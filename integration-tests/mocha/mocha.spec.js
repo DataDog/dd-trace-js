@@ -163,10 +163,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       },
       stdio: 'pipe'
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
   })
@@ -207,7 +207,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   const nonLegacyReportingOptions = ['evp proxy', 'agentless']
 
   nonLegacyReportingOptions.forEach((reportingOption) => {
-    let envVars = {}
+    let envVars = /** @type {NodeJS.ProcessEnv} */ ({})
     context(`(${reportingOption}) can run and report`, () => {
       beforeEach(() => {
         if (reportingOption === 'agentless') {
@@ -281,10 +281,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           stdio: 'pipe'
         })
 
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
 
@@ -329,7 +329,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -369,7 +368,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -410,7 +408,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -441,7 +438,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -475,7 +471,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: getCiVisAgentlessConfig(receiver.port),
-            stdio: 'inherit'
           }
         )
 
@@ -506,7 +501,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -540,7 +534,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -571,7 +564,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -605,7 +597,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -639,7 +630,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -670,7 +660,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -706,7 +695,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -754,7 +742,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -787,7 +774,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -820,7 +806,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -882,7 +867,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -912,7 +896,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -962,7 +945,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -996,7 +978,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
@@ -1085,8 +1066,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit',
-            shell: true
           }
         )
 
@@ -1116,10 +1095,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           },
           stdio: 'pipe'
         })
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
         childProcess.on('message', () => {
@@ -1156,7 +1135,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './test-custom-tags/custom-tags.js'
             ])
           },
-          stdio: 'inherit'
         }
       )
 
@@ -1178,10 +1156,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         },
         stdio: 'pipe'
       })
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
       childProcess.on('message', () => {
@@ -1213,7 +1191,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         env: {
           ...getCiVisAgentlessConfig(receiver.port)
         },
-        stdio: 'inherit'
       }
     )
 
@@ -1242,13 +1219,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         DD_TRACE_LOG_LEVEL: 'error',
         DD_SITE: '= invalid = url'
       },
-      stdio: 'pipe'
     })
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('exit', () => {
@@ -1314,17 +1290,17 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       cwd,
       env: {
         ...getCiVisAgentlessConfig(receiver.port),
-        RUN_IN_PARALLEL: true,
+        RUN_IN_PARALLEL: 'true',
         DD_TRACE_DEBUG: '1',
         DD_TRACE_LOG_LEVEL: 'warn',
         DD_TEST_SESSION_NAME: 'my-test-session'
       },
       stdio: 'pipe'
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
@@ -1352,12 +1328,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       'node node_modules/mocha/bin/mocha --parallel --jobs 2 ./ci-visibility/test/ci-visibility-test*', {
         cwd,
         env: getCiVisAgentlessConfig(receiver.port),
-        stdio: 'pipe'
       })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('exit', () => {
@@ -1372,12 +1347,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     childProcess = exec('node ./ci-visibility/run-workerpool.js', {
       cwd,
       env: getCiVisAgentlessConfig(receiver.port),
-      stdio: 'pipe'
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('exit', (code) => {
@@ -1407,7 +1381,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             './test/fail-test.js'
           ])
         },
-        stdio: 'inherit'
       }
     )
     childProcess.on('exit', () => {
@@ -1430,10 +1403,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       },
       stdio: 'pipe'
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
@@ -1521,7 +1494,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
 
     it('can report code coverage', (done) => {
-      let testOutput
+      let testOutput = ''
       const libraryConfigRequestPromise = receiver.payloadReceived(
         ({ url }) => url === '/api/v2/libraries/tests/services/setting'
       )
@@ -1582,10 +1555,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'pipe'
         }
       )
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
       childProcess.on('exit', () => {
@@ -1627,7 +1599,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
     })
@@ -1689,7 +1660,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
     })
@@ -1723,7 +1693,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -1772,7 +1741,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
     })
@@ -1812,7 +1780,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
     })
@@ -1882,7 +1849,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './unskippable-test/test-unskippable.js'
             ])
           },
-          stdio: 'inherit'
         }
       )
 
@@ -1952,7 +1918,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './unskippable-test/test-unskippable.js'
             ])
           },
-          stdio: 'inherit'
         }
       )
 
@@ -1988,7 +1953,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2014,7 +1978,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2052,7 +2015,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port)
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2131,7 +2093,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './test/ci-visibility-test-2.js'
             ])
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2208,7 +2169,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './test-early-flake-detection/mocha-parameterized.js'
             ])
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2266,7 +2226,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ]),
             DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2330,7 +2289,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './test-early-flake-detection/occasionally-failing-test.js'
             ])
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2387,7 +2345,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './test-early-flake-detection/skipped-and-todo-test.js'
             ])
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2452,7 +2409,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './test-early-flake-detection/weird-test-names.js'
             ])
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2504,7 +2460,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './test/ci-visibility-test-2.js'
             ])
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2564,14 +2519,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: '**/ci-visibility/test-early-flake-detection/occasionally-failing-test*'
           },
-          stdio: 'inherit'
         }
       )
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
 
@@ -2633,7 +2587,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './test/ci-visibility-test-2.js'
             ])
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2698,7 +2651,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           '--parallel ./ci-visibility/test-early-flake-detection/occasionally-failing-test.js', {
             cwd,
             env: getCiVisAgentlessConfig(receiver.port),
-            stdio: 'inherit'
           })
 
         childProcess.on('exit', (exitCode) => {
@@ -2759,12 +2711,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              RUN_IN_PARALLEL: true,
+              RUN_IN_PARALLEL: 'true',
               TESTS_TO_RUN: JSON.stringify([
                 './test-early-flake-detection/occasionally-failing-test.js'
               ])
             },
-            stdio: 'inherit'
           }
         )
         childProcess.on('exit', (exitCode) => {
@@ -2818,13 +2769,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              RUN_IN_PARALLEL: true,
+              RUN_IN_PARALLEL: 'true',
               TESTS_TO_RUN: JSON.stringify([
                 './test/ci-visibility-test.js',
                 './test/ci-visibility-test-2.js'
               ])
             },
-            stdio: 'inherit'
           }
         )
 
@@ -2877,13 +2827,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              RUN_IN_PARALLEL: true,
+              RUN_IN_PARALLEL: 'true',
               TESTS_TO_RUN: JSON.stringify([
                 './test/ci-visibility-test.js',
                 './test/ci-visibility-test-2.js'
               ])
             },
-            stdio: 'inherit'
           }
         )
 
@@ -2948,7 +2897,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './test/ci-visibility-test-2.js'
             ])
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2983,7 +2931,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './test-flaky-test-retries/eventually-passing-test.js'
             ])
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3055,7 +3002,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ]),
             DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3104,7 +3050,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ]),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3134,20 +3079,19 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       {
         cwd,
         env: getCiVisAgentlessConfig(receiver.port),
-        stdio: 'inherit'
       }
     )
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
 
     childProcess.on('exit', () => {
       linePctMatch = testOutput.match(linePctMatchRegex)
-      linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : null
+      linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : -Infinity
 
       assert.strictEqual(linesPctFromNyc, codeCoverageWithUntestedFiles,
         'nyc --all output does not match the reported coverage')
@@ -3161,7 +3105,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
 
@@ -3172,16 +3115,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           codeCoverageWithoutUntestedFiles = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
         })
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
 
       childProcess.on('exit', () => {
         linePctMatch = testOutput.match(linePctMatchRegex)
-        linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : null
+        linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : -Infinity
 
         assert.strictEqual(linesPctFromNyc, codeCoverageWithoutUntestedFiles,
           'nyc output does not match the reported coverage (no --all flag)')
@@ -3240,7 +3183,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
               DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -3294,7 +3236,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ]),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3383,7 +3324,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ]),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3438,7 +3378,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ]),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3506,7 +3445,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './test/ci-visibility-test-2.js'
             ])
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3541,7 +3479,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           ]),
           DD_SERVICE: 'my-service'
         },
-        stdio: 'inherit'
       }
     )
 
@@ -3646,6 +3583,17 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             }
           })
 
+      /**
+       * @param {() => void} done
+       * @param {{
+       *   isAttemptToFix?: boolean,
+       *   isQuarantined?: boolean,
+       *   isDisabled?: boolean,
+       *   shouldAlwaysPass?: boolean,
+       *   shouldFailSometimes?: boolean,
+       *   extraEnvVars?: Record<string, string>
+       * }} [options]
+       */
       const runAttemptToFixTest = (done, {
         isAttemptToFix,
         shouldAlwaysPass,
@@ -3677,11 +3625,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
               ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {})
             },
-            stdio: 'inherit'
           }
         )
 
-        childProcess.stdout.on('data', (data) => {
+        childProcess.stdout?.on('data', (data) => {
           stdout += data
         })
 
@@ -3843,11 +3790,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               SHOULD_CHECK_RESULTS: '1',
               ...extraEnvVars
             },
-            stdio: 'inherit'
           }
         )
 
-        childProcess.stdout.on('data', (data) => {
+        childProcess.stdout?.on('data', (data) => {
           stdout += data
         })
 
@@ -3968,11 +3914,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               SHOULD_CHECK_RESULTS: '1',
               ...extraEnvVars
             },
-            stdio: 'inherit'
           }
         )
 
-        childProcess.stdout.on('data', (data) => {
+        childProcess.stdout?.on('data', (data) => {
           stdout += data
         })
 
@@ -4052,14 +3997,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ]),
             DD_TRACE_DEBUG: '1'
           },
-          stdio: 'inherit'
         }
       )
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
 
@@ -4131,14 +4075,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: getCiVisAgentlessConfig(receiver.port),
-            stdio: 'inherit'
           }
         )
 
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
 
@@ -4190,7 +4133,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             DD_TEST_SESSION_NAME: 'my-test-session-name',
             ...extraEnvVars
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -4239,11 +4181,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './test-nested-hooks/test-nested-hooks.js'
             ])
           },
-          stdio: 'inherit'
         }
       )
 
-      childProcess.stdout.on('data', (data) => {
+      childProcess.stdout?.on('data', (data) => {
         stdout += data
       })
 
@@ -4306,11 +4247,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ]),
             SHOULD_FAIL: '1'
           },
-          stdio: 'inherit'
         }
       )
 
-      childProcess.stdout.on('data', (data) => {
+      childProcess.stdout?.on('data', (data) => {
         stdout += data
       })
 
@@ -4465,7 +4405,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             GITHUB_BASE_REF: '',
             ...extraEnvVars
           },
-          stdio: 'inherit'
         }
       )
 
@@ -4509,7 +4448,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './test-impacted-test/test-impacted-1',
               './test-impacted-test/test-impacted-2'
             ]),
-            RUN_IN_PARALLEL: true
+            RUN_IN_PARALLEL: 'true'
           }
         )
       })
