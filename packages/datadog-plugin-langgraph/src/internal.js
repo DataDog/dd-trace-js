@@ -27,6 +27,11 @@ class BaseLanggraphInternalPlugin extends TracingPlugin {
     // CRITICAL GUARD - DO NOT REMOVE: Ensures span only finishes when operation completes
     if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
 
+    // Tag error on span before finishing
+    if (ctx.error) {
+      this.addError(ctx.error, ctx.currentStore?.span)
+    }
+
     super.finish(ctx)
   }
 }

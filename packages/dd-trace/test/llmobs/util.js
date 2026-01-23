@@ -416,8 +416,11 @@ function useLlmObs ({
   return {
     getEvents: async function (numLlmObsSpans = 1) {
       // get apm spans from the agent
-      const apmSpans = await apmTracesPromise
+      const rawApmSpans = await apmTracesPromise
       resetTracesPromises()
+
+      // Wrap raw APM spans with context() method to match test expectations
+      const apmSpans = rawApmSpans.map(span => wrapApmSpan(span))
 
       // get llmobs span events requests from the agent
       // because llmobs process spans on span finish and submits periodically,
@@ -447,6 +450,31 @@ function getLlmObsSpansFromRequests (llmobsSpanEventsRequests) {
   return llmobsSpanEventsRequests
     .flatMap(request => request)
     .map(request => request.spans[0])
+}
+
+/**
+ * Wraps a raw APM span object with methods expected by tests.
+ * Raw spans from agent.assertSomeTraces are plain objects; this adds
+ * the context() method that tests expect.
+ * @param {object} span - Raw span object
+ * @returns {object} Wrapped span with context() method
+ */
+function wrapApmSpan (span) {
+  // span.span_id is typically a BigInt after msgpack decode
+  // Convert directly to string using toString(10) for base-10 representation
+  const spanId = span.span_id
+  const spanIdStr = spanId != null ? spanId.toString(10) : ''
+  return {
+    ...span,
+    context () {
+      return {
+        toSpanId () {
+          return spanIdStr
+        },
+        _tags: span.meta || {}
+      }
+    }
+  }
 }
 
 /**

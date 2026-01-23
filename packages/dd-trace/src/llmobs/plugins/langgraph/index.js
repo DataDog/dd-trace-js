@@ -38,15 +38,8 @@ class BaseLanggraphLLMObsPlugin extends LLMObsPlugin {
     const inputs = ctx.arguments?.[0]
     const result = ctx.result
 
-    // Tag input if available
-    if (inputs !== undefined) {
-      this._tagger.tagInputValue(span, inputs)
-    }
-
-    // Tag output if available
-    if (result !== undefined) {
-      this._tagger.tagOutputValue(span, result)
-    }
+    // Tag input/output using tagTextIO for workflow spans
+    this._tagger.tagTextIO(span, inputs, result)
   }
 }
 
