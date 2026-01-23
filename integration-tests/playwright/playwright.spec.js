@@ -270,7 +270,6 @@ versions.forEach((version) => {
                 DD_TEST_SESSION_NAME: 'my-test-session',
                 DD_SERVICE: undefined
               },
-              stdio: 'pipe'
             }
           )
         })
@@ -304,13 +303,12 @@ versions.forEach((version) => {
             PW_BASE_URL: `http://localhost:${webAppPort}`,
             PW_RUNNER_DEBUG: '1'
           },
-          stdio: 'inherit'
         }
       )
-      childProcess.stdout.on('data', chunk => {
+      childProcess.stdout?.on('data', chunk => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', chunk => {
+      childProcess.stderr?.on('data', chunk => {
         testOutput += chunk.toString()
       })
     })
@@ -342,7 +340,6 @@ versions.forEach((version) => {
             TEST_DIR: './ci-visibility/playwright-tests-error',
             TEST_TIMEOUT: '3000'
           },
-          stdio: 'pipe'
         }
       )
     })
@@ -457,7 +454,6 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'pipe'
           }
         )
 
@@ -527,7 +523,6 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -599,7 +594,6 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'pipe'
           }
         )
 
@@ -648,7 +642,6 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'pipe'
           }
         )
 
@@ -718,7 +711,6 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'pipe'
           }
         )
 
@@ -774,7 +766,6 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'pipe'
           }
         )
 
@@ -806,7 +797,6 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'pipe'
           }
         )
 
@@ -858,7 +848,6 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-efd-and-retries'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -933,7 +922,6 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-efd-and-retries',
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1001,7 +989,6 @@ versions.forEach((version) => {
             MAX_FAILURES: '1',
             TEST_DIR: './ci-visibility/playwright-tests-max-failures'
           },
-          stdio: 'pipe'
         }
       )
     })
@@ -1048,7 +1035,6 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-automatic-retry'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1091,7 +1077,6 @@ versions.forEach((version) => {
               DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
               TEST_DIR: './ci-visibility/playwright-tests-automatic-retry'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1139,7 +1124,6 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1174,7 +1158,6 @@ versions.forEach((version) => {
             PW_RUNNER_DEBUG: '1',
             TEST_DIR: '.'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -1242,7 +1225,6 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1272,7 +1254,6 @@ versions.forEach((version) => {
             PW_BASE_URL: `http://localhost:${webAppPort}`,
             DD_SERVICE: 'my-service'
           },
-          stdio: 'pipe'
         }
       )
 
@@ -1417,6 +1398,18 @@ versions.forEach((version) => {
               }
             }, 30000)
 
+        /**
+         * @param {{
+         *   isAttemptingToFix?: boolean,
+         *   isQuarantined?: boolean,
+         *   extraEnvVars?: Record<string, string>,
+         *   shouldAlwaysPass?: boolean,
+         *   shouldFailSometimes?: boolean,
+         *   isDisabled?: boolean,
+         *   shouldIncludeFlakyTest?: boolean,
+         *   cliArgs?: string
+         * }} [options]
+         */
         const runAttemptToFixTest = async ({
           isAttemptingToFix,
           isQuarantined,
@@ -1449,7 +1442,6 @@ versions.forEach((version) => {
                 ...(shouldIncludeFlakyTest ? { SHOULD_INCLUDE_FLAKY_TEST: '1' } : {}),
                 ...extraEnvVars
               },
-              stdio: 'pipe'
             }
           )
 
@@ -1683,14 +1675,13 @@ versions.forEach((version) => {
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
                 ...extraEnvVars
               },
-              stdio: 'pipe'
             }
           )
 
-          childProcess.stdout.on('data', (chunk) => {
+          childProcess.stdout?.on('data', (chunk) => {
             testOutput += chunk.toString()
           })
-          childProcess.stderr.on('data', (chunk) => {
+          childProcess.stderr?.on('data', (chunk) => {
             testOutput += chunk.toString()
           })
 
@@ -1805,6 +1796,14 @@ versions.forEach((version) => {
               }
             }, 25000)
 
+        /**
+         * @param {{
+         *   isQuarantining?: boolean,
+         *   extraEnvVars?: Record<string, string>,
+         *   cliArgs?: string,
+         *   hasFlakyTests?: boolean
+         * }} options
+         */
         const runQuarantineTest = async ({
           isQuarantining,
           extraEnvVars,
@@ -1823,7 +1822,6 @@ versions.forEach((version) => {
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
                 ...extraEnvVars
               },
-              stdio: 'pipe'
             }
           )
 
@@ -1912,14 +1910,13 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-tests-test-management',
               DD_TRACE_DEBUG: '1'
             },
-            stdio: 'pipe'
           }
         )
 
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
 
@@ -1973,7 +1970,6 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-tests-test-capabilities',
               DD_TEST_SESSION_NAME: 'my-test-session-name'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2005,7 +2001,6 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-active-test-span'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2041,7 +2036,6 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-active-test-span'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2088,7 +2082,6 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-tests-rum',
               ...extraEnvVars
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2158,7 +2151,6 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-exit-code'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2301,7 +2293,6 @@ versions.forEach((version) => {
               GITHUB_BASE_REF: '',
               ...extraEnvVars
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2394,7 +2385,6 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-retries-tagging',
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2456,7 +2446,6 @@ versions.forEach((version) => {
                 FULLY_PARALLEL: String(parallelism),
                 PLAYWRIGHT_WORKERS: '2'
               },
-              stdio: 'pipe'
             }
           )
 
@@ -2495,7 +2484,6 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-did-not-run',
               ADD_EXTRA_PLAYWRIGHT_PROJECT: 'true'
             },
-            stdio: 'pipe'
           }
         )
 
