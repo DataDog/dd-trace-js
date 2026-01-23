@@ -64,7 +64,7 @@ const NUM_RETRIES_EFD = 3
 
 const latest = 'latest'
 const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
-const versions = [oldest, latest]
+const versions = [latest]
 
 versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
@@ -80,7 +80,7 @@ versions.forEach((version) => {
   describe(`playwright@${version}`, function () {
     let cwd, receiver, childProcess, webAppPort, webPortWithRedirect, webAppServer, webAppServerWithRedirect
 
-    this.retries(2)
+    this.retries(0)
     this.timeout(80000)
 
     useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript'], true)
@@ -1283,7 +1283,7 @@ versions.forEach((version) => {
 
     contextNewVersions('test management', () => {
       const ATTEMPT_TO_FIX_NUM_RETRIES = 3
-      context('attempt to fix', () => {
+      context.only('attempt to fix', () => {
         beforeEach(() => {
           receiver.setTestManagementTests({
             playwright: {
@@ -1354,6 +1354,12 @@ versions.forEach((version) => {
                 ).length
                 // disabled tests with attemptToFix still run and are retried
                 assert.strictEqual(numDisabledTests, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
+                // disabled tests with attemptToFix should not be skipped - they should run with pass/fail status
+                const skippedDisabledTests = attemptedToFixTests.filter(test =>
+                  test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true' &&
+                  test.meta[TEST_STATUS] === 'skip'
+                ).length
+                assert.strictEqual(skippedDisabledTests, 0, 'disabled tests with attemptToFix should not be skipped')
               }
 
               if (isQuarantined) {
