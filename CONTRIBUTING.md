@@ -288,8 +288,7 @@ Please refer to [the "Install" section](https://github.com/brianc/node-postgres/
 
 ### Running Individual Tests
 
-When developing, it's often faster to run individual test files rather than entire test suites. **Never run `yarn test` directly** as it requires too much setup and takes too long.
-
+When developing, it's often faster to run individual test files rather than entire test suites.
 To target specific tests, use the `--grep` flag with mocha to match test names:
 
 ```sh

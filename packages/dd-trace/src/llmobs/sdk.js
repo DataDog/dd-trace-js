@@ -5,7 +5,7 @@ const { channel } = require('dc-polyfill')
 const { isTrue, isError } = require('../util')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
-const { getEnvironmentVariable } = require('../config/helper')
+const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
 const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
 const {
@@ -49,7 +49,7 @@ class LLMObs extends NoopLLMObs {
 
     logger.debug('Enabling LLMObs')
 
-    const DD_LLMOBS_ENABLED = getEnvironmentVariable('DD_LLMOBS_ENABLED')
+    const DD_LLMOBS_ENABLED = getValueFromEnvSources('DD_LLMOBS_ENABLED')
 
     if (DD_LLMOBS_ENABLED != null && !isTrue(DD_LLMOBS_ENABLED)) {
       logger.debug('LLMObs.enable() called when DD_LLMOBS_ENABLED is false. No action taken.')
@@ -241,7 +241,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('LLMObs span must have a span kind specified')
       }
 
-      const { inputData, outputData, metadata, metrics, tags } = options
+      const { inputData, outputData, metadata, metrics, tags, prompt } = options
 
       if (inputData || outputData) {
         if (spanKind === 'llm') {
@@ -263,6 +263,9 @@ class LLMObs extends NoopLLMObs {
       }
       if (tags) {
         this._tagger.tagSpanTags(span, tags)
+      }
+      if (prompt) {
+        this._tagger.tagPrompt(span, prompt)
       }
     } catch (e) {
       if (e.ddErrorTag) {
@@ -404,7 +407,7 @@ class LLMObs extends NoopLLMObs {
       }
 
       // When OTel tracing is enabled, add source:otel tag to allow backend to wait for OTel span conversion
-      if (isTrue(getEnvironmentVariable('DD_TRACE_OTEL_ENABLED'))) {
+      if (isTrue(getValueFromEnvSources('DD_TRACE_OTEL_ENABLED'))) {
         evaluationTags.source = 'otel'
       }
 
