@@ -17,13 +17,10 @@ class ContextManager {
     const baseContext = store || ROOT_CONTEXT
     const activeSpan = tracer.scope().active()
 
-    // Check if stored context has an OTel span
     const storedSpan = store ? trace.getSpan(store) : null
 
     // If stored span wraps the active DD span, prefer the stored context
     if (storedSpan && storedSpan._ddSpan === activeSpan) {
-      // The stored context already has the correct OTel span
-      // Just need to ensure baggage is synced
       const baggages = JSON.parse(activeSpan.getAllBaggageItems())
       if (Object.keys(baggages).length > 0) {
         const entries = {}
@@ -36,9 +33,7 @@ class ContextManager {
       return store
     }
 
-    // If there's no active DD span, check stored context for NonRecordingSpan
     if (!activeSpan) {
-      // span instanceof NonRecordingSpan
       const storedBaggageItems = storedSpan?._spanContext?._ddContext?._baggageItems
       if (storedBaggageItems) {
         const baggages = storedBaggageItems
@@ -52,10 +47,8 @@ class ContextManager {
       return baseContext
     }
 
-    // Active DD span exists but not wrapped in stored OTel span - convert to OTel
     const ddContext = activeSpan.context()
 
-    // Ensure we have an OTel wrapper
     if (!ddContext._otelSpanContext) {
       ddContext._otelSpanContext = new SpanContext(ddContext)
     }
@@ -72,12 +65,10 @@ class ContextManager {
       otelBaggages = propagation.createBaggage(entries)
     }
 
-    // Optimization: if store already has this exact span context, reuse it
     if (store && trace.getSpanContext(store) === ddContext._otelSpanContext) {
       return otelBaggages ? propagation.setBaggage(store, otelBaggages) : store
     }
 
-    // Create new context with span and baggage
     const wrappedContext = trace.setSpanContext(baseContext, ddContext._otelSpanContext)
     return otelBaggages ? propagation.setBaggage(wrappedContext, otelBaggages) : wrappedContext
   }
