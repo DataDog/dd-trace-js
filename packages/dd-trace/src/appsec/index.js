@@ -190,18 +190,32 @@ function incomingHttpEndTranslator ({ req, res }) {
   const persistent = {}
 
   // we need to keep this to support other body parsers
-  if (req.body !== undefined && req.body !== null && !analyzedBodies.has(req.body) && Object.keys(req.body).length) {
+  if (
+    req.body !== undefined &&
+    req.body !== null &&
+    !analyzedBodies.has(req.body) &&
+    Object.keys(req.body).length
+  ) {
     persistent[addresses.HTTP_INCOMING_BODY] = req.body
   }
 
   // we need to keep this to support other cookie parsers
-  if (req.cookies !== null && typeof req.cookies === 'object' && !analyzedCookies.has(req.cookies) && Object.keys(req.cookies).length) {
+  if (
+    req.cookies !== null &&
+    typeof req.cookies === 'object' &&
+    !analyzedCookies.has(req.cookies) &&
+    Object.keys(req.cookies).length
+  ) {
     persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
   // we need to keep this to support nextjs
   const query = req.query
-  if (query !== null && typeof query === 'object' && Object.keys(query).length) {
+  if (
+    query !== null &&
+    typeof query === 'object' &&
+    Object.keys(query).length
+  ) {
     persistent[addresses.HTTP_INCOMING_QUERY] = query
   }
 
