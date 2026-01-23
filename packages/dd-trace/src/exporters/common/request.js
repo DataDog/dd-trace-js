@@ -18,7 +18,7 @@ const maxActiveRequests = 8
 
 let activeRequests = 0
 
-function parseUrl(urlObjOrString) {
+function parseUrl (urlObjOrString) {
   if (urlObjOrString !== null && typeof urlObjOrString === 'object') return urlToHttpOptions(urlObjOrString)
 
   const url = urlToHttpOptions(new URL(urlObjOrString))
@@ -33,7 +33,7 @@ function parseUrl(urlObjOrString) {
   return url
 }
 
-function request(data, options, callback) {
+function request (data, options, callback) {
   if (!options.headers) {
     options.headers = {}
   }
@@ -69,7 +69,7 @@ function request(data, options, callback) {
 
   options.agent = isSecure ? httpsAgent : httpAgent
 
-  const onResponse = (finalize, res) => {
+  const onResponse = (res, finalize) => {
     const chunks = []
 
     res.setTimeout(timeout)
@@ -138,7 +138,7 @@ function request(data, options, callback) {
       activeRequests--
     }
 
-    const req = client.request(options, (res) => onResponse(finalize, res))
+    const req = client.request(options, (res) => onResponse(res, finalize))
 
     req.once('close', finalize)
     req.once('timeout', finalize)
@@ -177,12 +177,12 @@ function request(data, options, callback) {
   makeRequest(() => setTimeout(() => makeRequest(callback)))
 }
 
-function byteLength(data) {
+function byteLength (data) {
   return data.length > 0 ? data.reduce((prev, next) => prev + Buffer.byteLength(next, 'utf8'), 0) : 0
 }
 
 Object.defineProperty(request, 'writable', {
-  get() {
+  get () {
     return activeRequests < maxActiveRequests
   }
 })
