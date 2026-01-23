@@ -425,51 +425,6 @@ describe('AppSec Index', function () {
       sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, undefined)
     })
 
-    it('should pass stored response headers to Reporter.finishRequest', () => {
-      const req = {
-        url: '/path',
-        headers: {
-          'user-agent': 'Arachni',
-          host: 'localhost'
-        },
-        method: 'POST',
-        socket: {
-          remoteAddress: '127.0.0.1',
-          remotePort: 8080
-        }
-      }
-      const res = {
-        getHeaders: () => ({
-          'content-type': 'application/json',
-          'content-length': 42
-        }),
-        statusCode: 200
-      }
-
-      const storedHeaders = {
-        'content-type': 'text/plain',
-        'content-language': 'en-US',
-        'content-length': '15'
-      }
-
-      web.patch(req)
-
-      sinon.stub(Reporter, 'finishRequest')
-      sinon.stub(waf, 'disposeContext')
-
-      responseWriteHead.publish({
-        req,
-        res,
-        abortController: { abort: sinon.stub() },
-        statusCode: 200,
-        responseHeaders: storedHeaders
-      })
-
-      AppSec.incomingHttpEndTranslator({ req, res })
-
-      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, storedHeaders, undefined)
-    })
-
     it('should not propagate incoming http end data with invalid framework properties', () => {
       const req = {
         url: '/path',
@@ -556,6 +511,51 @@ describe('AppSec Index', function () {
         }
       }, req)
       sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, req.body)
+    })
+
+    it('should pass stored response headers to Reporter.finishRequest', () => {
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-length': 42
+        }),
+        statusCode: 200
+      }
+
+      const storedHeaders = {
+        'content-type': 'text/plain',
+        'content-language': 'en-US',
+        'content-length': '15'
+      }
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+      sinon.stub(waf, 'disposeContext')
+
+      responseWriteHead.publish({
+        req,
+        res,
+        abortController: { abort: sinon.stub() },
+        statusCode: 200,
+        responseHeaders: storedHeaders
+      })
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, storedHeaders, undefined)
     })
   })
 
