@@ -21,6 +21,8 @@ jobs:
     steps:
       - uses: wechuli/allcheckspassed@b0eaef5be76003932c9520e2b3dd03c85cc43d87 # v2.2.0
         with:
+          delay: '6' # Wait for 6 minutes before polling for the first time
           retries: 30 # once per minute, some checks take up to 15 min, retries are possible
           checks_exclude: devflow.*
           fail_fast: false
+          verbose: true # What checks are still waited for?
