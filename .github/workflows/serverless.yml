@@ -156,6 +156,13 @@ jobs:
             dd_api_key: ${{ secrets.DD_API_KEY }}
 
   azure-functions:
+    strategy:
+      fail-fast: false
+      matrix:
+        spec:
+          - eventhubs
+          - client
+          - servicebus
     runs-on: ubuntu-latest
     services:
         azurite:
@@ -192,6 +199,7 @@ jobs:
     env:
       PLUGINS: azure-functions
       SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator
+      SPEC: ${{ matrix.spec }}
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
