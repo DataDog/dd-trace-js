@@ -62,7 +62,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "is_vendor_group=${{ steps.metadata.outputs.directory == '/vendor' && steps.metadata.outputs.dependency-type == 'direct:production' }}" >> $GITHUB_OUTPUT
+          echo "is_vendor_group=${{ steps.metadata.outputs.directory == '/vendor' }}" >> $GITHUB_OUTPUT
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         if: steps.ctx.outputs.is_vendor_group == 'true'
         with:
@@ -126,13 +126,14 @@ jobs:
             exit 1
           fi
 
-          git diff --binary --no-color > vendor.patch
+          patch_path="${RUNNER_TEMP}/vendor.patch"
+          git diff --binary --no-color > "$patch_path"
           echo "has_changes=true" >> $GITHUB_OUTPUT
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: steps.diff.outputs.has_changes == 'true'
         with:
           name: vendor-patch
-          path: vendor.patch
+          path: ${{ runner.temp }}/vendor.patch
           if-no-files-found: error
 
   vendor-push:
@@ -159,8 +160,9 @@ jobs:
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: vendor-patch
+          path: ${{ runner.temp }}/vendor-artifact
       - name: Apply patch
-        run: git apply --whitespace=nowarn vendor.patch
+        run: git apply --whitespace=nowarn "${{ runner.temp }}/vendor-artifact/vendor.patch"
       - name: Validate changed paths
         run: |
           set -euo pipefail
@@ -193,7 +195,7 @@ jobs:
           git config user.name github-actions
           git config user.email github-actions@github.com
 
-          git add -A
+          git add vendor/dist vendor/package.json vendor/yarn.lock
           git commit -m "update vendored dependencies with new versions"
           echo "commits=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
       - name: Push commit
