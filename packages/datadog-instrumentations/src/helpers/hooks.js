@@ -40,6 +40,7 @@ module.exports = {
   amqplib: () => require('../amqplib'),
   avsc: () => require('../avsc'),
   'aws-sdk': () => require('../aws-sdk'),
+  'better-sqlite3': () => require('../better-sqlite3'),
   bluebird: () => require('../bluebird'),
   'body-parser': () => require('../body-parser'),
   bullmq: () => require('../bullmq'),

@@ -29,6 +29,7 @@ tracer.use('pg', {
 <h5 id="aws-sdk-tags"></h5>
 <h5 id="aws-sdk-config"></h5>
 <h5 id="azure-functions"></h5>
+<h5 id="better-sqlite3"></h5>
 <h5 id="bullmq"></h5>
 <h5 id="bunyan"></h5>
 <h5 id="confluentinc-kafka-javascript"></h5>
@@ -111,6 +112,7 @@ tracer.use('pg', {
 * [avsc](./interfaces/export_.plugins.avsc.html)
 * [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
 * [azure-functions](./interfaces/export_.plugins.azure_functions.html)
+* [better-sqlite3](./interfaces/export_.plugins.better_sqlite3.html)
 * [bluebird](./interfaces/export_.plugins.bluebird.html)
 * [bullmq](./interfaces/export_.plugins.bullmq.html)
 * [couchbase](./interfaces/export_.plugins.couchbase.html)

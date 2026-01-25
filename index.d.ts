@@ -227,6 +227,7 @@ interface Plugins {
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
+  "better-sqlite3": tracer.plugins.better_sqlite3;
   "bullmq": tracer.plugins.bullmq;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
@@ -1838,6 +1839,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
      */
+    /**
+     * This plugin automatically instruments the
+     * [better-sqlite3](https://github.com/npmjs/package/better-sqlite3) database client library.
+     */
+    interface better_sqlite3 extends Instrumentation {}
+
     interface bullmq extends Instrumentation {}
 
     interface bunyan extends Integration {}

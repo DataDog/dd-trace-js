@@ -310,6 +310,7 @@ tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
+tracer.use('better-sqlite3');
 tracer.use('bullmq');
 tracer.use('bunyan');
 tracer.use('couchbase');

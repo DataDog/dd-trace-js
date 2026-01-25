@@ -1,5 +1,7 @@
 'use strict'
 
+const { identityService } = require('../util')
+
 function getRedisService (pluginConfig, connectionName) {
   if (pluginConfig.splitByInstance && connectionName) {
     return pluginConfig.service
@@ -64,6 +66,10 @@ const storage = {
       opName: () => 'elasticsearch.query',
       serviceName: ({ tracerService, pluginConfig }) =>
         pluginConfig.service || `${tracerService}-elasticsearch`
+    },
+    'better-sqlite3': {
+      opName: () => 'better-sqlite3.command',
+      serviceName: identityService
     },
     ioredis: redisConfig,
     iovalkey: valkeyConfig,

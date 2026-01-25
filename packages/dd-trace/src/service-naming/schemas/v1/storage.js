@@ -1,5 +1,7 @@
 'use strict'
 
+const { identityService } = require('../util')
+
 function configWithFallback ({ tracerService, pluginConfig }) {
   return pluginConfig.service || tracerService
 }
@@ -39,6 +41,10 @@ const storage = {
     elasticsearch: {
       opName: () => 'elasticsearch.query',
       serviceName: configWithFallback
+    },
+    'better-sqlite3': {
+      opName: () => 'better-sqlite3.command',
+      serviceName: identityService
     },
     ioredis: redisNaming,
     iovalkey: {
