@@ -315,8 +315,6 @@ function getFinalStatus (test, testStatus) {
   const totalEfdExecutions = 1 + (earlyFlakeDetectionNumRetries || 0)
   const isLastEfdExecution = currentExecutionNumber >= totalEfdExecutions
   const isFinalEfdTestExecution = isEarlyFlakeDetectionEnabled && (!isEfdActive || isLastEfdExecution)
-  // eslint-disable-next-line no-console
-  console.log(`DEBUG getFinalStatus: fqn=${testFqn.substring(0, 50)}, prevLen=${testStatuses.length}, exec=${currentExecutionNumber}, totalEfd=${totalEfdExecutions}, isEfdEnabled=${isEarlyFlakeDetectionEnabled}, isEfdActive=${isEfdActive}, isFinalEfd=${isFinalEfdTestExecution}, noRetry=${!isEarlyFlakeDetectionEnabled && !isFlakyTestRetriesEnabled && !isAttemptToFix}`)
 
   // ATR: Check if this is the final ATR execution (playwright uses built-in retries)
   const isAtrEnabled = isFlakyTestRetriesEnabled && !isEfdRetry && !isAttemptToFix
@@ -334,7 +332,24 @@ function getFinalStatus (test, testStatus) {
   const isFinalTestExecution =
     noRetryFeaturesActive || isFinalEfdTestExecution || isFinalAtrTestExecution || isFinalAttemptToFixExecution
 
-  return isFinalTestExecution ? testStatus : undefined
+  if (!isFinalTestExecution) {
+    return
+  }
+
+  // For EFD: The framework reports 'pass' if ANY attempt passed (flaky but not failing)
+  // testStatuses doesn't include current status yet, so we need to include it
+  if (isEfdActive && isFinalEfdTestExecution) {
+    const allStatuses = [...testStatuses, testStatus]
+    if (allStatuses.includes('pass')) {
+      return 'pass'
+    }
+    // All attempts failed
+    return 'fail'
+  }
+
+  // For ATR: The status of the final execution is what the framework reports
+  // For Attempt to Fix: Similar to ATR, the last execution's status is reported
+  return testStatus
 }
 
 function testBeginHandler (test, browserName, shouldCreateTestSpan) {

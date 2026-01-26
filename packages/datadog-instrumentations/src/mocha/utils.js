@@ -137,7 +137,24 @@ function getFinalStatus (test, status, config) {
   const isFinalTestExecution =
     noRetryFeaturesActive || isFinalEfdTestExecution || isFinalAtrTestExecution || isFinalAttemptToFixExecution
 
-  return isFinalTestExecution ? status : undefined
+  if (!isFinalTestExecution) {
+    return
+  }
+
+  // For EFD: The framework reports 'pass' if ANY attempt passed (flaky but not failing)
+  // testStatuses doesn't include current status yet, so we need to include it
+  if (isEfdActive && isFinalEfdTestExecution) {
+    const allStatuses = [...testStatuses, status]
+    if (allStatuses.includes('pass')) {
+      return 'pass'
+    }
+    // All attempts failed
+    return 'fail'
+  }
+
+  // For ATR: The status of the final execution is what the framework reports
+  // For Attempt to Fix: Similar to ATR, the last execution's status is reported
+  return status
 }
 
 function getTestFullName (test) {

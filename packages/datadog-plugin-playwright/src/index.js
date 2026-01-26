@@ -6,7 +6,6 @@ const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
-  TEST_STATUS,
   TEST_FINAL_STATUS,
   finishAllTraceSpans,
   getTestSuiteCommonTags,

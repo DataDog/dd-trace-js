@@ -1744,7 +1744,8 @@ describe(`cucumber@${version} commonJS`, () => {
                 assert.strictEqual(
                   finalStatus,
                   testStatus,
-                  `Expected TEST_FINAL_STATUS "${finalStatus}" to match TEST_STATUS "${testStatus}" for test "${testName}"`
+                  `Expected TEST_FINAL_STATUS "${finalStatus}" to match ` +
+                  `TEST_STATUS "${testStatus}" for test "${testName}"`
                 )
               })
             }, 25000)

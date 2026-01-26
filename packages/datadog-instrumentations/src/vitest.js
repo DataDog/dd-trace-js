@@ -995,10 +995,10 @@ addHook({
 
       if (result) {
         const { state, duration, errors } = result
-        // This is the final execution for this test - always set finalStatus
-        const finalStatus = isSwitchedStatus
-          ? (switchedStatuses.has(task) && state === 'pass' ? 'fail' : state)
-          : state
+        // finalStatus should be the status reported to the test framework
+        // For EFD: if any attempt passed, framework reports 'pass' (state was switched to 'pass')
+        // So finalStatus should be 'state' (what the framework reports), not the original status
+        const finalStatus = state
         if (state === 'skip') { // programmatic skip
           testSkipCh.publish({
             testName: getTestName(task),

@@ -656,9 +656,27 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const noRetryFeaturesActive = !isEfdEnabled && !this.isFlakyTestRetriesEnabled && !isAttemptToFix
       const isFinalTestExecution =
         noRetryFeaturesActive || isFinalEfdTestExecution || isFinalAtrTestExecution || isFinalAttemptToFixExecution
-      const finalStatus = isFinalTestExecution ? status : undefined
 
-      return finalStatus
+      if (!isFinalTestExecution) {
+        return
+      }
+
+      // For EFD: The framework reports 'pass' if ANY attempt passed (flaky but not failing)
+      if (isEfdActive && isFinalEfdTestExecution) {
+        const testStatuses = newTestsTestStatuses.get(testName)
+        if (testStatuses && testStatuses.includes('pass')) {
+          return 'pass'
+        }
+        // All attempts failed
+        return 'fail'
+      }
+
+      // For ATR: The status of the final execution is what the framework reports
+      // - If test eventually passed, status is 'pass'
+      // - If all retries exhausted and still fails, status is 'fail'
+
+      // For Attempt to Fix: Similar to ATR, the last execution's status is reported
+      return status
     }
 
     teardown () {
