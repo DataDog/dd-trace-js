@@ -1,5 +1,6 @@
 'use strict'
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+
+const { getValueFromEnvSources } = require('./config/helper')
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
@@ -130,7 +131,10 @@ class Tracer extends NoopProxy {
         const rc = new RemoteConfig(config)
 
         const tracingRemoteConfig = require('./config/remote_config')
-        tracingRemoteConfig.enable(rc, config, this._enableOrDisableTracing.bind(this))
+        tracingRemoteConfig.enable(rc, config, () => {
+          this.#updateTracing(config)
+          this.#updateDebugger(config, rc)
+        })
 
         rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
           if (!conf?.name?.startsWith('flare-log-level.')) return
@@ -183,7 +187,7 @@ class Tracer extends NoopProxy {
         runtimeMetrics.start(config)
       }
 
-      this._enableOrDisableTracing(config)
+      this.#updateTracing(config)
 
       this._modules.rewriter.enable(config)
 
@@ -196,7 +200,7 @@ class Tracer extends NoopProxy {
         this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
       if (config.ciVisAgentlessLogSubmissionEnabled) {
-        if (getEnvironmentVariable('DD_API_KEY')) {
+        if (getValueFromEnvSources('DD_API_KEY')) {
           const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
           const automaticLogPlugin = new LogSubmissionPlugin(this)
           automaticLogPlugin.configure({ ...config, enabled: true })
@@ -242,7 +246,7 @@ class Tracer extends NoopProxy {
     }
   }
 
-  _enableOrDisableTracing (config) {
+  #updateTracing (config) {
     if (config.tracing !== false) {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
@@ -284,6 +288,31 @@ class Tracer extends NoopProxy {
       this._pluginManager.configure(config)
       DynamicInstrumentation.configure(config)
       setStartupLogPluginManager(this._pluginManager)
+    }
+  }
+
+  /**
+   * Updates the debugger (Dynamic Instrumentation) state based on remote config changes.
+   * Handles starting, stopping, and reconfiguring the debugger dynamically.
+   *
+   * @param {object} config - The tracer configuration object
+   * @param {object} rc - The RemoteConfig instance
+   */
+  #updateDebugger (config, rc) {
+    const shouldBeEnabled = config.dynamicInstrumentation.enabled
+    const isCurrentlyStarted = DynamicInstrumentation.isStarted()
+
+    if (shouldBeEnabled) {
+      if (isCurrentlyStarted) {
+        log.debug('[proxy] Reconfiguring Dynamic Instrumentation via remote config')
+        DynamicInstrumentation.configure(config)
+      } else {
+        log.debug('[proxy] Starting Dynamic Instrumentation via remote config')
+        DynamicInstrumentation.start(config, rc)
+      }
+    } else if (isCurrentlyStarted) {
+      log.debug('[proxy] Stopping Dynamic Instrumentation via remote config')
+      DynamicInstrumentation.stop()
     }
   }
 

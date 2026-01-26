@@ -3,7 +3,7 @@
 const { URL, format } = require('node:url')
 const path = require('node:path')
 const request = require('../../exporters/common/request')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getEnvironmentVariable } = require('../../config/helper')
 
 const logger = require('../../log')
 
@@ -16,19 +16,37 @@ const {
 } = require('../constants/writers')
 const { parseResponseAndLog } = require('./util')
 
+class LLMObsBuffer {
+  constructor ({ events, size, routing = {}, isDefault = false, limit = 1000 }) {
+    this.events = events
+    this.size = size
+    this.routing = routing
+    this.isDefault = isDefault
+    this.limit = limit
+  }
+
+  clear () {
+    this.events = []
+    this.size = 0
+  }
+}
+
 class BaseLLMObsWriter {
   #destroyer
+  /** @type {Map<string, LLMObsBuffer>} */
+  #multiTenantBuffers = new Map()
+
   constructor ({ interval, timeout, eventType, config, endpoint, intake }) {
     this._interval = interval ?? getEnvironmentVariable('_DD_LLMOBS_FLUSH_INTERVAL') ?? 1000 // 1s
     this._timeout = timeout ?? getEnvironmentVariable('_DD_LLMOBS_TIMEOUT') ?? 5000 // 5s
     this._eventType = eventType
 
-    this._buffer = []
-    this._bufferLimit = 1000
-    this._bufferSize = 0
+    /** @type {LLMObsBuffer} */
+    this._buffer = new LLMObsBuffer({ events: [], size: 0, isDefault: true })
 
     this._config = config
     this._endpoint = endpoint
+    this._baseEndpoint = endpoint // should not be unset
     this._intake = intake
 
     this._periodic = setInterval(() => {
@@ -41,48 +59,109 @@ class BaseLLMObsWriter {
     this.#destroyer = destroyer
   }
 
-  get url () {
-    if (this._agentless == null) return null
-
-    const baseUrl = this._baseUrl.href
-    const endpoint = this._endpoint
-
-    // Split on protocol separator to preserve it
-    // path.join will remove some slashes unnecessarily
+  // Split on protocol separator to preserve it
+  // path.join will remove some slashes unnecessarily
+  #buildUrl (baseUrl, endpoint) {
     const [protocol, rest] = baseUrl.split('://')
     return protocol + '://' + path.join(rest, endpoint)
   }
 
-  append (event, byteLength) {
-    if (this._buffer.length >= this._bufferLimit) {
-      logger.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
+  get url () {
+    if (this._agentless == null) return null
+    return this.#buildUrl(this._baseUrl.href, this._endpoint)
+  }
+
+  _getBuffer (routing) {
+    if (!routing?.apiKey) {
+      return this._buffer
+    }
+    const apiKey = routing.apiKey
+    let buffer = this.#multiTenantBuffers.get(apiKey)
+    if (!buffer) {
+      buffer = new LLMObsBuffer({ events: [], size: 0, routing })
+      this.#multiTenantBuffers.set(apiKey, buffer)
+    }
+    return buffer
+  }
+
+  append (event, routing, byteLength) {
+    const buffer = this._getBuffer(routing)
+
+    if (buffer.events.length >= buffer.limit) {
+      logger.warn(`${this.constructor.name} event buffer full (limit is ${buffer.limit}), dropping event`)
       telemetry.recordDroppedPayload(1, this._eventType, 'buffer_full')
       return
     }
 
-    this._bufferSize += byteLength || Buffer.byteLength(JSON.stringify(event))
-    this._buffer.push(event)
+    const eventSize = byteLength || Buffer.byteLength(JSON.stringify(event))
+
+    buffer.size += eventSize
+    buffer.events.push(event)
   }
 
   flush () {
-    const noAgentStrategy = this._agentless == null
-
-    if (this._buffer.length === 0 || noAgentStrategy) {
+    if (this._agentless == null) {
       return
     }
 
-    const events = this._buffer
-    this._buffer = []
-    this._bufferSize = 0
-    const payload = this._encode(this.makePayload(events))
+    // Flush default buffer
+    if (this._buffer.events.length > 0) {
+      const events = this._buffer.events
+      this._buffer.clear()
 
-    log.debug('Encoded LLMObs payload: %s', payload)
+      const payload = this._encode(this.makePayload(events))
 
-    const options = this._getOptions()
+      log.debug('Encoded LLMObs payload: %s', payload)
 
-    request(payload, options, (err, resp, code) => {
-      parseResponseAndLog(err, code, events.length, this.url, this._eventType)
-    })
+      const options = this._getOptions()
+
+      request(payload, options, (err, resp, code) => {
+        parseResponseAndLog(err, code, events.length, this.url, this._eventType)
+      })
+    }
+
+    // Flush multi-tenant buffers
+    for (const [apiKey, buffer] of this.#multiTenantBuffers) {
+      if (buffer.events.length === 0) continue
+
+      const events = buffer.events
+      buffer.clear()
+
+      const payload = this._encode(this.makePayload(events))
+      const site = buffer.routing.site || this._config.site
+      const options = {
+        headers: {
+          'Content-Type': 'application/json',
+          'DD-API-KEY': apiKey
+        },
+        method: 'POST',
+        timeout: this._timeout,
+        url: new URL(format({
+          protocol: 'https:',
+          hostname: `${this._intake}.${site}`
+        })),
+        path: this._baseEndpoint
+      }
+      const url = this.#buildUrl(options.url.href, options.path)
+      const maskedApiKey = apiKey ? `****${apiKey.slice(-4)}` : ''
+
+      log.debug('Encoding and flushing multi-tenant buffer for %s', maskedApiKey)
+      log.debug('Encoded LLMObs payload: %s', payload)
+
+      request(payload, options, (err, resp, code) => {
+        parseResponseAndLog(err, code, events.length, url, this._eventType)
+      })
+    }
+
+    this.#cleanupEmptyBuffers()
+  }
+
+  #cleanupEmptyBuffers () {
+    for (const [key, buffer] of this.#multiTenantBuffers) {
+      if (buffer.events.length === 0) {
+        this.#multiTenantBuffers.delete(key)
+      }
+    }
   }
 
   makePayload (events) {}
@@ -109,10 +188,11 @@ class BaseLLMObsWriter {
 
   _getUrlAndPath () {
     if (this._agentless) {
+      const site = this._config.site
       return {
         url: new URL(format({
           protocol: 'https:',
-          hostname: `${this._intake}.${this._config.site}`
+          hostname: `${this._intake}.${site}`
         })),
         endpoint: this._endpoint
       }

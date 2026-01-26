@@ -2,9 +2,8 @@
 
 const os = require('os')
 const { inspect } = require('util')
-
 const tracerVersion = require('../../../package.json').version
-const defaults = require('./config_defaults')
+const defaults = require('./config/defaults')
 const { info, warn } = require('./log/writer')
 
 const errors = {}
@@ -15,22 +14,14 @@ let samplingRules = []
 let alreadyRan = false
 
 /**
- * @param {{ agentError: { code: string, message: string } }} [options]
+ * @param {{ status: number, message: string } } [agentError]
  */
-function startupLog ({ agentError } = {}) {
-  if (!config || !pluginManager) {
-    return
-  }
-
-  if (alreadyRan) {
+function startupLog (agentError) {
+  if (alreadyRan || !config || !config.startupLogs || !pluginManager) {
     return
   }
 
   alreadyRan = true
-
-  if (!config.startupLogs) {
-    return
-  }
 
   const out = tracerInfo()
 
@@ -42,8 +33,8 @@ function startupLog ({ agentError } = {}) {
   if (agentError) {
     warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
     errors.agentError = {
-      code: agentError.code ?? '',
-      message: `Agent Error:${agentError.message}`
+      code: agentError.status,
+      message: `Agent Error: ${agentError.message}`
     }
   }
 }

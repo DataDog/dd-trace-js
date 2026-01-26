@@ -11,8 +11,8 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
 const {
-  getEnvironmentVariable
-} = require('../../dd-trace/src/config-helper')
+  getValueFromEnvSources
+} = require('../../dd-trace/src/config/helper')
 const { DD_MAJOR } = require('../../../version')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -41,7 +41,7 @@ const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
 
-const RUM_FLUSH_WAIT_TIME = Number(getEnvironmentVariable('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 1000
+const RUM_FLUSH_WAIT_TIME = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 1000
 
 let applyRepeatEachIndex = null
 
@@ -484,10 +484,11 @@ function dispatcherRunWrapper (run) {
 
 function dispatcherRunWrapperNew (run) {
   return function (testGroups) {
-    // Filter out disabled tests from testGroups before they get scheduled
+    // Filter out disabled tests from testGroups before they get scheduled,
+    // unless they have attemptToFix (in which case they should still run and be retried)
     if (isTestManagementTestsEnabled) {
       testGroups.forEach(group => {
-        group.tests = group.tests.filter(test => !test._ddIsDisabled)
+        group.tests = group.tests.filter(test => !test._ddIsDisabled || test._ddIsAttemptToFix)
       })
       // Remove empty groups
       testGroups = testGroups.filter(group => group.tests.length > 0)
@@ -911,14 +912,16 @@ addHook({
       const fileSuitesWithManagedTestsToProjects = new Map()
       for (const test of allTests) {
         const testProperties = getTestProperties(test)
-        // Disabled tests are skipped and not retried
+        // Disabled tests are skipped unless they have attemptToFix
         if (testProperties.disabled) {
           test._ddIsDisabled = true
-          test.expectedStatus = 'skipped'
-          // setting test.expectedStatus to 'skipped' does not work for every case,
-          // so we need to filter out disabled tests in dispatcherRunWrapperNew,
-          // so they don't get to the workers
-          continue
+          if (!testProperties.attemptToFix) {
+            test.expectedStatus = 'skipped'
+            // setting test.expectedStatus to 'skipped' does not work for every case,
+            // so we need to filter out disabled tests in dispatcherRunWrapperNew,
+            // so they don't get to the workers
+            continue
+          }
         }
         if (testProperties.quarantined) {
           test._ddIsQuarantined = true
@@ -947,6 +950,7 @@ addHook({
         (test) => test._ddIsAttemptToFix,
         [
           (test) => test._ddIsQuarantined && '_ddIsQuarantined',
+          (test) => test._ddIsDisabled && '_ddIsDisabled',
           '_ddIsAttemptToFix',
           '_ddIsAttemptToFixRetry'
         ],

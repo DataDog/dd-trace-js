@@ -8,7 +8,7 @@ const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detectio
 const { getTestManagementTests: getTestManagementTestsRequest } =
   require('../test-management/get-test-management-tests')
 const log = require('../../log')
-const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
+const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 
@@ -34,7 +34,7 @@ function getIsTestSessionTrace (trace) {
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
 
-class CiVisibilityExporter extends AgentInfoExporter {
+class CiVisibilityExporter extends BufferingExporter {
   constructor (config) {
     super(config)
     this._timer = undefined

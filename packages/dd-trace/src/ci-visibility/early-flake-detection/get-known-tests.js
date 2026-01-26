@@ -3,7 +3,7 @@
 const request = require('../../exporters/common/request')
 const id = require('../../id')
 const log = require('../../log')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getValueFromEnvSources } = require('../../config/helper')
 
 const {
   incrementCountMetric,
@@ -51,7 +51,7 @@ function getKnownTests ({
     options.path = `${evpProxyPrefix}/api/v2/ci/libraries/tests`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const apiKey = getEnvironmentVariable('DD_API_KEY')
+    const apiKey = getValueFromEnvSources('DD_API_KEY')
     if (!apiKey) {
       return done(new Error('Known tests were not fetched because Datadog API key is not defined.'))
     }

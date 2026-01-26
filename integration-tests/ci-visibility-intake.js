@@ -299,6 +299,16 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
+    app.post('/telemetry/proxy/api/v2/apmtelemetry', express.json(), (req, res) => {
+      res.status(200).send()
+      if (req.body?.payload?.namespace !== 'civisibility') return
+      this.emit('message', {
+        headers: req.headers,
+        payload: req.body,
+        url: req.url
+      })
+    })
+
     return new Promise((resolve, reject) => {
       const timeoutObj = setTimeout(() => {
         reject(new Error('Intake timed out starting up'))

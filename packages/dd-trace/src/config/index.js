@@ -4,28 +4,28 @@ const fs = require('fs')
 const os = require('os')
 const { URL } = require('url')
 const path = require('path')
-const uuid = require('../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
+const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 
-const set = require('../../datadog-core/src/utils/src/set')
-const { DD_MAJOR } = require('../../../version')
-const log = require('./log')
-const tagger = require('./tagger')
-const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
-const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
-const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
-  require('./git_properties')
-const { updateConfig } = require('./telemetry')
-const telemetryMetrics = require('./telemetry/metrics')
+const set = require('../../../datadog-core/src/utils/src/set')
+const { DD_MAJOR } = require('../../../../version')
+const log = require('../log')
+const tagger = require('../tagger')
+const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('../util')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
+const { updateConfig } = require('../telemetry')
+const telemetryMetrics = require('../telemetry/metrics')
 const {
   isInServerlessEnvironment,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription
-} = require('./serverless')
-const { ORIGIN_KEY } = require('./constants')
-const { appendRules } = require('./payload-tagging/config')
-const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./config-helper')
-const defaults = require('./config_defaults')
+} = require('../serverless')
+const { ORIGIN_KEY } = require('../constants')
+const { appendRules } = require('../payload-tagging/config')
+const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
+  require('./git_properties')
+const { getEnvironmentVariable: getEnv, getEnvironmentVariables, getStableConfigSources } = require('./helper')
+const defaults = require('./defaults')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -276,9 +276,12 @@ class Config {
 
   constructor (options = {}) {
     if (!isInServerlessEnvironment()) {
-      // Bail out early if we're in a serverless environment, stable config isn't supported
-      const StableConfig = require('./config_stable')
-      this.stableConfig = new StableConfig()
+      const configEnvSources = getStableConfigSources()
+      this.stableConfig = {
+        fleetEntries: configEnvSources.fleetStableConfig,
+        localEntries: configEnvSources.localStableConfig,
+        warnings: configEnvSources.stableConfigWarnings
+      }
     }
 
     options = {
@@ -328,7 +331,6 @@ class Config {
     this.#applyStableConfig(this.stableConfig?.fleetEntries ?? {}, this.#fleetStableConfig)
     this.#applyOptions(options)
     this.#applyCalculated()
-    this.#applyRemote({})
     this.#merge()
 
     tagger.add(this.tags, {
@@ -353,15 +355,38 @@ class Config {
     return this.#parsedDdTags
   }
 
-  // Supports only a subset of options for now.
-  configure (options, remote) {
-    if (remote) {
-      this.#applyRemote(options)
-    } else {
-      this.#applyOptions(options)
+  /**
+   * Set the configuration with remote config settings.
+   * Applies remote configuration, recalculates derived values, and merges all configuration sources.
+   *
+   * @param {import('./config/remote_config').RemoteConfigOptions|null} options - Configurations received via Remote
+   *   Config or null to reset all remote configuration
+   */
+  setRemoteConfig (options) {
+    // Clear all RC-managed fields to ensure previous values don't persist.
+    // State is instead managed by the `RCClientLibConfigManager` class
+    this.#remote = {}
+    this.#remoteUnprocessed = {}
+
+    // Special case: if options is null, nothing to apply
+    // This happens when all remote configs are removed
+    if (options !== null) {
+      this.#applyRemoteConfig(options)
     }
 
-    // TODO: test
+    this.#applyCalculated()
+    this.#merge()
+  }
+
+  // TODO: Remove the `updateOptions` method. We don't want to support updating the config this way
+  /**
+   * Updates the configuration with new programmatic options.
+   *
+   * @deprecated This method should not be used and will be removed in a future version.
+   * @param {object} options - Configuration options to apply (same format as tracer init options)
+   */
+  updateOptions (options) {
+    this.#applyOptions(options)
     this.#applyCalculated()
     this.#merge()
   }
@@ -1306,31 +1331,36 @@ class Config {
     }
   }
 
-  #applyRemote (options) {
+  /**
+   * Applies remote configuration options from APM_TRACING configs.
+   *
+   * @param {import('./config/remote_config').RemoteConfigOptions} options - Configurations received via Remote Config
+   */
+  #applyRemoteConfig (options) {
     const opts = this.#remote
-    const tags = {}
-    const headerTags = options.tracing_header_tags
-      ? options.tracing_header_tags.map(tag => {
-        return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
-      })
-      : undefined
 
-    tagger.add(tags, options.tracing_tags)
-    if (Object.keys(tags).length) tags['runtime-id'] = runtimeId
-
+    this.#setBoolean(opts, 'dynamicInstrumentation.enabled', options.dynamic_instrumentation_enabled)
+    this.#setBoolean(opts, 'codeOriginForSpans.enabled', options.code_origin_enabled)
     this.#setUnit(opts, 'sampleRate', options.tracing_sampling_rate)
     this.#setBoolean(opts, 'logInjection', options.log_injection_enabled)
-    opts.headerTags = headerTags
-    this.#setTags(opts, 'tags', tags)
     this.#setBoolean(opts, 'tracing', options.tracing_enabled)
     this.#remoteUnprocessed['sampler.rules'] = options.tracing_sampling_rules
-    this.#setSamplingRule(opts, 'sampler.rules', this.#reformatTags(options.tracing_sampling_rules))
+    this.#setSamplingRule(opts, 'sampler.rules', this.#reformatTagsFromRC(options.tracing_sampling_rules))
+
+    opts.headerTags = options.tracing_header_tags?.map(tag => {
+      return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
+    })
+
+    const tags = {}
+    tagger.add(tags, options.tracing_tags)
+    if (Object.keys(tags).length) tags['runtime-id'] = runtimeId
+    this.#setTags(opts, 'tags', tags)
   }
 
-  #reformatTags (samplingRules) {
+  #reformatTagsFromRC (samplingRules) {
     for (const rule of (samplingRules || [])) {
-      const reformattedTags = {}
       if (rule.tags) {
+        const reformattedTags = {}
         for (const tag of rule.tags) {
           reformattedTags[tag.key] = tag.value_glob
         }

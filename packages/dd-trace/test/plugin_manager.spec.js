@@ -76,11 +76,14 @@ describe('Plugin Manager', () => {
     PluginManager = proxyquire.noPreserveCache()('../src/plugin_manager', {
       './plugins': { ...plugins, '@noCallThru': true },
       '../../datadog-instrumentations': {},
-      '../../dd-trace/src/config-helper': {
+      '../../dd-trace/src/config/helper': {
         getEnvironmentVariable (name) {
           return process.env[name]
+        },
+        getValueFromEnvSources (name) {
+          return process.env[name]
         }
-      }
+      },
     })
     pm = new PluginManager(tracer)
   })

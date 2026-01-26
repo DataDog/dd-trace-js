@@ -314,7 +314,7 @@ function execHelper (command, options) {
         execSync('sleep 60')
         log('Exec RETRY START: ', command)
         execSync(command, options)
-        log('Exec RETRY SUCESS: ', command)
+        log('Exec RETRY SUCCESS: ', command)
       } catch (retryError) {
         error('Exec RETRY ERROR', command, retryError)
         throw retryError
@@ -444,7 +444,7 @@ async function createSandbox (
 }
 
 /**
- * @typedef {{ default: string, star: string, destructure: string }} Variants
+ * @typedef {{ default?: string, star: string, destructure: string }} Variants
  */
 /**
  * @overload
@@ -498,7 +498,9 @@ function varySandbox (filename, variants, namedExport, packageName = variants, b
     variantFilenames[variant] = variantFilename
     let newFileData = origFileData
     if (variant !== baseVariant) {
-      newFileData = origFileData.replace(variants[baseVariant], `${value}`)
+      const baseValue = variants[baseVariant]
+      assert(baseValue, `Missing ${baseVariant} variant`)
+      newFileData = origFileData.replace(baseValue, `${value}`)
       // Error out when the default import does not match that of server.mjs
       if (newFileData === origFileData) throw Error(`Unable to match ${baseVariant}`)
     }
@@ -609,6 +611,7 @@ async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMess
 
 /**
  * @param {number} port
+ * @returns {NodeJS.ProcessEnv}
  */
 function getCiVisAgentlessConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
@@ -617,7 +620,7 @@ function getCiVisAgentlessConfig (port) {
   return {
     ...rest,
     DD_API_KEY: '1',
-    DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
+    DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
     NODE_OPTIONS: '-r dd-trace/ci/init',
     DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
@@ -626,6 +629,7 @@ function getCiVisAgentlessConfig (port) {
 
 /**
  * @param {number} port
+ * @returns {NodeJS.ProcessEnv}
  */
 function getCiVisEvpProxyConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
@@ -633,7 +637,7 @@ function getCiVisEvpProxyConfig (port) {
   const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
-    DD_TRACE_AGENT_PORT: port,
+    DD_TRACE_AGENT_PORT: String(port),
     NODE_OPTIONS: '-r dd-trace/ci/init',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
     DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
@@ -848,12 +852,19 @@ const assertObjectContains = function assertObjectContains (actual, expected, ms
 
   try {
     assertionFn(actual, expected, msg)
-  } catch (originalError) {
+  } catch {
     // First attempt failed, retry with matcher support
     try {
       assertObjectContainsImpl(actual, expected, msg, true)
-    } catch {
-      throw originalError
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error)
+
+      throw new assert.AssertionError({
+        actual,
+        expected,
+        operator: 'partialDeepStrictEqual',
+      })
     }
   }
 }

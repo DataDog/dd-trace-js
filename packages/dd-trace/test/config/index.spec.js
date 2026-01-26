@@ -4,17 +4,19 @@ const { readFileSync, mkdtempSync, rmSync, writeFileSync } = require('node:fs')
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const path = require('node:path')
+const os = require('node:os')
 
 const sinon = require('sinon')
 const { it, describe, beforeEach, afterEach } = require('mocha')
 const context = describe
 const proxyquire = require('proxyquire')
 
-require('./setup/core')
-const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
-const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { DD_MAJOR } = require('../../../version')
+require('../setup/core')
+const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../../src/constants')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/config/helper')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const { DD_MAJOR } = require('../../../../version')
+const StableConfig = require('../../src/config/stable')
 
 describe('Config', () => {
   let getConfig
@@ -22,42 +24,43 @@ describe('Config', () => {
   let pkg
   let env
   let fs
-  let os
   let existsSyncParam
   let existsSyncReturn
-  let osType
   let updateConfig
 
-  const RECOMMENDED_JSON_PATH = require.resolve('../src/appsec/recommended.json')
-  const RULES_JSON_PATH = require.resolve('./fixtures/config/appsec-rules.json')
-  const BLOCKED_TEMPLATE_HTML_PATH = require.resolve('./fixtures/config/appsec-blocked-template.html')
+  const RECOMMENDED_JSON_PATH = require.resolve('../../src/appsec/recommended.json')
+  const RULES_JSON_PATH = require.resolve('../fixtures/config/appsec-rules.json')
+  const BLOCKED_TEMPLATE_HTML_PATH = require.resolve('../fixtures/config/appsec-blocked-template.html')
   const BLOCKED_TEMPLATE_HTML = readFileSync(BLOCKED_TEMPLATE_HTML_PATH, { encoding: 'utf8' })
-  const BLOCKED_TEMPLATE_JSON_PATH = require.resolve('./fixtures/config/appsec-blocked-template.json')
+  const BLOCKED_TEMPLATE_JSON_PATH = require.resolve('../fixtures/config/appsec-blocked-template.json')
   const BLOCKED_TEMPLATE_JSON = readFileSync(BLOCKED_TEMPLATE_JSON_PATH, { encoding: 'utf8' })
-  const BLOCKED_TEMPLATE_GRAPHQL_PATH = require.resolve('./fixtures/config/appsec-blocked-graphql-template.json')
+  const BLOCKED_TEMPLATE_GRAPHQL_PATH = require.resolve('../fixtures/config/appsec-blocked-graphql-template.json')
   const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
 
   const comparator = (a, b) => a.name.localeCompare(b.name) || a.origin.localeCompare(b.origin)
 
   function reloadLoggerAndConfig () {
-    log = proxyquire('../src/log', {})
+    log = proxyquire('../../src/log', {})
     log.use = sinon.spy()
     log.toggle = sinon.spy()
     log.warn = sinon.spy()
     log.error = sinon.spy()
 
-    const configDefaults = proxyquire('../src/config_defaults', {
-      './pkg': pkg
+    const configDefaults = proxyquire('../../src/config/defaults', {
+      '../pkg': pkg
     })
 
     // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
-    getConfig = (options) => proxyquire.noPreserveCache()('../src/config', {
-      './config_defaults': configDefaults,
-      './log': log,
-      './telemetry': { updateConfig },
-      fs,
-      os
-    })(options)
+    getConfig = (options) => {
+      const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {})
+      return proxyquire.noPreserveCache()('../../src/config', {
+        './defaults': configDefaults,
+        '../log': log,
+        '../telemetry': { updateConfig },
+        fs,
+        './helper': configHelper
+      })(options)
+    }
   }
 
   beforeEach(() => {
@@ -79,12 +82,6 @@ describe('Config', () => {
       mkdtempSync,
       writeFileSync,
     }
-    os = {
-      type () {
-        return osType
-      }
-    }
-    osType = 'Linux'
 
     reloadLoggerAndConfig()
   })
@@ -210,8 +207,8 @@ describe('Config', () => {
       }
     })
 
-    const indexFile = require('../src/index')
-    const proxy = require('../src/proxy')
+    const indexFile = require('../../src/index')
+    const proxy = require('../../src/proxy')
     assert.strictEqual(indexFile, proxy)
   })
 
@@ -249,9 +246,9 @@ describe('Config', () => {
       }
     })
 
-    delete require.cache[require.resolve('../src/index')]
-    const indexFile = require('../src/index')
-    const noop = require('../src/noop/proxy')
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const noop = require('../../src/noop/proxy')
     assert.strictEqual(indexFile, noop)
   })
 
@@ -2331,7 +2328,7 @@ describe('Config', () => {
   it('should send empty array when remote config is called on empty options', () => {
     const config = getConfig()
 
-    config.configure({}, true)
+    config.setRemoteConfig({})
 
     sinon.assert.calledTwice(updateConfig)
     assert.deepStrictEqual(updateConfig.getCall(1).args[0], [])
@@ -2340,9 +2337,9 @@ describe('Config', () => {
   it('should send remote config changes to telemetry', () => {
     const config = getConfig()
 
-    config.configure({
+    config.setRemoteConfig({
       tracing_sampling_rate: 0
-    }, true)
+    })
 
     assert.deepStrictEqual(updateConfig.getCall(1).args[0], [
       { name: 'sampleRate', value: 0, origin: 'remote_config' }
@@ -2352,7 +2349,7 @@ describe('Config', () => {
   it('should reformat tags from sampling rules when set through remote configuration', () => {
     const config = getConfig()
 
-    config.configure({
+    config.setRemoteConfig({
       tracing_sampling_rules: [
         {
           resource: '*',
@@ -2363,7 +2360,7 @@ describe('Config', () => {
           provenance: 'customer'
         }
       ]
-    }, true)
+    })
     assert.deepStrictEqual(config.sampler, {
       spanSamplingRules: [],
       rateLimit: 100,
@@ -2381,9 +2378,9 @@ describe('Config', () => {
   it('should have consistent runtime-id after remote configuration updates tags', () => {
     const config = getConfig()
     const runtimeId = config.tags['runtime-id']
-    config.configure({
+    config.setRemoteConfig({
       tracing_tags: { foo: 'bar' }
-    }, true)
+    })
 
     assert.strictEqual(config.tags?.foo, 'bar')
     assert.strictEqual(config.tags?.['runtime-id'], runtimeId)
@@ -2401,7 +2398,7 @@ describe('Config', () => {
   })
 
   it('should load span sampling rules from json file', () => {
-    const path = './fixtures/config/span-sampling-rules.json'
+    const path = '../fixtures/config/span-sampling-rules.json'
     process.env.DD_SPAN_SAMPLING_RULES_FILE = require.resolve(path)
 
     const config = getConfig()
@@ -2475,14 +2472,6 @@ describe('Config', () => {
   })
 
   context('auto configuration w/ unix domain sockets', () => {
-    context('on windows', () => {
-      it('should not be used', () => {
-        osType = 'Windows_NT'
-        const config = getConfig()
-
-        assert.strictEqual(config.url, undefined)
-      })
-    })
     context('socket does not exist', () => {
       it('should not be used', () => {
         const config = getConfig()
@@ -2490,6 +2479,7 @@ describe('Config', () => {
         assert.strictEqual(config.url, undefined)
       })
     })
+
     context('socket exists', () => {
       beforeEach(() => {
         existsSyncReturn = true
@@ -2498,8 +2488,13 @@ describe('Config', () => {
       it('should be used when no options and no env vars', () => {
         const config = getConfig()
 
-        assert.strictEqual(existsSyncParam, '/var/run/datadog/apm.socket')
-        assert.strictEqual(config.url.toString(), 'unix:///var/run/datadog/apm.socket')
+        if (os.type() === 'Windows_NT') {
+          assert.strictEqual(existsSyncParam, undefined)
+          assert.strictEqual(config.url, undefined)
+        } else {
+          assert.strictEqual(existsSyncParam, '/var/run/datadog/apm.socket')
+          assert.strictEqual(config.url.toString(), 'unix:///var/run/datadog/apm.socket')
+        }
       })
 
       it('should not be used when DD_TRACE_AGENT_URL provided', () => {
@@ -2715,8 +2710,8 @@ describe('Config', () => {
   context('sci embedding', () => {
     const DUMMY_COMMIT_SHA = 'b7b5dfa992008c77ab3f8a10eb8711e0092445b0'
     const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/dd-trace-js.git'
-    const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
-    const DD_GIT_FOLDER_PATH = path.join(__dirname, 'fixtures', 'config', 'git-folder')
+    const DD_GIT_PROPERTIES_FILE = require.resolve('../fixtures/config/git.properties')
+    const DD_GIT_FOLDER_PATH = path.join(__dirname, '..', 'fixtures', 'config', 'git-folder')
     let ddTags
     beforeEach(() => {
       ddTags = process.env.DD_TAGS
@@ -2777,7 +2772,7 @@ describe('Config', () => {
       assert.strictEqual(config.repositoryUrl, DUMMY_REPOSITORY_URL)
     })
     it('reads git.properties and filters out credentials', () => {
-      process.env.DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties.credentials')
+      process.env.DD_GIT_PROPERTIES_FILE = require.resolve('../fixtures/config/git.properties.credentials')
       const config = getConfig({})
       assertObjectContains(config, {
         commitSHA: '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d',
@@ -2882,7 +2877,7 @@ describe('Config', () => {
   context('payload tagging', () => {
     let env
 
-    const staticConfig = require('../src/payload-tagging/config/aws.json')
+    const staticConfig = require('../../src/payload-tagging/config/aws.json')
 
     beforeEach(() => {
       env = process.env
@@ -3080,18 +3075,13 @@ describe('Config', () => {
   })
 
   context('library config', () => {
-    const fs = require('node:fs')
-    const os = require('node:os')
-    const path = require('node:path')
-
-    const StableConfig = require('../src/config_stable')
-
-    // os.tmpdir returns undefined on Windows somehow
-    const baseTempDir = os.platform() !== 'win32' ? os.tmpdir() : 'C:\\Windows\\Temp'
+    // os.tmpdir() could return a falsy value on Windows, if process.env.TEMP or process.env.TMP are malformed.
+    const baseTempDir = os.tmpdir() || 'C:\\Windows\\Temp'
     let env
     let tempDir
     let localConfigPath
     let fleetConfigPath
+
     beforeEach(() => {
       env = process.env
       tempDir = fs.mkdtempSync(path.join(baseTempDir, 'config-test-'))
@@ -3099,6 +3089,7 @@ describe('Config', () => {
       fleetConfigPath = path.join(tempDir, 'fleet.yaml')
       process.env.DD_TEST_LOCAL_CONFIG_PATH = localConfigPath
       process.env.DD_TEST_FLEET_CONFIG_PATH = fleetConfigPath
+      reloadLoggerAndConfig()
     })
 
     afterEach(() => {
@@ -3137,7 +3128,7 @@ rules:
     it('should respect the priority sources', () => {
       // 1. Default
       const config1 = getConfig()
-      assert.strictEqual(config1?.service, 'node')
+      assert.strictEqual(config1.service, 'node')
 
       // 2. Local stable > Default
       fs.writeFileSync(
@@ -3153,12 +3144,12 @@ rules:
       DD_SERVICE: service_local_stable
 `)
       const config2 = getConfig()
-      assert.strictEqual(config2?.service, 'service_local_stable')
+      assert.strictEqual(config2.service, 'service_local_stable')
 
       // 3. Env > Local stable > Default
       process.env.DD_SERVICE = 'service_env'
       const config3 = getConfig()
-      assert.strictEqual(config3?.service, 'service_env')
+      assert.strictEqual(config3.service, 'service_env')
 
       // 4. Fleet Stable > Env > Local stable > Default
       fs.writeFileSync(
@@ -3573,6 +3564,89 @@ rules:
     })
   })
 
+  context('resourceRenamingEnabled', () => {
+    let originalResourceRenamingEnabled
+    let originalAppsecEnabled
+
+    beforeEach(() => {
+      originalResourceRenamingEnabled = process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED
+      originalAppsecEnabled = process.env.DD_APPSEC_ENABLED
+      delete process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED
+      delete process.env.DD_APPSEC_ENABLED
+    })
+
+    afterEach(() => {
+      if (originalResourceRenamingEnabled !== undefined) {
+        process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = originalResourceRenamingEnabled
+      } else {
+        delete process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED
+      }
+      if (originalAppsecEnabled !== undefined) {
+        process.env.DD_APPSEC_ENABLED = originalAppsecEnabled
+      } else {
+        delete process.env.DD_APPSEC_ENABLED
+      }
+    })
+
+    it('should be false by default', () => {
+      const config = getConfig()
+      assert.strictEqual(config.resourceRenamingEnabled, false)
+    })
+
+    it('should be enabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is true', () => {
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.resourceRenamingEnabled, true)
+    })
+
+    it('should be disabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is false', () => {
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
+      const config = getConfig()
+      assert.strictEqual(config.resourceRenamingEnabled, false)
+    })
+
+    it('should be enabled when appsec is enabled via env var', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.resourceRenamingEnabled, true)
+    })
+
+    it('should be enabled when appsec is enabled via options', () => {
+      const config = getConfig({ appsec: { enabled: true } })
+      assert.strictEqual(config.resourceRenamingEnabled, true)
+    })
+
+    it('should prioritize DD_TRACE_RESOURCE_RENAMING_ENABLED over appsec setting', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
+      const config = getConfig()
+      assert.strictEqual(config.resourceRenamingEnabled, false)
+    })
+
+    it('should prioritize DD_TRACE_RESOURCE_RENAMING_ENABLED over appsec option', () => {
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
+      const config = getConfig({ appsec: { enabled: true } })
+      assert.strictEqual(config.resourceRenamingEnabled, false)
+    })
+
+    it('should enable when appsec is enabled via both env and options', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = getConfig({ appsec: { enabled: true } })
+      assert.strictEqual(config.resourceRenamingEnabled, true)
+    })
+
+    it('should remain false when appsec is disabled', () => {
+      process.env.DD_APPSEC_ENABLED = 'false'
+      const config = getConfig()
+      assert.strictEqual(config.resourceRenamingEnabled, false)
+    })
+
+    it('should remain false when appsec is disabled via options', () => {
+      const config = getConfig({ appsec: { enabled: false } })
+      assert.strictEqual(config.resourceRenamingEnabled, false)
+    })
+  })
+
   context('getOrigin', () => {
     let originalAppsecEnabled
 
@@ -3604,6 +3678,127 @@ rules:
       })
 
       assert.strictEqual(config.getOrigin('appsec.enabled'), 'code')
+    })
+  })
+
+  describe('remote config field mapping', () => {
+    it('should map dynamic_instrumentation_enabled to dynamicInstrumentation.enabled', () => {
+      const config = getConfig()
+      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
+      config.setRemoteConfig({ dynamic_instrumentation_enabled: true })
+      assert.strictEqual(config.dynamicInstrumentation.enabled, true)
+    })
+
+    it('should map code_origin_enabled to codeOriginForSpans.enabled', () => {
+      const config = getConfig()
+      assert.strictEqual(config.codeOriginForSpans.enabled, true)
+      config.setRemoteConfig({ code_origin_enabled: false })
+      assert.strictEqual(config.codeOriginForSpans.enabled, false)
+    })
+
+    it('should map tracing_sampling_rate to sampleRate', () => {
+      const config = getConfig()
+      assert.strictEqual(config.sampleRate, undefined)
+      config.setRemoteConfig({ tracing_sampling_rate: 0.5 })
+      assert.strictEqual(config.sampleRate, 0.5)
+    })
+
+    it('should map log_injection_enabled to logInjection', () => {
+      const config = getConfig()
+      assert.strictEqual(config.logInjection, true)
+      config.setRemoteConfig({ log_injection_enabled: false })
+      assert.strictEqual(config.logInjection, false)
+    })
+
+    it('should map tracing_enabled to tracing', () => {
+      const config = getConfig()
+      assert.strictEqual(config.tracing, true)
+      config.setRemoteConfig({ tracing_enabled: false })
+      assert.strictEqual(config.tracing, false)
+    })
+
+    it('should map tracing_sampling_rules to sampler.rules', () => {
+      const config = getConfig()
+      assert.deepStrictEqual(config.sampler.rules, [])
+      config.setRemoteConfig({ tracing_sampling_rules: [{ sample_rate: 0.5 }] })
+      assert.deepStrictEqual(config.sampler.rules, [{ sampleRate: 0.5 }])
+    })
+
+    it('should map tracing_header_tags to headerTags', () => {
+      const config = getConfig({ headerTags: ['foo:bar'] })
+      assert.deepStrictEqual(config.headerTags, ['foo:bar'])
+      config.setRemoteConfig({ tracing_header_tags: [{ header: 'x-custom-header', tag_name: 'custom.tag' }] })
+      assert.deepStrictEqual(config.headerTags, [
+        // TODO: There's an unrelated bug in the tracer resulting in headerTags not being merged.
+        // 'foo:bar',
+        'x-custom-header:custom.tag'
+      ])
+    })
+
+    it('should map tracing_tags to tags', () => {
+      const config = getConfig({ tags: { foo: 'bar' } })
+      assertObjectContains(config.tags, { foo: 'bar' })
+      assert.strictEqual(config.tags.team, undefined)
+      config.setRemoteConfig({ tracing_tags: ['team:backend'] })
+      assertObjectContains(config.tags, {
+        // TODO: There's an unrelated bug in the tracer resulting in tags not being merged.
+        // foo: 'bar',
+        team: 'backend'
+      })
+    })
+  })
+
+  describe('remote config application', () => {
+    it('should clear RC fields when setRemoteConfig is called with null', () => {
+      const config = getConfig({ logInjection: true, sampleRate: 0.5 })
+
+      config.setRemoteConfig({ tracing_enabled: false })
+
+      assert.strictEqual(config.tracing, false)
+      assert.strictEqual(config.logInjection, true)
+      assert.strictEqual(config.sampleRate, 0.5)
+
+      config.setRemoteConfig(null)
+
+      assert.strictEqual(config.tracing, true)
+      assert.strictEqual(config.logInjection, true)
+      assert.strictEqual(config.sampleRate, 0.5)
+    })
+
+    it('should ignore null values', () => {
+      const config = getConfig({ sampleRate: 0.5 })
+      config.setRemoteConfig({ tracing_sampling_rate: null })
+      assert.strictEqual(config.sampleRate, 0.5)
+    })
+
+    it('should treat null values as unset', () => {
+      const config = getConfig({ sampleRate: 0.5 })
+      config.setRemoteConfig({ tracing_sampling_rate: 0.8 })
+      assert.strictEqual(config.sampleRate, 0.8)
+      config.setRemoteConfig({ tracing_sampling_rate: null })
+      assert.strictEqual(config.sampleRate, 0.5)
+    })
+
+    it('should replace all RC fields with each update', () => {
+      const config = getConfig()
+
+      config.setRemoteConfig({
+        tracing_enabled: true,
+        log_injection_enabled: false,
+        tracing_sampling_rate: 0.8
+      })
+
+      assert.strictEqual(config.tracing, true)
+      assert.strictEqual(config.logInjection, false)
+      assert.strictEqual(config.sampleRate, 0.8)
+
+      config.setRemoteConfig({
+        tracing_enabled: false
+      })
+
+      assert.strictEqual(config.tracing, false)
+      assert.strictEqual(config.logInjection, true)
+      assert.strictEqual(config.sampleRate, undefined)
     })
   })
 })

@@ -1,47 +1,20 @@
 'use strict'
 
-const { URL, format } = require('url')
-
-const defaults = require('../../config_defaults')
 const { incrementCountMetric, TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION } = require('../../ci-visibility/telemetry')
-const request = require('./request')
-
-function fetchAgentInfo (url, callback) {
-  request('', {
-    path: '/info',
-    url
-  }, (err, res) => {
-    if (err) {
-      return callback(err)
-    }
-    try {
-      const response = JSON.parse(res)
-      return callback(null, response)
-    } catch (e) {
-      return callback(e)
-    }
-  })
-}
+const { getAgentUrl } = require('../../agent/url')
 
 /**
- * Exporter that exposes a way to query /info endpoint from the agent and gives you the response.
- * While this._writer is not initialized, exported traces are stored as is.
+ * Base exporter that buffers traces until a writer is initialized.
+ * Provides common export logic with flush intervals.
  */
-class AgentInfoExporter {
+class BufferingExporter {
+  _traceBuffer = []
+  _isInitialized = false
+  _writer
+
   constructor (tracerConfig) {
     this._config = tracerConfig
-    const { url, hostname = defaults.hostname, port } = this._config
-    this._url = url || new URL(format({
-      protocol: 'http:',
-      hostname,
-      port
-    }))
-    this._traceBuffer = []
-    this._isInitialized = false
-  }
-
-  getAgentInfo (onReceivedInfo) {
-    fetchAgentInfo(this._url, onReceivedInfo)
+    this._url = getAgentUrl(tracerConfig)
   }
 
   export (trace) {
@@ -86,4 +59,4 @@ class AgentInfoExporter {
   }
 }
 
-module.exports = AgentInfoExporter
+module.exports = BufferingExporter

@@ -9,6 +9,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 describe('Plugin', () => {
   let elasticsearch
@@ -37,6 +38,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           elasticsearch = metaModule.get()
 
+          temporaryWarningExceptions.add('The `util.isArray` API is deprecated. Please use `Array.isArray()` instead.')
           client = new elasticsearch.Client({
             node: 'http://localhost:9200'
           })

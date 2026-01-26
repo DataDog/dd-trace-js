@@ -5,6 +5,7 @@ const { promisify } = require('util')
 const zlib = require('zlib')
 const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
+const log = require('../log')
 const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
@@ -63,13 +64,64 @@ class Profiler extends EventEmitter {
     this._timeoutInterval = undefined
   }
 
+  get serverless () { return false }
+
   get flushInterval () {
     return this.#config?.flushInterval
   }
 
-  start (options) {
+  start (config) {
+    const {
+      service,
+      version,
+      env,
+      url,
+      hostname,
+      port,
+      tags,
+      repositoryUrl,
+      commitSHA,
+      injectionEnabled
+    } = config
+    const { enabled, sourceMap, exporters } = config.profiling
+    const { heartbeatInterval } = config.telemetry
+
+    // TODO: Unify with main logger and rewrite template strings to use printf formatting.
+    const logger = {
+      debug (message) { log.debug(message) },
+      info (message) { log.info(message) },
+      warn (message) { log.warn(message) },
+      error (...args) { log.error(...args) }
+    }
+
+    const libraryInjected = injectionEnabled.length > 0
+    let activation
+    if (enabled === 'auto') {
+      activation = 'auto'
+    } else if (enabled === 'true') {
+      activation = 'manual'
+    } // else activation = undefined
+
+    const options = {
+      service,
+      version,
+      env,
+      logger,
+      sourceMap,
+      exporters,
+      url,
+      hostname,
+      port,
+      tags,
+      repositoryUrl,
+      commitSHA,
+      libraryInjected,
+      activation,
+      heartbeatInterval
+    }
+
     return this._start(options).catch((err) => {
-      logError(options.logger, 'Error starting profiler. For troubleshooting tips, see ' +
+      logError(logger, 'Error starting profiler. For troubleshooting tips, see ' +
         '<https://dtdg.co/nodejs-profiler-troubleshooting>', err)
       return false
     })
@@ -242,6 +294,7 @@ class Profiler extends EventEmitter {
 
   #createInitialInfos () {
     return {
+      serverless: this.serverless,
       settings: this.#config.systemInfoReport
     }
   }
@@ -350,6 +403,8 @@ class ServerlessProfiler extends Profiler {
     this.#interval = 1
     this.#flushAfterIntervals = undefined
   }
+
+  get serverless () { return true }
 
   get profiledIntervals () {
     return this.#profiledIntervals

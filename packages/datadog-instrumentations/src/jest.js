@@ -94,6 +94,8 @@ const testsToBeRetried = new Set()
 const testSuiteAbsolutePathsWithFastCheck = new Set()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
+const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
+const atrSuppressedErrors = new Map()
 
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
@@ -379,7 +381,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           isNewTest = retriedTestsToNumAttempts.has(testName)
         }
 
-        if (this.isEarlyFlakeDetectionEnabled && (isNewTest || isModified)) {
+        const willRunEfd = this.isEarlyFlakeDetectionEnabled && (isNewTest || isModified)
+        event.test[ATR_RETRY_SUPPRESSION_FLAG] = Boolean(isAttemptToFix || willRunEfd)
+
+        if (!isAttemptToFix && willRunEfd) {
           numEfdRetry = retriedTestsToNumAttempts.get(testName)
           retriedTestsToNumAttempts.set(testName, numEfdRetry + 1)
         }
@@ -435,19 +440,22 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         const testFullName = this.getTestNameFromAddTestEvent(event, state)
         const isSkipped = event.mode === 'todo' || event.mode === 'skip'
-        if (this.isTestManagementTestsEnabled) {
-          const isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(testFullName)
-          if (isAttemptToFix && !isSkipped && !retriedTestsToNumAttempts.has(testFullName)) {
-            retriedTestsToNumAttempts.set(testFullName, 0)
-            testsToBeRetried.add(testFullName)
-            this.retryTest({
-              jestEvent: event,
-              retryCount: testManagementAttemptToFixRetries,
-              retryType: 'Test Management (Attempt to Fix)'
-            })
-          }
+        const isAttemptToFix = this.isTestManagementTestsEnabled &&
+          this.testManagementTestsForThisSuite?.attemptToFix?.includes(testFullName)
+        if (
+          isAttemptToFix &&
+          !isSkipped &&
+          !retriedTestsToNumAttempts.has(testFullName)
+        ) {
+          retriedTestsToNumAttempts.set(testFullName, 0)
+          testsToBeRetried.add(testFullName)
+          this.retryTest({
+            jestEvent: event,
+            retryCount: testManagementAttemptToFixRetries,
+            retryType: 'Test Management (Attempt to Fix)'
+          })
         }
-        if (this.isImpactedTestsEnabled) {
+        if (!isAttemptToFix && this.isImpactedTestsEnabled) {
           const testStartLine = getTestLineStart(event.asyncError, this.testSuite)
           const testEndLine = getTestEndLine(event.fn, testStartLine)
           const isModified = isModifiedTest(
@@ -467,7 +475,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             })
           }
         }
-        if (this.isKnownTestsEnabled) {
+        if (!isAttemptToFix && this.isKnownTestsEnabled) {
           const isNew = !this.knownTestsForThisSuite.includes(testFullName)
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testFullName)) {
             retriedTestsToNumAttempts.set(testFullName, 0)
@@ -489,6 +497,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
         // restore in case it is retried
         event.test.fn = originalTestFns.get(event.test)
+        // If ATR retry is being suppressed for this test (due to EFD or Attempt to Fix taking precedence)
+        // and the test has errors for this attempt, store the errors temporarily and clear them
+        // so Jest won't treat this attempt as failed (the real status will be reported after retries).
+        if (event.test?.[ATR_RETRY_SUPPRESSION_FLAG] && event.test.errors?.length) {
+          atrSuppressedErrors.set(event.test, event.test.errors)
+          event.test.errors = []
+        }
 
         let attemptToFixPassed = false
         let attemptToFixFailed = false
@@ -581,6 +596,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (promises.isProbeReady) {
           await promises.isProbeReady
         }
+      }
+      if (event.name === 'run_finish') {
+        for (const [test, errors] of atrSuppressedErrors) {
+          test.errors = errors
+        }
+        atrSuppressedErrors.clear()
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
         const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())

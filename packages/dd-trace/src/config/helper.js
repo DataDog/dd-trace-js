@@ -34,7 +34,66 @@ for (const deprecation of Object.keys(deprecations)) {
   )
 }
 
+let localStableConfig
+let fleetStableConfig
+let stableConfigWarnings
+let stableConfigLoaded = false
+
+function loadStableConfig () {
+  stableConfigLoaded = true
+
+  // Lazy require to avoid circular dependency at module load time.
+  const { isInServerlessEnvironment } = require('../serverless')
+  if (isInServerlessEnvironment()) {
+    // Stable config is not supported in serverless environments.
+    return
+  }
+
+  const StableConfig = require('./stable')
+  const instance = new StableConfig()
+  localStableConfig = instance.localEntries
+  fleetStableConfig = instance.fleetEntries
+  stableConfigWarnings = instance.warnings
+}
+
+function getValueFromSource (name, source) {
+  const value = source[name]
+
+  if (value === undefined && aliases[name]) {
+    for (const alias of aliases[name]) {
+      if (source[alias] !== undefined) {
+        return source[alias]
+      }
+    }
+  }
+
+  return value
+}
+
+function validateAccess (name) {
+  if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
+    !supportedConfigurations[name]) {
+    throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
+  }
+}
+
 module.exports = {
+  /**
+   * Expose raw stable config maps and warnings for consumers that need
+   * per-source access (e.g. telemetry in Config).
+   *
+   * @returns {{ localStableConfig: object, fleetStableConfig: object, stableConfigWarnings: string[] }}
+   */
+  getStableConfigSources () {
+    if (!stableConfigLoaded) {
+      loadStableConfig()
+    }
+    return {
+      localStableConfig,
+      fleetStableConfig,
+      stableConfigWarnings,
+    }
+  },
   /**
    * Returns the environment variables that are supported by the tracer
    * (including all non-Datadog/OTEL specific environment variables).
@@ -46,6 +105,7 @@ module.exports = {
   getEnvironmentVariables () {
     const configs = {}
     for (const [key, value] of Object.entries(process.env)) {
+      // TODO(BridgeAR): Handle telemetry reporting for aliases.
       if (key.startsWith('DD_') || key.startsWith('OTEL_') || aliasToCanonical[key]) {
         if (supportedConfigurations[key]) {
           configs[key] = value
@@ -72,28 +132,41 @@ module.exports = {
     return configs
   },
 
+  getEnvironmentVariable (name) {
+    validateAccess(name)
+    return getValueFromSource(name, process.env)
+  },
+
   /**
-   * Returns the environment variable, if it's supported or a non Datadog
-   * configuration. Otherwise, it throws an error.
+   * Returns the value stored at the given name, assumed to be in environment variable format,
+   * from the supported env sources (process.env, local stable config, fleet stable config).
+   * Falls back to aliases if the canonical name is not set.
    *
    * @param {string} name Environment variable name
    * @returns {string|undefined}
    * @throws {Error} if the configuration is not supported
    */
-  // This method, and callers of this method, need to be updated to check for declarative config sources as well.
-  getEnvironmentVariable (name) {
-    if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
-        !supportedConfigurations[name]) {
-      throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
+  getValueFromEnvSources (name) {
+    validateAccess(name)
+
+    if (!stableConfigLoaded) {
+      loadStableConfig()
     }
-    const config = process.env[name]
-    if (config === undefined && aliases[name]) {
-      for (const alias of aliases[name]) {
-        if (process.env[alias] !== undefined) {
-          return process.env[alias]
-        }
+
+    if (fleetStableConfig !== undefined) {
+      const fromFleet = getValueFromSource(name, fleetStableConfig)
+      if (fromFleet !== undefined) {
+        return fromFleet
       }
     }
-    return config
-  }
+
+    const fromEnv = getValueFromSource(name, process.env)
+    if (fromEnv !== undefined) {
+      return fromEnv
+    }
+
+    if (localStableConfig !== undefined) {
+      return getValueFromSource(name, localStableConfig)
+    }
+  },
 }

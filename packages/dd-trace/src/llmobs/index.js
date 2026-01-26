@@ -136,9 +136,9 @@ function handleSpanProcess (span) {
   spanProcessor.process(span)
 }
 
-function handleEvalMetricAppend (payload) {
+function handleEvalMetricAppend ({ payload, routing }) {
   try {
-    evalWriter.append(payload)
+    evalWriter.append(payload, routing)
   } catch (e) {
     log.warn(
       // eslint-disable-next-line @stylistic/max-len
