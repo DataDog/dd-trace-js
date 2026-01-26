@@ -115,7 +115,15 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
    * @returns {string | undefined}
    */
   findToolName (toolName, toolDescription) {
-    if (Number.isNaN(Number.parseInt(toolName))) return toolName
+    if (Number.isNaN(Number.parseInt(toolName))) {
+      for (const availableTool of this.#availableTools) {
+        const description = availableTool.description
+        if (description === toolDescription && availableTool.id) {
+          this.#availableTools.delete(availableTool)
+        }
+      }
+      return toolName
+    }
 
     for (const availableTool of this.#availableTools) {
       const description = availableTool.description
