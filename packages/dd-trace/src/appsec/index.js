@@ -122,7 +122,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
     storedBodies.set(req, body)
   }
 
-  if (!Object.keys(body).length) return
+  if (isEmptyObject(body)) return
 
   const results = waf.run({
     persistent: {
@@ -143,7 +143,7 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (!Object.keys(cookies).length) return
+  if (isEmptyObject(cookies)) return
 
   const results = waf.run({
     persistent: {
@@ -194,7 +194,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     req.body !== undefined &&
     req.body !== null &&
     !analyzedBodies.has(req.body) &&
-    Object.keys(req.body).length
+    !isEmptyObject(req.body)
   ) {
     persistent[addresses.HTTP_INCOMING_BODY] = req.body
   }
@@ -204,7 +204,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     req.cookies !== null &&
     typeof req.cookies === 'object' &&
     !analyzedCookies.has(req.cookies) &&
-    Object.keys(req.cookies).length
+    !isEmptyObject(req.cookies)
   ) {
     persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
@@ -214,7 +214,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   if (
     query !== null &&
     typeof query === 'object' &&
-    Object.keys(query).length
+    !isEmptyObject(query)
   ) {
     persistent[addresses.HTTP_INCOMING_QUERY] = query
   }
@@ -223,7 +223,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
-  if (Object.keys(persistent).length) {
+  if (!isEmptyObject(persistent)) {
     waf.run({ persistent }, req)
   }
 
@@ -298,7 +298,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (!Object.keys(query).length) return
+  if (isEmptyObject(query)) return
 
   const results = waf.run({
     persistent: {
@@ -313,7 +313,7 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (!params || typeof params !== 'object' || !Object.keys(params).length) return
+  if (!params || typeof params !== 'object' || isEmptyObject(params)) return
 
   const results = waf.run({
     persistent: {
@@ -337,7 +337,7 @@ function onResponseBody ({ req, res, body }) {
 }
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
-  if (Object.keys(responseHeaders).length) {
+  if (!isEmptyObject(responseHeaders)) {
     storedResponseHeaders.set(req, responseHeaders)
   }
 
@@ -426,6 +426,16 @@ function disable () {
   if (fastifyResponseChannel.hasSubscribers) fastifyResponseChannel.unsubscribe(onResponseBody)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
   if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
+}
+
+// this is faster than Object.keys().length === 0
+function isEmptyObject (obj) {
+  // eslint-disable-next-line no-unreachable-loop
+  for (const _ in obj) {
+    return false
+  }
+
+  return true
 }
 
 module.exports = {
