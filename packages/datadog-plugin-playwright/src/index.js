@@ -6,6 +6,8 @@ const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
+  TEST_STATUS,
+  TEST_FINAL_STATUS,
   finishAllTraceSpans,
   getTestSuiteCommonTags,
   getTestSuitePath,
@@ -284,6 +286,7 @@ class PlaywrightPlugin extends CiPlugin {
     this.addSub('ci:playwright:test:finish', ({
       span,
       testStatus,
+      finalStatus,
       steps,
       error,
       extraTags,
@@ -306,6 +309,9 @@ class PlaywrightPlugin extends CiPlugin {
       const isRUMActive = span.context()._tags[TEST_IS_RUM_ACTIVE]
 
       span.setTag(TEST_STATUS, testStatus)
+      if (finalStatus) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
 
       if (error) {
         span.setTag('error', error)
@@ -420,6 +426,7 @@ class PlaywrightPlugin extends CiPlugin {
       )
 
       span.setTag(TEST_STATUS, 'skip')
+      span.setTag(TEST_FINAL_STATUS, 'skip')
 
       if (isNew) {
         span.setTag(TEST_IS_NEW, 'true')

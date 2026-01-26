@@ -298,6 +298,45 @@ function shouldFinishTestSuite (testSuiteAbsolutePath) {
   return !remainingTests.length || remainingTests.every(test => test.expectedStatus === 'skipped')
 }
 
+function getFinalStatus (test, testStatus) {
+  const testFqn = getTestFullyQualifiedName(test)
+  const testStatuses = testsToTestStatuses.get(testFqn) || []
+  // testStatuses.length is the count of PREVIOUS executions, current execution will be +1
+  const currentExecutionNumber = testStatuses.length + 1
+
+  const isNewTest = test._ddIsNew
+  const isModifiedTest = test._ddIsModified
+  const isEfdRetry = test._ddIsEfdRetry
+  const isAttemptToFix = test._ddIsAttemptToFix
+
+  // EFD: Check if this is the final EFD execution
+  const isEfdActive = isEarlyFlakeDetectionEnabled && (isNewTest || isModifiedTest)
+  // Total EFD executions = 1 (original) + numRetries
+  const totalEfdExecutions = 1 + (earlyFlakeDetectionNumRetries || 0)
+  const isLastEfdExecution = currentExecutionNumber >= totalEfdExecutions
+  const isFinalEfdTestExecution = isEarlyFlakeDetectionEnabled && (!isEfdActive || isLastEfdExecution)
+  // eslint-disable-next-line no-console
+  console.log(`DEBUG getFinalStatus: fqn=${testFqn.substring(0, 50)}, prevLen=${testStatuses.length}, exec=${currentExecutionNumber}, totalEfd=${totalEfdExecutions}, isEfdEnabled=${isEarlyFlakeDetectionEnabled}, isEfdActive=${isEfdActive}, isFinalEfd=${isFinalEfdTestExecution}, noRetry=${!isEarlyFlakeDetectionEnabled && !isFlakyTestRetriesEnabled && !isAttemptToFix}`)
+
+  // ATR: Check if this is the final ATR execution (playwright uses built-in retries)
+  const isAtrEnabled = isFlakyTestRetriesEnabled && !isEfdRetry && !isAttemptToFix
+  const testResult = test.results?.at(-1)
+  const retryNumber = testResult?.retry || 0
+  const isLastAtrRetry = testStatus === 'pass' || retryNumber >= flakyTestRetriesCount
+  const isFinalAtrTestExecution = isAtrEnabled && isLastAtrRetry
+
+  // Attempt to Fix: Check if this is the final attempt
+  const isFinalAttemptToFixExecution = isTestManagementTestsEnabled && isAttemptToFix &&
+    currentExecutionNumber >= (testManagementAttemptToFixRetries + 1)
+
+  // When no retry features are active, every test execution is final
+  const noRetryFeaturesActive = !isEarlyFlakeDetectionEnabled && !isFlakyTestRetriesEnabled && !isAttemptToFix
+  const isFinalTestExecution =
+    noRetryFeaturesActive || isFinalEfdTestExecution || isFinalAtrTestExecution || isFinalAttemptToFixExecution
+
+  return isFinalTestExecution ? testStatus : undefined
+}
+
 function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   const {
     _requireFile: testSuiteAbsolutePath,
@@ -371,8 +410,11 @@ function testEndHandler ({
     if (hookError) {
       addErrorToTestSuite(testSuiteAbsolutePath, hookError)
     }
-    return
+    return { finalStatus: undefined }
   }
+
+  // Calculate finalStatus BEFORE updating testsToTestStatuses so the count is correct
+  const finalStatus = getFinalStatus(test, testStatus)
 
   const testFqn = getTestFullyQualifiedName(test)
   const testStatuses = testsToTestStatuses.get(testFqn) || []
@@ -408,6 +450,7 @@ function testEndHandler ({
     if (testCtx) {
       testFinishCh.publish({
         testStatus,
+        finalStatus,
         steps: testResult?.steps || [],
         isRetry: testResult?.retry > 0,
         error,
@@ -473,6 +516,8 @@ function testEndHandler ({
     const testSuiteCtx = testSuiteToCtx.get(testSuiteAbsolutePath)
     testSuiteFinishCh.publish({ status: testSuiteStatus, error: suiteError, ...testSuiteCtx.currentStore })
   }
+
+  return { finalStatus }
 }
 
 function dispatcherRunWrapper (run) {
@@ -564,7 +609,8 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 
       const isTimeout = status === 'timedOut'
       const shouldCreateTestSpan = test.expectedStatus === 'skipped'
-      testEndHandler(
+      // testEndHandler calculates finalStatus BEFORE updating testsToTestStatuses
+      const { finalStatus } = testEndHandler(
         {
           test,
           annotations,
@@ -595,7 +641,8 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
           _ddHasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
           _ddHasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
           _ddIsAtrRetry: isAtrRetry,
-          _ddIsModified: test._ddIsModified
+          _ddIsModified: test._ddIsModified,
+          _ddFinalStatus: finalStatus
         }
       })
     })
@@ -779,6 +826,9 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     startedSuites = []
     remainingTestsByFile = {}
     quarantinedButNotAttemptToFixFqns = new Set()
+    testsToTestStatuses.clear()
+    testSuiteToTestStatuses.clear()
+    testSuiteToErrors.clear()
 
     // TODO: we can trick playwright into thinking the session passed by returning
     // 'passed' here. We might be able to use this for both EFD and Test Management tests.
@@ -1255,6 +1305,7 @@ addHook({
 
     testFinishCh.publish({
       testStatus: STATUS_TO_TEST_STATUS[status],
+      finalStatus: test._ddFinalStatus,
       steps: steps.filter(step => step.testId === testId),
       error,
       extraTags: annotationTags,

@@ -19,6 +19,7 @@ const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const { createWebAppServerWithRedirect } = require('../ci-visibility/web-app-server-with-redirect')
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_SOURCE_START,
   TEST_TYPE,
   TEST_SOURCE_FILE,
@@ -344,7 +345,148 @@ versions.forEach((version) => {
       )
     })
 
+    it('sets final_status tag on regular tests without retry features', (done) => {
+      // When no retry features are enabled (no EFD, no ATR, no Attempt to Fix),
+      // all test executions should have TEST_FINAL_STATUS set
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: false,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.ok(tests.length > 0, 'Expected at least one test')
+
+          tests.forEach(test => {
+            const testName = test.meta[TEST_NAME]
+            const testStatus = test.meta[TEST_STATUS]
+            const finalStatus = test.meta[TEST_FINAL_STATUS]
+
+            assert.ok(
+              finalStatus,
+              `Expected TEST_FINAL_STATUS to be set for test "${testName}" with status "${testStatus}"`
+            )
+            assert.strictEqual(
+              finalStatus,
+              testStatus,
+              `Expected TEST_FINAL_STATUS "${finalStatus}" to match TEST_STATUS "${testStatus}" for test "${testName}"`
+            )
+          })
+        })
+
+      childProcess = exec(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
     contextNewVersions('early flake detection', () => {
+      it('sets final_status tag on last EFD retry', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          },
+          known_tests_enabled: true
+        })
+
+        receiver.setKnownTests({
+          playwright: {
+            'landing-page-test.js': [
+              // 'should work with passing tests' will be considered new
+              'highest-level-describe  leading and trailing spaces    should work with skipped tests',
+              'highest-level-describe  leading and trailing spaces    should work with fixme',
+              'highest-level-describe  leading and trailing spaces    should work with annotated tests'
+            ],
+            'skipped-suite-test.js': [
+              'should work with fixme root'
+            ],
+            'todo-list-page-test.js': [
+              'playwright should work with failing tests',
+              'should work with fixme root'
+            ]
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            // Known tests should have final_status set
+            const knownTests = tests.filter(test =>
+              !test.resource.endsWith('should work with passing tests')
+            )
+            knownTests.forEach(test => {
+              assert.strictEqual(test.meta[TEST_FINAL_STATUS], test.meta[TEST_STATUS])
+            })
+
+            // New tests are retried - only the final retry should have final_status
+            const newTests = tests.filter(test =>
+              test.resource.endsWith('should work with passing tests')
+            )
+            // Wait until we have all expected test executions
+            if (newTests.length !== NUM_RETRIES_EFD + 1) {
+              throw new Error(`Expected ${NUM_RETRIES_EFD + 1} tests, got ${newTests.length}`)
+            }
+            // Verify exactly one test has final_status set
+            const testsWithFinalStatus = newTests.filter(test => TEST_FINAL_STATUS in test.meta)
+            if (testsWithFinalStatus.length !== 1) {
+              throw new Error(`Expected exactly 1 test with final_status, got ${testsWithFinalStatus.length}`)
+            }
+            // The test with final_status should have it match its status
+            assert.strictEqual(
+              testsWithFinalStatus[0].meta[TEST_FINAL_STATUS],
+              testsWithFinalStatus[0].meta[TEST_STATUS],
+              'final_status should match test status'
+            )
+            // All other tests should NOT have final_status
+            const testsWithoutFinalStatus = newTests.filter(test => !(TEST_FINAL_STATUS in test.meta))
+            assert.strictEqual(
+              testsWithoutFinalStatus.length,
+              NUM_RETRIES_EFD,
+              `Expected ${NUM_RETRIES_EFD} tests without final_status`
+            )
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        await receiverPromise
+      })
+
       it('retries new tests', async () => {
         receiver.setSettings({
           early_flake_detection: {
