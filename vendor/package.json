@@ -26,7 +26,7 @@
     "opentracing": ">=0.14.7",
     "path-to-regexp": "^0.1.12",
     "pprof-format": "^2.1.1",
-    "protobufjs": "^7.5.3",
+    "protobufjs": "^8.0.0",
     "retry": "^0.13.1",
     "rfdc": "^1.4.1",
     "semifies": "^1.0.0",
