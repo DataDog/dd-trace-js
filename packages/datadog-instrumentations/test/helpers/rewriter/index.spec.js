@@ -65,6 +65,19 @@ describe('check-require-cache', () => {
             kind: 'Callback'
           },
           channelName: 'test_invoke'
+        },
+        {
+          module: {
+            name: 'test-trace-var-class-instance-method',
+            versionRange: '>=0.1',
+            filePath: 'index.js'
+          },
+          functionQuery: {
+            className: 'Foo',
+            methodName: 'test',
+            kind: 'Sync'
+          },
+          channelName: 'test_invoke'
         }
       ]
     })
@@ -117,5 +130,20 @@ describe('check-require-cache', () => {
     ch.subscribe(subs)
 
     test.test(() => {})
+  })
+
+  it('should auto instrument var class instance methods', done => {
+    const test = compile('test-trace-var-class-instance-method')
+
+    subs = {
+      start () {
+        done()
+      }
+    }
+
+    ch = tracingChannel('orchestrion:test-trace-var-class-instance-method:test_invoke')
+    ch.subscribe(subs)
+
+    test.test()
   })
 })
