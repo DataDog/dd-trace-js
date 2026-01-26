@@ -1,0 +1,608 @@
+{
+  "DD_ACTION_EXECUTION_ID": {
+    "description": "AWS CodePipeline action execution ID (used as CI job identifier for correlation).",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/plugins/util/ci.js",
+        "line": 692,
+        "snippet": "    }\n\n    if (env.CODEBUILD_INITIATOR?.startsWith('codepipeline/')) {\n      const DD_ACTION_EXECUTION_ID = getValueFromEnvSources('DD_ACTION_EXECUTION_ID')\n      const DD_PIPELINE_EXECUTION_ID = getValueFromEnvSources('DD_PIPELINE_EXECUTION_ID')\n      tags = {\n        [CI_PROVIDER_NAME]: 'awscodepipeline',"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/plugins/util/ci.js",
+        "line": 692,
+        "snippet": "        [CI_PIPELINE_NAME]: CF_PIPELINE_NAME,\n        [CI_PIPELINE_URL]: CF_BUILD_URL,\n        [CI_JOB_NAME]: CF_STEP_NAME,\n        [CI_ENV_VARS]: JSON.stringify({\n          CF_BUILD_ID\n        }),\n        [PR_NUMBER]: CF_PULL_REQUEST_NUMBER,\n        [GIT_PULL_REQUEST_BASE_BRANCH]: CF_PULL_REQUEST_TARGET\n      }\n\n      const isTag = CF_BRANCH && CF_BRANCH.includes('tags/')\n      const refKey = isTag ? GIT_TAG : GIT_BRANCH\n      const ref = normalizeRef(CF_BRANCH)\n\n      tags[refKey] = ref\n    }\n\n    if (env.CODEBUILD_INITIATOR?.startsWith('codepipeline/')) {\n      const DD_ACTION_EXECUTION_ID = getValueFromEnvSources('DD_ACTION_EXECUTION_ID')\n      const DD_PIPELINE_EXECUTION_ID = getValueFromEnvSources('DD_PIPELINE_EXECUTION_ID')\n      tags = {\n        [CI_PROVIDER_NAME]: 'awscodepipeline',\n        [CI_PIPELINE_ID]: DD_PIPELINE_EXECUTION_ID,\n        [CI_ENV_VARS]: JSON.stringify({\n          CODEBUILD_BUILD_ARN: env.CODEBUILD_BUILD_ARN,\n          DD_PIPELINE_EXECUTION_ID,\n          DD_ACTION_EXECUTION_ID\n        }),\n        [CI_JOB_ID]: DD_ACTION_EXECUTION_ID\n      }\n    }\n\n    if (env.DRONE && env.CI) {\n      const {\n        DRONE_BUILD_NUMBER,\n        DRONE_BUILD_LINK,\n        DRONE_STEP_NAME,"
+      }
+    ]
+  },
+  "DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER": {
+    "description": "Name of the CI Visibility auto-instrumentation tool that injected dd-trace (telemetry only).",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/datadog-plugin-cucumber/src/index.js",
+        "line": 115,
+        "snippet": "      finishAllTraceSpans(this.testSessionSpan)\n      this.telemetry.count(TELEMETRY_TEST_SESSION, {\n        provider: this.ciProviderName,\n        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')\n      })\n\n      this.libraryConfig = null"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/datadog-plugin-cucumber/src/index.js",
+        "line": 115,
+        "snippet": "        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')\n      }\n      if (isParallel) {\n        this.testSessionSpan.setTag(CUCUMBER_IS_PARALLEL, 'true')\n      }\n      if (isTestManagementTestsEnabled) {\n        this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')\n      }\n\n      this.testSessionSpan.setTag(TEST_STATUS, status)\n      this.testModuleSpan.setTag(TEST_STATUS, status)\n      this.testModuleSpan.finish()\n      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')\n      this.testSessionSpan.finish()\n      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')\n      finishAllTraceSpans(this.testSessionSpan)\n      this.telemetry.count(TELEMETRY_TEST_SESSION, {\n        provider: this.ciProviderName,\n        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')\n      })\n\n      this.libraryConfig = null\n      this.tracer._exporter.flush()\n    })\n\n    this.addSub('ci:cucumber:test-suite:start', ({\n      testFileAbsolutePath,\n      isUnskippable,\n      isForcedToRun,\n      itrCorrelationId\n    }) => {\n      const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())\n      const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)\n\n      const testSuiteMetadata = getTestSuiteCommonTags(\n        this.command,\n        this.frameworkVersion,"
+      }
+    ]
+  },
+  "DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE": {
+    "description": "Force-enable CI Visibility behavior for testing or debugging.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/ci-visibility/requests/get-library-configuration.js",
+        "line": 129,
+        "snippet": "\n        log.debug('Remote settings: %j', settings)\n\n        if (getValueFromEnvSources('DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE')) {\n          settings.isCodeCoverageEnabled = true\n          log.debug('Dangerously set code coverage to true')\n        }"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/ci-visibility/requests/get-library-configuration.js",
+        "line": 129,
+        "snippet": "          isItrEnabled,\n          requireGit,\n          isEarlyFlakeDetectionEnabled: isKnownTestsEnabled && (earlyFlakeDetectionConfig?.enabled ?? false),\n          earlyFlakeDetectionNumRetries:\n            earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,\n          earlyFlakeDetectionFaultyThreshold:\n            earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD,\n          isFlakyTestRetriesEnabled,\n          isDiEnabled: isDiEnabled && isFlakyTestRetriesEnabled,\n          isKnownTestsEnabled,\n          isTestManagementEnabled: (testManagementConfig?.enabled ?? false),\n          testManagementAttemptToFixRetries:\n            testManagementConfig?.attempt_to_fix_retries,\n          isImpactedTestsEnabled\n        }\n\n        log.debug('Remote settings: %j', settings)\n\n        if (getValueFromEnvSources('DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE')) {\n          settings.isCodeCoverageEnabled = true\n          log.debug('Dangerously set code coverage to true')\n        }\n        if (getValueFromEnvSources('DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING')) {\n          settings.isSuitesSkippingEnabled = true\n          log.debug('Dangerously set test skipping to true')\n        }\n\n        incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE, settings)\n\n        done(null, settings)\n      } catch (err) {\n        done(err)\n      }\n    }\n  })\n}\n"
+      }
+    ]
+  },
+  "DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING": {
+    "description": "Force-enable CI Visibility behavior for testing or debugging.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/ci-visibility/requests/get-library-configuration.js",
+        "line": 133,
+        "snippet": "          settings.isCodeCoverageEnabled = true\n          log.debug('Dangerously set code coverage to true')\n        }\n        if (getValueFromEnvSources('DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING')) {\n          settings.isSuitesSkippingEnabled = true\n          log.debug('Dangerously set test skipping to true')\n        }"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/ci-visibility/requests/get-library-configuration.js",
+        "line": 133,
+        "snippet": "            earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,\n          earlyFlakeDetectionFaultyThreshold:\n            earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD,\n          isFlakyTestRetriesEnabled,\n          isDiEnabled: isDiEnabled && isFlakyTestRetriesEnabled,\n          isKnownTestsEnabled,\n          isTestManagementEnabled: (testManagementConfig?.enabled ?? false),\n          testManagementAttemptToFixRetries:\n            testManagementConfig?.attempt_to_fix_retries,\n          isImpactedTestsEnabled\n        }\n\n        log.debug('Remote settings: %j', settings)\n\n        if (getValueFromEnvSources('DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE')) {\n          settings.isCodeCoverageEnabled = true\n          log.debug('Dangerously set code coverage to true')\n        }\n        if (getValueFromEnvSources('DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING')) {\n          settings.isSuitesSkippingEnabled = true\n          log.debug('Dangerously set test skipping to true')\n        }\n\n        incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE, settings)\n\n        done(null, settings)\n      } catch (err) {\n        done(err)\n      }\n    }\n  })\n}\n\nmodule.exports = { getLibraryConfiguration }\n"
+      }
+    ]
+  },
+  "DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS": {
+    "description": "Wait time in milliseconds before flushing CI Visibility RUM events.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/datadog-instrumentations/src/playwright.js",
+        "line": 44,
+        "snippet": "const testSuiteToErrors = new Map()\nconst testsToTestStatuses = new Map()\n\nconst RUM_FLUSH_WAIT_TIME = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 1000\n\nlet applyRepeatEachIndex = null\n"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/datadog-instrumentations/src/playwright.js",
+        "line": 44,
+        "snippet": "const libraryConfigurationCh = channel('ci:playwright:library-configuration')\nconst knownTestsCh = channel('ci:playwright:known-tests')\nconst testManagementTestsCh = channel('ci:playwright:test-management-tests')\nconst modifiedFilesCh = channel('ci:playwright:modified-files')\nconst isModifiedCh = channel('ci:playwright:test:is-modified')\n\nconst testSuiteStartCh = channel('ci:playwright:test-suite:start')\nconst testSuiteFinishCh = channel('ci:playwright:test-suite:finish')\n\nconst workerReportCh = channel('ci:playwright:worker:report')\nconst testPageGotoCh = channel('ci:playwright:test:page-goto')\n\nconst testToCtx = new WeakMap()\nconst testSuiteToCtx = new Map()\nconst testSuiteToTestStatuses = new Map()\nconst testSuiteToErrors = new Map()\nconst testsToTestStatuses = new Map()\n\nconst RUM_FLUSH_WAIT_TIME = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 1000\n\nlet applyRepeatEachIndex = null\n\nlet startedSuites = []\n\nconst STATUS_TO_TEST_STATUS = {\n  passed: 'pass',\n  failed: 'fail',\n  timedOut: 'fail',\n  skipped: 'skip'\n}\n\nlet remainingTestsByFile = {}\nlet isKnownTestsEnabled = false\nlet isEarlyFlakeDetectionEnabled = false\nlet earlyFlakeDetectionNumRetries = 0\nlet isEarlyFlakeDetectionFaulty = false\nlet earlyFlakeDetectionFaultyThreshold = 0"
+      }
+    ]
+  },
+  "DD_CIVISIBILITY_TEST_COMMAND": {
+    "description": "Command used to run the test suite in CI Visibility.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/plugins/ci_plugin.js",
+        "line": 215,
+        "snippet": "        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()\n        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command\n      }\n\n      this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/plugins/ci_plugin.js",
+        "line": 215,
+        "snippet": "      this.testModuleSpan = this.tracer.startSpan(`${this.constructor.id}.test_module`, {\n        childOf: this.testSessionSpan,\n        tags: {\n          [COMPONENT]: this.constructor.id,\n          ...this.testEnvironmentMetadata,\n          ...testModuleSpanMetadata\n        },\n        integrationName: this.constructor.id\n      })\n      // only for vitest\n      // These are added for the worker threads to use\n      if (this.constructor.id === 'vitest') {\n        // TODO: Figure out alternative ways to pass this information to the worker threads\n        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()\n        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()\n        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command\n      }\n\n      this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')\n    })\n\n    this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {\n      const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]\n      skippedSuites.forEach((testSuite) => {\n        const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id)\n        if (this.itrCorrelationId) {\n          testSuiteMetadata[ITR_CORRELATION_ID] = this.itrCorrelationId\n        }\n\n        this.tracer.startSpan(`${this.constructor.id}.test_suite`, {\n          childOf: this.testModuleSpan,\n          tags: {\n            [COMPONENT]: this.constructor.id,\n            ...this.testEnvironmentMetadata,"
+      }
+    ]
+  },
+  "DD_CIVISIBILITY_TEST_MODULE_ID": {
+    "description": "CI Visibility test module identifier used to correlate spans across worker processes.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/plugins/ci_plugin.js",
+        "line": 213,
+        "snippet": "        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()\n        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()\n        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command\n      }"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/plugins/ci_plugin.js",
+        "line": 213,
+        "snippet": "      this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')\n\n      this.testModuleSpan = this.tracer.startSpan(`${this.constructor.id}.test_module`, {\n        childOf: this.testSessionSpan,\n        tags: {\n          [COMPONENT]: this.constructor.id,\n          ...this.testEnvironmentMetadata,\n          ...testModuleSpanMetadata\n        },\n        integrationName: this.constructor.id\n      })\n      // only for vitest\n      // These are added for the worker threads to use\n      if (this.constructor.id === 'vitest') {\n        // TODO: Figure out alternative ways to pass this information to the worker threads\n        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()\n        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()\n        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command\n      }\n\n      this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')\n    })\n\n    this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {\n      const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]\n      skippedSuites.forEach((testSuite) => {\n        const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id)\n        if (this.itrCorrelationId) {\n          testSuiteMetadata[ITR_CORRELATION_ID] = this.itrCorrelationId\n        }\n\n        this.tracer.startSpan(`${this.constructor.id}.test_suite`, {\n          childOf: this.testModuleSpan,\n          tags: {"
+      }
+    ]
+  },
+  "DD_CIVISIBILITY_TEST_SESSION_ID": {
+    "description": "CI Visibility test session trace identifier used to correlate spans across worker processes.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/plugins/ci_plugin.js",
+        "line": 211,
+        "snippet": "      if (this.constructor.id === 'vitest') {\n        // TODO: Figure out alternative ways to pass this information to the worker threads\n        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()\n        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()\n        // eslint-disable-next-line eslint-rules/eslint-process-env"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/plugins/ci_plugin.js",
+        "line": 211,
+        "snippet": "      })\n      // TODO: add telemetry tag when we can add `is_agentless_log_submission_enabled` for agentless log submission\n      this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')\n\n      this.testModuleSpan = this.tracer.startSpan(`${this.constructor.id}.test_module`, {\n        childOf: this.testSessionSpan,\n        tags: {\n          [COMPONENT]: this.constructor.id,\n          ...this.testEnvironmentMetadata,\n          ...testModuleSpanMetadata\n        },\n        integrationName: this.constructor.id\n      })\n      // only for vitest\n      // These are added for the worker threads to use\n      if (this.constructor.id === 'vitest') {\n        // TODO: Figure out alternative ways to pass this information to the worker threads\n        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()\n        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()\n        // eslint-disable-next-line eslint-rules/eslint-process-env\n        process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command\n      }\n\n      this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')\n    })\n\n    this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {\n      const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]\n      skippedSuites.forEach((testSuite) => {\n        const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id)\n        if (this.itrCorrelationId) {\n          testSuiteMetadata[ITR_CORRELATION_ID] = this.itrCorrelationId\n        }\n\n        this.tracer.startSpan(`${this.constructor.id}.test_suite`, {"
+      }
+    ]
+  },
+  "DD_GIT_COMMIT_HEAD_SHA": {
+    "description": "Git commit SHA for git metadata collection.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/plugins/util/user-provided-git.js",
+        "line": 62,
+        "snippet": "  const DD_GIT_COMMIT_AUTHOR_DATE = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_DATE')\n  const DD_GIT_PULL_REQUEST_BASE_BRANCH = getValueFromEnvSources('DD_GIT_PULL_REQUEST_BASE_BRANCH')\n  const DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA = getValueFromEnvSources('DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA')\n  const DD_GIT_COMMIT_HEAD_SHA = getValueFromEnvSources('DD_GIT_COMMIT_HEAD_SHA')\n\n  const branch = normalizeRef(DD_GIT_BRANCH)\n  let tag = normalizeRef(DD_GIT_TAG)"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/plugins/util/user-provided-git.js",
+        "line": 62,
+        "snippet": "  const isValidSha256 = /^[0-9a-f]{64}$/.test(gitCommitSha)\n  return isValidSha1 || isValidSha256\n}\n\nfunction getUserProviderGitMetadata () {\n  const DD_GIT_COMMIT_SHA = getValueFromEnvSources('DD_GIT_COMMIT_SHA')\n  const DD_GIT_BRANCH = getValueFromEnvSources('DD_GIT_BRANCH')\n  const DD_GIT_REPOSITORY_URL = getValueFromEnvSources('DD_GIT_REPOSITORY_URL')\n  const DD_GIT_TAG = getValueFromEnvSources('DD_GIT_TAG')\n  const DD_GIT_COMMIT_MESSAGE = getValueFromEnvSources('DD_GIT_COMMIT_MESSAGE')\n  const DD_GIT_COMMIT_COMMITTER_NAME = getValueFromEnvSources('DD_GIT_COMMIT_COMMITTER_NAME')\n  const DD_GIT_COMMIT_COMMITTER_EMAIL = getValueFromEnvSources('DD_GIT_COMMIT_COMMITTER_EMAIL')\n  const DD_GIT_COMMIT_COMMITTER_DATE = getValueFromEnvSources('DD_GIT_COMMIT_COMMITTER_DATE')\n  const DD_GIT_COMMIT_AUTHOR_NAME = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_NAME')\n  const DD_GIT_COMMIT_AUTHOR_EMAIL = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_EMAIL')\n  const DD_GIT_COMMIT_AUTHOR_DATE = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_DATE')\n  const DD_GIT_PULL_REQUEST_BASE_BRANCH = getValueFromEnvSources('DD_GIT_PULL_REQUEST_BASE_BRANCH')\n  const DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA = getValueFromEnvSources('DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA')\n  const DD_GIT_COMMIT_HEAD_SHA = getValueFromEnvSources('DD_GIT_COMMIT_HEAD_SHA')\n\n  const branch = normalizeRef(DD_GIT_BRANCH)\n  let tag = normalizeRef(DD_GIT_TAG)\n\n  // if DD_GIT_BRANCH is a tag, we associate its value to TAG too\n  if ((DD_GIT_BRANCH ?? '').includes('origin/tags') || (DD_GIT_BRANCH ?? '').includes('refs/heads/tags')) {\n    tag = normalizeRef(DD_GIT_BRANCH)\n  }\n\n  // Key value pairs are grouped in pairs of two\n  return removeEmptyValues([\n    GIT_COMMIT_SHA, DD_GIT_COMMIT_SHA,\n    GIT_BRANCH, branch,\n    GIT_REPOSITORY_URL, filterSensitiveInfoFromRepository(DD_GIT_REPOSITORY_URL),\n    GIT_TAG, tag,\n    GIT_COMMIT_MESSAGE, DD_GIT_COMMIT_MESSAGE,\n    GIT_COMMIT_COMMITTER_NAME, DD_GIT_COMMIT_COMMITTER_NAME,\n    GIT_COMMIT_COMMITTER_DATE, DD_GIT_COMMIT_COMMITTER_DATE,"
+      }
+    ]
+  },
+  "DD_GIT_PULL_REQUEST_BASE_BRANCH": {
+    "description": "Git base branch information for pull requests.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/plugins/util/user-provided-git.js",
+        "line": 60,
+        "snippet": "  const DD_GIT_COMMIT_AUTHOR_NAME = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_NAME')\n  const DD_GIT_COMMIT_AUTHOR_EMAIL = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_EMAIL')\n  const DD_GIT_COMMIT_AUTHOR_DATE = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_DATE')\n  const DD_GIT_PULL_REQUEST_BASE_BRANCH = getValueFromEnvSources('DD_GIT_PULL_REQUEST_BASE_BRANCH')\n  const DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA = getValueFromEnvSources('DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA')\n  const DD_GIT_COMMIT_HEAD_SHA = getValueFromEnvSources('DD_GIT_COMMIT_HEAD_SHA')\n"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/plugins/util/user-provided-git.js",
+        "line": 60,
+        "snippet": "function validateGitCommitSha (gitCommitSha) {\n  const isValidSha1 = /^[0-9a-f]{40}$/.test(gitCommitSha)\n  const isValidSha256 = /^[0-9a-f]{64}$/.test(gitCommitSha)\n  return isValidSha1 || isValidSha256\n}\n\nfunction getUserProviderGitMetadata () {\n  const DD_GIT_COMMIT_SHA = getValueFromEnvSources('DD_GIT_COMMIT_SHA')\n  const DD_GIT_BRANCH = getValueFromEnvSources('DD_GIT_BRANCH')\n  const DD_GIT_REPOSITORY_URL = getValueFromEnvSources('DD_GIT_REPOSITORY_URL')\n  const DD_GIT_TAG = getValueFromEnvSources('DD_GIT_TAG')\n  const DD_GIT_COMMIT_MESSAGE = getValueFromEnvSources('DD_GIT_COMMIT_MESSAGE')\n  const DD_GIT_COMMIT_COMMITTER_NAME = getValueFromEnvSources('DD_GIT_COMMIT_COMMITTER_NAME')\n  const DD_GIT_COMMIT_COMMITTER_EMAIL = getValueFromEnvSources('DD_GIT_COMMIT_COMMITTER_EMAIL')\n  const DD_GIT_COMMIT_COMMITTER_DATE = getValueFromEnvSources('DD_GIT_COMMIT_COMMITTER_DATE')\n  const DD_GIT_COMMIT_AUTHOR_NAME = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_NAME')\n  const DD_GIT_COMMIT_AUTHOR_EMAIL = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_EMAIL')\n  const DD_GIT_COMMIT_AUTHOR_DATE = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_DATE')\n  const DD_GIT_PULL_REQUEST_BASE_BRANCH = getValueFromEnvSources('DD_GIT_PULL_REQUEST_BASE_BRANCH')\n  const DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA = getValueFromEnvSources('DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA')\n  const DD_GIT_COMMIT_HEAD_SHA = getValueFromEnvSources('DD_GIT_COMMIT_HEAD_SHA')\n\n  const branch = normalizeRef(DD_GIT_BRANCH)\n  let tag = normalizeRef(DD_GIT_TAG)\n\n  // if DD_GIT_BRANCH is a tag, we associate its value to TAG too\n  if ((DD_GIT_BRANCH ?? '').includes('origin/tags') || (DD_GIT_BRANCH ?? '').includes('refs/heads/tags')) {\n    tag = normalizeRef(DD_GIT_BRANCH)\n  }\n\n  // Key value pairs are grouped in pairs of two\n  return removeEmptyValues([\n    GIT_COMMIT_SHA, DD_GIT_COMMIT_SHA,\n    GIT_BRANCH, branch,\n    GIT_REPOSITORY_URL, filterSensitiveInfoFromRepository(DD_GIT_REPOSITORY_URL),\n    GIT_TAG, tag,\n    GIT_COMMIT_MESSAGE, DD_GIT_COMMIT_MESSAGE,"
+      }
+    ]
+  },
+  "DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA": {
+    "description": "Git commit SHA for git metadata collection.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/plugins/util/user-provided-git.js",
+        "line": 61,
+        "snippet": "  const DD_GIT_COMMIT_AUTHOR_EMAIL = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_EMAIL')\n  const DD_GIT_COMMIT_AUTHOR_DATE = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_DATE')\n  const DD_GIT_PULL_REQUEST_BASE_BRANCH = getValueFromEnvSources('DD_GIT_PULL_REQUEST_BASE_BRANCH')\n  const DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA = getValueFromEnvSources('DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA')\n  const DD_GIT_COMMIT_HEAD_SHA = getValueFromEnvSources('DD_GIT_COMMIT_HEAD_SHA')\n\n  const branch = normalizeRef(DD_GIT_BRANCH)"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/plugins/util/user-provided-git.js",
+        "line": 61,
+        "snippet": "  const isValidSha1 = /^[0-9a-f]{40}$/.test(gitCommitSha)\n  const isValidSha256 = /^[0-9a-f]{64}$/.test(gitCommitSha)\n  return isValidSha1 || isValidSha256\n}\n\nfunction getUserProviderGitMetadata () {\n  const DD_GIT_COMMIT_SHA = getValueFromEnvSources('DD_GIT_COMMIT_SHA')\n  const DD_GIT_BRANCH = getValueFromEnvSources('DD_GIT_BRANCH')\n  const DD_GIT_REPOSITORY_URL = getValueFromEnvSources('DD_GIT_REPOSITORY_URL')\n  const DD_GIT_TAG = getValueFromEnvSources('DD_GIT_TAG')\n  const DD_GIT_COMMIT_MESSAGE = getValueFromEnvSources('DD_GIT_COMMIT_MESSAGE')\n  const DD_GIT_COMMIT_COMMITTER_NAME = getValueFromEnvSources('DD_GIT_COMMIT_COMMITTER_NAME')\n  const DD_GIT_COMMIT_COMMITTER_EMAIL = getValueFromEnvSources('DD_GIT_COMMIT_COMMITTER_EMAIL')\n  const DD_GIT_COMMIT_COMMITTER_DATE = getValueFromEnvSources('DD_GIT_COMMIT_COMMITTER_DATE')\n  const DD_GIT_COMMIT_AUTHOR_NAME = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_NAME')\n  const DD_GIT_COMMIT_AUTHOR_EMAIL = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_EMAIL')\n  const DD_GIT_COMMIT_AUTHOR_DATE = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_DATE')\n  const DD_GIT_PULL_REQUEST_BASE_BRANCH = getValueFromEnvSources('DD_GIT_PULL_REQUEST_BASE_BRANCH')\n  const DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA = getValueFromEnvSources('DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA')\n  const DD_GIT_COMMIT_HEAD_SHA = getValueFromEnvSources('DD_GIT_COMMIT_HEAD_SHA')\n\n  const branch = normalizeRef(DD_GIT_BRANCH)\n  let tag = normalizeRef(DD_GIT_TAG)\n\n  // if DD_GIT_BRANCH is a tag, we associate its value to TAG too\n  if ((DD_GIT_BRANCH ?? '').includes('origin/tags') || (DD_GIT_BRANCH ?? '').includes('refs/heads/tags')) {\n    tag = normalizeRef(DD_GIT_BRANCH)\n  }\n\n  // Key value pairs are grouped in pairs of two\n  return removeEmptyValues([\n    GIT_COMMIT_SHA, DD_GIT_COMMIT_SHA,\n    GIT_BRANCH, branch,\n    GIT_REPOSITORY_URL, filterSensitiveInfoFromRepository(DD_GIT_REPOSITORY_URL),\n    GIT_TAG, tag,\n    GIT_COMMIT_MESSAGE, DD_GIT_COMMIT_MESSAGE,\n    GIT_COMMIT_COMMITTER_NAME, DD_GIT_COMMIT_COMMITTER_NAME,"
+      }
+    ]
+  },
+  "DD_HEAP_SNAPSHOT_COUNT": {
+    "description": "Number of heap snapshots to write. Set to 0 to disable.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 491,
+        "snippet": "      DD_PROFILING_ENABLED,\n      DD_GRPC_CLIENT_ERROR_STATUSES,\n      DD_GRPC_SERVER_ERROR_STATUSES,\n      DD_HEAP_SNAPSHOT_COUNT,\n      DD_HEAP_SNAPSHOT_DESTINATION,\n      DD_HEAP_SNAPSHOT_INTERVAL,\n      DD_IAST_DB_ROWS_TO_TAINT,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 491,
+        "snippet": "      DD_CODE_ORIGIN_FOR_SPANS_ENABLED,\n      DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED,\n      DD_DATA_STREAMS_ENABLED,\n      DD_DBM_PROPAGATION_MODE,\n      DD_DOGSTATSD_HOST,\n      DD_DOGSTATSD_PORT,\n      DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS,\n      DD_DYNAMIC_INSTRUMENTATION_ENABLED,\n      DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE,\n      DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS,\n      DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS,\n      DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS,\n      DD_ENV,\n      DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,\n      DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED,\n      DD_PROFILING_ENABLED,\n      DD_GRPC_CLIENT_ERROR_STATUSES,\n      DD_GRPC_SERVER_ERROR_STATUSES,\n      DD_HEAP_SNAPSHOT_COUNT,\n      DD_HEAP_SNAPSHOT_DESTINATION,\n      DD_HEAP_SNAPSHOT_INTERVAL,\n      DD_IAST_DB_ROWS_TO_TAINT,\n      DD_IAST_DEDUPLICATION_ENABLED,\n      DD_IAST_ENABLED,\n      DD_IAST_MAX_CONCURRENT_REQUESTS,\n      DD_IAST_MAX_CONTEXT_OPERATIONS,\n      DD_IAST_REDACTION_ENABLED,\n      DD_IAST_REDACTION_NAME_PATTERN,\n      DD_IAST_REDACTION_VALUE_PATTERN,\n      DD_IAST_REQUEST_SAMPLING,\n      DD_IAST_SECURITY_CONTROLS_CONFIGURATION,\n      DD_IAST_TELEMETRY_VERBOSITY,\n      DD_IAST_STACK_TRACE_ENABLED,\n      DD_INJECTION_ENABLED,\n      DD_INJECT_FORCE,\n      DD_ENABLE_NX_SERVICE_NAME,\n      DD_INSTRUMENTATION_TELEMETRY_ENABLED,"
+      }
+    ]
+  },
+  "DD_HEAP_SNAPSHOT_DESTINATION": {
+    "description": "Directory path where heap snapshots are written.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 492,
+        "snippet": "      DD_GRPC_CLIENT_ERROR_STATUSES,\n      DD_GRPC_SERVER_ERROR_STATUSES,\n      DD_HEAP_SNAPSHOT_COUNT,\n      DD_HEAP_SNAPSHOT_DESTINATION,\n      DD_HEAP_SNAPSHOT_INTERVAL,\n      DD_IAST_DB_ROWS_TO_TAINT,\n      DD_IAST_DEDUPLICATION_ENABLED,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 492,
+        "snippet": "      DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED,\n      DD_DATA_STREAMS_ENABLED,\n      DD_DBM_PROPAGATION_MODE,\n      DD_DOGSTATSD_HOST,\n      DD_DOGSTATSD_PORT,\n      DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS,\n      DD_DYNAMIC_INSTRUMENTATION_ENABLED,\n      DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE,\n      DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS,\n      DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS,\n      DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS,\n      DD_ENV,\n      DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,\n      DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED,\n      DD_PROFILING_ENABLED,\n      DD_GRPC_CLIENT_ERROR_STATUSES,\n      DD_GRPC_SERVER_ERROR_STATUSES,\n      DD_HEAP_SNAPSHOT_COUNT,\n      DD_HEAP_SNAPSHOT_DESTINATION,\n      DD_HEAP_SNAPSHOT_INTERVAL,\n      DD_IAST_DB_ROWS_TO_TAINT,\n      DD_IAST_DEDUPLICATION_ENABLED,\n      DD_IAST_ENABLED,\n      DD_IAST_MAX_CONCURRENT_REQUESTS,\n      DD_IAST_MAX_CONTEXT_OPERATIONS,\n      DD_IAST_REDACTION_ENABLED,\n      DD_IAST_REDACTION_NAME_PATTERN,\n      DD_IAST_REDACTION_VALUE_PATTERN,\n      DD_IAST_REQUEST_SAMPLING,\n      DD_IAST_SECURITY_CONTROLS_CONFIGURATION,\n      DD_IAST_TELEMETRY_VERBOSITY,\n      DD_IAST_STACK_TRACE_ENABLED,\n      DD_INJECTION_ENABLED,\n      DD_INJECT_FORCE,\n      DD_ENABLE_NX_SERVICE_NAME,\n      DD_INSTRUMENTATION_TELEMETRY_ENABLED,\n      DD_INSTRUMENTATION_CONFIG_ID,"
+      }
+    ]
+  },
+  "DD_HEAP_SNAPSHOT_INTERVAL": {
+    "description": "Delay in seconds between heap snapshots."
+  },
+  "DD_INSTRUMENTATION_CONFIG_ID": {
+    "description": "Identifier used for configuration and correlation.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 510,
+        "snippet": "      DD_INJECT_FORCE,\n      DD_ENABLE_NX_SERVICE_NAME,\n      DD_INSTRUMENTATION_TELEMETRY_ENABLED,\n      DD_INSTRUMENTATION_CONFIG_ID,\n      DD_LOGS_INJECTION,\n      DD_LOGS_OTEL_ENABLED,\n      DD_METRICS_OTEL_ENABLED,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 510,
+        "snippet": "      DD_HEAP_SNAPSHOT_DESTINATION,\n      DD_HEAP_SNAPSHOT_INTERVAL,\n      DD_IAST_DB_ROWS_TO_TAINT,\n      DD_IAST_DEDUPLICATION_ENABLED,\n      DD_IAST_ENABLED,\n      DD_IAST_MAX_CONCURRENT_REQUESTS,\n      DD_IAST_MAX_CONTEXT_OPERATIONS,\n      DD_IAST_REDACTION_ENABLED,\n      DD_IAST_REDACTION_NAME_PATTERN,\n      DD_IAST_REDACTION_VALUE_PATTERN,\n      DD_IAST_REQUEST_SAMPLING,\n      DD_IAST_SECURITY_CONTROLS_CONFIGURATION,\n      DD_IAST_TELEMETRY_VERBOSITY,\n      DD_IAST_STACK_TRACE_ENABLED,\n      DD_INJECTION_ENABLED,\n      DD_INJECT_FORCE,\n      DD_ENABLE_NX_SERVICE_NAME,\n      DD_INSTRUMENTATION_TELEMETRY_ENABLED,\n      DD_INSTRUMENTATION_CONFIG_ID,\n      DD_LOGS_INJECTION,\n      DD_LOGS_OTEL_ENABLED,\n      DD_METRICS_OTEL_ENABLED,\n      DD_LANGCHAIN_SPAN_CHAR_LIMIT,\n      DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,\n      DD_LLMOBS_AGENTLESS_ENABLED,\n      DD_LLMOBS_ENABLED,\n      DD_LLMOBS_ML_APP,\n      DD_OPENAI_LOGS_ENABLED,\n      DD_OPENAI_SPAN_CHAR_LIMIT,\n      DD_PROFILING_EXPORTERS,\n      DD_PROFILING_SOURCE_MAP,\n      DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD,\n      DD_INSTRUMENTATION_INSTALL_ID,\n      DD_INSTRUMENTATION_INSTALL_TIME,\n      DD_INSTRUMENTATION_INSTALL_TYPE,\n      DD_REMOTE_CONFIGURATION_ENABLED,\n      DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,"
+      }
+    ]
+  },
+  "DD_LANGCHAIN_SPAN_CHAR_LIMIT": {
+    "description": "Maximum number of characters recorded for langchain span data.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 514,
+        "snippet": "      DD_LOGS_INJECTION,\n      DD_LOGS_OTEL_ENABLED,\n      DD_METRICS_OTEL_ENABLED,\n      DD_LANGCHAIN_SPAN_CHAR_LIMIT,\n      DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,\n      DD_LLMOBS_AGENTLESS_ENABLED,\n      DD_LLMOBS_ENABLED,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 514,
+        "snippet": "      DD_IAST_ENABLED,\n      DD_IAST_MAX_CONCURRENT_REQUESTS,\n      DD_IAST_MAX_CONTEXT_OPERATIONS,\n      DD_IAST_REDACTION_ENABLED,\n      DD_IAST_REDACTION_NAME_PATTERN,\n      DD_IAST_REDACTION_VALUE_PATTERN,\n      DD_IAST_REQUEST_SAMPLING,\n      DD_IAST_SECURITY_CONTROLS_CONFIGURATION,\n      DD_IAST_TELEMETRY_VERBOSITY,\n      DD_IAST_STACK_TRACE_ENABLED,\n      DD_INJECTION_ENABLED,\n      DD_INJECT_FORCE,\n      DD_ENABLE_NX_SERVICE_NAME,\n      DD_INSTRUMENTATION_TELEMETRY_ENABLED,\n      DD_INSTRUMENTATION_CONFIG_ID,\n      DD_LOGS_INJECTION,\n      DD_LOGS_OTEL_ENABLED,\n      DD_METRICS_OTEL_ENABLED,\n      DD_LANGCHAIN_SPAN_CHAR_LIMIT,\n      DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,\n      DD_LLMOBS_AGENTLESS_ENABLED,\n      DD_LLMOBS_ENABLED,\n      DD_LLMOBS_ML_APP,\n      DD_OPENAI_LOGS_ENABLED,\n      DD_OPENAI_SPAN_CHAR_LIMIT,\n      DD_PROFILING_EXPORTERS,\n      DD_PROFILING_SOURCE_MAP,\n      DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD,\n      DD_INSTRUMENTATION_INSTALL_ID,\n      DD_INSTRUMENTATION_INSTALL_TIME,\n      DD_INSTRUMENTATION_INSTALL_TYPE,\n      DD_REMOTE_CONFIGURATION_ENABLED,\n      DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,\n      DD_RUNTIME_METRICS_ENABLED,\n      DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED,\n      DD_RUNTIME_METRICS_GC_ENABLED,\n      DD_SERVICE,"
+      }
+    ]
+  },
+  "DD_OPENAI_SPAN_CHAR_LIMIT": {
+    "description": "Maximum number of characters recorded for openai span data.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 520,
+        "snippet": "      DD_LLMOBS_ENABLED,\n      DD_LLMOBS_ML_APP,\n      DD_OPENAI_LOGS_ENABLED,\n      DD_OPENAI_SPAN_CHAR_LIMIT,\n      DD_PROFILING_EXPORTERS,\n      DD_PROFILING_SOURCE_MAP,\n      DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 520,
+        "snippet": "      DD_IAST_REQUEST_SAMPLING,\n      DD_IAST_SECURITY_CONTROLS_CONFIGURATION,\n      DD_IAST_TELEMETRY_VERBOSITY,\n      DD_IAST_STACK_TRACE_ENABLED,\n      DD_INJECTION_ENABLED,\n      DD_INJECT_FORCE,\n      DD_ENABLE_NX_SERVICE_NAME,\n      DD_INSTRUMENTATION_TELEMETRY_ENABLED,\n      DD_INSTRUMENTATION_CONFIG_ID,\n      DD_LOGS_INJECTION,\n      DD_LOGS_OTEL_ENABLED,\n      DD_METRICS_OTEL_ENABLED,\n      DD_LANGCHAIN_SPAN_CHAR_LIMIT,\n      DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,\n      DD_LLMOBS_AGENTLESS_ENABLED,\n      DD_LLMOBS_ENABLED,\n      DD_LLMOBS_ML_APP,\n      DD_OPENAI_LOGS_ENABLED,\n      DD_OPENAI_SPAN_CHAR_LIMIT,\n      DD_PROFILING_EXPORTERS,\n      DD_PROFILING_SOURCE_MAP,\n      DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD,\n      DD_INSTRUMENTATION_INSTALL_ID,\n      DD_INSTRUMENTATION_INSTALL_TIME,\n      DD_INSTRUMENTATION_INSTALL_TYPE,\n      DD_REMOTE_CONFIGURATION_ENABLED,\n      DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,\n      DD_RUNTIME_METRICS_ENABLED,\n      DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED,\n      DD_RUNTIME_METRICS_GC_ENABLED,\n      DD_SERVICE,\n      DD_SERVICE_MAPPING,\n      DD_SITE,\n      DD_SPAN_SAMPLING_RULES,\n      DD_SPAN_SAMPLING_RULES_FILE,\n      DD_TAGS,\n      DD_TELEMETRY_DEBUG,"
+      }
+    ]
+  },
+  "DD_PIPELINE_EXECUTION_ID": {
+    "description": "Identifier used for configuration and correlation.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/plugins/util/ci.js",
+        "line": 693,
+        "snippet": "\n    if (env.CODEBUILD_INITIATOR?.startsWith('codepipeline/')) {\n      const DD_ACTION_EXECUTION_ID = getValueFromEnvSources('DD_ACTION_EXECUTION_ID')\n      const DD_PIPELINE_EXECUTION_ID = getValueFromEnvSources('DD_PIPELINE_EXECUTION_ID')\n      tags = {\n        [CI_PROVIDER_NAME]: 'awscodepipeline',\n        [CI_PIPELINE_ID]: DD_PIPELINE_EXECUTION_ID,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/plugins/util/ci.js",
+        "line": 693,
+        "snippet": "        [CI_PIPELINE_URL]: CF_BUILD_URL,\n        [CI_JOB_NAME]: CF_STEP_NAME,\n        [CI_ENV_VARS]: JSON.stringify({\n          CF_BUILD_ID\n        }),\n        [PR_NUMBER]: CF_PULL_REQUEST_NUMBER,\n        [GIT_PULL_REQUEST_BASE_BRANCH]: CF_PULL_REQUEST_TARGET\n      }\n\n      const isTag = CF_BRANCH && CF_BRANCH.includes('tags/')\n      const refKey = isTag ? GIT_TAG : GIT_BRANCH\n      const ref = normalizeRef(CF_BRANCH)\n\n      tags[refKey] = ref\n    }\n\n    if (env.CODEBUILD_INITIATOR?.startsWith('codepipeline/')) {\n      const DD_ACTION_EXECUTION_ID = getValueFromEnvSources('DD_ACTION_EXECUTION_ID')\n      const DD_PIPELINE_EXECUTION_ID = getValueFromEnvSources('DD_PIPELINE_EXECUTION_ID')\n      tags = {\n        [CI_PROVIDER_NAME]: 'awscodepipeline',\n        [CI_PIPELINE_ID]: DD_PIPELINE_EXECUTION_ID,\n        [CI_ENV_VARS]: JSON.stringify({\n          CODEBUILD_BUILD_ARN: env.CODEBUILD_BUILD_ARN,\n          DD_PIPELINE_EXECUTION_ID,\n          DD_ACTION_EXECUTION_ID\n        }),\n        [CI_JOB_ID]: DD_ACTION_EXECUTION_ID\n      }\n    }\n\n    if (env.DRONE && env.CI) {\n      const {\n        DRONE_BUILD_NUMBER,\n        DRONE_BUILD_LINK,\n        DRONE_STEP_NAME,\n        DRONE_STAGE_NAME,"
+      }
+    ]
+  },
+  "DD_PLAYWRIGHT_WORKER": {
+    "description": "Internal marker (set to `1`) used to detect Playwright worker processes for CI Visibility IPC payload routing.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/ci-visibility/exporters/test-worker/index.js",
+        "line": 26,
+        "snippet": "  if (getEnvironmentVariable('MOCHA_WORKER_ID')) {\n    return MOCHA_WORKER_TRACE_PAYLOAD_CODE\n  }\n  if (getValueFromEnvSources('DD_PLAYWRIGHT_WORKER')) {\n    return PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE\n  }\n  if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/ci-visibility/exporters/test-worker/index.js",
+        "line": 26,
+        "snippet": "  JEST_WORKER_LOGS_PAYLOAD_CODE,\n  PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,\n  VITEST_WORKER_TRACE_PAYLOAD_CODE,\n  VITEST_WORKER_LOGS_PAYLOAD_CODE\n} = require('../../../plugins/util/test')\nconst { getEnvironmentVariable, getValueFromEnvSources } = require('../../../config/helper')\nconst Writer = require('./writer')\n\nfunction getInterprocessTraceCode () {\n  if (getEnvironmentVariable('JEST_WORKER_ID')) {\n    return JEST_WORKER_TRACE_PAYLOAD_CODE\n  }\n  if (getEnvironmentVariable('CUCUMBER_WORKER_ID')) {\n    return CUCUMBER_WORKER_TRACE_PAYLOAD_CODE\n  }\n  if (getEnvironmentVariable('MOCHA_WORKER_ID')) {\n    return MOCHA_WORKER_TRACE_PAYLOAD_CODE\n  }\n  if (getValueFromEnvSources('DD_PLAYWRIGHT_WORKER')) {\n    return PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE\n  }\n  if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {\n    return VITEST_WORKER_TRACE_PAYLOAD_CODE\n  }\n  if (getValueFromEnvSources('DD_VITEST_WORKER')) {\n    return VITEST_WORKER_TRACE_PAYLOAD_CODE\n  }\n  return null\n}\n\n// TODO: make it available with cucumber\nfunction getInterprocessCoverageCode () {\n  if (getEnvironmentVariable('JEST_WORKER_ID')) {\n    return JEST_WORKER_COVERAGE_PAYLOAD_CODE\n  }\n  return null\n}"
+      }
+    ],
+    "default": "__UNSET__"
+  },
+  "DD_PROFILING_SOURCE_MAP": {
+    "description": "Enable/disable source map support for profiling.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 522,
+        "snippet": "      DD_OPENAI_LOGS_ENABLED,\n      DD_OPENAI_SPAN_CHAR_LIMIT,\n      DD_PROFILING_EXPORTERS,\n      DD_PROFILING_SOURCE_MAP,\n      DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD,\n      DD_INSTRUMENTATION_INSTALL_ID,\n      DD_INSTRUMENTATION_INSTALL_TIME,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 522,
+        "snippet": "      DD_IAST_TELEMETRY_VERBOSITY,\n      DD_IAST_STACK_TRACE_ENABLED,\n      DD_INJECTION_ENABLED,\n      DD_INJECT_FORCE,\n      DD_ENABLE_NX_SERVICE_NAME,\n      DD_INSTRUMENTATION_TELEMETRY_ENABLED,\n      DD_INSTRUMENTATION_CONFIG_ID,\n      DD_LOGS_INJECTION,\n      DD_LOGS_OTEL_ENABLED,\n      DD_METRICS_OTEL_ENABLED,\n      DD_LANGCHAIN_SPAN_CHAR_LIMIT,\n      DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,\n      DD_LLMOBS_AGENTLESS_ENABLED,\n      DD_LLMOBS_ENABLED,\n      DD_LLMOBS_ML_APP,\n      DD_OPENAI_LOGS_ENABLED,\n      DD_OPENAI_SPAN_CHAR_LIMIT,\n      DD_PROFILING_EXPORTERS,\n      DD_PROFILING_SOURCE_MAP,\n      DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD,\n      DD_INSTRUMENTATION_INSTALL_ID,\n      DD_INSTRUMENTATION_INSTALL_TIME,\n      DD_INSTRUMENTATION_INSTALL_TYPE,\n      DD_REMOTE_CONFIGURATION_ENABLED,\n      DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,\n      DD_RUNTIME_METRICS_ENABLED,\n      DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED,\n      DD_RUNTIME_METRICS_GC_ENABLED,\n      DD_SERVICE,\n      DD_SERVICE_MAPPING,\n      DD_SITE,\n      DD_SPAN_SAMPLING_RULES,\n      DD_SPAN_SAMPLING_RULES_FILE,\n      DD_TAGS,\n      DD_TELEMETRY_DEBUG,\n      DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED,\n      DD_TELEMETRY_HEARTBEAT_INTERVAL,"
+      }
+    ]
+  },
+  "DD_SITE": {
+    "description": "Datadog site/region to send data to. Set this when your org is not on `datadoghq.com`."
+  },
+  "DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES": {
+    "description": "Number of retries used by Test Management.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 1292,
+        "snippet": "        !isFalse(getEnv('DD_TEST_FAILED_TEST_REPLAY_ENABLED')))\n      this.#setBoolean(calc, 'isServiceUserProvided', !!this.#env.service)\n      this.#setBoolean(calc, 'isTestManagementEnabled', !isFalse(getEnv('DD_TEST_MANAGEMENT_ENABLED')))\n      calc.testManagementAttemptToFixRetries = maybeInt(getEnv('DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES')) ?? 20\n      this.#setBoolean(calc, 'isImpactedTestsEnabled',\n        !isFalse(getEnv('DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED')))\n    }"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 1292,
+        "snippet": "    calc.url = DD_CIVISIBILITY_AGENTLESS_URL\n      ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)\n      : getAgentUrl(this._getTraceAgentUrl(), this.#optionsArg)\n\n    if (this.#isCiVisibility()) {\n      this.#setBoolean(calc, 'isEarlyFlakeDetectionEnabled',\n        getEnv('DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED') ?? true)\n      this.#setBoolean(calc, 'isFlakyTestRetriesEnabled', getEnv('DD_CIVISIBILITY_FLAKY_RETRY_ENABLED') ?? true)\n      calc.flakyTestRetriesCount = maybeInt(getEnv('DD_CIVISIBILITY_FLAKY_RETRY_COUNT')) ?? 5\n      this.#setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(this.#isCiVisibilityItrEnabled()))\n      this.#setBoolean(calc, 'isManualApiEnabled', !isFalse(getEnv('DD_CIVISIBILITY_MANUAL_API_ENABLED')))\n      this.#setString(calc, 'ciVisibilityTestSessionName', getEnv('DD_TEST_SESSION_NAME'))\n      this.#setBoolean(calc, 'ciVisAgentlessLogSubmissionEnabled',\n        isTrue(getEnv('DD_AGENTLESS_LOG_SUBMISSION_ENABLED')))\n      this.#setBoolean(calc, 'isTestDynamicInstrumentationEnabled',\n        !isFalse(getEnv('DD_TEST_FAILED_TEST_REPLAY_ENABLED')))\n      this.#setBoolean(calc, 'isServiceUserProvided', !!this.#env.service)\n      this.#setBoolean(calc, 'isTestManagementEnabled', !isFalse(getEnv('DD_TEST_MANAGEMENT_ENABLED')))\n      calc.testManagementAttemptToFixRetries = maybeInt(getEnv('DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES')) ?? 20\n      this.#setBoolean(calc, 'isImpactedTestsEnabled',\n        !isFalse(getEnv('DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED')))\n    }\n\n    // Disable log injection when OTEL logs are enabled\n    // OTEL logs and DD log injection are mutually exclusive\n    if (this.#env.otelLogsEnabled) {\n      this.#setBoolean(calc, 'logInjection', false)\n    }\n\n    calc['dogstatsd.hostname'] = this.#getHostname()\n\n    // Compute OTLP logs and metrics URLs to send payloads to the active Datadog Agent\n    const agentHostname = this.#getHostname()\n    calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`\n    calc.otelMetricsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`\n    calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`\n"
+      }
+    ]
+  },
+  "DD_TRACE_AWS_ADD_SPAN_POINTERS": {
+    "description": "Enable/disable span pointers for supported AWS SDK operations.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 547,
+        "snippet": "      DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,\n      DD_TRACE_AGENT_PORT,\n      DD_TRACE_AGENT_PROTOCOL_VERSION,\n      DD_TRACE_AWS_ADD_SPAN_POINTERS,\n      DD_TRACE_BAGGAGE_MAX_BYTES,\n      DD_TRACE_BAGGAGE_MAX_ITEMS,\n      DD_TRACE_BAGGAGE_TAG_KEYS,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 547,
+        "snippet": "      DD_RUNTIME_METRICS_ENABLED,\n      DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED,\n      DD_RUNTIME_METRICS_GC_ENABLED,\n      DD_SERVICE,\n      DD_SERVICE_MAPPING,\n      DD_SITE,\n      DD_SPAN_SAMPLING_RULES,\n      DD_SPAN_SAMPLING_RULES_FILE,\n      DD_TAGS,\n      DD_TELEMETRY_DEBUG,\n      DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED,\n      DD_TELEMETRY_HEARTBEAT_INTERVAL,\n      DD_TELEMETRY_LOG_COLLECTION_ENABLED,\n      DD_TELEMETRY_METRICS_ENABLED,\n      DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,\n      DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,\n      DD_TRACE_AGENT_PORT,\n      DD_TRACE_AGENT_PROTOCOL_VERSION,\n      DD_TRACE_AWS_ADD_SPAN_POINTERS,\n      DD_TRACE_BAGGAGE_MAX_BYTES,\n      DD_TRACE_BAGGAGE_MAX_ITEMS,\n      DD_TRACE_BAGGAGE_TAG_KEYS,\n      DD_TRACE_CLIENT_IP_ENABLED,\n      DD_TRACE_CLIENT_IP_HEADER,\n      DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,\n      DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,\n      DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,\n      DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS,\n      DD_TRACE_ENABLED,\n      DD_TRACE_EXPERIMENTAL_EXPORTER,\n      DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,\n      DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED,\n      DD_TRACE_GIT_METADATA_ENABLED,\n      DD_TRACE_GLOBAL_TAGS,\n      DD_TRACE_GRAPHQL_ERROR_EXTENSIONS,\n      DD_TRACE_HEADER_TAGS,\n      DD_TRACE_LEGACY_BAGGAGE_ENABLED,"
+      }
+    ]
+  },
+  "DD_TRACE_BEAUTIFUL_LOGS": {
+    "description": "Pretty-print JSON payloads in tracer debug logs (adds indentation).",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/exporters/common/util.js",
+        "line": 9,
+        "snippet": "  return JSON.stringify(\n    value,\n    (key, value) => key === 'dd-api-key' ? undefined : value,\n    getValueFromEnvSources('DD_TRACE_BEAUTIFUL_LOGS') ? 2 : undefined\n  )\n}\n"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/exporters/common/util.js",
+        "line": 9,
+        "snippet": "'use strict'\n\nconst { getValueFromEnvSources } = require('../../config/helper')\n\nfunction safeJSONStringify (value) {\n  return JSON.stringify(\n    value,\n    (key, value) => key === 'dd-api-key' ? undefined : value,\n    getValueFromEnvSources('DD_TRACE_BEAUTIFUL_LOGS') ? 2 : undefined\n  )\n}\n\nmodule.exports = { safeJSONStringify }\n"
+      }
+    ]
+  },
+  "DD_TRACE_DISABLED_PLUGINS": {
+    "description": "Comma-separated list of plugin IDs to disable. See `index.d.ts` `interface Plugins` for valid IDs.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/plugin_manager.js",
+        "line": 28,
+        "snippet": "  require('./lambda')\n}\n\nconst DD_TRACE_DISABLED_PLUGINS = getValueFromEnvSources('DD_TRACE_DISABLED_PLUGINS')\n\nconst disabledPlugins = new Set(\n  DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(',').map(plugin => plugin.trim())"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/plugin_manager.js",
+        "line": 28,
+        "snippet": "// Test optimization plugins that should only be enabled when isCiVisibility is true\nconst TEST_OPTIMIZATION_PLUGINS = new Set([\n  'jest',\n  'vitest',\n  'cucumber',\n  'mocha',\n  'playwright'\n])\n\nconst loadChannel = channel('dd-trace:instrumentation:load')\n\n// instrument everything that needs Plugin System V2 instrumentation\nrequire('../../datadog-instrumentations')\nif (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {\n  // instrument lambda environment\n  require('./lambda')\n}\n\nconst DD_TRACE_DISABLED_PLUGINS = getValueFromEnvSources('DD_TRACE_DISABLED_PLUGINS')\n\nconst disabledPlugins = new Set(\n  DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(',').map(plugin => plugin.trim())\n)\n\n// TODO actually ... should we be looking at environment variables this deep down in the code?\n\nconst pluginClasses = {}\n\nloadChannel.subscribe(({ name }) => {\n  maybeEnable(plugins[name])\n})\n\nfunction maybeEnable (Plugin) {\n  if (!Plugin || typeof Plugin !== 'function') return\n  if (!pluginClasses[Plugin.id]) {\n    const enabled = getEnabled(Plugin)\n"
+      }
+    ]
+  },
+  "DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS": {
+    "description": "JSON object mapping DynamoDB table names to primary key field names (1-2) used for span pointers.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 556,
+        "snippet": "      DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,\n      DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,\n      DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,\n      DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS,\n      DD_TRACE_ENABLED,\n      DD_TRACE_EXPERIMENTAL_EXPORTER,\n      DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 556,
+        "snippet": "      DD_TELEMETRY_DEBUG,\n      DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED,\n      DD_TELEMETRY_HEARTBEAT_INTERVAL,\n      DD_TELEMETRY_LOG_COLLECTION_ENABLED,\n      DD_TELEMETRY_METRICS_ENABLED,\n      DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,\n      DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,\n      DD_TRACE_AGENT_PORT,\n      DD_TRACE_AGENT_PROTOCOL_VERSION,\n      DD_TRACE_AWS_ADD_SPAN_POINTERS,\n      DD_TRACE_BAGGAGE_MAX_BYTES,\n      DD_TRACE_BAGGAGE_MAX_ITEMS,\n      DD_TRACE_BAGGAGE_TAG_KEYS,\n      DD_TRACE_CLIENT_IP_ENABLED,\n      DD_TRACE_CLIENT_IP_HEADER,\n      DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,\n      DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,\n      DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,\n      DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS,\n      DD_TRACE_ENABLED,\n      DD_TRACE_EXPERIMENTAL_EXPORTER,\n      DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,\n      DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED,\n      DD_TRACE_GIT_METADATA_ENABLED,\n      DD_TRACE_GLOBAL_TAGS,\n      DD_TRACE_GRAPHQL_ERROR_EXTENSIONS,\n      DD_TRACE_HEADER_TAGS,\n      DD_TRACE_LEGACY_BAGGAGE_ENABLED,\n      DD_TRACE_MEMCACHED_COMMAND_ENABLED,\n      DD_TRACE_MIDDLEWARE_TRACING_ENABLED,\n      DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,\n      DD_TRACE_PARTIAL_FLUSH_MIN_SPANS,\n      DD_TRACE_FLUSH_INTERVAL,\n      DD_TRACE_PEER_SERVICE_MAPPING,\n      DD_TRACE_PROPAGATION_EXTRACT_FIRST,\n      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT,\n      DD_TRACE_PROPAGATION_STYLE,"
+      }
+    ]
+  },
+  "DD_TRACE_ENCODING_DEBUG": {
+    "description": "Enable/disable additional trace encoding debug logging.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/encode/0.4.js",
+        "line": 34,
+        "snippet": "    this._stringBytes = new MsgpackChunk()\n    this._writer = writer\n    this._reset()\n    this._debugEncoding = isTrue(getValueFromEnvSources('DD_TRACE_ENCODING_DEBUG'))\n    this._config = this._writer?._config\n  }\n"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/encode/0.4.js",
+        "line": 34,
+        "snippet": "    if (config?.trace?.nativeSpanEvents) {\n      formatSpanEvents(span)\n    } else {\n      span.meta.events = JSON.stringify(span.span_events)\n      delete span.span_events\n    }\n  }\n  return span\n}\n\nclass AgentEncoder {\n  constructor (writer, limit = SOFT_LIMIT) {\n    this._msgpack = new MsgpackEncoder()\n    this._limit = limit\n    this._traceBytes = new MsgpackChunk()\n    this._stringBytes = new MsgpackChunk()\n    this._writer = writer\n    this._reset()\n    this._debugEncoding = isTrue(getValueFromEnvSources('DD_TRACE_ENCODING_DEBUG'))\n    this._config = this._writer?._config\n  }\n\n  count () {\n    return this._traceCount\n  }\n\n  encode (trace) {\n    const bytes = this._traceBytes\n    const start = bytes.length\n\n    this._traceCount++\n\n    this._encode(bytes, trace)\n\n    const end = bytes.length\n\n    if (this._debugEncoding) {"
+      }
+    ]
+  },
+  "DD_TRACE_EXPERIMENTAL_SPAN_COUNTS": {
+    "description": "Enable/disable experimental span counts.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/opentracing/span.js",
+        "line": 21,
+        "snippet": "const tracerMetrics = telemetryMetrics.manager.namespace('tracers')\n\nconst DD_TRACE_EXPERIMENTAL_STATE_TRACKING = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING')\nconst DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS')\n\nconst unfinishedRegistry = createRegistry('unfinished')\nconst finishedRegistry = createRegistry('finished')"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/opentracing/span.js",
+        "line": 21,
+        "snippet": "// TODO (new internal tracer): use DC events for lifecycle metrics and test them\nconst { performance } = require('perf_hooks')\nconst now = performance.now.bind(performance)\nconst dateNow = Date.now\nconst util = require('util')\nconst { channel } = require('dc-polyfill')\nconst id = require('../id')\nconst tagger = require('../tagger')\nconst runtimeMetrics = require('../runtime_metrics')\nconst log = require('../log')\nconst { storage } = require('../../../datadog-core')\nconst telemetryMetrics = require('../telemetry/metrics')\nconst { getValueFromEnvSources } = require('../config/helper')\nconst SpanContext = require('./span_context')\n\nconst tracerMetrics = telemetryMetrics.manager.namespace('tracers')\n\nconst DD_TRACE_EXPERIMENTAL_STATE_TRACKING = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING')\nconst DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS')\n\nconst unfinishedRegistry = createRegistry('unfinished')\nconst finishedRegistry = createRegistry('finished')\n\nconst OTEL_ENABLED = !!getValueFromEnvSources('DD_TRACE_OTEL_ENABLED')\nconst ALLOWED = new Set(['string', 'number', 'boolean'])\n\nconst integrationCounters = {\n  spans_created: {},\n  spans_finished: {}\n}\n\nconst startCh = channel('dd-trace:span:start')\nconst finishCh = channel('dd-trace:span:finish')\n\nfunction getIntegrationCounter (event, integration) {\n  const counters = integrationCounters[event]\n"
+      }
+    ]
+  },
+  "DD_TRACE_EXPERIMENTAL_STATE_TRACKING": {
+    "description": "Enable/disable experimental state tracking.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/opentracing/span.js",
+        "line": 20,
+        "snippet": "\nconst tracerMetrics = telemetryMetrics.manager.namespace('tracers')\n\nconst DD_TRACE_EXPERIMENTAL_STATE_TRACKING = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING')\nconst DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS')\n\nconst unfinishedRegistry = createRegistry('unfinished')"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/opentracing/span.js",
+        "line": 20,
+        "snippet": "\n// TODO (new internal tracer): use DC events for lifecycle metrics and test them\nconst { performance } = require('perf_hooks')\nconst now = performance.now.bind(performance)\nconst dateNow = Date.now\nconst util = require('util')\nconst { channel } = require('dc-polyfill')\nconst id = require('../id')\nconst tagger = require('../tagger')\nconst runtimeMetrics = require('../runtime_metrics')\nconst log = require('../log')\nconst { storage } = require('../../../datadog-core')\nconst telemetryMetrics = require('../telemetry/metrics')\nconst { getValueFromEnvSources } = require('../config/helper')\nconst SpanContext = require('./span_context')\n\nconst tracerMetrics = telemetryMetrics.manager.namespace('tracers')\n\nconst DD_TRACE_EXPERIMENTAL_STATE_TRACKING = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING')\nconst DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS')\n\nconst unfinishedRegistry = createRegistry('unfinished')\nconst finishedRegistry = createRegistry('finished')\n\nconst OTEL_ENABLED = !!getValueFromEnvSources('DD_TRACE_OTEL_ENABLED')\nconst ALLOWED = new Set(['string', 'number', 'boolean'])\n\nconst integrationCounters = {\n  spans_created: {},\n  spans_finished: {}\n}\n\nconst startCh = channel('dd-trace:span:start')\nconst finishCh = channel('dd-trace:span:finish')\n\nfunction getIntegrationCounter (event, integration) {\n  const counters = integrationCounters[event]"
+      }
+    ]
+  },
+  "DD_TRACE_GRAPHQL_ERROR_EXTENSIONS": {
+    "description": "Comma-separated list of GraphQL error extension keys to record on span events.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 563,
+        "snippet": "      DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED,\n      DD_TRACE_GIT_METADATA_ENABLED,\n      DD_TRACE_GLOBAL_TAGS,\n      DD_TRACE_GRAPHQL_ERROR_EXTENSIONS,\n      DD_TRACE_HEADER_TAGS,\n      DD_TRACE_LEGACY_BAGGAGE_ENABLED,\n      DD_TRACE_MEMCACHED_COMMAND_ENABLED,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 563,
+        "snippet": "      DD_TRACE_AGENT_PORT,\n      DD_TRACE_AGENT_PROTOCOL_VERSION,\n      DD_TRACE_AWS_ADD_SPAN_POINTERS,\n      DD_TRACE_BAGGAGE_MAX_BYTES,\n      DD_TRACE_BAGGAGE_MAX_ITEMS,\n      DD_TRACE_BAGGAGE_TAG_KEYS,\n      DD_TRACE_CLIENT_IP_ENABLED,\n      DD_TRACE_CLIENT_IP_HEADER,\n      DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,\n      DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,\n      DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,\n      DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS,\n      DD_TRACE_ENABLED,\n      DD_TRACE_EXPERIMENTAL_EXPORTER,\n      DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,\n      DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED,\n      DD_TRACE_GIT_METADATA_ENABLED,\n      DD_TRACE_GLOBAL_TAGS,\n      DD_TRACE_GRAPHQL_ERROR_EXTENSIONS,\n      DD_TRACE_HEADER_TAGS,\n      DD_TRACE_LEGACY_BAGGAGE_ENABLED,\n      DD_TRACE_MEMCACHED_COMMAND_ENABLED,\n      DD_TRACE_MIDDLEWARE_TRACING_ENABLED,\n      DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,\n      DD_TRACE_PARTIAL_FLUSH_MIN_SPANS,\n      DD_TRACE_FLUSH_INTERVAL,\n      DD_TRACE_PEER_SERVICE_MAPPING,\n      DD_TRACE_PROPAGATION_EXTRACT_FIRST,\n      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT,\n      DD_TRACE_PROPAGATION_STYLE,\n      DD_TRACE_PROPAGATION_STYLE_INJECT,\n      DD_TRACE_PROPAGATION_STYLE_EXTRACT,\n      DD_TRACE_RATE_LIMIT,\n      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,\n      DD_TRACE_REPORT_HOSTNAME,\n      DD_TRACE_RESOURCE_RENAMING_ENABLED,\n      DD_TRACE_SAMPLE_RATE,"
+      }
+    ]
+  },
+  "DD_TRACE_NATIVE_SPAN_EVENTS": {
+    "description": "Encode span events in the native `span_events` payload format instead of `meta.events` JSON.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 597,
+        "snippet": "      DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,\n      DD_VERTEXAI_SPAN_CHAR_LIMIT,\n      DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,\n      DD_TRACE_NATIVE_SPAN_EVENTS,\n      OTEL_METRICS_EXPORTER,\n      OTEL_PROPAGATORS,\n      OTEL_RESOURCE_ATTRIBUTES,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 597,
+        "snippet": "      DD_TRACE_REPORT_HOSTNAME,\n      DD_TRACE_RESOURCE_RENAMING_ENABLED,\n      DD_TRACE_SAMPLE_RATE,\n      DD_TRACE_SAMPLING_RULES,\n      DD_TRACE_SCOPE,\n      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA,\n      DD_TRACE_SPAN_LEAK_DEBUG,\n      DD_TRACE_STARTUP_LOGS,\n      DD_TRACE_TAGS,\n      DD_TRACE_WEBSOCKET_MESSAGES_ENABLED,\n      DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING,\n      DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES,\n      DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,\n      DD_TRACING_ENABLED,\n      DD_VERSION,\n      DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,\n      DD_VERTEXAI_SPAN_CHAR_LIMIT,\n      DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,\n      DD_TRACE_NATIVE_SPAN_EVENTS,\n      OTEL_METRICS_EXPORTER,\n      OTEL_PROPAGATORS,\n      OTEL_RESOURCE_ATTRIBUTES,\n      OTEL_SERVICE_NAME,\n      OTEL_TRACES_SAMPLER,\n      OTEL_TRACES_SAMPLER_ARG,\n      DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED,\n      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,\n      OTEL_EXPORTER_OTLP_LOGS_HEADERS,\n      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,\n      OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,\n      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,\n      OTEL_EXPORTER_OTLP_METRICS_HEADERS,\n      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,\n      OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,\n      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE,\n      OTEL_METRIC_EXPORT_TIMEOUT,\n      OTEL_EXPORTER_OTLP_PROTOCOL,"
+      }
+    ]
+  },
+  "DD_TRACE_PEER_SERVICE_MAPPING": {
+    "description": "Comma-separated `from:to` mapping to remap `peer.service` (sets `_dd.peer.service.remapped_from`).",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 571,
+        "snippet": "      DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,\n      DD_TRACE_PARTIAL_FLUSH_MIN_SPANS,\n      DD_TRACE_FLUSH_INTERVAL,\n      DD_TRACE_PEER_SERVICE_MAPPING,\n      DD_TRACE_PROPAGATION_EXTRACT_FIRST,\n      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT,\n      DD_TRACE_PROPAGATION_STYLE,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 571,
+        "snippet": "      DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,\n      DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,\n      DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,\n      DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS,\n      DD_TRACE_ENABLED,\n      DD_TRACE_EXPERIMENTAL_EXPORTER,\n      DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,\n      DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED,\n      DD_TRACE_GIT_METADATA_ENABLED,\n      DD_TRACE_GLOBAL_TAGS,\n      DD_TRACE_GRAPHQL_ERROR_EXTENSIONS,\n      DD_TRACE_HEADER_TAGS,\n      DD_TRACE_LEGACY_BAGGAGE_ENABLED,\n      DD_TRACE_MEMCACHED_COMMAND_ENABLED,\n      DD_TRACE_MIDDLEWARE_TRACING_ENABLED,\n      DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,\n      DD_TRACE_PARTIAL_FLUSH_MIN_SPANS,\n      DD_TRACE_FLUSH_INTERVAL,\n      DD_TRACE_PEER_SERVICE_MAPPING,\n      DD_TRACE_PROPAGATION_EXTRACT_FIRST,\n      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT,\n      DD_TRACE_PROPAGATION_STYLE,\n      DD_TRACE_PROPAGATION_STYLE_INJECT,\n      DD_TRACE_PROPAGATION_STYLE_EXTRACT,\n      DD_TRACE_RATE_LIMIT,\n      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,\n      DD_TRACE_REPORT_HOSTNAME,\n      DD_TRACE_RESOURCE_RENAMING_ENABLED,\n      DD_TRACE_SAMPLE_RATE,\n      DD_TRACE_SAMPLING_RULES,\n      DD_TRACE_SCOPE,\n      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA,\n      DD_TRACE_SPAN_LEAK_DEBUG,\n      DD_TRACE_STARTUP_LOGS,\n      DD_TRACE_TAGS,\n      DD_TRACE_WEBSOCKET_MESSAGES_ENABLED,\n      DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING,"
+      }
+    ]
+  },
+  "DD_TRACE_PG_NATIVE_ENABLED": {
+    "default": true
+  },
+  "DD_TRACE_SCOPE": {
+    "description": "Legacy scope configuration (async context propagation); currently has no effect.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 583,
+        "snippet": "      DD_TRACE_RESOURCE_RENAMING_ENABLED,\n      DD_TRACE_SAMPLE_RATE,\n      DD_TRACE_SAMPLING_RULES,\n      DD_TRACE_SCOPE,\n      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA,\n      DD_TRACE_SPAN_LEAK_DEBUG,\n      DD_TRACE_STARTUP_LOGS,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 583,
+        "snippet": "      DD_TRACE_LEGACY_BAGGAGE_ENABLED,\n      DD_TRACE_MEMCACHED_COMMAND_ENABLED,\n      DD_TRACE_MIDDLEWARE_TRACING_ENABLED,\n      DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,\n      DD_TRACE_PARTIAL_FLUSH_MIN_SPANS,\n      DD_TRACE_FLUSH_INTERVAL,\n      DD_TRACE_PEER_SERVICE_MAPPING,\n      DD_TRACE_PROPAGATION_EXTRACT_FIRST,\n      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT,\n      DD_TRACE_PROPAGATION_STYLE,\n      DD_TRACE_PROPAGATION_STYLE_INJECT,\n      DD_TRACE_PROPAGATION_STYLE_EXTRACT,\n      DD_TRACE_RATE_LIMIT,\n      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,\n      DD_TRACE_REPORT_HOSTNAME,\n      DD_TRACE_RESOURCE_RENAMING_ENABLED,\n      DD_TRACE_SAMPLE_RATE,\n      DD_TRACE_SAMPLING_RULES,\n      DD_TRACE_SCOPE,\n      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA,\n      DD_TRACE_SPAN_LEAK_DEBUG,\n      DD_TRACE_STARTUP_LOGS,\n      DD_TRACE_TAGS,\n      DD_TRACE_WEBSOCKET_MESSAGES_ENABLED,\n      DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING,\n      DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES,\n      DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,\n      DD_TRACING_ENABLED,\n      DD_VERSION,\n      DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,\n      DD_VERTEXAI_SPAN_CHAR_LIMIT,\n      DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,\n      DD_TRACE_NATIVE_SPAN_EVENTS,\n      OTEL_METRICS_EXPORTER,\n      OTEL_PROPAGATORS,\n      OTEL_RESOURCE_ATTRIBUTES,\n      OTEL_SERVICE_NAME,"
+      }
+    ]
+  },
+  "DD_TRACE_TAGS": {
+    "description": "Additional tags to apply to traces, as comma-separated `key:value` pairs.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 587,
+        "snippet": "      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA,\n      DD_TRACE_SPAN_LEAK_DEBUG,\n      DD_TRACE_STARTUP_LOGS,\n      DD_TRACE_TAGS,\n      DD_TRACE_WEBSOCKET_MESSAGES_ENABLED,\n      DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING,\n      DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 587,
+        "snippet": "      DD_TRACE_PARTIAL_FLUSH_MIN_SPANS,\n      DD_TRACE_FLUSH_INTERVAL,\n      DD_TRACE_PEER_SERVICE_MAPPING,\n      DD_TRACE_PROPAGATION_EXTRACT_FIRST,\n      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT,\n      DD_TRACE_PROPAGATION_STYLE,\n      DD_TRACE_PROPAGATION_STYLE_INJECT,\n      DD_TRACE_PROPAGATION_STYLE_EXTRACT,\n      DD_TRACE_RATE_LIMIT,\n      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,\n      DD_TRACE_REPORT_HOSTNAME,\n      DD_TRACE_RESOURCE_RENAMING_ENABLED,\n      DD_TRACE_SAMPLE_RATE,\n      DD_TRACE_SAMPLING_RULES,\n      DD_TRACE_SCOPE,\n      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA,\n      DD_TRACE_SPAN_LEAK_DEBUG,\n      DD_TRACE_STARTUP_LOGS,\n      DD_TRACE_TAGS,\n      DD_TRACE_WEBSOCKET_MESSAGES_ENABLED,\n      DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING,\n      DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES,\n      DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,\n      DD_TRACING_ENABLED,\n      DD_VERSION,\n      DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,\n      DD_VERTEXAI_SPAN_CHAR_LIMIT,\n      DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,\n      DD_TRACE_NATIVE_SPAN_EVENTS,\n      OTEL_METRICS_EXPORTER,\n      OTEL_PROPAGATORS,\n      OTEL_RESOURCE_ATTRIBUTES,\n      OTEL_SERVICE_NAME,\n      OTEL_TRACES_SAMPLER,\n      OTEL_TRACES_SAMPLER_ARG,\n      DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED,\n      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,"
+      }
+    ]
+  },
+  "DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH": {
+    "description": "Maximum length of the `x-datadog-tags` header for trace tag propagation. Set to 0 to disable.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 591,
+        "snippet": "      DD_TRACE_WEBSOCKET_MESSAGES_ENABLED,\n      DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING,\n      DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES,\n      DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,\n      DD_TRACING_ENABLED,\n      DD_VERSION,\n      DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 591,
+        "snippet": "      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT,\n      DD_TRACE_PROPAGATION_STYLE,\n      DD_TRACE_PROPAGATION_STYLE_INJECT,\n      DD_TRACE_PROPAGATION_STYLE_EXTRACT,\n      DD_TRACE_RATE_LIMIT,\n      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,\n      DD_TRACE_REPORT_HOSTNAME,\n      DD_TRACE_RESOURCE_RENAMING_ENABLED,\n      DD_TRACE_SAMPLE_RATE,\n      DD_TRACE_SAMPLING_RULES,\n      DD_TRACE_SCOPE,\n      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA,\n      DD_TRACE_SPAN_LEAK_DEBUG,\n      DD_TRACE_STARTUP_LOGS,\n      DD_TRACE_TAGS,\n      DD_TRACE_WEBSOCKET_MESSAGES_ENABLED,\n      DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING,\n      DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES,\n      DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,\n      DD_TRACING_ENABLED,\n      DD_VERSION,\n      DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,\n      DD_VERTEXAI_SPAN_CHAR_LIMIT,\n      DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,\n      DD_TRACE_NATIVE_SPAN_EVENTS,\n      OTEL_METRICS_EXPORTER,\n      OTEL_PROPAGATORS,\n      OTEL_RESOURCE_ATTRIBUTES,\n      OTEL_SERVICE_NAME,\n      OTEL_TRACES_SAMPLER,\n      OTEL_TRACES_SAMPLER_ARG,\n      DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED,\n      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,\n      OTEL_EXPORTER_OTLP_LOGS_HEADERS,\n      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,\n      OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,\n      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,"
+      }
+    ]
+  },
+  "DD_VERTEXAI_SPAN_CHAR_LIMIT": {
+    "description": "Maximum number of characters recorded for vertexai span data.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 595,
+        "snippet": "      DD_TRACING_ENABLED,\n      DD_VERSION,\n      DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,\n      DD_VERTEXAI_SPAN_CHAR_LIMIT,\n      DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,\n      DD_TRACE_NATIVE_SPAN_EVENTS,\n      OTEL_METRICS_EXPORTER,"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/config/index.js",
+        "line": 595,
+        "snippet": "      DD_TRACE_RATE_LIMIT,\n      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,\n      DD_TRACE_REPORT_HOSTNAME,\n      DD_TRACE_RESOURCE_RENAMING_ENABLED,\n      DD_TRACE_SAMPLE_RATE,\n      DD_TRACE_SAMPLING_RULES,\n      DD_TRACE_SCOPE,\n      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA,\n      DD_TRACE_SPAN_LEAK_DEBUG,\n      DD_TRACE_STARTUP_LOGS,\n      DD_TRACE_TAGS,\n      DD_TRACE_WEBSOCKET_MESSAGES_ENABLED,\n      DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING,\n      DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES,\n      DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,\n      DD_TRACING_ENABLED,\n      DD_VERSION,\n      DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,\n      DD_VERTEXAI_SPAN_CHAR_LIMIT,\n      DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,\n      DD_TRACE_NATIVE_SPAN_EVENTS,\n      OTEL_METRICS_EXPORTER,\n      OTEL_PROPAGATORS,\n      OTEL_RESOURCE_ATTRIBUTES,\n      OTEL_SERVICE_NAME,\n      OTEL_TRACES_SAMPLER,\n      OTEL_TRACES_SAMPLER_ARG,\n      DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED,\n      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,\n      OTEL_EXPORTER_OTLP_LOGS_HEADERS,\n      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,\n      OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,\n      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,\n      OTEL_EXPORTER_OTLP_METRICS_HEADERS,\n      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,\n      OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,\n      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE,"
+      }
+    ]
+  },
+  "DD_VITEST_WORKER": {
+    "description": "Internal marker (set to `1`) used to detect Vitest worker processes for CI Visibility IPC payload routing.",
+    "evidence": [
+      {
+        "kind": "code",
+        "file": "packages/dd-trace/src/ci-visibility/exporters/test-worker/index.js",
+        "line": 32,
+        "snippet": "  if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {\n    return VITEST_WORKER_TRACE_PAYLOAD_CODE\n  }\n  if (getValueFromEnvSources('DD_VITEST_WORKER')) {\n    return VITEST_WORKER_TRACE_PAYLOAD_CODE\n  }\n  return null"
+      },
+      {
+        "kind": "code_context",
+        "file": "packages/dd-trace/src/ci-visibility/exporters/test-worker/index.js",
+        "line": 32,
+        "snippet": "const Writer = require('./writer')\n\nfunction getInterprocessTraceCode () {\n  if (getEnvironmentVariable('JEST_WORKER_ID')) {\n    return JEST_WORKER_TRACE_PAYLOAD_CODE\n  }\n  if (getEnvironmentVariable('CUCUMBER_WORKER_ID')) {\n    return CUCUMBER_WORKER_TRACE_PAYLOAD_CODE\n  }\n  if (getEnvironmentVariable('MOCHA_WORKER_ID')) {\n    return MOCHA_WORKER_TRACE_PAYLOAD_CODE\n  }\n  if (getValueFromEnvSources('DD_PLAYWRIGHT_WORKER')) {\n    return PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE\n  }\n  if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {\n    return VITEST_WORKER_TRACE_PAYLOAD_CODE\n  }\n  if (getValueFromEnvSources('DD_VITEST_WORKER')) {\n    return VITEST_WORKER_TRACE_PAYLOAD_CODE\n  }\n  return null\n}\n\n// TODO: make it available with cucumber\nfunction getInterprocessCoverageCode () {\n  if (getEnvironmentVariable('JEST_WORKER_ID')) {\n    return JEST_WORKER_COVERAGE_PAYLOAD_CODE\n  }\n  return null\n}\n\nfunction getInterprocessLogsCode () {\n  if (getEnvironmentVariable('JEST_WORKER_ID')) {\n    return JEST_WORKER_LOGS_PAYLOAD_CODE\n  }\n  if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {"
+      }
+    ],
+    "default": "__UNSET__"
+  }
+}

@@ -1,0 +1,5546 @@
+{
+  "supportedVersion": "2",
+  "overwriteExisting": false,
+  "emitAllCandidates": false,
+  "docs": {
+    "source": "/Users/ruben.bridgewater/go/src/github.com/DataDog/dd-trace-js/packages/dd-trace/src/config/supported-configurations.docs-report.json",
+    "matchedEnvVarCount": 149,
+    "typeConflicts": [
+      {
+        "envVar": "DD_DOGSTATSD_PORT",
+        "supportedType": "string",
+        "docsTypes": [
+          "int"
+        ],
+        "evidence": [
+          {
+            "file": "scripts/.cache/datadog-documentation/content/en/tracing/trace_collection/library_config/_index.md",
+            "line": 27,
+            "snippet": "`DD_DOGSTATSD_PORT`",
+            "scope": "other"
+          },
+          {
+            "file": "scripts/.cache/datadog-documentation/content/en/developers/dogstatsd/_index.md",
+            "line": 578,
+            "snippet": "| `port`             | Integer         | `8125`      | The port of your DogStatsD server. If this is not set, the Agent looks at the `DD_DOGSTATSD_PORT` or `DD_DOGSTATSD_URL` environment variable.                                            ",
+            "scope": "other"
+          }
+        ]
+      },
+      {
+        "envVar": "DD_PROFILING_ENABLED",
+        "supportedType": "string",
+        "docsTypes": [
+          "boolean"
+        ],
+        "evidence": [
+          {
+            "file": "scripts/.cache/datadog-documentation/content/en/profiler/enabling/dotnet.md",
+            "line": 481,
+            "snippet": "| `DD_PROFILING_ENABLED`     | Boolean        | If set to `true`, enables the .NET Profiler. Defaults to `false`.  |",
+            "scope": "other"
+          },
+          {
+            "file": "scripts/.cache/datadog-documentation/content/en/profiler/enabling/java.md",
+            "line": 336,
+            "snippet": "| `DD_PROFILING_ENABLED`                           | Boolean       | Alternate for `-Ddd.profiling.enabled` argument. Set to `true` to enable profiler.               |",
+            "scope": "other"
+          },
+          {
+            "file": "scripts/.cache/datadog-documentation/content/en/profiler/enabling/ruby.md",
+            "line": 120,
+            "snippet": "| `DD_PROFILING_ENABLED`                        | Boolean | If set to `true`, enables the profiler. Defaults to `false`.                                                                            |",
+            "scope": "other"
+          }
+        ]
+      },
+      {
+        "envVar": "DD_TRACE_HEADER_TAGS",
+        "supportedType": "array",
+        "docsTypes": [
+          "string"
+        ],
+        "evidence": [
+          {
+            "file": "scripts/.cache/datadog-documentation/content/en/tracing/trace_collection/library_config/_index.md",
+            "line": 103,
+            "snippet": "`DD_TRACE_HEADER_TAGS`",
+            "scope": "other"
+          }
+        ]
+      },
+      {
+        "envVar": "DD_TRACE_SAMPLING_RULES",
+        "supportedType": "json",
+        "docsTypes": [
+          "array"
+        ],
+        "evidence": [
+          {
+            "file": "scripts/.cache/datadog-documentation/content/en/tracing/trace_collection/library_config/_index.md",
+            "line": 115,
+            "snippet": "`DD_TRACE_SAMPLING_RULES`",
+            "scope": "other"
+          }
+        ]
+      }
+    ]
+  },
+  "chosenByEnvVar": {
+    "DD_AAS_DOTNET_EXTENSION_VERSION": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Azure metadata",
+        "keptExisting": true
+      }
+    },
+    "DD_ACTION_EXECUTION_ID": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "AWS CodePipeline action execution ID (used as CI job identifier for correlation).",
+        "keptExisting": true
+      }
+    },
+    "DD_AGENTLESS_LOG_SUBMISSION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enables/disables log submission",
+        "keptExisting": true
+      }
+    },
+    "DD_AGENTLESS_LOG_SUBMISSION_URL": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Sets custom URL for submitting logs",
+        "keptExisting": true
+      }
+    },
+    "DD_AGENT_HOST": {
+      "internalKey": "hostname",
+      "optionPath": "hostname",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "The address of the trace agent that the tracer will submit to.",
+        "keptExisting": true
+      }
+    },
+    "DD_AI_GUARD_ENABLED": {
+      "internalKey": "experimental.aiguard.enabled",
+      "optionPath": "experimental.aiguard.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Set to `true` to enable the SDK.",
+        "keptExisting": true
+      }
+    },
+    "DD_AI_GUARD_ENDPOINT": {
+      "internalKey": "experimental.aiguard.endpoint",
+      "optionPath": "experimental.aiguard.endpoint",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "URL of the AI Guard REST API.",
+        "keptExisting": true
+      }
+    },
+    "DD_AI_GUARD_MAX_CONTENT_SIZE": {
+      "internalKey": "experimental.aiguard.maxContentSize",
+      "optionPath": "experimental.aiguard.maxContentSize",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Max size of the content property set in the meta-struct",
+        "keptExisting": true
+      }
+    },
+    "DD_AI_GUARD_MAX_MESSAGES_LENGTH": {
+      "internalKey": "experimental.aiguard.maxMessagesLength",
+      "optionPath": "experimental.aiguard.maxMessagesLength",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Maximum number of conversational messages allowed to be set in the meta-struct",
+        "keptExisting": true
+      }
+    },
+    "DD_AI_GUARD_TIMEOUT": {
+      "internalKey": "experimental.aiguard.timeout",
+      "optionPath": "experimental.aiguard.timeout",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Timeout used in calls to the AI Guard REST API in milliseconds (default 5000)",
+        "keptExisting": true
+      }
+    },
+    "DD_API_KEY": {
+      "internalKey": "apiKey",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "[Datadog API Key][6] - **Required**",
+        "keptExisting": true
+      }
+    },
+    "DD_API_SECURITY_ENABLED": {
+      "internalKey": "appsec.apiSecurity.enabled",
+      "optionPath": "appsec.apiSecurity.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable Api Security.",
+        "keptExisting": true
+      }
+    },
+    "DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED": {
+      "internalKey": "appsec.apiSecurity.endpointCollectionEnabled",
+      "optionPath": "appsec.apiSecurity.endpointCollectionEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable endpoint collection for API Security.",
+        "keptExisting": true
+      }
+    },
+    "DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT": {
+      "internalKey": "appsec.apiSecurity.endpointCollectionMessageLimit",
+      "optionPath": "appsec.apiSecurity.endpointCollectionMessageLimit",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Maximum number of endpoints that can be serialized per message.",
+        "keptExisting": true
+      }
+    },
+    "DD_API_SECURITY_SAMPLE_DELAY": {
+      "internalKey": "appsec.apiSecurity.sampleDelay",
+      "chosenType": {
+        "value": "float",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Initialize from environment variables",
+        "keptExisting": true
+      }
+    },
+    "DD_APM_FLUSH_DEADLINE_MILLISECONDS": {
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Doesnt crash when spans are finished early and reached impending timeout",
+        "keptExisting": true
+      }
+    },
+    "DD_APM_TRACING_ENABLED": {
+      "internalKey": "apmTracingEnabled",
+      "optionPath": "apmTracingEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Used to disable APM Tracing when using standalone products",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE": {
+      "internalKey": "appsec.eventTracking.mode",
+      "optionPath": "appsec.eventTracking.mode",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Controls the automated user tracking mode for user IDs and logins collections. Possible values:<br>*  'anonymous': will hash user IDs and user logins before collecting them<br>*  'anon': alias for 'anonymous'<br>*  'safe': deprecated alias for 'anonymous'<br>*  'identification': will collect user IDs and logins without redaction<br>*  'ident': alias for 'identification'<br>*  'extended': deprecated alias for 'identification'<br>*  'disabled': will not collect user IDs and logins<br>Unknown values will be considered as 'disabled'",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_COLLECT_ALL_HEADERS": {
+      "internalKey": "appsec.extendedHeadersCollection.enabled",
+      "optionPath": "appsec.extendedHeadersCollection.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable extended headers collection",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_ENABLED": {
+      "internalKey": "appsec.enabled",
+      "optionPath": "appsec.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable AppSec.",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON": {
+      "internalKey": "appsec.blockedTemplateGraphql",
+      "optionPath": "appsec.blockedTemplateGraphql",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Specifies a path to a custom blocking template json file for graphql requests",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED": {
+      "internalKey": "appsec.extendedHeadersCollection.redaction",
+      "optionPath": "appsec.extendedHeadersCollection.redaction",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to redact collected headers",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML": {
+      "internalKey": "appsec.blockedTemplateHtml",
+      "optionPath": "appsec.blockedTemplateHtml",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Specifies a path to a custom blocking template html file.",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON": {
+      "internalKey": "appsec.blockedTemplateJson",
+      "optionPath": "appsec.blockedTemplateJson",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Specifies a path to a custom blocking template json file.",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_MAX_COLLECTED_HEADERS": {
+      "internalKey": "appsec.extendedHeadersCollection.maxHeaders",
+      "optionPath": "appsec.extendedHeadersCollection.maxHeaders",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Specifies the maximum number of headers collected.",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_MAX_STACK_TRACES": {
+      "internalKey": "appsec.stackTrace.maxStackTraces",
+      "optionPath": "appsec.stackTrace.maxStackTraces",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Specifies the maximum number of stack traces to be reported.",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_MAX_STACK_TRACE_DEPTH": {
+      "internalKey": "appsec.stackTrace.maxDepth",
+      "optionPath": "appsec.stackTrace.maxDepth",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Specifies the maximum depth of a stack trace to be reported.",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP": {
+      "internalKey": "appsec.obfuscatorKeyRegex",
+      "optionPath": "appsec.obfuscatorKeyRegex",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Specifies a regex that will redact sensitive data by its key in attack reports.",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP": {
+      "internalKey": "appsec.obfuscatorValueRegex",
+      "optionPath": "appsec.obfuscatorValueRegex",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Specifies a regex that will redact sensitive data by its value in attack reports.",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_RASP_COLLECT_REQUEST_BODY": {
+      "internalKey": "appsec.rasp.bodyCollection",
+      "optionPath": "appsec.rasp.bodyCollection",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable request body collection on RASP event",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_RASP_ENABLED": {
+      "internalKey": "appsec.rasp.enabled",
+      "optionPath": "appsec.rasp.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable RASP.",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_RULES": {
+      "internalKey": "appsec.rules",
+      "optionPath": "appsec.rules",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Specifies a path to a custom rules file.",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_SCA_ENABLED": {
+      "internalKey": "appsec.sca.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_STACK_TRACE_ENABLED": {
+      "internalKey": "appsec.stackTrace.enabled",
+      "optionPath": "appsec.stackTrace.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable stack trace reporting.",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_TRACE_RATE_LIMIT": {
+      "internalKey": "appsec.rateLimit",
+      "optionPath": "appsec.rateLimit",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Controls the maximum amount of traces sampled by AppSec attacks, per second.",
+        "keptExisting": true
+      }
+    },
+    "DD_APPSEC_WAF_TIMEOUT": {
+      "internalKey": "appsec.wafTimeout",
+      "optionPath": "appsec.wafTimeout",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Controls the maximum amount of time in microseconds the WAF is allowed to run synchronously for.",
+        "keptExisting": true
+      }
+    },
+    "DD_APP_KEY": {
+      "internalKey": "appKey",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Your Datadog application key. This key is created by your [Datadog organization][2], should include the code_analysis_read scope, and be stored as a secret.",
+        "keptExisting": true
+      }
+    },
+    "DD_AZURE_RESOURCE_GROUP": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Azure metadata",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_AGENTLESS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Does not init if DD_API_KEY is not set",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_AGENTLESS_URL": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Does not change mocha config if CI Visibility fails to init",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Name of the CI Visibility auto-instrumentation tool that injected dd-trace (telemetry only).",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Force-enable CI Visibility behavior for testing or debugging.",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Force-enable CI Visibility behavior for testing or debugging.",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable civisibility.",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_FLAKY_RETRY_COUNT": {
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "ATR is disabled for an attempt to fix test",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_FLAKY_RETRY_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Git_metadata",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Disable git upload if the DD_CIVISIBILITY_GIT_UPLOAD_ENABLED is set to false",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_ITR_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Disable ITR if DD_CIVISIBILITY_ITR_ENABLED is set to false",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_MANUAL_API_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Can run tests",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS": {
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Wait time in milliseconds before flushing CI Visibility RUM events.",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_TEST_COMMAND": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Eslint-disable-next-line eslint-rules/eslint-process-env",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_TEST_MODULE_ID": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Eslint-disable-next-line eslint-rules/eslint-process-env",
+        "keptExisting": true
+      }
+    },
+    "DD_CIVISIBILITY_TEST_SESSION_ID": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "TODO: Figure out alternative ways to pass this information to the worker threads<br>eslint-disable-next-line eslint-rules/eslint-process-env",
+        "keptExisting": true
+      }
+    },
+    "DD_CODE_ORIGIN_FOR_SPANS_ENABLED": {
+      "internalKey": "codeOriginForSpans.enabled",
+      "optionPath": "codeOriginForSpans.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable Code Origin for Spans.",
+        "keptExisting": true
+      }
+    },
+    "DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED": {
+      "internalKey": "codeOriginForSpans.experimental.exit_spans.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Configuration for Code Origin for Spans.",
+        "keptExisting": true
+      }
+    },
+    "DD_CRASHTRACKING_ENABLED": {
+      "internalKey": "crashtracking.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Disable crash tracking for SSI when configured",
+        "keptExisting": true
+      }
+    },
+    "DD_CUSTOM_TRACE_ID": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Custom variable set by the Jenkins Datadog Plugin for trace IDs.",
+        "keptExisting": true
+      }
+    },
+    "DD_DATA_STREAMS_ENABLED": {
+      "internalKey": "dsmEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Data streams checkpointer manual api",
+        "keptExisting": true
+      }
+    },
+    "DD_DBM_PROPAGATION_MODE": {
+      "internalKey": "dbmPropagationMode",
+      "optionPath": "dbmPropagationMode",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enables DBM to APM link using tag injection.",
+        "keptExisting": true
+      }
+    },
+    "DD_DOGSTATSD_HOST": {
+      "internalKey": "dogstatsd.hostname",
+      "optionPath": "dogstatsd.hostname",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "The hostname of the Dogstatsd agent that the metrics will submitted to.",
+        "keptExisting": true
+      }
+    },
+    "DD_DOGSTATSD_PORT": {
+      "internalKey": "dogstatsd.port",
+      "optionPath": "dogstatsd.port",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "The port of the Dogstatsd agent that the metrics will submitted to.",
+        "keptExisting": true
+      }
+    },
+    "DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS": {
+      "internalKey": "dynamicInstrumentation.captureTimeoutMs",
+      "optionPath": "dynamicInstrumentation.captureTimeoutMs",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Timeout in milliseconds for capturing variable values.",
+        "keptExisting": true
+      }
+    },
+    "DD_DYNAMIC_INSTRUMENTATION_ENABLED": {
+      "internalKey": "dynamicInstrumentation.enabled",
+      "optionPath": "dynamicInstrumentation.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable Dynamic Instrumentation.",
+        "keptExisting": true
+      }
+    },
+    "DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE": {
+      "internalKey": "dynamicInstrumentation.probeFile",
+      "optionPath": "dynamicInstrumentation.probeFile",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Path to a custom probes configuration file.",
+        "keptExisting": true
+      }
+    },
+    "DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS": {
+      "internalKey": "dynamicInstrumentation.redactedIdentifiers",
+      "optionPath": "dynamicInstrumentation.redactedIdentifiers",
+      "chosenType": {
+        "value": "array",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "List of identifier names to redact in captured data.",
+        "keptExisting": true
+      }
+    },
+    "DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS": {
+      "internalKey": "dynamicInstrumentation.redactionExcludedIdentifiers",
+      "optionPath": "dynamicInstrumentation.redactionExcludedIdentifiers",
+      "chosenType": {
+        "value": "array",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "List of identifier names to exclude from redaction.",
+        "keptExisting": true
+      }
+    },
+    "DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS": {
+      "internalKey": "dynamicInstrumentation.uploadIntervalSeconds",
+      "optionPath": "dynamicInstrumentation.uploadIntervalSeconds",
+      "chosenType": {
+        "value": "float",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Interval in seconds between uploads of probe data.",
+        "keptExisting": true
+      }
+    },
+    "DD_ENABLE_NX_SERVICE_NAME": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Give DD_SERVICE precedence over NX_TASK_TARGET_PROJECT",
+        "keptExisting": true
+      }
+    },
+    "DD_ENV": {
+      "internalKey": "env",
+      "optionPath": "env",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Set an application’s environment e.g. prod, pre-prod, stage.",
+        "keptExisting": true
+      }
+    },
+    "DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED": {
+      "internalKey": "apmTracingEnabled",
+      "optionPath": "apmTracingEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Used to disable APM Tracing when using standalone products",
+        "keptExisting": true
+      }
+    },
+    "DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED": {
+      "internalKey": "experimental.flaggingProvider.enabled",
+      "optionPath": "experimental.flaggingProvider.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable the feature flagging provider.<br>Requires Remote Config to be properly configured.",
+        "keptExisting": true
+      }
+    },
+    "DD_EXPERIMENTAL_PROFILING_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable experimental profiling.",
+        "keptExisting": true
+      }
+    },
+    "DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED": {
+      "internalKey": "propagateProcessTags.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED",
+        "keptExisting": true
+      }
+    },
+    "DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Git-cache integration tests",
+        "keptExisting": true
+      }
+    },
+    "DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Git-cache integration tests",
+        "keptExisting": true
+      }
+    },
+    "DD_EXTERNAL_ENV": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Docker",
+        "keptExisting": true
+      }
+    },
+    "DD_FLAGGING_PROVIDER_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable flagging provider.",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_BRANCH": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Git",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_COMMIT_AUTHOR_DATE": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Git",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_COMMIT_AUTHOR_EMAIL": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Git",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_COMMIT_AUTHOR_NAME": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Git",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_COMMIT_COMMITTER_DATE": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Git",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_COMMIT_COMMITTER_EMAIL": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Git",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_COMMIT_COMMITTER_NAME": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Git",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_COMMIT_HEAD_SHA": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Git commit SHA for git metadata collection.",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_COMMIT_MESSAGE": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Git",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_COMMIT_SHA": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Basic case",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_FOLDER_PATH": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Disables telemetry if inside a jest worker",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_PROPERTIES_FILE": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Disables telemetry if inside a jest worker",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_PULL_REQUEST_BASE_BRANCH": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Git base branch information for pull requests.",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Git commit SHA for git metadata collection.",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_REPOSITORY_URL": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Basic case",
+        "keptExisting": true
+      }
+    },
+    "DD_GIT_TAG": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Git",
+        "keptExisting": true
+      }
+    },
+    "DD_GRPC_CLIENT_ERROR_STATUSES": {
+      "internalKey": "grpc.client.error.statuses",
+      "chosenType": {
+        "value": "array",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Parse integer range sets",
+        "keptExisting": true
+      }
+    },
+    "DD_GRPC_SERVER_ERROR_STATUSES": {
+      "internalKey": "grpc.server.error.statuses",
+      "chosenType": {
+        "value": "array",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Parse integer range sets",
+        "keptExisting": true
+      }
+    },
+    "DD_HEAP_SNAPSHOT_COUNT": {
+      "internalKey": "heapSnapshot.count",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Number of heap snapshots to write. Set to 0 to disable.",
+        "keptExisting": true
+      }
+    },
+    "DD_HEAP_SNAPSHOT_DESTINATION": {
+      "internalKey": "heapSnapshot.destination",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Directory path where heap snapshots are written.",
+        "keptExisting": true
+      }
+    },
+    "DD_HEAP_SNAPSHOT_INTERVAL": {
+      "internalKey": "heapSnapshot.interval",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Delay in seconds between heap snapshots.",
+        "keptExisting": true
+      }
+    },
+    "DD_IAST_DB_ROWS_TO_TAINT": {
+      "internalKey": "iast.dbRowsToTaint",
+      "optionPath": "iast.dbRowsToTaint",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Defines the number of rows to taint in data coming from databases",
+        "keptExisting": true
+      }
+    },
+    "DD_IAST_DEDUPLICATION_ENABLED": {
+      "internalKey": "iast.deduplicationEnabled",
+      "optionPath": "iast.deduplicationEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable vulnerability deduplication",
+        "keptExisting": true
+      }
+    },
+    "DD_IAST_ENABLED": {
+      "internalKey": "iast.enabled",
+      "optionPath": "iast.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable IAST.",
+        "keptExisting": true
+      }
+    },
+    "DD_IAST_MAX_CONCURRENT_REQUESTS": {
+      "internalKey": "iast.maxConcurrentRequests",
+      "optionPath": "iast.maxConcurrentRequests",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Controls how many request can be analyzing code vulnerabilities at the same time",
+        "keptExisting": true
+      }
+    },
+    "DD_IAST_MAX_CONTEXT_OPERATIONS": {
+      "internalKey": "iast.maxContextOperations",
+      "optionPath": "iast.maxContextOperations",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Controls how many code vulnerabilities can be detected in the same request",
+        "keptExisting": true
+      }
+    },
+    "DD_IAST_REDACTION_ENABLED": {
+      "internalKey": "iast.redactionEnabled",
+      "optionPath": "iast.redactionEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable vulnerability redaction",
+        "keptExisting": true
+      }
+    },
+    "DD_IAST_REDACTION_NAME_PATTERN": {
+      "internalKey": "iast.redactionNamePattern",
+      "optionPath": "iast.redactionNamePattern",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Specifies a regex that will redact sensitive source names in vulnerability reports.",
+        "keptExisting": true
+      }
+    },
+    "DD_IAST_REDACTION_VALUE_PATTERN": {
+      "internalKey": "iast.redactionValuePattern",
+      "optionPath": "iast.redactionValuePattern",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Specifies a regex that will redact sensitive source values in vulnerability reports.",
+        "keptExisting": true
+      }
+    },
+    "DD_IAST_REQUEST_SAMPLING": {
+      "internalKey": "iast.requestSampling",
+      "optionPath": "iast.requestSampling",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Controls the percentage of requests that iast will analyze",
+        "keptExisting": true
+      }
+    },
+    "DD_IAST_SECURITY_CONTROLS_CONFIGURATION": {
+      "internalKey": "iast.securityControlsConfiguration",
+      "optionPath": "iast.securityControlsConfiguration",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Allows to enable security controls. This option is not supported when<br>using ESM.",
+        "keptExisting": true
+      }
+    },
+    "DD_IAST_STACK_TRACE_ENABLED": {
+      "internalKey": "iast.stackTrace.enabled",
+      "optionPath": "iast.stackTrace.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable stack trace reporting.",
+        "keptExisting": true
+      }
+    },
+    "DD_IAST_TELEMETRY_VERBOSITY": {
+      "internalKey": "iast.telemetryVerbosity",
+      "optionPath": "iast.telemetryVerbosity",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Specifies the verbosity of the sent telemetry. Default 'INFORMATION'",
+        "keptExisting": true
+      }
+    },
+    "DD_INJECTION_ENABLED": {
+      "internalKey": "injectionEnabled",
+      "chosenType": {
+        "value": "array",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Initialize instrumentation",
+        "keptExisting": true
+      }
+    },
+    "DD_INJECT_FORCE": {
+      "internalKey": "injectForce",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Initialize instrumentation",
+        "keptExisting": true
+      }
+    },
+    "DD_INSTRUMENTATION_CONFIG_ID": {
+      "internalKey": "instrumentation_config_id",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Identifier used for configuration and correlation.",
+        "keptExisting": true
+      }
+    },
+    "DD_INSTRUMENTATION_INSTALL_ID": {
+      "internalKey": "installSignature.id",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Support legacy direct-set fields through all stable config and env var sources",
+        "keptExisting": true
+      }
+    },
+    "DD_INSTRUMENTATION_INSTALL_TIME": {
+      "internalKey": "installSignature.time",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Support legacy direct-set fields through all stable config and env var sources",
+        "keptExisting": true
+      }
+    },
+    "DD_INSTRUMENTATION_INSTALL_TYPE": {
+      "internalKey": "installSignature.type",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Support legacy direct-set fields through all stable config and env var sources",
+        "keptExisting": true
+      }
+    },
+    "DD_INSTRUMENTATION_TELEMETRY_ENABLED": {
+      "internalKey": "telemetry.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Can run tests and report tests",
+        "keptExisting": true
+      }
+    },
+    "DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD": {
+      "internalKey": "profiling.longLivedThreshold",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "This is only used in testing to not have to wait 30s",
+        "keptExisting": true
+      }
+    },
+    "DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable internal profiling timeline sampling.",
+        "keptExisting": true
+      }
+    },
+    "DD_LAMBDA_HANDLER": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Correctly patch handler where context is the third argument",
+        "keptExisting": true
+      }
+    },
+    "DD_LANGCHAIN_SPAN_CHAR_LIMIT": {
+      "internalKey": "langchain.spanCharLimit",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Maximum number of characters recorded for langchain span data.",
+        "keptExisting": true
+      }
+    },
+    "DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE": {
+      "internalKey": "langchain.spanPromptCompletionSampleRate",
+      "chosenType": {
+        "value": "float",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Rate for langchain span prompt completion.",
+        "keptExisting": true
+      }
+    },
+    "DD_LLMOBS_AGENTLESS_ENABLED": {
+      "internalKey": "llmobs.agentlessEnabled",
+      "optionPath": "llmobs.agentlessEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Set to `true` to disable sending data that requires a Datadog Agent.",
+        "keptExisting": true
+      }
+    },
+    "DD_LLMOBS_ENABLED": {
+      "internalKey": "llmobs.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Disable llmobs if DD_LLMOBS_ENABLED is set to false",
+        "keptExisting": true
+      }
+    },
+    "DD_LLMOBS_ML_APP": {
+      "internalKey": "llmobs.mlApp",
+      "optionPath": "llmobs.mlApp",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "The name of your ML application.",
+        "keptExisting": true
+      }
+    },
+    "DD_LOGS_INJECTION": {
+      "internalKey": "logInjection",
+      "optionPath": "logInjection",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable trace ID injection in log records to be able to correlate<br>traces with logs.",
+        "keptExisting": true
+      }
+    },
+    "DD_LOGS_OTEL_ENABLED": {
+      "internalKey": "otelLogsEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "OpenTelemetry Logs",
+        "keptExisting": true
+      }
+    },
+    "DD_LOG_LEVEL": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Set the level for the [Datadog Agent log][8].",
+        "keptExisting": true
+      }
+    },
+    "DD_METRICS_OTEL_ENABLED": {
+      "internalKey": "otelMetricsEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Does not initialize when OTEL metrics are explicitly disabled",
+        "keptExisting": true
+      }
+    },
+    "DD_MINI_AGENT_PATH": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Path for mini agent path.",
+        "keptExisting": true
+      }
+    },
+    "DD_OPENAI_LOGS_ENABLED": {
+      "internalKey": "openAiLogsEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable openai logs.",
+        "keptExisting": true
+      }
+    },
+    "DD_OPENAI_SPAN_CHAR_LIMIT": {
+      "internalKey": "openai.spanCharLimit",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Maximum number of characters recorded for openai span data.",
+        "keptExisting": true
+      }
+    },
+    "DD_PIPELINE_EXECUTION_ID": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Identifier used for configuration and correlation.",
+        "keptExisting": true
+      }
+    },
+    "DD_PLAYWRIGHT_WORKER": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Internal marker (set to `1`) used to detect Playwright worker processes for CI Visibility IPC payload routing.",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Can be turned off by env var",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_CODEHOTSPOTS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Prioritize non-experimental env variables and warn about experimental ones",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_CPU_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "If set to false, disables the CPU profiling. Defaults to true.",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_DEBUG_SOURCE_MAPS": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Be able to read some env vars",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_DEBUG_UPLOAD_COMPRESSION": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Flush when the profiler is stopped",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_ENABLED": {
+      "internalKey": "profiling.enabled",
+      "optionPath": "profiling",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable profiling.",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_ENDPOINT_COLLECTION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Log deprecation warning for deprecated configurations",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Prioritize non-experimental env variables and warn about experimental ones",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_EXPERIMENTAL_CPU_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Support profiler config with DD_PROFILING_PROFILERS",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Log deprecation warning for deprecated configurations",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Sends a heap profile on OOM with async callback",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE": {
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Sends a heap profile on OOM with async callback",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT": {
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Sends a heap profile on OOM with async callback",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Support OOM heap profiler configuration",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable profiling experimental timeline.",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_EXPORTERS": {
+      "internalKey": "profiling.exporters",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Code hotspots and endpoint tracing works",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_HEAP_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "If set to true, enables Live Heap profiling (in Preview). Defaults to false.",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_HEAP_SAMPLING_INTERVAL": {
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Be able to read some env vars",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_PPROF_PREFIX": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Be able to read some env vars",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_PROFILERS": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Support profiler config with DD_PROFILING_PROFILERS",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_SOURCE_MAP": {
+      "internalKey": "profiling.sourceMap",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable source map support for profiling.",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_TIMELINE_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Be able to read some env vars",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_UPLOAD_PERIOD": {
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Sends profiler API telemetry",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_UPLOAD_TIMEOUT": {
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Be able to read some env vars",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_V8_PROFILER_BUG_WORKAROUND": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Support profiler config with DD_PROFILING_PROFILERS",
+        "keptExisting": true
+      }
+    },
+    "DD_PROFILING_WALLTIME_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "If set to false, disables the Wall time profiling. Defaults to true.",
+        "keptExisting": true
+      }
+    },
+    "DD_REMOTE_CONFIGURATION_ENABLED": {
+      "internalKey": "remoteConfig.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Disabled",
+        "keptExisting": true
+      }
+    },
+    "DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS": {
+      "internalKey": "remoteConfig.pollInterval",
+      "optionPath": "remoteConfig.pollInterval",
+      "chosenType": {
+        "value": "float",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Specifies the remote configuration polling interval in seconds",
+        "keptExisting": true
+      }
+    },
+    "DD_RUNTIME_METRICS_ENABLED": {
+      "internalKey": "runtimeMetrics.enabled",
+      "optionPath": "runtimeMetrics.enabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Apply host wide config",
+        "keptExisting": true
+      }
+    },
+    "DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED": {
+      "internalKey": "runtimeMetrics.eventLoop",
+      "optionPath": "runtimeMetrics.eventLoop",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable runtime metrics event loop.",
+        "keptExisting": true
+      }
+    },
+    "DD_RUNTIME_METRICS_FLUSH_INTERVAL": {
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Interval for runtime metrics flush.",
+        "keptExisting": true
+      }
+    },
+    "DD_RUNTIME_METRICS_GC_ENABLED": {
+      "internalKey": "runtimeMetrics.gc",
+      "optionPath": "runtimeMetrics.gc",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable runtime metrics gc.",
+        "keptExisting": true
+      }
+    },
+    "DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED": {
+      "internalKey": "runtimeMetricsRuntimeId",
+      "optionPath": "runtimeMetricsRuntimeId",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to add an auto-generated `runtime-id` tag to metrics.",
+        "keptExisting": true
+      }
+    },
+    "DD_SERVICE": {
+      "internalKey": "service",
+      "optionPath": "service",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "The service name to be used for this program. If not set, the service name<br>will attempted to be inferred from package.json",
+        "keptExisting": true
+      }
+    },
+    "DD_SERVICE_MAPPING": {
+      "internalKey": "serviceMapping",
+      "optionPath": "serviceMapping",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Provide service name mappings for each plugin.",
+        "keptExisting": true
+      }
+    },
+    "DD_SITE": {
+      "internalKey": "site",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "field": "description",
+        "value": "[Datadog site][4] - **Required**",
+        "source": "docs_other",
+        "confidence": "medium",
+        "evidence": [
+          {
+            "file": "scripts/.cache/datadog-documentation/content/en/serverless/guide/azure_app_service_linux_containers_serverless_init.md",
+            "line": 116,
+            "snippet": "| `DD_SITE` | [Datadog site][4] - **Required** |"
+          }
+        ]
+      }
+    },
+    "DD_SPAN_SAMPLING_RULES": {
+      "internalKey": "sampler.spanSamplingRules",
+      "optionPath": "spanSamplingRules",
+      "chosenType": {
+        "value": "array",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Span sampling rules that take effect when the enclosing trace is dropped, to ingest single spans",
+        "keptExisting": true
+      }
+    },
+    "DD_SPAN_SAMPLING_RULES_FILE": {
+      "internalKey": "sampler.spanSamplingRules",
+      "optionPath": "spanSamplingRules",
+      "chosenType": {
+        "value": "array",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Span sampling rules that take effect when the enclosing trace is dropped, to ingest single spans",
+        "keptExisting": true
+      }
+    },
+    "DD_TAGS": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Tags to apply to produced data. Must be a list of <key>:<value> separated by commas such as: layer:api,team:intake.",
+        "keptExisting": true
+      }
+    },
+    "DD_TELEMETRY_DEBUG": {
+      "internalKey": "telemetry.debug",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Add debug header if DD_TELEMETRY_DEBUG is present",
+        "keptExisting": true
+      }
+    },
+    "DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED": {
+      "internalKey": "telemetry.dependencyCollection",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable telemetry dependency collection.",
+        "keptExisting": true
+      }
+    },
+    "DD_TELEMETRY_FORWARDER_PATH": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Path for telemetry forwarder path.",
+        "keptExisting": true
+      }
+    },
+    "DD_TELEMETRY_HEARTBEAT_INTERVAL": {
+      "internalKey": "telemetry.heartbeatInterval",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Capture auto-instrumentation telemetry",
+        "keptExisting": true
+      }
+    },
+    "DD_TELEMETRY_LOG_COLLECTION_ENABLED": {
+      "internalKey": "telemetry.logCollection",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Be disabled and not subscribe if DD_TELEMETRY_LOG_COLLECTION_ENABLED = false",
+        "keptExisting": true
+      }
+    },
+    "DD_TELEMETRY_METRICS_ENABLED": {
+      "internalKey": "telemetry.metrics",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Not set DD_TELEMETRY_METRICS_ENABLED",
+        "keptExisting": true
+      }
+    },
+    "DD_TEST_FAILED_TEST_REPLAY_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Does not activate it if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false",
+        "keptExisting": true
+      }
+    },
+    "DD_TEST_FLEET_CONFIG_PATH": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Disable stats if config property is used",
+        "keptExisting": true
+      }
+    },
+    "DD_TEST_LOCAL_CONFIG_PATH": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Disable stats if config property is used",
+        "keptExisting": true
+      }
+    },
+    "DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES": {
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Number of retries used by Test Management.",
+        "keptExisting": true
+      }
+    },
+    "DD_TEST_MANAGEMENT_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Does not disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false",
+        "keptExisting": true
+      }
+    },
+    "DD_TEST_SESSION_NAME": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Adds capabilities to tests",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED": {
+      "internalKey": "traceId128BitGenerationEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "DD_TRACING_ENABLED=true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED=false",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED": {
+      "internalKey": "traceId128BitLoggingEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace 128 bit traceid logging.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AEROSPIKE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aerospike.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AGENT_PORT": {
+      "internalKey": "port",
+      "optionPath": "port",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "The port of the trace agent that the tracer will submit to.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AGENT_PROTOCOL_VERSION": {
+      "internalKey": "protocolVersion",
+      "optionPath": "protocolVersion",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Protocol version to use for requests to the agent. The version configured must be supported by the agent version installed or all traces will be dropped.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AGENT_URL": {
+      "optionPath": "url",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Inject Unix Domain Socket path in DD_TRACE_AGENT_URL environment variable and the volume definition to access the corresponding path. Inject URL to use to connect the Datadog Agent for DogStatsD metrics in DD_DOGSTATSD_URL.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AI_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace ai.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AMQP10_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace amqp10.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AMQPLIB_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace amqplib.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_ANTHROPIC_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace anthropic.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_APOLLO_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace apollo.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_APOLLO_GATEWAY_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace apollo gateway.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_APOLLO_SERVER_CORE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace apollo server core.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_APOLLO_SERVER_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace apollo server.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_APOLLO_SERVER_EXPRESS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace apollo server express.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_APOLLO_SERVER_FASTIFY_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace apollo server fastify.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_APOLLO_SUBGRAPH_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace apollo subgraph.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AVSC_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace avsc.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_ADD_SPAN_POINTERS": {
+      "internalKey": "trace.aws.addSpanPointers",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable span pointers for supported AWS SDK operations.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_AWS_BATCH_PROPAGATION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk aws batch propagation.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_AWS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk aws.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk batch propagation.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_BEDROCKRUNTIME_BATCH_PROPAGATION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk bedrockruntime batch propagation.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_BEDROCKRUNTIME_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk bedrockruntime.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_CLOUDWATCHLOGS_BATCH_PROPAGATION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk cloudwatchlogs batch propagation.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_CLOUDWATCHLOGS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk cloudwatchlogs.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_DYNAMODB_BATCH_PROPAGATION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk dynamodb batch propagation.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_DYNAMODB_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk dynamodb.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_EVENTBRIDGE_BATCH_PROPAGATION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk eventbridge batch propagation.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_EVENTBRIDGE_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk eventbridge.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk kinesis batch propagation.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_KINESIS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk kinesis.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_LAMBDA_BATCH_PROPAGATION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk lambda batch propagation.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_LAMBDA_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk lambda.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_NODE_HTTP_HANDLER_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk node http handler.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_REDSHIFT_BATCH_PROPAGATION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk redshift batch propagation.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_REDSHIFT_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk redshift.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_S3_BATCH_PROPAGATION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk s3 batch propagation.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_S3_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk s3.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_SFN_BATCH_PROPAGATION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk sfn batch propagation.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_SFN_CLIENT_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk sfn client.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_SFN_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk sfn.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_SMITHY_CLIENT_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk smithy client.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_SNS_BATCH_PROPAGATION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk sns batch propagation.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_SNS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk sns.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk sqs batch propagation.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_SQS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk sqs.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_STATES_BATCH_PROPAGATION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk states batch propagation.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_STATES_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk states.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_STEPFUNCTIONS_BATCH_PROPAGATION_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk stepfunctions batch propagation.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AWS_SDK_STEPFUNCTIONS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace aws sdk stepfunctions.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AXIOS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace axios.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace azure eventhubs batch links.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AZURE_EVENT_HUBS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace azure event hubs.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AZURE_FUNCTIONS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace azure functions.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace azure servicebus batch links.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_AZURE_SERVICE_BUS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace azure service bus.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_BAGGAGE_MAX_BYTES": {
+      "internalKey": "baggageMaxBytes",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "The maximum number of bytes in the baggage header value. Values less than 3 bytes prevent propagation, because this is the minimum size for a valid key-value pair (for example, k=v).",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_BAGGAGE_MAX_ITEMS": {
+      "internalKey": "baggageMaxItems",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "The maximum number of key-value pairs in the baggage header.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_BAGGAGE_TAG_KEYS": {
+      "internalKey": "baggageTagKeys",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "A comma-separated list of baggage keys that are automatically applied as span tags to the local root span. For example, a baggage key `user.id` is tagged as `baggage.user.id`<br><br>This feature only applies to baggage extracted from incoming HTTP headers. Baggage set with the baggage API is not included.<br>  - To tag all baggage items, set the value to `*`. Use this with caution to avoid exposing sensitive data in tags.<br>  - To disable this feature, set the value to an empty string.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_BEAUTIFUL_LOGS": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Pretty-print JSON payloads in tracer debug logs (adds indentation).",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_BLUEBIRD_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace bluebird.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_BODY_PARSER_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace body parser.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_BSON_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace bson.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_BULLMQ_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace bullmq.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_BUNYAN_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace bunyan.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_CASSANDRA_DRIVER_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace cassandra driver.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_CHILD_PROCESS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace child process.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_CLIENT_IP_ENABLED": {
+      "internalKey": "clientIpEnabled",
+      "optionPath": "clientIpEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable client IP collection from relevant IP headers",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_CLIENT_IP_HEADER": {
+      "internalKey": "clientIpHeader",
+      "optionPath": "clientIpHeader",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Custom header name to source the http.client_ip tag from.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH": {
+      "internalKey": "cloudPayloadTagging.maxDepth",
+      "optionPath": "cloudPayloadTagging.maxDepth",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Maximum depth of payload traversal for tags",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING": {
+      "internalKey": "cloudPayloadTagging.rules",
+      "optionPath": "cloudPayloadTagging.request",
+      "chosenType": {
+        "value": "array",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Additional JSONPath queries to replace with `redacted` in request payloads<br>Undefined or invalid JSONPath queries disable the feature for requests.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING": {
+      "internalKey": "cloudPayloadTagging.rules",
+      "optionPath": "cloudPayloadTagging.request",
+      "chosenType": {
+        "value": "array",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Additional JSONPath queries to replace with `redacted` in request payloads<br>Undefined or invalid JSONPath queries disable the feature for requests.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_COLLECTIONS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace collections.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_COMMONPLUGIN_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace commonplugin.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_CONFLUENTINC_KAFKA_JAVASCRIPT_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace confluentinc kafka javascript.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_CONNECT_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace connect.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_COOKIE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace cookie.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_COOKIE_PARSER_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace cookie parser.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_COUCHBASE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace couchbase.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_CRYPTO_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace crypto.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_CUCUMBER_CUCUMBER_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace cucumber cucumber.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_CUCUMBER_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace cucumber.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_CYPRESS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace cypress.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_DD_TRACE_API_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace dd trace api.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_DEBUG": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enables or disables debug logging (Could help in case of troubleshooting investigation). Valid values are: true or false. Defaults to false.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_DISABLED_INSTRUMENTATIONS": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Capture auto-instrumentation telemetry",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_DISABLED_PLUGINS": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Comma-separated list of plugin IDs to disable. See `index.d.ts` `interface Plugins` for valid IDs.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_DNS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace dns.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS": {
+      "internalKey": "trace.dynamoDb.tablePrimaryKeys",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "JSON object mapping DynamoDB table names to primary key field names (1-2) used for span pointers.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_ELASTICSEARCH_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace elasticsearch.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_ELASTIC_ELASTICSEARCH_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace elastic elasticsearch.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_ELASTIC_TRANSPORT_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace elastic transport.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_ENABLED": {
+      "internalKey": "traceEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enables trace collection. Defaults to true. For more information about trace collection environment variables, see [Library Configuration][9].",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_ENCODING_DEBUG": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable additional trace encoding debug logging.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_EXPERIMENTAL_B3_ENABLED": {
+      "optionPath": "experimental.b3",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace experimental b3.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_EXPERIMENTAL_EXPORTER": {
+      "internalKey": "experimental.exporter",
+      "optionPath": "experimental.exporter",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to write traces to log output or agentless, rather than send to an agent",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED": {
+      "internalKey": "experimental.enableGetRumData",
+      "optionPath": "experimental.enableGetRumData",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable the experimental `getRumData` method.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Set new runtimeMetricsRuntimeId from deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_EXPERIMENTAL_SPAN_COUNTS": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable experimental span counts.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_EXPERIMENTAL_STATE_TRACKING": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable experimental state tracking.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_EXPRESS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Disable loading instrumentations using DD_TRACE_<INTEGRATION>_ENABLED",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_EXPRESS_MONGO_SANITIZE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace express mongo sanitize.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_EXPRESS_SESSION_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace express session.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_FASTIFY_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace fastify.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_FETCH_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace fetch.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_FIND_MY_WAY_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace find my way.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_FLUSH_INTERVAL": {
+      "internalKey": "flushInterval",
+      "optionPath": "flushInterval",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Interval in milliseconds at which the tracer will submit traces to the agent.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_FS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace fs.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GCP_PUBSUB_PUSH_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace gcp pubsub push.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GENERIC_POOL_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace generic pool.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GIT_METADATA_ENABLED": {
+      "internalKey": "gitMetadataEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Disables telemetry if inside a jest worker",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GLOBAL_TAGS": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Give priority to the common agent environment variable",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GOOGLE_CLOUD_PUBSUB_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace google cloud pubsub.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GOOGLE_CLOUD_VERTEXAI_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace google cloud vertexai.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GOOGLE_GAX_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace google gax.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GOOGLE_GENAI_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace google genai.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GRAPHQL_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace graphql.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GRAPHQL_ERROR_EXTENSIONS": {
+      "internalKey": "graphqlErrorExtensions",
+      "chosenType": {
+        "value": "array",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Comma-separated list of GraphQL error extension keys to record on span events.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GRAPHQL_TAG_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace graphql tag.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GRAPHQL_TOOLS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace graphql tools.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GRAPHQL_TOOLS_EXECUTOR_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace graphql tools executor.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GRAPHQL_YOGA_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace graphql yoga.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GRPC_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace grpc.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GRPC_GRPC_JS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace grpc grpc js.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_GRPC_PROTO_LOADER_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace grpc proto loader.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_HANDLEBARS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace handlebars.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_HAPI_BOOM_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace hapi boom.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_HAPI_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace hapi.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_HAPI_HAPI_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace hapi hapi.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_HEADER_TAGS": {
+      "internalKey": "headerTags",
+      "chosenType": {
+        "value": "array",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Automatically apply specified HTTP headers as span tags. If a custom tag name is not specified, the tag key defaults to http.request.headers. for request headers and http.response.headers. for response headers.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_HONO_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace hono.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_HTTP2_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace http2.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_HTTPS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace https.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_HTTP_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace http.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED": {
+      "internalKey": "inferredProxyServicesEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace inferred proxy services.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_IOREDIS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace ioredis.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_IOVALKEY_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace iovalkey.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_JEST_CIRCUS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace jest circus.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_JEST_CONFIG_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace jest config.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_JEST_CORE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace jest core.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_JEST_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace jest.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_JEST_ENVIRONMENT_JSDOM_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace jest environment jsdom.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_JEST_ENVIRONMENT_NODE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace jest environment node.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_JEST_GLOBALS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace jest globals.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_JEST_REPORTERS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace jest reporters.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_JEST_RUNTIME_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace jest runtime.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_JEST_TEST_SEQUENCER_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace jest test sequencer.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_JEST_TRANSFORM_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace jest transform.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_JEST_WORKER_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace jest worker.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_KAFKAJS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace kafkajs.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_KNEX_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace knex.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_KOA_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace koa.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_KOA_ROUTER_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace koa router.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_KOA_ROUTE_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace koa route.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_KOA_WEBSOCKET_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace koa websocket.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_LANGCHAIN_ANTHROPIC_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace langchain anthropic.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_LANGCHAIN_COHERE_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace langchain cohere.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_LANGCHAIN_CORE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace langchain core.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_LANGCHAIN_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace langchain.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_LANGCHAIN_GOOGLE_GENAI_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace langchain google genai.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_LANGCHAIN_OPENAI_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace langchain openai.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_LDAPJS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace ldapjs.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_LDAPJS_PROMISE_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace ldapjs promise.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_LEGACY_BAGGAGE_ENABLED": {
+      "internalKey": "legacyBaggageEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace legacy baggage.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_LIMITD_CLIENT_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace limitd client.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_LODASH_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace lodash.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_LOG_LEVEL": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Capture telemetry if both DD and OTEL env vars are set",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_LOOPBACK_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace loopback.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MARIADB_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace mariadb.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MEMCACHED_COMMAND_ENABLED": {
+      "internalKey": "memcachedCommandEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MEMCACHED_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace memcached.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MICROGATEWAY_CORE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace microgateway core.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MIDDIE_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace middie.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MIDDLEWARE_TRACING_ENABLED": {
+      "internalKey": "middlewareTracingEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace middleware tracing.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MOCHA_EACH_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace mocha each.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MOCHA_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace mocha.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MOLECULER_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace moleculer.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MONGODB_CORE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace mongodb core.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MONGODB_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace mongodb.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MONGODB_HEARTBEAT_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace mongodb heartbeat.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MONGOOSE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace mongoose.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MQUERY_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace mquery.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MULTER_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace multer.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MYSQL2_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace mysql2.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_MYSQL_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace mysql.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_NATIVE_SPAN_EVENTS": {
+      "internalKey": "trace.nativeSpanEvents",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Encode span events in the native `span_events` payload format instead of `meta.events` JSON.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_NET_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace net.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_NEXT_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace next.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_NODE_CHILD_PROCESS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace node child process.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_NODE_REDIS_CLIENT_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace node redis client.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_NODE_SERIALIZE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace node serialize.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_NYC_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace nyc.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP": {
+      "internalKey": "queryStringObfuscation",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Applies a regex to redact sensitive data from query strings on incoming HTTP requests. The default regex matches various sensitive data patterns, including passwords, tokens, API keys, private keys, and authorization terms. Matches are r...",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_OPENAI_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace openai.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_OPENSEARCH_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace opensearch.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_OPENSEARCH_PROJECT_OPENSEARCH_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace opensearch project opensearch.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_OPENTELEMETRY_SDK_TRACE_NODE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace opentelemetry sdk trace node.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_ORACLEDB_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace oracledb.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_OTEL_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Capture auto-instrumentation telemetry",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PARTIAL_FLUSH_MIN_SPANS": {
+      "internalKey": "flushMinSpans",
+      "optionPath": "flushMinSpans",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PASSPORT_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace passport.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PASSPORT_HTTP_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace passport http.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PASSPORT_LOCAL_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace passport local.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED": {
+      "optionPath": "spanComputePeerService",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Activate peer service in v1 unless explicitly false",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PEER_SERVICE_MAPPING": {
+      "internalKey": "peerServiceMapping",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Comma-separated `from:to` mapping to remap `peer.service` (sets `_dd.peer.service.remapped_from`).",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PG_CURSOR_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace pg cursor.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PG_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace pg.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PG_NATIVE_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace pg native.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PG_QUERY_STREAM_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace pg query stream.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PINO_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace pino.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PINO_PRETTY_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace pino pretty.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PLAYWRIGHT_CORE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace playwright core.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PLAYWRIGHT_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace playwright.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PLAYWRIGHT_TEST_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace playwright test.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PRISMA_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace prisma.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PROCESS_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace process.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PROMISE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace promise.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PROMISE_JS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace promise js.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT": {
+      "internalKey": "tracePropagationBehaviorExtract",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Not extract baggage when Trace_Propagation_Behavior_Extract is set to ignore",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PROPAGATION_EXTRACT_FIRST": {
+      "internalKey": "tracePropagationExtractFirst",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Read case-insensitive booleans from environment variables",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PROPAGATION_STYLE": {
+      "internalKey": "tracePropagationStyle.inject",
+      "optionPath": "tracePropagationStyle.inject",
+      "chosenType": {
+        "value": "array",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Selection of context propagation injection mechanisms.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PROPAGATION_STYLE_EXTRACT": {
+      "internalKey": "tracePropagationStyle.extract",
+      "optionPath": "tracePropagationStyle.extract",
+      "chosenType": {
+        "value": "array",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Selection and priority order of context propagation extraction mechanisms.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PROPAGATION_STYLE_INJECT": {
+      "internalKey": "tracePropagationStyle.inject",
+      "optionPath": "tracePropagationStyle.inject",
+      "chosenType": {
+        "value": "array",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Selection of context propagation injection mechanisms.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PROTOBUFJS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace protobufjs.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_PUG_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace pug.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_Q_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace q.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_RATE_LIMIT": {
+      "internalKey": "sampler.rateLimit",
+      "optionPath": "ingestion.rateLimit",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Global rate limit that is applied on the global sample rate and all rules,<br>and controls the ingestion rate limit between the agent and the backend.<br>Defaults to deferring the decision to the agent.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_REACT_DOM_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace react dom.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_REACT_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace react.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_REDIS_CLIENT_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace redis client.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_REDIS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace redis.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED": {
+      "internalKey": "spanRemoveIntegrationFromService",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace remove integration service names.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_REPORT_HOSTNAME": {
+      "internalKey": "reportHostname",
+      "optionPath": "reportHostname",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_REQUEST_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace request.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_RESOURCE_RENAMING_ENABLED": {
+      "internalKey": "resourceRenamingEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Be disabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is false",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_RESTIFY_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace restify.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_RHEA_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace rhea.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_ROUTER_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace router.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_SAMPLE_RATE": {
+      "internalKey": "sampleRate",
+      "optionPath": "ingestion.sampleRate",
+      "chosenType": {
+        "value": "float",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_SAMPLING_RULES": {
+      "internalKey": "sampler.rules",
+      "optionPath": "samplingRules",
+      "chosenType": {
+        "value": "json",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Sampling rules to apply to priority sampling. Each rule is a JSON,<br>consisting of `service` and `name`, which are regexes to match against<br>a trace's `service` and `name`, and a corresponding `sampleRate`. If not<br>specified, will defer to global sampling rate for all spans.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_SCOPE": {
+      "internalKey": "scope",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Legacy scope configuration (async context propagation); currently has no effect.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_SELENIUM_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace selenium.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_SELENIUM_WEBDRIVER_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace selenium webdriver.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_SEQUELIZE_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace sequelize.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_SHAREDB_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace sharedb.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_SMITHY_SMITHY_CLIENT_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace smithy smithy client.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_SPAN_ATTRIBUTE_SCHEMA": {
+      "internalKey": "spanAttributeSchema",
+      "optionPath": "spanAttributeSchema",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Activate peer service in v1 unless explicitly false",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_SPAN_LEAK_DEBUG": {
+      "internalKey": "spanLeakDebug",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "0: Disabled, 1: logging, 2: garbage collection + logging",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_SQLITE3_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace sqlite3.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_STARTUP_LOGS": {
+      "internalKey": "startupLogs",
+      "optionPath": "startupLogs",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Whether to enable startup logs.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_STATS_COMPUTATION_ENABLED": {
+      "optionPath": "stats",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Disable stats",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_SUFFIXPLUGIN_ENABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace suffixplugin.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_TAGS": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Additional tags to apply to traces, as comma-separated `key:value` pairs.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_TEDIOUS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace tedious.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_UNDICI_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace undici.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_URL_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace url.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_VITEST_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace vitest.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_VITEST_RUNNER_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace vitest runner.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_VM_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace vm.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_WEBSOCKET_MESSAGES_ENABLED": {
+      "internalKey": "traceWebsocketMessagesEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace websocket messages.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING": {
+      "internalKey": "traceWebsocketMessagesInheritSampling",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "By default, websocket messages preserve the same sampling as the span captured during the handshake. This ensures that, if a handshake span has been sampled, all the messages in its session will also be sampled. To disable that behavior and sample each websocket message independently, set this configuration to `false`.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES": {
+      "internalKey": "traceWebsocketMessagesSeparateTraces",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "By default, each received message generates a new trace. The handshake is linked to it as a span link. Setting this parameter to `false` causes all the spans captured during the session to be in the same trace.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_WHEN_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace when.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_WINSTON_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace winston.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_WORKERPOOL_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace workerpool.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_WS_ENABLED": {
+      "chosenType": {
+        "field": "type",
+        "value": "boolean",
+        "source": "heuristic",
+        "confidence": "medium"
+      },
+      "chosenDescription": {
+        "value": "Enable/disable trace ws.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH": {
+      "internalKey": "tagsHeaderMaxLength",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Maximum length of the `x-datadog-tags` header for trace tag propagation. Set to 0 to disable.",
+        "keptExisting": true
+      }
+    },
+    "DD_TRACING_ENABLED": {
+      "internalKey": "tracing",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "DD_TRACING_ENABLED=false",
+        "keptExisting": true
+      }
+    },
+    "DD_VERSION": {
+      "internalKey": "version",
+      "optionPath": "version",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "The version number of the application. If not set, the version<br>will attempted to be inferred from package.json.",
+        "keptExisting": true
+      }
+    },
+    "DD_VERTEXAI_SPAN_CHAR_LIMIT": {
+      "internalKey": "vertexai.spanCharLimit",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Maximum number of characters recorded for vertexai span data.",
+        "keptExisting": true
+      }
+    },
+    "DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE": {
+      "internalKey": "vertexai.spanPromptCompletionSampleRate",
+      "chosenType": {
+        "value": "float",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Rate for vertexai span prompt completion.",
+        "keptExisting": true
+      }
+    },
+    "DD_VITEST_WORKER": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Internal marker (set to `1`) used to detect Vitest worker processes for CI Visibility IPC payload routing.",
+        "keptExisting": true
+      }
+    },
+    "OTEL_BSP_MAX_EXPORT_BATCH_SIZE": {
+      "internalKey": "otelMaxExportBatchSize",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "OpenTelemetry Logs",
+        "keptExisting": true
+      }
+    },
+    "OTEL_BSP_MAX_QUEUE_SIZE": {
+      "internalKey": "otelMaxQueueSize",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Rejects negative values for all configs",
+        "keptExisting": true
+      }
+    },
+    "OTEL_BSP_SCHEDULE_DELAY": {
+      "internalKey": "otelBatchTimeout",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Rejects negative values for all configs",
+        "keptExisting": true
+      }
+    },
+    "OTEL_EXPORTER_OTLP_ENDPOINT": {
+      "internalKey": "otelUrl",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Only set if there's a custom URL, otherwise let calc phase handle the default",
+        "keptExisting": true
+      }
+    },
+    "OTEL_EXPORTER_OTLP_HEADERS": {
+      "internalKey": "otelHeaders",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Configures OTLP headers from environment variable",
+        "keptExisting": true
+      }
+    },
+    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": {
+      "internalKey": "otelLogsUrl",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Appends /v1/logs to endpoint if not provided",
+        "keptExisting": true
+      }
+    },
+    "OTEL_EXPORTER_OTLP_LOGS_HEADERS": {
+      "internalKey": "otelLogsHeaders",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Prioritizes logs-specific headers over generic OTLP headers",
+        "keptExisting": true
+      }
+    },
+    "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": {
+      "internalKey": "otelLogsProtocol",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Exports logs using JSON protocol",
+        "keptExisting": true
+      }
+    },
+    "OTEL_EXPORTER_OTLP_LOGS_TIMEOUT": {
+      "internalKey": "otelLogsTimeout",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Configures OTLP timeout from environment variable",
+        "keptExisting": true
+      }
+    },
+    "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": {
+      "internalKey": "otelMetricsUrl",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Configures OTLP endpoint from environment variable",
+        "keptExisting": true
+      }
+    },
+    "OTEL_EXPORTER_OTLP_METRICS_HEADERS": {
+      "internalKey": "otelMetricsHeaders",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Prioritizes metrics-specific headers over generic OTLP headers",
+        "keptExisting": true
+      }
+    },
+    "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL": {
+      "internalKey": "otelMetricsProtocol",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Logs warning and falls back to protobuf when gRPC protocol is set",
+        "keptExisting": true
+      }
+    },
+    "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE": {
+      "internalKey": "otelMetricsTemporalityPreference",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Exports observable counter metrics",
+        "keptExisting": true
+      }
+    },
+    "OTEL_EXPORTER_OTLP_METRICS_TIMEOUT": {
+      "internalKey": "otelMetricsTimeout",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Configures OTLP timeout from environment variable",
+        "keptExisting": true
+      }
+    },
+    "OTEL_EXPORTER_OTLP_PROTOCOL": {
+      "internalKey": "otelProtocol",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Configures protocol from environment variable",
+        "keptExisting": true
+      }
+    },
+    "OTEL_EXPORTER_OTLP_TIMEOUT": {
+      "internalKey": "otelTimeout",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Falls back to generic timeout when metrics-specific not set",
+        "keptExisting": true
+      }
+    },
+    "OTEL_LOGS_EXPORTER": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Capture telemetry if both DD and OTEL env vars are set",
+        "keptExisting": true
+      }
+    },
+    "OTEL_LOG_LEVEL": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Capture telemetry if both DD and OTEL env vars are set",
+        "keptExisting": true
+      }
+    },
+    "OTEL_METRICS_EXPORTER": {
+      "internalKey": "otelMetricsEnabled",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Capture telemetry if both DD and OTEL env vars are set",
+        "keptExisting": true
+      }
+    },
+    "OTEL_METRIC_EXPORT_INTERVAL": {
+      "internalKey": "otelMetricsExportInterval",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "OpenTelemetry Meter Provider",
+        "keptExisting": true
+      }
+    },
+    "OTEL_METRIC_EXPORT_TIMEOUT": {
+      "internalKey": "otelMetricsExportTimeout",
+      "chosenType": {
+        "value": "int",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Rejects negative values for all configs",
+        "keptExisting": true
+      }
+    },
+    "OTEL_PROPAGATORS": {
+      "internalKey": "tracePropagationStyle.otelPropagators",
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Capture telemetry if both DD and OTEL env vars are set",
+        "keptExisting": true
+      }
+    },
+    "OTEL_RESOURCE_ATTRIBUTES": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Capture telemetry if both DD and OTEL env vars are set",
+        "keptExisting": true
+      }
+    },
+    "OTEL_SDK_DISABLED": {
+      "chosenType": {
+        "value": "boolean",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Capture telemetry if both DD and OTEL env vars are set",
+        "keptExisting": true
+      }
+    },
+    "OTEL_SERVICE_NAME": {
+      "internalKey": "service",
+      "optionPath": "service",
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "The service name to be used for this program. If not set, the service name<br>will attempted to be inferred from package.json",
+        "keptExisting": true
+      }
+    },
+    "OTEL_TRACES_EXPORTER": {
+      "chosenType": {
+        "value": "string",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Capture telemetry if both DD and OTEL env vars are set",
+        "keptExisting": true
+      }
+    },
+    "OTEL_TRACES_SAMPLER": {
+      "internalKey": "sampleRate",
+      "optionPath": "sampleRate",
+      "chosenType": {
+        "value": "float",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.",
+        "keptExisting": true
+      }
+    },
+    "OTEL_TRACES_SAMPLER_ARG": {
+      "internalKey": "sampleRate",
+      "optionPath": "sampleRate",
+      "chosenType": {
+        "value": "float",
+        "keptExisting": true
+      },
+      "chosenDescription": {
+        "value": "Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.",
+        "keptExisting": true
+      }
+    }
+  }
+}
