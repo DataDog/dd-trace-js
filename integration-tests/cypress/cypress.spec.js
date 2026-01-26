@@ -20,6 +20,7 @@ const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const coverageFixture = require('../ci-visibility/fixtures/coverage.json')
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_COMMAND,
   TEST_MODULE,
   TEST_FRAMEWORK,
@@ -1791,6 +1792,206 @@ moduleTypes.forEach(({
           receiverPromise
         ])
         assert.match(testOutput, /Retrying "other context fails" to detect flakes because it is new/)
+      })
+    })
+
+    context('final_status tag', () => {
+      it('sets final_status tag on regular tests without retry features', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: false,
+          early_flake_detection: {
+            enabled: false
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.ok(tests.length > 0, 'Expected at least one test')
+
+            tests.forEach(test => {
+              const testName = test.meta[TEST_NAME]
+              const testStatus = test.meta[TEST_STATUS]
+              const finalStatus = test.meta[TEST_FINAL_STATUS]
+
+              assert.ok(
+                finalStatus,
+                `Expected TEST_FINAL_STATUS to be set for test "${testName}" with status "${testStatus}"`
+              )
+              assert.strictEqual(
+                finalStatus,
+                testStatus,
+                `Expected TEST_FINAL_STATUS "${finalStatus}" to match TEST_STATUS "${testStatus}" for test "${testName}"`
+              )
+            })
+          }, 25000)
+
+        const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: 'cypress/e2e/basic-pass.js'
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([once(childProcess, 'exit'), receiverPromise])
+      })
+
+      it('sets final_status tag only on last EFD retry', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          },
+          known_tests_enabled: true
+        })
+
+        receiver.setKnownTests({
+          cypress: {
+            'cypress/e2e/spec.cy.js': [
+              // 'context passes' is considered new
+              'other context fails'
+            ]
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            // New tests are retried - only the last retry should have final_status
+            const newTests = tests.filter(test =>
+              test.resource === 'cypress/e2e/spec.cy.js.context passes'
+            )
+            assert.strictEqual(newTests.length, NUM_RETRIES_EFD + 1)
+
+            const testsWithFinalStatus = newTests.filter(test => TEST_FINAL_STATUS in test.meta)
+            assert.strictEqual(testsWithFinalStatus.length, 1, 'Expected exactly one test with final_status')
+            assert.strictEqual(
+              testsWithFinalStatus[0].meta[TEST_FINAL_STATUS],
+              testsWithFinalStatus[0].meta[TEST_STATUS]
+            )
+
+            const testsWithoutFinalStatus = newTests.filter(test => !(TEST_FINAL_STATUS in test.meta))
+            assert.strictEqual(
+              testsWithoutFinalStatus.length,
+              NUM_RETRIES_EFD,
+              'Expected all retries to not have final_status'
+            )
+
+            // Known tests should have final_status set
+            const knownTests = tests.filter(test =>
+              test.resource === 'cypress/e2e/spec.cy.js.other context fails'
+            )
+            assert.strictEqual(knownTests.length, 1)
+            assert.ok(knownTests[0].meta[TEST_FINAL_STATUS], 'Expected final_status on known tests')
+          }, 25000)
+
+        const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([once(childProcess, 'exit'), receiverPromise])
+      })
+
+      it('sets final_status tag only on last ATR retry', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: {
+            enabled: false
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            // Test that passes on third attempt - only the last one should have final_status
+            const eventuallyPassingTests = tests.filter(
+              test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes'
+            )
+            assert.strictEqual(eventuallyPassingTests.length, 3)
+
+            const passingTestsWithFinalStatus = eventuallyPassingTests.filter(
+              test => TEST_FINAL_STATUS in test.meta
+            )
+            assert.strictEqual(
+              passingTestsWithFinalStatus.length,
+              1,
+              'Expected exactly one eventually-passing test with final_status'
+            )
+            assert.strictEqual(passingTestsWithFinalStatus[0].meta[TEST_FINAL_STATUS], 'pass')
+
+            // Test that never passes - only the last retry should have final_status
+            const neverPassingTests = tests.filter(
+              test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry never passes'
+            )
+            assert.strictEqual(neverPassingTests.length, 6) // retries = 5, so 6 total attempts
+
+            const failingTestsWithFinalStatus = neverPassingTests.filter(
+              test => TEST_FINAL_STATUS in test.meta
+            )
+            assert.strictEqual(
+              failingTestsWithFinalStatus.length,
+              1,
+              'Expected exactly one never-passing test with final_status'
+            )
+            assert.strictEqual(failingTestsWithFinalStatus[0].meta[TEST_FINAL_STATUS], 'fail')
+
+            // Test that always passes - should have final_status set
+            const alwaysPassingTests = tests.filter(
+              test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
+            )
+            assert.strictEqual(alwaysPassingTests.length, 1)
+            assert.strictEqual(alwaysPassingTests[0].meta[TEST_FINAL_STATUS], 'pass')
+          }, 25000)
+
+        const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: 'cypress/e2e/flaky-test-retries.js'
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([once(childProcess, 'exit'), receiverPromise])
       })
     })
 

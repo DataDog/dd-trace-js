@@ -2,6 +2,7 @@
 
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_IS_RUM_ACTIVE,
   TEST_CODE_OWNERS,
   getTestEnvironmentMetadata,
@@ -241,6 +242,7 @@ class CypressPlugin {
   isSuitesSkippingEnabled = false
   isCodeCoverageEnabled = false
   isFlakyTestRetriesEnabled = false
+  flakyTestRetriesCount = 0
   isEarlyFlakeDetectionEnabled = false
   isKnownTestsEnabled = false
   earlyFlakeDetectionNumRetries = 0
@@ -340,6 +342,7 @@ class CypressPlugin {
           this.isKnownTestsEnabled = isKnownTestsEnabled
           if (isFlakyTestRetriesEnabled && this.isTestIsolationEnabled) {
             this.isFlakyTestRetriesEnabled = true
+            this.flakyTestRetriesCount = flakyTestRetriesCount
             this.cypressConfig.retries.runMode = flakyTestRetriesCount
           }
           this.isTestManagementTestsEnabled = isTestManagementEnabled
@@ -372,6 +375,36 @@ class CypressPlugin {
       this.getTestSuiteProperties(testSuite)?.[testName]?.properties || {}
 
     return { isAttemptToFix, isDisabled, isQuarantined }
+  }
+
+  getFinalStatus (testName, testStatus, { isNew, isModified, isEfdRetry, isAttemptToFix }) {
+    const testStatuses = this.testStatuses[testName] || []
+    // testStatuses hasn't been updated yet with current status, so current execution is length + 1
+    const currentExecutionNumber = testStatuses.length + 1
+
+    // EFD: Check if this is the final EFD execution
+    const isEfdActive = this.isEarlyFlakeDetectionEnabled && (isNew || isModified)
+    const totalEfdExecutions = 1 + (this.earlyFlakeDetectionNumRetries || 0)
+    const isLastEfdExecution = currentExecutionNumber >= totalEfdExecutions
+    const isFinalEfdTestExecution = this.isEarlyFlakeDetectionEnabled && (!isEfdActive || isLastEfdExecution)
+
+    // ATR: Check if this is the final ATR execution
+    // Cypress uses its built-in retry mechanism - attempt index is tracked via testStatuses
+    const isAtrEnabled = this.isFlakyTestRetriesEnabled && !isEfdRetry && !isAttemptToFix
+    const isLastAtrRetry = testStatus === 'pass' || currentExecutionNumber >= (this.flakyTestRetriesCount + 1)
+    const isFinalAtrTestExecution = isAtrEnabled && isLastAtrRetry
+
+    // Attempt to Fix: Check if this is the final attempt
+    const isFinalAttemptToFixExecution = this.isTestManagementTestsEnabled && isAttemptToFix &&
+      currentExecutionNumber >= (this.testManagementAttemptToFixRetries + 1)
+
+    // When no retry features are active, every test execution is final
+    const noRetryFeaturesActive =
+      !this.isEarlyFlakeDetectionEnabled && !this.isFlakyTestRetriesEnabled && !isAttemptToFix
+    const isFinalTestExecution =
+      noRetryFeaturesActive || isFinalEfdTestExecution || isFinalAtrTestExecution || isFinalAttemptToFixExecution
+
+    return isFinalTestExecution ? testStatus : undefined
   }
 
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
@@ -703,6 +736,7 @@ class CypressPlugin {
       const skippedTestSpan = this.getTestSpan({ testName: cypressTestName, testSuite: spec.relative, testSourceFile })
 
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
+      skippedTestSpan.setTag(TEST_FINAL_STATUS, 'skip')
       if (isSkippedByItr) {
         skippedTestSpan.setTag(TEST_SKIPPED_BY_ITR, 'true')
       }
@@ -898,6 +932,12 @@ class CypressPlugin {
         }
         const testStatus = CYPRESS_STATUS_TO_TEST_STATUS[state]
         this.activeTestSpan.setTag(TEST_STATUS, testStatus)
+
+        // Calculate finalStatus BEFORE updating testStatuses so the count is correct
+        const finalStatus = this.getFinalStatus(testName, testStatus, { isNew, isModified, isEfdRetry, isAttemptToFix })
+        if (finalStatus) {
+          this.activeTestSpan.setTag(TEST_FINAL_STATUS, finalStatus)
+        }
 
         // Save the test status to know if it has passed all retries
         if (this.testStatuses[testName]) {
