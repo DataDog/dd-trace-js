@@ -99,6 +99,36 @@ function getSuiteStatusFromTestStatuses (testStatuses) {
   return 'pass'
 }
 
+function getFinalStatus (pickleId, status, { isNew, isModified, isEfdRetry, isAttemptToFix }) {
+  // lastStatusByPickleId has already been updated with the current status at this point
+  const testStatuses = lastStatusByPickleId.get(pickleId) || []
+  const currentExecutionNumber = testStatuses.length
+
+  // EFD: Check if this is the final EFD execution
+  const isEfdActive = isEarlyFlakeDetectionEnabled && (isNew || isModified)
+  const totalEfdExecutions = 1 + (earlyFlakeDetectionNumRetries || 0)
+  const isLastEfdExecution = currentExecutionNumber >= totalEfdExecutions
+  const isFinalEfdTestExecution = isEarlyFlakeDetectionEnabled && (!isEfdActive || isLastEfdExecution)
+
+  // ATR: Check if this is the final ATR execution
+  // Cucumber uses its own retry mechanism - numTestRetries is the total retry count
+  const isAtrEnabled = isFlakyTestRetriesEnabled && !isEfdRetry && !isAttemptToFix
+  const isLastAtrRetry = status === 'pass' || currentExecutionNumber >= (numTestRetries + 1)
+  const isFinalAtrTestExecution = isAtrEnabled && isLastAtrRetry
+
+  // Attempt to Fix: Check if this is the final attempt
+  const isFinalAttemptToFixExecution = isTestManagementTestsEnabled && isAttemptToFix &&
+    currentExecutionNumber >= (testManagementAttemptToFixRetries + 1)
+
+  // When no retry features are active, every test execution is final
+  const noRetryFeaturesActive =
+    !isEarlyFlakeDetectionEnabled && !isFlakyTestRetriesEnabled && !isAttemptToFix
+  const isFinalTestExecution =
+    noRetryFeaturesActive || isFinalEfdTestExecution || isFinalAtrTestExecution || isFinalAttemptToFixExecution
+
+  return isFinalTestExecution ? status : undefined
+}
+
 function getStatusFromResult (result) {
   if (result.status === 1) {
     return { status: 'pass' }
@@ -353,6 +383,9 @@ function wrapRun (pl, isLatestVersion, version) {
           isEfdRetry = numRetries > 0
         }
 
+        // Calculate finalStatus after all flags are set and lastStatusByPickleId has been updated
+        const finalStatus = getFinalStatus(this.pickle.id, status, { isNew, isModified, isEfdRetry, isAttemptToFix })
+
         const attemptCtx = numAttemptToCtx.get(numAttempt)
 
         const error = getErrorFromCucumberResult(result)
@@ -375,6 +408,7 @@ function wrapRun (pl, isLatestVersion, version) {
           isDisabled,
           isQuarantined,
           isModified,
+          finalStatus,
           ...attemptCtx.currentStore
         })
       })

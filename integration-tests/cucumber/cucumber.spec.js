@@ -18,6 +18,7 @@ const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_TYPE,
   TEST_SKIPPED_BY_ITR,
   TEST_COMMAND,
@@ -1708,6 +1709,131 @@ describe(`cucumber@${version} commonJS`, () => {
               once(childProcess, 'exit'),
               eventsPromise,
             ])
+          })
+        })
+      })
+
+      context('final_status tag', () => {
+        it('sets final_status tag on regular tests without retry features', (done) => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: false,
+            early_flake_detection: {
+              enabled: false
+            }
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              assert.ok(tests.length > 0, 'Expected at least one test')
+
+              tests.forEach(test => {
+                const testName = test.meta[TEST_NAME]
+                const testStatus = test.meta[TEST_STATUS]
+                const finalStatus = test.meta[TEST_FINAL_STATUS]
+
+                assert.ok(
+                  finalStatus,
+                  `Expected TEST_FINAL_STATUS to be set for test "${testName}" with status "${testStatus}"`
+                )
+                assert.strictEqual(
+                  finalStatus,
+                  testStatus,
+                  `Expected TEST_FINAL_STATUS "${finalStatus}" to match TEST_STATUS "${testStatus}" for test "${testName}"`
+                )
+              })
+            }, 25000)
+
+          childProcess = exec(
+            './node_modules/.bin/cucumber-js ci-visibility/features/farewell.feature',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port)
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            eventsPromise.then(() => {
+              done()
+            }).catch(done)
+          })
+        })
+
+        it('sets final_status tag only on last EFD retry', (done) => {
+          const NUM_RETRIES_EFD = 3
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
+            },
+            known_tests_enabled: true
+          })
+
+          receiver.setKnownTests({
+            cucumber: {
+              'ci-visibility/features/farewell.feature': ['Say farewell'],
+              'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
+            }
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              // New test 'Say whatever' is retried - only the last retry should have final_status
+              const newTests = tests.filter(test =>
+                test.resource === 'ci-visibility/features/farewell.feature.Say whatever'
+              )
+              assert.strictEqual(newTests.length, NUM_RETRIES_EFD + 1)
+
+              const testsWithFinalStatus = newTests.filter(test => TEST_FINAL_STATUS in test.meta)
+              assert.strictEqual(testsWithFinalStatus.length, 1, 'Expected exactly one test with final_status')
+              assert.strictEqual(
+                testsWithFinalStatus[0].meta[TEST_FINAL_STATUS],
+                testsWithFinalStatus[0].meta[TEST_STATUS]
+              )
+
+              const testsWithoutFinalStatus = newTests.filter(test => !(TEST_FINAL_STATUS in test.meta))
+              assert.strictEqual(
+                testsWithoutFinalStatus.length,
+                NUM_RETRIES_EFD,
+                'Expected all retries to not have final_status'
+              )
+
+              // Known tests should have final_status set
+              const knownTests = tests.filter(test =>
+                test.resource === 'ci-visibility/features/farewell.feature.Say farewell'
+              )
+              assert.strictEqual(knownTests.length, 1)
+              assert.ok(knownTests[0].meta[TEST_FINAL_STATUS], 'Expected final_status on known tests')
+            }, 25000)
+
+          childProcess = exec(
+            './node_modules/.bin/cucumber-js ci-visibility/features/farewell.feature',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port)
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            eventsPromise.then(() => {
+              done()
+            }).catch(done)
           })
         })
       })
