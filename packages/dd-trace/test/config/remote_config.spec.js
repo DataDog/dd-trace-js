@@ -48,6 +48,8 @@ describe('Tracing Remote Config', () => {
       sinon.assert.calledWithExactly(rc.updateCapabilities,
         RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION, true)
       sinon.assert.calledWithExactly(rc.updateCapabilities,
+        RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING, true)
+      sinon.assert.calledWithExactly(rc.updateCapabilities,
         RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN, true)
     })
 
