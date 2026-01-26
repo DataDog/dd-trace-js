@@ -343,6 +343,30 @@
       "versions": [">=1.0"]
     }
   ],
+  "@langchain/anthropic": [
+    {
+      "name": "@langchain/core",
+      "dep": true
+    }
+  ],
+  "@langchain/google-genai": [
+    {
+      "name": "@langchain/core",
+      "dep": true
+    }
+  ],
+  "@langchain/cohere": [
+    {
+      "name": "@langchain/core",
+      "dep": true
+    }
+  ],
+  "@langchain/openai": [
+    {
+      "name": "@langchain/core",
+      "dep": true
+    }
+  ],
   "ldapjs": [
     {
       "name": "ldapjs",

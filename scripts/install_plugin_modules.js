@@ -174,16 +174,20 @@ async function assertPeerDependencies (rootFolder, parent = '') {
       const pkgJsonPath = require(folder).pkgJsonPath()
       const pkgJson = require(pkgJsonPath)
 
-      for (const section of ['devDependencies', 'peerDependencies']) {
+      for (const section of ['peerDependencies', 'devDependencies']) {
         if (pkgJson[section]?.[name]) {
+          const versionSpec = pkgJson[section][name]
+          // Skip workspace protocol versions
+          if (versionSpec.startsWith('workspace:')) continue
+
           if (dep === externalName) {
             versionPkgJson.dependencies[name] = pkgJson.version
           } else {
-            versionPkgJson.dependencies[name] = pkgJson[section][name].includes('||')
+            versionPkgJson.dependencies[name] = versionSpec.includes('||')
               // Use the first version in the list (as npm does by default)
-              ? pkgJson[section][name].split('||')[0].trim()
+              ? versionSpec.split('||')[0].trim()
               // Only one version available so use that.
-              : pkgJson[section][name]
+              : versionSpec
           }
 
           await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
