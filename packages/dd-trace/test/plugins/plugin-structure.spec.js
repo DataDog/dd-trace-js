@@ -45,6 +45,43 @@ const missingInstrumentationHooks = [
   'fetch' // fetch is provided by Node.js, and is automatically instrumented if it exists
 ]
 
+function extractPluginIds (source, re, index) {
+  const ids = new Set()
+  let m
+  while ((m = re.exec(source))) {
+    ids.add(m[index])
+  }
+  return ids
+}
+
+function extractPluginsInterfaceKeys (dtsSource) {
+  const m = dtsSource.match(/interface Plugins\s*\{([\s\S]*?)\n\}/m)
+  assert.ok(m, 'Could not find `interface Plugins { ... }` in index.d.ts')
+
+  const body = m[1]
+  return extractPluginIds(body, /^\s*"([^"]+)"\s*:\s*/gm, 1)
+}
+
+function extractRuntimePluginPackageNames (pluginsIndexSource) {
+  // Example: require('../../../datadog-plugin-express/src')
+  return extractPluginIds(pluginsIndexSource, /datadog-plugin-[a-z0-9_-]+/gi, 0)
+}
+
+function extractDocsApiPluginList (apiMdSource) {
+  const sectionMatch = apiMdSource.match(
+    /<h3 id="integrations-list">Available Plugins<\/h3>\n([\s\S]*?)\n\n<h2 id="manual-instrumentation">/m
+  )
+  assert.ok(sectionMatch, 'Could not find Available Plugins section in docs/API.md')
+
+  const section = sectionMatch[1]
+  return extractPluginIds(section, /^\* \[([^\]]+)\]\(/gm, 1)
+}
+
+function extractDocsApiH5PluginAnchors (apiMdSource) {
+  const allAnchors = extractPluginIds(apiMdSource, /<h5 id="([^"]+)"><\/h5>/g, 1)
+  return new Set([...allAnchors].filter(id => !id.endsWith('-tags') && !id.endsWith('-config')))
+}
+
 describe('Plugin Structure Validation', () => {
   const packagesDir = path.join(__dirname, '..', '..', '..')
   const instrumentationsDir = path.join(packagesDir, 'datadog-instrumentations', 'src')
@@ -59,6 +96,9 @@ describe('Plugin Structure Validation', () => {
   )
 
   const allPluginIds = new Set(pluginDirs.map(dir => dir.replace('datadog-plugin-', '')))
+
+  let dtsPluginKeys
+  let apiMdSource
 
   pluginDirs.forEach(pluginDir => {
     const expectedId = pluginDir.replace('datadog-plugin-', '')
@@ -80,6 +120,18 @@ describe('Plugin Structure Validation', () => {
         assert.strictEqual(instrumentationFiles.has(pluginId), true, `Missing instrumentation file: ${pluginId}.js`)
       })
     })
+  })
+
+  before(() => {
+    const repoRoot = path.join(packagesDir, '..')
+
+    const dtsPath = path.join(repoRoot, 'index.d.ts')
+    const apiMdPath = path.join(repoRoot, 'docs', 'API.md')
+
+    const dtsSource = fs.readFileSync(dtsPath, 'utf8')
+    apiMdSource = fs.readFileSync(apiMdPath, 'utf8')
+
+    dtsPluginKeys = extractPluginsInterfaceKeys(dtsSource)
   })
 
   it('should have all plugins accounted for with an instrumentation file', () => {
@@ -118,5 +170,54 @@ describe('Plugin Structure Validation', () => {
     })
 
     assert.deepStrictEqual(missingHooks, missingInstrumentationHooks)
+  })
+
+  it('should include all canonical plugin ids used by the runtime plugin registry in index.d.ts', () => {
+    const pluginsIndexPath = path.join(packagesDir, 'dd-trace', 'src', 'plugins', 'index.js')
+
+    const pluginsIndexSource = fs.readFileSync(pluginsIndexPath, 'utf8')
+
+    const runtimePluginPackages = extractRuntimePluginPackageNames(pluginsIndexSource)
+
+    // Runtime may load internal plugins that are not meant to be configured via the public API.
+    const internalPluginIds = new Set([
+      'dd-trace-api'
+    ])
+
+    for (const pkgName of runtimePluginPackages) {
+      const pluginPath = path.join(packagesDir, pkgName, 'src', 'index.js')
+      const Plugin = require(pluginPath)
+      const id = Plugin?.id
+
+      assert.ok(typeof id === 'string' && id.length > 0, `Invalid plugin id: ${pkgName}`)
+
+      if (!internalPluginIds.has(id)) {
+        assert.ok(dtsPluginKeys.has(id), `Missing plugin in index.d.ts: ${id}`)
+      }
+    }
+  })
+
+  it('should keep docs/API.md plugin list aligned with index.d.ts', () => {
+    const apiPluginKeys = extractDocsApiPluginList(apiMdSource)
+
+    for (const pluginId of dtsPluginKeys) {
+      assert.ok(apiPluginKeys.has(pluginId), `Missing plugin in docs/API.md: ${pluginId}`)
+    }
+
+    for (const pluginId of apiPluginKeys) {
+      assert.ok(dtsPluginKeys.has(pluginId), `Extra plugin in docs/API.md: ${pluginId}`)
+    }
+  })
+
+  it('should keep docs/API.md <h5> plugin anchors aligned with index.d.ts', () => {
+    const apiH5PluginKeys = extractDocsApiH5PluginAnchors(apiMdSource)
+
+    for (const pluginId of dtsPluginKeys) {
+      assert.ok(apiH5PluginKeys.has(pluginId), `Missing <h5> anchor in docs/API.md for plugin: ${pluginId}`)
+    }
+
+    for (const pluginId of apiH5PluginKeys) {
+      assert.ok(dtsPluginKeys.has(pluginId), `Extra <h5> anchor in docs/API.md for plugin: ${pluginId}`)
+    }
   })
 })
