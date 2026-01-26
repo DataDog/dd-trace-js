@@ -68,12 +68,13 @@ function extractRuntimePluginPackageNames (pluginsIndexSource) {
 }
 
 function extractDocsApiPluginList (apiMdSource) {
-  const sectionMatch = apiMdSource.match(
-    /<h3 id="integrations-list">Available Plugins<\/h3>\n([\s\S]*?)\n\n<h2 id="manual-instrumentation">/m
-  )
-  assert.ok(sectionMatch, 'Could not find Available Plugins section in docs/API.md')
+  const start = apiMdSource.indexOf('<h3 id="integrations-list">Available Plugins</h3>')
+  assert.ok(start !== -1, 'Could not find Available Plugins heading in docs/API.md')
 
-  const section = sectionMatch[1]
+  const end = apiMdSource.indexOf('<h2 id="manual-instrumentation">', start)
+  assert.ok(end !== -1, 'Could not find Manual Instrumentation heading in docs/API.md')
+
+  const section = apiMdSource.slice(start, end)
   return extractPluginIds(section, /^\* \[([^\]]+)\]\(/gm, 1)
 }
 
