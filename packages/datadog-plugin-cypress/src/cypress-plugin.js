@@ -54,8 +54,6 @@ const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const log = require('../../dd-trace/src/log')
-const { discoverCoverageReports } = require('../../dd-trace/src/ci-visibility/coverage-report-discovery')
-const CoverageReportWriter = require('../../dd-trace/src/ci-visibility/exporters/agentless/coverage-report-writer')
 
 const {
   TELEMETRY_EVENT_CREATED,
@@ -662,32 +660,6 @@ class CypressPlugin {
 
       const onFlushComplete = () => {
         appClosingTelemetry()
-
-        // Upload coverage reports if enabled
-        if (this.isCoverageReportUploadEnabled) {
-          const reports = discoverCoverageReports(this.rootDir)
-
-          if (reports && reports.length > 0) {
-            log.debug(() => `Found ${reports.length} coverage reports to upload`)
-            const url = exporter._url
-            const evpProxyPrefix = exporter._evpProxyPrefix
-
-            const writer = new CoverageReportWriter({
-              url,
-              evpProxyPrefix,
-              tags: this.testEnvironmentMetadata
-            })
-
-            writer.uploadCoverageReports(reports, (err) => {
-              if (err) {
-                log.error('Error uploading coverage reports:', err)
-              }
-              resolve(null)
-            })
-            return
-          }
-        }
-
         resolve(null)
       }
 

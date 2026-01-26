@@ -4618,8 +4618,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         }
       })
 
+      // Use lcov reporter to generate coverage report files
       childProcess = exec(
-        runTestsCommand,
+        `./node_modules/nyc/bin/nyc.js -r=lcov ${runTestsCommand}`,
         {
           cwd,
           env: {
@@ -4649,8 +4650,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         }
       })
 
+      // Use lcov reporter to generate coverage report files
       childProcess = exec(
-        runTestsCommand,
+        `./node_modules/nyc/bin/nyc.js -r=lcov ${runTestsCommand}`,
         {
           cwd,
           env: {

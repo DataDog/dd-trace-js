@@ -4,8 +4,6 @@ const { storage } = require('../../datadog-core')
 const id = require('../../dd-trace/src/id')
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
-const { discoverCoverageReports } = require('../../dd-trace/src/ci-visibility/coverage-report-discovery')
-const CoverageReportWriter = require('../../dd-trace/src/ci-visibility/exporters/agentless/coverage-report-writer')
 
 const {
   TEST_STATUS,
@@ -113,27 +111,6 @@ class PlaywrightPlugin extends CiPlugin {
       appClosingTelemetry()
 
       this.tracer._exporter.flush(() => {
-        // Upload coverage reports if enabled
-        if (this.libraryConfig?.isCoverageReportUploadEnabled) {
-          const reports = discoverCoverageReports(this.rootDir)
-
-          if (reports && reports.length > 0) {
-            const url = this.tracer._exporter._url
-            const evpProxyPrefix = this.tracer._exporter._evpProxyPrefix
-
-            const writer = new CoverageReportWriter({
-              url,
-              evpProxyPrefix,
-              tags: this.testEnvironmentMetadata
-            })
-
-            writer.uploadCoverageReports(reports, () => {
-              if (onDone) onDone()
-            })
-            return
-          }
-        }
-
         if (onDone) onDone()
       })
       this.numFailedTests = 0

@@ -3,9 +3,6 @@
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
-const { discoverCoverageReports } = require('../../dd-trace/src/ci-visibility/coverage-report-discovery')
-const CoverageReportWriter = require('../../dd-trace/src/ci-visibility/exporters/agentless/coverage-report-writer')
-const log = require('../../dd-trace/src/log')
 
 const {
   TEST_SKIP_REASON,
@@ -118,33 +115,9 @@ class CucumberPlugin extends CiPlugin {
         autoInjected: !!getEnvironmentVariable('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
       })
 
-      const isCoverageReportUploadEnabled = this.libraryConfig?.isCoverageReportUploadEnabled
       this.libraryConfig = null
 
-      this.tracer._exporter.flush(() => {
-        // Upload coverage reports if enabled
-        if (isCoverageReportUploadEnabled) {
-          const reports = discoverCoverageReports(this.rootDir)
-
-          if (reports && reports.length > 0) {
-            log.debug(() => `Found ${reports.length} coverage reports to upload`)
-            const url = this.tracer._exporter._url
-            const evpProxyPrefix = this.tracer._exporter._evpProxyPrefix
-
-            const writer = new CoverageReportWriter({
-              url,
-              evpProxyPrefix,
-              tags: this.testEnvironmentMetadata
-            })
-
-            writer.uploadCoverageReports(reports, (err) => {
-              if (err) {
-                log.error('Error uploading coverage reports:', err)
-              }
-            })
-          }
-        }
-      })
+      this.tracer._exporter.flush()
     })
 
     this.addSub('ci:cucumber:test-suite:start', ({
