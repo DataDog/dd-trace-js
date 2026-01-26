@@ -36,7 +36,7 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     return session.post('Debugger.resume')
   }
 
-  const stack = getStackFromCallFrames(callFrames)
+  const stack = await getStackFromCallFrames(callFrames)
 
   const { processLocalState } = await getLocalStateForCallFrame(callFrames[0])
 
