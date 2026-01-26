@@ -1,22 +1,59 @@
 # AGENTS.md
 
+## Non-negotiables (read before coding)
+
+- **Dependencies / services (yarn only)**: `yarn install`, `yarn add <pkg>`, `yarn services`
+- **Never use corepack** in this repo.
+- **Never use `npm install` / `npm ci`** in this repo.
+- **Everything else uses npm scripts**: `npm run <script>` (lint, tests, build, etc.)
+- **Never run root `npm test`**: it is intentionally disabled. Run a specific `*.spec.js` file, or a targeted `npm run test:<area>`.
+- **Production package code is hot-path code** (`packages/*/src/`):
+  - Do not introduce `async/await` or Promises (exceptions: tests and worker threads).
+  - Prefer fast paths and low allocations; use `for` / `for-of` / `while` loops; never use `for-in`.
+- **Keep changes backportable**: avoid breaking changes; guard newer APIs via `version.js` when needed.
+
+## Common workflows (copy/paste)
+
+**Run a test file (unit / integration):**
+
+```bash
+./node_modules/.bin/mocha path/to/test.spec.js
+./node_modules/.bin/mocha --timeout 60000 path/to/test.spec.js
+```
+
+**If a test expects “spec file is entrypoint” semantics:**
+
+```bash
+node scripts/mocha-run-file.js path/to/test.spec.js
+```
+
+**Run plugin tests (single plugin):**
+
+```bash
+PLUGINS="amqplib" npm run test:plugins
+```
+
+**Run plugin tests with external services:**
+
+```bash
+export SERVICES="rabbitmq" PLUGINS="amqplib"
+docker compose up -d $SERVICES
+yarn services
+npm run test:plugins
+```
+
+**Lint:**
+
+```bash
+npm run lint
+```
+
 ## Prerequisites
 
 - Node.js >= 18
 - yarn 1.x
 - Docker + docker-compose (for running service dependencies in tests)
-
-## Setup
-
-**Package manager policy:**
-
-- Use **yarn only for installing dependencies and services**:
-  - `yarn add`
-  - `yarn install`
-  - `yarn services`
-- Use **npm for running scripts and other commands**: `npm run <script>`
-- In this repo, **everything else** (tests, lint, build, etc.) should use **npm**, not yarn.
-- `yarn services` is the only non-install yarn command: it sets up test service/plugin dependencies.
+- Optimize for performance and security: tracer runs in application hot paths.
 
 ## Project Overview
 
@@ -35,27 +72,12 @@ dd-trace is the Datadog client library for Node.js.
 
 ## Testing Instructions
 
-**IMPORTANT**: The root `npm test` is intentionally disabled. Always run a specific `*.spec.js` file, or a targeted `npm run test:<area>` script.
+**IMPORTANT**: The root `npm test` is intentionally disabled (see **Non-negotiables** above). Always run a specific `*.spec.js` file, or a targeted
+`npm run test:<area>` script.
 
 ### Running Individual Tests
 
-**Unit tests:**
-
-```bash
-./node_modules/.bin/mocha path/to/test.spec.js
-```
-
-**Integration test file (usually needs higher timeout):**
-
-```bash
-./node_modules/.bin/mocha --timeout 60000 path/to/test.spec.js
-```
-
-**If a test expects “spec file is entrypoint” semantics:**
-
-```bash
-node scripts/mocha-run-file.js path/to/test.spec.js
-```
+Commands are in **Common workflows (copy/paste)** above:
 
 You can inject mocha options via `MOCHA_RUN_FILE_CONFIG` (JSON), including `require` hooks.
 
@@ -69,8 +91,8 @@ You can inject mocha options via `MOCHA_RUN_FILE_CONFIG` (JSON), including `requ
 **Use `PLUGINS` env var:**
 
 ```bash
-PLUGINS="amqplib" npm run test:plugins
 # pipe-delimited for multiple: PLUGINS="amqplib|bluebird"
+PLUGINS="amqplib|bluebird" npm run test:plugins
 ```
 
 To run a single test file directly:
@@ -85,6 +107,8 @@ To run a single test file directly:
 
 **With external services** (check `.github/workflows/apm-integrations.yml` for `SERVICES`):
 
+Only needed for plugins that require external services; otherwise skip the docker/yarn-services steps.
+
 ```bash
 export SERVICES="rabbitmq" PLUGINS="amqplib"
 docker compose up -d $SERVICES
@@ -93,13 +117,11 @@ yarn services && npm run test:plugins
 
 **ARM64 incompatible:** `aerospike`, `couchbase`, `grpc`, `oracledb`
 
-### Test Coverage
+### Test Coverage (rare)
 
-```bash
-./node_modules/.bin/nyc --include "packages/dd-trace/src/debugger/**/*.js" \
-  ./node_modules/.bin/mocha \
-  "packages/dd-trace/test/debugger/**/*.spec.js"
-```
+Use nyc when needed (example):
+
+- `./node_modules/.bin/nyc --include "packages/dd-trace/src/debugger/**/*.js" ./node_modules/.bin/mocha "packages/dd-trace/test/debugger/**/*.spec.js"`
 
 **Philosophy:**
 
@@ -127,9 +149,10 @@ Never use the `doesNotThrow()` assertion. Instead, execute the method directly.
 - Prefer `#private` class fields for new/internal-only code (no cross-module access needed).
 - If other modules need access, prefer a small explicit method API over accessing internal fields.
 - Avoid large refactors of existing `_underscore` fields unless you can prove they are not accessed externally (excluding tests).
-- Files shall end with a single new line at the end
+- Files must end with a single new line at the end
 - Use destructuring for better code readability
 - Line length is capped at 120 characters
+- Avoid abbreviations. Use short expressive variable, method, and function names
 
 ### Linting & Naming
 
@@ -142,13 +165,13 @@ Never use the `doesNotThrow()` assertion. Instead, execute the method directly.
 - Never use `any` (be specific; use `unknown` only if the type is truly unknown)
 - Prefer the most specific type you can infer/identify from context; reuse existing types/typedefs instead of defaulting to `unknown`
 - Write the most specific types possible by reading the overall context
-- Always define argument types via `@param` on the method/function JSDoc
-- Avoid adding inline JSDoc type comments inside method bodies (e.g. `/** @type {...} */ x`).
-  - Prefer `@typedef` at file scope + small helper/type-guard functions, then type parameters/returns at the method boundary.
+- All new methods/functions must receive a full JSDoc comment
+- Always define argument JSDoc types via `@param` on new methods/functions
+- Avoid adding inline JSDoc type comments inside method/function bodies (e.g. `/** @type {...} */ x`).
+  - Prefer `@typedef` at file scope + small helper/type-guard functions, then type parameters/returns at the method/function boundary.
 - Prefer type casting over adding runtime type-guard code when the checks are only needed for static typing (e.g., comparisons). Never add extra runtime work just to satisfy types.
-- Only add types inside of a method if they cannot be inferred otherwise
+- Only add types inside of a method/function if they cannot be inferred otherwise
 - Only rewrite code for better types in case it was explicitly requested by the user
-- All new methods should receive a full JSDoc comment
 - Reuse existing types, if possible (check appropriate sources)
 - Only define the type for a property on a class once
 
@@ -183,11 +206,14 @@ Separate groups with empty line, sort alphabetically within each:
 - Use V8 knowledge about fast and slow APIs
 - Avoid unnecessary allocations/objects/closures; reuse objects/buffers when possible
 - Prefer `for-of` / `for` / `while` loops over `forEach`/`map`/`filter` in production code
-- `map` may be used if there is just a single transformation for all entries
+- `map()` may be used for a single, linear transformation; avoid chaining (`filter().map()...`) in hot paths
 - **Never** use `for-in` (use `for-of`)
-- Do NOT use `async/await` or promises in production code (npm package)
-  - Allowed ONLY in: test files, worker threads (e.g., `packages/dd-trace/src/debugger/devtools_client/`)
+- Do NOT introduce `async/await` or Promises in production package code (`packages/*/src/`)
+  - Allowed ONLY in: test files and worker threads (e.g., `packages/dd-trace/src/debugger/devtools_client/`)
   - Use callbacks or synchronous patterns instead
+- Use one time data transformations (e.g., at file load time) over call site transformations later
+- Add microbenchmarks (sirun) when adding a new plugin or instrumentation that run an example app with the instrumentation disabled, enabled and plugin disabled, and both enabled.
+- Add microbenchmarks to hot code paths as well for performance optimizations
 
 ### Debugging and Logging
 
@@ -208,7 +234,7 @@ Avoid try/catch in hot paths - validate inputs early
 - **Search first**: Check for existing utilities/patterns before creating new code
 - **Avoid diverging implementations**: If behavior already exists elsewhere, reuse it or extract a shared helper instead of reimplementing it in a second place.
 - **Small PRs**: Break large efforts into incremental, reviewable changes
-- **Descriptive code**: Self-documenting with verbs in function names; comment when needed
+- **Descriptive code**: Self-documenting with variable names (preferred) or as verbs in function names (for more than 2 lines of code); comment when needed
 - **Readable formatting**: Empty lines for grouping, split complex objects, extract variables
 - **Avoid large refactors**: Iterative changes, gradual pattern introduction
 - **Test changes**: Test logic (not mocks), failure cases, edge cases - always update tests. Write blackbox tests instead of testing internal exports directly
@@ -247,7 +273,7 @@ Avoid try/catch in hot paths - validate inputs early
 
 ## Upstream changes
 
-In case an issue is actually happening outside of dd-trace, suggest to fix it upstream instead of creating a work-around.
+If an issue is actually happening outside of dd-trace, prefer fixing it upstream (issue/PR + minimal repro) instead of adding a workaround here.
 
 ## Adding New Instrumentation
 
@@ -267,21 +293,12 @@ cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<name>/s
 Edit `src/index.js`, create `test/index.spec.js`, then register in:
 `packages/dd-trace/src/plugins/index.js`, `index.d.ts`, `docs/test.ts`, `docs/API.md`, `.github/workflows/apm-integrations.yml`
 
-## Pull Requests and CI
+Validate basic plugin structure with:
 
-### Commit Messages
+```bash
+./node_modules/.bin/mocha packages/dd-trace/test/plugins/plugin-structure.spec.js
+```
 
-Conventional format: `type(scope): description`
-Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`
-Example: `feat(appsec): add new WAF rule`
+## Contributor / CI process (human)
 
-### PR Requirements
-
-- Use template from `.github/pull_request_template.md`
-- Label: `semver-patch` (fixes only), `semver-minor` (new features), `semver-major` (breaking)
-- **All tests must pass - all-green policy, no exceptions**
-
-## Vendoring Dependencies
-
-Using rspack: Run `yarn` in `vendor/` to install/bundle dependencies → `packages/node_modules/`
-(Some deps excluded, e.g., `@opentelemetry/api`)
+For PR process, labels, and contributor guidance, see `CONTRIBUTING.md` and `.github/pull_request_template.md`.
