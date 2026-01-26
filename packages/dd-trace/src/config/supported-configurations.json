@@ -1,4127 +1,513 @@
 {
-  "version": "2",
   "supportedConfigurations": {
-    "DD_AAS_DOTNET_EXTENSION_VERSION": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Azure metadata",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_ACTION_EXECUTION_ID": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "AWS CodePipeline action execution ID (used as CI job identifier for correlation).",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_AGENTLESS_LOG_SUBMISSION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enables/disables log submission",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_AGENTLESS_LOG_SUBMISSION_URL": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Sets custom URL for submitting logs",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_AGENT_HOST": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "The address of the trace agent that the tracer will submit to.",
-        "programmaticConfig": "hostname",
-        "default": "127.0.0.1",
-        "aliases": [
-          "DD_TRACE_AGENT_HOSTNAME"
-        ]
-      }
-    ],
-    "DD_AI_GUARD_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Set to `true` to enable the SDK.",
-        "programmaticConfig": "experimental.aiguard.enabled",
-        "default": false
-      }
-    ],
-    "DD_AI_GUARD_ENDPOINT": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "URL of the AI Guard REST API.",
-        "programmaticConfig": "experimental.aiguard.endpoint",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_AI_GUARD_MAX_CONTENT_SIZE": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Max size of the content property set in the meta-struct",
-        "programmaticConfig": "experimental.aiguard.maxContentSize",
-        "default": 524288
-      }
-    ],
-    "DD_AI_GUARD_MAX_MESSAGES_LENGTH": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Maximum number of conversational messages allowed to be set in the meta-struct",
-        "programmaticConfig": "experimental.aiguard.maxMessagesLength",
-        "default": 16
-      }
-    ],
-    "DD_AI_GUARD_TIMEOUT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Timeout used in calls to the AI Guard REST API in milliseconds (default 5000)",
-        "programmaticConfig": "experimental.aiguard.timeout",
-        "default": 10000
-      }
-    ],
-    "DD_API_KEY": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "[Datadog API Key][6] - **Required**",
-        "default": "__UNSET__",
-        "aliases": [
-          "DATADOG_API_KEY"
-        ]
-      }
-    ],
-    "DD_API_SECURITY_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable Api Security.",
-        "programmaticConfig": "appsec.apiSecurity.enabled",
-        "default": true,
-        "aliases": [
-          "DD_EXPERIMENTAL_API_SECURITY_ENABLED"
-        ]
-      }
-    ],
-    "DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable endpoint collection for API Security.",
-        "programmaticConfig": "appsec.apiSecurity.endpointCollectionEnabled",
-        "default": true
-      }
-    ],
-    "DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Maximum number of endpoints that can be serialized per message.",
-        "programmaticConfig": "appsec.apiSecurity.endpointCollectionMessageLimit",
-        "default": 300
-      }
-    ],
-    "DD_API_SECURITY_SAMPLE_DELAY": [
-      {
-        "implementation": "A",
-        "type": "float",
-        "description": "Initialize from environment variables",
-        "default": 30
-      }
-    ],
-    "DD_APM_FLUSH_DEADLINE_MILLISECONDS": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Doesnt crash when spans are finished early and reached impending timeout",
-        "default": 100
-      }
-    ],
-    "DD_APM_TRACING_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Used to disable APM Tracing when using standalone products",
-        "programmaticConfig": "apmTracingEnabled",
-        "default": true
-      }
-    ],
-    "DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Controls the automated user tracking mode for user IDs and logins collections. Possible values:<br>*  'anonymous': will hash user IDs and user logins before collecting them<br>*  'anon': alias for 'anonymous'<br>*  'safe': deprecated alias for 'anonymous'<br>*  'identification': will collect user IDs and logins without redaction<br>*  'ident': alias for 'identification'<br>*  'extended': deprecated alias for 'identification'<br>*  'disabled': will not collect user IDs and logins<br>Unknown values will be considered as 'disabled'",
-        "programmaticConfig": "appsec.eventTracking.mode",
-        "default": "identification",
-        "aliases": [
-          "DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING"
-        ]
-      }
-    ],
-    "DD_APPSEC_COLLECT_ALL_HEADERS": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable extended headers collection",
-        "programmaticConfig": "appsec.extendedHeadersCollection.enabled",
-        "default": false
-      }
-    ],
-    "DD_APPSEC_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable AppSec.",
-        "programmaticConfig": "appsec.enabled",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Specifies a path to a custom blocking template json file for graphql requests",
-        "programmaticConfig": "appsec.blockedTemplateGraphql",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to redact collected headers",
-        "programmaticConfig": "appsec.extendedHeadersCollection.redaction",
-        "default": true
-      }
-    ],
-    "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Specifies a path to a custom blocking template html file.",
-        "programmaticConfig": "appsec.blockedTemplateHtml",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Specifies a path to a custom blocking template json file.",
-        "programmaticConfig": "appsec.blockedTemplateJson",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_APPSEC_MAX_COLLECTED_HEADERS": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Specifies the maximum number of headers collected.",
-        "programmaticConfig": "appsec.extendedHeadersCollection.maxHeaders",
-        "default": 50
-      }
-    ],
-    "DD_APPSEC_MAX_STACK_TRACES": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Specifies the maximum number of stack traces to be reported.",
-        "programmaticConfig": "appsec.stackTrace.maxStackTraces",
-        "default": 2
-      }
-    ],
-    "DD_APPSEC_MAX_STACK_TRACE_DEPTH": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Specifies the maximum depth of a stack trace to be reported.",
-        "programmaticConfig": "appsec.stackTrace.maxDepth",
-        "default": 32
-      }
-    ],
-    "DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Specifies a regex that will redact sensitive data by its key in attack reports.",
-        "programmaticConfig": "appsec.obfuscatorKeyRegex",
-        "default": "(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt"
-      }
-    ],
-    "DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Specifies a regex that will redact sensitive data by its value in attack reports.",
-        "programmaticConfig": "appsec.obfuscatorValueRegex",
-        "default": "(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=([^;&]+)|\"\\s*:\\s*(\"[^\"]+\"|\\d+))|bearer\\s+([a-z0-9\\._\\-]+)|token\\s*:\\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\\w=-]+\\.(ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?)|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}([^\\-]+)[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*([a-z0-9\\/\\.+]{100,})"
-      }
-    ],
-    "DD_APPSEC_RASP_COLLECT_REQUEST_BODY": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable request body collection on RASP event",
-        "programmaticConfig": "appsec.rasp.bodyCollection",
-        "default": false
-      }
-    ],
-    "DD_APPSEC_RASP_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable RASP.",
-        "programmaticConfig": "appsec.rasp.enabled",
-        "default": true
-      }
-    ],
-    "DD_APPSEC_RULES": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Specifies a path to a custom rules file.",
-        "programmaticConfig": "appsec.rules",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_APPSEC_SCA_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_APPSEC_STACK_TRACE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable stack trace reporting.",
-        "programmaticConfig": "appsec.stackTrace.enabled",
-        "default": true
-      }
-    ],
-    "DD_APPSEC_TRACE_RATE_LIMIT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Controls the maximum amount of traces sampled by AppSec attacks, per second.",
-        "programmaticConfig": "appsec.rateLimit",
-        "default": 100
-      }
-    ],
-    "DD_APPSEC_WAF_TIMEOUT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Controls the maximum amount of time in microseconds the WAF is allowed to run synchronously for.",
-        "programmaticConfig": "appsec.wafTimeout",
-        "default": 5000
-      }
-    ],
-    "DD_APP_KEY": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Your Datadog application key. This key is created by your [Datadog organization][2], should include the code_analysis_read scope, and be stored as a secret.",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_AZURE_RESOURCE_GROUP": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Azure metadata",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_AGENTLESS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Does not init if DD_API_KEY is not set",
-        "default": false
-      }
-    ],
-    "DD_CIVISIBILITY_AGENTLESS_URL": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Does not change mocha config if CI Visibility fails to init",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Name of the CI Visibility auto-instrumentation tool that injected dd-trace (telemetry only).",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Force-enable CI Visibility behavior for testing or debugging.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Force-enable CI Visibility behavior for testing or debugging.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable civisibility.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_FLAKY_RETRY_COUNT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "ATR is disabled for an attempt to fix test",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_FLAKY_RETRY_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Git_metadata",
-        "default": true
-      }
-    ],
-    "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Disable git upload if the DD_CIVISIBILITY_GIT_UPLOAD_ENABLED is set to false",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_ITR_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Disable ITR if DD_CIVISIBILITY_ITR_ENABLED is set to false",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_MANUAL_API_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Can run tests",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Wait time in milliseconds before flushing CI Visibility RUM events.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_TEST_COMMAND": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Eslint-disable-next-line eslint-rules/eslint-process-env",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_TEST_MODULE_ID": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Eslint-disable-next-line eslint-rules/eslint-process-env",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CIVISIBILITY_TEST_SESSION_ID": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "TODO: Figure out alternative ways to pass this information to the worker threads<br>eslint-disable-next-line eslint-rules/eslint-process-env",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_CODE_ORIGIN_FOR_SPANS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable Code Origin for Spans.",
-        "programmaticConfig": "codeOriginForSpans.enabled",
-        "default": true
-      }
-    ],
-    "DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Configuration for Code Origin for Spans.",
-        "default": false
-      }
-    ],
-    "DD_CRASHTRACKING_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Disable crash tracking for SSI when configured",
-        "default": true
-      }
-    ],
-    "DD_CUSTOM_TRACE_ID": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Custom variable set by the Jenkins Datadog Plugin for trace IDs.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_DATA_STREAMS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Data streams checkpointer manual api",
-        "default": false
-      }
-    ],
-    "DD_DBM_PROPAGATION_MODE": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Enables DBM to APM link using tag injection.",
-        "programmaticConfig": "dbmPropagationMode",
-        "default": "disabled"
-      }
-    ],
-    "DD_DOGSTATSD_HOST": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "The hostname of the Dogstatsd agent that the metrics will submitted to.",
-        "programmaticConfig": "dogstatsd.hostname",
-        "default": "127.0.0.1",
-        "aliases": [
-          "DD_DOGSTATSD_HOSTNAME"
-        ]
-      }
-    ],
-    "DD_DOGSTATSD_PORT": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "The port of the Dogstatsd agent that the metrics will submitted to.",
-        "programmaticConfig": "dogstatsd.port",
-        "default": "8125"
-      }
-    ],
-    "DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Timeout in milliseconds for capturing variable values.",
-        "programmaticConfig": "dynamicInstrumentation.captureTimeoutMs",
-        "default": 15
-      }
-    ],
-    "DD_DYNAMIC_INSTRUMENTATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable Dynamic Instrumentation.",
-        "programmaticConfig": "dynamicInstrumentation.enabled",
-        "default": false
-      }
-    ],
-    "DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Path to a custom probes configuration file.",
-        "programmaticConfig": "dynamicInstrumentation.probeFile",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS": [
-      {
-        "implementation": "A",
-        "type": "array",
-        "description": "List of identifier names to redact in captured data.",
-        "programmaticConfig": "dynamicInstrumentation.redactedIdentifiers",
-        "default": []
-      }
-    ],
-    "DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS": [
-      {
-        "implementation": "A",
-        "type": "array",
-        "description": "List of identifier names to exclude from redaction.",
-        "programmaticConfig": "dynamicInstrumentation.redactionExcludedIdentifiers",
-        "default": []
-      }
-    ],
-    "DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS": [
-      {
-        "implementation": "A",
-        "type": "float",
-        "description": "Interval in seconds between uploads of probe data.",
-        "programmaticConfig": "dynamicInstrumentation.uploadIntervalSeconds",
-        "default": 1
-      }
-    ],
-    "DD_ENABLE_NX_SERVICE_NAME": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Give DD_SERVICE precedence over NX_TASK_TARGET_PROJECT",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_ENV": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Set an application’s environment e.g. prod, pre-prod, stage.",
-        "programmaticConfig": "env",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Used to disable APM Tracing when using standalone products",
-        "programmaticConfig": "apmTracingEnabled",
-        "default": true
-      }
-    ],
-    "DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable the feature flagging provider.<br>Requires Remote Config to be properly configured.",
-        "programmaticConfig": "experimental.flaggingProvider.enabled",
-        "default": false
-      }
-    ],
-    "DD_EXPERIMENTAL_PROFILING_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable experimental profiling.",
-        "default": "__UNKNOWN__",
-        "deprecations": {
-          "replacedBy": "DD_PROFILING_ENABLED"
-        }
-      }
-    ],
-    "DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Git-cache integration tests",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Git-cache integration tests",
-        "default": false
-      }
-    ],
-    "DD_EXTERNAL_ENV": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Docker",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_FLAGGING_PROVIDER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable flagging provider.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_BRANCH": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Git",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_COMMIT_AUTHOR_DATE": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Git",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_COMMIT_AUTHOR_EMAIL": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Git",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_COMMIT_AUTHOR_NAME": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Git",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_COMMIT_COMMITTER_DATE": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Git",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_COMMIT_COMMITTER_EMAIL": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Git",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_COMMIT_COMMITTER_NAME": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Git",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_COMMIT_HEAD_SHA": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Git commit SHA for git metadata collection.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_COMMIT_MESSAGE": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Git",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_COMMIT_SHA": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Basic case",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_FOLDER_PATH": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Disables telemetry if inside a jest worker",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_PROPERTIES_FILE": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Disables telemetry if inside a jest worker",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_PULL_REQUEST_BASE_BRANCH": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Git base branch information for pull requests.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Git commit SHA for git metadata collection.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_REPOSITORY_URL": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Basic case",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GIT_TAG": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Git",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_GRPC_CLIENT_ERROR_STATUSES": [
-      {
-        "implementation": "A",
-        "type": "array",
-        "description": "Parse integer range sets",
-        "default": [
-          1,
-          2,
-          3,
-          4,
-          5,
-          6,
-          7,
-          8,
-          9,
-          10,
-          11,
-          12,
-          13,
-          14,
-          15,
-          16
-        ]
-      }
-    ],
-    "DD_GRPC_SERVER_ERROR_STATUSES": [
-      {
-        "implementation": "A",
-        "type": "array",
-        "description": "Parse integer range sets",
-        "default": [
-          2,
-          3,
-          4,
-          5,
-          6,
-          7,
-          8,
-          9,
-          10,
-          11,
-          12,
-          13,
-          14,
-          15,
-          16
-        ]
-      }
-    ],
-    "DD_HEAP_SNAPSHOT_COUNT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Number of heap snapshots to write. Set to 0 to disable.",
-        "default": 0
-      }
-    ],
-    "DD_HEAP_SNAPSHOT_DESTINATION": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Directory path where heap snapshots are written.",
-        "default": ""
-      }
-    ],
-    "DD_HEAP_SNAPSHOT_INTERVAL": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Delay in seconds between heap snapshots.",
-        "default": 3600
-      }
-    ],
-    "DD_IAST_DB_ROWS_TO_TAINT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Defines the number of rows to taint in data coming from databases",
-        "programmaticConfig": "iast.dbRowsToTaint",
-        "default": 1
-      }
-    ],
-    "DD_IAST_DEDUPLICATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable vulnerability deduplication",
-        "programmaticConfig": "iast.deduplicationEnabled",
-        "default": true
-      }
-    ],
-    "DD_IAST_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable IAST.",
-        "programmaticConfig": "iast.enabled",
-        "default": false
-      }
-    ],
-    "DD_IAST_MAX_CONCURRENT_REQUESTS": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Controls how many request can be analyzing code vulnerabilities at the same time",
-        "programmaticConfig": "iast.maxConcurrentRequests",
-        "default": 2
-      }
-    ],
-    "DD_IAST_MAX_CONTEXT_OPERATIONS": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Controls how many code vulnerabilities can be detected in the same request",
-        "programmaticConfig": "iast.maxContextOperations",
-        "default": 2
-      }
-    ],
-    "DD_IAST_REDACTION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable vulnerability redaction",
-        "programmaticConfig": "iast.redactionEnabled",
-        "default": true
-      }
-    ],
-    "DD_IAST_REDACTION_NAME_PATTERN": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Specifies a regex that will redact sensitive source names in vulnerability reports.",
-        "programmaticConfig": "iast.redactionNamePattern",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_IAST_REDACTION_VALUE_PATTERN": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Specifies a regex that will redact sensitive source values in vulnerability reports.",
-        "programmaticConfig": "iast.redactionValuePattern",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_IAST_REQUEST_SAMPLING": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Controls the percentage of requests that iast will analyze",
-        "programmaticConfig": "iast.requestSampling",
-        "default": 30
-      }
-    ],
-    "DD_IAST_SECURITY_CONTROLS_CONFIGURATION": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Allows to enable security controls. This option is not supported when<br>using ESM.",
-        "programmaticConfig": "iast.securityControlsConfiguration",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_IAST_STACK_TRACE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable stack trace reporting.",
-        "programmaticConfig": "iast.stackTrace.enabled",
-        "default": true
-      }
-    ],
-    "DD_IAST_TELEMETRY_VERBOSITY": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Specifies the verbosity of the sent telemetry. Default 'INFORMATION'",
-        "programmaticConfig": "iast.telemetryVerbosity",
-        "default": "INFORMATION"
-      }
-    ],
-    "DD_INJECTION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "array",
-        "description": "Initialize instrumentation",
-        "default": []
-      }
-    ],
-    "DD_INJECT_FORCE": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Initialize instrumentation",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_INSTRUMENTATION_CONFIG_ID": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Identifier used for configuration and correlation.",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_INSTRUMENTATION_INSTALL_ID": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Support legacy direct-set fields through all stable config and env var sources",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_INSTRUMENTATION_INSTALL_TIME": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Support legacy direct-set fields through all stable config and env var sources",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_INSTRUMENTATION_INSTALL_TYPE": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Support legacy direct-set fields through all stable config and env var sources",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_INSTRUMENTATION_TELEMETRY_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Can run tests and report tests",
-        "default": true,
-        "aliases": [
-          "DD_TRACE_TELEMETRY_ENABLED"
-        ]
-      }
-    ],
-    "DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "This is only used in testing to not have to wait 30s",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable internal profiling timeline sampling.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_LAMBDA_HANDLER": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Correctly patch handler where context is the third argument",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_LANGCHAIN_SPAN_CHAR_LIMIT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Maximum number of characters recorded for langchain span data.",
-        "default": 128
-      }
-    ],
-    "DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE": [
-      {
-        "implementation": "A",
-        "type": "float",
-        "description": "Rate for langchain span prompt completion.",
-        "default": 1
-      }
-    ],
-    "DD_LLMOBS_AGENTLESS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Set to `true` to disable sending data that requires a Datadog Agent.",
-        "programmaticConfig": "llmobs.agentlessEnabled",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_LLMOBS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Disable llmobs if DD_LLMOBS_ENABLED is set to false",
-        "default": false
-      }
-    ],
-    "DD_LLMOBS_ML_APP": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "The name of your ML application.",
-        "programmaticConfig": "llmobs.mlApp",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_LOGS_INJECTION": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable trace ID injection in log records to be able to correlate<br>traces with logs.",
-        "programmaticConfig": "logInjection",
-        "default": true
-      }
-    ],
-    "DD_LOGS_OTEL_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "OpenTelemetry Logs",
-        "default": false
-      }
-    ],
-    "DD_LOG_LEVEL": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Set the level for the [Datadog Agent log][8].",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_METRICS_OTEL_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Does not initialize when OTEL metrics are explicitly disabled",
-        "default": false
-      }
-    ],
-    "DD_MINI_AGENT_PATH": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Path for mini agent path.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_OPENAI_LOGS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable openai logs.",
-        "default": false
-      }
-    ],
-    "DD_OPENAI_SPAN_CHAR_LIMIT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Maximum number of characters recorded for openai span data.",
-        "default": 128
-      }
-    ],
-    "DD_PIPELINE_EXECUTION_ID": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Identifier used for configuration and correlation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_PLAYWRIGHT_WORKER": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Internal marker (set to `1`) used to detect Playwright worker processes for CI Visibility IPC payload routing.",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Can be turned off by env var",
-        "default": "$dynamic"
-      }
-    ],
-    "DD_PROFILING_CODEHOTSPOTS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Prioritize non-experimental env variables and warn about experimental ones",
-        "default": "__UNKNOWN__",
-        "aliases": [
-          "DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED"
-        ]
-      }
-    ],
-    "DD_PROFILING_CPU_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "If set to false, disables the CPU profiling. Defaults to true.",
-        "default": "__UNKNOWN__",
-        "aliases": [
-          "DD_PROFILING_EXPERIMENTAL_CPU_ENABLED"
-        ]
-      }
-    ],
-    "DD_PROFILING_DEBUG_SOURCE_MAPS": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Be able to read some env vars",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_PROFILING_DEBUG_UPLOAD_COMPRESSION": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Flush when the profiler is stopped",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_PROFILING_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Whether to enable profiling.",
-        "programmaticConfig": "profiling",
-        "default": "__UNSET__",
-        "aliases": [
-          "DD_EXPERIMENTAL_PROFILING_ENABLED"
-        ]
-      }
-    ],
-    "DD_PROFILING_ENDPOINT_COLLECTION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Log deprecation warning for deprecated configurations",
-        "default": "__UNKNOWN__",
-        "aliases": [
-          "DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED"
-        ]
-      }
-    ],
-    "DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Prioritize non-experimental env variables and warn about experimental ones",
-        "default": "__UNKNOWN__",
-        "deprecations": {
-          "replacedBy": "DD_PROFILING_CODEHOTSPOTS_ENABLED"
-        }
-      }
-    ],
-    "DD_PROFILING_EXPERIMENTAL_CPU_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Support profiler config with DD_PROFILING_PROFILERS",
-        "default": "__UNKNOWN__",
-        "deprecations": {
-          "replacedBy": "DD_PROFILING_CPU_ENABLED"
-        }
-      }
-    ],
-    "DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Log deprecation warning for deprecated configurations",
-        "default": "__UNKNOWN__",
-        "deprecations": {
-          "replacedBy": "DD_PROFILING_ENDPOINT_COLLECTION_ENABLED"
-        }
-      }
-    ],
-    "DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Sends a heap profile on OOM with async callback",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Sends a heap profile on OOM with async callback",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Sends a heap profile on OOM with async callback",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Support OOM heap profiler configuration",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable profiling experimental timeline.",
-        "default": "__UNKNOWN__",
-        "deprecations": {
-          "replacedBy": "DD_PROFILING_TIMELINE_ENABLED"
-        }
-      }
-    ],
-    "DD_PROFILING_EXPORTERS": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Code hotspots and endpoint tracing works",
-        "default": "agent"
-      }
-    ],
-    "DD_PROFILING_HEAP_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "If set to true, enables Live Heap profiling (in Preview). Defaults to false.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_PROFILING_HEAP_SAMPLING_INTERVAL": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Be able to read some env vars",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_PROFILING_PPROF_PREFIX": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Be able to read some env vars",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_PROFILING_PROFILERS": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Support profiler config with DD_PROFILING_PROFILERS",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_PROFILING_SOURCE_MAP": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable source map support for profiling.",
-        "default": true
-      }
-    ],
-    "DD_PROFILING_TIMELINE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Be able to read some env vars",
-        "default": "__UNKNOWN__",
-        "aliases": [
-          "DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED"
-        ]
-      }
-    ],
-    "DD_PROFILING_UPLOAD_PERIOD": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Sends profiler API telemetry",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_PROFILING_UPLOAD_TIMEOUT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Be able to read some env vars",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_PROFILING_V8_PROFILER_BUG_WORKAROUND": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Support profiler config with DD_PROFILING_PROFILERS",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_PROFILING_WALLTIME_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "If set to false, disables the Wall time profiling. Defaults to true.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_REMOTE_CONFIGURATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Disabled",
-        "default": true,
-        "aliases": [
-          "DD_REMOTE_CONFIG_ENABLED"
-        ]
-      }
-    ],
-    "DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS": [
-      {
-        "implementation": "A",
-        "type": "float",
-        "description": "Specifies the remote configuration polling interval in seconds",
-        "programmaticConfig": "remoteConfig.pollInterval",
-        "default": 5
-      }
-    ],
-    "DD_RUNTIME_METRICS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Apply host wide config",
-        "programmaticConfig": "runtimeMetrics.enabled",
-        "default": false
-      }
-    ],
-    "DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable runtime metrics event loop.",
-        "programmaticConfig": "runtimeMetrics.eventLoop",
-        "default": true
-      }
-    ],
-    "DD_RUNTIME_METRICS_FLUSH_INTERVAL": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Interval for runtime metrics flush.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_RUNTIME_METRICS_GC_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable runtime metrics gc.",
-        "programmaticConfig": "runtimeMetrics.gc",
-        "default": true
-      }
-    ],
-    "DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to add an auto-generated `runtime-id` tag to metrics.",
-        "programmaticConfig": "runtimeMetricsRuntimeId",
-        "default": false,
-        "aliases": [
-          "DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED"
-        ]
-      }
-    ],
-    "DD_SERVICE": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "The service name to be used for this program. If not set, the service name<br>will attempted to be inferred from package.json",
-        "programmaticConfig": "service",
-        "default": "$dynamic",
-        "aliases": [
-          "DD_SERVICE_NAME"
-        ]
-      }
-    ],
-    "DD_SERVICE_MAPPING": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Provide service name mappings for each plugin.",
-        "programmaticConfig": "serviceMapping",
-        "default": {}
-      }
-    ],
-    "DD_SITE": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Datadog site/region to send data to. Set this when your org is not on `datadoghq.com`.",
-        "default": "datadoghq.com"
-      }
-    ],
-    "DD_SPAN_SAMPLING_RULES": [
-      {
-        "implementation": "A",
-        "type": "array",
-        "description": "Span sampling rules that take effect when the enclosing trace is dropped, to ingest single spans",
-        "programmaticConfig": "spanSamplingRules",
-        "default": []
-      }
-    ],
-    "DD_SPAN_SAMPLING_RULES_FILE": [
-      {
-        "implementation": "A",
-        "type": "array",
-        "description": "Span sampling rules that take effect when the enclosing trace is dropped, to ingest single spans",
-        "programmaticConfig": "spanSamplingRules",
-        "default": []
-      }
-    ],
-    "DD_TAGS": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Tags to apply to produced data. Must be a list of <key>:<value> separated by commas such as: layer:api,team:intake.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TELEMETRY_DEBUG": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Add debug header if DD_TELEMETRY_DEBUG is present",
-        "default": false
-      }
-    ],
-    "DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable telemetry dependency collection.",
-        "default": true
-      }
-    ],
-    "DD_TELEMETRY_FORWARDER_PATH": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Path for telemetry forwarder path.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TELEMETRY_HEARTBEAT_INTERVAL": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Capture auto-instrumentation telemetry",
-        "default": 60000
-      }
-    ],
-    "DD_TELEMETRY_LOG_COLLECTION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Be disabled and not subscribe if DD_TELEMETRY_LOG_COLLECTION_ENABLED = false",
-        "default": true
-      }
-    ],
-    "DD_TELEMETRY_METRICS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Not set DD_TELEMETRY_METRICS_ENABLED",
-        "default": true
-      }
-    ],
-    "DD_TEST_FAILED_TEST_REPLAY_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Does not activate it if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TEST_FLEET_CONFIG_PATH": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Disable stats if config property is used",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TEST_LOCAL_CONFIG_PATH": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Disable stats if config property is used",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Number of retries used by Test Management.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TEST_MANAGEMENT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Does not disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TEST_SESSION_NAME": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Adds capabilities to tests",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "DD_TRACING_ENABLED=true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED=false",
-        "default": true
-      }
-    ],
-    "DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace 128 bit traceid logging.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_AEROSPIKE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aerospike.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_AGENT_PORT": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "The port of the trace agent that the tracer will submit to.",
-        "programmaticConfig": "port",
-        "default": "8126"
-      }
-    ],
-    "DD_TRACE_AGENT_PROTOCOL_VERSION": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Protocol version to use for requests to the agent. The version configured must be supported by the agent version installed or all traces will be dropped.",
-        "programmaticConfig": "protocolVersion",
-        "default": "0.4"
-      }
-    ],
-    "DD_TRACE_AGENT_URL": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Inject Unix Domain Socket path in DD_TRACE_AGENT_URL environment variable and the volume definition to access the corresponding path. Inject URL to use to connect the Datadog Agent for DogStatsD metrics in DD_DOGSTATSD_URL.",
-        "programmaticConfig": "url",
-        "default": "__UNKNOWN__",
-        "aliases": [
-          "DD_TRACE_URL"
-        ]
-      }
-    ],
-    "DD_TRACE_AI_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace ai.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_AMQP10_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace amqp10.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_AMQPLIB_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace amqplib.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_ANTHROPIC_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace anthropic.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_APOLLO_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace apollo.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_APOLLO_GATEWAY_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace apollo gateway.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_APOLLO_SERVER_CORE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace apollo server core.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_APOLLO_SERVER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace apollo server.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_APOLLO_SERVER_EXPRESS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace apollo server express.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_APOLLO_SERVER_FASTIFY_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace apollo server fastify.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_APOLLO_SUBGRAPH_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace apollo subgraph.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AVSC_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace avsc.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_AWS_ADD_SPAN_POINTERS": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable span pointers for supported AWS SDK operations.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_AWS_SDK_AWS_BATCH_PROPAGATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk aws batch propagation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_AWS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk aws.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk batch propagation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_BEDROCKRUNTIME_BATCH_PROPAGATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk bedrockruntime batch propagation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_BEDROCKRUNTIME_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk bedrockruntime.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_CLOUDWATCHLOGS_BATCH_PROPAGATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk cloudwatchlogs batch propagation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_CLOUDWATCHLOGS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk cloudwatchlogs.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_DYNAMODB_BATCH_PROPAGATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk dynamodb batch propagation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_DYNAMODB_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk dynamodb.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_AWS_SDK_EVENTBRIDGE_BATCH_PROPAGATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk eventbridge batch propagation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_EVENTBRIDGE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk eventbridge.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk kinesis batch propagation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_KINESIS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk kinesis.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_LAMBDA_BATCH_PROPAGATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk lambda batch propagation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_LAMBDA_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk lambda.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_NODE_HTTP_HANDLER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk node http handler.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_REDSHIFT_BATCH_PROPAGATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk redshift batch propagation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_REDSHIFT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk redshift.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_S3_BATCH_PROPAGATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk s3 batch propagation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_S3_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk s3.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_SFN_BATCH_PROPAGATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk sfn batch propagation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_SFN_CLIENT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk sfn client.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_SFN_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk sfn.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_SMITHY_CLIENT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk smithy client.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_AWS_SDK_SNS_BATCH_PROPAGATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk sns batch propagation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_SNS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk sns.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk sqs batch propagation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_SQS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk sqs.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_STATES_BATCH_PROPAGATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk states batch propagation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_STATES_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk states.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_STEPFUNCTIONS_BATCH_PROPAGATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk stepfunctions batch propagation.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AWS_SDK_STEPFUNCTIONS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace aws sdk stepfunctions.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AXIOS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace axios.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace azure eventhubs batch links.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AZURE_EVENT_HUBS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace azure event hubs.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_AZURE_FUNCTIONS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace azure functions.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace azure servicebus batch links.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_AZURE_SERVICE_BUS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace azure service bus.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_BAGGAGE_MAX_BYTES": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "The maximum number of bytes in the baggage header value. Values less than 3 bytes prevent propagation, because this is the minimum size for a valid key-value pair (for example, k=v).",
-        "default": 8192
-      }
-    ],
-    "DD_TRACE_BAGGAGE_MAX_ITEMS": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "The maximum number of key-value pairs in the baggage header.",
-        "default": 64
-      }
-    ],
-    "DD_TRACE_BAGGAGE_TAG_KEYS": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "A comma-separated list of baggage keys that are automatically applied as span tags to the local root span. For example, a baggage key `user.id` is tagged as `baggage.user.id`<br><br>This feature only applies to baggage extracted from incoming HTTP headers. Baggage set with the baggage API is not included.<br>  - To tag all baggage items, set the value to `*`. Use this with caution to avoid exposing sensitive data in tags.<br>  - To disable this feature, set the value to an empty string.",
-        "default": "user.id,session.id,account.id"
-      }
-    ],
-    "DD_TRACE_BEAUTIFUL_LOGS": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Pretty-print JSON payloads in tracer debug logs (adds indentation).",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_BLUEBIRD_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace bluebird.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_BODY_PARSER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace body parser.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_BSON_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace bson.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_BULLMQ_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace bullmq.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_BUNYAN_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace bunyan.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_CASSANDRA_DRIVER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace cassandra driver.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_CHILD_PROCESS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace child process.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_CLIENT_IP_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable client IP collection from relevant IP headers",
-        "programmaticConfig": "clientIpEnabled",
-        "default": false
-      }
-    ],
-    "DD_TRACE_CLIENT_IP_HEADER": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Custom header name to source the http.client_ip tag from.",
-        "programmaticConfig": "clientIpHeader",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Maximum depth of payload traversal for tags",
-        "programmaticConfig": "cloudPayloadTagging.maxDepth",
-        "default": 10
-      }
-    ],
-    "DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING": [
-      {
-        "implementation": "A",
-        "type": "array",
-        "description": "Additional JSONPath queries to replace with `redacted` in request payloads<br>Undefined or invalid JSONPath queries disable the feature for requests.",
-        "programmaticConfig": "cloudPayloadTagging.request",
-        "default": []
-      }
-    ],
-    "DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING": [
-      {
-        "implementation": "A",
-        "type": "array",
-        "description": "Additional JSONPath queries to replace with `redacted` in request payloads<br>Undefined or invalid JSONPath queries disable the feature for requests.",
-        "programmaticConfig": "cloudPayloadTagging.request",
-        "default": []
-      }
-    ],
-    "DD_TRACE_COLLECTIONS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace collections.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_COMMONPLUGIN_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace commonplugin.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_CONFLUENTINC_KAFKA_JAVASCRIPT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace confluentinc kafka javascript.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_CONNECT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace connect.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_COOKIE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace cookie.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_COOKIE_PARSER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace cookie parser.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_COUCHBASE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace couchbase.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_CRYPTO_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace crypto.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_CUCUMBER_CUCUMBER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace cucumber cucumber.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_CUCUMBER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace cucumber.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_CYPRESS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace cypress.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_DD_TRACE_API_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace dd trace api.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_DEBUG": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enables or disables debug logging (Could help in case of troubleshooting investigation). Valid values are: true or false. Defaults to false.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_DISABLED_INSTRUMENTATIONS": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Capture auto-instrumentation telemetry",
-        "default": ""
-      }
-    ],
-    "DD_TRACE_DISABLED_PLUGINS": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Comma-separated list of plugin IDs to disable. See `index.d.ts` `interface Plugins` for valid IDs.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_DNS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace dns.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "JSON object mapping DynamoDB table names to primary key field names (1-2) used for span pointers.",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_TRACE_ELASTICSEARCH_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace elasticsearch.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_ELASTIC_ELASTICSEARCH_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace elastic elasticsearch.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_ELASTIC_TRANSPORT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace elastic transport.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enables trace collection. Defaults to true. For more information about trace collection environment variables, see [Library Configuration][9].",
-        "default": true
-      }
-    ],
-    "DD_TRACE_ENCODING_DEBUG": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable additional trace encoding debug logging.",
-        "default": false
-      }
-    ],
-    "DD_TRACE_EXPERIMENTAL_B3_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace experimental b3.",
-        "programmaticConfig": "experimental.b3",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_EXPERIMENTAL_EXPORTER": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Whether to write traces to log output or agentless, rather than send to an agent",
-        "programmaticConfig": "experimental.exporter",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable the experimental `getRumData` method.",
-        "programmaticConfig": "experimental.enableGetRumData",
-        "default": false
-      }
-    ],
-    "DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Set new runtimeMetricsRuntimeId from deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED",
-        "default": "__UNKNOWN__",
-        "deprecations": {
-          "replacedBy": "DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED"
-        }
-      }
-    ],
-    "DD_TRACE_EXPERIMENTAL_SPAN_COUNTS": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable experimental span counts.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_EXPERIMENTAL_STATE_TRACKING": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable experimental state tracking.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_EXPRESS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Disable loading instrumentations using DD_TRACE_<INTEGRATION>_ENABLED",
-        "default": true
-      }
-    ],
-    "DD_TRACE_EXPRESS_MONGO_SANITIZE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace express mongo sanitize.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_EXPRESS_SESSION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace express session.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_FASTIFY_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace fastify.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_FETCH_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace fetch.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_FIND_MY_WAY_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace find my way.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_FLUSH_INTERVAL": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Interval in milliseconds at which the tracer will submit traces to the agent.",
-        "programmaticConfig": "flushInterval",
-        "default": 2000
-      }
-    ],
-    "DD_TRACE_FS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace fs.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_GCP_PUBSUB_PUSH_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace gcp pubsub push.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_GENERIC_POOL_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace generic pool.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_GIT_METADATA_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Disables telemetry if inside a jest worker",
-        "default": true
-      }
-    ],
-    "DD_TRACE_GLOBAL_TAGS": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Give priority to the common agent environment variable",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_GOOGLE_CLOUD_PUBSUB_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace google cloud pubsub.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_GOOGLE_CLOUD_VERTEXAI_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace google cloud vertexai.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_GOOGLE_GAX_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace google gax.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_GOOGLE_GENAI_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace google genai.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_GRAPHQL_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace graphql.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_GRAPHQL_ERROR_EXTENSIONS": [
-      {
-        "implementation": "A",
-        "type": "array",
-        "description": "Comma-separated list of GraphQL error extension keys to record on span events.",
-        "default": []
-      }
-    ],
-    "DD_TRACE_GRAPHQL_TAG_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace graphql tag.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_GRAPHQL_TOOLS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace graphql tools.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_GRAPHQL_TOOLS_EXECUTOR_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace graphql tools executor.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_GRAPHQL_YOGA_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace graphql yoga.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_GRPC_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace grpc.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_GRPC_GRPC_JS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace grpc grpc js.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_GRPC_PROTO_LOADER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace grpc proto loader.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_HANDLEBARS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace handlebars.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_HAPI_BOOM_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace hapi boom.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_HAPI_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace hapi.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_HAPI_HAPI_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace hapi hapi.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_HEADER_TAGS": [
-      {
-        "implementation": "A",
-        "type": "array",
-        "description": "Automatically apply specified HTTP headers as span tags. If a custom tag name is not specified, the tag key defaults to http.request.headers. for request headers and http.response.headers. for response headers.",
-        "default": []
-      }
-    ],
-    "DD_TRACE_HONO_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace hono.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_HTTP2_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace http2.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_HTTPS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace https.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_HTTP_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace http.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace inferred proxy services.",
-        "default": false
-      }
-    ],
-    "DD_TRACE_IOREDIS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace ioredis.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_IOVALKEY_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace iovalkey.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_JEST_CIRCUS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace jest circus.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_JEST_CONFIG_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace jest config.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_JEST_CORE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace jest core.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_JEST_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace jest.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_JEST_ENVIRONMENT_JSDOM_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace jest environment jsdom.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_JEST_ENVIRONMENT_NODE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace jest environment node.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_JEST_GLOBALS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace jest globals.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_JEST_REPORTERS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace jest reporters.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_JEST_RUNTIME_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace jest runtime.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_JEST_TEST_SEQUENCER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace jest test sequencer.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_JEST_TRANSFORM_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace jest transform.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_JEST_WORKER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace jest worker.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_KAFKAJS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace kafkajs.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_KNEX_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace knex.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_KOA_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace koa.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_KOA_ROUTER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace koa router.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_KOA_ROUTE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace koa route.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_KOA_WEBSOCKET_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace koa websocket.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_LANGCHAIN_ANTHROPIC_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace langchain anthropic.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_LANGCHAIN_COHERE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace langchain cohere.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_LANGCHAIN_CORE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace langchain core.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_LANGCHAIN_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace langchain.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_LANGCHAIN_GOOGLE_GENAI_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace langchain google genai.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_LANGCHAIN_OPENAI_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace langchain openai.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_LDAPJS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace ldapjs.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_LDAPJS_PROMISE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace ldapjs promise.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_LEGACY_BAGGAGE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace legacy baggage.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_LIMITD_CLIENT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace limitd client.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_LODASH_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace lodash.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_LOG_LEVEL": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Capture telemetry if both DD and OTEL env vars are set",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_LOOPBACK_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace loopback.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_MARIADB_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace mariadb.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_MEMCACHED_COMMAND_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent",
-        "default": false
-      }
-    ],
-    "DD_TRACE_MEMCACHED_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace memcached.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_MICROGATEWAY_CORE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace microgateway core.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_MIDDIE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace middie.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_MIDDLEWARE_TRACING_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace middleware tracing.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_MOCHA_EACH_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace mocha each.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_MOCHA_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace mocha.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_MOLECULER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace moleculer.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_MONGODB_CORE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace mongodb core.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_MONGODB_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace mongodb.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_MONGODB_HEARTBEAT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace mongodb heartbeat.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_MONGOOSE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace mongoose.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_MQUERY_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace mquery.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_MULTER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace multer.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_MYSQL2_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace mysql2.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_MYSQL_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace mysql.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_NATIVE_SPAN_EVENTS": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Encode span events in the native `span_events` payload format instead of `meta.events` JSON.",
-        "default": false
-      }
-    ],
-    "DD_TRACE_NET_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace net.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_NEXT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace next.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_NODE_CHILD_PROCESS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace node child process.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_NODE_REDIS_CLIENT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace node redis client.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_NODE_SERIALIZE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace node serialize.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_NYC_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace nyc.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Applies a regex to redact sensitive data from query strings on incoming HTTP requests. The default regex matches various sensitive data patterns, including passwords, tokens, API keys, private keys, and authorization terms. Matches are r...",
-        "default": "(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:\"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:\"|%22)(?:%2[^2]|%[^2]|[^\"%])+(?:\"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}"
-      }
-    ],
-    "DD_TRACE_OPENAI_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace openai.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_OPENSEARCH_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace opensearch.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_OPENSEARCH_PROJECT_OPENSEARCH_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace opensearch project opensearch.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_OPENTELEMETRY_SDK_TRACE_NODE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace opentelemetry sdk trace node.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_ORACLEDB_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace oracledb.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_OTEL_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Capture auto-instrumentation telemetry",
-        "default": false
-      }
-    ],
-    "DD_TRACE_PARTIAL_FLUSH_MIN_SPANS": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces.",
-        "programmaticConfig": "flushMinSpans",
-        "default": 1000
-      }
-    ],
-    "DD_TRACE_PASSPORT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace passport.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_PASSPORT_HTTP_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace passport http.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_PASSPORT_LOCAL_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace passport local.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Activate peer service in v1 unless explicitly false",
-        "programmaticConfig": "spanComputePeerService",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_PEER_SERVICE_MAPPING": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Comma-separated `from:to` mapping to remap `peer.service` (sets `_dd.peer.service.remapped_from`).",
-        "default": {}
-      }
-    ],
-    "DD_TRACE_PG_CURSOR_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace pg cursor.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_PG_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace pg.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_PG_NATIVE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace pg native.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_PG_QUERY_STREAM_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace pg query stream.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_PINO_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace pino.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_PINO_PRETTY_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace pino pretty.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_PLAYWRIGHT_CORE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace playwright core.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_PLAYWRIGHT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace playwright.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_PLAYWRIGHT_TEST_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace playwright test.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_PRISMA_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace prisma.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_PROCESS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace process.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_PROMISE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace promise.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_PROMISE_JS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace promise js.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Not extract baggage when Trace_Propagation_Behavior_Extract is set to ignore",
-        "default": "continue"
-      }
-    ],
-    "DD_TRACE_PROPAGATION_EXTRACT_FIRST": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Read case-insensitive booleans from environment variables",
-        "default": false
-      }
-    ],
-    "DD_TRACE_PROPAGATION_STYLE": [
-      {
-        "implementation": "A",
-        "type": "array",
-        "description": "Selection of context propagation injection mechanisms.",
-        "programmaticConfig": "tracePropagationStyle.inject",
-        "default": [
-          "datadog",
-          "tracecontext",
-          "baggage"
-        ]
-      }
-    ],
-    "DD_TRACE_PROPAGATION_STYLE_EXTRACT": [
-      {
-        "implementation": "A",
-        "type": "array",
-        "description": "Selection and priority order of context propagation extraction mechanisms.",
-        "programmaticConfig": "tracePropagationStyle.extract",
-        "default": [
-          "datadog",
-          "tracecontext",
-          "baggage"
-        ]
-      }
-    ],
-    "DD_TRACE_PROPAGATION_STYLE_INJECT": [
-      {
-        "implementation": "A",
-        "type": "array",
-        "description": "Selection of context propagation injection mechanisms.",
-        "programmaticConfig": "tracePropagationStyle.inject",
-        "default": [
-          "datadog",
-          "tracecontext",
-          "baggage"
-        ]
-      }
-    ],
-    "DD_TRACE_PROTOBUFJS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace protobufjs.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_PUG_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace pug.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_Q_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace q.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_RATE_LIMIT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Global rate limit that is applied on the global sample rate and all rules,<br>and controls the ingestion rate limit between the agent and the backend.<br>Defaults to deferring the decision to the agent.",
-        "programmaticConfig": "ingestion.rateLimit",
-        "default": 100
-      }
-    ],
-    "DD_TRACE_REACT_DOM_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace react dom.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_REACT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace react.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_REDIS_CLIENT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace redis client.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_REDIS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace redis.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace remove integration service names.",
-        "default": false
-      }
-    ],
-    "DD_TRACE_REPORT_HOSTNAME": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.",
-        "programmaticConfig": "reportHostname",
-        "default": false
-      }
-    ],
-    "DD_TRACE_REQUEST_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace request.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_RESOURCE_RENAMING_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Be disabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is false",
-        "default": false
-      }
-    ],
-    "DD_TRACE_RESTIFY_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace restify.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_RHEA_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace rhea.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_ROUTER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace router.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_SAMPLE_RATE": [
-      {
-        "implementation": "A",
-        "type": "float",
-        "description": "Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.",
-        "programmaticConfig": "ingestion.sampleRate",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_TRACE_SAMPLING_RULES": [
-      {
-        "implementation": "A",
-        "type": "json",
-        "description": "Sampling rules to apply to priority sampling. Each rule is a JSON,<br>consisting of `service` and `name`, which are regexes to match against<br>a trace's `service` and `name`, and a corresponding `sampleRate`. If not<br>specified, will defer to global sampling rate for all spans.",
-        "programmaticConfig": "samplingRules",
-        "default": []
-      }
-    ],
-    "DD_TRACE_SCOPE": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Legacy scope configuration (async context propagation); currently has no effect.",
-        "default": "__UNSET__"
-      }
-    ],
-    "DD_TRACE_SELENIUM_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace selenium.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_SELENIUM_WEBDRIVER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace selenium webdriver.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_SEQUELIZE_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace sequelize.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_SHAREDB_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace sharedb.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_SMITHY_SMITHY_CLIENT_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace smithy smithy client.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_SPAN_ATTRIBUTE_SCHEMA": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Activate peer service in v1 unless explicitly false",
-        "programmaticConfig": "spanAttributeSchema",
-        "default": "v0"
-      }
-    ],
-    "DD_TRACE_SPAN_LEAK_DEBUG": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "0: Disabled, 1: logging, 2: garbage collection + logging",
-        "default": 0
-      }
-    ],
-    "DD_TRACE_SQLITE3_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace sqlite3.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_STARTUP_LOGS": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Whether to enable startup logs.",
-        "programmaticConfig": "startupLogs",
-        "default": false
-      }
-    ],
-    "DD_TRACE_STATS_COMPUTATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Disable stats",
-        "programmaticConfig": "stats",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_SUFFIXPLUGIN_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace suffixplugin.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_TAGS": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Additional tags to apply to traces, as comma-separated `key:value` pairs.",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_TRACE_TEDIOUS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace tedious.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_UNDICI_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace undici.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_URL_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace url.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_VITEST_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace vitest.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_VITEST_RUNNER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace vitest runner.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_VM_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace vm.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_WEBSOCKET_MESSAGES_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace websocket messages.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "By default, websocket messages preserve the same sampling as the span captured during the handshake. This ensures that, if a handshake span has been sampled, all the messages in its session will also be sampled. To disable that behavior and sample each websocket message independently, set this configuration to `false`.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "By default, each received message generates a new trace. The handshake is linked to it as a span link. Setting this parameter to `false` causes all the spans captured during the session to be in the same trace.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_WHEN_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace when.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_WINSTON_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace winston.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_WORKERPOOL_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace workerpool.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_WS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Enable/disable trace ws.",
-        "default": true
-      }
-    ],
-    "DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Maximum length of the `x-datadog-tags` header for trace tag propagation. Set to 0 to disable.",
-        "default": 512
-      }
-    ],
-    "DD_TRACING_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "DD_TRACING_ENABLED=false",
-        "default": true
-      }
-    ],
-    "DD_VERSION": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "The version number of the application. If not set, the version<br>will attempted to be inferred from package.json.",
-        "programmaticConfig": "version",
-        "default": "$dynamic"
-      }
-    ],
-    "DD_VERTEXAI_SPAN_CHAR_LIMIT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Maximum number of characters recorded for vertexai span data.",
-        "default": 128
-      }
-    ],
-    "DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE": [
-      {
-        "implementation": "A",
-        "type": "float",
-        "description": "Rate for vertexai span prompt completion.",
-        "default": 1
-      }
-    ],
-    "DD_VITEST_WORKER": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Internal marker (set to `1`) used to detect Vitest worker processes for CI Visibility IPC payload routing.",
-        "default": "__UNSET__"
-      }
-    ],
-    "OTEL_BSP_MAX_EXPORT_BATCH_SIZE": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "OpenTelemetry Logs",
-        "default": 512
-      }
-    ],
-    "OTEL_BSP_MAX_QUEUE_SIZE": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Rejects negative values for all configs",
-        "default": 2048
-      }
-    ],
-    "OTEL_BSP_SCHEDULE_DELAY": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Rejects negative values for all configs",
-        "default": 5000
-      }
-    ],
-    "OTEL_EXPORTER_OTLP_ENDPOINT": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Only set if there's a custom URL, otherwise let calc phase handle the default",
-        "default": "__UNSET__"
-      }
-    ],
-    "OTEL_EXPORTER_OTLP_HEADERS": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Configures OTLP headers from environment variable",
-        "default": "__UNSET__"
-      }
-    ],
-    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Appends /v1/logs to endpoint if not provided",
-        "default": "__UNSET__"
-      }
-    ],
-    "OTEL_EXPORTER_OTLP_LOGS_HEADERS": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Prioritizes logs-specific headers over generic OTLP headers",
-        "default": ""
-      }
-    ],
-    "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Exports logs using JSON protocol",
-        "default": "http/protobuf"
-      }
-    ],
-    "OTEL_EXPORTER_OTLP_LOGS_TIMEOUT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Configures OTLP timeout from environment variable",
-        "default": 10000
-      }
-    ],
-    "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Configures OTLP endpoint from environment variable",
-        "default": "__UNSET__"
-      }
-    ],
-    "OTEL_EXPORTER_OTLP_METRICS_HEADERS": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Prioritizes metrics-specific headers over generic OTLP headers",
-        "default": ""
-      }
-    ],
-    "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Logs warning and falls back to protobuf when gRPC protocol is set",
-        "default": "http/protobuf"
-      }
-    ],
-    "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Exports observable counter metrics",
-        "default": "DELTA"
-      }
-    ],
-    "OTEL_EXPORTER_OTLP_METRICS_TIMEOUT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Configures OTLP timeout from environment variable",
-        "default": 10000
-      }
-    ],
-    "OTEL_EXPORTER_OTLP_PROTOCOL": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Configures protocol from environment variable",
-        "default": "http/protobuf"
-      }
-    ],
-    "OTEL_EXPORTER_OTLP_TIMEOUT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Falls back to generic timeout when metrics-specific not set",
-        "default": 10000
-      }
-    ],
-    "OTEL_LOGS_EXPORTER": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Capture telemetry if both DD and OTEL env vars are set",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "OTEL_LOG_LEVEL": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Capture telemetry if both DD and OTEL env vars are set",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "OTEL_METRICS_EXPORTER": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Capture telemetry if both DD and OTEL env vars are set",
-        "default": false
-      }
-    ],
-    "OTEL_METRIC_EXPORT_INTERVAL": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "OpenTelemetry Meter Provider",
-        "default": 10000
-      }
-    ],
-    "OTEL_METRIC_EXPORT_TIMEOUT": [
-      {
-        "implementation": "A",
-        "type": "int",
-        "description": "Rejects negative values for all configs",
-        "default": 7500
-      }
-    ],
-    "OTEL_PROPAGATORS": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Capture telemetry if both DD and OTEL env vars are set",
-        "default": false
-      }
-    ],
-    "OTEL_RESOURCE_ATTRIBUTES": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Capture telemetry if both DD and OTEL env vars are set",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "OTEL_SDK_DISABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "description": "Capture telemetry if both DD and OTEL env vars are set",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "OTEL_SERVICE_NAME": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "The service name to be used for this program. If not set, the service name<br>will attempted to be inferred from package.json",
-        "programmaticConfig": "service",
-        "default": "$dynamic"
-      }
-    ],
-    "OTEL_TRACES_EXPORTER": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "description": "Capture telemetry if both DD and OTEL env vars are set",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "OTEL_TRACES_SAMPLER": [
-      {
-        "implementation": "A",
-        "type": "float",
-        "description": "Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.",
-        "programmaticConfig": "sampleRate",
-        "default": "__UNSET__"
-      }
-    ],
-    "OTEL_TRACES_SAMPLER_ARG": [
-      {
-        "implementation": "A",
-        "type": "float",
-        "description": "Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.",
-        "programmaticConfig": "sampleRate",
-        "default": "__UNSET__"
-      }
-    ]
+    "DD_AAS_DOTNET_EXTENSION_VERSION": ["A"],
+    "DD_ACTION_EXECUTION_ID": ["A"],
+    "DD_AGENT_HOST": ["A"],
+    "DD_AGENTLESS_LOG_SUBMISSION_ENABLED": ["A"],
+    "DD_AGENTLESS_LOG_SUBMISSION_URL": ["A"],
+    "DD_AI_GUARD_ENABLED": ["A"],
+    "DD_AI_GUARD_ENDPOINT": ["A"],
+    "DD_AI_GUARD_MAX_CONTENT_SIZE": ["A"],
+    "DD_AI_GUARD_MAX_MESSAGES_LENGTH": ["A"],
+    "DD_AI_GUARD_TIMEOUT": ["A"],
+    "DD_API_KEY": ["A"],
+    "DD_API_SECURITY_ENABLED": ["A"],
+    "DD_API_SECURITY_SAMPLE_DELAY": ["A"],
+    "DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED": ["A"],
+    "DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT": ["A"],
+    "DD_APM_FLUSH_DEADLINE_MILLISECONDS": ["A"],
+    "DD_APM_TRACING_ENABLED": ["A"],
+    "DD_APP_KEY": ["A"],
+    "DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE": ["A"],
+    "DD_APPSEC_COLLECT_ALL_HEADERS": ["A"],
+    "DD_APPSEC_ENABLED": ["A"],
+    "DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON": ["A"],
+    "DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED": ["A"],
+    "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML": ["A"],
+    "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON": ["A"],
+    "DD_APPSEC_MAX_COLLECTED_HEADERS": ["A"],
+    "DD_APPSEC_MAX_STACK_TRACE_DEPTH": ["A"],
+    "DD_APPSEC_MAX_STACK_TRACES": ["A"],
+    "DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP": ["A"],
+    "DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP": ["A"],
+    "DD_APPSEC_RASP_COLLECT_REQUEST_BODY": ["A"],
+    "DD_APPSEC_RASP_ENABLED": ["A"],
+    "DD_APPSEC_RULES": ["A"],
+    "DD_APPSEC_SCA_ENABLED": ["A"],
+    "DD_APPSEC_STACK_TRACE_ENABLED": ["A"],
+    "DD_APPSEC_TRACE_RATE_LIMIT": ["A"],
+    "DD_APPSEC_WAF_TIMEOUT": ["A"],
+    "DD_AZURE_RESOURCE_GROUP": ["A"],
+    "DD_CIVISIBILITY_AGENTLESS_ENABLED": ["A"],
+    "DD_CIVISIBILITY_AGENTLESS_URL": ["A"],
+    "DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER": ["A"],
+    "DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE": ["A"],
+    "DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING": ["A"],
+    "DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED": ["A"],
+    "DD_CIVISIBILITY_ENABLED": ["A"],
+    "DD_CIVISIBILITY_FLAKY_RETRY_COUNT": ["A"],
+    "DD_CIVISIBILITY_FLAKY_RETRY_ENABLED": ["A"],
+    "DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED": ["A"],
+    "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED": ["A"],
+    "DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED": ["A"],
+    "DD_CIVISIBILITY_ITR_ENABLED": ["A"],
+    "DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS": ["A"],
+    "DD_CIVISIBILITY_MANUAL_API_ENABLED": ["A"],
+    "DD_CIVISIBILITY_TEST_COMMAND": ["A"],
+    "DD_CIVISIBILITY_TEST_MODULE_ID": ["A"],
+    "DD_CIVISIBILITY_TEST_SESSION_ID": ["A"],
+    "DD_CODE_ORIGIN_FOR_SPANS_ENABLED": ["A"],
+    "DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED": ["A"],
+    "DD_CRASHTRACKING_ENABLED": ["A"],
+    "DD_CUSTOM_TRACE_ID": ["A"],
+    "DD_DATA_STREAMS_ENABLED": ["A"],
+    "DD_DBM_PROPAGATION_MODE": ["A"],
+    "DD_DOGSTATSD_HOST": ["A"],
+    "DD_DOGSTATSD_PORT": ["A"],
+    "DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS": ["A"],
+    "DD_DYNAMIC_INSTRUMENTATION_ENABLED": ["A"],
+    "DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE": ["A"],
+    "DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS": ["A"],
+    "DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS": ["A"],
+    "DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS": ["A"],
+    "DD_ENV": ["A"],
+    "DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED": ["A"],
+    "DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED": ["A"],
+    "DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED": ["A"],
+    "DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED": ["A"],
+    "DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR": ["A"],
+    "DD_EXTERNAL_ENV": ["A"],
+    "DD_FLAGGING_PROVIDER_ENABLED": ["A"],
+    "DD_GIT_BRANCH": ["A"],
+    "DD_GIT_COMMIT_AUTHOR_DATE": ["A"],
+    "DD_GIT_COMMIT_AUTHOR_EMAIL": ["A"],
+    "DD_GIT_COMMIT_AUTHOR_NAME": ["A"],
+    "DD_GIT_COMMIT_COMMITTER_DATE": ["A"],
+    "DD_GIT_COMMIT_COMMITTER_EMAIL": ["A"],
+    "DD_GIT_COMMIT_COMMITTER_NAME": ["A"],
+    "DD_GIT_COMMIT_MESSAGE": ["A"],
+    "DD_GIT_COMMIT_SHA": ["A"],
+    "DD_GIT_PROPERTIES_FILE": ["A"],
+    "DD_GIT_FOLDER_PATH": ["A"],
+    "DD_GIT_REPOSITORY_URL": ["A"],
+    "DD_GIT_TAG": ["A"],
+    "DD_GIT_PULL_REQUEST_BASE_BRANCH": ["A"],
+    "DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA": ["A"],
+    "DD_GIT_COMMIT_HEAD_SHA": ["A"],
+    "DD_GRPC_CLIENT_ERROR_STATUSES": ["A"],
+    "DD_GRPC_SERVER_ERROR_STATUSES": ["A"],
+    "DD_HEAP_SNAPSHOT_COUNT": ["A"],
+    "DD_HEAP_SNAPSHOT_INTERVAL": ["A"],
+    "DD_HEAP_SNAPSHOT_DESTINATION": ["A"],
+    "DD_IAST_DB_ROWS_TO_TAINT": ["A"],
+    "DD_IAST_DEDUPLICATION_ENABLED": ["A"],
+    "DD_IAST_ENABLED": ["A"],
+    "DD_IAST_MAX_CONCURRENT_REQUESTS": ["A"],
+    "DD_IAST_MAX_CONTEXT_OPERATIONS": ["A"],
+    "DD_IAST_REDACTION_ENABLED": ["A"],
+    "DD_IAST_REDACTION_NAME_PATTERN": ["A"],
+    "DD_IAST_REDACTION_VALUE_PATTERN": ["A"],
+    "DD_IAST_REQUEST_SAMPLING": ["A"],
+    "DD_IAST_SECURITY_CONTROLS_CONFIGURATION": ["A"],
+    "DD_IAST_STACK_TRACE_ENABLED": ["A"],
+    "DD_IAST_TELEMETRY_VERBOSITY": ["A"],
+    "DD_INJECT_FORCE": ["A"],
+    "DD_INJECTION_ENABLED": ["A"],
+    "DD_ENABLE_NX_SERVICE_NAME": ["A"],
+    "DD_INSTRUMENTATION_CONFIG_ID": ["A"],
+    "DD_INSTRUMENTATION_INSTALL_ID": ["A"],
+    "DD_INSTRUMENTATION_INSTALL_TIME": ["A"],
+    "DD_INSTRUMENTATION_INSTALL_TYPE": ["A"],
+    "DD_INSTRUMENTATION_TELEMETRY_ENABLED": ["A"],
+    "DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD": ["A"],
+    "DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED": ["A"],
+    "DD_LAMBDA_HANDLER": ["A"],
+    "DD_LANGCHAIN_SPAN_CHAR_LIMIT": ["A"],
+    "DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE": ["A"],
+    "DD_LLMOBS_AGENTLESS_ENABLED": ["A"],
+    "DD_LLMOBS_ENABLED": ["A"],
+    "DD_LLMOBS_ML_APP": ["A"],
+    "DD_LOG_LEVEL": ["A"],
+    "DD_LOGS_INJECTION": ["A"],
+    "DD_LOGS_OTEL_ENABLED": ["A"],
+    "DD_METRICS_OTEL_ENABLED": ["A"],
+    "DD_MINI_AGENT_PATH": ["A"],
+    "DD_OPENAI_LOGS_ENABLED": ["A"],
+    "DD_OPENAI_SPAN_CHAR_LIMIT": ["A"],
+    "DD_PIPELINE_EXECUTION_ID": ["A"],
+    "DD_PLAYWRIGHT_WORKER": ["A"],
+    "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": ["A"],
+    "DD_PROFILING_CODEHOTSPOTS_ENABLED": ["A"],
+    "DD_PROFILING_CPU_ENABLED": ["A"],
+    "DD_PROFILING_DEBUG_SOURCE_MAPS": ["A"],
+    "DD_PROFILING_DEBUG_UPLOAD_COMPRESSION": ["A"],
+    "DD_PROFILING_ENABLED": ["A"],
+    "DD_PROFILING_ENDPOINT_COLLECTION_ENABLED": ["A"],
+    "DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES": ["A"],
+    "DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE": ["A"],
+    "DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT": ["A"],
+    "DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED": ["A"],
+    "DD_PROFILING_EXPORTERS": ["A"],
+    "DD_PROFILING_HEAP_ENABLED": ["A"],
+    "DD_PROFILING_HEAP_SAMPLING_INTERVAL": ["A"],
+    "DD_PROFILING_PPROF_PREFIX": ["A"],
+    "DD_PROFILING_PROFILERS": ["A"],
+    "DD_PROFILING_SOURCE_MAP": ["A"],
+    "DD_PROFILING_TIMELINE_ENABLED": ["A"],
+    "DD_PROFILING_UPLOAD_PERIOD": ["A"],
+    "DD_PROFILING_UPLOAD_TIMEOUT": ["A"],
+    "DD_PROFILING_V8_PROFILER_BUG_WORKAROUND": ["A"],
+    "DD_PROFILING_WALLTIME_ENABLED": ["A"],
+    "DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS": ["A"],
+    "DD_REMOTE_CONFIGURATION_ENABLED": ["A"],
+    "DD_RUNTIME_METRICS_ENABLED": ["A"],
+    "DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED": ["A"],
+    "DD_RUNTIME_METRICS_GC_ENABLED": ["A"],
+    "DD_RUNTIME_METRICS_FLUSH_INTERVAL": ["A"],
+    "DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED": ["A"],
+    "DD_TRACE_GCP_PUBSUB_PUSH_ENABLED": ["A"],
+    "DD_SERVICE_MAPPING": ["A"],
+    "DD_SERVICE": ["A"],
+    "DD_SITE": ["A"],
+    "DD_SPAN_SAMPLING_RULES_FILE": ["A"],
+    "DD_SPAN_SAMPLING_RULES": ["A"],
+    "DD_TAGS": ["A"],
+    "DD_TELEMETRY_DEBUG": ["A"],
+    "DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED": ["A"],
+    "DD_TELEMETRY_FORWARDER_PATH": ["A"],
+    "DD_TELEMETRY_HEARTBEAT_INTERVAL": ["A"],
+    "DD_TELEMETRY_LOG_COLLECTION_ENABLED": ["A"],
+    "DD_TELEMETRY_METRICS_ENABLED": ["A"],
+    "DD_TEST_FAILED_TEST_REPLAY_ENABLED": ["A"],
+    "DD_TEST_FLEET_CONFIG_PATH": ["A"],
+    "DD_TEST_LOCAL_CONFIG_PATH": ["A"],
+    "DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES": ["A"],
+    "DD_TEST_MANAGEMENT_ENABLED": ["A"],
+    "DD_TEST_SESSION_NAME": ["A"],
+    "DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED": ["A"],
+    "DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED": ["A"],
+    "DD_TRACE_AEROSPIKE_ENABLED": ["A"],
+    "DD_TRACE_AI_ENABLED": ["A"],
+    "DD_TRACE_ANTHROPIC_ENABLED": ["A"],
+    "DD_TRACE_AGENT_PORT": ["A"],
+    "DD_TRACE_AGENT_PROTOCOL_VERSION": ["A"],
+    "DD_TRACE_AGENT_URL": ["A"],
+    "DD_TRACE_AMQP10_ENABLED": ["A"],
+    "DD_TRACE_AMQPLIB_ENABLED": ["A"],
+    "DD_TRACE_APOLLO_ENABLED": ["A"],
+    "DD_TRACE_APOLLO_GATEWAY_ENABLED": ["A"],
+    "DD_TRACE_APOLLO_SERVER_CORE_ENABLED": ["A"],
+    "DD_TRACE_APOLLO_SERVER_ENABLED": ["A"],
+    "DD_TRACE_APOLLO_SERVER_EXPRESS_ENABLED": ["A"],
+    "DD_TRACE_APOLLO_SERVER_FASTIFY_ENABLED": ["A"],
+    "DD_TRACE_APOLLO_SUBGRAPH_ENABLED": ["A"],
+    "DD_TRACE_AVSC_ENABLED": ["A"],
+    "DD_TRACE_AWS_ADD_SPAN_POINTERS": ["A"],
+    "DD_TRACE_AWS_SDK_AWS_BATCH_PROPAGATION_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_AWS_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_BEDROCKRUNTIME_BATCH_PROPAGATION_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_BEDROCKRUNTIME_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_CLOUDWATCHLOGS_BATCH_PROPAGATION_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_CLOUDWATCHLOGS_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_DYNAMODB_BATCH_PROPAGATION_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_DYNAMODB_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_EVENTBRIDGE_BATCH_PROPAGATION_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_EVENTBRIDGE_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_KINESIS_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_LAMBDA_BATCH_PROPAGATION_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_LAMBDA_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_NODE_HTTP_HANDLER_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_REDSHIFT_BATCH_PROPAGATION_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_REDSHIFT_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_S3_BATCH_PROPAGATION_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_S3_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_SFN_BATCH_PROPAGATION_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_SFN_CLIENT_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_SFN_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_SMITHY_CLIENT_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_SNS_BATCH_PROPAGATION_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_SNS_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_SQS_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_STATES_BATCH_PROPAGATION_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_STATES_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_STEPFUNCTIONS_BATCH_PROPAGATION_ENABLED": ["A"],
+    "DD_TRACE_AWS_SDK_STEPFUNCTIONS_ENABLED": ["A"],
+    "DD_TRACE_AXIOS_ENABLED": ["A"],
+    "DD_TRACE_AZURE_EVENT_HUBS_ENABLED": ["A"],
+    "DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED": ["A"],
+    "DD_TRACE_AZURE_FUNCTIONS_ENABLED": ["A"],
+    "DD_TRACE_AZURE_SERVICE_BUS_ENABLED": ["A"],
+    "DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED": ["A"],
+    "DD_TRACE_BAGGAGE_MAX_BYTES": ["A"],
+    "DD_TRACE_BAGGAGE_MAX_ITEMS": ["A"],
+    "DD_TRACE_BAGGAGE_TAG_KEYS": ["A"],
+    "DD_TRACE_BEAUTIFUL_LOGS": ["A"],
+    "DD_TRACE_BLUEBIRD_ENABLED": ["A"],
+    "DD_TRACE_BULLMQ_ENABLED": ["A"],
+    "DD_TRACE_BODY_PARSER_ENABLED": ["A"],
+    "DD_TRACE_BSON_ENABLED": ["A"],
+    "DD_TRACE_BUNYAN_ENABLED": ["A"],
+    "DD_TRACE_CASSANDRA_DRIVER_ENABLED": ["A"],
+    "DD_TRACE_CHILD_PROCESS_ENABLED": ["A"],
+    "DD_TRACE_CLIENT_IP_ENABLED": ["A"],
+    "DD_TRACE_CLIENT_IP_HEADER": ["A"],
+    "DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH": ["A"],
+    "DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING": ["A"],
+    "DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING": ["A"],
+    "DD_TRACE_COLLECTIONS_ENABLED": ["A"],
+    "DD_TRACE_COMMONPLUGIN_ENABLED": ["A"],
+    "DD_TRACE_CONFLUENTINC_KAFKA_JAVASCRIPT_ENABLED": ["A"],
+    "DD_TRACE_CONNECT_ENABLED": ["A"],
+    "DD_TRACE_COOKIE_ENABLED": ["A"],
+    "DD_TRACE_COOKIE_PARSER_ENABLED": ["A"],
+    "DD_TRACE_COUCHBASE_ENABLED": ["A"],
+    "DD_TRACE_CRYPTO_ENABLED": ["A"],
+    "DD_TRACE_CUCUMBER_CUCUMBER_ENABLED": ["A"],
+    "DD_TRACE_CUCUMBER_ENABLED": ["A"],
+    "DD_TRACE_CYPRESS_ENABLED": ["A"],
+    "DD_TRACE_DD_TRACE_API_ENABLED": ["A"],
+    "DD_TRACE_DEBUG": ["A"],
+    "DD_TRACE_DISABLED_INSTRUMENTATIONS": ["A"],
+    "DD_TRACE_DISABLED_PLUGINS": ["A"],
+    "DD_TRACE_DNS_ENABLED": ["A"],
+    "DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS": ["A"],
+    "DD_TRACE_ELASTIC_ELASTICSEARCH_ENABLED": ["A"],
+    "DD_TRACE_ELASTIC_TRANSPORT_ENABLED": ["A"],
+    "DD_TRACE_ELASTICSEARCH_ENABLED": ["A"],
+    "DD_TRACE_ENABLED": ["A"],
+    "DD_TRACE_ENCODING_DEBUG": ["A"],
+    "DD_TRACE_EXPERIMENTAL_B3_ENABLED": ["A"],
+    "DD_TRACE_EXPERIMENTAL_EXPORTER": ["A"],
+    "DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED": ["A"],
+    "DD_TRACE_EXPERIMENTAL_SPAN_COUNTS": ["A"],
+    "DD_TRACE_EXPERIMENTAL_STATE_TRACKING": ["A"],
+    "DD_TRACE_EXPRESS_ENABLED": ["A"],
+    "DD_TRACE_EXPRESS_MONGO_SANITIZE_ENABLED": ["A"],
+    "DD_TRACE_EXPRESS_SESSION_ENABLED": ["A"],
+    "DD_TRACE_FASTIFY_ENABLED": ["A"],
+    "DD_TRACE_FETCH_ENABLED": ["A"],
+    "DD_TRACE_FIND_MY_WAY_ENABLED": ["A"],
+    "DD_TRACE_FLUSH_INTERVAL": ["A"],
+    "DD_TRACE_FS_ENABLED": ["A"],
+    "DD_TRACE_GENERIC_POOL_ENABLED": ["A"],
+    "DD_TRACE_GIT_METADATA_ENABLED": ["A"],
+    "DD_TRACE_GLOBAL_TAGS": ["A"],
+    "DD_TRACE_GOOGLE_CLOUD_PUBSUB_ENABLED": ["A"],
+    "DD_TRACE_GOOGLE_CLOUD_VERTEXAI_ENABLED": ["A"],
+    "DD_TRACE_GOOGLE_GAX_ENABLED": ["A"],
+    "DD_TRACE_GOOGLE_GENAI_ENABLED": ["A"],
+    "DD_TRACE_GRAPHQL_ENABLED": ["A"],
+    "DD_TRACE_GRAPHQL_ERROR_EXTENSIONS": ["A"],
+    "DD_TRACE_GRAPHQL_TAG_ENABLED": ["A"],
+    "DD_TRACE_GRAPHQL_TOOLS_ENABLED": ["A"],
+    "DD_TRACE_GRAPHQL_TOOLS_EXECUTOR_ENABLED": ["A"],
+    "DD_TRACE_GRAPHQL_YOGA_ENABLED": ["A"],
+    "DD_TRACE_GRPC_ENABLED": ["A"],
+    "DD_TRACE_GRPC_GRPC_JS_ENABLED": ["A"],
+    "DD_TRACE_GRPC_PROTO_LOADER_ENABLED": ["A"],
+    "DD_TRACE_HANDLEBARS_ENABLED": ["A"],
+    "DD_TRACE_HAPI_BOOM_ENABLED": ["A"],
+    "DD_TRACE_HAPI_ENABLED": ["A"],
+    "DD_TRACE_HAPI_HAPI_ENABLED": ["A"],
+    "DD_TRACE_HEADER_TAGS": ["A"],
+    "DD_TRACE_HONO_ENABLED": ["A"],
+    "DD_TRACE_HTTP_ENABLED": ["A"],
+    "DD_TRACE_HTTP2_ENABLED": ["A"],
+    "DD_TRACE_HTTPS_ENABLED": ["A"],
+    "DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED": ["A"],
+    "DD_TRACE_IOREDIS_ENABLED": ["A"],
+    "DD_TRACE_IOVALKEY_ENABLED": ["A"],
+    "DD_TRACE_JEST_CIRCUS_ENABLED": ["A"],
+    "DD_TRACE_JEST_CONFIG_ENABLED": ["A"],
+    "DD_TRACE_JEST_CORE_ENABLED": ["A"],
+    "DD_TRACE_JEST_ENABLED": ["A"],
+    "DD_TRACE_JEST_ENVIRONMENT_JSDOM_ENABLED": ["A"],
+    "DD_TRACE_JEST_ENVIRONMENT_NODE_ENABLED": ["A"],
+    "DD_TRACE_JEST_GLOBALS_ENABLED": ["A"],
+    "DD_TRACE_JEST_REPORTERS_ENABLED": ["A"],
+    "DD_TRACE_JEST_RUNTIME_ENABLED": ["A"],
+    "DD_TRACE_JEST_TEST_SEQUENCER_ENABLED": ["A"],
+    "DD_TRACE_JEST_TRANSFORM_ENABLED": ["A"],
+    "DD_TRACE_JEST_WORKER_ENABLED": ["A"],
+    "DD_TRACE_KAFKAJS_ENABLED": ["A"],
+    "DD_TRACE_KNEX_ENABLED": ["A"],
+    "DD_TRACE_KOA_ENABLED": ["A"],
+    "DD_TRACE_KOA_ROUTE_ENABLED": ["A"],
+    "DD_TRACE_KOA_ROUTER_ENABLED": ["A"],
+    "DD_TRACE_KOA_WEBSOCKET_ENABLED": ["A"],
+    "DD_TRACE_LANGCHAIN_ANTHROPIC_ENABLED": ["A"],
+    "DD_TRACE_LANGCHAIN_COHERE_ENABLED": ["A"],
+    "DD_TRACE_LANGCHAIN_CORE_ENABLED": ["A"],
+    "DD_TRACE_LANGCHAIN_ENABLED": ["A"],
+    "DD_TRACE_LANGCHAIN_GOOGLE_GENAI_ENABLED": ["A"],
+    "DD_TRACE_LANGCHAIN_OPENAI_ENABLED": ["A"],
+    "DD_TRACE_LDAPJS_ENABLED": ["A"],
+    "DD_TRACE_LDAPJS_PROMISE_ENABLED": ["A"],
+    "DD_TRACE_LEGACY_BAGGAGE_ENABLED": ["A"],
+    "DD_TRACE_LIMITD_CLIENT_ENABLED": ["A"],
+    "DD_TRACE_LODASH_ENABLED": ["A"],
+    "DD_TRACE_LOG_LEVEL": ["A"],
+    "DD_TRACE_LOOPBACK_ENABLED": ["A"],
+    "DD_TRACE_MARIADB_ENABLED": ["A"],
+    "DD_TRACE_MEMCACHED_COMMAND_ENABLED": ["A"],
+    "DD_TRACE_MEMCACHED_ENABLED": ["A"],
+    "DD_TRACE_MICROGATEWAY_CORE_ENABLED": ["A"],
+    "DD_TRACE_MIDDIE_ENABLED": ["A"],
+    "DD_TRACE_MIDDLEWARE_TRACING_ENABLED": ["A"],
+    "DD_TRACE_MOCHA_EACH_ENABLED": ["A"],
+    "DD_TRACE_MOCHA_ENABLED": ["A"],
+    "DD_TRACE_MOLECULER_ENABLED": ["A"],
+    "DD_TRACE_MONGODB_CORE_ENABLED": ["A"],
+    "DD_TRACE_MONGODB_ENABLED": ["A"],
+    "DD_TRACE_MONGODB_HEARTBEAT_ENABLED": ["A"],
+    "DD_TRACE_MONGOOSE_ENABLED": ["A"],
+    "DD_TRACE_MQUERY_ENABLED": ["A"],
+    "DD_TRACE_MULTER_ENABLED": ["A"],
+    "DD_TRACE_MYSQL_ENABLED": ["A"],
+    "DD_TRACE_MYSQL2_ENABLED": ["A"],
+    "DD_TRACE_NATIVE_SPAN_EVENTS": ["A"],
+    "DD_TRACE_NET_ENABLED": ["A"],
+    "DD_TRACE_NEXT_ENABLED": ["A"],
+    "DD_TRACE_NODE_CHILD_PROCESS_ENABLED": ["A"],
+    "DD_TRACE_NODE_REDIS_CLIENT_ENABLED": ["A"],
+    "DD_TRACE_NODE_SERIALIZE_ENABLED": ["A"],
+    "DD_TRACE_NYC_ENABLED": ["A"],
+    "DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP": ["A"],
+    "DD_TRACE_OPENAI_ENABLED": ["A"],
+    "DD_TRACE_OPENSEARCH_ENABLED": ["A"],
+    "DD_TRACE_OPENSEARCH_PROJECT_OPENSEARCH_ENABLED": ["A"],
+    "DD_TRACE_OPENTELEMETRY_SDK_TRACE_NODE_ENABLED": ["A"],
+    "DD_TRACE_ORACLEDB_ENABLED": ["A"],
+    "DD_TRACE_OTEL_ENABLED": ["A"],
+    "DD_TRACE_PARTIAL_FLUSH_MIN_SPANS": ["A"],
+    "DD_TRACE_PASSPORT_ENABLED": ["A"],
+    "DD_TRACE_PASSPORT_HTTP_ENABLED": ["A"],
+    "DD_TRACE_PASSPORT_LOCAL_ENABLED": ["A"],
+    "DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED": ["A"],
+    "DD_TRACE_PEER_SERVICE_MAPPING": ["A"],
+    "DD_TRACE_PG_CURSOR_ENABLED": ["A"],
+    "DD_TRACE_PG_ENABLED": ["A"],
+    "DD_TRACE_PG_NATIVE_ENABLED": ["A"],
+    "DD_TRACE_PG_QUERY_STREAM_ENABLED": ["A"],
+    "DD_TRACE_PINO_ENABLED": ["A"],
+    "DD_TRACE_PINO_PRETTY_ENABLED": ["A"],
+    "DD_TRACE_PLAYWRIGHT_CORE_ENABLED": ["A"],
+    "DD_TRACE_PLAYWRIGHT_ENABLED": ["A"],
+    "DD_TRACE_PLAYWRIGHT_TEST_ENABLED": ["A"],
+    "DD_TRACE_PRISMA_ENABLED": ["A"],
+    "DD_TRACE_PROCESS_ENABLED": ["A"],
+    "DD_TRACE_PROMISE_ENABLED": ["A"],
+    "DD_TRACE_PROMISE_JS_ENABLED": ["A"],
+    "DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT": ["A"],
+    "DD_TRACE_PROPAGATION_EXTRACT_FIRST": ["A"],
+    "DD_TRACE_PROPAGATION_STYLE_EXTRACT": ["A"],
+    "DD_TRACE_PROPAGATION_STYLE_INJECT": ["A"],
+    "DD_TRACE_PROPAGATION_STYLE": ["A"],
+    "DD_TRACE_PROTOBUFJS_ENABLED": ["A"],
+    "DD_TRACE_PUG_ENABLED": ["A"],
+    "DD_TRACE_Q_ENABLED": ["A"],
+    "DD_TRACE_RATE_LIMIT": ["A"],
+    "DD_TRACE_REACT_DOM_ENABLED": ["A"],
+    "DD_TRACE_REACT_ENABLED": ["A"],
+    "DD_TRACE_REDIS_CLIENT_ENABLED": ["A"],
+    "DD_TRACE_REDIS_ENABLED": ["A"],
+    "DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED": ["A"],
+    "DD_TRACE_REPORT_HOSTNAME": ["A"],
+    "DD_TRACE_REQUEST_ENABLED": ["A"],
+    "DD_TRACE_RESOURCE_RENAMING_ENABLED": ["A"],
+    "DD_TRACE_RESTIFY_ENABLED": ["A"],
+    "DD_TRACE_RHEA_ENABLED": ["A"],
+    "DD_TRACE_ROUTER_ENABLED": ["A"],
+    "DD_TRACE_SAMPLE_RATE": ["A"],
+    "DD_TRACE_SAMPLING_RULES": ["A"],
+    "DD_TRACE_SCOPE": ["A"],
+    "DD_TRACE_SELENIUM_ENABLED": ["A"],
+    "DD_TRACE_SELENIUM_WEBDRIVER_ENABLED": ["A"],
+    "DD_TRACE_SEQUELIZE_ENABLED": ["A"],
+    "DD_TRACE_SHAREDB_ENABLED": ["A"],
+    "DD_TRACE_SMITHY_SMITHY_CLIENT_ENABLED": ["A"],
+    "DD_TRACE_SPAN_ATTRIBUTE_SCHEMA": ["A"],
+    "DD_TRACE_SPAN_LEAK_DEBUG": ["A"],
+    "DD_TRACE_SQLITE3_ENABLED": ["A"],
+    "DD_TRACE_STARTUP_LOGS": ["A"],
+    "DD_TRACE_STATS_COMPUTATION_ENABLED": ["A"],
+    "DD_TRACE_SUFFIXPLUGIN_ENABLED": ["A"],
+    "DD_TRACE_TAGS": ["A"],
+    "DD_TRACE_TEDIOUS_ENABLED": ["A"],
+    "DD_TRACE_UNDICI_ENABLED": ["A"],
+    "DD_TRACE_URL_ENABLED": ["A"],
+    "DD_TRACE_VITEST_ENABLED": ["A"],
+    "DD_TRACE_VITEST_RUNNER_ENABLED": ["A"],
+    "DD_TRACE_VM_ENABLED": ["A"],
+    "DD_TRACE_WEBSOCKET_MESSAGES_ENABLED":["A"],
+    "DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING": ["A"],
+    "DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES":["A"],
+    "DD_TRACE_WHEN_ENABLED": ["A"],
+    "DD_TRACE_WINSTON_ENABLED": ["A"],
+    "DD_TRACE_WORKERPOOL_ENABLED": ["A"],
+    "DD_TRACE_WS_ENABLED": ["A"],
+    "DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH": ["A"],
+    "DD_TRACING_ENABLED": ["A"],
+    "DD_VERSION": ["A"],
+    "DD_VERTEXAI_SPAN_CHAR_LIMIT": ["A"],
+    "DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE": ["A"],
+    "DD_VITEST_WORKER": ["A"],
+    "OTEL_LOG_LEVEL": ["A"],
+    "OTEL_LOGS_EXPORTER": ["A"],
+    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": ["A"],
+    "OTEL_EXPORTER_OTLP_LOGS_HEADERS": ["A"],
+    "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": ["A"],
+    "OTEL_EXPORTER_OTLP_LOGS_TIMEOUT": ["A"],
+    "OTEL_EXPORTER_OTLP_ENDPOINT": ["A"],
+    "OTEL_EXPORTER_OTLP_HEADERS": ["A"],
+    "OTEL_EXPORTER_OTLP_PROTOCOL": ["A"],
+    "OTEL_EXPORTER_OTLP_TIMEOUT": ["A"],
+    "OTEL_BSP_SCHEDULE_DELAY": ["A"],
+    "OTEL_BSP_MAX_EXPORT_BATCH_SIZE": ["A"],
+    "OTEL_BSP_MAX_QUEUE_SIZE": ["A"],
+    "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": ["A"],
+    "OTEL_EXPORTER_OTLP_METRICS_HEADERS": ["A"],
+    "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL": ["A"],
+    "OTEL_EXPORTER_OTLP_METRICS_TIMEOUT": ["A"],
+    "OTEL_METRIC_EXPORT_INTERVAL": ["A"],
+    "OTEL_METRIC_EXPORT_TIMEOUT": ["A"],
+    "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE": ["A"],
+    "OTEL_METRICS_EXPORTER": ["A"],
+    "OTEL_PROPAGATORS": ["A"],
+    "OTEL_RESOURCE_ATTRIBUTES": ["A"],
+    "OTEL_SDK_DISABLED": ["A"],
+    "OTEL_SERVICE_NAME": ["A"],
+    "OTEL_TRACES_EXPORTER": ["A"],
+    "OTEL_TRACES_SAMPLER_ARG": ["A"],
+    "OTEL_TRACES_SAMPLER": ["A"]
+  },
+  "aliases": {
+    "DD_AGENT_HOST": ["DD_TRACE_AGENT_HOSTNAME"],
+    "DD_API_KEY": ["DATADOG_API_KEY"],
+    "DD_API_SECURITY_ENABLED": ["DD_EXPERIMENTAL_API_SECURITY_ENABLED"],
+    "DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE": ["DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING"],
+    "DD_DOGSTATSD_HOST": ["DD_DOGSTATSD_HOSTNAME"],
+    "DD_INSTRUMENTATION_TELEMETRY_ENABLED": ["DD_TRACE_TELEMETRY_ENABLED"],
+    "DD_PROFILING_CODEHOTSPOTS_ENABLED": ["DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED"],
+    "DD_PROFILING_CPU_ENABLED": ["DD_PROFILING_EXPERIMENTAL_CPU_ENABLED"],
+    "DD_PROFILING_ENABLED": ["DD_EXPERIMENTAL_PROFILING_ENABLED"],
+    "DD_PROFILING_ENDPOINT_COLLECTION_ENABLED": ["DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED"],
+    "DD_PROFILING_TIMELINE_ENABLED": ["DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED"],
+    "DD_REMOTE_CONFIGURATION_ENABLED": ["DD_REMOTE_CONFIG_ENABLED" ],
+    "DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED": ["DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED"],
+    "DD_SERVICE": ["DD_SERVICE_NAME"],
+    "DD_TRACE_AGENT_URL": ["DD_TRACE_URL"]
+  },
+  "deprecations": {
+    "DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED": "DD_PROFILING_ENDPOINT_COLLECTION_ENABLED",
+    "DD_PROFILING_EXPERIMENTAL_CPU_ENABLED": "DD_PROFILING_CPU_ENABLED",
+    "DD_EXPERIMENTAL_PROFILING_ENABLED": "DD_PROFILING_ENABLED",
+    "DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED": "DD_PROFILING_CODEHOTSPOTS_ENABLED",
+    "DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED": "DD_PROFILING_TIMELINE_ENABLED",
+    "DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED": "DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED"
   }
 }
