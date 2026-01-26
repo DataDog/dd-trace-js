@@ -995,16 +995,21 @@ addHook({
 
       if (result) {
         const { state, duration, errors } = result
+        // This is the final execution for this test - always set finalStatus
+        const finalStatus = isSwitchedStatus
+          ? (switchedStatuses.has(task) && state === 'pass' ? 'fail' : state)
+          : state
         if (state === 'skip') { // programmatic skip
           testSkipCh.publish({
             testName: getTestName(task),
             testSuiteAbsolutePath: task.file.filepath,
             isNew: newTasks.has(task),
-            isDisabled: disabledTasks.has(task)
+            isDisabled: disabledTasks.has(task),
+            finalStatus: 'skip'
           })
         } else if (state === 'pass' && !isSwitchedStatus) {
           if (testCtx) {
-            testPassCh.publish({ task, ...testCtx.currentStore })
+            testPassCh.publish({ task, finalStatus, ...testCtx.currentStore })
           }
         } else if (state === 'fail' || isSwitchedStatus) {
           let testError
@@ -1033,6 +1038,7 @@ addHook({
               error: testError,
               hasFailedAllRetries,
               attemptToFixFailed,
+              finalStatus,
               ...testCtx.currentStore
             })
           }
@@ -1045,7 +1051,8 @@ addHook({
           testName: getTestName(task),
           testSuiteAbsolutePath: task.file.filepath,
           isNew: newTasks.has(task),
-          isDisabled: disabledTasks.has(task)
+          isDisabled: disabledTasks.has(task),
+          finalStatus: 'skip'
         })
       }
     })

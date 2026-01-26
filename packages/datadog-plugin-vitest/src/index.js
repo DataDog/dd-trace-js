@@ -6,6 +6,7 @@ const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   VITEST_POOL,
   finishAllTraceSpans,
   getTestSuitePath,
@@ -204,12 +205,15 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test:pass', ({ span, task }) => {
+    this.addSub('ci:vitest:test:pass', ({ span, task, finalStatus }) => {
       if (span) {
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
           hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS]
         })
         span.setTag(TEST_STATUS, 'pass')
+        if (finalStatus) {
+          span.setTag(TEST_FINAL_STATUS, finalStatus)
+        }
         span.finish(this.taskToFinishTime.get(task))
         finishAllTraceSpans(span)
       }
@@ -222,7 +226,8 @@ class VitestPlugin extends CiPlugin {
       shouldSetProbe,
       promises,
       hasFailedAllRetries,
-      attemptToFixFailed
+      attemptToFixFailed,
+      finalStatus
     }) => {
       if (!span) {
         return
@@ -240,6 +245,9 @@ class VitestPlugin extends CiPlugin {
         hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS]
       })
       span.setTag(TEST_STATUS, 'fail')
+      if (finalStatus) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
 
       if (error) {
         span.setTag('error', error)
@@ -258,7 +266,7 @@ class VitestPlugin extends CiPlugin {
       finishAllTraceSpans(span)
     })
 
-    this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath, isNew, isDisabled }) => {
+    this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath, isNew, isDisabled, finalStatus }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const testSpan = this.startTestSpan(
         testName,
@@ -268,6 +276,7 @@ class VitestPlugin extends CiPlugin {
           [TEST_SOURCE_FILE]: testSuite,
           [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
           [TEST_STATUS]: 'skip',
+          [TEST_FINAL_STATUS]: finalStatus || 'skip',
           ...(isDisabled ? { [TEST_MANAGEMENT_IS_DISABLED]: 'true' } : {}),
           ...(isNew ? { [TEST_IS_NEW]: 'true' } : {})
         }

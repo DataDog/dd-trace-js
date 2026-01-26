@@ -17,6 +17,7 @@ const {
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_TYPE,
   TEST_IS_RETRY,
   TEST_CODE_OWNERS,
@@ -1160,6 +1161,143 @@ versions.forEach((version) => {
           once(childProcess, 'exit'),
           eventsPromise,
         ])
+      })
+    })
+
+    context('final_status tag', () => {
+      it('sets final_status tag on regular tests without retry features', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: false,
+          early_flake_detection: {
+            enabled: false
+          }
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.ok(tests.length > 0, 'Expected at least one test')
+
+            tests.forEach(test => {
+              const testName = test.meta[TEST_NAME]
+              const testStatus = test.meta[TEST_STATUS]
+              const finalStatus = test.meta[TEST_FINAL_STATUS]
+
+              assert.ok(
+                finalStatus,
+                `Expected TEST_FINAL_STATUS to be set for test "${testName}" with status "${testStatus}"`
+              )
+              assert.strictEqual(
+                finalStatus,
+                testStatus,
+                `Expected TEST_FINAL_STATUS "${finalStatus}" to match TEST_STATUS "${testStatus}" for test "${testName}"`
+              )
+            })
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/test-visibility*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+
+      it('sets final_status tag only on last EFD retry', (done) => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          },
+          known_tests_enabled: true
+        })
+
+        receiver.setKnownTests({
+          vitest: {
+            'ci-visibility/vitest-tests/early-flake-detection.mjs': [
+              // 'early flake detection can retry tests that always pass' will be considered new
+              'early flake detection can retry tests that eventually pass',
+              'early flake detection can retry tests that eventually fail',
+              'early flake detection does not retry if it is not new',
+              'early flake detection does not retry if the test is skipped'
+            ]
+          }
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(test => test.content)
+
+            // New tests that are retried
+            const newTests = tests.filter(test =>
+              test.meta[TEST_NAME] === 'early flake detection can retry tests that always pass' &&
+              test.meta[TEST_IS_NEW] === 'true'
+            )
+            // We need all retries to have arrived
+            if (newTests.length !== NUM_RETRIES_EFD + 1) {
+              throw new Error(`Expected ${NUM_RETRIES_EFD + 1} retries, got ${newTests.length}`)
+            }
+
+            // Exactly one should have final_status
+            const testsWithFinalStatus = newTests.filter(test => TEST_FINAL_STATUS in test.meta)
+            if (testsWithFinalStatus.length !== 1) {
+              throw new Error(`Expected exactly 1 test with final_status, got ${testsWithFinalStatus.length}`)
+            }
+
+            // The test with final_status should match its status
+            assert.strictEqual(
+              testsWithFinalStatus[0].meta[TEST_FINAL_STATUS],
+              testsWithFinalStatus[0].meta[TEST_STATUS]
+            )
+
+            // Non-new tests should have final_status (they're not retried)
+            const knownTests = tests.filter(test =>
+              test.meta[TEST_IS_NEW] !== 'true'
+            )
+            knownTests.forEach(test => {
+              assert.strictEqual(test.meta[TEST_FINAL_STATUS], test.meta[TEST_STATUS],
+                `Known test "${test.meta[TEST_NAME]}" should have final_status`)
+            })
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', (exitCode) => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
       })
     })
 
