@@ -11,6 +11,7 @@
 **Package manager policy:**
 
 - Use **yarn only for installing dependencies and services**:
+  - `yarn add`
   - `yarn install`
   - `yarn services`
 - Use **npm for running scripts and other commands**: `npm run <script>`
