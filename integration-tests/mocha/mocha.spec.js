@@ -4575,4 +4575,72 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       ])
     })
   })
+
+  context('coverage report upload', () => {
+    it('uploads coverage report when coverage_report_upload_enabled is true', async () => {
+      let testOutput = ''
+
+      receiver.setSettings({
+        coverage_report_upload_enabled: true
+      })
+
+      // Use lcov reporter to generate a coverage file that can be discovered
+      const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov -r=text-summary ${runTestsCommand}`
+
+      childProcess = exec(
+        runTestsWithLcovCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_GIT_COMMIT_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            DD_GIT_REPOSITORY_URL: 'https://github.com/datadog/test-repo.git'
+          }
+        }
+      )
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      await once(childProcess, 'exit')
+
+      assert.match(testOutput, /\[dd-trace\] Uploading \d+ coverage report\(s\)/)
+    })
+
+    it('does not upload coverage report when coverage_report_upload_enabled is false', async () => {
+      let testOutput = ''
+
+      receiver.setSettings({
+        coverage_report_upload_enabled: false
+      })
+
+      // Use lcov reporter to generate a coverage file that can be discovered
+      const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov -r=text-summary ${runTestsCommand}`
+
+      childProcess = exec(
+        runTestsWithLcovCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_GIT_COMMIT_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            DD_GIT_REPOSITORY_URL: 'https://github.com/datadog/test-repo.git'
+          }
+        }
+      )
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      await once(childProcess, 'exit')
+
+      assert.doesNotMatch(testOutput, /\[dd-trace\] Uploading \d+ coverage report\(s\)/)
+    })
+  })
 })

@@ -27,7 +27,8 @@ const DEFAULT_SETTINGS = {
   test_management: {
     enabled: false
   },
-  impacted_tests_enabled: false
+  impacted_tests_enabled: false,
+  coverage_report_upload_enabled: false
 }
 
 const DEFAULT_SUITES_TO_SKIP = []
