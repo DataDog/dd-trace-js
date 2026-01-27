@@ -745,3 +745,73 @@ aiguard.evaluate([
 ]).then(result => {
   result.action && result.reason && result.tags
 })
+
+// AI Guard Middleware typings tests
+
+// Create middleware instance with allowOnFailure: true
+const aiGuardMiddleware = new tracer.AIGuardMiddleware({
+  tracer,
+  allowOnFailure: true
+})
+
+// Create middleware instance with allowOnFailure: false
+const aiGuardMiddlewareStrict = new tracer.AIGuardMiddleware({
+  tracer,
+  allowOnFailure: false
+})
+
+// Create middleware instance with default allowOnFailure (omitted)
+const aiGuardMiddlewareDefault = new tracer.AIGuardMiddleware({
+  tracer
+})
+
+// Verify specificationVersion is 'v3'
+const specVersion: 'v3' = aiGuardMiddleware.specificationVersion
+
+// wrapGenerate method
+aiGuardMiddleware.wrapGenerate({
+  doGenerate: () => Promise.resolve({ text: 'response' }),
+  params: { prompt: [{ role: 'user', content: 'hello' }] },
+  model: {}
+}).then(result => {
+  result
+})
+
+// wrapStream method
+aiGuardMiddleware.wrapStream({
+  doStream: () => Promise.resolve({
+    stream: new ReadableStream(),
+    response: {}
+  }),
+  params: { prompt: [{ role: 'user', content: 'hello' }] },
+  model: {}
+}).then(result => {
+  const stream: ReadableStream = result.stream
+  const response: unknown = result.response
+})
+
+// Error types verification
+import type { aiguard as AiguardTypes } from '..';
+
+const handleError = (error: unknown) => {
+  // AIGuardMiddlewareAbortError check
+  const abortError = error as AiguardTypes.AIGuardMiddlewareAbortError
+  if (abortError.code === 'AI_GUARD_MIDDLEWARE_ABORT') {
+    const name: 'AIGuardMiddlewareAbortError' = abortError.name
+    const code: 'AI_GUARD_MIDDLEWARE_ABORT' = abortError.code
+    const kind: AiguardTypes.GuardKind = abortError.kind
+    const message: string = abortError.message
+  }
+
+  // AIGuardMiddlewareClientError check
+  const clientError = error as AiguardTypes.AIGuardMiddlewareClientError
+  if (clientError.code === 'AI_GUARD_MIDDLEWARE_CLIENT_ERROR') {
+    const name: 'AIGuardMiddlewareClientError' = clientError.name
+    const code: 'AI_GUARD_MIDDLEWARE_CLIENT_ERROR' = clientError.code
+    const message: string = clientError.message
+  }
+}
+
+// GuardKind type verification
+const promptKind: AiguardTypes.GuardKind = 'Prompt'
+const toolCallKind: AiguardTypes.GuardKind = 'Tool call'
