@@ -4677,8 +4677,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
             if (isQuarantining) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+              // test session is passed even though a test fails because the test is quarantined
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
             } else {
               assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
             }
 
             const resourceNames = tests.map(span => span.resource)
@@ -4712,7 +4715,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             }
           })
 
-      const runQuarantineTest = (done, isQuarantining, extraEnvVars = {}, isParallel = false) => {
+      const runQuarantineTest = async (isQuarantining, extraEnvVars = {}, isParallel = false) => {
         let stdout = ''
         const testAssertionsPromise = getTestAssertions(isQuarantining, isParallel)
 
@@ -4725,7 +4728,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               TESTS_TO_RUN: 'test-management/test-quarantine-1',
               SHOULD_CHECK_RESULTS: '1',
               ...extraEnvVars
-            },
+            }
           }
         )
 
@@ -4734,44 +4737,40 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           stdout += chunk.toString()
         })
 
-        childProcess.on('exit', exitCode => {
-          testAssertionsPromise.then(() => {
-            // it runs regardless of quarantine status
-            assert.match(stdout, /I am running when quarantined/)
-            if (isQuarantining) {
-              // even though a test fails, the exit code is 0 because the test is quarantined
-              assert.strictEqual(exitCode, 0)
-            } else {
-              assert.strictEqual(exitCode, 1)
-            }
-            done()
-          }).catch(done)
-        })
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
+
+        // it runs regardless of quarantine status
+        assert.match(stdout, /I am running when quarantined/)
+        if (isQuarantining) {
+          // even though a test fails, the exit code is 0 because the test is quarantined
+          assert.strictEqual(exitCode, 0)
+        } else {
+          assert.strictEqual(exitCode, 1)
+        }
       }
 
-      it('can quarantine tests', (done) => {
+      it('can quarantine tests', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
 
-        runQuarantineTest(done, true)
+        await runQuarantineTest(true)
       })
 
-      it('fails if quarantine is not enabled', (done) => {
+      it('fails if quarantine is not enabled', async () => {
         receiver.setSettings({ test_management: { enabled: false } })
 
-        runQuarantineTest(done, false)
+        await runQuarantineTest(false)
       })
 
-      it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+      it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
 
-        runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+        await runQuarantineTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
       })
 
-      it('can quarantine in parallel mode', (done) => {
+      it('can quarantine in parallel mode', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
 
-        runQuarantineTest(
-          done,
+        await runQuarantineTest(
           true,
           {
             // we need to run more than 1 suite for parallel mode to kick in
@@ -4780,6 +4779,73 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           },
           true
         )
+      })
+
+      it('fails if a non-quarantined test fails even when a quarantined test also fails', async () => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        // Only quarantine one of the failing tests, leaving another failing test non-quarantined
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-partial-quarantine.js': {
+                tests: {
+                  'partial quarantine tests quarantined failing test': {
+                    properties: {
+                      quarantined: true
+                    }
+                  }
+                  // Note: 'partial quarantine tests non-quarantined failing test' is NOT quarantined
+                }
+              }
+            }
+          }
+        })
+
+        const testAssertionsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            // Session should be marked as failed because a non-quarantined test failed
+            assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+
+            // Verify the quarantined test has the quarantine tag
+            const quarantinedTest = tests.find(
+              test => test.meta[TEST_NAME] === 'partial quarantine tests quarantined failing test'
+            )
+            assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+            // Verify the non-quarantined test does NOT have the quarantine tag
+            const nonQuarantinedTest = tests.find(
+              test => test.meta[TEST_NAME] === 'partial quarantine tests non-quarantined failing test'
+            )
+            assert.strictEqual(nonQuarantinedTest.meta[TEST_STATUS], 'fail')
+            assert.ok(
+              !(TEST_MANAGEMENT_IS_QUARANTINED in nonQuarantinedTest.meta),
+              'Non-quarantined test should not have quarantine tag'
+            )
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-partial-quarantine',
+              SHOULD_CHECK_RESULTS: '1'
+            }
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
+
+        // Exit code should be 1 because a non-quarantined test failed
+        assert.strictEqual(exitCode, 1)
       })
     })
 
