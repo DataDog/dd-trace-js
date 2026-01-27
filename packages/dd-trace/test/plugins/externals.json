@@ -537,6 +537,10 @@
     {
       "name": "express",
       "versions": ["^4"]
+    },
+    {
+      "name": "body-parser",
+      "versions": ["1.20.1"]
     }
   ],
   "ws": [
