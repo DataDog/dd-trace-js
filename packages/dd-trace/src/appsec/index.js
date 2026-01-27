@@ -146,14 +146,13 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
   if (!rootSpan) return
 
   if (isEmptyObject(cookies)) return
+  analyzedCookies.add(cookies)
 
   const results = waf.run({
     persistent: {
       [addresses.HTTP_INCOMING_COOKIES]: cookies
     }
   }, req)
-
-  analyzedCookies.add(cookies)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
 }
