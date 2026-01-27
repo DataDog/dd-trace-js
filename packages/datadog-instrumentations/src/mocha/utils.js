@@ -104,6 +104,59 @@ function getIsLastRetry (test) {
   return test._currentRetry === test._retries
 }
 
+function getFinalStatus (test, status, config) {
+  const isEfdRetry = test._ddIsEfdRetry
+  const isNewTest = test._ddIsNew
+  const isModifiedTest = test._ddIsModified
+  const isAttemptToFix = test._ddIsAttemptToFix
+  const testName = getTestFullName(test)
+  const testStatuses = testsStatuses.get(testName) || []
+  // testStatuses.length is the count of PREVIOUS executions, current execution will be +1
+  const currentExecutionNumber = testStatuses.length + 1
+
+  // EFD: Check if this is the final EFD execution
+  const isEfdEnabled = config.isEarlyFlakeDetectionEnabled
+  const isEfdActive = isEfdEnabled && (isNewTest || isModifiedTest)
+  // Total EFD executions = 1 (original) + numRetries
+  const totalEfdExecutions = 1 + (config.earlyFlakeDetectionNumRetries || 0)
+  const isLastEfdExecution = currentExecutionNumber >= totalEfdExecutions
+  const isFinalEfdTestExecution = isEfdEnabled && (!isEfdActive || isLastEfdExecution)
+
+  // ATR: Check if this is the final ATR execution (uses mocha's built-in retry)
+  const isAtrEnabled = config.isFlakyTestRetriesEnabled && !isEfdRetry && !isAttemptToFix
+  const isLastAtrRetry = status === 'pass' || getIsLastRetry(test)
+  const isFinalAtrTestExecution = isAtrEnabled && isLastAtrRetry
+
+  // Attempt to Fix: Check if this is the final attempt
+  const isAttemptToFixEnabled = config.isTestManagementTestsEnabled && isAttemptToFix
+  const isFinalAttemptToFixExecution = isAttemptToFixEnabled &&
+    currentExecutionNumber >= (config.testManagementAttemptToFixRetries + 1)
+
+  // When no retry features are active, every test execution is final
+  const noRetryFeaturesActive = !isEfdEnabled && !config.isFlakyTestRetriesEnabled && !isAttemptToFix
+  const isFinalTestExecution =
+    noRetryFeaturesActive || isFinalEfdTestExecution || isFinalAtrTestExecution || isFinalAttemptToFixExecution
+
+  if (!isFinalTestExecution) {
+    return
+  }
+
+  // For EFD: The framework reports 'pass' if ANY attempt passed (flaky but not failing)
+  // testStatuses doesn't include current status yet, so we need to include it
+  if (isEfdActive && isFinalEfdTestExecution) {
+    const allStatuses = [...testStatuses, status]
+    if (allStatuses.includes('pass')) {
+      return 'pass'
+    }
+    // All attempts failed
+    return 'fail'
+  }
+
+  // For ATR: The status of the final execution is what the framework reports
+  // For Attempt to Fix: Similar to ATR, the last execution's status is reported
+  return status
+}
+
 function getTestFullName (test) {
   return `mocha.${getTestSuitePath(test.file, process.cwd())}.${test.fullTitle()}`
 }
@@ -262,6 +315,9 @@ function getOnTestEndHandler (config) {
 
     const testName = getTestFullName(test)
 
+    // Calculate finalStatus BEFORE updating testsStatuses so the count is correct
+    const finalStatus = getFinalStatus(test, status, config)
+
     if (testsStatuses.get(testName)) {
       testsStatuses.get(testName).push(status)
     } else {
@@ -298,13 +354,14 @@ function getOnTestEndHandler (config) {
         attemptToFixFailed,
         isAttemptToFixRetry,
         isAtrRetry,
+        finalStatus,
         ...ctx.currentStore
       })
     }
   }
 }
 
-function getOnHookEndHandler () {
+function getOnHookEndHandler (config) {
   return function (hook) {
     const test = hook.ctx.currentTest
     const afterEachHooks = getAfterEachHooks(hook)
@@ -314,10 +371,12 @@ function getOnHookEndHandler () {
         const status = getTestStatus(test)
         const ctx = getTestContext(test)
         if (ctx) {
+          const finalStatus = getFinalStatus(test, status, config)
           testFinishCh.publish({
             status,
             hasBeenRetried: isMochaRetry(test),
             isLastRetry: getIsLastRetry(test),
+            finalStatus,
             ...ctx.currentStore
           })
         }

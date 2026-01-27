@@ -6,6 +6,7 @@ const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_PARAMETERS,
   finishAllTraceSpans,
   getTestSuitePath,
@@ -211,10 +212,14 @@ class MochaPlugin extends CiPlugin {
       attemptToFixPassed,
       attemptToFixFailed,
       isAttemptToFixRetry,
-      isAtrRetry
+      isAtrRetry,
+      finalStatus
     }) => {
       if (span) {
         span.setTag(TEST_STATUS, status)
+        if (finalStatus) {
+          span.setTag(TEST_FINAL_STATUS, finalStatus)
+        }
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
           if (isAtrRetry) {

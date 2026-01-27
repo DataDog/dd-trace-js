@@ -21,6 +21,7 @@ const {
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_TYPE,
   TEST_FRAMEWORK,
   TEST_SKIPPED_BY_ITR,
@@ -2026,7 +2027,134 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
   })
 
+  it('sets final_status tag on regular tests without retry features', (done) => {
+    // When no retry features are enabled (no EFD, no ATR, no Attempt to Fix),
+    // all test executions should have TEST_FINAL_STATUS set
+    receiver.setSettings({
+      itr_enabled: false,
+      code_coverage: false,
+      tests_skipping: false,
+      flaky_test_retries_enabled: false,
+      early_flake_detection: {
+        enabled: false
+      }
+    })
+
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+        assert.ok(tests.length > 0, 'Expected at least one test')
+
+        tests.forEach(test => {
+          const testName = test.meta[TEST_NAME]
+          const testStatus = test.meta[TEST_STATUS]
+          const finalStatus = test.meta[TEST_FINAL_STATUS]
+
+          assert.ok(
+            finalStatus,
+            `Expected TEST_FINAL_STATUS to be set for test "${testName}" with status "${testStatus}"`
+          )
+          assert.strictEqual(
+            finalStatus,
+            testStatus,
+            `Expected TEST_FINAL_STATUS "${finalStatus}" to match TEST_STATUS "${testStatus}" for test "${testName}"`
+          )
+        })
+      })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: JSON.stringify([
+            './test/ci-visibility-test.js',
+            './test/ci-visibility-test-2.js'
+          ])
+        },
+        stdio: 'inherit'
+      }
+    )
+
+    childProcess.on('exit', () => {
+      eventsPromise.then(() => {
+        done()
+      }).catch(done)
+    })
+  })
+
   context('early flake detection', () => {
+    it('sets final_status tag on last retry', (done) => {
+      // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
+      const knownTestFile = 'ci-visibility/test/ci-visibility-test.js'
+      receiver.setKnownTests({
+        mocha: {
+          [knownTestFile]: ['ci visibility can report tests']
+        }
+      })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD
+          },
+          faulty_session_threshold: 100
+        },
+        known_tests_enabled: true
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          // Known tests (not retried) should have final_status
+          const knownTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === knownTestFile
+          )
+          knownTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_FINAL_STATUS], test.meta[TEST_STATUS])
+          })
+
+          // New tests are retried - only the last retry should have final_status
+          const newTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
+          )
+          newTests.sort((a, b) => a.start > b.start ? 1 : -1).forEach((test, index) => {
+            if (index < newTests.length - 1) {
+              assert.ok(!(TEST_FINAL_STATUS in test.meta),
+                `Expected no TEST_FINAL_STATUS on retry ${index}, got "${test.meta[TEST_FINAL_STATUS]}"`)
+            } else {
+              assert.strictEqual(test.meta[TEST_FINAL_STATUS], test.meta[TEST_STATUS])
+            }
+          })
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test/ci-visibility-test.js',
+              './test/ci-visibility-test-2.js'
+            ])
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
     it('retries new tests', (done) => {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
@@ -2910,6 +3038,58 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
   context('auto test retries', () => {
     // retry listener was released in mocha@6.0.0
+    it('sets final_status tag on last retry', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          // Sort by start time to get execution order
+          tests.sort((a, b) => a.start > b.start ? 1 : -1)
+
+          // Only the last execution should have final_status
+          tests.forEach((test, index) => {
+            if (index < tests.length - 1) {
+              assert.ok(!(TEST_FINAL_STATUS in test.meta),
+                `Expected no TEST_FINAL_STATUS on attempt ${index}, got "${test.meta[TEST_FINAL_STATUS]}"`)
+            } else {
+              // Last execution should have final_status matching its status
+              assert.strictEqual(test.meta[TEST_FINAL_STATUS], test.meta[TEST_STATUS])
+            }
+          })
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-flaky-test-retries/eventually-passing-test.js'
+            ])
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
     onlyLatestIt('retries failed tests automatically', (done) => {
       receiver.setSettings({
         itr_enabled: false,

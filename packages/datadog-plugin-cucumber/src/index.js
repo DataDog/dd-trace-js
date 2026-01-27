@@ -17,6 +17,7 @@ const {
   TEST_CODE_OWNERS,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_FINAL_STATUS,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_IS_MODIFIED,
   TEST_IS_NEW,
@@ -299,11 +300,17 @@ class CucumberPlugin extends CiPlugin {
       hasFailedAttemptToFix,
       isDisabled,
       isQuarantined,
-      isModified
+      isModified,
+      finalStatus
     }) => {
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 
       span.setTag(statusTag, status)
+
+      // Set final_status on test spans (not steps)
+      if (!isStep && finalStatus) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
 
       if (isNew) {
         span.setTag(TEST_IS_NEW, 'true')
