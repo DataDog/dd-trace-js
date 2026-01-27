@@ -1575,6 +1575,16 @@ declare namespace tracer {
       blacklist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
 
       /**
+       * Custom filter function used to decide whether a URL/path is allowed.
+       * When provided, this takes precedence over allowlist/blocklist configuration.
+       * If not provided, allowlist/blocklist logic will be used instead.
+       *
+       * @param urlOrPath - The URL or path to filter
+       * @returns true to instrument the request, false to skip it
+       */
+      filter?: (urlOrPath: string) => boolean;
+
+      /**
        * An array of headers to include in the span metadata.
        *
        * @default []
@@ -2179,6 +2189,16 @@ declare namespace tracer {
       blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
+       * Custom filter function used to decide whether a Redis command should be instrumented.
+       * When provided, this takes precedence over allowlist/blocklist configuration.
+       * If not provided, allowlist/blocklist logic will be used instead.
+       *
+       * @param command - The Redis command name to filter
+       * @returns true to instrument the command, false to skip it
+       */
+      filter?: (command: string) => boolean;
+
+      /**
        * Whether to use a different service name for each Redis instance based
        * on the configured connection name of the client.
        *
@@ -2224,6 +2244,16 @@ declare namespace tracer {
        * @hidden
        */
       blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * Custom filter function used to decide whether a Valkey command should be instrumented.
+       * When provided, this takes precedence over allowlist/blocklist configuration.
+       * If not provided, allowlist/blocklist logic will be used instead.
+       *
+       * @param command - The Valkey command name to filter
+       * @returns true to instrument the command, false to skip it
+       */
+      filter?: (command: string) => boolean;
 
       /**
        * Whether to use a different service name for each Redis instance based
@@ -2498,6 +2528,16 @@ declare namespace tracer {
        * @hidden
        */
       blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * Custom filter function used to decide whether a Redis command should be instrumented.
+       * When provided, this takes precedence over allowlist/blocklist configuration.
+       * If not provided, allowlist/blocklist logic will be used instead.
+       *
+       * @param command - The Redis command name to filter
+       * @returns true to instrument the command, false to skip it
+       */
+      filter?: (command: string) => boolean;
     }
 
     /**
@@ -2567,12 +2607,6 @@ declare namespace tracer {
      * This plugin implements shared web request instrumentation helpers.
      */
     interface web extends HttpServer {
-      /**
-       * Custom filter function used to decide whether a URL/path should be instrumented.
-       * Takes precedence over allowlist/blocklist.
-       */
-      filter?: (urlOrPath: string) => boolean;
-
       /**
        * Whether (or how) to obfuscate querystring values in `http.url`.
        *
