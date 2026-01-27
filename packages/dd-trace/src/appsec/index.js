@@ -391,7 +391,8 @@ function onResponseSetHeader ({ res, abortController }) {
 }
 
 function onStripeCheckoutSessionCreate (payload) {
-  if (payload.mode !== 'payment') return
+  if (payload?.mode !== 'payment') return
+
   waf.run({
     persistent: {
       [addresses.PAYMENT_CREATION]: {
@@ -403,14 +404,16 @@ function onStripeCheckoutSessionCreate (payload) {
         'discounts.coupon': payload.discounts?.[0]?.coupon,
         'discounts.promotion_code': payload.discounts?.[0]?.promotion_code,
         livemode: payload.livemode,
-        'total_details.amount_discount': payload.total_details.amount_discount,
-        'total_details.amount_shipping': payload.total_details.amount_shipping
+        'total_details.amount_discount': payload.total_details?.amount_discount,
+        'total_details.amount_shipping': payload.total_details?.amount_shipping
       }
     }
   })
 }
 
 function onStripePaymentIntentCreate (payload) {
+  if (payload === null || typeof payload !== 'object') return
+
   waf.run({
     persistent: {
       [addresses.PAYMENT_CREATION]: {
@@ -426,44 +429,51 @@ function onStripePaymentIntentCreate (payload) {
 }
 
 function onStripeConstructEvent (payload) {
-  const wafPayload = { persistent: {} }
+  const object = payload?.data?.object
+  if (object === null || typeof object !== 'object') return
 
-  const object = payload.data.object
+  let persistent
 
   switch (payload.type) {
     case 'payment_intent.succeeded':
-      wafPayload.persistent[addresses.PAYMENT_SUCCESS] = {
-        integration: 'stripe',
-        id: object.id,
-        amount: object.amount,
-        currency: object.currency,
-        livemode: object.livemode,
-        payment_method: object.payment_method
+      persistent = {
+        [addresses.PAYMENT_SUCCESS]: {
+          integration: 'stripe',
+          id: object.id,
+          amount: object.amount,
+          currency: object.currency,
+          livemode: object.livemode,
+          payment_method: object.payment_method
+        }
       }
       break
 
     case 'payment_intent.payment_failed':
-      wafPayload.persistent[addresses.PAYMENT_FAILURE] = {
-        integration: 'stripe',
-        id: object.id,
-        amount: object.amount,
-        currency: object.currency,
-        'last_payment_error.code': object.last_payment_error?.code,
-        'last_payment_error.decline_code': object.last_payment_error?.decline_code,
-        'last_payment_error.payment_method.id': object.last_payment_error?.payment_method?.id,
-        'last_payment_error.payment_method.type': object.last_payment_error?.payment_method?.type,
-        livemode: object.livemode
+      persistent = {
+        [addresses.PAYMENT_FAILURE]: {
+          integration: 'stripe',
+          id: object.id,
+          amount: object.amount,
+          currency: object.currency,
+          'last_payment_error.code': object.last_payment_error?.code,
+          'last_payment_error.decline_code': object.last_payment_error?.decline_code,
+          'last_payment_error.payment_method.id': object.last_payment_error?.payment_method?.id,
+          'last_payment_error.payment_method.type': object.last_payment_error?.payment_method?.type,
+          livemode: object.livemode
+        }
       }
       break
 
     case 'payment_intent.canceled':
-      wafPayload.persistent[addresses.PAYMENT_CANCELLATION] = {
-        integration: 'stripe',
-        id: object.id,
-        amount: object.amount,
-        cancellation_reason: object.cancellation_reason,
-        currency: object.currency,
-        livemode: object.livemode
+      persistent = {
+        [addresses.PAYMENT_CANCELLATION]: {
+          integration: 'stripe',
+          id: object.id,
+          amount: object.amount,
+          cancellation_reason: object.cancellation_reason,
+          currency: object.currency,
+          livemode: object.livemode
+        }
       }
       break
 
@@ -471,7 +481,7 @@ function onStripeConstructEvent (payload) {
       return
   }
 
-  waf.run(wafPayload)
+  waf.run({ persistent })
 }
 
 function handleResults (actions, req, res, rootSpan, abortController) {
