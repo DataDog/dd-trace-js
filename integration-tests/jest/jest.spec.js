@@ -2170,6 +2170,76 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
+    it('resets mock state between early flake detection retries', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      // Test is considered new (not in known tests)
+      receiver.setKnownTests({ jest: {} })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD
+          },
+          faulty_session_threshold: 100
+        },
+        known_tests_enabled: true
+      })
+
+      let stdout = ''
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          // Should have 1 original + NUM_RETRIES_EFD retry attempts
+          const mockTests = tests.filter(
+            test => test.meta[TEST_NAME] === 'early flake detection tests with mock resets mock state between retries'
+          )
+          assert.strictEqual(mockTests.length, NUM_RETRIES_EFD + 1)
+
+          // All tests should pass because mock state is reset between retries
+          for (const test of mockTests) {
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          }
+
+          // All should be marked as new
+          for (const test of mockTests) {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+          }
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'test-early-flake-detection/test-efd-with-mock'
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        stdout += chunk.toString()
+      })
+
+      childProcess.stderr?.on('data', (chunk) => {
+        stdout += chunk.toString()
+      })
+
+      const [exitCode] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
+
+      // Verify the test actually ran
+      assert.match(stdout, /I am running EFD with mock/)
+
+      // All retries should pass, so exit code should be 0
+      assert.strictEqual(exitCode[0], 0)
+    })
+
     it('handles parameterized tests as a single unit', (done) => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test-early-flake-detection/test-parameterized.js will be considered new
@@ -5009,6 +5079,24 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
          })`
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-1.js', { cwd, stdio: 'ignore' })
+
+      // Also modify test file with mock for mock state reset test
+      fs.writeFileSync(
+        path.join(cwd, 'ci-visibility/test-impacted-test/test-impacted-with-mock.js'),
+        `'use strict'
+
+         const mockFn = jest.fn()
+
+         describe('impacted tests with mock', () => {
+           it('resets mock state between retries', () => {
+             console.log('I am running impacted test with mock')
+             mockFn()
+             expect(mockFn).toHaveBeenCalledTimes(1)
+           })
+         })`
+      )
+      execSync('git add ci-visibility/test-impacted-test/test-impacted-with-mock.js', { cwd, stdio: 'ignore' })
+
       execSync('git commit -m "modify test-impacted-1.js"', { cwd, stdio: 'ignore' })
     })
 
@@ -5233,6 +5321,76 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           known_tests_enabled: true
         })
         runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
+      })
+
+      it('resets mock state between impacted test retries', async () => {
+        // Test is considered new (not in known tests)
+        receiver.setKnownTests({ jest: {} })
+        receiver.setSettings({
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES
+            },
+            faulty_session_threshold: 100
+          },
+          known_tests_enabled: true
+        })
+
+        let stdout = ''
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            // Should have 1 original + NUM_RETRIES retry attempts
+            const mockTests = tests.filter(
+              test => test.meta[TEST_NAME] === 'impacted tests with mock resets mock state between retries'
+            )
+            assert.strictEqual(mockTests.length, NUM_RETRIES + 1)
+
+            // All tests should pass because mock state is reset between retries
+            for (const test of mockTests) {
+              assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+            }
+
+            // All should be marked as modified (impacted)
+            for (const test of mockTests) {
+              assert.strictEqual(test.meta[TEST_IS_MODIFIED], 'true')
+            }
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-impacted-test/test-impacted-with-mock',
+              GITHUB_BASE_REF: ''
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        childProcess.stderr?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        const [exitCode] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise
+        ])
+
+        // Verify the test actually ran
+        assert.match(stdout, /I am running impacted test with mock/)
+
+        // All retries should pass, so exit code should be 0
+        assert.strictEqual(exitCode[0], 0)
       })
     })
   })
