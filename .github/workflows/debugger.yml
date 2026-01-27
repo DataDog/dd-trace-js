@@ -29,7 +29,12 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:code-origin:ci
       - run: yarn test:debugger:ci
-      - run: yarn test:integration:debugger
+      - run: yarn test:integration:debugger:ci
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          disable_search: true
+          files: coverage/integration-debugger/lcov.info
+          flags: integration-debugger
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:

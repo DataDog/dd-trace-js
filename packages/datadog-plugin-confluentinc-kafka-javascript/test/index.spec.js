@@ -381,10 +381,21 @@ describe('Plugin', () => {
                 const timeoutId = setTimeout(() => {
                   reject(new Error(`Timeout: Did not consume message on topic "${topic}" within ${timeoutMs}ms`))
                 }, timeoutMs)
+                let retriesRemaining = 20
 
                 function doConsume () {
                   consumer.consume(1, function (err, messages) {
                     if (err) {
+                      const msg = String(err.message || err)
+                      if (msg.includes('Unknown topic or partition')) {
+                        retriesRemaining -= 1
+                        if (retriesRemaining <= 0) {
+                          clearTimeout(timeoutId)
+                          return reject(err)
+                        }
+                        setTimeout(doConsume, 50)
+                        return
+                      }
                       clearTimeout(timeoutId)
                       return reject(err)
                     }

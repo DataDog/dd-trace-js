@@ -58,7 +58,7 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-      - run: yarn test:integration:testopt
+      - run: yarn test:integration:testopt:ci
 
   integration-playwright:
     strategy:
@@ -100,9 +100,14 @@ jobs:
         with:
           path: /github/home/.cache/ms-playwright
           key: playwright-browsers-oldest-dd${{ steps.dd-version.outputs.major }}
-      - run: yarn test:integration:playwright
+      - run: yarn test:integration:playwright:ci
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          disable_search: true
+          files: coverage/integration-playwright/lcov.info
+          flags: integration-playwright
 
   integration-mocha:
     strategy:
@@ -120,10 +125,15 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:mocha
+      - run: yarn test:integration:mocha:ci
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
           MOCHA_VERSION: ${{ matrix.mocha-version }}
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          disable_search: true
+          files: coverage/integration-mocha/lcov.info
+          flags: integration-mocha
 
   integration-jest:
     strategy:
@@ -141,10 +151,15 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:jest
+      - run: yarn test:integration:jest:ci
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
           JEST_VERSION: ${{ matrix.jest-version }}
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          disable_search: true
+          files: coverage/integration-jest/lcov.info
+          flags: integration-jest
 
   integration-cucumber:
     strategy:
@@ -162,10 +177,15 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:cucumber
+      - run: yarn test:integration:cucumber:ci
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
           CUCUMBER_VERSION: ${{ matrix.cucumber-version }}
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          disable_search: true
+          files: coverage/integration-cucumber/lcov.info
+          flags: integration-cucumber
 
   integration-selenium:
     strategy:
@@ -200,9 +220,14 @@ jobs:
           sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
           sudo chmod +x /usr/bin/chromedriver
       - uses: ./.github/actions/install
-      - run: yarn test:integration:selenium
+      - run: yarn test:integration:selenium:ci
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          disable_search: true
+          files: coverage/integration-selenium/lcov.info
+          flags: integration-selenium
 
   integration-cypress:
     strategy:
@@ -213,7 +238,7 @@ jobs:
         # 14.5.4 is the latest version that supports Node 18
         # The logic to decide whether the tests run lives in integration-tests/cypress/cypress.spec.js
         cypress-version: [6.7.0, 10.2.0, 14.5.4, latest]
-        module-type: ['commonJS', 'esm']
+        module-type: ["commonJS", "esm"]
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -234,12 +259,17 @@ jobs:
           path: ~/.cache/Cypress
           key: cypress-binary-${{ matrix.cypress-version }}
       - run: yarn config set ignore-engines true
-      - run: yarn test:integration:cypress --ignore-engines
+      - run: yarn test:integration:cypress:ci --ignore-engines
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
           CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
           OPTIONS_OVERRIDE: 1
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          disable_search: true
+          files: coverage/integration-cypress/lcov.info
+          flags: integration-cypress
 
   integration-vitest:
     runs-on: ubuntu-latest
@@ -257,6 +287,11 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:vitest
+      - run: yarn test:integration:vitest:ci
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
+      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          disable_search: true
+          files: coverage/integration-vitest/lcov.info
+          flags: integration-vitest
