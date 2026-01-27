@@ -51,7 +51,7 @@ class AgentWriter extends BaseWriter {
 
       // Capture container tags hash from agent response headers
       if (headers) {
-        const containerTagsHash = headers['datadog-container-tags']
+        const containerTagsHash = headers['Datadog-Container-Tags-Hash']
         if (containerTagsHash) {
           propagationHash.updateContainerTagsHash(containerTagsHash)
           log.debug('Updated container tags hash from agent response: %s', containerTagsHash)
