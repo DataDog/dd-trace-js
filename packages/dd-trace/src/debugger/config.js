@@ -12,6 +12,6 @@ module.exports = function getDebuggerConfig (config) {
     repositoryUrl: config.repositoryUrl,
     runtimeId: config.tags['runtime-id'],
     service: config.service,
-    url: config.url?.toString(),
+    url: config.url.toString(),
   }
 }

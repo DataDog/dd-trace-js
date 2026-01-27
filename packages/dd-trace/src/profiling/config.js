@@ -9,7 +9,6 @@ const { getIsAzureFunction } = require('../serverless')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../config/helper')
-const { getAgentUrl } = require('../agent/url')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
@@ -112,7 +111,7 @@ class Config {
     this.pprofPrefix = pprofPrefix
     this.v8ProfilerBugWorkaroundEnabled = isTrue(options.v8ProfilerBugWorkaround ??
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND ?? true)
-    this.url = getAgentUrl(options)
+    this.url = options.url
 
     this.libraryInjected = options.libraryInjected
     this.activation = options.activation

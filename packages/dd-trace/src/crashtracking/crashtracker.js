@@ -5,7 +5,6 @@ const libdatadog = require('@datadog/libdatadog')
 const binding = libdatadog.load('crashtracker')
 
 const log = require('../log')
-const { getAgentUrl } = require('../agent/url')
 const pkg = require('../../../../package.json')
 const processTags = require('../process-tags')
 
@@ -50,7 +49,7 @@ class Crashtracker {
 
   // TODO: Send only configured values when defaults are fixed.
   #getConfig (config) {
-    const url = getAgentUrl(config)
+    const url = config.url
 
     return {
       additional_files: [],

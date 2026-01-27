@@ -2,7 +2,6 @@
 
 const request = require('../../exporters/common/request')
 const { safeJSONStringify } = require('../../exporters/common/util')
-const { getAgentUrl } = require('../../agent/url')
 
 const log = require('../../log')
 
@@ -37,7 +36,7 @@ class BaseFFEWriter {
 
     this._config = config
     this._endpoint = endpoint
-    this._baseUrl = agentUrl ?? this._getAgentUrl()
+    this._baseUrl = agentUrl ?? config.url
     this._payloadSizeLimit = payloadSizeLimit
     this._eventSizeLimit = eventSizeLimit
     this._headers = headers || {}
@@ -151,14 +150,6 @@ class BaseFFEWriter {
         log.warn(`${this.constructor.name} dropped ${this._droppedEvents} events due to buffer overflow`)
       }
     }
-  }
-
-  /**
-   * @private
-   * @returns {URL} Constructs agent URL from config
-   */
-  _getAgentUrl () {
-    return getAgentUrl(this._config)
   }
 
   /**
