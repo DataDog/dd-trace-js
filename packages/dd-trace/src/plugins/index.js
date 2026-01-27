@@ -30,6 +30,8 @@ const plugins = {
   get '@redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@smithy/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@vitest/runner' () { return require('../../../datadog-plugin-vitest/src') },
+  get '@openai/agents' () { return require('../../../datadog-plugin-openai-agents/src') },
+  get '@openai/agents-openai' () { return require('../../../datadog-plugin-openai-agents/src') },
   get aerospike () { return require('../../../datadog-plugin-aerospike/src') },
   get ai () { return require('../../../datadog-plugin-ai/src') },
   get amqp10 () { return require('../../../datadog-plugin-amqp10/src') },

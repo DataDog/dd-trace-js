@@ -273,6 +273,7 @@ interface Plugins {
   "next": tracer.plugins.next;
   "nyc": tracer.plugins.nyc;
   "openai": tracer.plugins.openai;
+  "openai-agents": tracer.plugins.openai_agents;
   "opensearch": tracer.plugins.opensearch;
   "oracledb": tracer.plugins.oracledb;
   "playwright": tracer.plugins.playwright;
@@ -2393,6 +2394,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [opensearch](https://github.com/opensearch-project/opensearch-js) module.
      */
+    /**
+     * This plugin automatically instruments the
+     * [openai-agents](https://github.com/npmjs/package/@openai/agents) library.
+     */
+    interface openai_agents extends Instrumentation {}
+
     interface opensearch extends elasticsearch {}
 
     /**

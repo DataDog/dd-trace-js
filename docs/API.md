@@ -80,6 +80,7 @@ tracer.use('pg', {
 <h5 id="next"></h5>
 <h5 id="nyc"></h5>
 <h5 id="openai"></h5>
+<h5 id="openai-agents"></h5>
 <h5 id="opensearch"></h5>
 <h5 id="oracledb"></h5>
 <h5 id="pg"></h5>
@@ -158,6 +159,7 @@ tracer.use('pg', {
 * [next](./interfaces/export_.plugins.next.html)
 * [nyc](./interfaces/export_.plugins.nyc.html)
 * [openai](./interfaces/export_.plugins.openai.html)
+* [openai-agents](./interfaces/export_.plugins.openai_agents.html)
 * [opensearch](./interfaces/export_.plugins.opensearch.html)
 * [oracledb](./interfaces/export_.plugins.oracledb.html)
 * [pg](./interfaces/export_.plugins.pg.html)
