@@ -886,7 +886,23 @@ describe('AppSec Index', function () {
         sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
-      it('Should block when it is detected as attack', () => {
+      it('Should block when it is detected as attack with string', () => {
+        const body = 'value'
+        req.body = body
+        waf.run.returns(resultActions)
+
+        bodyParser.publish({ req, res, body, abortController })
+
+        sinon.assert.calledOnceWithMatch(waf.run, {
+          persistent: {
+            'server.request.body': 'value'
+          }
+        })
+        sinon.assert.called(abortController.abort)
+        sinon.assert.called(res.constructor.prototype.end)
+      })
+
+      it('Should block when it is detected as attack with object', () => {
         const body = { key: 'value' }
         req.body = body
         waf.run.returns(resultActions)

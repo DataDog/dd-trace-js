@@ -122,15 +122,17 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
     storedBodies.set(req, body)
   }
 
-  if (isEmptyObject(body)) return
+  // eslint-disable-next-line eslint-rules/eslint-safe-typeof-object
+  if (typeof body === 'object') {
+    if (isEmptyObject(body)) return
+    analyzedBodies.add(body)
+  }
 
   const results = waf.run({
     persistent: {
       [addresses.HTTP_INCOMING_BODY]: body
     }
   }, req)
-
-  analyzedBodies.add(body)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
 }
