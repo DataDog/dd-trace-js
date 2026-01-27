@@ -4208,6 +4208,79 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ])
       })
 
+      it('resets mock state between attempt to fix retries', async () => {
+        const NUM_RETRIES = 3
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: NUM_RETRIES } })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-attempt-to-fix-with-mock.js': {
+                tests: {
+                  'attempt to fix tests with mock resets mock state between retries': {
+                    properties: {
+                      attempt_to_fix: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+
+        let stdout = ''
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            // Should have 1 original + NUM_RETRIES retry attempts
+            const mockTests = tests.filter(
+              test => test.meta[TEST_NAME] === 'attempt to fix tests with mock resets mock state between retries'
+            )
+            assert.strictEqual(mockTests.length, NUM_RETRIES + 1)
+
+            // All tests should pass because mock state is reset between retries
+            for (const test of mockTests) {
+              assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+            }
+
+            // Last attempt should be marked as attempt_to_fix_passed
+            const lastTest = mockTests[mockTests.length - 1]
+            assert.strictEqual(lastTest.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-attempt-to-fix-with-mock'
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        childProcess.stderr?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        const [exitCode] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise
+        ])
+
+        // Verify the test actually ran
+        assert.match(stdout, /I am running attempt to fix with mock/)
+
+        // All retries should pass, so exit code should be 0
+        assert.strictEqual(exitCode[0], 0)
+      })
+
       it('does not fail retry if a test is quarantined', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
         receiver.setTestManagementTests({
