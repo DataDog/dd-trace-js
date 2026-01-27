@@ -6,6 +6,7 @@ stages:
   - macrobenchmarks
   - macrobenchmarks-gate
   - macrobenchmarks-notify
+  - node-hapi-redis-macrobenchmarks
 
 # Config Registry CI jobs
 validate_supported_configurations_local_file:
@@ -25,6 +26,9 @@ include:
   - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/macrobenchmarks.yml"
+  - project: 'DataDog/apm-reliability/apm-sdks-benchmarks'
+    file: '.gitlab/ci-node-hapi-redis.yml'
+    ref: 'main'
 
 workflow:
   auto_cancel:
@@ -51,4 +55,3 @@ requirements_json_test:
   variables:
     REQUIREMENTS_BLOCK_JSON_PATH: ".gitlab/requirements_block.json"
     REQUIREMENTS_ALLOW_JSON_PATH: ".gitlab/requirements_allow.json"
-
