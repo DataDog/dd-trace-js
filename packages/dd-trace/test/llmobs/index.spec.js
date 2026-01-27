@@ -7,7 +7,6 @@ const { after, afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const AgentInfoExporter = require('../../src/exporters/common/agent-info-exporter')
 const { removeDestroyHandler } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
@@ -22,6 +21,7 @@ describe('module', () => {
 
   let LLMObsSpanWriterSpy
   let LLMObsEvalMetricsWriterSpy
+  let fetchAgentInfoStub
 
   beforeEach(() => {
     store = {}
@@ -38,6 +38,8 @@ describe('module', () => {
       setAgentless: sinon.stub()
     })
 
+    fetchAgentInfoStub = sinon.stub()
+
     llmobsModule = proxyquire('../../../dd-trace/src/llmobs', {
       './writers/spans': LLMObsSpanWriterSpy,
       './writers/evaluations': LLMObsEvalMetricsWriterSpy,
@@ -48,7 +50,12 @@ describe('module', () => {
             return store
           }
         }
-      }
+      },
+      './writers/util': proxyquire('../../../dd-trace/src/llmobs/writers/util', {
+        '../../agent/info': {
+          fetchAgentInfo: fetchAgentInfoStub
+        }
+      })
     })
 
     removeDestroyHandler()
@@ -166,8 +173,7 @@ describe('module', () => {
     describe('when an agent is running', () => {
       describe('when the agent does not have the correct proxy endpoint', () => {
         beforeEach(() => {
-          sinon.stub(AgentInfoExporter.prototype, 'getAgentInfo')
-          AgentInfoExporter.prototype.getAgentInfo.callsFake((cb) => {
+          fetchAgentInfoStub.callsFake((url, cb) => {
             cb(null, {})
           })
         })
@@ -198,8 +204,7 @@ describe('module', () => {
 
       describe('when the agent has the correct proxy endpoint', () => {
         beforeEach(() => {
-          sinon.stub(AgentInfoExporter.prototype, 'getAgentInfo')
-          AgentInfoExporter.prototype.getAgentInfo.callsFake((cb) => {
+          fetchAgentInfoStub.callsFake((url, cb) => {
             cb(null, { endpoints: ['/evp_proxy/v2/'] })
           })
         })
@@ -215,8 +220,7 @@ describe('module', () => {
 
     describe('when no agent is running', () => {
       beforeEach(() => {
-        sinon.stub(AgentInfoExporter.prototype, 'getAgentInfo')
-        AgentInfoExporter.prototype.getAgentInfo.callsFake((cb) => {
+        fetchAgentInfoStub.callsFake((url, cb) => {
           cb(new Error('No agent running'))
         })
       })

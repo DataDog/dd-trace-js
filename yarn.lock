@@ -141,10 +141,10 @@
     "@babel/helper-string-parser" "^7.27.1"
     "@babel/helper-validator-identifier" "^7.28.5"
 
-"@datadog/flagging-core@0.2.0":
-  version "0.2.0"
-  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-0.2.0.tgz#d29d81486068b870c41cebb2524721a71184eb16"
-  integrity sha512-DocYjr8NFJZfsnqzu3MuBUNqgbJquq1doimkKEXI5UImLmz/tR0LO09dd651pBhoz1Pa4SKcnPaxWFLTqxWtsA==
+"@datadog/flagging-core@0.3.1":
+  version "0.3.1"
+  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-0.3.1.tgz#54c5494285067fcb75b7fba6503917faffbd0a51"
+  integrity sha512-GTt0+6c2cBcShh3euYbDb6boz3MJqndq0e+0/DTMozEEUAeiZEiEVagp34shEAax8Lqrtn7+UZ8HGArsXimEcw==
   dependencies:
     spark-md5 "^3.0.2"
 
@@ -175,13 +175,13 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/openfeature-node-server@^0.2.0":
-  version "0.2.0"
-  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-0.2.0.tgz#905032cc6d7d1eb1d6620aabe323ed552366d65a"
-  integrity sha512-Jn8lShFyqNji0tiKntLcCRwu3xrhg93fTTJS3gHSPKMfBDBKxjB9uF8Hu5Ayn2k0QuwJexx5atN9GSiWX0h5qg==
+"@datadog/openfeature-node-server@^0.3.1":
+  version "0.3.1"
+  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-0.3.1.tgz#d02ab2a7a94648bd0cb92b8bca1cfdcab62b16f6"
+  integrity sha512-bY96ej6EINf2rWeM4TdmcbRZEuOD2/V/IhN2rXNmUtAUm5uPzjNFmaShi16TJWdoksWolCO1FdS07WHhf31C4A==
   dependencies:
-    "@datadog/flagging-core" "0.2.0"
-    "@openfeature/server-sdk" "~1.18.0"
+    "@datadog/flagging-core" "0.3.1"
+    "@openfeature/server-sdk" "~1.20.0"
 
 "@datadog/pprof@5.13.2":
   version "5.13.2"
@@ -598,11 +598,6 @@
   version "1.9.1"
   resolved "https://registry.yarnpkg.com/@openfeature/core/-/core-1.9.1.tgz#9925a04ed0745e92dd7b3793b35cff1ed89d54c1"
   integrity sha512-YySPtH4s/rKKnHRU0xyFGrqMU8XA+OIPNWDrlEFxE6DCVWCIrxE5YpiB94YD2jMFn6SSdA0cwQ8vLkCkl8lm8A==
-
-"@openfeature/server-sdk@~1.18.0":
-  version "1.18.0"
-  resolved "https://registry.yarnpkg.com/@openfeature/server-sdk/-/server-sdk-1.18.0.tgz#5fed5f1d0900b2535878db18a78295bbaebb997b"
-  integrity sha512-uP8nqEGBS58s3iWXx6d8vnJ6ZVt3DACJL4PWADOAuwIS4xXpID91783e9f6zQ0i1ijQpj3yx+3ZuCB2LfQMUMA==
 
 "@openfeature/server-sdk@~1.20.0":
   version "1.20.1"
@@ -2797,9 +2792,9 @@ lodash.merge@^4.6.2:
   integrity sha512-0KpjqXRVvrYyCsX1swR/XTK0va6VQkQM6MNo7PqW77ByjAhoARA8EfrP1N4+KlKj8YS0ZUCtRT/YUuhyYDujIQ==
 
 lodash@^4.17.15, lodash@^4.17.4:
-  version "4.17.21"
-  resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.21.tgz#679591c564c3bffaae8454cf0b3df370c3d6911c"
-  integrity sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==
+  version "4.17.23"
+  resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.23.tgz#f113b0378386103be4f6893388c73d0bde7f2c5a"
+  integrity sha512-LgVTMpQtIopCi79SJeDiP0TfWi5CNEc/L/aRdTh3yIvmZXTnheWpKjSZhnvMl8iXbC1tFg9gdHHDMLoV7CnG+w==
 
 log-symbols@^4.1.0:
   version "4.1.0"
