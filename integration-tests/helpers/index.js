@@ -9,6 +9,7 @@ const http = require('http')
 const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
+const { setTimeout: setTimeoutPromise } = require('timers/promises')
 const { inspect } = require('util')
 
 const id = require('../../packages/dd-trace/src/id')
@@ -326,6 +327,113 @@ function execHelper (command, options) {
 }
 
 /**
+ * Pack dd-trace into a tarball at the specified path.
+ *
+ * @param {string} tarballPath - The path where the tarball should be created
+ * @param {NodeJS.ProcessEnv} env - The environment to use for the pack command
+ */
+function packTarball (tarballPath, env) {
+  execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
+  log('Tarball packed successfully:', tarballPath)
+}
+
+/**
+ * Pack the tarball with file locking to coordinate between parallel workers.
+ * Only one worker will pack the tarball, others will wait for it to be ready.
+ *
+ * @param {string} tarballPath - The path where the tarball should be created
+ * @param {NodeJS.ProcessEnv} env - The environment to use for the pack command
+ * @returns {Promise<void>}
+ */
+async function packTarballWithLock (tarballPath, env) {
+  if (existsSync(tarballPath)) {
+    log('Tarball already exists:', tarballPath)
+    return
+  }
+
+  const lockFile = `${tarballPath}.lock`
+  const maxWaitTime = 60_000 // 60 seconds max wait
+  const pollInterval = 100 // Check every 100ms
+  const lockTimeout = 60_000 // Consider locks older than 60s as stale
+  let lockFd
+
+  try {
+    // Try to acquire the lock by creating the lock file exclusively
+    lockFd = await fs.open(lockFile, 'wx')
+    log('Lock acquired, packing tarball:', tarballPath)
+
+    if (existsSync(tarballPath)) {
+      log('Tarball already exists (created while waiting for lock):', tarballPath)
+      return
+    }
+
+    // We have the lock, pack the tarball
+    packTarball(tarballPath, env)
+
+    // Close and remove the lock file
+    await lockFd.close()
+    await fs.unlink(lockFile).catch(() => {}) // Ignore errors if already removed
+    lockFd = undefined
+  } catch (err) {
+    if (err.code === 'EEXIST') {
+      // Lock file exists, another process is packing or has stale lock
+      log('Lock file exists, waiting for tarball:', tarballPath)
+
+      // Check if lock is stale
+      try {
+        const lockStat = await fs.stat(lockFile)
+        const lockAge = Date.now() - lockStat.mtimeMs
+        if (lockAge > lockTimeout) {
+          log('Stale lock detected, breaking lock:', lockFile)
+          await fs.unlink(lockFile).catch(() => {})
+          // Retry packing after breaking stale lock
+          return packTarballWithLock(tarballPath, env)
+        }
+      } catch {
+        // Lock file might have been removed between EEXIST and stat, which is fine
+      }
+
+      // Wait for the tarball to be ready
+      const startTime = Date.now()
+      while (Date.now() - startTime < maxWaitTime) {
+        // Check if tarball exists
+        if (existsSync(tarballPath)) {
+          log('Tarball ready:', tarballPath)
+          return
+        }
+
+        // Check if lock is gone (might indicate failure)
+        const lockExists = existsSync(lockFile)
+        if (!lockExists) {
+          // Lock is gone but tarball doesn't exist - another process might have failed
+          // Try to pack it ourselves
+          log('Lock removed but no tarball, retrying pack:', tarballPath)
+          return packTarballWithLock(tarballPath, env)
+        }
+
+        // Wait a bit before checking again
+        await setTimeoutPromise(pollInterval)
+      }
+
+      // Timeout waiting for tarball
+      throw new Error(`Timeout waiting for tarball to be packed: ${tarballPath}`)
+    } else {
+      throw err
+    }
+  } finally {
+    // Ensure lock file is cleaned up if we still have it open
+    if (lockFd) {
+      try {
+        await lockFd.close()
+        await fs.unlink(lockFile).catch(() => {})
+      } catch (cleanupErr) {
+        error('Error cleaning up lock:', cleanupErr)
+      }
+    }
+  }
+}
+
+/**
  * @param {string[]} dependencies
  * @param {boolean} isGitRepo
  * @param {string[]} integrationTestsPaths
@@ -365,15 +473,17 @@ async function createSandbox (
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
   const folder = path.join(sandboxRoot, id().toString())
-  const out = path.join(sandboxRoot, 'dd-trace.tgz')
+  const tarballEnv = process.env.DD_TRACE_INTEGRATION_TARBALL_PATH
+  const out = tarballEnv && tarballEnv !== '0' && tarballEnv !== 'false'
+    ? tarballEnv
+    : path.join(sandboxRoot, 'dd-trace.tgz')
   const deps = cappedDependencies.concat(`file:${out}`)
 
   await fs.mkdir(folder, { recursive: true })
   const addOptions = { cwd: folder, env: restOfEnv }
   const addFlags = ['--trust']
-  if (!existsSync(out)) {
-    execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${out}`, { env: restOfEnv })
-  }
+
+  await packTarballWithLock(out, restOfEnv)
 
   if (process.env.OFFLINE === '1' || process.env.OFFLINE === 'true') {
     addFlags.push('--prefer-offline')
@@ -527,7 +637,7 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
 
   const tryAgain = async function () {
     retries += 1
-    await new Promise(resolve => setTimeout(resolve, 100))
+    await setTimeoutPromise(100)
     return cleanup()
   }
 
