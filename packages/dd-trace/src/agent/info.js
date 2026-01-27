@@ -36,15 +36,17 @@ function fetchAgentInfo (url, callback) {
     if (err) {
       return callback(err)
     }
+
     try {
-      const response = JSON.parse(res)
-      cachedUrl = urlKey
-      cachedData = response
-      cachedTimestamp = Date.now()
-      return callback(null, response)
+      cachedData = JSON.parse(res)
     } catch (e) {
       return callback(e)
     }
+
+    cachedUrl = urlKey
+    cachedTimestamp = Date.now()
+
+    callback(null, cachedData)
   })
 }
 
