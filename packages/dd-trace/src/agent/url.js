@@ -16,10 +16,13 @@ module.exports = { getAgentUrl }
  * @returns {URL} The agent URL
  */
 function getAgentUrl (config) {
-  const { url, hostname = defaults.hostname, port = defaults.port } = config
-  return url || new URL(format({
+  const { url, hostname, port } = config
+  if (url) {
+    return url instanceof URL ? url : new URL(url)
+  }
+  return new URL(format({
     protocol: 'http:',
-    hostname,
-    port
+    hostname: hostname || defaults.hostname,
+    port: port || defaults.port
   }))
 }

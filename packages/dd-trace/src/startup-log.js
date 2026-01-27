@@ -3,7 +3,7 @@
 const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
-const defaults = require('./config/defaults')
+const { getAgentUrl } = require('./agent/url')
 const { info, warn } = require('./log/writer')
 
 const errors = {}
@@ -43,7 +43,7 @@ function startupLog (agentError) {
  * @returns {Record<string, unknown>}
  */
 function tracerInfo () {
-  const url = config.url || `http://${config.hostname || defaults.hostname}:${config.port}`
+  const url = getAgentUrl(config)
 
   const out = {
     [inspect.custom] () {
