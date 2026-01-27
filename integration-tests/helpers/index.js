@@ -9,7 +9,6 @@ const http = require('http')
 const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
-const { setTimeout: setTimeoutPromise } = require('timers/promises')
 const { inspect } = require('util')
 
 const id = require('../../packages/dd-trace/src/id')
@@ -412,7 +411,7 @@ async function packTarballWithLock (tarballPath, env) {
         }
 
         // Wait a bit before checking again
-        await setTimeoutPromise(pollInterval)
+        await new Promise(resolve => setTimeout(resolve, pollInterval))
       }
 
       // Timeout waiting for tarball
@@ -637,7 +636,7 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
 
   const tryAgain = async function () {
     retries += 1
-    await setTimeoutPromise(100)
+    await new Promise(resolve => setTimeout(resolve, 100))
     return cleanup()
   }
 
