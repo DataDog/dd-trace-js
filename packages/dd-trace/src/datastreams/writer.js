@@ -5,7 +5,6 @@ const pkg = require('../../../../package.json')
 const log = require('../log')
 const request = require('../exporters/common/request')
 const { MsgpackEncoder } = require('../msgpack')
-const { getAgentUrl } = require('../agent/url')
 
 const msgpack = new MsgpackEncoder()
 
@@ -31,7 +30,7 @@ function makeRequest (data, url, cb) {
 
 class DataStreamsWriter {
   constructor (config) {
-    this._url = getAgentUrl(config)
+    this._url = config.url
   }
 
   flush (payload) {

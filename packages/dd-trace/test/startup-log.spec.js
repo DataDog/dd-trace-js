@@ -42,6 +42,7 @@ describe('startup logging', () => {
       service: 'test',
       hostname: 'example.com',
       port: 4321,
+      url: new URL('http://example.com:4321/'),
       debug: true,
       sampler: {
         sampleRate: 1,

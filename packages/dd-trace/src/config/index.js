@@ -2,7 +2,7 @@
 
 const fs = require('fs')
 const os = require('os')
-const { URL } = require('url')
+const { URL, format } = require('url')
 const path = require('path')
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 
@@ -359,7 +359,7 @@ class Config {
    * Set the configuration with remote config settings.
    * Applies remote configuration, recalculates derived values, and merges all configuration sources.
    *
-   * @param {import('./config/remote_config').RemoteConfigOptions|null} options - Configurations received via Remote
+   * @param {import('./remote_config').RemoteConfigOptions|null} options - Configurations received via Remote
    *   Config or null to reset all remote configuration
    */
   setRemoteConfig (options) {
@@ -1225,17 +1225,6 @@ class Config {
     return getEnv('DD_CIVISIBILITY_ITR_ENABLED') ?? true
   }
 
-  #getHostname () {
-    const DD_CIVISIBILITY_AGENTLESS_URL = getEnv('DD_CIVISIBILITY_AGENTLESS_URL')
-    const url = DD_CIVISIBILITY_AGENTLESS_URL
-      ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
-      : getAgentUrl(this._getTraceAgentUrl(), this.#optionsArg)
-    const DD_AGENT_HOST = this.#optionsArg.hostname ??
-      getEnv('DD_AGENT_HOST') ??
-      defaults.hostname
-    return DD_AGENT_HOST || url?.hostname
-  }
-
   #getSpanComputePeerService () {
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       this.#optionsArg.spanAttributeSchema ??
@@ -1271,21 +1260,52 @@ class Config {
     )
   }
 
-  _getTraceAgentUrl () {
-    return this.#optionsArg.url ??
-      getEnv('DD_TRACE_AGENT_URL') ??
-      null
+  #calculateAgentUrl () {
+    // 1. CI Visibility agentless mode takes highest priority
+    const DD_CIVISIBILITY_AGENTLESS_URL = getEnv('DD_CIVISIBILITY_AGENTLESS_URL')
+    if (DD_CIVISIBILITY_AGENTLESS_URL) {
+      return new URL(DD_CIVISIBILITY_AGENTLESS_URL)
+    }
+
+    // 2. Check for explicit URL from options or DD_TRACE_AGENT_URL
+    const explicitUrl = this.#optionsArg.url ?? getEnv('DD_TRACE_AGENT_URL')
+    if (explicitUrl) {
+      return new URL(explicitUrl)
+    }
+
+    // 3. Unix socket auto-detection (Linux only, when no explicit host/port)
+    if (os.type() !== 'Windows_NT') {
+      const hasExplicitHostOrPort =
+        this.#optionsArg.hostname ||
+        this.#optionsArg.port ||
+        getEnv('DD_AGENT_HOST') ||
+        getEnv('DD_TRACE_AGENT_PORT')
+
+      if (!hasExplicitHostOrPort && fs.existsSync('/var/run/datadog/apm.socket')) {
+        return new URL('unix:///var/run/datadog/apm.socket')
+      }
+    }
+
+    // 4. Fallback: construct HTTP URL from hostname/port
+    const hostname = this.#optionsArg.hostname ||
+                    getEnv('DD_AGENT_HOST') ||
+                    defaults.hostname
+    const port = this.#optionsArg.port ||
+                getEnv('DD_TRACE_AGENT_PORT') ||
+                defaults.port
+
+    return new URL(format({
+      protocol: 'http:',
+      hostname,
+      port,
+    }))
   }
 
   // handles values calculated from a mixture of options and env vars
   #applyCalculated () {
     const calc = this.#calculated
 
-    const DD_CIVISIBILITY_AGENTLESS_URL = getEnv('DD_CIVISIBILITY_AGENTLESS_URL')
-
-    calc.url = DD_CIVISIBILITY_AGENTLESS_URL
-      ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
-      : getAgentUrl(this._getTraceAgentUrl(), this.#optionsArg)
+    calc.url = this.#calculateAgentUrl()
 
     if (this.#isCiVisibility()) {
       this.#setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
@@ -1312,10 +1332,11 @@ class Config {
       this.#setBoolean(calc, 'logInjection', false)
     }
 
-    calc['dogstatsd.hostname'] = this.#getHostname()
+    const agentHostname = this.#optionsArg.hostname || getEnv('DD_AGENT_HOST') || calc.url.hostname
+
+    calc['dogstatsd.hostname'] = agentHostname
 
     // Compute OTLP logs and metrics URLs to send payloads to the active Datadog Agent
-    const agentHostname = this.#getHostname()
     calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
     calc.otelMetricsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`
     calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
@@ -1346,7 +1367,7 @@ class Config {
   /**
    * Applies remote configuration options from APM_TRACING configs.
    *
-   * @param {import('./config/remote_config').RemoteConfigOptions} options - Configurations received via Remote Config
+   * @param {import('./remote_config').RemoteConfigOptions} options - Configurations received via Remote Config
    */
   #applyRemoteConfig (options) {
     const opts = this.#remote
@@ -1488,8 +1509,11 @@ class Config {
 
     const originExists = origin in changeTracker[name]
     const oldValue = changeTracker[name][origin]
+    const hasChanged = originExists && oldValue instanceof URL && value instanceof URL
+      ? oldValue.toString() !== value.toString()
+      : !originExists || oldValue !== value
 
-    if (!originExists || oldValue !== value) {
+    if (hasChanged) {
       changeTracker[name][origin] = value
       changes.push({
         name,
@@ -1626,22 +1650,6 @@ function nonNegInt (value, envVarName, allowZero = true) {
     return
   }
   return parsed
-}
-
-function getAgentUrl (url, options) {
-  if (url) return new URL(url)
-
-  if (os.type() === 'Windows_NT') return
-
-  if (
-    !options.hostname &&
-    !options.port &&
-    !getEnv('DD_AGENT_HOST') &&
-    !getEnv('DD_TRACE_AGENT_PORT') &&
-    fs.existsSync('/var/run/datadog/apm.socket')
-  ) {
-    return new URL('unix:///var/run/datadog/apm.socket')
-  }
 }
 
 let configInstance = null

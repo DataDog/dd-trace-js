@@ -1,7 +1,6 @@
 'use strict'
 
 const { workerData: { config: parentConfig, parentThreadId, configPort } } = require('node:worker_threads')
-const { getAgentUrl } = require('../../agent/url')
 const log = require('./log')
 
 const config = module.exports = {
@@ -18,7 +17,7 @@ configPort.on('messageerror', (err) =>
 )
 
 function updateUrl (updates) {
-  config.url = getAgentUrl(updates)
+  config.url = updates.url
 
   config.dynamicInstrumentation.captureTimeoutNs = BigInt(updates.dynamicInstrumentation.captureTimeoutMs) * 1_000_000n
 }

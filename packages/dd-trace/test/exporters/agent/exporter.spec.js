@@ -60,10 +60,9 @@ describe('Exporter', () => {
 
   it('should support IPv6', () => {
     const stats = { enabled: true }
-    exporter = new Exporter({ hostname: '::1', flushInterval, stats }, prioritySampler)
-    sinon.assert.calledWithMatch(Writer, {
-      url: new URL('http://[::1]:8126/'),
-    })
+    const url = new URL('http://[::1]:8126/')
+    exporter = new Exporter({ hostname: '::1', flushInterval, stats, url }, prioritySampler)
+    sinon.assert.calledWithMatch(Writer, { url })
   })
 
   describe('when interval is set to a positive number', () => {

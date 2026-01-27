@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { URL } = require('node:url')
 
 const { describe, it, beforeEach } = require('mocha')
 const context = describe
@@ -23,8 +24,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
   })
 
   const flushInterval = 50
-  const port = 8126
-  const url = `http://127.0.0.1:${port}`
+  const url = new URL('http://127.0.0.1:8126')
   const queryDelay = 50
   const tags = {}
 
@@ -35,7 +35,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         endpoints: ['/evp_proxy/v2'],
       }))
 
-    const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+    const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, tags })
 
     assert.notStrictEqual(agentProxyCiVisibilityExporter, null)
     await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
@@ -49,7 +49,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
       .reply(200, JSON.stringify({
         endpoints: ['/evp_proxy/v2/'],
       }))
-    const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+    const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, tags })
 
     const trace = [{ span_id: '1234' }]
     const coverage = {
@@ -89,7 +89,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
     })
 
     it('should initialise AgentlessWriter and CoverageWriter', async () => {
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, tags })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       assert.ok(agentProxyCiVisibilityExporter._writer instanceof AgentlessWriter)
       assert.ok(agentProxyCiVisibilityExporter._coverageWriter instanceof CoverageWriter)
@@ -100,7 +100,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         append: sinon.spy(),
         flush: sinon.spy(),
       }
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, tags })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       agentProxyCiVisibilityExporter._writer = mockWriter
       const testSuiteTrace = [{ type: 'test_suite_end' }]
@@ -116,7 +116,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         append: sinon.spy(),
         flush: sinon.spy(),
       }
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, tags })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       agentProxyCiVisibilityExporter._coverageWriter = mockWriter
       const coverage = {
@@ -132,7 +132,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
     context('if isTestDynamicInstrumentationEnabled is set', () => {
       it('should initialise DynamicInstrumentationLogsWriter', async () => {
         const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
-          port,
+          url,
           tags,
           isTestDynamicInstrumentationEnabled: true,
         })
@@ -146,7 +146,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
           flush: sinon.spy(),
         }
         const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
-          port,
+          url,
           tags,
           isTestDynamicInstrumentationEnabled: true,
         })
@@ -170,7 +170,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
     })
 
     it('should initialise AgentWriter', async () => {
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, tags })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       assert.ok(agentProxyCiVisibilityExporter._writer instanceof AgentWriter)
       assert.strictEqual(agentProxyCiVisibilityExporter._coverageWriter, undefined)
@@ -181,7 +181,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         append: sinon.spy(),
         flush: sinon.spy(),
       }
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, tags })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       agentProxyCiVisibilityExporter._writer = mockWriter
       const testSuiteTrace = [{ type: 'test_suite_end' }]
@@ -196,7 +196,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         append: sinon.spy(),
         flush: sinon.spy(),
       }
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, tags })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       agentProxyCiVisibilityExporter._writer = mockWriter
       agentProxyCiVisibilityExporter._coverageWriter = mockWriter
@@ -215,7 +215,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
     context('if isTestDynamicInstrumentationEnabled is set', () => {
       it('should not initialise DynamicInstrumentationLogsWriter', async () => {
         const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
-          port,
+          url,
           tags,
           isTestDynamicInstrumentationEnabled: true,
         })
@@ -229,7 +229,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
           flush: sinon.spy(),
         }
         const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
-          port,
+          url,
           tags,
           isTestDynamicInstrumentationEnabled: true,
         })
@@ -255,7 +255,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         .reply(200, JSON.stringify({
           endpoints: ['/evp_proxy/v2/'],
         }))
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, flushInterval, tags })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, flushInterval, tags })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
 
       agentProxyCiVisibilityExporter._writer = mockWriter
@@ -280,7 +280,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
           endpoints: ['/evp_proxy/v2/'],
         }))
 
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, flushInterval, tags })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, flushInterval, tags })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
 
       agentProxyCiVisibilityExporter._writer = mockWriter
@@ -312,7 +312,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         .reply(200, JSON.stringify({
           endpoints: ['/evp_proxy/v2/'],
         }))
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, tags })
       agentProxyCiVisibilityExporter._writer = mockWriter
       agentProxyCiVisibilityExporter._coverageWriter = mockCoverageWriter
 
@@ -337,7 +337,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
           endpoints: ['/evp_proxy/v2', '/evp_proxy/v3', '/evp_proxy/v4/', '/evp_proxy/v5'],
         }))
 
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, tags })
 
       assert.notStrictEqual(agentProxyCiVisibilityExporter, null)
 
@@ -354,7 +354,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
           endpoints: ['/evp_proxy/v2', '/evp_proxy/v3'],
         }))
 
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, tags })
 
       assert.notStrictEqual(agentProxyCiVisibilityExporter, null)
 
@@ -373,7 +373,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
           endpoints: ['/evp_proxy/v2', '/evp_proxy/v3'],
         }))
 
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, tags })
 
       assert.notStrictEqual(agentProxyCiVisibilityExporter, null)
 
@@ -390,7 +390,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
           endpoints: ['/evp_proxy/v2', '/evp_proxy/v3', '/evp_proxy/v4/'],
         }))
 
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, tags })
 
       assert.notStrictEqual(agentProxyCiVisibilityExporter, null)
 

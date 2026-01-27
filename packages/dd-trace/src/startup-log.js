@@ -3,7 +3,6 @@
 const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
-const { getAgentUrl } = require('./agent/url')
 const { info, warn } = require('./log/writer')
 
 const errors = {}
@@ -43,9 +42,7 @@ function startupLog (agentError) {
  * @returns {Record<string, unknown>}
  */
 function tracerInfo () {
-  const url = getAgentUrl(config)
-
-  const out = {
+  return {
     [inspect.custom] () {
       return String(this)
     },
@@ -64,7 +61,7 @@ function tracerInfo () {
     env: config.env,
     enabled: config.enabled,
     service: config.service,
-    agent_url: url,
+    agent_url: config.url,
     debug: !!config.debug,
     sample_rate: config.sampler.sampleRate,
     sampling_rules: samplingRules,
@@ -76,8 +73,6 @@ function tracerInfo () {
     integrations_loaded: Object.keys(pluginManager._pluginsByName),
     appsec_enabled: !!config.appsec.enabled,
   }
-
-  return out
 }
 
 /**

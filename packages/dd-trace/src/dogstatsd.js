@@ -8,7 +8,6 @@ const request = require('./exporters/common/request')
 const log = require('./log')
 const Histogram = require('./histogram')
 const defaults = require('./config/defaults')
-const { getAgentUrl } = require('./agent/url')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
 
@@ -173,17 +172,12 @@ class DogStatsDClient {
       }
     }
 
-    const clientConfig = {
+    return {
       host: config.dogstatsd.hostname,
       port: config.dogstatsd.port,
       tags,
+      metricsProxyUrl: config.url,
     }
-
-    if (config.url || config.port) {
-      clientConfig.metricsProxyUrl = getAgentUrl(config)
-    }
-
-    return clientConfig
   }
 }
 

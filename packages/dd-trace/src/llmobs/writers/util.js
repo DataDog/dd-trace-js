@@ -4,7 +4,6 @@ const logger = require('../../log')
 const { EVP_PROXY_AGENT_BASE_PATH } = require('../constants/writers')
 const telemetry = require('../telemetry')
 const { fetchAgentInfo } = require('../../agent/info')
-const { getAgentUrl } = require('../../agent/url')
 
 function setAgentStrategy (config, setWritersAgentlessValue) {
   const agentlessEnabled = config.llmobs.agentlessEnabled
@@ -14,7 +13,7 @@ function setAgentStrategy (config, setWritersAgentlessValue) {
     return
   }
 
-  fetchAgentInfo(getAgentUrl(config), (err, agentInfo) => {
+  fetchAgentInfo(config.url, (err, agentInfo) => {
     if (err) {
       setWritersAgentlessValue(true)
       return

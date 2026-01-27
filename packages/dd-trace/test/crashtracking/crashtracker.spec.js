@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const os = require('node:os')
+const { URL } = require('node:url')
 
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -22,7 +23,7 @@ describeNotWindows('crashtracker', () => {
     binding = libdatadog.load('crashtracker')
 
     config = {
-      port: 7357,
+      url: new URL('http://127.0.0.1:7357'),
       tags: {
         foo: 'bar',
       },
