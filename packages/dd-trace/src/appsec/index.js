@@ -191,13 +191,15 @@ function incomingHttpEndTranslator ({ req, res }) {
   const persistent = {}
 
   // we need to keep this to support other body parsers
-  if (
-    req.body !== undefined &&
-    req.body !== null &&
-    !analyzedBodies.has(req.body) &&
-    !isEmptyObject(req.body)
-  ) {
-    persistent[addresses.HTTP_INCOMING_BODY] = req.body
+  if (req.body !== undefined && req.body !== null) {
+    // eslint-disable-next-line eslint-rules/eslint-safe-typeof-object
+    if (typeof req.body === 'object') {
+      if (!isEmptyObject(req.body) && !analyzedBodies.has(req.body)) {
+        persistent[addresses.HTTP_INCOMING_BODY] = req.body
+      }
+    } else {
+      persistent[addresses.HTTP_INCOMING_BODY] = req.body
+    }
   }
 
   // we need to keep this to support other cookie parsers
