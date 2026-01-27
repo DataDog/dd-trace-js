@@ -255,4 +255,187 @@ describe('FlaggingProvider Initialization Timeout', () => {
       assert.strictEqual(errorArg.message, 'Initialization timeout after 10000ms')
     })
   })
+
+  describe('environment variable timeout configuration', () => {
+    let originalEnv
+
+    beforeEach(() => {
+      // Save original environment variables
+      originalEnv = {
+        DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: process.env.DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
+        DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS:
+          process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS
+      }
+    })
+
+    afterEach(() => {
+      // Restore original environment variables
+      if (originalEnv.DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS !== undefined) {
+        process.env.DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS =
+          originalEnv.DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS
+      } else {
+        delete process.env.DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS
+      }
+
+      if (originalEnv.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS !== undefined) {
+        process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS =
+          originalEnv.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS
+      } else {
+        delete process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS
+      }
+    })
+
+    it('should use DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variable', async () => {
+      // Set environment variable for 8-second timeout
+      process.env.DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS = '8000'
+
+      // Need to reload the config module to pick up env var
+      delete require.cache[require.resolve('../../src/config')]
+      const Config = require('../../src/config')
+      const config = new Config({})
+
+      const provider = new FlaggingProvider(mockTracer, config)
+
+      const initPromise = provider.initialize()
+
+      // Attach catch handler
+      initPromise.catch(() => {
+        // Expected to reject on timeout
+      })
+
+      // Verify initialization is in progress
+      assert.strictEqual(provider.initController.isInitializing(), true)
+
+      // Advance time by 7.9 seconds (before env var timeout)
+      await clock.tickAsync(7900)
+
+      // Should still be initializing
+      assert.strictEqual(provider.initController.isInitializing(), true)
+
+      // Advance by another 200ms to trigger the 8-second timeout
+      await clock.tickAsync(200)
+
+      // Wait for promise to settle
+      await initPromise.catch(() => {})
+
+      // Should now be timed out
+      assert.strictEqual(provider.initController.isInitializing(), false)
+    })
+
+    it('should use DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variable', async () => {
+      // Set experimental environment variable for 6-second timeout
+      process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS = '6000'
+
+      // Need to reload the config module to pick up env var
+      delete require.cache[require.resolve('../../src/config')]
+      const Config = require('../../src/config')
+      const config = new Config({})
+
+      const provider = new FlaggingProvider(mockTracer, config)
+
+      // Spy on setError method to verify timeout message
+      const setErrorSpy = sinon.spy(provider, 'setError')
+
+      const initPromise = provider.initialize()
+
+      // Attach catch handler
+      initPromise.catch(() => {
+        // Expected to reject
+      })
+
+      // Advance time to trigger experimental env var timeout
+      await clock.tickAsync(6000)
+
+      await initPromise.catch(() => {})
+
+      // Verify setError was called with experimental env var timeout error
+      assert.strictEqual(setErrorSpy.calledOnce, true)
+      const errorArg = setErrorSpy.firstCall.args[0]
+      assert.ok(errorArg instanceof Error)
+      assert.ok(errorArg.message.includes('Initialization timeout'))
+      assert.ok(errorArg.message.includes('6000ms'))
+    })
+
+    it('should prioritize DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS ' +
+       'over DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS', async () => {
+      // Set both environment variables - experimental should take priority
+      process.env.DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS = '10000'
+      process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS = '4000'
+
+      // Need to reload the config module to pick up env vars
+      delete require.cache[require.resolve('../../src/config')]
+      const Config = require('../../src/config')
+      const config = new Config({})
+
+      const provider = new FlaggingProvider(mockTracer, config)
+
+      const initPromise = provider.initialize()
+
+      // Attach catch handler
+      initPromise.catch(() => {
+        // Expected to reject on timeout
+      })
+
+      // Verify initialization is in progress
+      assert.strictEqual(provider.initController.isInitializing(), true)
+
+      // Advance time by 3.9 seconds (before experimental timeout)
+      await clock.tickAsync(3900)
+
+      // Should still be initializing
+      assert.strictEqual(provider.initController.isInitializing(), true)
+
+      // Advance by another 200ms to trigger the 4-second timeout (experimental takes priority)
+      await clock.tickAsync(200)
+
+      // Wait for promise to settle
+      await initPromise.catch(() => {})
+
+      // Should now be timed out (using experimental env var, not the regular one)
+      assert.strictEqual(provider.initController.isInitializing(), false)
+    })
+
+    it('should use config object value over environment variables', async () => {
+      // Set environment variable
+      process.env.DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS = '7000'
+
+      // Config with explicit timeout (should override env var)
+      const configWithTimeout = {
+        ...mockConfig,
+        experimental: {
+          flaggingProvider: {
+            enabled: true,
+            initializationTimeoutMs: 3000 // This should override env var
+          }
+        }
+      }
+
+      const provider = new FlaggingProvider(mockTracer, configWithTimeout)
+
+      const initPromise = provider.initialize()
+
+      // Attach catch handler
+      initPromise.catch(() => {
+        // Expected to reject on timeout
+      })
+
+      // Verify initialization is in progress
+      assert.strictEqual(provider.initController.isInitializing(), true)
+
+      // Advance time by 2.9 seconds (before config timeout)
+      await clock.tickAsync(2900)
+
+      // Should still be initializing
+      assert.strictEqual(provider.initController.isInitializing(), true)
+
+      // Advance by another 200ms to trigger the 3-second timeout (config takes priority)
+      await clock.tickAsync(200)
+
+      // Wait for promise to settle
+      await initPromise.catch(() => {})
+
+      // Should now be timed out (using config value, not env var)
+      assert.strictEqual(provider.initController.isInitializing(), false)
+    })
+  })
 })
