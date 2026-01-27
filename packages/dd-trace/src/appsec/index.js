@@ -203,8 +203,8 @@ function incomingHttpEndTranslator ({ req, res }) {
   if (
     req.cookies !== null &&
     typeof req.cookies === 'object' &&
-    !analyzedCookies.has(req.cookies) &&
-    !isEmptyObject(req.cookies)
+    !isEmptyObject(req.cookies) &&
+    !analyzedCookies.has(req.cookies)
   ) {
     persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
