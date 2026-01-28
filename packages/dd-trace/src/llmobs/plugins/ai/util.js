@@ -205,6 +205,27 @@ function getLlmObsSpanName (operation, functionId) {
   return functionId ? `${functionId}.${operation}` : operation
 }
 
+/**
+ * Get custom telemetry metadata from ai.telemetry.metadata.* attributes
+ * @param {Record<string, unknown>} tags
+ * @returns {Record<string, unknown> | null}
+ */
+function getTelemetryMetadata (tags) {
+  const metadata = {}
+  const prefix = 'ai.telemetry.metadata.'
+
+  for (const tag of Object.keys(tags)) {
+    if (!tag.startsWith(prefix)) continue
+
+    const metadataKey = tag.slice(prefix.length)
+    if (metadataKey) {
+      metadata[metadataKey] = tags[tag]
+    }
+  }
+
+  return Object.keys(metadata).length ? metadata : null
+}
+
 module.exports = {
   getSpanTags,
   getOperation,
@@ -214,5 +235,6 @@ module.exports = {
   getGenerationMetadata,
   getToolNameFromTags,
   getToolCallResultContent,
-  getLlmObsSpanName
+  getLlmObsSpanName,
+  getTelemetryMetadata
 }
