@@ -1,15 +1,12 @@
 'use strict'
 
-const { execFileSync } = require('node:child_process')
+const { readFileSync, existsSync } = require('node:fs')
+const path = require('node:path')
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const log = require('../../dd-trace/src/log')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const { discoverCoverageReports } = require('../../dd-trace/src/ci-visibility/coverage-report-discovery')
-const { readSettingsFromCache } = require('../../dd-trace/src/ci-visibility/requests/settings-cache')
-const { getRepositoryUrl } = require('../../dd-trace/src/plugins/util/git')
-const { getCIMetadata } = require('../../dd-trace/src/plugins/util/ci')
-const { filterSensitiveInfoFromRepository } = require('../../dd-trace/src/plugins/util/url')
+const { getCacheFolderPath } = require('../../dd-trace/src/ci-visibility/test-optimization-cache')
 
 class NycPlugin extends CiPlugin {
   static id = 'nyc'
@@ -39,81 +36,136 @@ class NycPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:nyc:report', ({ rootDir }) => {
-      this.#handleCoverageReport(rootDir)
+    this.addSub('ci:nyc:report', ({ rootDir, onDone }) => {
+      this.#handleCoverageReport(rootDir, onDone)
     })
   }
 
   /**
-   * Gets the repository URL and commit SHA from environment or git commands.
-   * Uses the same sources as the main tracer to ensure cache key consistency.
-   * @returns {{repositoryUrl: string|undefined, sha: string|undefined}}
+   * Reads the library configuration from the test optimization cache folder.
+   * @returns {object|undefined} The library configuration settings, or undefined if not available.
    */
-  #getGitInfo () {
-    // Check user-provided env vars first (same as main tracer)
-    let repositoryUrl = getValueFromEnvSources('DD_GIT_REPOSITORY_URL')
-    let sha = getValueFromEnvSources('DD_GIT_COMMIT_SHA')
-
-    // Fall back to CI metadata
-    if (!repositoryUrl || !sha) {
-      const ciMetadata = getCIMetadata()
-      repositoryUrl = repositoryUrl || ciMetadata['git.repository_url']
-      sha = sha || ciMetadata['git.commit.sha']
+  #readLibraryConfiguration () {
+    const cacheFolder = getCacheFolderPath()
+    if (!cacheFolder) {
+      log.debug('Test optimization cache folder not found')
+      return
     }
 
-    // Fall back to git commands if still not available
-    if (!repositoryUrl) {
-      const rawRepositoryUrl = getRepositoryUrl()
-      repositoryUrl = filterSensitiveInfoFromRepository(rawRepositoryUrl) || rawRepositoryUrl
-    }
-    if (!sha) {
-      try {
-        sha = execFileSync('git', ['rev-parse', 'HEAD'], { stdio: 'pipe' }).toString().trim()
-      } catch {
-        // Git command failed
-      }
+    const configPath = path.join(cacheFolder, 'library-configuration.json')
+    if (!existsSync(configPath)) {
+      log.debug('Library configuration file not found at %s', configPath)
+      return
     }
 
-    // Apply filtering to match main tracer behavior
-    if (repositoryUrl) {
-      const filteredUrl = filterSensitiveInfoFromRepository(repositoryUrl)
-      if (filteredUrl) {
-        repositoryUrl = filteredUrl
-      }
+    try {
+      const content = readFileSync(configPath, 'utf8')
+      return JSON.parse(content)
+    } catch (err) {
+      log.debug('Failed to read library configuration: %s', err.message)
+    }
+  }
+
+  /**
+   * Reads the test environment metadata from the test optimization cache folder.
+   * @returns {object|undefined} The test environment metadata, or undefined if not available.
+   */
+  #readTestEnvironmentMetadata () {
+    const cacheFolder = getCacheFolderPath()
+    if (!cacheFolder) {
+      return
     }
 
-    return { repositoryUrl, sha }
+    const metadataPath = path.join(cacheFolder, 'test-environment-data.json')
+    if (!existsSync(metadataPath)) {
+      log.debug('Test environment metadata file not found at %s', metadataPath)
+      return
+    }
+
+    try {
+      const content = readFileSync(metadataPath, 'utf8')
+      return JSON.parse(content)
+    } catch (err) {
+      log.debug('Failed to read test environment metadata: %s', err.message)
+    }
   }
 
   /**
    * Handles the coverage report by discovering and uploading it if enabled.
    * @param {string} rootDir - The root directory where coverage reports are located.
+   * @param {Function} [onDone] - Callback to signal completion.
    */
-  #handleCoverageReport (rootDir) {
-    const { repositoryUrl, sha } = this.#getGitInfo()
+  #handleCoverageReport (rootDir, onDone) {
+    const done = onDone || (() => {})
 
-    if (!repositoryUrl || !sha) {
-      log.debug('Could not determine repository URL or commit SHA for settings cache lookup')
+    // Check if the exporter supports coverage report upload
+    if (!this.tracer._exporter?.uploadCoverageReport) {
+      log.debug('Exporter does not support coverage report upload')
+      done()
       return
     }
 
-    const settings = readSettingsFromCache(sha, repositoryUrl)
-    if (!settings?.isCoverageReportUploadEnabled) {
+    const libraryConfig = this.#readLibraryConfiguration()
+    const testEnvironmentMetadata = this.#readTestEnvironmentMetadata()
+
+    if (!libraryConfig || !testEnvironmentMetadata) {
+      log.debug('Missing library configuration or test environment metadata from cache folder')
+      done()
+      return
+    }
+
+    if (!libraryConfig.isCoverageReportUploadEnabled) {
       log.debug('Coverage report upload is not enabled')
+      done()
       return
     }
 
     const coverageReports = discoverCoverageReports(rootDir)
     if (coverageReports.length === 0) {
       log.debug('No coverage reports found to upload')
+      done()
       return
     }
 
-    // TODO: Upload the code coverage reports
     log.debug('Coverage report upload is enabled, found %d report(s) to upload', coverageReports.length)
 
-    // eslint-disable-next-line no-console
-    console.log(`[dd-trace] Uploading ${coverageReports.length} coverage report(s)`)
+    // Upload reports sequentially (one file per request)
+    let uploadedCount = 0
+    let failedCount = 0
+    let reportIndex = 0
+
+    const uploadNextReport = () => {
+      if (reportIndex >= coverageReports.length) {
+        // All reports processed, log summary
+        if (failedCount > 0) {
+          log.warn('Coverage report upload completed: %d succeeded, %d failed', uploadedCount, failedCount)
+        } else {
+          log.info('Coverage report upload completed: %d report(s) uploaded', uploadedCount)
+        }
+        done()
+        return
+      }
+
+      const { filePath, format } = coverageReports[reportIndex]
+      reportIndex++
+
+      this.tracer._exporter.uploadCoverageReport(
+        { filePath, format, testEnvironmentMetadata },
+        (err) => {
+          if (err) {
+            failedCount++
+            log.error('Failed to upload coverage report %s: %s', filePath, err.message)
+          } else {
+            uploadedCount++
+          }
+
+          // Process next report
+          uploadNextReport()
+        }
+      )
+    }
+
+    uploadNextReport()
   }
 }
 

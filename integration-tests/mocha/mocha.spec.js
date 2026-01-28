@@ -4578,14 +4578,42 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
   context('coverage report upload', () => {
     it('uploads coverage report when coverage_report_upload_enabled is true', async () => {
-      let testOutput = ''
-
       receiver.setSettings({
         coverage_report_upload_enabled: true
       })
 
+      const coverageReportPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/cicovreprt', (payloads) => {
+          assert.ok(payloads.length >= 1)
+
+          const coverageReport = payloads[0]
+
+          // Verify the coverage report upload
+          assert.ok(coverageReport.headers['content-type'])
+          assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
+
+          // Check coverage files (field name is 'coverage' matching Java implementation)
+          assert.ok(Array.isArray(coverageReport.coverageFiles))
+          assert.ok(coverageReport.coverageFiles.length >= 1)
+
+          const coverageFile = coverageReport.coverageFiles[0]
+          assert.strictEqual(coverageFile.name, 'coverage')
+          assert.ok(coverageFile.content.includes('SF:')) // LCOV format starts with SF: (source file)
+
+          // Check event files (field name is 'event' matching Java implementation)
+          assert.ok(Array.isArray(coverageReport.eventFiles))
+          assert.ok(coverageReport.eventFiles.length >= 1)
+
+          const eventFile = coverageReport.eventFiles[0]
+          assert.strictEqual(eventFile.name, 'event')
+          assert.strictEqual(eventFile.content.type, 'coverage_report')
+          assert.strictEqual(eventFile.content.format, 'lcov')
+          assert.strictEqual(eventFile.content['git.commit.sha'], 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+          assert.strictEqual(eventFile.content['git.repository_url'], 'https://github.com/datadog/test-repo.git')
+        })
+
       // Use lcov reporter to generate a coverage file that can be discovered
-      const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov -r=text-summary ${runTestsCommand}`
+      const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov ${runTestsCommand}`
 
       childProcess = exec(
         runTestsWithLcovCoverageCommand,
@@ -4598,16 +4626,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           }
         }
       )
-      childProcess.stdout?.on('data', (chunk) => {
-        testOutput += chunk.toString()
-      })
-      childProcess.stderr?.on('data', (chunk) => {
-        testOutput += chunk.toString()
-      })
 
-      await once(childProcess, 'exit')
-
-      assert.match(testOutput, /\[dd-trace\] Uploading \d+ coverage report\(s\)/)
+      await Promise.all([
+        coverageReportPromise,
+        once(childProcess, 'exit')
+      ])
     })
 
     it('does not upload coverage report when coverage_report_upload_enabled is false', async () => {

@@ -1,8 +1,12 @@
 'use strict'
 
+const { writeFileSync } = require('node:fs')
+const path = require('node:path')
+
 const { storage } = require('../../../datadog-core')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
+const { getCacheFolderPath } = require('../ci-visibility/test-optimization-cache')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -396,6 +400,20 @@ module.exports = class CiPlugin extends Plugin {
       this.config,
       this.shouldSkipGitMetadataExtraction
     )
+
+    // Write test environment metadata to cache folder if git metadata extraction was performed
+    if (!this.shouldSkipGitMetadataExtraction) {
+      const cacheFolder = getCacheFolderPath()
+      if (cacheFolder) {
+        try {
+          const metadataPath = path.join(cacheFolder, 'test-environment-data.json')
+          writeFileSync(metadataPath, JSON.stringify(this.testEnvironmentMetadata))
+          log.debug('Wrote test environment metadata to %s', metadataPath)
+        } catch (writeErr) {
+          log.debug('Failed to write test environment metadata to cache folder: %s', writeErr.message)
+        }
+      }
+    }
 
     const {
       [GIT_REPOSITORY_URL]: repositoryUrl,

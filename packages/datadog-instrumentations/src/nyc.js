@@ -2,6 +2,7 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+const { createCacheFolderIfNeeded } = require('../../dd-trace/src/ci-visibility/test-optimization-cache')
 const { addHook, channel } = require('./helpers/instrument')
 
 const codeCoverageWrapCh = channel('ci:nyc:wrap')
@@ -13,7 +14,10 @@ addHook({
 }, (nycPackage) => {
   // `wrap` is an async function
   shimmer.wrap(nycPackage.prototype, 'wrap', wrap => function () {
-    // Only relevant if the config `all` is set to true
+    // Set up the cache folder for test optimization data sharing (needed for coverage report upload)
+    createCacheFolderIfNeeded()
+
+    // Only relevant if the config `all` is set to true (for untested code coverage)
     try {
       if (JSON.parse(getEnvironmentVariable('NYC_CONFIG')).all) {
         codeCoverageWrapCh.publish(this)
@@ -31,8 +35,14 @@ addHook({
     const reportPromise = report.apply(this, arguments)
 
     if (codeCoverageReportCh.hasSubscribers && reportPromise && typeof reportPromise.then === 'function') {
-      reportPromise.then(() => {
-        codeCoverageReportCh.publish({ rootDir: nycInstance.cwd })
+      // Return a new promise that waits for both the report AND the coverage upload
+      return reportPromise.then(() => {
+        return new Promise((resolve) => {
+          codeCoverageReportCh.publish({
+            rootDir: nycInstance.cwd,
+            onDone: resolve
+          })
+        })
       }).catch(() => {
         // Ignore errors - report generation failed
       })
