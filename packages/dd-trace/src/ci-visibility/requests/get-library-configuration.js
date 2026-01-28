@@ -1,9 +1,13 @@
 'use strict'
 
+const { writeFileSync } = require('node:fs')
+const path = require('node:path')
+
 const request = require('../../exporters/common/request')
 const id = require('../../id')
 const log = require('../../log')
 const { getValueFromEnvSources } = require('../../config/helper')
+const { getCacheFolderPath } = require('../test-optimization-cache')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -12,6 +16,7 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE
 } = require('../telemetry')
+const { writeSettingsToCache } = require('./settings-cache')
 
 const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
 const DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD = 30
@@ -100,7 +105,8 @@ function getLibraryConfiguration ({
               di_enabled: isDiEnabled,
               known_tests_enabled: isKnownTestsEnabled,
               test_management: testManagementConfig,
-              impacted_tests_enabled: isImpactedTestsEnabled
+              impacted_tests_enabled: isImpactedTestsEnabled,
+              coverage_report_upload_enabled: isCoverageReportUploadEnabled
             }
           }
         } = JSON.parse(res)
@@ -121,7 +127,8 @@ function getLibraryConfiguration ({
           isTestManagementEnabled: (testManagementConfig?.enabled ?? false),
           testManagementAttemptToFixRetries:
             testManagementConfig?.attempt_to_fix_retries,
-          isImpactedTestsEnabled
+          isImpactedTestsEnabled,
+          isCoverageReportUploadEnabled: isCoverageReportUploadEnabled ?? false
         }
 
         log.debug('Remote settings: %j', settings)
@@ -136,6 +143,20 @@ function getLibraryConfiguration ({
         }
 
         incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE, settings)
+
+        writeSettingsToCache(sha, repositoryUrl, settings)
+
+        // Write settings to test optimization cache folder if available
+        const cacheFolder = getCacheFolderPath()
+        if (cacheFolder) {
+          try {
+            const configPath = path.join(cacheFolder, 'library-configuration.json')
+            writeFileSync(configPath, JSON.stringify(settings))
+            log.debug('Wrote library configuration to %s', configPath)
+          } catch (writeErr) {
+            log.debug('Failed to write library configuration to cache folder: %s', writeErr.message)
+          }
+        }
 
         done(null, settings)
       } catch (err) {

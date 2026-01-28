@@ -7,6 +7,7 @@ const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligen
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
 const { getTestManagementTests: getTestManagementTestsRequest } =
   require('../test-management/get-test-management-tests')
+const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
 const log = require('../../log')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -211,7 +212,8 @@ class CiVisibilityExporter extends BufferingExporter {
       isKnownTestsEnabled,
       isTestManagementEnabled,
       testManagementAttemptToFixRetries,
-      isImpactedTestsEnabled
+      isImpactedTestsEnabled,
+      isCoverageReportUploadEnabled
     } = remoteConfiguration
     return {
       isCodeCoverageEnabled,
@@ -228,7 +230,8 @@ class CiVisibilityExporter extends BufferingExporter {
       isTestManagementEnabled: isTestManagementEnabled && this._config.isTestManagementEnabled,
       testManagementAttemptToFixRetries:
         testManagementAttemptToFixRetries ?? this._config.testManagementAttemptToFixRetries,
-      isImpactedTestsEnabled: isImpactedTestsEnabled && this._config.isImpactedTestsEnabled
+      isImpactedTestsEnabled: isImpactedTestsEnabled && this._config.isImpactedTestsEnabled,
+      isCoverageReportUploadEnabled
     }
   }
 
@@ -385,6 +388,29 @@ class CiVisibilityExporter extends BufferingExporter {
         }
       })
     }
+  }
+
+  /**
+   * Uploads a single coverage report to the CI intake.
+   * @param {object} options - Upload options
+   * @param {string} options.filePath - Path to the coverage report file
+   * @param {string} options.format - Format of the coverage report
+   * @param {object} options.testEnvironmentMetadata - Test environment metadata containing git/CI tags
+   * @param {Function} callback - Callback function (err)
+   */
+  uploadCoverageReport ({ filePath, format, testEnvironmentMetadata }, callback) {
+    if (!this._codeCoverageReportUrl) {
+      return callback(new Error('Coverage report upload URL not configured'))
+    }
+
+    uploadCoverageReportRequest({
+      filePath,
+      format,
+      testEnvironmentMetadata,
+      url: this._codeCoverageReportUrl,
+      isEvpProxy: !!this._isUsingEvpProxy,
+      evpProxyPrefix: this.evpProxyPrefix
+    }, callback)
   }
 }
 
