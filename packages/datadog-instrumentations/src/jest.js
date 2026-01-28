@@ -91,6 +91,7 @@ const wrappedWorkers = new WeakSet()
 const testSuiteMockedFiles = new Map()
 const testsToBeRetried = new Set()
 const testSuiteAbsolutePathsWithFastCheck = new Set()
+const testSuiteJestObjects = new Map()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
@@ -237,6 +238,28 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
     }
 
+    /**
+     * Jest mock state issue during test retries
+     *
+     * Problem:
+     * - Jest tracks mock function calls using internal state (call count, call arguments, etc.)
+     * - When a test is retried, the mock state is not automatically reset
+     * - This causes assertions like `toHaveBeenCalledTimes(1)` to fail because the call count
+     *   accumulates across retries
+     *
+     * The solution is to clear all mocks before each retry attempt.
+     */
+    resetMockState () {
+      try {
+        const jestObject = testSuiteJestObjects.get(this.testSuiteAbsolutePath)
+        if (jestObject?.clearAllMocks) {
+          jestObject.clearAllMocks()
+        }
+      } catch (e) {
+        log.warn('Error resetting mock state', e)
+      }
+    }
+
     // This function returns an array if the known tests are valid and null otherwise.
     getKnownTestsForSuite (suiteKnownTests) {
       // `suiteKnownTests` is `this.testEnvironmentOptions._ddKnownTests`,
@@ -339,8 +362,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (event.name === 'test_start') {
         const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
         if (testsToBeRetried.has(testName)) {
-          // This is needed because we're trying tests with the same name
+          // This is needed because we're retrying tests with the same name
           this.resetSnapshotState()
+          this.resetMockState()
         }
 
         let isNewTest = false
@@ -1148,9 +1172,19 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
         })
       }
       testSuiteFinishCh.publish({ status, errorMessage, testSuiteAbsolutePath: environment.testSuiteAbsolutePath })
+
+      // Cleanup per-suite state to avoid memory leaks
+      testSuiteMockedFiles.delete(environment.testSuiteAbsolutePath)
+      testSuiteJestObjects.delete(environment.testSuiteAbsolutePath)
+
       return suiteResults
     }).catch(error => {
       testSuiteFinishCh.publish({ status: 'fail', error, testSuiteAbsolutePath: environment.testSuiteAbsolutePath })
+
+      // Cleanup per-suite state to avoid memory leaks
+      testSuiteMockedFiles.delete(environment.testSuiteAbsolutePath)
+      testSuiteJestObjects.delete(environment.testSuiteAbsolutePath)
+
       throw error
     })
   })
@@ -1311,6 +1345,11 @@ addHook({
   shimmer.wrap(Runtime.prototype, '_createJestObjectFor', _createJestObjectFor => function (from) {
     const result = _createJestObjectFor.apply(this, arguments)
     const suiteFilePath = this._testPath || from
+
+    // Store the jest object so we can access it later for resetting mock state
+    if (suiteFilePath) {
+      testSuiteJestObjects.set(suiteFilePath, result)
+    }
 
     shimmer.wrap(result, 'mock', mock => function (moduleName) {
       // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine

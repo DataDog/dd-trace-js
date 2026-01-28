@@ -1,8 +1,8 @@
 'use strict'
 
-const { URL, format } = require('node:url')
 const request = require('../../exporters/common/request')
 const { safeJSONStringify } = require('../../exporters/common/util')
+const { getAgentUrl } = require('../../agent/url')
 
 const log = require('../../log')
 
@@ -158,13 +158,7 @@ class BaseFFEWriter {
    * @returns {URL} Constructs agent URL from config
    */
   _getAgentUrl () {
-    const { hostname, port } = this._config
-
-    return this._config.url ?? new URL(format({
-      protocol: 'http:',
-      hostname: hostname || 'localhost',
-      port: port || 8126
-    }))
+    return getAgentUrl(this._config)
   }
 
   /**

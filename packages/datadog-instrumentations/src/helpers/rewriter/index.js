@@ -127,6 +127,7 @@ function fromFunctionQuery (functionQuery) {
   if (className) {
     queries.push(
       `[id.name="${className}"]`,
+      `[id.name="${className}"] > ClassExpression`,
       `[id.name="${className}"] > ClassBody > [key.name="${methodName}"] > [async]`,
       `[id.name="${className}"] > ClassExpression > ClassBody > [key.name="${methodName}"] > [async]`
     )
