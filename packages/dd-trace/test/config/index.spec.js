@@ -3831,11 +3831,16 @@ rules:
       assert.ok(config.url instanceof URL)
     })
 
-    it('should use CI visibility agentless URL when set', () => {
+    it('should set CI visibility agentless URL separately from agent URL', () => {
       process.env.DD_CIVISIBILITY_AGENTLESS_URL = 'http://ci-agentless:9999'
-      config = getConfig()
-      assert.strictEqual(config.url.hostname, 'ci-agentless')
-      assert.strictEqual(config.url.port, '9999')
+      config = getConfig({ isCiVisibility: true })
+      // CI Visibility agentless URL is stored separately
+      assert.ok(config.ciVisibilityAgentlessUrl instanceof URL)
+      assert.strictEqual(config.ciVisibilityAgentlessUrl.hostname, 'ci-agentless')
+      assert.strictEqual(config.ciVisibilityAgentlessUrl.port, '9999')
+      // Agent URL should still use defaults
+      assert.strictEqual(config.url.hostname, '127.0.0.1')
+      assert.strictEqual(config.url.port, '8126')
     })
 
     it('should use explicit DD_TRACE_AGENT_URL', () => {
@@ -3874,12 +3879,17 @@ rules:
       assert.ok(config.url.port) // Just check it's set
     })
 
-    it('should prioritize CI visibility URL over explicit URL', () => {
+    it('should not conflate CI visibility URL with agent URL', () => {
       process.env.DD_CIVISIBILITY_AGENTLESS_URL = 'http://ci-vis:1111'
       process.env.DD_TRACE_AGENT_URL = 'http://explicit:2222'
-      config = getConfig()
-      assert.strictEqual(config.url.hostname, 'ci-vis')
-      assert.strictEqual(config.url.port, '1111')
+      config = getConfig({ isCiVisibility: true })
+      // CI Visibility URL should be set separately
+      assert.ok(config.ciVisibilityAgentlessUrl instanceof URL)
+      assert.strictEqual(config.ciVisibilityAgentlessUrl.hostname, 'ci-vis')
+      assert.strictEqual(config.ciVisibilityAgentlessUrl.port, '1111')
+      // Agent URL should still use DD_TRACE_AGENT_URL
+      assert.strictEqual(config.url.hostname, 'explicit')
+      assert.strictEqual(config.url.port, '2222')
     })
 
     it('should prioritize explicit URL over hostname/port', () => {
@@ -3889,6 +3899,29 @@ rules:
       config = getConfig()
       assert.strictEqual(config.url.hostname, 'explicit')
       assert.strictEqual(config.url.port, '3333')
+    })
+
+    it('should fall back to defaults when explicit URL is invalid', () => {
+      process.env.DD_TRACE_AGENT_URL = 'not a valid url'
+      config = getConfig()
+      // Should use defaults instead of crashing
+      assert.ok(config.url instanceof URL)
+      assert.strictEqual(config.url.protocol, 'http:')
+      assert.strictEqual(config.url.hostname, '127.0.0.1')
+      assert.strictEqual(config.url.port, '8126')
+      // Should have logged an error
+      sinon.assert.calledWithMatch(log.error, /Invalid agent URL/)
+    })
+
+    it('should fall back to defaults when options.url is invalid', () => {
+      config = getConfig({ url: '= invalid = url' })
+      // Should use defaults instead of crashing
+      assert.ok(config.url instanceof URL)
+      assert.strictEqual(config.url.protocol, 'http:')
+      assert.strictEqual(config.url.hostname, '127.0.0.1')
+      assert.strictEqual(config.url.port, '8126')
+      // Should have logged an error
+      sinon.assert.calledWithMatch(log.error, /Invalid agent URL/)
     })
   })
 })

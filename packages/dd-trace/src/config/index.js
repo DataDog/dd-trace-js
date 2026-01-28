@@ -467,6 +467,7 @@ class Config {
       DD_APPSEC_RASP_COLLECT_REQUEST_BODY,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
+      DD_CIVISIBILITY_AGENTLESS_URL,
       DD_CRASHTRACKING_ENABLED,
       DD_CODE_ORIGIN_FOR_SPANS_ENABLED,
       DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED,
@@ -751,6 +752,8 @@ class Config {
     if (DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH) {
       target['cloudPayloadTagging.maxDepth'] = maybeInt(DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH)
     }
+    this.#setUrl(target, 'ciVisibilityAgentlessUrl', DD_CIVISIBILITY_AGENTLESS_URL)
+    unprocessedTarget.ciVisibilityAgentlessUrl = DD_CIVISIBILITY_AGENTLESS_URL
     this.#setBoolean(target, 'crashtracking.enabled', DD_CRASHTRACKING_ENABLED)
     this.#setBoolean(target, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
     this.#setBoolean(
@@ -1261,19 +1264,17 @@ class Config {
   }
 
   #calculateAgentUrl () {
-    // 1. CI Visibility agentless mode takes highest priority
-    const DD_CIVISIBILITY_AGENTLESS_URL = getEnv('DD_CIVISIBILITY_AGENTLESS_URL')
-    if (DD_CIVISIBILITY_AGENTLESS_URL) {
-      return new URL(DD_CIVISIBILITY_AGENTLESS_URL)
-    }
-
-    // 2. Check for explicit URL from options or DD_TRACE_AGENT_URL
+    // 1. Check for explicit URL from options or DD_TRACE_AGENT_URL
     const explicitUrl = this.#optionsArg.url ?? getEnv('DD_TRACE_AGENT_URL')
     if (explicitUrl) {
-      return new URL(explicitUrl)
+      try {
+        return new URL(explicitUrl)
+      } catch (e) {
+        log.error(`Invalid agent URL "${explicitUrl}": ${e.message}. Using default.`)
+      }
     }
 
-    // 3. Unix socket auto-detection (Linux only, when no explicit host/port)
+    // 2. Unix socket auto-detection (Linux only, when no explicit host/port)
     if (os.type() !== 'Windows_NT') {
       const hasExplicitHostOrPort =
         this.#optionsArg.hostname ||
@@ -1286,7 +1287,7 @@ class Config {
       }
     }
 
-    // 4. Fallback: construct HTTP URL from hostname/port
+    // 3. Fallback: construct HTTP URL from hostname/port
     const hostname = this.#optionsArg.hostname ||
                     getEnv('DD_AGENT_HOST') ||
                     defaults.hostname
@@ -1489,6 +1490,19 @@ class Config {
 
   #setString (obj, name, value) {
     obj[name] = value ? String(value) : undefined // unset for empty strings
+  }
+
+  #setUrl (obj, name, value) {
+    if (!value) {
+      obj[name] = undefined
+      return
+    }
+    try {
+      obj[name] = new URL(value)
+    } catch (e) {
+      log.error(`Invalid URL for ${name}: ${e.message}`)
+      obj[name] = undefined
+    }
   }
 
   #setTags (obj, name, value) {
