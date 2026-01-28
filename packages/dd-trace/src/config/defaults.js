@@ -123,6 +123,7 @@ module.exports = {
   'llmobs.agentlessEnabled': undefined,
   'llmobs.enabled': false,
   'llmobs.mlApp': undefined,
+  ciVisibilityAgentlessUrl: undefined,
   ciVisibilityTestSessionName: '',
   ciVisAgentlessLogSubmissionEnabled: false,
   legacyBaggageEnabled: true,
