@@ -692,6 +692,8 @@ declare namespace tracer {
         /**
          * Whether to enable the feature flagging provider.
          * Requires Remote Config to be properly configured.
+         * Can be configured via DD_FLAGGING_PROVIDER_ENABLED or
+         * DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED environment variables.
          *
          * @default false
          */
@@ -699,6 +701,8 @@ declare namespace tracer {
         /**
          * Timeout in milliseconds for OpenFeature provider initialization.
          * If configuration is not received within this time, initialization fails.
+         * Can be configured via DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS or
+         * DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variables.
          *
          * @default 30000
          */
