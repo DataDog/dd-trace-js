@@ -177,7 +177,7 @@ class DataStreamsProcessor {
 
     // Add ProcessTags only if feature is enabled and process tags exist
     if (propagationHash.isEnabled() && processTags.serialized) {
-      payload.ProcessTags = processTags.serialized
+      payload.ProcessTags = processTags.serialized.split(',')
     }
 
     this.writer.flush(payload)

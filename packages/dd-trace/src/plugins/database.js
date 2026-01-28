@@ -76,8 +76,8 @@ class DatabasePlugin extends StoragePlugin {
 
     let dbmComment = servicePropagation
 
-    // Add propagation hash if enabled
-    if (propagationHash.isEnabled()) {
+    // Add propagation hash if both process tags and SQL base hash injection are enabled
+    if (propagationHash.isEnabled() && this.config['dbm.injectSqlBaseHash']) {
       const hashBase64 = propagationHash.getHashBase64()
       if (hashBase64) {
         dbmComment += `,ddsh='${hashBase64}'`

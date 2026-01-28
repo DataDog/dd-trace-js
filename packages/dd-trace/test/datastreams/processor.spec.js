@@ -329,7 +329,11 @@ describe('DataStreamsProcessor', () => {
     const payload = call.args[0]
 
     assert.ok(payload.ProcessTags, 'ProcessTags should be present')
-    assert.strictEqual(payload.ProcessTags, processTags.serialized, 'ProcessTags should match process-tags module')
+    assert.deepStrictEqual(
+      payload.ProcessTags,
+      processTags.serialized.split(','),
+      'ProcessTags should match process-tags module as array'
+    )
 
     // Cleanup
     propagationHash.configure(null)

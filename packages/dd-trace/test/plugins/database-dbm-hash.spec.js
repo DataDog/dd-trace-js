@@ -60,7 +60,8 @@ describe('DatabasePlugin DBM Hash', () => {
 
     // Create plugin instance with proper config structure
     const config = {
-      dbmPropagationMode: 'service'
+      dbmPropagationMode: 'service',
+      'dbm.injectSqlBaseHash': true
     }
     plugin = new DatabasePlugin({ tracer }, config)
     plugin.config = config
@@ -117,6 +118,17 @@ describe('DatabasePlugin DBM Hash', () => {
 
       assert.ok(comment, 'Comment should still be created')
       assert.ok(!comment.includes('ddsh='), 'Comment should not include hash')
+    })
+
+    it('should not include hash when dbm.injectSqlBaseHash is disabled', () => {
+      plugin.config['dbm.injectSqlBaseHash'] = false
+
+      const comment = plugin.createDbmComment(span, 'test-service')
+
+      assert.ok(comment, 'Comment should still be created')
+      assert.ok(!comment.includes('ddsh='), 'Comment should not include hash when config is disabled')
+      assert.strictEqual(span._tags['_dd.dbm.propagation_hash'], undefined,
+        'Span should not have hash tag when config is disabled')
     })
 
     it('should include hash in the correct position in comment', () => {

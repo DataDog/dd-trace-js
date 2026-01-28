@@ -32,7 +32,9 @@ function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt 
   edgeTags.sort()
   const hashableEdgeTags = edgeTags.filter(item => item !== 'manual_checkpoint:true')
 
-  // Include propagation hash in cache key if present
+  // Cache key includes parentHash to handle fan-in/fan-out scenarios where the same
+  // service+env+tags+propagationHash can have different parents. This ensures we cache
+  // the complete pathway context, not just the current node's identity.
   const propagationPart = propagationHashBigInt ? `:${propagationHashBigInt.toString(16)}` : ''
   const key = `${service}${env}${hashableEdgeTags.join('')}${parentHash}${propagationPart}`
 
@@ -41,7 +43,9 @@ function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt 
     return value
   }
 
-  // Include propagation hash in hash input if present
+  // Hash input excludes parentHash because we need to compute the *current* node's hash
+  // independently first, then combine it with parentHash (line 51). This two-step approach
+  // (hash current node, then XOR with parent) is required for proper pathway construction.
   const baseString = `${service}${env}` + hashableEdgeTags.join('')
   const hashInput = propagationHashBigInt
     ? `${baseString}:${propagationHashBigInt.toString(16)}`
