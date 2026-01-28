@@ -813,7 +813,8 @@ describe('OpenTelemetry Meter Provider', () => {
       assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', 0, 'OTEL_BSP_MAX_QUEUE_SIZE'))
       assert(!warnSpy.calledWith('Invalid value %s for %s. Using default value.', 0, 'OTEL_EXPORTER_OTLP_TIMEOUT'))
       assert(!warnSpy.calledWith('Invalid value %s for %s. Using default value.', 0, 'OTEL_METRIC_EXPORT_TIMEOUT'))
-      assert(!warnSpy.calledWith('Invalid value %s for %s. Using default value.', 0, 'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT'))
+      assert(!warnSpy.calledWith('Invalid value %s for %s. Using default value.', 0,
+        'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT'))
     })
 
     it('rejects negative values for all configs', () => {
@@ -829,7 +830,8 @@ describe('OpenTelemetry Meter Provider', () => {
       }, false)
       assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', -1, 'OTEL_EXPORTER_OTLP_TIMEOUT'))
       assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', -1, 'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT'))
-      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', -1, 'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', -1,
+        'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT'))
       assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', -1, 'OTEL_METRIC_EXPORT_TIMEOUT'))
       assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', -1, 'OTEL_METRIC_EXPORT_INTERVAL'))
       assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', -1, 'OTEL_BSP_SCHEDULE_DELAY'))
@@ -849,8 +851,10 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_BSP_MAX_QUEUE_SIZE: 'xyz',
       }, false)
       assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN, 'OTEL_EXPORTER_OTLP_TIMEOUT'))
-      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN, 'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT'))
-      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN, 'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN,
+        'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN,
+        'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT'))
       assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN, 'OTEL_METRIC_EXPORT_TIMEOUT'))
       assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN, 'OTEL_METRIC_EXPORT_INTERVAL'))
       assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN, 'OTEL_BSP_SCHEDULE_DELAY'))
