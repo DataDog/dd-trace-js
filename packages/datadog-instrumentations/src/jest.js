@@ -561,8 +561,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         let isEfdRetry = false
         // We'll store the test statuses of the retries
+        const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
         if (this.isKnownTestsEnabled) {
-          const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
           const isNewTest = retriedTestsToNumAttempts.has(testName)
           if (isNewTest) {
             if (newTestsTestStatuses.has(testName)) {
@@ -577,18 +577,27 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const promises = {}
         const numRetries = this.global[RETRY_TIMES]
         const numTestExecutions = event.test?.invocations
-        const willBeRetried = numRetries > 0 && numTestExecutions - 1 < numRetries
+        const willBeRetriedByFailedTestReplay = numRetries > 0 && numTestExecutions - 1 < numRetries
         const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 2
 
         const ctx = testContexts.get(event.test)
 
+        const finalStatus = this.getFinalStatus(testName,
+          status,
+          !!ctx?.isNew,
+          !!ctx?.isModified,
+          isEfdRetry,
+          isAttemptToFix,
+          numTestExecutions)
+
         if (status === 'fail') {
-          const shouldSetProbe = this.isDiEnabled && willBeRetried && numTestExecutions === 1
+          const shouldSetProbe = this.isDiEnabled && willBeRetriedByFailedTestReplay && numTestExecutions === 1
           testErrCh.publish({
             ...ctx.currentStore,
             error: formatJestError(event.test.errors[0]),
             shouldSetProbe,
             promises,
+            finalStatus
           })
         }
 
@@ -615,6 +624,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           failedAllTests,
           attemptToFixFailed,
           isAtrRetry,
+          finalStatus
         })
 
         if (promises.isProbeReady) {
@@ -641,6 +651,68 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(testName),
         })
       }
+    }
+
+    getFinalStatus (testName, status, isNewTest, isModifiedTest, isEfdRetry, isAttemptToFix, numberOfTestInvocations) {
+      const numberOfExecutedRetries = retriedTestsToNumAttempts.get(testName) ?? 0
+
+      const isEfdEnabled = this.isEarlyFlakeDetectionEnabled
+      const isEfdActive = isEfdEnabled && (isNewTest || isModifiedTest)
+      const isLastEfdRetry = isEfdRetry && numberOfExecutedRetries >= (earlyFlakeDetectionNumRetries + 1)
+      const isFinalEfdTestExecution = isEfdEnabled && (!isEfdActive || isLastEfdRetry)
+
+      const isAtrEnabled =
+        this.isFlakyTestRetriesEnabled &&
+        !isEfdRetry &&
+        !isAttemptToFix &&
+        Number.isFinite(this.global[RETRY_TIMES])
+      const isLastAtrRetry =
+        status === 'pass' || numberOfTestInvocations >= (Number(this.global[RETRY_TIMES]) + 1)
+      const isFinalAtrTestExecution = isAtrEnabled && isLastAtrRetry
+
+      const isAttemptToFixEnabled =
+        this.isTestManagementTestsEnabled &&
+        isAttemptToFix &&
+        Number.isFinite(testManagementAttemptToFixRetries)
+      const isFinalAttemptToFixExecution = isAttemptToFixEnabled &&
+        numberOfExecutedRetries >= (testManagementAttemptToFixRetries + 1)
+
+      // When no retry features are active, every test execution is final
+      const noRetryFeaturesActive = !isEfdEnabled && !isAttemptToFixEnabled
+      const isFinalTestExecution =
+        noRetryFeaturesActive || isFinalEfdTestExecution || isFinalAtrTestExecution || isFinalAttemptToFixExecution
+
+      if (!isFinalTestExecution) {
+        return
+      }
+
+      // If the test is quarantined, regardless of its actual execution result,
+      // the final status of its last execution should be reported as 'skip'.
+      if (this.isTestManagementTestsEnabled &&
+        this.testManagementTestsForThisSuite?.quarantined?.includes(testName)) {
+        return 'skip'
+      }
+
+      // For EFD: The framework reports 'pass' if ANY attempt passed (flaky but not failing)
+      if (isEfdActive && isFinalEfdTestExecution) {
+        const testStatuses = newTestsTestStatuses.get(testName)
+        if (testStatuses && testStatuses.includes('pass')) {
+          return 'pass'
+        }
+        return 'fail'
+      }
+
+      // For Attempt to Fix: 'pass' only if ALL attempts passed, 'fail' if ANY failed
+      if (isAttemptToFixEnabled && isFinalAttemptToFixExecution) {
+        const testStatuses = attemptToFixRetriedTestsStatuses.get(testName)
+        if (testStatuses && testStatuses.every(status => status === 'pass')) {
+          return 'pass'
+        }
+        return 'fail'
+      }
+
+      // For ATR: The last execution's status is what the framework reports
+      return status
     }
 
     teardown () {
