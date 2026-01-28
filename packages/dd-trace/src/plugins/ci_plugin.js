@@ -1,12 +1,9 @@
 'use strict'
 
-const { writeFileSync } = require('node:fs')
-const path = require('node:path')
-
 const { storage } = require('../../../datadog-core')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
-const { getCacheFolderPath } = require('../ci-visibility/test-optimization-cache')
+const { discoverCoverageReports } = require('../ci-visibility/coverage-report-discovery')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -401,20 +398,6 @@ module.exports = class CiPlugin extends Plugin {
       this.shouldSkipGitMetadataExtraction
     )
 
-    // Write test environment metadata to cache folder if git metadata extraction was performed
-    if (!this.shouldSkipGitMetadataExtraction) {
-      const cacheFolder = getCacheFolderPath()
-      if (cacheFolder) {
-        try {
-          const metadataPath = path.join(cacheFolder, 'test-environment-data.json')
-          writeFileSync(metadataPath, JSON.stringify(this.testEnvironmentMetadata))
-          log.debug('Wrote test environment metadata to %s', metadataPath)
-        } catch (writeErr) {
-          log.debug('Failed to write test environment metadata to cache folder: %s', writeErr.message)
-        }
-      }
-    }
-
     const {
       [GIT_REPOSITORY_URL]: repositoryUrl,
       [GIT_COMMIT_SHA]: sha,
@@ -621,5 +604,77 @@ module.exports = class CiPlugin extends Plugin {
       file,
       line
     }
+  }
+
+  /**
+   * Uploads coverage reports if enabled. This is the common logic used by plugins.
+   * @param {object} options - Upload options
+   * @param {string} options.rootDir - The root directory where coverage reports are located
+   * @param {boolean} options.isCoverageReportUploadEnabled - Whether coverage upload is enabled
+   * @param {object} options.testEnvironmentMetadata - Test environment metadata containing git/CI tags
+   * @param {Function} [options.onDone] - Callback to signal completion
+   */
+  uploadCoverageReports ({ rootDir, isCoverageReportUploadEnabled, testEnvironmentMetadata, onDone }) {
+    const done = onDone || (() => {})
+
+    // Check if the exporter supports coverage report upload
+    if (!this.tracer._exporter?.uploadCoverageReport) {
+      log.debug('Exporter does not support coverage report upload')
+      done()
+      return
+    }
+
+    if (!isCoverageReportUploadEnabled) {
+      log.debug('Coverage report upload is not enabled')
+      done()
+      return
+    }
+
+    const coverageReports = discoverCoverageReports(rootDir)
+    if (coverageReports.length === 0) {
+      log.debug('No coverage reports found to upload')
+      done()
+      return
+    }
+
+    log.debug('Coverage report upload is enabled, found %d report(s) to upload', coverageReports.length)
+
+    // Upload reports sequentially (one file per request)
+    let uploadedCount = 0
+    let failedCount = 0
+    let reportIndex = 0
+
+    const uploadNextReport = () => {
+      if (reportIndex >= coverageReports.length) {
+        // All reports processed, log summary
+        if (failedCount > 0) {
+          log.warn('Coverage report upload completed: %d succeeded, %d failed', uploadedCount, failedCount)
+        } else {
+          log.info('Coverage report upload completed: %d report(s) uploaded', uploadedCount)
+        }
+        done()
+        return
+      }
+
+      const { filePath, format } = coverageReports[reportIndex]
+      reportIndex++
+
+      this.tracer._exporter.uploadCoverageReport(
+        { filePath, format, testEnvironmentMetadata },
+        (err) => {
+          if (err) {
+            failedCount++
+            log.error('Failed to upload coverage report %s: %s', filePath, err.message)
+          } else {
+            uploadedCount++
+          }
+
+          // Process next report
+          uploadNextReport()
+        }
+      )
+    }
+
+    uploadNextReport()
   }
 }

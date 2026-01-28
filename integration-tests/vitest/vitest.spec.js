@@ -55,7 +55,9 @@ const {
   TEST_IS_MODIFIED,
   DD_CAPABILITIES_IMPACTED_TESTS,
   VITEST_POOL,
-  TEST_IS_TEST_FRAMEWORK_WORKER
+  TEST_IS_TEST_FRAMEWORK_WORKER,
+  GIT_COMMIT_SHA,
+  GIT_REPOSITORY_URL
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { NODE_MAJOR } = require('../../version')
@@ -2278,5 +2280,101 @@ versions.forEach((version) => {
         ])
       })
     })
+
+    // Coverage report upload only works for >=2.0.0 (when vitest has proper coverage support)
+    // v4 dropped support for Node 18
+    if (version === 'latest' && NODE_MAJOR >= 20) {
+      context('coverage report upload', () => {
+        const gitCommitSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        const gitRepositoryUrl = 'https://github.com/datadog/test-repo.git'
+
+        it('uploads coverage report when coverage_report_upload_enabled is true', async () => {
+          receiver.setSettings({
+            coverage_report_upload_enabled: true
+          })
+
+          const coverageReportPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/cicovreprt', (payloads) => {
+              assert.strictEqual(payloads.length, 1)
+
+              const coverageReport = payloads[0]
+
+              // Verify the coverage report upload
+              assert.ok(coverageReport.headers['content-type'])
+              assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
+
+              // Check coverage files
+              assert.ok(Array.isArray(coverageReport.coverageFiles))
+              assert.ok(coverageReport.coverageFiles.length >= 1)
+
+              const coverageFile = coverageReport.coverageFiles[0]
+              assert.strictEqual(coverageFile.name, 'coverage')
+              assert.ok(coverageFile.content.includes('SF:')) // LCOV format starts with SF: (source file)
+
+              // Check event files
+              assert.ok(Array.isArray(coverageReport.eventFiles))
+              assert.ok(coverageReport.eventFiles.length >= 1)
+
+              const eventFile = coverageReport.eventFiles[0]
+              assert.strictEqual(eventFile.name, 'event')
+              assert.strictEqual(eventFile.content.type, 'coverage_report')
+              assert.strictEqual(eventFile.content.format, 'lcov')
+              assert.strictEqual(eventFile.content[GIT_COMMIT_SHA], gitCommitSha)
+              assert.strictEqual(eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --coverage',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                COVERAGE_PROVIDER: 'v8',
+                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
+                DD_GIT_COMMIT_SHA: gitCommitSha,
+                DD_GIT_REPOSITORY_URL: gitRepositoryUrl
+              }
+            }
+          )
+
+          await Promise.all([
+            coverageReportPromise,
+            once(childProcess, 'exit')
+          ])
+        })
+
+        it('does not upload coverage report when coverage_report_upload_enabled is false', async () => {
+          receiver.setSettings({
+            coverage_report_upload_enabled: false
+          })
+
+          // Track if a coverage report upload request is received
+          let coverageReportUploaded = false
+          receiver.assertPayloadReceived(() => {
+            coverageReportUploaded = true
+          }, ({ url }) => url === '/api/v2/cicovreprt')
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --coverage',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                COVERAGE_PROVIDER: 'v8',
+                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
+                DD_GIT_COMMIT_SHA: gitCommitSha,
+                DD_GIT_REPOSITORY_URL: gitRepositoryUrl
+              }
+            }
+          )
+
+          await once(childProcess, 'exit')
+
+          assert.strictEqual(coverageReportUploaded, false, 'coverage report should not be uploaded')
+        })
+      })
+    }
   })
 })

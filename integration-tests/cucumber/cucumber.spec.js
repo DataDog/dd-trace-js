@@ -64,6 +64,8 @@ const {
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
+  GIT_COMMIT_SHA,
+  GIT_REPOSITORY_URL,
   TEST_IS_MODIFIED,
   DD_CAPABILITIES_IMPACTED_TESTS,
   TEST_FRAMEWORK,
@@ -3016,6 +3018,9 @@ describe(`cucumber@${version} commonJS`, () => {
   })
 
   context('coverage report upload', () => {
+    const gitCommitSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    const gitRepositoryUrl = 'https://github.com/datadog/test-repo.git'
+
     it('uploads coverage report when coverage_report_upload_enabled is true', async () => {
       receiver.setSettings({
         coverage_report_upload_enabled: true
@@ -3023,7 +3028,7 @@ describe(`cucumber@${version} commonJS`, () => {
 
       const coverageReportPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/cicovreprt', (payloads) => {
-          assert.ok(payloads.length >= 1)
+          assert.strictEqual(payloads.length, 1)
 
           const coverageReport = payloads[0]
 
@@ -3047,8 +3052,8 @@ describe(`cucumber@${version} commonJS`, () => {
           assert.strictEqual(eventFile.name, 'event')
           assert.strictEqual(eventFile.content.type, 'coverage_report')
           assert.strictEqual(eventFile.content.format, 'lcov')
-          assert.strictEqual(eventFile.content['git.commit.sha'], 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
-          assert.strictEqual(eventFile.content['git.repository_url'], 'https://github.com/datadog/test-repo.git')
+          assert.strictEqual(eventFile.content[GIT_COMMIT_SHA], gitCommitSha)
+          assert.strictEqual(eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
         })
 
       // Use lcov reporter to generate a coverage file that can be discovered
@@ -3060,8 +3065,8 @@ describe(`cucumber@${version} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            DD_GIT_COMMIT_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-            DD_GIT_REPOSITORY_URL: 'https://github.com/datadog/test-repo.git'
+            DD_GIT_COMMIT_SHA: gitCommitSha,
+            DD_GIT_REPOSITORY_URL: gitRepositoryUrl
           }
         }
       )
@@ -3092,8 +3097,8 @@ describe(`cucumber@${version} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            DD_GIT_COMMIT_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-            DD_GIT_REPOSITORY_URL: 'https://github.com/datadog/test-repo.git'
+            DD_GIT_COMMIT_SHA: gitCommitSha,
+            DD_GIT_REPOSITORY_URL: gitRepositoryUrl
           }
         }
       )

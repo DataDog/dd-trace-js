@@ -36,6 +36,7 @@ const modifiedFilesCh = channel('ci:vitest:modified-files')
 
 const workerReportTraceCh = channel('ci:vitest:worker-report:trace')
 const workerReportLogsCh = channel('ci:vitest:worker-report:logs')
+const codeCoverageReportCh = channel('ci:vitest:coverage-report')
 
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
@@ -59,6 +60,7 @@ let isImpactedTestsEnabled = false
 let testManagementAttemptToFixRetries = 0
 let isDiEnabled = false
 let testCodeCoverageLinesTotal
+let coverageRootDir
 let isSessionStarted = false
 let vitestPool = null
 
@@ -354,6 +356,18 @@ function getSortWrapper (sort, frameworkVersion) {
     }
 
     if (this.ctx.coverageProvider?.generateCoverage) {
+      // Capture coverage root directory from config (default is 'coverage' in cwd)
+      try {
+        const coverageConfig = this.ctx.config?.coverage
+        const reportsDirectory = coverageConfig?.reportsDirectory || 'coverage'
+        const rootDir = this.ctx.config?.root || process.cwd()
+        const path = require('node:path')
+        coverageRootDir = path.isAbsolute(reportsDirectory) ? reportsDirectory : path.join(rootDir, reportsDirectory)
+      } catch {
+        // Fallback to cwd if we can't get config
+        coverageRootDir = process.cwd()
+      }
+
       shimmer.wrap(this.ctx.coverageProvider, 'generateCoverage', generateCoverage => async function () {
         const totalCodeCoverage = await generateCoverage.apply(this, arguments)
 
@@ -403,6 +417,13 @@ function getFinishWrapper (exitOrClose) {
     })
 
     await flushPromise
+
+    // If coverage was generated, publish coverage report channel for upload
+    if (coverageRootDir && codeCoverageReportCh.hasSubscribers) {
+      await new Promise((resolve) => {
+        codeCoverageReportCh.publish({ rootDir: coverageRootDir, onDone: resolve })
+      })
+    }
 
     return exitOrClose.apply(this, arguments)
   }

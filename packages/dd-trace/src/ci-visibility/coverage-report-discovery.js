@@ -10,7 +10,7 @@ const log = require('../log')
  * Each entry contains the relative path from root and the format identifier
  */
 const COVERAGE_REPORT_PATTERNS = [
-  // LCOV format (Jest, Vitest, Istanbul default)
+  // LCOV format
   { path: 'coverage/lcov.info', format: 'lcov' },
   { path: 'lcov.info', format: 'lcov' },
 
@@ -18,22 +18,21 @@ const COVERAGE_REPORT_PATTERNS = [
   { path: 'coverage/cobertura-coverage.xml', format: 'cobertura' },
   { path: 'cobertura-coverage.xml', format: 'cobertura' },
 
+  // JaCoCo XML format
+  { path: 'coverage/jacoco.xml', format: 'jacoco' },
+  { path: 'jacoco.xml', format: 'jacoco' },
+
   // Clover XML format
   { path: 'coverage/clover.xml', format: 'clover' },
   { path: 'clover.xml', format: 'clover' },
 
-  // JaCoCo XML format (Java, but some JS tools support it)
-  { path: 'coverage/jacoco.xml', format: 'jacoco' },
-  { path: 'jacoco.xml', format: 'jacoco' },
-
-  // Istanbul JSON format (can be converted to LCOV)
-  { path: 'coverage/coverage-final.json', format: 'lcov' },
-
-  // OpenCover XML format (C#, but listing for completeness)
+  // OpenCover XML format
   { path: 'coverage/opencover.xml', format: 'opencover' },
+  { path: 'opencover.xml', format: 'opencover' },
 
-  // SimpleCov JSON format (Ruby)
-  { path: 'coverage/.resultset.json', format: 'simplecov' }
+  // SimpleCov JSON format
+  { path: 'coverage/.resultset.json', format: 'simplecov' },
+  { path: '.resultset.json', format: 'simplecov' }
 ]
 
 /**
