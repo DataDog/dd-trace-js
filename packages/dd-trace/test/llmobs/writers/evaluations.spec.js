@@ -37,6 +37,7 @@ describe('LLMObsEvalMetricsWriter', () => {
     writer = new LLMObsEvalMetricsWriter({
       port: 8126,
       hostname: 'localhost',
+      url: new URL('http://localhost:8126'),
     })
     writer.setAgentless(false)
     assert.strictEqual(writer.url, 'http://localhost:8126/evp_proxy/v2/api/intake/llm-obs/v1/eval-metric')
