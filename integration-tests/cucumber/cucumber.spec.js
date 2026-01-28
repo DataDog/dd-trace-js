@@ -3014,4 +3014,93 @@ describe(`cucumber@${version} commonJS`, () => {
       })
     })
   })
+
+  context('coverage report upload', () => {
+    it('uploads coverage report when coverage_report_upload_enabled is true', async () => {
+      receiver.setSettings({
+        coverage_report_upload_enabled: true
+      })
+
+      const coverageReportPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/cicovreprt', (payloads) => {
+          assert.ok(payloads.length >= 1)
+
+          const coverageReport = payloads[0]
+
+          // Verify the coverage report upload
+          assert.ok(coverageReport.headers['content-type'])
+          assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
+
+          // Check coverage files
+          assert.ok(Array.isArray(coverageReport.coverageFiles))
+          assert.ok(coverageReport.coverageFiles.length >= 1)
+
+          const coverageFile = coverageReport.coverageFiles[0]
+          assert.strictEqual(coverageFile.name, 'coverage')
+          assert.ok(coverageFile.content.includes('SF:')) // LCOV format starts with SF: (source file)
+
+          // Check event files
+          assert.ok(Array.isArray(coverageReport.eventFiles))
+          assert.ok(coverageReport.eventFiles.length >= 1)
+
+          const eventFile = coverageReport.eventFiles[0]
+          assert.strictEqual(eventFile.name, 'event')
+          assert.strictEqual(eventFile.content.type, 'coverage_report')
+          assert.strictEqual(eventFile.content.format, 'lcov')
+          assert.strictEqual(eventFile.content['git.commit.sha'], 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+          assert.strictEqual(eventFile.content['git.repository_url'], 'https://github.com/datadog/test-repo.git')
+        })
+
+      // Use lcov reporter to generate a coverage file that can be discovered
+      const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov ${runTestsCommand}`
+
+      childProcess = exec(
+        runTestsWithLcovCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_GIT_COMMIT_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            DD_GIT_REPOSITORY_URL: 'https://github.com/datadog/test-repo.git'
+          }
+        }
+      )
+
+      await Promise.all([
+        coverageReportPromise,
+        once(childProcess, 'exit')
+      ])
+    })
+
+    it('does not upload coverage report when coverage_report_upload_enabled is false', async () => {
+      receiver.setSettings({
+        coverage_report_upload_enabled: false
+      })
+
+      // Track if a coverage report upload request is received
+      let coverageReportUploaded = false
+      receiver.assertPayloadReceived(() => {
+        coverageReportUploaded = true
+      }, ({ url }) => url === '/api/v2/cicovreprt')
+
+      // Use lcov reporter to generate a coverage file that can be discovered
+      const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov -r=text-summary ${runTestsCommand}`
+
+      childProcess = exec(
+        runTestsWithLcovCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_GIT_COMMIT_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            DD_GIT_REPOSITORY_URL: 'https://github.com/datadog/test-repo.git'
+          }
+        }
+      )
+
+      await once(childProcess, 'exit')
+
+      assert.strictEqual(coverageReportUploaded, false, 'coverage report should not be uploaded')
+    })
+  })
 })

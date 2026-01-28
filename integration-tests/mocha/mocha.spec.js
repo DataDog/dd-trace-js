@@ -4634,11 +4634,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
 
     it('does not upload coverage report when coverage_report_upload_enabled is false', async () => {
-      let testOutput = ''
-
       receiver.setSettings({
         coverage_report_upload_enabled: false
       })
+
+      // Track if a coverage report upload request is received
+      let coverageReportUploaded = false
+      receiver.assertPayloadReceived(() => {
+        coverageReportUploaded = true
+      }, ({ url }) => url === '/api/v2/cicovreprt')
 
       // Use lcov reporter to generate a coverage file that can be discovered
       const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov -r=text-summary ${runTestsCommand}`
@@ -4654,16 +4658,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           }
         }
       )
-      childProcess.stdout?.on('data', (chunk) => {
-        testOutput += chunk.toString()
-      })
-      childProcess.stderr?.on('data', (chunk) => {
-        testOutput += chunk.toString()
-      })
 
       await once(childProcess, 'exit')
 
-      assert.doesNotMatch(testOutput, /\[dd-trace\] Uploading \d+ coverage report\(s\)/)
+      assert.strictEqual(coverageReportUploaded, false, 'coverage report should not be uploaded')
     })
   })
 })
