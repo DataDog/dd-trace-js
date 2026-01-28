@@ -752,8 +752,6 @@ class Config {
     if (DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH) {
       target['cloudPayloadTagging.maxDepth'] = maybeInt(DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH)
     }
-    this.#setUrl(target, 'ciVisibilityAgentlessUrl', DD_CIVISIBILITY_AGENTLESS_URL)
-    unprocessedTarget.ciVisibilityAgentlessUrl = DD_CIVISIBILITY_AGENTLESS_URL
     this.#setBoolean(target, 'crashtracking.enabled', DD_CRASHTRACKING_ENABLED)
     this.#setBoolean(target, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
     this.#setBoolean(
@@ -1270,7 +1268,7 @@ class Config {
       try {
         return new URL(explicitUrl)
       } catch (e) {
-        log.error(`Invalid agent URL "${explicitUrl}": ${e.message}. Using default.`)
+        log.error('Invalid agent URL "%s" (using default)', explicitUrl, e)
       }
     }
 
@@ -1321,6 +1319,16 @@ class Config {
       this.#setBoolean(calc, 'isTestDynamicInstrumentationEnabled',
         !isFalse(getEnv('DD_TEST_FAILED_TEST_REPLAY_ENABLED')))
       this.#setBoolean(calc, 'isServiceUserProvided', !!this.#env.service)
+      // Set CI Visibility agentless URL separately from agent URL
+      // Read directly from environment variable to avoid priority issues in merge
+      const ciVisUrlStr = getEnv('DD_CIVISIBILITY_AGENTLESS_URL')
+      if (ciVisUrlStr) {
+        try {
+          calc.ciVisibilityAgentlessUrl = new URL(ciVisUrlStr)
+        } catch (e) {
+          log.error('Invalid URL for ciVisibilityAgentlessUrl: %s', ciVisUrlStr, e)
+        }
+      }
       this.#setBoolean(calc, 'isTestManagementEnabled', !isFalse(getEnv('DD_TEST_MANAGEMENT_ENABLED')))
       calc.testManagementAttemptToFixRetries = maybeInt(getEnv('DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES')) ?? 20
       this.#setBoolean(calc, 'isImpactedTestsEnabled',
@@ -1492,19 +1500,6 @@ class Config {
     obj[name] = value ? String(value) : undefined // unset for empty strings
   }
 
-  #setUrl (obj, name, value) {
-    if (!value) {
-      obj[name] = undefined
-      return
-    }
-    try {
-      obj[name] = new URL(value)
-    } catch (e) {
-      log.error(`Invalid URL for ${name}: ${e.message}`)
-      obj[name] = undefined
-    }
-  }
-
   #setTags (obj, name, value) {
     if (!value || Object.keys(value).length === 0) {
       obj[name] = null
@@ -1660,7 +1655,7 @@ function nonNegInt (value, envVarName, allowZero = true) {
   if (value === undefined) return
   const parsed = Number.parseInt(value)
   if (Number.isNaN(parsed) || parsed < 0 || (parsed === 0 && !allowZero)) {
-    log.warn(`Invalid value ${parsed} for ${envVarName}. Using default value.`)
+    log.warn('Invalid value %s for %s. Using default value.', parsed, envVarName)
     return
   }
   return parsed
