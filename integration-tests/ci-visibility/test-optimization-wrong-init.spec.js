@@ -96,6 +96,7 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
           env: {
             ...process.env,
             ...restEnvVars,
+            DD_TRACE_AGENT_PORT: String(receiver.port), // Send regular APM traces to the receiver
             DD_TRACE_DISABLED_INSTRUMENTATIONS: 'child_process',
             DD_TRACE_DEBUG: '1',
             ...extraTestContext,
