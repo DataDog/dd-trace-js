@@ -25,7 +25,7 @@ update_central_configurations_version_range:
 include:
   - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks.yml"
-  - local: ".gitlab/macrobenchmarks.yml"
+  # - local: ".gitlab/macrobenchmarks.yml"
   - project: 'DataDog/apm-reliability/apm-sdks-benchmarks'
     file: '.gitlab/ci-node-hapi-redis.yml'
     ref: 'main'
