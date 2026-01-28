@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+if [ ! -e "node_modules/.bin/yarn-deduplicate" ]; then
+  echo "yarn-deduplicate is not installed. Run 'yarn install' (with devDependencies) and try again."
+  exit 1
+fi
+
+yarn dependencies:dedupe
+git add yarn.lock
