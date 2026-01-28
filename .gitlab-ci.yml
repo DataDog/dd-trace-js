@@ -3,15 +3,9 @@ stages:
   - benchmarks
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
-  # - macrobenchmarks
-  # - macrobenchmarks-gate
-  # - macrobenchmarks-notify
   - infrastructure
   - node-hapi-redis-tests
   - node-hapi-redis-macrobenchmarks
-  - generate-slos
-  - gate
-  - notify
 
 # Config Registry CI jobs
 validate_supported_configurations_local_file:
@@ -30,7 +24,6 @@ update_central_configurations_version_range:
 include:
   - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks.yml"
-  # - local: ".gitlab/macrobenchmarks.yml"
   - project: 'DataDog/apm-reliability/apm-sdks-benchmarks'
     file: '.gitlab/ci-node-hapi-redis.yml'
     ref: 'pabloerhard/node-benchmarks'
