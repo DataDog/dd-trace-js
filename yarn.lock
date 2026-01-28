@@ -2301,10 +2301,10 @@ import-fresh@^3.2.1:
     parent-module "^1.0.0"
     resolve-from "^4.0.0"
 
-import-in-the-middle@2.0.3:
-  version "2.0.3"
-  resolved "https://registry.yarnpkg.com/import-in-the-middle/-/import-in-the-middle-2.0.3.tgz#2ba36d716faa3531a7946c4ee52a8e553f6ee0bd"
-  integrity sha512-BhJ3Rc6x+kA3EE0apAuGc4rsihsUrEj31lCkXRfwGzLKqgzlSyBLvthIinsvLg6J4bCCTgVAoAgD+KwkISjmBQ==
+import-in-the-middle@2.0.5:
+  version "2.0.5"
+  resolved "https://registry.yarnpkg.com/import-in-the-middle/-/import-in-the-middle-2.0.5.tgz#3ee0bfa70e6f543b821f6d5ed42890dd578b87a2"
+  integrity sha512-0InH9/4oDCBRzWXhpOqusspLBrVfK1vPvbn9Wxl8DAQ8yyx5fWJRETICSwkiAMaYntjJAMBP1R4B6cQnEUYVEA==
   dependencies:
     acorn "^8.15.0"
     acorn-import-attributes "^1.9.5"
