@@ -6,6 +6,7 @@ stages:
   - infrastructure
   - node-hapi-redis-tests
   - node-hapi-redis-macrobenchmarks
+  - generate-slos
 
 # Config Registry CI jobs
 validate_supported_configurations_local_file:
