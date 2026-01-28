@@ -40,7 +40,7 @@ const colors = noColor
       white: s => `\x1b[37m${s}\x1b[0m`
     }
 
-const indent = '            ' // 12 spaces - past mocha's indentation
+const indent = '                    ' // 20 spaces - well past mocha's indentation
 
 /**
  * Writes a line to stderr synchronously to prevent interleaving with stdout.
