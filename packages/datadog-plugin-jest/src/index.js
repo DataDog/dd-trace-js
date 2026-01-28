@@ -193,14 +193,15 @@ class JestPlugin extends CiPlugin {
       })
     })
 
-    this.addSub('ci:jest:test-suite:start', ({
+    this.addBind('ci:jest:test-suite:start', (ctx) => {
+      const {
       testSuite,
       testSourceFile,
       testEnvironmentOptions,
       frameworkVersion,
       displayName,
       testSuiteAbsolutePath
-    }) => {
+    } = ctx
       const {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
@@ -263,6 +264,10 @@ class JestPlugin extends CiPlugin {
         this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_STARTED, 'suite', { library: 'istanbul' })
       }
       this.testSuiteSpanPerTestSuiteAbsolutePath.set(testSuiteAbsolutePath, this.testSuiteSpan)
+      
+      // Return the store with the suite span for context
+      const store = storage('legacy').getStore()
+      return { ...store, span: this.testSuiteSpan }
     })
 
     this.addSub('ci:jest:worker-report:coverage', data => {
@@ -358,6 +363,12 @@ class JestPlugin extends CiPlugin {
 
     this.addBind('ci:jest:test:fn', (ctx) => {
       return ctx.currentStore
+    })
+
+    // Add binding for suite function channel (used for suite-level hooks)
+    this.addBind('ci:jest:suite:fn', (ctx) => {
+      // Return suite context for hook execution
+      return ctx.currentStore || ctx
     })
 
     this.addSub('ci:jest:test:finish', ({
