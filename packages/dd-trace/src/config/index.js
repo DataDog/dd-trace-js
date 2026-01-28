@@ -1261,7 +1261,17 @@ class Config {
   }
 
   #calculateAgentUrl () {
-    // 1. Check for explicit URL from options or DD_TRACE_AGENT_URL
+    // 1. CI Visibility agentless URL takes highest priority for backward compatibility
+    const DD_CIVISIBILITY_AGENTLESS_URL = getEnv('DD_CIVISIBILITY_AGENTLESS_URL')
+    if (DD_CIVISIBILITY_AGENTLESS_URL) {
+      try {
+        return new URL(DD_CIVISIBILITY_AGENTLESS_URL)
+      } catch (e) {
+        log.error('Invalid CI Visibility agentless URL "%s" (using default)', DD_CIVISIBILITY_AGENTLESS_URL, e)
+      }
+    }
+
+    // 2. Check for explicit URL from options or DD_TRACE_AGENT_URL
     const explicitUrl = this.#optionsArg.url ?? getEnv('DD_TRACE_AGENT_URL')
     if (explicitUrl) {
       try {
@@ -1271,7 +1281,7 @@ class Config {
       }
     }
 
-    // 2. Unix socket auto-detection (Linux only, when no explicit host/port)
+    // 3. Unix socket auto-detection (Linux only, when no explicit host/port)
     if (os.type() !== 'Windows_NT') {
       const hasExplicitHostOrPort =
         this.#optionsArg.hostname ||
@@ -1284,7 +1294,7 @@ class Config {
       }
     }
 
-    // 3. Fallback: construct HTTP URL from hostname/port
+    // 4. Fallback: construct HTTP URL from hostname/port
     const hostname = this.#optionsArg.hostname ||
                     getEnv('DD_AGENT_HOST') ||
                     defaults.hostname
@@ -1305,6 +1315,18 @@ class Config {
 
     calc.url = this.#calculateAgentUrl()
 
+    // Set CI Visibility agentless URL separately for use by AgentlessCiVisibilityExporter
+    // This is also already set in calc.url for backward compatibility, but we keep it separate
+    // so the AgentlessCiVisibilityExporter can access it directly
+    const ciVisUrlStr = getEnv('DD_CIVISIBILITY_AGENTLESS_URL')
+    if (ciVisUrlStr) {
+      try {
+        calc.ciVisibilityAgentlessUrl = new URL(ciVisUrlStr)
+      } catch (e) {
+        log.error('Invalid URL for ciVisibilityAgentlessUrl: %s', ciVisUrlStr, e)
+      }
+    }
+
     if (this.#isCiVisibility()) {
       this.#setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
         getEnv('DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED') ?? true)
@@ -1318,16 +1340,6 @@ class Config {
       this.#setBoolean(calc, 'isTestDynamicInstrumentationEnabled',
         !isFalse(getEnv('DD_TEST_FAILED_TEST_REPLAY_ENABLED')))
       this.#setBoolean(calc, 'isServiceUserProvided', !!this.#env.service)
-      // Set CI Visibility agentless URL separately from agent URL
-      // Read directly from environment variable to avoid priority issues in merge
-      const ciVisUrlStr = getEnv('DD_CIVISIBILITY_AGENTLESS_URL')
-      if (ciVisUrlStr) {
-        try {
-          calc.ciVisibilityAgentlessUrl = new URL(ciVisUrlStr)
-        } catch (e) {
-          log.error('Invalid URL for ciVisibilityAgentlessUrl: %s', ciVisUrlStr, e)
-        }
-      }
       this.#setBoolean(calc, 'isTestManagementEnabled', !isFalse(getEnv('DD_TEST_MANAGEMENT_ENABLED')))
       calc.testManagementAttemptToFixRetries = maybeInt(getEnv('DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES')) ?? 20
       this.#setBoolean(calc, 'isImpactedTestsEnabled',
