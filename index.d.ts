@@ -1636,6 +1636,21 @@ declare namespace tracer {
        * @default true
        */
       middleware?: boolean;
+
+      /**
+       * Whether (or how) to obfuscate querystring values in `http.url`.
+       *
+       * - `true`: obfuscate all values
+       * - `false`: disable obfuscation
+       * - `string`: regex string used to obfuscate matching values (empty string disables)
+       * - `RegExp`: regex used to obfuscate matching values
+       */
+      queryStringObfuscation?: boolean | string | RegExp;
+
+      /**
+       * Whether to enable resource renaming when the framework route is unavailable.
+       */
+      resourceRenamingEnabled?: boolean;
     }
 
     /** @hidden */
@@ -2606,22 +2621,7 @@ declare namespace tracer {
     /**
      * This plugin implements shared web request instrumentation helpers.
      */
-    interface web extends HttpServer {
-      /**
-       * Whether (or how) to obfuscate querystring values in `http.url`.
-       *
-       * - `true`: obfuscate all values
-       * - `false`: disable obfuscation
-       * - `string`: regex string used to obfuscate matching values (empty string disables)
-       * - `RegExp`: regex used to obfuscate matching values
-       */
-      queryStringObfuscation?: boolean | string | RegExp;
-
-      /**
-       * Whether to enable resource renaming when the framework route is unavailable.
-       */
-      resourceRenamingEnabled?: boolean;
-    }
+    interface web extends HttpServer {}
 
     /**
      * This plugin patches the [winston](https://github.com/winstonjs/winston)
