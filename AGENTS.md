@@ -196,6 +196,27 @@ Use `log` (`packages/dd-trace/src/log/index.js`) with printf-style formatting (n
 Enable: `DD_TRACE_DEBUG=true DD_TRACE_LOG_LEVEL=info node app.js`
 Levels: `trace`, `debug`, `info`, `warn`, `error`
 
+**Channel Debug Mode (Integration Tests):**
+
+Set `DD_CHANNEL_DEBUG=true` to enable detailed logging of diagnostic channel activity, span lifecycle, and instrumentation hooks.
+
+```bash
+DD_CHANNEL_DEBUG=true DD_CHANNEL_FILTER="*bullmq*" PLUGINS=bullmq yarn test:plugins
+```
+
+Additional options:
+- `DD_CHANNEL_FILTER="*http*"` - Filter output by pattern (supports `*` wildcards)
+- `DD_CHANNEL_VERBOSE=true` - Show span tags on indented lines (3 per line)
+- `DD_CHANNEL_SHOW_DATA=true` - Include message data in publish logs
+
+Output includes:
+- `[SUB]` - Channel subscriptions
+- `[PUB]` - Channel publishes
+- `[RUN]` - runStores calls
+- `[WRAP]` - Shimmer wrap operations
+- `[REWRITE]` - Code rewrite operations
+- `[SPAN:START]` / `[SPAN:END]` - Span lifecycle events
+
 ### Error Handling
 
 **Never crash user apps:** Catch/log errors (`log.error()`/`log.warn()`), resume or disable plugin/subsystem

@@ -14,6 +14,9 @@ const semifies = require('semifies')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
 const ritm = require('../../src/ritm')
+
+// Channel debug patching (enabled via DD_CHANNEL_DEBUG env var)
+const channelDebug = process.env.DD_CHANNEL_DEBUG ? require('../debug/channel-patch') : null
 const traceHandlers = new Set()
 const statsHandlers = new Set()
 let llmobsSpanEventsRequests = []
@@ -427,6 +430,14 @@ module.exports = {
       './src': TracerProxy
     })
 
+    // Apply channel debug patches to tracer and shimmer
+    if (channelDebug) {
+      channelDebug.patchTracer(tracer)
+      try {
+        channelDebug.patchShimmer(require('../../../datadog-shimmer'))
+      } catch (e) {}
+    }
+
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
     agent.use(bodyParser.text({ limit: Infinity, type: 'application/json' }))
@@ -511,6 +522,11 @@ module.exports = {
           flushInterval: 0,
           plugins: false
         }, tracerConfig))
+
+        // Apply channel debug patch to tracer after init (when _tracer is available)
+        if (channelDebug) {
+          channelDebug.patchTracer(tracer)
+        }
 
         tracer.setUrl(`http://127.0.0.1:${port}`)
 
