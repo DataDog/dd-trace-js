@@ -28,7 +28,7 @@ include:
   # - local: ".gitlab/macrobenchmarks.yml"
   - project: 'DataDog/apm-reliability/apm-sdks-benchmarks'
     file: '.gitlab/ci-node-hapi-redis.yml'
-    ref: 'main'
+    ref: 'pabloerhard/node-benchmarks'
 
 workflow:
   auto_cancel:
