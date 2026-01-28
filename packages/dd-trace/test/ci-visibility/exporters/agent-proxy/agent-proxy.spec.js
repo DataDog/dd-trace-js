@@ -23,6 +23,11 @@ describe('AgentProxyCiVisibilityExporter', () => {
     nock.cleanAll()
   })
 
+  afterEach(() => {
+    clearCache()
+    nock.cleanAll()
+  })
+
   const flushInterval = 50
   const url = new URL('http://127.0.0.1:8126')
   const queryDelay = 50
