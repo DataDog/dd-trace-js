@@ -371,9 +371,12 @@ async function createSandbox (
   await fs.mkdir(folder, { recursive: true })
   const addOptions = { cwd: folder, env: restOfEnv }
   const addFlags = ['--trust']
+
+  const start = Date.now()
   if (!existsSync(out)) {
     execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${out}`, { env: restOfEnv })
   }
+  process._rawDebug('Time to pack: ', Date.now() - start)
 
   if (process.env.OFFLINE === '1' || process.env.OFFLINE === 'true') {
     addFlags.push('--prefer-offline')
