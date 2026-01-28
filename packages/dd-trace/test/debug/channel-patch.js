@@ -1,6 +1,5 @@
 'use strict'
 
-
 if (globalThis._ddChannelDebugPatched) return
 globalThis._ddChannelDebugPatched = true
 
@@ -89,11 +88,12 @@ function formatDuration (start) {
 // Channel Prototype Patching
 // ============================================================
 
-const { subscribe, publish, runStores } = dc.Channel.prototype
+const { subscribe, publish } = dc.Channel.prototype
 
 dc.Channel.prototype.subscribe = function (fn) {
   if (match(this.name)) {
-    log(`${formatTimestamp()} ${colors.blue('[SUB]')} ${colors.cyan(this.name)} ${colors.gray(`← ${fn.name || 'anon'}`)}`)
+    const handler = colors.gray(`← ${fn.name || 'anon'}`)
+    log(`${formatTimestamp()} ${colors.blue('[SUB]')} ${colors.cyan(this.name)} ${handler}`)
   }
   return subscribe.call(this, fn)
 }
@@ -108,13 +108,10 @@ dc.Channel.prototype.publish = function (msg) {
   return publish.call(this, msg)
 }
 
-dc.Channel.prototype.runStores = function (ctx, fn, thisArg, ...args) {
-  if (!match(this.name)) return runStores.call(this, ctx, fn, thisArg, ...args)
-  const start = performance.now()
-  const result = runStores.call(this, ctx, fn, thisArg, ...args)
-  log(`${formatTimestamp()} ${colors.green('[RUN]')} ${colors.cyan(this.name)} ${formatDuration(start)}`)
-  return result
-}
+// NOTE: runStores patching was removed because it causes test timeouts.
+// TracingChannel caches runStores at creation time, and wrapping dc.channel()
+// to patch instances breaks async context propagation.
+// Use [TRACEPROMISE]/[TRACESYNC]/[TRACECALLBACK] logs instead.
 
 // ============================================================
 // TracingChannel Patching (dc-polyfill)
@@ -135,7 +132,8 @@ Hook(['dc-polyfill'], exports => {
           if (!match(name)) return fn.apply(this, args)
           const start = performance.now()
           const result = fn.apply(this, args)
-          log(`${formatTimestamp()} ${colors.magenta(`[${method.toUpperCase()}]`)} ${colors.cyan(name)} ${formatDuration(start)}`)
+          const tag = colors.magenta(`[${method.toUpperCase()}]`)
+          log(`${formatTimestamp()} ${tag} ${colors.cyan(name)} ${formatDuration(start)}`)
           return result
         }
       }
@@ -225,7 +223,12 @@ function patchRewriter (exports) {
         if (cleanFilename.endsWith(`${mod.name}/${mod.filePath}`)) {
           const target = className ? `${className}.${methodName}` : methodName || channelName
           if (match(mod.name) || match(target) || match(channelName)) {
-            log(`${separator}\n${formatTimestamp()} ${colors.magenta('[REWRITE]')} ${colors.cyan(mod.name)} ${colors.yellow(target)} ${colors.blue(operator)} ${colors.gray(mod.filePath)}`)
+            const parts = [
+              separator,
+              `${formatTimestamp()} ${colors.magenta('[REWRITE]')} ${colors.cyan(mod.name)}`,
+              `${colors.yellow(target)} ${colors.blue(operator)} ${colors.gray(mod.filePath)}`
+            ]
+            log(parts.join('\n'))
           }
         }
       }
@@ -337,7 +340,9 @@ function logSpanStart (name, span, options) {
   const meta = formatSpanMeta(tags)
   const resourcePart = resource ? colors.blue(` ${resource}`) : ''
   const kindPart = kind ? colors.magenta(` ${kind}`) : ''
-  log(`${separator}\n${formatTimestamp()} ${colors.green('[SPAN:START]')} ${colors.white(name)} ${colors.cyan(service)}${resourcePart}${kindPart}${meta}`)
+  const tag = colors.green('[SPAN:START]')
+  const spanInfo = `${colors.white(name)} ${colors.cyan(service)}${resourcePart}${kindPart}`
+  log(`${separator}\n${formatTimestamp()} ${tag} ${spanInfo}${meta}`)
 }
 
 /**
