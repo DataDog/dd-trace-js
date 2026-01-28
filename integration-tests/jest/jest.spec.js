@@ -73,6 +73,8 @@ const {
   TEST_SESSION_ID,
   TEST_MODULE,
   TEST_COMMAND,
+  GIT_COMMIT_SHA,
+  GIT_REPOSITORY_URL
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE, ERROR_TYPE, ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
@@ -5508,5 +5510,97 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     ])
     assert.doesNotMatch(testOutput, /Cannot find module/)
     assert.match(testOutput, /6 passed/)
+  })
+
+  context('coverage report upload', () => {
+    const gitCommitSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    const gitRepositoryUrl = 'https://github.com/datadog/test-repo.git'
+
+    it('uploads coverage report when coverage_report_upload_enabled is true', async () => {
+      receiver.setSettings({
+        coverage_report_upload_enabled: true
+      })
+
+      const coverageReportPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/cicovreprt', (payloads) => {
+          assert.strictEqual(payloads.length, 1)
+
+          const coverageReport = payloads[0]
+
+          // Verify the coverage report upload
+          assert.ok(coverageReport.headers['content-type'])
+          assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
+
+          // Check coverage files
+          assert.ok(Array.isArray(coverageReport.coverageFiles))
+          assert.ok(coverageReport.coverageFiles.length >= 1)
+
+          const coverageFile = coverageReport.coverageFiles[0]
+          assert.strictEqual(coverageFile.name, 'coverage')
+          assert.ok(coverageFile.content.includes('SF:')) // LCOV format starts with SF: (source file)
+
+          // Check event files
+          assert.ok(Array.isArray(coverageReport.eventFiles))
+          assert.ok(coverageReport.eventFiles.length >= 1)
+
+          const eventFile = coverageReport.eventFiles[0]
+          assert.strictEqual(eventFile.name, 'event')
+          assert.strictEqual(eventFile.content.type, 'coverage_report')
+          assert.strictEqual(eventFile.content.format, 'lcov')
+          assert.strictEqual(eventFile.content[GIT_COMMIT_SHA], gitCommitSha)
+          assert.strictEqual(eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            ENABLE_CODE_COVERAGE: 'true',
+            COVERAGE_REPORTERS: 'lcov',
+            COLLECT_COVERAGE_FROM: 'ci-visibility/test/*.js',
+            DD_GIT_COMMIT_SHA: gitCommitSha,
+            DD_GIT_REPOSITORY_URL: gitRepositoryUrl
+          }
+        }
+      )
+
+      await Promise.all([
+        coverageReportPromise,
+        once(childProcess, 'exit')
+      ])
+    })
+
+    it('does not upload coverage report when coverage_report_upload_enabled is false', async () => {
+      receiver.setSettings({
+        coverage_report_upload_enabled: false
+      })
+
+      // Track if a coverage report upload request is received
+      let coverageReportUploaded = false
+      receiver.assertPayloadReceived(() => {
+        coverageReportUploaded = true
+      }, ({ url }) => url === '/api/v2/cicovreprt')
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            ENABLE_CODE_COVERAGE: 'true',
+            COVERAGE_REPORTERS: 'lcov',
+            COLLECT_COVERAGE_FROM: 'ci-visibility/test/*.js',
+            DD_GIT_COMMIT_SHA: gitCommitSha,
+            DD_GIT_REPOSITORY_URL: gitRepositoryUrl
+          }
+        }
+      )
+
+      await once(childProcess, 'exit')
+
+      assert.strictEqual(coverageReportUploaded, false, 'coverage report should not be uploaded')
+    })
   })
 })

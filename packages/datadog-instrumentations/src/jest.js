@@ -24,6 +24,7 @@ const { addHook, channel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
+const codeCoverageReportCh = channel('ci:jest:coverage-report')
 
 const testSessionConfigurationCh = channel('ci:jest:session:configuration')
 
@@ -951,6 +952,14 @@ function getCliWrapper (isNewJestVersion) {
 
       if (waitingResult === 'timeout') {
         log.error('Timeout waiting for the tracer to flush')
+      }
+
+      // If user has coverage enabled, upload coverage reports after flush
+      if (isUserCodeCoverageEnabled && codeCoverageReportCh.hasSubscribers) {
+        const rootDir = result.globalConfig?.rootDir || process.cwd()
+        await new Promise((resolve) => {
+          codeCoverageReportCh.publish({ rootDir, onDone: resolve })
+        })
       }
 
       numSkippedSuites = 0
