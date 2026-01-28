@@ -34,7 +34,11 @@ describe('CI Visibility Agentless Exporter', () => {
   })
 
   it('can use CI Vis protocol right away', () => {
-    const agentlessExporter = new AgentlessCiVisibilityExporter({ ciVisibilityAgentlessUrl, isGitUploadEnabled: true, tags: {} })
+    const agentlessExporter = new AgentlessCiVisibilityExporter({
+      ciVisibilityAgentlessUrl,
+      isGitUploadEnabled: true,
+      tags: {},
+    })
     assert.strictEqual(agentlessExporter.canReportSessionTraces(), true)
   })
 
