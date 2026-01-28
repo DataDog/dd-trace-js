@@ -6,8 +6,12 @@ stages:
   # - macrobenchmarks
   # - macrobenchmarks-gate
   # - macrobenchmarks-notify
-  - node-hapi-redis-macrobenchmarks
+  - infrastructure
   - node-hapi-redis-tests
+  - node-hapi-redis-macrobenchmarks
+  - generate-slos
+  - gate
+  - notify
 
 # Config Registry CI jobs
 validate_supported_configurations_local_file:
