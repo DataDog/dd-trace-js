@@ -888,7 +888,6 @@ function getCliWrapper (isNewJestVersion) {
 
       const {
         results: {
-          success,
           coverageMap,
           numFailedTestSuites,
           numFailedTests,
@@ -907,53 +906,6 @@ function getCliWrapper (isNewJestVersion) {
           // ignore errors
         }
       }
-      let status, error
-
-      if (success) {
-        status = numTotalTests === 0 && numTotalTestSuites === 0 ? 'skip' : 'pass'
-      } else {
-        status = 'fail'
-        error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
-      }
-      let timeoutId
-
-      // Pass the resolve callback to defer it to DC listener
-      const flushPromise = new Promise((resolve) => {
-        onDone = () => {
-          clearTimeout(timeoutId)
-          resolve()
-        }
-      })
-
-      const timeoutPromise = new Promise((resolve) => {
-        timeoutId = setTimeout(() => {
-          resolve('timeout')
-        }, FLUSH_TIMEOUT).unref()
-      })
-
-      testSessionFinishCh.publish({
-        status,
-        isSuitesSkipped,
-        isSuitesSkippingEnabled,
-        isCodeCoverageEnabled,
-        testCodeCoverageLinesTotal,
-        numSkippedSuites,
-        hasUnskippableSuites,
-        hasForcedToRunSuites,
-        error,
-        isEarlyFlakeDetectionEnabled,
-        isEarlyFlakeDetectionFaulty,
-        isTestManagementTestsEnabled,
-        onDone
-      })
-
-      const waitingResult = await Promise.race([flushPromise, timeoutPromise])
-
-      if (waitingResult === 'timeout') {
-        log.error('Timeout waiting for the tracer to flush')
-      }
-
-      numSkippedSuites = 0
 
       /**
        * If Early Flake Detection (EFD) is enabled the logic is as follows:
@@ -962,7 +914,6 @@ function getCliWrapper (isNewJestVersion) {
        * The rationale behind is the following: you may still be able to block your CI pipeline by gating
        * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
        */
-
       if (isEarlyFlakeDetectionEnabled) {
         let numFailedTestsToIgnore = 0
         for (const testStatuses of newTestsTestStatuses.values()) {
@@ -1019,6 +970,55 @@ function getCliWrapper (isNewJestVersion) {
           result.results.success = true
         }
       }
+
+      // Determine session status after EFD and quarantine checks have potentially modified success
+      let status, error
+      if (result.results.success) {
+        status = numTotalTests === 0 && numTotalTestSuites === 0 ? 'skip' : 'pass'
+      } else {
+        status = 'fail'
+        error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
+      }
+
+      let timeoutId
+
+      // Pass the resolve callback to defer it to DC listener
+      const flushPromise = new Promise((resolve) => {
+        onDone = () => {
+          clearTimeout(timeoutId)
+          resolve()
+        }
+      })
+
+      const timeoutPromise = new Promise((resolve) => {
+        timeoutId = setTimeout(() => {
+          resolve('timeout')
+        }, FLUSH_TIMEOUT).unref()
+      })
+
+      testSessionFinishCh.publish({
+        status,
+        isSuitesSkipped,
+        isSuitesSkippingEnabled,
+        isCodeCoverageEnabled,
+        testCodeCoverageLinesTotal,
+        numSkippedSuites,
+        hasUnskippableSuites,
+        hasForcedToRunSuites,
+        error,
+        isEarlyFlakeDetectionEnabled,
+        isEarlyFlakeDetectionFaulty,
+        isTestManagementTestsEnabled,
+        onDone
+      })
+
+      const waitingResult = await Promise.race([flushPromise, timeoutPromise])
+
+      if (waitingResult === 'timeout') {
+        log.error('Timeout waiting for the tracer to flush')
+      }
+
+      numSkippedSuites = 0
 
       return result
     }, {
