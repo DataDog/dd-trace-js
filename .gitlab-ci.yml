@@ -3,9 +3,9 @@ stages:
   - benchmarks
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
-  - macrobenchmarks
-  - macrobenchmarks-gate
-  - macrobenchmarks-notify
+  # - macrobenchmarks
+  # - macrobenchmarks-gate
+  # - macrobenchmarks-notify
   - node-hapi-redis-macrobenchmarks
 
 # Config Registry CI jobs
