@@ -20,6 +20,12 @@ const { clearCache } = require('../../../../src/agent/info')
 describe('AgentProxyCiVisibilityExporter', () => {
   beforeEach(() => {
     clearCache()
+    nock.cleanAll()
+  })
+
+  afterEach(() => {
+    clearCache()
+    nock.cleanAll()
   })
 
   const flushInterval = 50
