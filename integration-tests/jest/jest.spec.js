@@ -2524,7 +2524,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('retries flaky tests and sets exit code to 0 as long as one attempt passes', (done) => {
+    it('retries flaky tests and sets exit code to 0 as long as one attempt passes', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
       receiver.setKnownTests({ jest: {} })
@@ -2547,6 +2547,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const testSession = events.find(event => event.type === 'test_session_end').content
           assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+          // Session is passed because at least one retry of the new flaky test passes
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -2566,14 +2568,16 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           })
         })
 
+      let testOutput = ''
       childProcess = exec(
         'node ./node_modules/jest/bin/jest --config config-jest.js',
         {
           cwd,
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
-            TESTS_TO_RUN: '**/ci-visibility/test-early-flake-detection/occasionally-failing-test*'
-          },
+            TESTS_TO_RUN: '**/ci-visibility/test-early-flake-detection/occasionally-failing-test*',
+            SHOULD_CHECK_RESULTS: '1'
+          }
         }
       )
 
@@ -2584,13 +2588,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         testOutput += chunk.toString()
       })
 
-      childProcess.on('exit', (exitCode) => {
-        assert.match(testOutput, /2 failed, 2 passed/)
-        assert.strictEqual(exitCode, 0)
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+      assert.match(testOutput, /2 failed, 2 passed/)
+      // Exit code is 0 because at least one retry of the new flaky test passes
+      assert.strictEqual(exitCode, 0)
     })
 
     // resetting snapshot state logic only works in latest versions
@@ -2624,6 +2626,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const testSession = events.find(event => event.type === 'test_session_end').content
           assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+          // Session is passed because at least one retry of each new flaky test passes
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           // 6 tests, 4 of which are new: 4*(1 test + 3 retries) + 2*(1 test) = 18
@@ -2650,14 +2654,16 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         env: {
           ...getCiVisEvpProxyConfig(receiver.port),
           TESTS_TO_RUN: 'ci-visibility/test-early-flake-detection/jest-snapshot',
-          CI: '1' // needs to be run as CI so snapshots are not written
-        },
+          CI: '1', // needs to be run as CI so snapshots are not written
+          SHOULD_CHECK_RESULTS: '1'
+        }
       })
 
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         eventsPromise
       ])
+      // Exit code is 0 because at least one retry of each new flaky test passes
       assert.strictEqual(exitCode, 0)
     })
 
@@ -2687,6 +2693,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const testSession = events.find(event => event.type === 'test_session_end').content
           assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+          // Session is passed because at least one retry of the new flaky test passes
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           // 1 new test
@@ -2709,14 +2717,16 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         env: {
           ...getCiVisEvpProxyConfig(receiver.port),
           TESTS_TO_RUN: 'ci-visibility/test-early-flake-detection/jest-image-snapshot',
-          CI: '1'
-        },
+          CI: '1',
+          SHOULD_CHECK_RESULTS: '1'
+        }
       })
 
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         eventsPromise
       ])
+      // Exit code is 0 because at least one retry of the new flaky test passes
       assert.strictEqual(exitCode, 0)
     })
 
