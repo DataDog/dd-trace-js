@@ -27,6 +27,7 @@ const exclude = new Set([
 ])
 
 module.exports = {
+  // @ts-expect-error Array#difference exists in the Node.js version being used here.
   entry: Object.fromEntries(include.difference(exclude).entries()),
   target: 'node',
   mode: 'production',
