@@ -148,7 +148,7 @@ interface Tracer extends opentracing.Tracer {
    * OpenFeature Provider with Remote Config integration.
    *
    * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
-   * Enable with DD_FLAGGING_PROVIDER_ENABLED=true.
+   * Enable with DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED=true.
    *
    * @beta This feature is in preview and not ready for production use
    */
@@ -692,6 +692,7 @@ declare namespace tracer {
         /**
          * Whether to enable the feature flagging provider.
          * Requires Remote Config to be properly configured.
+         * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED environment variable.
          *
          * @default false
          */
@@ -699,6 +700,7 @@ declare namespace tracer {
         /**
          * Timeout in milliseconds for OpenFeature provider initialization.
          * If configuration is not received within this time, initialization fails.
+         * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variable.
          *
          * @default 30000
          */
