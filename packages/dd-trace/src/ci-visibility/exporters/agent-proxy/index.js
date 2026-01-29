@@ -73,7 +73,6 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
             const DynamicInstrumentationLogsWriter = require('../agentless/di-logs-writer')
             this._logsWriter = new DynamicInstrumentationLogsWriter({
               url: this._url,
-              tags,
               isAgentProxy: true
             })
             this._canForwardLogs = true
