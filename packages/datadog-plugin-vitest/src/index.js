@@ -411,7 +411,7 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:vitest:coverage-report', ({ rootDir, onDone }) => {
-      this.#handleCoverageReport(rootDir, onDone)
+      this.handleCoverageReport(rootDir, onDone)
     })
   }
 
@@ -420,10 +420,13 @@ class VitestPlugin extends CiPlugin {
    * @param {string} rootDir - The root directory where coverage reports are located.
    * @param {Function} [onDone] - Callback to signal completion.
    */
-  #handleCoverageReport (rootDir, onDone) {
+  handleCoverageReport (rootDir, onDone) {
+    if (!this.libraryConfig?.isCoverageReportUploadEnabled) {
+      onDone()
+      return
+    }
     this.uploadCoverageReports({
       rootDir,
-      isCoverageReportUploadEnabled: this.libraryConfig?.isCoverageReportUploadEnabled,
       testEnvironmentMetadata: this.testEnvironmentMetadata,
       onDone
     })

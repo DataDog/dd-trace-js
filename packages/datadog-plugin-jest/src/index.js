@@ -432,9 +432,12 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:coverage-report', ({ rootDir, onDone }) => {
+      if (!this.libraryConfig?.isCoverageReportUploadEnabled) {
+        onDone()
+        return
+      }
       this.uploadCoverageReports({
         rootDir,
-        isCoverageReportUploadEnabled: this.libraryConfig?.isCoverageReportUploadEnabled,
         testEnvironmentMetadata: this.testEnvironmentMetadata,
         onDone
       })

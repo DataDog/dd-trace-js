@@ -4593,11 +4593,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           const coverageReport = payloads[0]
 
-          // Verify the coverage report upload
           assert.ok(coverageReport.headers['content-type'])
           assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
 
-          // Check coverage files (field name is 'coverage' matching Java implementation)
           assert.ok(Array.isArray(coverageReport.coverageFiles))
           assert.ok(coverageReport.coverageFiles.length >= 1)
 
@@ -4605,7 +4603,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(coverageFile.name, 'coverage')
           assert.ok(coverageFile.content.includes('SF:')) // LCOV format starts with SF: (source file)
 
-          // Check event files (field name is 'event' matching Java implementation)
           assert.ok(Array.isArray(coverageReport.eventFiles))
           assert.ok(coverageReport.eventFiles.length >= 1)
 
@@ -4617,7 +4614,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
         })
 
-      // Use lcov reporter to generate a coverage file that can be discovered
       const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov ${runTestsCommand}`
 
       childProcess = exec(
@@ -4643,13 +4639,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         coverage_report_upload_enabled: false
       })
 
-      // Track if a coverage report upload request is received
       let coverageReportUploaded = false
       receiver.assertPayloadReceived(() => {
         coverageReportUploaded = true
       }, ({ url }) => url === '/api/v2/cicovreprt')
 
-      // Use lcov reporter to generate a coverage file that can be discovered
       const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov -r=text-summary ${runTestsCommand}`
 
       childProcess = exec(

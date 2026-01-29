@@ -954,8 +954,7 @@ function getCliWrapper (isNewJestVersion) {
         log.error('Timeout waiting for the tracer to flush')
       }
 
-      // If user has coverage enabled, upload coverage reports after flush
-      if (isUserCodeCoverageEnabled && codeCoverageReportCh.hasSubscribers) {
+      if (codeCoverageReportCh.hasSubscribers) {
         const rootDir = result.globalConfig?.rootDir || process.cwd()
         await new Promise((resolve) => {
           codeCoverageReportCh.publish({ rootDir, onDone: resolve })

@@ -610,22 +610,14 @@ module.exports = class CiPlugin extends Plugin {
    * Uploads coverage reports if enabled. This is the common logic used by plugins.
    * @param {object} options - Upload options
    * @param {string} options.rootDir - The root directory where coverage reports are located
-   * @param {boolean} options.isCoverageReportUploadEnabled - Whether coverage upload is enabled
-   * @param {object} options.testEnvironmentMetadata - Test environment metadata containing git/CI tags
    * @param {Function} [options.onDone] - Callback to signal completion
    */
-  uploadCoverageReports ({ rootDir, isCoverageReportUploadEnabled, testEnvironmentMetadata, onDone }) {
+  uploadCoverageReports ({ rootDir, onDone }) {
     const done = onDone || (() => {})
 
     // Check if the exporter supports coverage report upload
     if (!this.tracer._exporter?.uploadCoverageReport) {
       log.debug('Exporter does not support coverage report upload')
-      done()
-      return
-    }
-
-    if (!isCoverageReportUploadEnabled) {
-      log.debug('Coverage report upload is not enabled')
       done()
       return
     }
@@ -660,7 +652,7 @@ module.exports = class CiPlugin extends Plugin {
       reportIndex++
 
       this.tracer._exporter.uploadCoverageReport(
-        { filePath, format, testEnvironmentMetadata },
+        { filePath, format, testEnvironmentMetadata: this.testEnvironmentMetadata },
         (err) => {
           if (err) {
             failedCount++

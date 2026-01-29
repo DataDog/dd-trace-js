@@ -1,11 +1,10 @@
 'use strict'
 
 const { readFileSync, existsSync } = require('node:fs')
-const path = require('node:path')
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const log = require('../../dd-trace/src/log')
-const { getCacheFolderPath } = require('../../dd-trace/src/ci-visibility/test-optimization-cache')
+const { getSettingsCachePath } = require('../../dd-trace/src/ci-visibility/test-optimization-cache')
 
 class NycPlugin extends CiPlugin {
   static id = 'nyc'
@@ -36,32 +35,31 @@ class NycPlugin extends CiPlugin {
     })
 
     this.addSub('ci:nyc:report', ({ rootDir, onDone }) => {
-      this.#handleCoverageReport(rootDir, onDone)
+      this.handleCoverageReport(rootDir, onDone)
     })
   }
 
   /**
-   * Reads the library configuration from the test optimization cache folder.
+   * Reads the library configuration from the settings cache file.
    * @returns {object|undefined} The library configuration settings, or undefined if not available.
    */
-  #readLibraryConfiguration () {
-    const cacheFolder = getCacheFolderPath()
-    if (!cacheFolder) {
-      log.debug('Test optimization cache folder not found')
+  readLibraryConfiguration () {
+    const settingsCachePath = getSettingsCachePath()
+    if (!settingsCachePath) {
+      log.debug('Settings cache path not set (DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE)')
       return
     }
 
-    const configPath = path.join(cacheFolder, 'library-configuration.json')
-    if (!existsSync(configPath)) {
-      log.debug('Library configuration file not found at %s', configPath)
+    if (!existsSync(settingsCachePath)) {
+      log.debug('Settings cache file not found at %s', settingsCachePath)
       return
     }
 
     try {
-      const content = readFileSync(configPath, 'utf8')
+      const content = readFileSync(settingsCachePath, 'utf8')
       return JSON.parse(content)
     } catch (err) {
-      log.debug('Failed to read library configuration: %s', err.message)
+      log.debug('Failed to read settings cache: %s', err.message)
     }
   }
 
@@ -70,19 +68,24 @@ class NycPlugin extends CiPlugin {
    * @param {string} rootDir - The root directory where coverage reports are located.
    * @param {Function} [onDone] - Callback to signal completion.
    */
-  #handleCoverageReport (rootDir, onDone) {
+  handleCoverageReport (rootDir, onDone) {
     const done = onDone || (() => {})
 
-    const libraryConfig = this.#readLibraryConfiguration()
+    const libraryConfig = this.readLibraryConfiguration()
     if (!libraryConfig) {
-      log.debug('Library configuration not found in cache folder')
+      log.debug('Library configuration not found in settings cache')
+      done()
+      return
+    }
+
+    if (!libraryConfig.isCoverageReportUploadEnabled) {
+      log.debug('Coverage report upload is not enabled')
       done()
       return
     }
 
     this.uploadCoverageReports({
       rootDir,
-      isCoverageReportUploadEnabled: libraryConfig.isCoverageReportUploadEnabled,
       testEnvironmentMetadata: this.testEnvironmentMetadata,
       onDone: done
     })

@@ -1,64 +1,61 @@
 'use strict'
 
-const { existsSync, readFileSync, writeFileSync, mkdirSync } = require('node:fs')
+const { writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { randomUUID } = require('node:crypto')
 const path = require('node:path')
 
 const { getValueFromEnvSources } = require('../config/helper')
-
-// Path to store the cache folder location (persists across process forks)
-const CACHE_FOLDER_MARKER_PATH = path.join(tmpdir(), '.dd-test-optimization-cache-folder')
+const log = require('../log')
 
 /**
- * Gets the test optimization cache folder path.
- * Reads from env var first, falls back to marker file for forked processes.
- * @returns {string|undefined}
+ * Gets the test optimization settings cache file path from the env var.
+ * @returns {string|undefined} The cache file path, or undefined if not set.
  */
-function getCacheFolderPath () {
-  // Try env var first
-  const envValue = getValueFromEnvSources('DD_TEST_OPTIMIZATION_CACHE_FOLDER')
-  if (envValue) {
-    return envValue
-  }
-
-  // Fall back to marker file (for forked processes where env var might not persist)
-  try {
-    if (existsSync(CACHE_FOLDER_MARKER_PATH)) {
-      return readFileSync(CACHE_FOLDER_MARKER_PATH, 'utf8').trim()
-    }
-  } catch {
-    // Ignore read errors
-  }
+function getSettingsCachePath () {
+  return getValueFromEnvSources('DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE')
 }
 
 /**
- * Creates the test optimization cache folder and sets it up for sharing.
- * @returns {string|undefined} The cache folder path, or undefined if creation failed.
+ * Sets up the test optimization settings cache file path.
+ * Returns the existing path if already set, otherwise creates a new one.
+ * @returns {string} The cache file path.
  */
-function createCacheFolderIfNeeded () {
-  // Check if already set up
-  const existing = getCacheFolderPath()
-  if (existing && existsSync(existing)) {
+function setupSettingsCachePath () {
+  const existing = getSettingsCachePath()
+  if (existing) {
     return existing
   }
 
-  // Create new cache folder
-  const cacheFolder = path.join(tmpdir(), `dd-test-optimization-${randomUUID()}`)
+  const cacheFilePath = path.join(tmpdir(), `dd-test-optimization-${randomUUID()}.json`)
+
+  // eslint-disable-next-line eslint-rules/eslint-process-env
+  process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE = cacheFilePath
+
+  return cacheFilePath
+}
+
+/**
+ * Writes the settings to the cache file specified by DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE.
+ * Does nothing if the env var is not set.
+ * @param {object} settings - The settings object to cache.
+ */
+function writeSettingsToCache (settings) {
+  const settingsCachePath = getSettingsCachePath()
+  if (!settingsCachePath) {
+    return
+  }
+
   try {
-    mkdirSync(cacheFolder, { recursive: true })
-    // eslint-disable-next-line eslint-rules/eslint-process-env
-    process.env.DD_TEST_OPTIMIZATION_CACHE_FOLDER = cacheFolder
-    // Also write to marker file so forked processes can find it
-    writeFileSync(CACHE_FOLDER_MARKER_PATH, cacheFolder)
-    return cacheFolder
-  } catch {
-    // Ignore errors creating cache folder
+    writeFileSync(settingsCachePath, JSON.stringify(settings), 'utf8')
+    log.debug('Settings written to %s', settingsCachePath)
+  } catch (err) {
+    log.error('Failed to write settings to cache file', err)
   }
 }
 
 module.exports = {
-  getCacheFolderPath,
-  createCacheFolderIfNeeded,
-  CACHE_FOLDER_MARKER_PATH
+  getSettingsCachePath,
+  setupSettingsCachePath,
+  writeSettingsToCache
 }

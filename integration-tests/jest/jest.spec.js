@@ -5527,11 +5527,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const coverageReport = payloads[0]
 
-          // Verify the coverage report upload
           assert.ok(coverageReport.headers['content-type'])
           assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
 
-          // Check coverage files
           assert.ok(Array.isArray(coverageReport.coverageFiles))
           assert.ok(coverageReport.coverageFiles.length >= 1)
 
@@ -5539,7 +5537,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(coverageFile.name, 'coverage')
           assert.ok(coverageFile.content.includes('SF:')) // LCOV format starts with SF: (source file)
 
-          // Check event files
           assert.ok(Array.isArray(coverageReport.eventFiles))
           assert.ok(coverageReport.eventFiles.length >= 1)
 
@@ -5577,7 +5574,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         coverage_report_upload_enabled: false
       })
 
-      // Track if a coverage report upload request is received
       let coverageReportUploaded = false
       receiver.assertPayloadReceived(() => {
         coverageReportUploaded = true
