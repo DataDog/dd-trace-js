@@ -1,5 +1,7 @@
 'use strict'
 
+if (process.env.DD_CHANNEL_DEBUG) require('../debug/channel-patch')
+
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
 // If this is a release PR, set the SSI variables.
