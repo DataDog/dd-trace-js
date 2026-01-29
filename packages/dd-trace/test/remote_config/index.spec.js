@@ -59,7 +59,7 @@ describe('RemoteConfig', () => {
     })
 
     config = {
-      url: 'http://127.0.0.1:1337',
+      url: new URL('http://127.0.0.1:1337'),
       hostname: '127.0.0.1',
       port: '1337',
       tags: {
