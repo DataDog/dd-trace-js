@@ -91,7 +91,7 @@ describe('input message http requests', function () {
     const opts = getRequestOptions(request)
     assert.strictEqual(opts.method, 'POST')
     assert.strictEqual(opts.path,
-      '/debugger/v1/input?ddtags=' +
+      '/debugger/v2/input?ddtags=' +
         `env%3A${process.env.DD_ENV}%2C` +
         `version%3A${process.env.DD_VERSION}%2C` +
         `debugger_version%3A${version}%2C` +
@@ -125,17 +125,17 @@ describe('input message http requests', function () {
     done()
   })
 
-  it('should fallback to /debugger/v1/input on 404 from v2 endpoint', function (done) {
+  it('should fallback to /debugger/v1/diagnostics on 404 from v2 endpoint', function (done) {
     const configStub = createConfigMock({ inputPath: '/debugger/v2/input' })
 
-    // Mock request to return 404 on first call (v2), then succeed on second call (v1)
+    // Mock request to return 404 on first call (v2), then succeed on second call (diagnostics)
     let callCount = 0
     const requestWith404 = sinon.spy((payload, opts, callback) => {
       if (++callCount === 1) {
         // First call to v2 - return 404
         callback(new Error('404'), null, 404)
       } else {
-        // Second call to v1 - succeed
+        // Second call to diagnostics - succeed
         callback(null)
       }
     })
@@ -151,7 +151,7 @@ describe('input message http requests', function () {
     sendV2(message, logger, dd, snapshot)
     clock.tick(1000)
 
-    // Should have been called twice: once with v2 (404), once with v1 (success)
+    // Should have been called twice: once with v2 (404), once with diagnostics (success)
     sinon.assert.calledTwice(requestWith404)
 
     const firstCallOpts = requestWith404.getCall(0).args[1]
@@ -159,16 +159,16 @@ describe('input message http requests', function () {
       `First call should use v2 endpoint but got ${firstCallOpts.path}`)
 
     const secondCallOpts = requestWith404.getCall(1).args[1]
-    assert.ok(secondCallOpts.path.startsWith('/debugger/v1/input?ddtags='),
-      `Second call should fallback to v1 endpoint but got ${secondCallOpts.path}`)
+    assert.ok(secondCallOpts.path.startsWith('/debugger/v1/diagnostics?ddtags='),
+      `Second call should fallback to diagnostics endpoint but got ${secondCallOpts.path}`)
 
-    // Verify config was updated to v1
-    assert.strictEqual(configStub.inputPath, '/debugger/v1/input')
+    // Verify config was updated to diagnostics
+    assert.strictEqual(configStub.inputPath, '/debugger/v1/diagnostics')
 
     done()
   })
 
-  it('should stick with v1 endpoint after fallback', function (done) {
+  it('should stick with diagnostics endpoint after fallback', function (done) {
     const configStub = createConfigMock({ inputPath: '/debugger/v2/input' })
 
     // Mock request to return 404 on first flush, then succeed on subsequent calls
@@ -191,23 +191,23 @@ describe('input message http requests', function () {
       './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
     })
 
-    // First send - should trigger v2 → v1 fallback
+    // First send - should trigger v2 → diagnostics fallback
     sendV2({ message: 1 }, logger, dd, snapshot)
     clock.tick(1000)
 
-    // Second send - should use v1 directly (no fallback)
+    // Second send - should use diagnostics directly (no fallback)
     sendV2({ message: 2 }, logger, dd, snapshot)
     clock.tick(1000)
 
     // Should have been called 3 times total:
     // 1. First flush with v2 (404)
-    // 2. First flush retry with v1 (success)
-    // 3. Second flush with v1 (success)
+    // 2. First flush retry with diagnostics (success)
+    // 3. Second flush with diagnostics (success)
     sinon.assert.calledThrice(requestWith404)
 
     const thirdCallOpts = requestWith404.getCall(2).args[1]
-    assert.ok(thirdCallOpts.path.startsWith('/debugger/v1/input?ddtags='),
-      `Third call should stick with v1 endpoint but got ${thirdCallOpts.path}`)
+    assert.ok(thirdCallOpts.path.startsWith('/debugger/v1/diagnostics?ddtags='),
+      `Third call should stick with diagnostics endpoint but got ${thirdCallOpts.path}`)
 
     done()
   })
@@ -317,7 +317,7 @@ function createConfigMock (overrides = {}) {
     commitSHA,
     repositoryUrl,
     url,
-    inputPath: '/debugger/v1/input',
+    inputPath: '/debugger/v2/input',
     maxTotalPayloadSize: 5 * 1024 * 1024,
     dynamicInstrumentation: {
       uploadIntervalSeconds: 1,

@@ -4,6 +4,7 @@ const log = require('../../../log')
 const { safeJSONStringify } = require('../../../exporters/common/util')
 const { JSONEncoder } = require('../../encode/json-encoder')
 const { getValueFromEnvSources } = require('../../../config/helper')
+const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 
 const BaseWriter = require('../../../exporters/common/writer')
 
@@ -34,7 +35,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
 
     if (this._isAgentProxy) {
       delete options.headers['dd-api-key']
-      options.path = '/debugger/v1/input'
+      options.path = DEBUGGER_INPUT_V1
     }
 
     log.debug(() => `Request to the logs intake: ${safeJSONStringify(options)}`)

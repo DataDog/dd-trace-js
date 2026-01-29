@@ -5,7 +5,7 @@ const { assertObjectContains } = require('../helpers')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation - Endpoint Fallback', function () {
-  describe('v1 endpoint when agent does not advertise v2 support', function () {
+  describe('diagnostics endpoint when agent does not advertise v2 support', function () {
     const t = setup({
       dependencies: ['fastify'],
       testApp: 'target-app/basic.js',
@@ -14,11 +14,9 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       },
     })
 
-    it('should use v1 endpoint when agent does not advertise v2 support', async function () {
-      let v2Called = false
-
-      const v1InputPromise = new Promise(/** @type {() => void} */ (resolve) => {
-        t.agent.once('debugger-input-v1', ({ payload }) => {
+    it('should use diagnostics endpoint when agent does not advertise v2 support', async function () {
+      const diagnosticsPromise = new Promise(/** @type {() => void} */ (resolve) => {
+        t.agent.once('debugger-diagnostics-input', ({ payload }) => {
           assertObjectContains(payload[0], {
             ddsource: 'dd_debugger',
             service: 'node',
@@ -29,7 +27,7 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       })
 
       t.agent.on('debugger-input-v2', () => {
-        v2Called = true
+        assert.fail('v2 endpoint should not be called')
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
@@ -37,18 +35,15 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       assert.strictEqual(response.status, 200)
       assert.deepStrictEqual(response.data, { hello: 'bar' })
 
-      await v1InputPromise
-      assert.strictEqual(v2Called, false, 'v2 endpoint should not be called')
+      await diagnosticsPromise
     })
 
-    it('should continue using v1 endpoint for multiple requests', async function () {
+    it('should continue using diagnostics endpoint for multiple requests', async function () {
       const expectedSnapshots = 2
       let snapshotsReceived = 0
 
-      let v2Called = false
-
-      const v1InputsPromise = new Promise(/** @type {() => void} */ (resolve) => {
-        t.agent.on('debugger-input-v1', ({ payload }) => {
+      const diagnosticsPromise = new Promise(/** @type {() => void} */ (resolve) => {
+        t.agent.on('debugger-diagnostics-input', ({ payload }) => {
           // The payload is an array of snapshots, count them all
           snapshotsReceived += payload.length
           payload.forEach((item) => {
@@ -65,7 +60,7 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       })
 
       t.agent.on('debugger-input-v2', () => {
-        v2Called = true
+        assert.fail('v2 endpoint should not be called')
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
@@ -77,8 +72,7 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       assert.strictEqual(response2.status, 200)
       assert.deepStrictEqual(response2.data, { hello: 'bar' })
 
-      await v1InputsPromise
-      assert.strictEqual(v2Called, false, 'v2 endpoint should not be called')
+      await diagnosticsPromise
     })
   })
 
@@ -86,8 +80,6 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
     const t = setup({ dependencies: ['fastify'], testApp: 'target-app/basic.js' })
 
     it('should successfully use v2 endpoint when agent supports it', async function () {
-      let v1Called = false
-
       const v2InputPromise = new Promise(/** @type {() => void} */ (resolve) => {
         t.agent.once('debugger-input-v2', ({ payload }) => {
           assertObjectContains(payload[0], {
@@ -99,8 +91,8 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
         })
       })
 
-      t.agent.on('debugger-input-v1', () => {
-        v1Called = true
+      t.agent.on('debugger-diagnostics-input', () => {
+        assert.fail('Snapshots should not be sent to diagnostics endpoint when using v2')
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
@@ -109,11 +101,10 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       assert.deepStrictEqual(response.data, { hello: 'bar' })
 
       await v2InputPromise
-      assert.strictEqual(v1Called, false, 'v1 endpoint should not be called')
     })
   })
 
-  describe('runtime fallback from v2 to v1 when v2 returns 404', function () {
+  describe('runtime fallback from v2 to diagnostics when v2 returns 404', function () {
     const t = setup({
       dependencies: ['fastify'],
       testApp: 'target-app/basic.js',
@@ -125,13 +116,13 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       },
     })
 
-    it('should fallback to v1 endpoint when v2 returns 404 at runtime', async function () {
+    it('should fallback to diagnostics endpoint when v2 returns 404 at runtime', async function () {
       const v2404Promise = new Promise(/** @type {() => void} */ (resolve) => {
         t.agent.once('debugger-input-v2-404', () => resolve())
       })
 
-      const v1InputPromise = new Promise(/** @type {() => void} */ (resolve) => {
-        t.agent.once('debugger-input-v1', ({ payload }) => {
+      const diagnosticsPromise = new Promise(/** @type {() => void} */ (resolve) => {
+        t.agent.once('debugger-diagnostics-input', ({ payload }) => {
           assertObjectContains(payload[0], {
             ddsource: 'dd_debugger',
             service: 'node',
@@ -146,10 +137,10 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       assert.strictEqual(response.status, 200)
       assert.deepStrictEqual(response.data, { hello: 'bar' })
 
-      await Promise.all([v2404Promise, v1InputPromise])
+      await Promise.all([v2404Promise, diagnosticsPromise])
     })
 
-    it('should continue using v1 endpoint after runtime fallback', async function () {
+    it('should continue using diagnostics endpoint after runtime fallback', async function () {
       const expectedSnapshots = 2
       let snapshotsReceived = 0
 
@@ -157,8 +148,8 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
         t.agent.once('debugger-input-v2-404', () => resolve())
       })
 
-      const v1InputsPromise = new Promise(/** @type {() => void} */ (resolve) => {
-        t.agent.on('debugger-input-v1', ({ payload }) => {
+      const diagnosticsPromise = new Promise(/** @type {() => void} */ (resolve) => {
+        t.agent.on('debugger-diagnostics-input', ({ payload }) => {
           // The payload is an array of snapshots, count them all
           snapshotsReceived += payload.length
           payload.forEach((item) => {
@@ -183,7 +174,7 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       assert.strictEqual(response2.status, 200)
       assert.deepStrictEqual(response2.data, { hello: 'bar' })
 
-      await Promise.all([v2404Promise, v1InputsPromise])
+      await Promise.all([v2404Promise, diagnosticsPromise])
     })
   })
 })

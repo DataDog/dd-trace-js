@@ -451,11 +451,23 @@ function buildExpressServer (agent) {
   })
 
   app.post('/debugger/v1/diagnostics', upload.any(), (req, res) => {
-    res.status(200).send()
-    agent.emit('debugger-diagnostics', {
-      headers: req.headers,
-      payload: JSON.parse((/** @type {Express.Multer.File[]} */ (req.files))[0].buffer.toString()),
-    })
+    res.status(200).send() // TODO: Should we send a 202 here instead?
+    // The diagnostics endpoint can receive both probe results and status messages
+    // Emit the appropriate events based on payload structure
+    const isProbeResult = req.body[0]?.debugger?.snapshot !== undefined
+    if (isProbeResult) {
+      const event = {
+        headers: req.headers,
+        payload: req.body,
+      }
+      agent.emit('debugger-input', event)
+      agent.emit('debugger-diagnostics-input', event)
+    } else {
+      agent.emit('debugger-diagnostics', {
+        headers: req.headers,
+        payload: JSON.parse((/** @type {Express.Multer.File[]} */ (req.files))[0].buffer.toString()),
+      })
+    }
   })
 
   app.post('/profiling/v1/input', upload.any(), (req, res) => {
