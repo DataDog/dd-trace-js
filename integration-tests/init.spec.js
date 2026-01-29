@@ -31,8 +31,12 @@ delete process.env.DD_INJECT_FORCE
 
 function testInjectionScenarios (arg, filename, esmWorks = false) {
   if (!currentVersionIsSupported) return
-  const tracerFile = arg === 'loader' ? 'init/trace.mjs' : 'init/trace.js'
-  const instrFile = arg === 'loader' ? 'init/instrument.mjs' : 'init/instrument.js'
+
+  // For `--loader`, we generally want ESM fixtures to ensure the loader hook actually applies.
+  // However, Node 18.0.0 is a known outlier where ESM via custom loaders is not supportable.
+  const isNode1800 = process.versions.node === '18.0.0'
+  const tracerFile = arg === 'loader' && !isNode1800 ? 'init/trace.mjs' : 'init/trace.js'
+  const instrFile = arg === 'loader' && !isNode1800 ? 'init/instrument.mjs' : 'init/instrument.js'
 
   context('preferring app-dir dd-trace', () => {
     context('when dd-trace is not in the app dir', () => {
