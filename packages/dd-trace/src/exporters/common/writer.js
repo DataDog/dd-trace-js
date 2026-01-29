@@ -27,6 +27,7 @@ class Writer {
   append (payload) {
     if (!request.writable) {
       log.debug(() => `Maximum number of active requests reached. Payload discarded: ${safeJSONStringify(payload)}`)
+      console.log(`Maximum number of active requests reached. Payload discarded: ${safeJSONStringify(payload)}`)
       return
     }
 
