@@ -24,7 +24,7 @@ import {
 
 let hasInsertedInit = false
 const initJsUrl = new URL('init.js', import.meta.url).href
-// Note: `--loader` only reliably influences ESM entrypoints; for CJS apps use `--import`/`--require`.
+// `--loader` only reliably influences ESM entrypoints; for CJS apps use `--import`/`--require`.
 
 /**
  * @param {{ source?: string|Buffer|Uint8Array, format?: string }} result
