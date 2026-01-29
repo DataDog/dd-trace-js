@@ -176,45 +176,26 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
-    // Coverage report upload endpoint (for nyc coverage reports)
-    // Expects one file per request with field names 'coverage' and 'event'
+    // Coverage report upload endpoint - one file per request
     app.post([
       '/api/v2/cicovreprt',
       '/evp_proxy/:version/api/v2/cicovreprt'
     ], upload.any(), (req, res) => {
       res.status(200).send('OK')
 
-      // Parse the uploaded files - coverage file is gzipped, event file is JSON
       const coverageFile = req.files.find(f => f.fieldname === 'coverage')
       const eventFile = req.files.find(f => f.fieldname === 'event')
 
-      let coverageContent
-      if (coverageFile) {
-        try {
-          coverageContent = zlib.gunzipSync(coverageFile.buffer).toString('utf8')
-        } catch {
-          coverageContent = coverageFile.buffer.toString('utf8')
-        }
-      }
-
       this.emit('message', {
         headers: req.headers,
-        coverageFiles: coverageFile
-          ? [{
-              name: coverageFile.fieldname,
-              type: coverageFile.mimetype,
-              filename: coverageFile.originalname,
-              content: coverageContent
-            }]
-          : [],
-        eventFiles: eventFile
-          ? [{
-              name: eventFile.fieldname,
-              type: eventFile.mimetype,
-              filename: eventFile.originalname,
-              content: JSON.parse(eventFile.buffer.toString('utf8'))
-            }]
-          : [],
+        coverageFile: coverageFile && {
+          name: coverageFile.fieldname,
+          content: zlib.gunzipSync(coverageFile.buffer).toString('utf8')
+        },
+        eventFile: eventFile && {
+          name: eventFile.fieldname,
+          content: JSON.parse(eventFile.buffer.toString('utf8'))
+        },
         url: req.url
       })
     })

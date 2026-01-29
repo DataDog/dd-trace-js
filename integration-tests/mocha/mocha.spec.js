@@ -4593,25 +4593,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           const coverageReport = payloads[0]
 
-          assert.ok(coverageReport.headers['content-type'])
           assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
 
-          assert.ok(Array.isArray(coverageReport.coverageFiles))
-          assert.ok(coverageReport.coverageFiles.length >= 1)
+          assert.strictEqual(coverageReport.coverageFile.name, 'coverage')
+          assert.ok(coverageReport.coverageFile.content.includes('SF:')) // LCOV format
 
-          const coverageFile = coverageReport.coverageFiles[0]
-          assert.strictEqual(coverageFile.name, 'coverage')
-          assert.ok(coverageFile.content.includes('SF:')) // LCOV format starts with SF: (source file)
-
-          assert.ok(Array.isArray(coverageReport.eventFiles))
-          assert.ok(coverageReport.eventFiles.length >= 1)
-
-          const eventFile = coverageReport.eventFiles[0]
-          assert.strictEqual(eventFile.name, 'event')
-          assert.strictEqual(eventFile.content.type, 'coverage_report')
-          assert.strictEqual(eventFile.content.format, 'lcov')
-          assert.strictEqual(eventFile.content[GIT_COMMIT_SHA], gitCommitSha)
-          assert.strictEqual(eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
+          assert.strictEqual(coverageReport.eventFile.name, 'event')
+          assert.strictEqual(coverageReport.eventFile.content.type, 'coverage_report')
+          assert.strictEqual(coverageReport.eventFile.content.format, 'lcov')
+          assert.strictEqual(coverageReport.eventFile.content[GIT_COMMIT_SHA], gitCommitSha)
+          assert.strictEqual(coverageReport.eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
         })
 
       const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov ${runTestsCommand}`
