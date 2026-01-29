@@ -1,4 +1,5 @@
 'use strict'
+const path = require('node:path')
 
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -361,7 +362,6 @@ function getSortWrapper (sort, frameworkVersion) {
         const coverageConfig = this.ctx.config?.coverage
         const reportsDirectory = coverageConfig?.reportsDirectory || 'coverage'
         const rootDir = this.ctx.config?.root || process.cwd()
-        const path = require('node:path')
         coverageRootDir = path.isAbsolute(reportsDirectory) ? reportsDirectory : path.join(rootDir, reportsDirectory)
       } catch {
         // Fallback to cwd if we can't get config
