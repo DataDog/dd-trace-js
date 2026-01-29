@@ -6,7 +6,7 @@ const path = require('path')
 const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
-describe('IAST - overhead-controller - integration', () => {
+describe('IAST - overhead-controller - integration' + i, () => {
   let axios, cwd, agent, proc
 
   useSandbox(
@@ -30,6 +30,7 @@ describe('IAST - overhead-controller - integration', () => {
 
   describe('vulnerability sampling algorithm', () => {
     beforeEach(async () => {
+      console.time('oce-spawn-proc')
       proc = await spawnProc(path.join(cwd, 'resources', 'overhead-controller.js'), {
         cwd,
         env: {
@@ -41,6 +42,7 @@ describe('IAST - overhead-controller - integration', () => {
         }
       })
       axios = Axios.create({ baseURL: proc.url })
+      console.timeEnd('oce-spawn-proc')
     })
 
     async function checkVulnerabilitiesInEndpoint (path, vulnerabilitiesAndCount, method = 'GET') {
