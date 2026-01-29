@@ -8,6 +8,7 @@ const sinon = require('sinon')
 require('../../setup/mocha')
 
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
+const { DEBUGGER_DIAGNOSTICS_V1 } = require('../../../src/debugger/constants')
 const { getRequestOptions } = require('./utils')
 
 const ddsource = 'dd_debugger'
@@ -141,7 +142,7 @@ describe('diagnostic message http requests', function () {
 
         const opts = getRequestOptions(request)
         assert.strictEqual(opts.method, 'POST')
-        assert.strictEqual(opts.path, '/debugger/v1/diagnostics')
+        assert.strictEqual(opts.path, DEBUGGER_DIAGNOSTICS_V1)
 
         done()
       })

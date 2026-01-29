@@ -5,9 +5,10 @@ const { types } = require('util')
 const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
 const log = require('../log')
-const AgentInfoExporter = require('../exporters/common/agent-info-exporter')
+const { fetchAgentInfo } = require('../agent/info')
+const { getAgentUrl } = require('../agent/url')
 const getDebuggerConfig = require('./config')
-const { DEBUGGER_INPUT_V1, DEBUGGER_INPUT_V2 } = require('./constants')
+const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('./constants')
 
 /**
  * @typedef {ReturnType<import('../config')>} Config
@@ -22,7 +23,6 @@ let configChannel = null
 let ackId = 0
 let rcAckCallbacks = null
 let rc = null
-let agentInfoExporter = null
 let inputPath = null
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
@@ -187,7 +187,6 @@ function cleanup (error) {
     worker = null
   }
   configChannel = null
-  agentInfoExporter = null
   inputPath = null
 
   // Call any pending ack callbacks
@@ -210,14 +209,13 @@ function cleanup (error) {
 function detectDebuggerEndpoint (config, cb) {
   log.debug('[debugger] Detecting available debugger endpoints...')
 
-  if (!agentInfoExporter) {
-    agentInfoExporter = new AgentInfoExporter(config)
-  }
-
-  agentInfoExporter.getAgentInfo((err, agentInfo) => {
+  fetchAgentInfo(getAgentUrl(config), (err, agentInfo) => {
     if (err) {
-      log.warn('[debugger] Failed to query agent /info endpoint, falling back to %s', DEBUGGER_INPUT_V1, err)
-      return cb(DEBUGGER_INPUT_V1)
+      log.warn('[debugger] Failed to query agent %s endpoint, falling back to %s',
+        DEBUGGER_INPUT_V2,
+        DEBUGGER_DIAGNOSTICS_V1,
+        err)
+      return cb(DEBUGGER_DIAGNOSTICS_V1)
     }
 
     const endpoints = agentInfo.endpoints || []
@@ -226,8 +224,8 @@ function detectDebuggerEndpoint (config, cb) {
       log.debug('[debugger] Agent supports %s', DEBUGGER_INPUT_V2)
       return cb(DEBUGGER_INPUT_V2)
     }
-    log.debug('[debugger] Agent does not support %s, using %s', DEBUGGER_INPUT_V2, DEBUGGER_INPUT_V1)
-    return cb(DEBUGGER_INPUT_V1)
+    log.debug('[debugger] Agent does not support %s, using %s', DEBUGGER_INPUT_V2, DEBUGGER_DIAGNOSTICS_V1)
+    return cb(DEBUGGER_DIAGNOSTICS_V1)
   })
 }
 

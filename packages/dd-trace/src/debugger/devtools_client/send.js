@@ -7,7 +7,7 @@ const { version } = require('../../../../../package.json')
 const request = require('../../exporters/common/request')
 const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags')
 const { getValueFromEnvSources } = require('../../config/helper')
-const { DEBUGGER_INPUT_V1, DEBUGGER_INPUT_V2 } = require('../constants')
+const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('../constants')
 const log = require('./log')
 const JSONBuffer = require('./json-buffer')
 const config = require('./config')
@@ -107,13 +107,17 @@ function handleV2FallbackIfNeeded (statusCode, payload) {
     return false
   }
 
-  log.warn('[debugger:devtools_client] Received 404 from %s, falling back to %s', DEBUGGER_INPUT_V2, DEBUGGER_INPUT_V1)
+  log.warn('[debugger:devtools_client] Received 404 from %s, falling back to %s',
+    DEBUGGER_INPUT_V2,
+    DEBUGGER_DIAGNOSTICS_V1)
 
-  setInputPath(DEBUGGER_INPUT_V1)
+  setInputPath(DEBUGGER_DIAGNOSTICS_V1)
 
   request(payload, buildRequestOpts(), (err) => {
     if (err) {
-      log.error('[debugger:devtools_client] Error sending probe payload after fallback to %s', DEBUGGER_INPUT_V1, err)
+      log.error('[debugger:devtools_client] Error sending probe payload after fallback to %s',
+        DEBUGGER_DIAGNOSTICS_V1,
+        err)
     }
   })
 
