@@ -16,6 +16,8 @@ import * as Module from 'module'
 import { types } from 'util'
 import { isMainThread } from 'worker_threads'
 
+// This file must support Node.js 12.0.0 syntax
+
 import {
   iitmExclusions,
   load as hookLoad,
@@ -35,7 +37,7 @@ const initJsUrl = new URL('init.js', import.meta.url).href
 function insertInit (result, _url_, context) {
   if (hasInsertedInit) return result
   // If Node provides `isMain`, only inject into the entrypoint module.
-  if (context?.isMain === false) return result
+  if (context && context.isMain === false) return result
 
   let { source } = result
   if (typeof source !== 'string') {
@@ -50,7 +52,7 @@ function insertInit (result, _url_, context) {
     }
   }
 
-  const format = result.format || context?.format
+  const format = result.format || (context && context.format)
   if (format !== 'module') return result
 
   hasInsertedInit = true

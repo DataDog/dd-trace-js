@@ -5,14 +5,16 @@ import configHelper from './packages/dd-trace/src/config/helper.js'
 import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
 import { isRelativeRequire } from './packages/datadog-instrumentations/src/helpers/shared-utils.js'
 
+// This file must support Node.js 12.0.0 syntax
+
 const regexpEscape = regexpEscapeModule.default
 
 // For some reason `getEnvironmentVariable` is not otherwise available to ESM.
 const env = configHelper.getEnvironmentVariable
 
 function initialize (data = {}) {
-  data.include ??= []
-  data.exclude ??= []
+  if (data.include == null) data.include = []
+  if (data.exclude == null) data.exclude = []
 
   addInstrumentations(data)
   addSecurityControls(data)
