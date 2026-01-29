@@ -2,9 +2,8 @@
 
 const logger = require('../../log')
 const { EVP_PROXY_AGENT_BASE_PATH } = require('../constants/constants')
-
-const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
-let agentInfoExporter
+const { fetchAgentInfo } = require('../../agent/info')
+const { getAgentUrl } = require('../../agent/url')
 
 /**
  * Determines if the agent supports EVP proxy and sets the writer enabled state accordingly
@@ -12,11 +11,7 @@ let agentInfoExporter
  * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
  */
 function setAgentStrategy (config, setWriterEnabledValue) {
-  if (!agentInfoExporter) {
-    agentInfoExporter = new AgentInfoExporter(config)
-  }
-
-  agentInfoExporter.getAgentInfo((err, agentInfo) => {
+  fetchAgentInfo(getAgentUrl(config), (err, agentInfo) => {
     if (err) {
       logger.debug('FFE Writer disabled - error getting agent info:', err.message)
       setWriterEnabledValue(false)

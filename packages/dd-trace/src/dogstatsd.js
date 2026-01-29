@@ -3,12 +3,12 @@
 const lookup = require('dns').lookup // cache to avoid instrumentation
 const dgram = require('dgram')
 const isIP = require('net').isIP
-const { URL, format } = require('url')
 
 const request = require('./exporters/common/request')
 const log = require('./log')
 const Histogram = require('./histogram')
 const defaults = require('./config/defaults')
+const { getAgentUrl } = require('./agent/url')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
 
@@ -179,14 +179,8 @@ class DogStatsDClient {
       tags
     }
 
-    if (config.url) {
-      clientConfig.metricsProxyUrl = config.url
-    } else if (config.port) {
-      clientConfig.metricsProxyUrl = new URL(format({
-        protocol: 'http:',
-        hostname: config.hostname || defaults.hostname,
-        port: config.port
-      }))
+    if (config.url || config.port) {
+      clientConfig.metricsProxyUrl = getAgentUrl(config)
     }
 
     return clientConfig

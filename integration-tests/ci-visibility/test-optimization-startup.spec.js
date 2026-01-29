@@ -38,14 +38,13 @@ describe('test optimization startup', () => {
             NODE_OPTIONS: '-r dd-trace/ci/init',
             DD_TRACE_DEBUG: '1'
           },
-          stdio: 'pipe'
         }
       )
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         processOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         processOutput += chunk.toString()
       })
 
@@ -68,14 +67,13 @@ describe('test optimization startup', () => {
           NODE_OPTIONS: '-r dd-trace/ci/init',
           DD_TRACE_DEBUG: '1'
         },
-        stdio: 'pipe'
       }
     )
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
 
@@ -99,14 +97,13 @@ describe('test optimization startup', () => {
           DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
           DD_API_KEY: '',
         },
-        stdio: 'pipe'
       }
     )
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
 
@@ -131,14 +128,13 @@ describe('test optimization startup', () => {
           DD_API_KEY: '',
           JEST_WORKER_ID: '1' // worker id is set in jest workers
         },
-        stdio: 'pipe'
       }
     )
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
 

@@ -76,11 +76,8 @@ function wrapFunction (original, wrapper) {
   if (typeof original !== 'function') return original
 
   const wrapped = wrapper(original)
-
-  if (typeof original === 'function') {
-    assertNotClass(original)
-    copyProperties(original, wrapped)
-  }
+  assertNotClass(original)
+  copyProperties(original, wrapped)
 
   return wrapped
 }

@@ -20,7 +20,7 @@ describe('Exporter', () => {
   let span
 
   beforeEach(() => {
-    url = 'www.example.com'
+    url = 'http://www.example.com:8126'
     flushInterval = 1000
     span = {}
     writer = {
@@ -62,7 +62,7 @@ describe('Exporter', () => {
     const stats = { enabled: true }
     exporter = new Exporter({ hostname: '::1', flushInterval, stats }, prioritySampler)
     sinon.assert.calledWithMatch(Writer, {
-      url: new URL('http://[::1]')
+      url: new URL('http://[::1]:8126/')
     })
   })
 

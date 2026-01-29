@@ -66,7 +66,6 @@ describe('test-api-manual', () => {
       {
         cwd,
         env: getCiVisAgentlessConfig(receiver.port),
-        stdio: 'pipe'
       }
     )
     childProcess.on('exit', () => {
@@ -89,7 +88,6 @@ describe('test-api-manual', () => {
           ...getCiVisAgentlessConfig(receiver.port),
           DD_CIVISIBILITY_MANUAL_API_ENABLED: 'false'
         },
-        stdio: 'pipe'
       }
     )
     childProcess.on('exit', () => {

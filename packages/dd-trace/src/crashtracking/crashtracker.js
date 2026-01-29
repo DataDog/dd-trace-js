@@ -1,13 +1,11 @@
 'use strict'
 
-const { URL } = require('url')
-
 // Load binding first to not import other modules if it throws
 const libdatadog = require('@datadog/libdatadog')
 const binding = libdatadog.load('crashtracker')
 
 const log = require('../log')
-const defaults = require('../config/defaults')
+const { getAgentUrl } = require('../agent/url')
 const pkg = require('../../../../package.json')
 const processTags = require('../process-tags')
 
@@ -52,8 +50,7 @@ class Crashtracker {
 
   // TODO: Send only configured values when defaults are fixed.
   #getConfig (config) {
-    const { hostname = defaults.hostname, port = defaults.port } = config
-    const url = config.url || new URL(`http://${hostname}:${port}`)
+    const url = getAgentUrl(config)
 
     return {
       additional_files: [],

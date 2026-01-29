@@ -89,7 +89,7 @@ describe('RemoteConfig', () => {
 
     assert.strictEqual(rc.scheduler, scheduler)
 
-    assert.deepStrictEqual(rc.url, config.url)
+    assert.strictEqual(rc.url.toString(), 'http://127.0.0.1:1337/')
 
     sinon.assert.calledOnceWithExactly(tagger.add, config.tags, {
       '_dd.rc.client_id': '1234-5678'

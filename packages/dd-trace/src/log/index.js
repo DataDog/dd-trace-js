@@ -31,31 +31,31 @@ const log = {
   use (logger) {
     config.logger = logger
     logWriter.use(logger)
-    return this
+    return log
   },
 
   toggle (enabled, logLevel) {
     config.enabled = enabled
     config.logLevel = logLevel
     logWriter.toggle(enabled, logLevel)
-    return this
+    return log
   },
 
   reset () {
     logWriter.reset()
-    this._deprecate = memoize((code, message) => {
-      errorChannel.publish(Log.parse(message))
+    log._deprecate = memoize((code, message) => {
+      publishFormatted(errorChannel, null, message)
       return true
     })
 
-    return this
+    return log
   },
 
   trace (...args) {
     if (traceChannel.hasSubscribers) {
       const logRecord = {}
 
-      Error.captureStackTrace(logRecord, this.trace)
+      Error.captureStackTrace(logRecord, log.trace)
 
       const stack = logRecord.stack.split('\n')
       const fn = stack[1].replace(/^\s+at ([^\s]+) .+/, '$1')
@@ -64,49 +64,46 @@ const log = {
 
       stack[0] = `Trace: ${fn}(${params})`
 
-      traceChannel.publish(Log.parse(stack.join('\n')))
+      publishFormatted(traceChannel, null, stack.join('\n'))
     }
-    return this
+    return log
   },
 
   debug (...args) {
-    if (debugChannel.hasSubscribers) {
-      debugChannel.publish(Log.parse(...args))
-    }
-    return this
+    publishFormatted(debugChannel, null, ...args)
+    return log
   },
 
   info (...args) {
-    if (infoChannel.hasSubscribers) {
-      infoChannel.publish(Log.parse(...args))
-    }
-    return this
+    publishFormatted(infoChannel, null, ...args)
+    return log
   },
 
   warn (...args) {
-    if (warnChannel.hasSubscribers) {
-      warnChannel.publish(Log.parse(...args))
-    }
-    return this
+    publishFormatted(warnChannel, null, ...args)
+    return log
   },
 
   error (...args) {
-    if (errorChannel.hasSubscribers) {
-      errorChannel.publish(Log.parse(...args))
-    }
-    return this
+    publishFormatted(errorChannel, formatted => {
+      const stackTraceLimitBackup = Error.stackTraceLimit
+      Error.stackTraceLimit = 0
+      const newError = new Error(formatted)
+      Error.stackTraceLimit = stackTraceLimitBackup
+      Error.captureStackTrace(newError, log.error)
+      return newError
+    }, ...args)
+    return log
   },
 
   errorWithoutTelemetry (...args) {
     args.push(NO_TRANSMIT)
-    if (errorChannel.hasSubscribers) {
-      errorChannel.publish(Log.parse(...args))
-    }
-    return this
+    publishFormatted(errorChannel, null, ...args)
+    return log
   },
 
   deprecate (code, message) {
-    return this._deprecate(code, message)
+    return log._deprecate(code, message)
   },
 
   isEnabled (fleetStableConfigValue, localStableConfigValue) {
@@ -133,7 +130,25 @@ const log = {
   }
 }
 
-logWriter.setStackTraceLimitFunction(log.error)
+function publishFormatted (ch, formatter, ...args) {
+  if (ch.hasSubscribers) {
+    const log = Log.parse(...args)
+    const { formatted, cause } = getErrorLog(log)
+
+    // calling twice ch.publish() because Error cause is only available in Node.js v16.9.0
+    // TODO: replace it with Error(message, { cause }) when cause has broad support
+    if (formatted) ch.publish(formatter?.(formatted) || formatted)
+    if (cause) ch.publish(cause)
+  }
+}
+
+function getErrorLog (err) {
+  if (typeof err?.delegate === 'function') {
+    const result = err.delegate()
+    return Array.isArray(result) ? Log.parse(...result) : Log.parse(result)
+  }
+  return err
+}
 
 log.reset()
 

@@ -13,7 +13,7 @@ jobs:
   actionlint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       # NOTE: Ok this next bit seems unnecessary, right? The problem is that
       # this repo is currently incompatible with npm, at least with the
@@ -46,7 +46,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: npm run lint
@@ -54,7 +54,7 @@ jobs:
   verify-exercised-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: npm run verify-exercised-tests
@@ -68,7 +68,7 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - run: FILENAME=$(npm pack --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
       - run: rm -rf *
@@ -86,7 +86,7 @@ jobs:
     if: github.actor != 'dependabot[bot]' && github.event_name != 'pull_request'
     steps:
     - name: Checkout
-      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Check code meets quality and security standards
       id: datadog-static-analysis
       uses: DataDog/datadog-static-analyzer-github-action@2cc0e0621ea2863272b29d9aea230d9aad238086 # v2.0.0
@@ -99,7 +99,7 @@ jobs:
   typescript:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: npm run type:doc:test
@@ -109,7 +109,7 @@ jobs:
   # verify-yaml:
   #   runs-on: ubuntu-latest
   #   steps:
-  #     - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+  #     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
   #     - uses: ./.github/actions/node/latest
   #     - uses: ./.github/actions/install
   #     - run: node scripts/verify-ci-config.js
@@ -121,7 +121,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0

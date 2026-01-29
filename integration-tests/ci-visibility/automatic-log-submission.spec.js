@@ -34,7 +34,11 @@ describe('test optimization automatic log submission', () => {
     // *Be advised*: this means that we'll only be using chromium for this test suite
     execSync('npx playwright install --with-deps chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
     webAppServer.listen(0, () => {
-      webAppPort = webAppServer.address().port
+      const address = webAppServer.address()
+      if (!address || typeof address === 'string') {
+        return done(new Error('Failed to determine web app server port'))
+      }
+      webAppPort = address.port
       done()
     })
   })
@@ -82,7 +86,8 @@ describe('test optimization automatic log submission', () => {
 
     context(`with ${name}`, () => {
       it('can automatically submit logs', async () => {
-        let logIds, testIds
+        let logIds = {}
+        let testIds = {}
 
         const logsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
@@ -134,13 +139,12 @@ describe('test optimization automatic log submission', () => {
               DD_SERVICE: 'my-service',
               ...getExtraEnvVars()
             },
-            stdio: 'pipe'
           }
         )
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
 
@@ -176,13 +180,12 @@ describe('test optimization automatic log submission', () => {
               DD_SERVICE: 'my-service',
               ...getExtraEnvVars()
             },
-            stdio: 'pipe'
           }
         )
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
 
@@ -218,14 +221,13 @@ describe('test optimization automatic log submission', () => {
               DD_API_KEY: '',
               ...getExtraEnvVars()
             },
-            stdio: 'pipe'
           }
         )
 
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
 

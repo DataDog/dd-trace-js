@@ -27,7 +27,7 @@ jobs:
   lambda:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -45,7 +45,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: serverless-lambda
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -108,7 +108,7 @@ jobs:
       SERVICES: localstack localstack-legacy
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -122,7 +122,7 @@ jobs:
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           flags: serverless-aws-sdk-${{ matrix.node-version }}-${{ matrix.spec }}
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -150,12 +150,19 @@ jobs:
       PLUGINS: azure-event-hubs
       SERVICES: azurite,azureeventhubsemulator
     steps:
-        - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         - uses: ./.github/actions/plugins/test
           with:
             dd_api_key: ${{ secrets.DD_API_KEY }}
 
   azure-functions:
+    strategy:
+      fail-fast: false
+      matrix:
+        spec:
+          - eventhubs
+          - client
+          - servicebus
     runs-on: ubuntu-latest
     services:
         azurite:
@@ -192,8 +199,9 @@ jobs:
     env:
       PLUGINS: azure-functions
       SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator
+      SPEC: ${{ matrix.spec }}
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Copy emulator config files
         run: |
@@ -213,7 +221,7 @@ jobs:
       - run: npm install -g azure-functions-core-tools@4.3.0
       - run: echo "$(dirname $(which func))" >> $GITHUB_PATH
       - run: yarn test:plugins:ci
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -242,7 +250,7 @@ jobs:
       PLUGINS: azure-service-bus
       SERVICES: azureservicebusemulator,azuresqledge
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -258,7 +266,7 @@ jobs:
       PLUGINS: google-cloud-pubsub
       SERVICES: gpubsub
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}

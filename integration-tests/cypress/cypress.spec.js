@@ -117,6 +117,10 @@ moduleTypes.forEach(({
   type,
   testCommand
 }) => {
+  if (typeof testCommand === 'function') {
+    testCommand = testCommand(version)
+  }
+
   describe(`cypress@${version} ${type}`, function () {
     if (!shouldTestsRun(type)) {
       // eslint-disable-next-line no-console
@@ -127,10 +131,6 @@ moduleTypes.forEach(({
     this.retries(2)
     this.timeout(80000)
     let cwd, receiver, childProcess, webAppPort, webAppServer, secondWebAppServer
-
-    if (type === 'commonJS') {
-      testCommand = testCommand(version)
-    }
 
     // cypress-fail-fast is required as an incompatible plugin
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
@@ -153,14 +153,14 @@ moduleTypes.forEach(({
 
       // Create a fresh web server for each test to avoid state issues
       webAppServer = createWebAppServer()
-      await new Promise((resolve, reject) => {
+      await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         webAppServer.once('error', reject)
         webAppServer.listen(0, 'localhost', () => {
           webAppPort = webAppServer.address().port
           webAppServer.removeListener('error', reject)
           resolve()
         })
-      })
+      }))
     })
 
     // Cypress child processes can sometimes hang or take longer to
@@ -180,7 +180,7 @@ moduleTypes.forEach(({
 
       // Close web server before stopping receiver
       if (webAppServer) {
-        await new Promise((resolve) => {
+        await /** @type {Promise<void>} */ (new Promise((resolve) => {
           webAppServer.close((err) => {
             if (err) {
               // eslint-disable-next-line no-console
@@ -188,7 +188,7 @@ moduleTypes.forEach(({
             }
             resolve()
           })
-        })
+        }))
       }
 
       // Add timeout to prevent hanging
@@ -222,35 +222,43 @@ moduleTypes.forEach(({
             span.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail'
           )
 
-          assert.ok(passedTestSpan)
-          assert.strictEqual(passedTestSpan.name, 'cypress.test')
-          assert.strictEqual(passedTestSpan.resource, 'cypress/e2e/basic-pass.js.basic pass suite can pass')
-          assert.strictEqual(passedTestSpan.type, 'test')
-          assert.strictEqual(passedTestSpan.meta[TEST_STATUS], 'pass')
-          assert.strictEqual(passedTestSpan.meta[TEST_NAME], 'basic pass suite can pass')
-          assert.strictEqual(passedTestSpan.meta[TEST_SUITE], 'cypress/e2e/basic-pass.js')
-          assert.strictEqual(passedTestSpan.meta[TEST_FRAMEWORK], 'cypress')
-          assert.strictEqual(passedTestSpan.meta[TEST_TYPE], 'browser')
-          assert.ok(passedTestSpan.meta[TEST_SOURCE_FILE])
+          assertObjectContains(passedTestSpan, {
+            name: 'cypress.test',
+            resource: 'cypress/e2e/basic-pass.js.basic pass suite can pass',
+            type: 'test',
+            meta: {
+              [TEST_STATUS]: 'pass',
+              [TEST_NAME]: 'basic pass suite can pass',
+              [TEST_SUITE]: 'cypress/e2e/basic-pass.js',
+              [TEST_FRAMEWORK]: 'cypress',
+              [TEST_TYPE]: 'browser',
+              [TEST_CODE_OWNERS]: JSON.stringify(['@datadog-dd-trace-js']),
+              customTag: 'customValue',
+              addTagsBeforeEach: 'customBeforeEach',
+              addTagsAfterEach: 'customAfterEach'
+            },
+          })
           assert.match(passedTestSpan.meta[TEST_SOURCE_FILE], /cypress\/e2e\/basic-pass\.js/)
           assert.ok(passedTestSpan.meta[TEST_FRAMEWORK_VERSION])
           assert.ok(passedTestSpan.meta[COMPONENT])
           assert.ok(passedTestSpan.metrics[TEST_SOURCE_START])
-          assert.strictEqual(passedTestSpan.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
-          assert.strictEqual(passedTestSpan.meta.customTag, 'customValue')
-          assert.strictEqual(passedTestSpan.meta.addTagsBeforeEach, 'customBeforeEach')
-          assert.strictEqual(passedTestSpan.meta.addTagsAfterEach, 'customAfterEach')
 
-          assert.ok(failedTestSpan)
-          assert.strictEqual(failedTestSpan.name, 'cypress.test')
-          assert.strictEqual(failedTestSpan.resource, 'cypress/e2e/basic-fail.js.basic fail suite can fail')
-          assert.strictEqual(failedTestSpan.type, 'test')
-          assert.strictEqual(failedTestSpan.meta[TEST_STATUS], 'fail')
-          assert.strictEqual(failedTestSpan.meta[TEST_NAME], 'basic fail suite can fail')
-          assert.strictEqual(failedTestSpan.meta[TEST_SUITE], 'cypress/e2e/basic-fail.js')
-          assert.strictEqual(failedTestSpan.meta[TEST_FRAMEWORK], 'cypress')
-          assert.strictEqual(failedTestSpan.meta[TEST_TYPE], 'browser')
-          assert.ok(failedTestSpan.meta[TEST_SOURCE_FILE])
+          assertObjectContains(failedTestSpan, {
+            name: 'cypress.test',
+            resource: 'cypress/e2e/basic-fail.js.basic fail suite can fail',
+            type: 'test',
+            meta: {
+              [TEST_STATUS]: 'fail',
+              [TEST_NAME]: 'basic fail suite can fail',
+              [TEST_SUITE]: 'cypress/e2e/basic-fail.js',
+              [TEST_FRAMEWORK]: 'cypress',
+              [TEST_TYPE]: 'browser',
+              [TEST_CODE_OWNERS]: JSON.stringify(['@datadog-dd-trace-js']),
+              customTag: 'customValue',
+              addTagsBeforeEach: 'customBeforeEach',
+              addTagsAfterEach: 'customAfterEach',
+            },
+          })
           assert.match(failedTestSpan.meta[TEST_SOURCE_FILE], /cypress\/e2e\/basic-fail\.js/)
           assert.ok(failedTestSpan.meta[TEST_FRAMEWORK_VERSION])
           assert.ok(failedTestSpan.meta[COMPONENT])
@@ -258,10 +266,6 @@ moduleTypes.forEach(({
           assert.match(failedTestSpan.meta[ERROR_MESSAGE], /expected/)
           assert.ok(failedTestSpan.meta[ERROR_TYPE])
           assert.ok(failedTestSpan.metrics[TEST_SOURCE_START])
-          assert.strictEqual(passedTestSpan.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
-          assert.strictEqual(failedTestSpan.meta.customTag, 'customValue')
-          assert.strictEqual(failedTestSpan.meta.addTagsBeforeEach, 'customBeforeEach')
-          assert.strictEqual(failedTestSpan.meta.addTagsAfterEach, 'customAfterEach')
           // Tags added after failure should not be present because test failed
           assert.ok(!('addTagsAfterFailure' in failedTestSpan.meta))
         }, 60000)
@@ -287,7 +291,6 @@ moduleTypes.forEach(({
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             SPEC_PATTERN: specToRun
           },
-          stdio: 'pipe'
         }
       )
 
@@ -314,11 +317,10 @@ moduleTypes.forEach(({
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'pipe'
           }
         )
 
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           stdout += chunk.toString()
         })
 
@@ -358,13 +360,12 @@ moduleTypes.forEach(({
             DD_SITE: '= invalid = url',
             SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
           },
-          stdio: 'pipe'
         }
       )
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
 
@@ -452,7 +453,6 @@ moduleTypes.forEach(({
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
           },
-          stdio: 'pipe'
         }
       )
 
@@ -580,7 +580,6 @@ moduleTypes.forEach(({
             DD_TEST_SESSION_NAME: 'my-test-session',
             DD_SERVICE: undefined
           },
-          stdio: 'pipe'
         }
       )
 
@@ -625,7 +624,6 @@ moduleTypes.forEach(({
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
           },
-          stdio: 'pipe'
         }
       )
 
@@ -658,13 +656,12 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
             },
-            stdio: 'pipe'
           }
         )
 
         // TODO: remove this once we have figured out flakiness
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
+        childProcess.stdout?.pipe(process.stdout)
+        childProcess.stderr?.pipe(process.stderr)
 
         const [, searchCommitRequest, packfileRequest] = await Promise.all([
           once(childProcess, 'exit'),
@@ -707,7 +704,6 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -779,13 +775,12 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/{other,spec}.cy.js'
             },
-            stdio: 'pipe'
           }
         )
 
         // TODO: remove this once we have figured out flakiness
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
+        childProcess.stdout?.pipe(process.stdout)
+        childProcess.stderr?.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -838,13 +833,12 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/other.cy.js'
             },
-            stdio: 'pipe'
           }
         )
 
         // TODO: remove this once we have figured out flakiness
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
+        childProcess.stdout?.pipe(process.stdout)
+        childProcess.stderr?.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -917,13 +911,12 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/{other,spec}.cy.js'
             },
-            stdio: 'pipe'
           }
         )
 
         // TODO: remove this once we have figured out flakiness
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
+        childProcess.stdout?.pipe(process.stdout)
+        childProcess.stderr?.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -990,13 +983,12 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/{other,spec}.cy.js'
             },
-            stdio: 'pipe'
           }
         )
 
         // TODO: remove this once we have figured out flakiness
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
+        childProcess.stdout?.pipe(process.stdout)
+        childProcess.stderr?.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -1047,13 +1039,12 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
             },
-            stdio: 'pipe'
           }
         )
 
         // TODO: remove this once we have figured out flakiness
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
+        childProcess.stdout?.pipe(process.stdout)
+        childProcess.stderr?.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -1088,7 +1079,6 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1144,13 +1134,12 @@ moduleTypes.forEach(({
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
             },
-            stdio: 'inherit'
           }
         )
 
         // TODO: remove this once we have figured out flakiness
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
+        childProcess.stdout?.pipe(process.stdout)
+        childProcess.stderr?.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -1190,7 +1179,6 @@ moduleTypes.forEach(({
             CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN: '1',
             SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
           },
-          stdio: 'pipe'
         }
       )
 
@@ -1228,7 +1216,6 @@ moduleTypes.forEach(({
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             CYPRESS_ENABLE_AFTER_RUN_CUSTOM: '1'
           },
-          stdio: 'pipe'
         }
       )
 
@@ -1266,7 +1253,6 @@ moduleTypes.forEach(({
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             CYPRESS_ENABLE_AFTER_SPEC_CUSTOM: '1'
           },
-          stdio: 'pipe'
         }
       )
 
@@ -1341,7 +1327,6 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1404,7 +1389,6 @@ moduleTypes.forEach(({
               SPEC_PATTERN: specToRun,
               DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1461,7 +1445,6 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/skipped-test.js'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1516,7 +1499,6 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1579,7 +1561,6 @@ moduleTypes.forEach(({
               SPEC_PATTERN: specToRun,
               DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1641,7 +1622,6 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1712,7 +1692,6 @@ moduleTypes.forEach(({
               SPEC_PATTERN: specToRun,
               CYPRESS_TEST_ISOLATION: 'false'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1795,14 +1774,13 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun
             },
-            stdio: 'pipe'
           }
         )
 
-        childProcess.stdout.on('data', (data) => {
+        childProcess.stdout?.on('data', (data) => {
           testOutput += data.toString()
         })
-        childProcess.stderr.on('data', (data) => {
+        childProcess.stderr?.on('data', (data) => {
           testOutput += data.toString()
         })
 
@@ -1893,13 +1871,12 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun
             },
-            stdio: 'pipe'
           }
         )
 
         // TODO: remove this once we have figured out flakiness
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
+        childProcess.stdout?.pipe(process.stdout)
+        childProcess.stderr?.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -1953,7 +1930,6 @@ moduleTypes.forEach(({
               DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
               SPEC_PATTERN: specToRun
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2015,7 +1991,6 @@ moduleTypes.forEach(({
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
               SPEC_PATTERN: specToRun
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2066,7 +2041,6 @@ moduleTypes.forEach(({
               SPEC_PATTERN: specToRun,
               CYPRESS_TEST_ISOLATION: 'false'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2144,7 +2118,6 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2189,7 +2162,6 @@ moduleTypes.forEach(({
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2247,7 +2219,6 @@ moduleTypes.forEach(({
               SPEC_PATTERN: specToRun,
               DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2304,7 +2275,6 @@ moduleTypes.forEach(({
               SPEC_PATTERN: specToRun,
               DD_TRACE_DEBUG: 'true'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2343,7 +2313,6 @@ moduleTypes.forEach(({
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             DD_SERVICE: 'my-service'
           },
-          stdio: 'pipe'
         }
       )
 
@@ -2452,6 +2421,16 @@ moduleTypes.forEach(({
               }
             }, 25000)
 
+        /**
+         * @param {{
+         *   isAttemptToFix?: boolean,
+         *   shouldAlwaysPass?: boolean,
+         *   shouldFailSometimes?: boolean,
+         *   isQuarantined?: boolean,
+         *   isDisabled?: boolean,
+         *   extraEnvVars?: Record<string, string>
+         * }} [options]
+         */
         const runAttemptToFixTest = async ({
           isAttemptToFix,
           shouldAlwaysPass,
@@ -2487,13 +2466,12 @@ moduleTypes.forEach(({
                 ...(shouldAlwaysPass ? { CYPRESS_SHOULD_ALWAYS_PASS: '1' } : {}),
                 ...(shouldFailSometimes ? { CYPRESS_SHOULD_FAIL_SOMETIMES: '1' } : {})
               },
-              stdio: 'pipe'
             }
           )
 
           // TODO: remove this once we have figured out flakiness
-          childProcess.stdout.pipe(process.stdout)
-          childProcess.stderr.pipe(process.stderr)
+          childProcess.stdout?.pipe(process.stdout)
+          childProcess.stderr?.pipe(process.stderr)
 
           const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
@@ -2660,7 +2638,6 @@ moduleTypes.forEach(({
                 SPEC_PATTERN: specToRun,
                 ...extraEnvVars
               },
-              stdio: 'pipe'
             }
           )
 
@@ -2759,7 +2736,6 @@ moduleTypes.forEach(({
                 SPEC_PATTERN: specToRun,
                 ...extraEnvVars
               },
-              stdio: 'pipe'
             }
           )
 
@@ -2828,7 +2804,6 @@ moduleTypes.forEach(({
               SPEC_PATTERN: specToRun,
               DD_TRACE_DEBUG: '1'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2902,7 +2877,6 @@ moduleTypes.forEach(({
               CYPRESS_SHOULD_ALWAYS_PASS: '1',
               CYPRESS_TEST_ISOLATION: 'false'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2992,14 +2966,13 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
             },
-            stdio: 'pipe'
           }
         )
 
-        childProcess.stdout.on('data', (data) => {
+        childProcess.stdout?.on('data', (data) => {
           testOutput += data.toString()
         })
-        childProcess.stderr.on('data', (data) => {
+        childProcess.stderr?.on('data', (data) => {
           testOutput += data.toString()
         })
 
@@ -3052,13 +3025,12 @@ moduleTypes.forEach(({
               DD_TEST_SESSION_NAME: 'my-test-session-name',
               SPEC_PATTERN: specToRun,
             },
-            stdio: 'pipe'
           }
         )
 
         // TODO: remove this once we have figured out flakiness
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
+        childProcess.stdout?.pipe(process.stdout)
+        childProcess.stderr?.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -3197,13 +3169,12 @@ moduleTypes.forEach(({
               GITHUB_BASE_REF: '',
               ...extraEnvVars
             },
-            stdio: 'pipe'
           }
         )
 
         // TODO: remove this once we have figured out flakiness
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
+        childProcess.stdout?.pipe(process.stdout)
+        childProcess.stderr?.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -3317,7 +3288,6 @@ moduleTypes.forEach(({
               GITHUB_BASE_REF: '',
               CYPRESS_TEST_ISOLATION: 'false'
             },
-            stdio: 'pipe'
           }
         )
 
@@ -3410,14 +3380,13 @@ moduleTypes.forEach(({
               SPEC_PATTERN: specToRun,
               GITHUB_BASE_REF: ''
             },
-            stdio: 'pipe'
           }
         )
 
-        childProcess.stdout.on('data', (data) => {
+        childProcess.stdout?.on('data', (data) => {
           testOutput += data.toString()
         })
-        childProcess.stderr.on('data', (data) => {
+        childProcess.stderr?.on('data', (data) => {
           testOutput += data.toString()
         })
 

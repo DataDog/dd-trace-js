@@ -425,51 +425,6 @@ describe('AppSec Index', function () {
       sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, undefined)
     })
 
-    it('should pass stored response headers to Reporter.finishRequest', () => {
-      const req = {
-        url: '/path',
-        headers: {
-          'user-agent': 'Arachni',
-          host: 'localhost'
-        },
-        method: 'POST',
-        socket: {
-          remoteAddress: '127.0.0.1',
-          remotePort: 8080
-        }
-      }
-      const res = {
-        getHeaders: () => ({
-          'content-type': 'application/json',
-          'content-length': 42
-        }),
-        statusCode: 200
-      }
-
-      const storedHeaders = {
-        'content-type': 'text/plain',
-        'content-language': 'en-US',
-        'content-length': '15'
-      }
-
-      web.patch(req)
-
-      sinon.stub(Reporter, 'finishRequest')
-      sinon.stub(waf, 'disposeContext')
-
-      responseWriteHead.publish({
-        req,
-        res,
-        abortController: { abort: sinon.stub() },
-        statusCode: 200,
-        responseHeaders: storedHeaders
-      })
-
-      AppSec.incomingHttpEndTranslator({ req, res })
-
-      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, storedHeaders, undefined)
-    })
-
     it('should not propagate incoming http end data with invalid framework properties', () => {
       const req = {
         url: '/path',
@@ -506,6 +461,87 @@ describe('AppSec Index', function () {
       sinon.assert.notCalled(waf.run)
 
       sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, undefined)
+    })
+
+    it('should not propagate incoming http end data with already analyzed framework properties', () => {
+      const body = { São: 'Tomé' }
+      const cookies = { São: 'Nicolau' }
+
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        },
+        body,
+        cookies
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-length': 42
+        }),
+        statusCode: 201
+      }
+
+      bodyParser.publish({ req, res, body })
+      cookieParser.publish({ req, res, cookies })
+
+      sinon.resetHistory()
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      sinon.assert.notCalled(waf.run)
+
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, body)
+    })
+
+    it('should not propagate incoming http end data with empty framework properties', () => {
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        },
+        body: {},
+        query: {},
+        route: {},
+        params: {},
+        cookies: {}
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-length': 42
+        }),
+        statusCode: 201
+      }
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      sinon.assert.notCalled(waf.run)
+
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, {})
     })
 
     it('should propagate incoming http end data with express', () => {
@@ -556,6 +592,51 @@ describe('AppSec Index', function () {
         }
       }, req)
       sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, req.body)
+    })
+
+    it('should pass stored response headers to Reporter.finishRequest', () => {
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-length': 42
+        }),
+        statusCode: 200
+      }
+
+      const storedHeaders = {
+        'content-type': 'text/plain',
+        'content-language': 'en-US',
+        'content-length': '15'
+      }
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+      sinon.stub(waf, 'disposeContext')
+
+      responseWriteHead.publish({
+        req,
+        res,
+        abortController: { abort: sinon.stub() },
+        statusCode: 200,
+        responseHeaders: storedHeaders
+      })
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, storedHeaders, undefined)
     })
   })
 
@@ -782,6 +863,14 @@ describe('AppSec Index', function () {
         sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
+      it('should not block with empty body', () => {
+        bodyParser.publish({ req, res, body: {}, abortController })
+
+        sinon.assert.notCalled(waf.run)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
+      })
+
       it('Should not block with body by default', () => {
         const body = { key: 'value' }
         req.body = body
@@ -797,7 +886,23 @@ describe('AppSec Index', function () {
         sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
-      it('Should block when it is detected as attack', () => {
+      it('Should block when it is detected as attack with string', () => {
+        const body = 'value'
+        req.body = body
+        waf.run.returns(resultActions)
+
+        bodyParser.publish({ req, res, body, abortController })
+
+        sinon.assert.calledOnceWithMatch(waf.run, {
+          persistent: {
+            'server.request.body': 'value'
+          }
+        })
+        sinon.assert.called(abortController.abort)
+        sinon.assert.called(res.constructor.prototype.end)
+      })
+
+      it('Should block when it is detected as attack with object', () => {
         const body = { key: 'value' }
         req.body = body
         waf.run.returns(resultActions)
@@ -817,6 +922,14 @@ describe('AppSec Index', function () {
     describe('onRequestCookieParsed', () => {
       it('Should not block without cookie', () => {
         cookieParser.publish({ req, res, abortController })
+
+        sinon.assert.notCalled(waf.run)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
+      })
+
+      it('Should not block with empty cookie', () => {
+        cookieParser.publish({ req, res, abortController, cookies: {} })
 
         sinon.assert.notCalled(waf.run)
         sinon.assert.notCalled(abortController.abort)
@@ -856,6 +969,14 @@ describe('AppSec Index', function () {
     describe('onRequestQueryParsed', () => {
       it('Should not block without query', () => {
         queryParser.publish({ req, res, abortController })
+
+        sinon.assert.notCalled(waf.run)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
+      })
+
+      it('Should not block with empty query', () => {
+        queryParser.publish({ req, res, query: {}, abortController })
 
         sinon.assert.notCalled(waf.run)
         sinon.assert.notCalled(abortController.abort)

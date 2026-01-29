@@ -83,7 +83,7 @@ describe('startup logging', () => {
       env: 'production',
       enabled: true,
       service: 'test',
-      agent_url: 'http://example.com:4321',
+      agent_url: 'http://example.com:4321/',
       debug: true,
       sample_rate: 1,
       sampling_rules: [
