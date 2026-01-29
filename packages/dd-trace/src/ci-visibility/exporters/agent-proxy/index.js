@@ -47,7 +47,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       this._isInitialized = true
       let latestEvpProxyVersion = getLatestEvpProxyVersion(err, agentInfo)
       const isEvpCompatible = latestEvpProxyVersion >= 2
-      const isGzipCompatible = latestEvpProxyVersion >= 4
+      this._isGzipCompatible = latestEvpProxyVersion >= 4
 
       // v3 does not work well citestcycle, so we downgrade to v2
       if (latestEvpProxyVersion === 3) {
@@ -74,7 +74,6 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
             const DynamicInstrumentationLogsWriter = require('../agentless/di-logs-writer')
             this._logsWriter = new DynamicInstrumentationLogsWriter({
               url: this._url,
-              tags,
               isAgentProxy: true
             })
             this._canForwardLogs = true
@@ -94,7 +93,6 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       this._resolveCanUseCiVisProtocol(isEvpCompatible)
       this.exportUncodedTraces()
       this.exportUncodedCoverages()
-      this._isGzipCompatible = isGzipCompatible
     })
   }
 

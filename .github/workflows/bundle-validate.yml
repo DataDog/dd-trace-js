@@ -13,6 +13,13 @@ on:
 jobs:
   validate-vendored-bundle:
     runs-on: ubuntu-latest
+    # Dependabot vendor PRs are post-processed by `.github/workflows/dependabot-automation.yml`
+    # which pushes the generated `vendor/dist/*` contents. Running this workflow before that
+    # push is expected to fail (it will regenerate `vendor/dist/*` and see a diff).
+    #
+    # Instead, Dependabot vendor PRs are validated after `vendor-push` via the `vendor-validate`
+    # job in `dependabot-automation.yml`, ensuring correct ordering and avoiding flakiness.
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]'
     permissions:
       contents: read
     steps:
@@ -21,4 +28,14 @@ jobs:
       # Running `yarn` also automatically runs Rspack as a postinstall script.
       - run: yarn --frozen-lockfile
         working-directory: vendor
-      - run: git diff --exit-code
+      - name: Ensure no untracked outputs
+        run: |
+          set -euo pipefail
+
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Working tree is dirty after vendoring:"
+            git status --porcelain
+            exit 1
+          fi
+      - name: Diff only expected paths
+        run: git diff --exit-code -- vendor/dist vendor/package.json vendor/yarn.lock
