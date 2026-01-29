@@ -11,7 +11,8 @@ const BaseWriter = require('../../../exporters/common/writer')
 // It is used to encode and send logs to both the logs intake directly and the
 // `/debugger/v1/input` endpoint in the agent, which is a proxy to the logs intake.
 class DynamicInstrumentationLogsWriter extends BaseWriter {
-  constructor ({ url, timeout, isAgentProxy = false }) {
+  // TODO: what's a good value for timeout for the logs intake?
+  constructor ({ url, timeout = 15_000, isAgentProxy = false }) {
     super(...arguments)
     this._url = url
     this._encoder = new JSONEncoder()
@@ -27,8 +28,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
         'dd-api-key': getValueFromEnvSources('DD_API_KEY'),
         'Content-Type': 'application/json'
       },
-      // TODO: what's a good value for timeout for the logs intake?
-      timeout: this.timeout || 15_000,
+      timeout: this.timeout,
       url: this._url
     }
 
