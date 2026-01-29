@@ -11,10 +11,10 @@
 
 /* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['module.register'] }] */
 
-import { isMainThread } from 'worker_threads'
 import { Buffer } from 'buffer'
 import * as Module from 'module'
 import { types } from 'util'
+import { isMainThread } from 'worker_threads'
 
 import {
   iitmExclusions,
