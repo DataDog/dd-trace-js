@@ -29,8 +29,9 @@ describe('IAST - overhead-controller - integration', () => {
   })
 
   describe('vulnerability sampling algorithm', () => {
-    beforeEach(async () => {
-      console.time('oce-spawn-proc')
+    beforeEach(async function () {
+      this.timeout(30_000)
+
       proc = await spawnProc(path.join(cwd, 'resources', 'overhead-controller.js'), {
         cwd,
         env: {
@@ -42,7 +43,6 @@ describe('IAST - overhead-controller - integration', () => {
         }
       })
       axios = Axios.create({ baseURL: proc.url })
-      console.timeEnd('oce-spawn-proc')
     })
 
     async function checkVulnerabilitiesInEndpoint (path, vulnerabilitiesAndCount, method = 'GET') {
