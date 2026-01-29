@@ -95,9 +95,10 @@ module.exports = {
  *   environment.
  * @param {(data: Buffer) => void} [options.stderrHandler] The function to handle the standard error output of the test
  *   environment.
+ * @param {object} [options.agentOptions] Optional configuration options to pass to the FakeAgent constructor.
  * @returns {DebuggerTestEnvironment} Test harness with agent, app process, axios client and breakpoint helpers.
  */
-function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandler, stderrHandler } = {}) {
+function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandler, stderrHandler, agentOptions } = {}) {
   let cwd, axios, appFile, agent, proc
 
   const breakpoints = getBreakpointInfo({
@@ -203,7 +204,8 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
     // Allow specific access to each breakpoint
     t.breakpoints.forEach((breakpoint) => { breakpoint.rcConfig = generateRemoteConfig(breakpoint) })
 
-    agent = await new FakeAgent().start()
+    agent = await new FakeAgent(0, agentOptions).start()
+
     proc = await spawnProc(/** @type {string} */ (t.appFile), {
       cwd,
       env: {

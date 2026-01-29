@@ -1,6 +1,6 @@
 'use strict'
 
-module.exports = function getDebuggerConfig (config) {
+module.exports = function getDebuggerConfig (config, inputPath) {
   return {
     commitSHA: config.commitSHA,
     debug: config.debug,
@@ -13,5 +13,6 @@ module.exports = function getDebuggerConfig (config) {
     runtimeId: config.tags['runtime-id'],
     service: config.service,
     url: config.url?.toString(),
+    inputPath,
   }
 }
