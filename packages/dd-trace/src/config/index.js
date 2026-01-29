@@ -600,6 +600,7 @@ class Config {
       OTEL_TRACES_SAMPLER,
       OTEL_TRACES_SAMPLER_ARG,
       DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED,
+      DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
       OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
       OTEL_EXPORTER_OTLP_LOGS_HEADERS,
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
@@ -776,7 +777,15 @@ class Config {
       maybeFloat(DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS)
     unprocessedTarget['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
     this.#setString(target, 'env', DD_ENV || tags.env)
-    this.#setBoolean(target, 'experimental.flaggingProvider.enabled', DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED)
+    this.#setBoolean(
+      target,
+      'experimental.flaggingProvider.enabled',
+      DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
+    )
+    if (DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS != null) {
+      target['experimental.flaggingProvider.initializationTimeoutMs'] =
+        maybeInt(DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS)
+    }
     this.#setBoolean(target, 'traceEnabled', DD_TRACE_ENABLED)
     this.#setBoolean(target, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
     this.#setString(target, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
@@ -1112,6 +1121,11 @@ class Config {
     this.#setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
     this.#setString(opts, 'experimental.exporter', options.experimental?.exporter)
     this.#setBoolean(opts, 'experimental.flaggingProvider.enabled', options.experimental?.flaggingProvider?.enabled)
+    opts['experimental.flaggingProvider.initializationTimeoutMs'] = maybeInt(
+      options.experimental?.flaggingProvider?.initializationTimeoutMs
+    )
+    this.#optsUnprocessed['experimental.flaggingProvider.initializationTimeoutMs'] =
+      options.experimental?.flaggingProvider?.initializationTimeoutMs
     opts.flushInterval = maybeInt(options.flushInterval)
     this.#optsUnprocessed.flushInterval = options.flushInterval
     opts.flushMinSpans = maybeInt(options.flushMinSpans)
