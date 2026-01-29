@@ -24,4 +24,10 @@ module.exports = {
 
     return esquery.traverse(ast, selector, visitor)
   },
+
+  query: (ast, query) => {
+    esquery ??= require('../../../../../vendor/dist/esquery').default
+
+    return esquery.query(ast, query)
+  },
 }
