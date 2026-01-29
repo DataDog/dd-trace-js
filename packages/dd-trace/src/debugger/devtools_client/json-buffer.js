@@ -11,26 +11,25 @@ class JSONBuffer {
     this.#maxSize = size
     this.#timeout = timeout
     this.#onFlush = onFlush
-    this.#reset()
-  }
-
-  #reset () {
-    clearTimeout(this.#timer)
-    this.#timer = undefined
-    this.#partialJson = undefined
   }
 
   #flush () {
     const json = `${this.#partialJson}]`
-    this.#reset()
+    this.#partialJson = undefined
     this.#onFlush(json)
   }
 
   write (str, size = Buffer.byteLength(str)) {
-    if (this.#timer === undefined) {
+    if (this.#partialJson === undefined) {
       this.#partialJson = `[${str}`
-      this.#timer = setTimeout(() => this.#flush(), this.#timeout)
-    } else if (Buffer.byteLength(/** @type {string} */ (this.#partialJson)) + size + 2 > this.#maxSize) {
+      if (this.#timer === undefined) {
+        this.#timer = setTimeout(() => this.#flush(), this.#timeout)
+      } else {
+        this.#timer.refresh()
+      }
+    } else if (Buffer.byteLength(this.#partialJson) + size + 2 > this.#maxSize) {
+      clearTimeout(this.#timer)
+      this.#timer = undefined
       this.#flush()
       this.write(str, size)
     } else {
