@@ -3,7 +3,34 @@
 /* eslint-disable eslint-rules/eslint-process-env */
 
 const { deprecate } = require('util')
-const { supportedConfigurations, aliases, deprecations } = require('./supported-configurations.json')
+const { supportedConfigurations } = require('./supported-configurations.json')
+
+/**
+ * @typedef {object} SupportedConfigEntry
+ * @property {string} implementation
+ * @property {string} type
+ * @property {string} description
+ * @property {string} [default]
+ * @property {string[]} [aliases]
+ * @property {{ replacedBy?: string }} [deprecations]
+ */
+// Backwards-compatible views for old helper logic:
+// - `aliases`: Record<canonicalEnvVar, string[]>
+// - `deprecations`: Record<deprecatedEnvVar, string> (message suffix)
+const aliases = {}
+const deprecations = {}
+for (const [canonical, entries] of Object.entries(supportedConfigurations)) {
+  for (const entry of /** @type {SupportedConfigEntry[]} */ (entries)) {
+    for (const alias of entry.aliases ?? []) {
+      aliases[canonical] ??= []
+      aliases[canonical].push(alias)
+    }
+    const replacedBy = entry.deprecations?.replacedBy
+    if (replacedBy) {
+      deprecations[canonical] = `Please use ${replacedBy} instead.`
+    }
+  }
+}
 
 /**
  * Types for environment variable handling.
