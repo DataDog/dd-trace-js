@@ -471,6 +471,7 @@ export default [
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
       'unicorn/no-array-for-each': 'off', // 122 errors
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
+      'unicorn/prefer-export-from': ['error', { ignoreUsedVariables: true }],
       'unicorn/prevent-abbreviations': 'off', // too strict
 
       // These rules require a newer Node.js version than we support
