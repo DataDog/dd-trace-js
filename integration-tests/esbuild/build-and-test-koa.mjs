@@ -35,7 +35,6 @@ try {
     assert.match(data, /^ {8}package: "@koa\/router",$/m, 'Bundle should contain the @koa/router instrumentation')
   }
 
-
   console.log('ok') // eslint-disable-line no-console
 } finally {
   await fs.rm('./outfile.js', { force: true })
