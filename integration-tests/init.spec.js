@@ -31,7 +31,8 @@ delete process.env.DD_INJECT_FORCE
 
 function testInjectionScenarios (arg, filename, esmWorks = false) {
   if (!currentVersionIsSupported) return
-  const doTest = (file, ...args) => testFile(file, ...args)
+  const tracerFile = arg === 'loader' ? 'init/trace.mjs' : 'init/trace.js'
+  const instrFile = arg === 'loader' ? 'init/instrument.mjs' : 'init/instrument.js'
 
   context('preferring app-dir dd-trace', () => {
     context('when dd-trace is not in the app dir', () => {
@@ -40,23 +41,23 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 
       if (currentVersionIsSupported) {
         context('without DD_INJECTION_ENABLED', () => {
-          it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', [], 'manual'))
+          it('should initialize the tracer', () => testFile(tracerFile, 'true\n', [], 'manual'))
 
-          it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', [], 'manual'))
+          it('should initialize instrumentation', () => testFile(instrFile, 'true\n', [], 'manual'))
 
           it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-            doTest('init/instrument.mjs', `${esmWorks}\n`, [], 'manual'))
+            testFile('init/instrument.mjs', `${esmWorks}\n`, [], 'manual'))
         })
       }
 
       context('with DD_INJECTION_ENABLED', () => {
         useEnv({ DD_INJECTION_ENABLED })
 
-        it('should not initialize the tracer', () => doTest('init/trace.js', 'false\n', []))
+        it('should not initialize the tracer', () => testFile(tracerFile, 'false\n', [], ''))
 
-        it('should not initialize instrumentation', () => doTest('init/instrument.js', 'false\n', []))
+        it('should not initialize instrumentation', () => testFile(instrFile, 'false\n', [], ''))
 
-        it('should not initialize ESM instrumentation', () => doTest('init/instrument.mjs', 'false\n', []))
+        it('should not initialize ESM instrumentation', () => testFile('init/instrument.mjs', 'false\n', [], ''))
       })
     })
 
@@ -65,23 +66,23 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
       useEnv({ NODE_OPTIONS })
 
       context('without DD_INJECTION_ENABLED', () => {
-        it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', [], 'manual'))
+        it('should initialize the tracer', () => testFile(tracerFile, 'true\n', [], 'manual'))
 
-        it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', [], 'manual'))
+        it('should initialize instrumentation', () => testFile(instrFile, 'true\n', [], 'manual'))
 
         it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          doTest('init/instrument.mjs', `${esmWorks}\n`, [], 'manual'))
+          testFile('init/instrument.mjs', `${esmWorks}\n`, [], 'manual'))
       })
 
       context('with DD_INJECTION_ENABLED', () => {
         useEnv({ DD_INJECTION_ENABLED, DD_TRACE_DEBUG })
 
-        it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', telemetryGood, 'ssi'))
+        it('should initialize the tracer', () => testFile(tracerFile, 'true\n', telemetryGood, 'ssi'))
 
-        it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', telemetryGood, 'ssi'))
+        it('should initialize instrumentation', () => testFile(instrFile, 'true\n', telemetryGood, 'ssi'))
 
         it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          doTest('init/instrument.mjs', `${esmWorks}\n`, telemetryGood, 'ssi'))
+          testFile('init/instrument.mjs', `${esmWorks}\n`, telemetryGood, 'ssi'))
       })
     })
   })
@@ -90,11 +91,13 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 function testRuntimeVersionChecks (arg, filename) {
   context('runtime version check', () => {
     const NODE_OPTIONS = `--${arg} dd-trace/${filename}`
-    const doTest = (...args) => testFile('init/trace.js', ...args)
-    const doTestForced = async (...args) => {
+    const entryFile = arg === 'loader' ? 'init/trace.mjs' : 'init/trace.js'
+    const doTest = (expectedOut, expectedTelemetryPoints, expectedSource) =>
+      testFile(entryFile, expectedOut, expectedTelemetryPoints, expectedSource)
+    const doTestForced = async (expectedOut, expectedTelemetryPoints, expectedSource) => {
       Object.assign(process.env, { DD_INJECT_FORCE })
       try {
-        await testFile('init/trace.js', ...args)
+        await testFile(entryFile, expectedOut, expectedTelemetryPoints, expectedSource)
       } finally {
         delete process.env.DD_INJECT_FORCE
       }
@@ -279,7 +282,7 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
     if (semver.satisfies(process.versions.node, '>=20.6.0')) {
       context('as --import', () => {
         testInjectionScenarios('import', 'initialize.mjs', true)
-        testRuntimeVersionChecks('loader', 'initialize.mjs')
+        testRuntimeVersionChecks('import', 'initialize.mjs')
       })
     }
   })

@@ -2,8 +2,7 @@
  * This file serves one of two purposes, depending on how it's used.
  *
  * If used with --import, it will import init.js and register the loader hook.
- * If used with --loader, it will act as the loader hook, except that it will
- * also import init.js inside the source code of the entrypoint file.
+ * If used with --loader, it will act as the loader hook.
  *
  * The result is that no matter how this file is used, so long as it's with
  * one of the two flags, the tracer will always be initialized, and the loader
@@ -13,48 +12,65 @@
 /* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['module.register'] }] */
 
 import { isMainThread } from 'worker_threads'
+import { Buffer } from 'buffer'
+import * as Module from 'module'
+import { types } from 'util'
 
-import * as Module from 'node:module'
-import { fileURLToPath } from 'node:url'
 import {
-  load as origLoad,
-  resolve as origResolve,
-  getSource as origGetSource,
-} from 'import-in-the-middle/hook.mjs'
+  iitmExclusions,
+  load as hookLoad,
+  resolve as hookResolve,
+} from './loader-hook.mjs'
 
 let hasInsertedInit = false
-function insertInit (result) {
-  if (!hasInsertedInit) {
-    hasInsertedInit = true
-    result.source = `
-import '${fileURLToPath(new URL('init.js', import.meta.url))}';
-${result.source}`
+const initJsUrl = new URL('init.js', import.meta.url).href
+// Note: `--loader` only reliably influences ESM entrypoints; for CJS apps use `--import`/`--require`.
+
+/**
+ * @param {{ source?: string|Buffer|Uint8Array, format?: string }} result
+ * @param {unknown} _url_
+ * @param {{ format?: string, isMain?: boolean }} context
+ * @returns {{ source?: string|Buffer|Uint8Array, format?: string }}
+ */
+function insertInit (result, _url_, context) {
+  if (hasInsertedInit) return result
+  // If Node provides `isMain`, only inject into the entrypoint module.
+  if (context?.isMain === false) return result
+
+  let { source } = result
+  if (typeof source !== 'string') {
+    // Fast decode: handle bytes sources without extra copies when possible.
+    if (Buffer.isBuffer(source)) {
+      source = source.toString('utf8')
+    } else if (types.isUint8Array(source)) {
+      // Create a Buffer view over the same ArrayBuffer segment (no copy).
+      source = Buffer.from(source.buffer, source.byteOffset, source.byteLength).toString('utf8')
+    } else {
+      return result
+    }
   }
+
+  const format = result.format || context?.format
+  if (format !== 'module') return result
+
+  hasInsertedInit = true
+
+  result.source = `import ${JSON.stringify(initJsUrl)};\n${source}`
+
   return result
 }
 
 const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number)
 
 const brokenLoaders = NODE_MAJOR === 18 && NODE_MINOR === 0
-const iitmExclusions = [
-  /langsmith/,
-  /openai\/_shims/,
-  /openai\/resources\/chat\/completions\/messages/,
-  /openai\/agents-core\/dist\/shims/,
-  /@anthropic-ai\/sdk\/_shims/,
-]
 
 export async function load (url, context, nextLoad) {
   const iitmExclusionsMatch = iitmExclusions.some((exclusion) => exclusion.test(url))
-  const loadHook = (brokenLoaders || iitmExclusionsMatch) ? nextLoad : origLoad
-  return insertInit(await loadHook(url, context, nextLoad))
+  const loadHook = (brokenLoaders || iitmExclusionsMatch) ? nextLoad : hookLoad
+  return insertInit(await loadHook(url, context, nextLoad), url, context)
 }
 
-export const resolve = brokenLoaders ? undefined : origResolve
-
-export async function getSource (...args) {
-  return insertInit(await origGetSource(...args))
-}
+export const resolve = brokenLoaders ? undefined : hookResolve
 
 if (isMainThread) {
   const require = Module.createRequire(import.meta.url)
@@ -65,5 +81,3 @@ if (isMainThread) {
     })
   }
 }
-
-export { getFormat } from 'import-in-the-middle/hook.mjs'
