@@ -341,6 +341,14 @@ class Tracer extends NoopProxy {
   get TracerProvider () {
     return require('./opentelemetry/tracer_provider')
   }
+
+  /**
+   * AI Guard middleware for Vercel AI SDK.
+   * @returns {typeof import('./aiguard/middleware/vercel-ai').AIGuardMiddleware}
+   */
+  get AIGuardMiddleware () {
+    return require('./aiguard/middleware/vercel-ai').AIGuardMiddleware
+  }
 }
 
 module.exports = Tracer
