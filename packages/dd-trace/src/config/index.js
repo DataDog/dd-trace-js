@@ -601,8 +601,6 @@ class Config {
       OTEL_TRACES_SAMPLER_ARG,
       DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED,
       DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
-      DD_FLAGGING_PROVIDER_ENABLED,
-      DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
       OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
       OTEL_EXPORTER_OTLP_LOGS_HEADERS,
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
@@ -782,12 +780,11 @@ class Config {
     this.#setBoolean(
       target,
       'experimental.flaggingProvider.enabled',
-      DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED || DD_FLAGGING_PROVIDER_ENABLED
+      DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
     )
-    const timeoutEnvVar =
-      DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS || DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS
-    if (timeoutEnvVar != null) {
-      target['experimental.flaggingProvider.initializationTimeoutMs'] = maybeInt(timeoutEnvVar)
+    if (DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS != null) {
+      target['experimental.flaggingProvider.initializationTimeoutMs'] =
+        maybeInt(DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS)
     }
     this.#setBoolean(target, 'traceEnabled', DD_TRACE_ENABLED)
     this.#setBoolean(target, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
