@@ -32,7 +32,8 @@ try {
   } else {
     assert.match(data, /^ {8}package: "koa",$/m, 'Bundle should contain the koa CJS instrumentation')
   }
-  assert.match(data, /^ {8}package: "@koa\/router",$/m, 'Bundle should contain the @koa/router instrumentation')
+
+  assert.match(data, /register.*@koa\/router.*".*"@koa\/router"\);$/m, 'Bundle should contain the @koa/router instrumentation')
 
   console.log('ok') // eslint-disable-line no-console
 } finally {
