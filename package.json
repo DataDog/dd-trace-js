@@ -75,6 +75,7 @@
     "test:unit:plugins": "mocha \"packages/datadog-instrumentations/test/@($(echo $PLUGINS)).spec.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\" --exclude \"packages/datadog-plugin-@($(echo $PLUGINS))/test/integration-test/**/*.spec.js\"",
     "test:shimmer": "mocha \"packages/datadog-shimmer/test/**/*.spec.js\"",
     "test:shimmer:ci": "nyc --no-clean --include \"packages/datadog-shimmer/src/**/*.js\" -- npm run test:shimmer",
+    "verify:workflow-job-names": "node scripts/verify-workflow-job-names.js",
     "verify-exercised-tests": "node scripts/verify-exercised-tests.js"
   },
   "repository": {
