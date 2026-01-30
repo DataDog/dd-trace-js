@@ -351,9 +351,6 @@ async function packTarballWithLock (tarballPath, env) {
   }
 
   const lockFile = `${tarballPath}.lock`
-  const maxWaitTime = 60_000 // 60 seconds max wait
-  const pollInterval = 100 // Check every 100ms
-  const lockTimeout = 60_000 // Consider locks older than 60s as stale
   let lockFd
 
   try {
@@ -361,6 +358,7 @@ async function packTarballWithLock (tarballPath, env) {
     lockFd = await fs.open(lockFile, 'wx')
     log('Lock acquired, packing tarball:', tarballPath)
 
+    // Double-check if tarball was created while we were acquiring the lock
     if (existsSync(tarballPath)) {
       log('Tarball already exists (created while waiting for lock):', tarballPath)
       return
@@ -368,66 +366,23 @@ async function packTarballWithLock (tarballPath, env) {
 
     // We have the lock, pack the tarball
     packTarball(tarballPath, env)
-
-    // Close and remove the lock file
-    await lockFd.close()
-    await fs.unlink(lockFile).catch(() => {}) // Ignore errors if already removed
-    lockFd = undefined
   } catch (err) {
     if (err.code === 'EEXIST') {
-      // Lock file exists, another process is packing or has stale lock
+      // Lock exists, another process is packing - wait for the tarball to appear
       log('Lock file exists, waiting for tarball:', tarballPath)
 
-      // Check if lock is stale
-      try {
-        const lockStat = await fs.stat(lockFile)
-        const lockAge = Date.now() - lockStat.mtimeMs
-        if (lockAge > lockTimeout) {
-          log('Stale lock detected, breaking lock:', lockFile)
-          await fs.unlink(lockFile).catch(() => {})
-          // Retry packing after breaking stale lock
-          return packTarballWithLock(tarballPath, env)
-        }
-      } catch {
-        // Lock file might have been removed between EEXIST and stat, which is fine
+      while (!existsSync(tarballPath)) {
+        await new Promise(resolve => setTimeout(resolve, 100))
       }
 
-      // Wait for the tarball to be ready
-      const startTime = Date.now()
-      while (Date.now() - startTime < maxWaitTime) {
-        // Check if tarball exists
-        if (existsSync(tarballPath)) {
-          log('Tarball ready:', tarballPath)
-          return
-        }
-
-        // Check if lock is gone (might indicate failure)
-        const lockExists = existsSync(lockFile)
-        if (!lockExists) {
-          // Lock is gone but tarball doesn't exist - another process might have failed
-          // Try to pack it ourselves
-          log('Lock removed but no tarball, retrying pack:', tarballPath)
-          return packTarballWithLock(tarballPath, env)
-        }
-
-        // Wait a bit before checking again
-        await new Promise(resolve => setTimeout(resolve, pollInterval))
-      }
-
-      // Timeout waiting for tarball
-      throw new Error(`Timeout waiting for tarball to be packed: ${tarballPath}`)
+      log('Tarball ready:', tarballPath)
     } else {
       throw err
     }
   } finally {
-    // Ensure lock file is cleaned up if we still have it open
+    // Strictly no need to clean up the lock - it's in a temp directory
     if (lockFd) {
-      try {
-        await lockFd.close()
-        await fs.unlink(lockFile).catch(() => {})
-      } catch (cleanupErr) {
-        error('Error cleaning up lock:', cleanupErr)
-      }
+      lockFd.close().catch(() => {})
     }
   }
 }
