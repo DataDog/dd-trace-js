@@ -7,5 +7,5 @@
     "**/test/**/fixtures/**",
     "**/test/**/resources/**",
     "**/integration-tests/**/fixtures/**"
-  ],
+  ]
 }
