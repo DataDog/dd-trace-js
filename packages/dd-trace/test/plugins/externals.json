@@ -188,7 +188,7 @@
     },
     {
       "name": "@fastify/multipart",
-      "versions": [">=6"]
+      "versions": [">=6", "9.3.0"]
     },
     {
       "name": "pg",

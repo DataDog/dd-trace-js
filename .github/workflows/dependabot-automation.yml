@@ -62,8 +62,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "is_vendor_group=${{ steps.metadata.outputs.directory == '/vendor' && steps.metadata.outputs.dependency-type == 'direct:production' }}" >> $GITHUB_OUTPUT
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+          echo "is_vendor_group=${{ steps.metadata.outputs.directory == '/vendor' }}" >> $GITHUB_OUTPUT
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         if: steps.ctx.outputs.is_vendor_group == 'true'
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
@@ -126,13 +126,13 @@ jobs:
             exit 1
           fi
 
-          git diff --binary --no-color > vendor.patch
+          git diff --binary --no-color > "${RUNNER_TEMP}/vendor.patch"
           echo "has_changes=true" >> $GITHUB_OUTPUT
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: steps.diff.outputs.has_changes == 'true'
         with:
           name: vendor-patch
-          path: vendor.patch
+          path: ${{ runner.temp }}/vendor.patch
           if-no-files-found: error
 
   vendor-push:
@@ -150,7 +150,7 @@ jobs:
         with:
           scope: DataDog/dd-trace-js
           policy: dependabot-automation
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ steps.octo-sts.outputs.token }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
@@ -159,8 +159,9 @@ jobs:
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: vendor-patch
+          path: ${{ runner.temp }}/vendor-artifact
       - name: Apply patch
-        run: git apply --whitespace=nowarn vendor.patch
+        run: git apply --whitespace=nowarn "${{ runner.temp }}/vendor-artifact/vendor.patch"
       - name: Validate changed paths
         run: |
           set -euo pipefail
@@ -193,7 +194,7 @@ jobs:
           git config user.name github-actions
           git config user.email github-actions@github.com
 
-          git add -A
+          git add vendor/dist vendor/package.json vendor/yarn.lock
           git commit -m "update vendored dependencies with new versions"
           echo "commits=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
       - name: Push commit
@@ -204,3 +205,46 @@ jobs:
           branch: ${{ github.event.pull_request.head.ref }}
           command: push
           commits: "${{ steps.create-commit.outputs.commits }}"
+
+  vendor-validate:
+    # Run validation after the generated vendor patch has been pushed, to ensure the PR contains
+    # the committed `vendor/dist/*` outputs. This runs inside the same workflow as the push, so it
+    # doesn't rely on additional workflows being triggered by that push.
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && needs.vendor-build.outputs.is_vendor_group == 'true' && needs.vendor-build.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    needs:
+      - vendor-build
+      - vendor-push
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Restore trusted Node setup actions
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          git checkout "${{ github.event.pull_request.base.sha }}" -- .github/actions/node
+      - name: Restore trusted vendoring scripts
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          git checkout "${{ github.event.pull_request.base.sha }}" -- vendor/rspack.js vendor/rspack.config.js
+      - uses: ./.github/actions/node/active-lts
+      # Running `yarn` also automatically runs Rspack as a postinstall script.
+      - run: yarn --frozen-lockfile
+        working-directory: vendor
+      - name: Ensure no untracked outputs
+        run: |
+          set -euo pipefail
+
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Working tree is dirty after vendoring:"
+            git status --porcelain
+            exit 1
+          fi
+      - name: Diff only expected paths
+        run: git diff --exit-code -- vendor/dist vendor/package.json vendor/yarn.lock

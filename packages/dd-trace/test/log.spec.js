@@ -457,8 +457,8 @@ describe('log', () => {
 
         sinon.assert.calledOnce(console.error)
         const consoleErrorArg = console.error.getCall(0).args[0]
-        assert.strictEqual(typeof consoleErrorArg, 'object')
-        assert.strictEqual(consoleErrorArg.message, 'message')
+        assert.strictEqual(typeof consoleErrorArg, 'string')
+        assert.strictEqual(consoleErrorArg, 'message')
       })
 
       it('should only log once for a given code', () => {

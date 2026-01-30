@@ -148,7 +148,7 @@ interface Tracer extends opentracing.Tracer {
    * OpenFeature Provider with Remote Config integration.
    *
    * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
-   * Enable with DD_FLAGGING_PROVIDER_ENABLED=true.
+   * Enable with DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED=true.
    *
    * @beta This feature is in preview and not ready for production use
    */
@@ -241,6 +241,8 @@ interface Plugins {
   "express": tracer.plugins.express;
   "fastify": tracer.plugins.fastify;
   "fetch": tracer.plugins.fetch;
+  "find-my-way": tracer.plugins.find_my_way;
+  "fs": tracer.plugins.fs;
   "generic-pool": tracer.plugins.generic_pool;
   "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
   "google-cloud-vertexai": tracer.plugins.google_cloud_vertexai;
@@ -269,6 +271,7 @@ interface Plugins {
   "mysql2": tracer.plugins.mysql2;
   "net": tracer.plugins.net;
   "next": tracer.plugins.next;
+  "nyc": tracer.plugins.nyc;
   "openai": tracer.plugins.openai;
   "opensearch": tracer.plugins.opensearch;
   "oracledb": tracer.plugins.oracledb;
@@ -286,7 +289,9 @@ interface Plugins {
   "tedious": tracer.plugins.tedious;
   "undici": tracer.plugins.undici;
   "vitest": tracer.plugins.vitest;
+  "web": tracer.plugins.web;
   "winston": tracer.plugins.winston;
+  "ws": tracer.plugins.ws;
 }
 
 declare namespace tracer {
@@ -687,6 +692,7 @@ declare namespace tracer {
         /**
          * Whether to enable the feature flagging provider.
          * Requires Remote Config to be properly configured.
+         * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED environment variable.
          *
          * @default false
          */
@@ -694,6 +700,7 @@ declare namespace tracer {
         /**
          * Timeout in milliseconds for OpenFeature provider initialization.
          * If configuration is not received within this time, initialization fails.
+         * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variable.
          *
          * @default 30000
          */
@@ -1925,6 +1932,16 @@ declare namespace tracer {
     interface fetch extends HttpClient {}
 
     /**
+     * This plugin patches the [find-my-way](https://github.com/delvedor/find-my-way) router.
+     */
+    interface find_my_way extends Integration {}
+
+    /**
+     * This plugin automatically instruments Node.js core fs operations.
+     */
+    interface fs extends Instrumentation {}
+
+    /**
      * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)
      * module to bind the callbacks the the caller context.
      */
@@ -2356,6 +2373,11 @@ declare namespace tracer {
     }
 
     /**
+     * This plugin integrates with [nyc](https://github.com/istanbuljs/nyc) for CI visibility.
+     */
+    interface nyc extends Integration {}
+
+    /**
      * This plugin automatically instruments the
      * [openai](https://platform.openai.com/docs/api-reference?lang=node.js) module.
      *
@@ -2542,12 +2564,50 @@ declare namespace tracer {
     interface vitest extends Integration {}
 
     /**
+     * This plugin implements shared web request instrumentation helpers.
+     */
+    interface web extends HttpServer {
+      /**
+       * Custom filter function used to decide whether a URL/path should be instrumented.
+       * Takes precedence over allowlist/blocklist.
+       */
+      filter?: (urlOrPath: string) => boolean;
+
+      /**
+       * Whether (or how) to obfuscate querystring values in `http.url`.
+       *
+       * - `true`: obfuscate all values
+       * - `false`: disable obfuscation
+       * - `string`: regex string used to obfuscate matching values (empty string disables)
+       * - `RegExp`: regex used to obfuscate matching values
+       */
+      queryStringObfuscation?: boolean | string | RegExp;
+
+      /**
+       * Whether to enable resource renaming when the framework route is unavailable.
+       */
+      resourceRenamingEnabled?: boolean;
+    }
+
+    /**
      * This plugin patches the [winston](https://github.com/winstonjs/winston)
      * to automatically inject trace identifiers in log records when the
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
      * on the tracer.
      */
     interface winston extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
+     * [ws](https://github.com/websockets/ws) module.
+     */
+    interface ws extends Instrumentation {
+      /**
+       * Controls whether websocket messages should be traced.
+       * This is also configurable via `DD_TRACE_WEBSOCKET_MESSAGES_ENABLED`.
+       */
+      traceWebsocketMessagesEnabled?: boolean;
+    }
   }
 
   export namespace opentelemetry {
