@@ -59,6 +59,15 @@ jobs:
       - uses: ./.github/actions/install
       - run: npm run verify-exercised-tests
 
+  workflow-job-names:
+    runs-on: ubuntu-latest
+    name: Workflow job names (unique)
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/install
+      - run: npm run verify:workflow-job-names
+
   # The package size is especially useful in constrained environments, so the
   # computation is done only on the package that would be installed there.
   # In order to do that, the current folder is wiped and replaced with what
