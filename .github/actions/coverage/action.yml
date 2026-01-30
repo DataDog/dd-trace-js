@@ -1,0 +1,23 @@
+name: coverage
+description: Verify coverage output and upload it to Codecov.
+
+inputs:
+  flags:
+    description: "Codecov flags value"
+    required: false
+  report-dir:
+    description: "Coverage report directory (defaults to 'coverage')"
+    required: false
+    default: coverage
+
+runs:
+  using: composite
+  steps:
+    - name: Verify coverage output
+      shell: bash
+      run: node scripts/verify-coverage.js --expected --report-dir "${{ inputs.report-dir }}" --flags "${{ inputs.flags }}"
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      with:
+        flags: ${{ inputs.flags }}
