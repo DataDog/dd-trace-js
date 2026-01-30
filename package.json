@@ -188,6 +188,7 @@
     "typescript": "^5.9.2",
     "workerpool": "^10.0.0",
     "yaml": "^2.8.0",
+    "husky": "^9.1.7",
     "yarn-deduplicate": "^6.0.2"
   }
 }
