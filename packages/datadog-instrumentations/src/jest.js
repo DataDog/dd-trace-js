@@ -44,6 +44,9 @@ const testFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 const testFnCh = channel('ci:jest:test:fn')
 
+// Suite-level channels for hook execution
+const suiteFnCh = channel('ci:jest:suite:fn')
+
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
 const knownTestsCh = channel('ci:jest:known-tests')
@@ -85,6 +88,7 @@ let modifiedFiles = {}
 const testContexts = new WeakMap()
 const originalTestFns = new WeakMap()
 const originalHookFns = new WeakMap()
+const suiteContexts = new Map() // Map from test suite path to suite context
 const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
 const attemptToFixRetriedTestsStatuses = new Map()
@@ -125,6 +129,18 @@ function getTestEnvironmentOptions (config) {
   return {}
 }
 
+// Helper functions to identify hook types
+function getHookType (hook) {
+  // Jest Circus stores hook type in hook.type
+  // Values: 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'
+  return hook.type
+}
+
+function isSuiteLevelHook (hook) {
+  const type = getHookType(hook)
+  return type === 'beforeAll' || type === 'afterAll'
+}
+
 function getTestStats (testStatuses) {
   return testStatuses.reduce((acc, testStatus) => {
     acc[testStatus]++
@@ -143,6 +159,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.global._ddtrace = global._ddtrace
       this.hasSnapshotTests = undefined
       this.testSuiteAbsolutePath = context.testPath
+      this.suiteSpanContext = null // Will store suite span context for hook wrapping
 
       this.displayName = config.projectConfig?.displayName?.name || config.displayName
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
@@ -349,6 +366,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       const setNameToParams = (name, params) => { this.nameToParams[name] = [...params] }
 
+      // Capture suite context when a describe block starts
+      if (event.name === 'run_describe_start') {
+        // Store the suite context for this test suite
+        const suiteContext = suiteContexts.get(this.testSuiteAbsolutePath)
+        if (suiteContext) {
+          this.suiteSpanContext = suiteContext
+        }
+      }
+
       if (event.name === 'setup' && this.global.test) {
         shimmer.wrap(this.global.test, 'each', each => function () {
           const testParameters = getFormattedJestTestParameters(arguments)
@@ -435,14 +461,27 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         testStartCh.runStores(ctx, () => {
           for (const hook of event.test.parent.hooks) {
-            let hookFn = hook.fn
+            // Skip if hook is already wrapped
             if (originalHookFns.has(hook)) {
-              hookFn = originalHookFns.get(hook)
-            } else {
-              originalHookFns.set(hook, hookFn)
+              continue
             }
-            const newHookFn = shimmer.wrapFunction(hookFn, hookFn => function () {
-              return testFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
+            
+            const hookType = getHookType(hook)
+            const isSuiteHook = isSuiteLevelHook(hook)
+            
+            // Store original function
+            originalHookFns.set(hook, hook.fn)
+            
+            // Choose appropriate context based on hook type
+            const hookContext = isSuiteHook ? this.suiteSpanContext : ctx
+            
+            // Wrap with appropriate context
+            const newHookFn = shimmer.wrapFunction(hook.fn, hookFn => function () {
+              // Use different channel for suite hooks vs test hooks
+              const channel = isSuiteHook ? suiteFnCh : testFnCh
+              // If suite context is not available, fall back to test context
+              const finalContext = hookContext || ctx
+              return channel.runStores(finalContext, () => hookFn.apply(this, arguments))
             })
             hook.fn = newHookFn
           }
@@ -1142,13 +1181,22 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
     if (!environment || !environment.testEnvironmentOptions) {
       return adapter.apply(this, arguments)
     }
-    testSuiteStartCh.publish({
+    const suiteContext = {
       testSuite: environment.testSuite,
       testEnvironmentOptions: environment.testEnvironmentOptions,
       testSourceFile: environment.testSourceFile,
       displayName: environment.displayName,
       frameworkVersion: jestVersion,
       testSuiteAbsolutePath: environment.testSuiteAbsolutePath
+    }
+    
+    // Publish suite start to create the span, then capture its context
+    testSuiteStartCh.runStores(suiteContext, () => {
+      // Store suite context with the span information for hook wrapping
+      const store = require('../../datadog-core').storage('legacy').getStore()
+      if (store) {
+        suiteContexts.set(environment.testSuiteAbsolutePath, store)
+      }
     })
     return adapter.apply(this, arguments).then(suiteResults => {
       const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults
