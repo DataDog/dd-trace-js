@@ -16,6 +16,8 @@ const log = require('./log')
 
 require('./remote_config')
 
+/** @typedef {import('node:inspector').Debugger.EvaluateOnCallFrameReturnType} EvaluateOnCallFrameResult */
+
 // Expression to run on a call frame of the paused thread to get its active trace and span id.
 const templateExpressionSetupCode = `
   const $dd_inspect = global.require('node:util').inspect;
@@ -124,12 +126,14 @@ session.on('Debugger.paused', async ({ params }) => {
       if (probe.condition !== undefined) {
         // TODO: Bundle all conditions and evaluate them in a single call
         // TODO: Handle errors
-        // eslint-disable-next-line no-await-in-loop
-        const { result } = await session.post('Debugger.evaluateOnCallFrame', {
-          callFrameId: params.callFrames[0].callFrameId,
-          expression: probe.condition,
-          returnByValue: true
-        })
+        const { result } = /** @type {EvaluateOnCallFrameResult} */ (
+          // eslint-disable-next-line no-await-in-loop
+          await session.post('Debugger.evaluateOnCallFrame', {
+            callFrameId: params.callFrames[0].callFrameId,
+            expression: probe.condition,
+            returnByValue: true
+          })
+        )
         if (result.value !== true) continue
       }
 
@@ -151,14 +155,16 @@ session.on('Debugger.paused', async ({ params }) => {
   const timestamp = Date.now()
 
   let evalResults
-  const { result } = await session.post('Debugger.evaluateOnCallFrame', {
-    callFrameId: params.callFrames[0].callFrameId,
-    expression: templateExpressions.length === 0
-      ? `[${getDDTagsExpression}]`
-      : `${templateExpressionSetupCode}[${getDDTagsExpression}${templateExpressions}]`,
-    returnByValue: true,
-    includeCommandLineAPI: true
-  })
+  const { result } = /** @type {EvaluateOnCallFrameResult} */ (
+    await session.post('Debugger.evaluateOnCallFrame', {
+      callFrameId: params.callFrames[0].callFrameId,
+      expression: templateExpressions.length === 0
+        ? `[${getDDTagsExpression}]`
+        : `${templateExpressionSetupCode}[${getDDTagsExpression}${templateExpressions}]`,
+      returnByValue: true,
+      includeCommandLineAPI: true
+    })
+  )
   if (result?.subtype === 'error') {
     log.error('[debugger:devtools_client] Error evaluating code on call frame: %s', result?.description)
     evalResults = []
@@ -198,7 +204,7 @@ session.on('Debugger.paused', async ({ params }) => {
     thread_name: threadName
   }
 
-  const stack = getStackFromCallFrames(params.callFrames)
+  const stack = await getStackFromCallFrames(params.callFrames)
   const dd = processDD(evalResults[0]) // the first result is the dd tags, the rest are the probe template results
   let messageIndex = 1
 
