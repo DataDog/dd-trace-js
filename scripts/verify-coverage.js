@@ -3,57 +3,79 @@
 const fs = require('node:fs')
 const path = require('node:path')
 // eslint-disable-next-line n/no-unsupported-features/node-builtins
-const { parseArgs } = require('node:util')
+const { parseArgs, format } = require('node:util')
 
 const { values } = parseArgs({
   args: process.argv.slice(2),
   options: {
-    expected: { type: 'boolean', default: false },
-    'report-dir': { type: 'string', default: 'coverage' },
     flags: { type: 'string', default: '' }
   },
   allowPositionals: true
 })
 
-const reportDirAbs = path.resolve(process.cwd(), values['report-dir'])
+const cwd = process.cwd()
 
-const lcovPath = path.join(reportDirAbs, 'lcov.info')
-let lcovContent
+/** @type {string[]} */
+const reportDirsAbs = []
+
+// If the default report dir is being used, prefer checking all top-level `coverage-node-*` directories.
 try {
-  lcovContent = fs.readFileSync(lcovPath, 'utf8')
+  const entries = fs.readdirSync(cwd, { withFileTypes: true })
+  for (const entry of entries) {
+    if (entry.isDirectory() && entry.name.startsWith('coverage-node-')) {
+      reportDirsAbs.push(path.join(cwd, entry.name))
+    }
+  }
 } catch {
   // ignore
 }
 
-// Consider it empty unless we see at least one `SF:` record.
-const isMissingOrEmpty = lcovContent === undefined || !/(^|\n)SF:/.test(lcovContent)
+const emptyReportDirs = []
 
-// If the file exists but is empty, remove it so uploaders don't pick it up.
-if (lcovContent !== undefined && isMissingOrEmpty) {
+for (const dirAbs of reportDirsAbs) {
+  const lcovPath = path.join(dirAbs, 'lcov.info')
+  let lcovContent
   try {
-    fs.unlinkSync(lcovPath)
+    lcovContent = fs.readFileSync(lcovPath, 'utf8')
+  } catch {
+    // ignore
+  }
+
+  // Consider it empty unless we see at least one `SF:` record.
+  const isMissingOrEmpty = lcovContent === undefined || !/(^|\n)SF:/.test(lcovContent)
+
+  if (!isMissingOrEmpty) {
+    emptyReportDirs.push(dirAbs)
+    continue
+  }
+
+  // If the file exists but is empty, remove it so uploaders don't pick it up.
+  if (lcovContent !== undefined) {
+    try {
+      fs.unlinkSync(lcovPath)
+    } catch {
+      // ignore
+    }
+  }
+
+  // If we deleted the last artifact, avoid leaving an empty coverage directory behind.
+  try {
+    const entries = fs.readdirSync(dirAbs)
+    if (entries.length === 0) {
+      fs.rmdirSync(dirAbs)
+    }
   } catch {
     // ignore
   }
 }
 
-// If we deleted the last artifact, avoid leaving an empty `coverage/` directory behind.
-try {
-  const entries = fs.readdirSync(reportDirAbs)
-  if (entries.length === 0) {
-    fs.rmdirSync(reportDirAbs)
-  }
-} catch {
-  // ignore
-}
-
-if (values.expected && isMissingOrEmpty) {
+if (emptyReportDirs.length > 0) {
   throw new Error(
-    [
-      'Expected a non-empty coverage report but none was produced.',
-      `reportDir=${reportDirAbs}`,
-      'missingOrEmpty=lcov.info',
-      `flags=${values.flags}`
-    ].join(' ')
+    format(
+      'Expected non-empty lcov.info coverage report but none was produced in %s. Searched in %s with flags %s.',
+      emptyReportDirs.map(d => path.relative(cwd, d) || '.').join(','),
+      reportDirsAbs.map(d => path.relative(cwd, d) || '.').join(','),
+      values.flags
+    )
   )
 }
