@@ -70,6 +70,8 @@ jobs:
           PR_USER_TYPE: ${{ github.event.pull_request.user.type }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_HEAD_REF: ${{ github.head_ref }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
         run: |
           set -e
 
@@ -78,7 +80,7 @@ jobs:
           else
             echo "📝 LICENSE-3rdparty.csv was modified by license attribution command"
 
-            if [[ "$PR_USER_TYPE" == "Bot" ]] && [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            if [[ "$PR_USER_TYPE" == "Bot" ]] && [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]] && [[ "$PR_HEAD_REPO" == "$BASE_REPO" ]]; then
               echo "🤖 Bot-created PR detected. Auto-committing LICENSE-3rdparty.csv changes..."
 
               git config --local user.email "action@github.com"

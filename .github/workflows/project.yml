@@ -198,7 +198,10 @@ jobs:
           if-no-files-found: error
 
   yarn-dedupe-push:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.yarn-dedupe.outputs.has_changes == 'true'
+    # If this job pushes a commit, GitHub will re-trigger the workflow on `pull_request:synchronize`
+    # with `github.actor == 'dd-octo-sts[bot]'`. Never attempt to mint another token / push again on
+    # that follow-up run.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.yarn-dedupe.outputs.has_changes == 'true' && github.actor != 'dd-octo-sts[bot]'
     runs-on: ubuntu-latest
     needs: yarn-dedupe
     # Security: this job has an STS-minted token, but never runs installs/builds.
