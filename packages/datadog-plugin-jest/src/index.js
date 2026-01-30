@@ -430,6 +430,18 @@ class JestPlugin extends CiPlugin {
 
       span.finish()
     })
+
+    this.addSub('ci:jest:coverage-report', ({ rootDir, onDone }) => {
+      if (!this.libraryConfig?.isCoverageReportUploadEnabled) {
+        onDone()
+        return
+      }
+      this.uploadCoverageReports({
+        rootDir,
+        testEnvironmentMetadata: this.testEnvironmentMetadata,
+        onDone
+      })
+    })
   }
 
   startTestSpan (test) {
