@@ -2,7 +2,7 @@
 
 const { join, dirname } = require('path')
 const { normalize } = require('../../../../../vendor/dist/source-map/lib/util')
-const { loadSourceMapSync } = require('./source-maps')
+const { loadSourceMapSync, getOriginalPosition } = require('./source-maps')
 const session = require('./session')
 const log = require('./log')
 
@@ -36,7 +36,6 @@ module.exports = {
 
   _loadedScripts: loadedScripts, // Only exposed for testing
   _scriptUrls: scriptUrls, // Only exposed for testing
-  _scriptSourceMaps: scriptSourceMaps, // Only exposed for testing
 
   /**
    * Find the script to inspect based on a partial or absolute path. Handles both Windows and POSIX paths.
@@ -127,8 +126,6 @@ module.exports = {
    * @returns {Promise<Array<StackFrame>>} - The stack from call frames.
    */
   getStackFromCallFrames (callFrames) {
-    const { getOriginalPosition } = require('./source-maps')
-
     return Promise.all(callFrames.map(async (frame) => {
       // TODO: Possible race condition: If the breakpoint is in the process of being removed, and this is the last
       // breakpoint, it will also stop the debugging session, which in turn will clear the state, which means clearing
