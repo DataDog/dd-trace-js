@@ -27,7 +27,15 @@ function listFilesFromGit () {
 
 const matches = []
 for (const file of listFilesFromGit()) {
-  if (FORBIDDEN_BASENAMES.has(path.basename(file))) {
+  const basename = path.basename(file)
+
+  // Be extra conservative: JSON fixtures that look like coverage reports are commonly misidentified by tooling.
+  if (basename.endsWith('.json') && /coverage/i.test(basename)) {
+    matches.push(file.replaceAll('\\', '/'))
+    continue
+  }
+
+  if (FORBIDDEN_BASENAMES.has(basename)) {
     matches.push(file.replaceAll('\\', '/'))
   }
 }
