@@ -231,9 +231,11 @@ function withVersions (plugin, modules, range, cb) {
     for (const instrumentation of instrumentations) {
       if (instrumentation.name !== moduleName) continue
 
+      // Some entries coming from `externals.json` are dependency-only (e.g. `dep: true`) and don't have `versions`.
+      // Treat those as "not a test target" instead of crashing.
       const versions = process.env.PACKAGE_VERSION_RANGE
         ? [process.env.PACKAGE_VERSION_RANGE]
-        : instrumentation.versions
+        : normalizeVersions(instrumentation.versions)
 
       for (const version of versions) {
         if (process.env.RANGE && !semver.subset(version, process.env.RANGE)) continue
@@ -286,6 +288,11 @@ function withVersions (plugin, modules, range, cb) {
       })
     }
   }
+}
+
+function normalizeVersions (versions) {
+  if (!versions) return []
+  return Array.isArray(versions) ? versions : [versions]
 }
 
 /**

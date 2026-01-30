@@ -13,7 +13,7 @@ if (!msg) {
 
 try {
   exec('yarn install', { cwd: './docs' })
-} catch (e) { // retry in case of error from registry
+} catch { // retry in case of error from registry
   exec('yarn install', { cwd: './docs' })
 }
 
