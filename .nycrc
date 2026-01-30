@@ -8,5 +8,4 @@
     "**/test/**/resources/**",
     "**/integration-tests/**/fixtures/**"
   ],
-  "excludeAfterRemap": true
 }
