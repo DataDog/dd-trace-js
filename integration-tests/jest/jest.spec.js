@@ -103,9 +103,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     `jest@${JEST_VERSION}`,
     `jest-jasmine2@${JEST_VERSION}`,
     // jest-environment-jsdom is included in older versions of jest
-    JEST_VERSION === 'latest' && `jest-environment-jsdom@${JEST_VERSION}`,
+    JEST_VERSION === 'latest' ? `jest-environment-jsdom@${JEST_VERSION}` : '',
     // jest-circus is not included in older versions of jest
-    JEST_VERSION !== 'latest' && `jest-circus@${JEST_VERSION}`,
+    JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
     '@happy-dom/jest-environment',
     'office-addin-mock',
     'winston',
@@ -156,10 +156,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         },
         stdio: 'pipe'
       })
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
 
@@ -293,7 +293,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'jest-plugin-tests/jest-test.js',
             DD_SERVICE: 'plugin-tests',
           },
-          stdio: 'inherit'
         }
       )
 
@@ -345,7 +344,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...oldApmProtocolEnvVars,
             TESTS_TO_RUN: 'jest-plugin-tests/jest-hook-failure',
           },
-          stdio: 'inherit'
         }
       )
 
@@ -395,7 +393,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...oldApmProtocolEnvVars,
             TESTS_TO_RUN: 'jest-plugin-tests/jest-focus'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -425,9 +422,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           env: {
             ...oldApmProtocolEnvVars,
             TESTS_TO_RUN: 'jest-plugin-tests/jest-inject-globals',
-            DO_NOT_INJECT_GLOBALS: true
+            DO_NOT_INJECT_GLOBALS: 'true'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -517,12 +513,47 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           },
           stdio: 'pipe'
         })
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
+      })
+
+      // TODO: This should also run in agentless mode
+      const maybeSkippped = reportingOption === 'evp proxy' ? it : it.skip
+      maybeSkippped('sends telemetry with test_session metric when telemetry is enabled', async () => {
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
+        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+        const telemetryPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+            const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+
+            const testSessionMetric = telemetryMetrics.find(
+              ({ metric }) => metric === 'test_session'
+            )
+
+            assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+              TESTS_TO_RUN: 'test/ci-visibility-test',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          telemetryPromise
+        ])
       })
 
       it('should create events for session, suite and test', async () => {
@@ -583,7 +614,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               ...envVars,
               TESTS_TO_RUN: 'jest-plugin-tests/jest-test-suite'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -613,10 +643,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           },
           stdio: 'pipe'
         })
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
         childProcess.on('message', () => {
@@ -637,10 +667,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         },
         stdio: 'pipe'
       })
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
       childProcess.on('message', () => {
@@ -676,7 +706,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             testRunner: 'jest-circus/runner',
           }])
         },
-        stdio: 'pipe'
       }
     )
 
@@ -729,7 +758,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'sharding-test/sharding-test',
             TEST_SHARD: '2/2'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -765,7 +793,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           TESTS_TO_RUN: 'sharding-test/sharding-test',
           TEST_SHARD: '1/2'
         },
-        stdio: 'inherit'
       }
     )
   })
@@ -778,10 +805,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       },
       stdio: 'pipe'
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
@@ -798,14 +825,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ...getCiVisAgentlessConfig(receiver.port),
         OLD_RUNNER: 1,
         NODE_OPTIONS: '-r dd-trace/ci/init',
-        RUN_IN_PARALLEL: true
+        RUN_IN_PARALLEL: 'true'
       },
       stdio: 'pipe'
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
@@ -947,7 +974,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             RUN_IN_PARALLEL: 'true',
           },
-          stdio: 'inherit'
         }
       )
 
@@ -973,10 +999,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       },
       stdio: 'pipe'
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
@@ -1053,7 +1079,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           RUN_IN_PARALLEL: 'true',
           WAIT_FOR_UNHANDLED_REJECTIONS: 'true'
         },
-        stdio: 'inherit'
       })
 
       await Promise.all([
@@ -1104,7 +1129,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           TESTS_TO_RUN: 'jest-bad-import-torn-down/jest-bad-import-test',
           RUN_IN_PARALLEL: 'true',
         },
-        stdio: 'inherit'
       })
 
       await Promise.all([
@@ -1131,7 +1155,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       {
         cwd,
         env: getCiVisAgentlessConfig(receiver.port),
-        stdio: 'inherit'
       }
     )
   })
@@ -1153,7 +1176,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       {
         cwd,
         env: { ...getCiVisAgentlessConfig(receiver.port), ENABLE_CODE_COVERAGE: '1' },
-        stdio: 'inherit'
       }
     )
   })
@@ -1184,7 +1206,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           DD_TRACE_DEBUG: '1',
           DD_TRACE_LOG_LEVEL: 'warn'
         },
-        stdio: 'inherit'
       }
     )
     childProcess.on('exit', () => {
@@ -1192,10 +1213,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         done()
       }).catch(done)
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
   })
@@ -1213,7 +1234,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           DD_TRACE_DEBUG: '1',
           DD_TRACE_LOG_LEVEL: 'warn'
         },
-        stdio: 'inherit'
       }
     )
     childProcess.on('exit', () => {
@@ -1221,10 +1241,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.match(testOutput, /Timeout waiting for the tracer to flush/)
       done()
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
   })
@@ -1255,7 +1275,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       {
         cwd,
         env: getCiVisAgentlessConfig(receiver.port),
-        stdio: 'inherit'
       }
     )
     childProcess.on('exit', () => {
@@ -1282,7 +1301,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           ...getCiVisAgentlessConfig(receiver.port),
           TESTS_TO_RUN: 'test/fail-test'
         },
-        stdio: 'inherit'
       }
     )
     childProcess.on('exit', () => {
@@ -1305,10 +1323,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       },
       stdio: 'pipe'
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
@@ -1452,7 +1470,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             ENABLE_CODE_COVERAGE: '1'
           },
-          stdio: 'pipe'
         }
       )
       await Promise.all([
@@ -1496,7 +1513,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             ENABLE_CODE_COVERAGE: '1'
           },
-          stdio: 'inherit'
         }
       )
     })
@@ -1558,7 +1574,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
     })
@@ -1592,7 +1607,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -1641,7 +1655,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
     })
@@ -1681,7 +1694,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
     })
@@ -1747,7 +1759,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'unskippable-test/test-'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -1813,7 +1824,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'unskippable-test/test-'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -1849,7 +1859,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -1875,7 +1884,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -1922,7 +1930,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
 
@@ -1969,7 +1976,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             COLLECT_COVERAGE_FROM: '**/test-total-code-coverage/**',
             ENABLE_CODE_COVERAGE: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2011,7 +2017,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               testRunner: 'jest-circus/runner',
             }])
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2045,7 +2050,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'jest/mocked-test.js',
           },
-          stdio: 'pipe'
         }
       )
       childProcess.on('exit', () => {
@@ -2088,7 +2092,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: { ...getCiVisAgentlessConfig(receiver.port), TESTS_TO_RUN: 'jest-flaky/flaky-fails.js' },
-          stdio: 'inherit'
         }
       )
 
@@ -2158,7 +2161,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2166,6 +2168,76 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           done()
         }).catch(done)
       })
+    })
+
+    it('resets mock state between early flake detection retries', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      // Test is considered new (not in known tests)
+      receiver.setKnownTests({ jest: {} })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD
+          },
+          faulty_session_threshold: 100
+        },
+        known_tests_enabled: true
+      })
+
+      let stdout = ''
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          // Should have 1 original + NUM_RETRIES_EFD retry attempts
+          const mockTests = tests.filter(
+            test => test.meta[TEST_NAME] === 'early flake detection tests with mock resets mock state between retries'
+          )
+          assert.strictEqual(mockTests.length, NUM_RETRIES_EFD + 1)
+
+          // All tests should pass because mock state is reset between retries
+          for (const test of mockTests) {
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          }
+
+          // All should be marked as new
+          for (const test of mockTests) {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+          }
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'test-early-flake-detection/test-efd-with-mock'
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        stdout += chunk.toString()
+      })
+
+      childProcess.stderr?.on('data', (chunk) => {
+        stdout += chunk.toString()
+      })
+
+      const [exitCode] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
+
+      // Verify the test actually ran
+      assert.match(stdout, /I am running EFD with mock/)
+
+      // All retries should pass, so exit code should be 0
+      assert.strictEqual(exitCode[0], 0)
     })
 
     it('handles parameterized tests as a single unit', (done) => {
@@ -2231,7 +2303,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test-early-flake-detection/test' },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2287,7 +2358,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'test/ci-visibility-test',
             DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2347,7 +2417,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisEvpProxyConfig(receiver.port),
             TESTS_TO_RUN: 'test-early-flake-detection/occasionally-failing-test'
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2405,7 +2474,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisEvpProxyConfig(receiver.port),
             TESTS_TO_RUN: 'test-early-flake-detection/skipped-and-todo-test'
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2469,7 +2537,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisEvpProxyConfig(receiver.port),
             TESTS_TO_RUN: 'test-early-flake-detection/weird-test-names'
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2519,7 +2586,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisEvpProxyConfig(receiver.port),
             TESTS_TO_RUN: 'test/ci-visibility-test'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2528,7 +2594,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('retries flaky tests and sets exit code to 0 as long as one attempt passes', (done) => {
+    it('retries flaky tests and sets exit code to 0 as long as one attempt passes', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
       receiver.setKnownTests({ jest: {} })
@@ -2551,6 +2617,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const testSession = events.find(event => event.type === 'test_session_end').content
           assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+          // Session is passed because at least one retry of the new flaky test passes
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -2570,32 +2638,31 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           })
         })
 
+      let testOutput = ''
       childProcess = exec(
         'node ./node_modules/jest/bin/jest --config config-jest.js',
         {
           cwd,
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
-            TESTS_TO_RUN: '**/ci-visibility/test-early-flake-detection/occasionally-failing-test*'
-          },
-          stdio: 'inherit'
+            TESTS_TO_RUN: '**/ci-visibility/test-early-flake-detection/occasionally-failing-test*',
+            SHOULD_CHECK_RESULTS: '1'
+          }
         }
       )
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
 
-      childProcess.on('exit', (exitCode) => {
-        assert.match(testOutput, /2 failed, 2 passed/)
-        assert.strictEqual(exitCode, 0)
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+      assert.match(testOutput, /2 failed, 2 passed/)
+      // Exit code is 0 because at least one retry of the new flaky test passes
+      assert.strictEqual(exitCode, 0)
     })
 
     // resetting snapshot state logic only works in latest versions
@@ -2629,6 +2696,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const testSession = events.find(event => event.type === 'test_session_end').content
           assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+          // Session is passed because at least one retry of each new flaky test passes
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           // 6 tests, 4 of which are new: 4*(1 test + 3 retries) + 2*(1 test) = 18
@@ -2655,15 +2724,16 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         env: {
           ...getCiVisEvpProxyConfig(receiver.port),
           TESTS_TO_RUN: 'ci-visibility/test-early-flake-detection/jest-snapshot',
-          CI: '1' // needs to be run as CI so snapshots are not written
-        },
-        stdio: 'inherit'
+          CI: '1', // needs to be run as CI so snapshots are not written
+          SHOULD_CHECK_RESULTS: '1'
+        }
       })
 
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         eventsPromise
       ])
+      // Exit code is 0 because at least one retry of each new flaky test passes
       assert.strictEqual(exitCode, 0)
     })
 
@@ -2693,6 +2763,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const testSession = events.find(event => event.type === 'test_session_end').content
           assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+          // Session is passed because at least one retry of the new flaky test passes
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           // 1 new test
@@ -2715,15 +2787,16 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         env: {
           ...getCiVisEvpProxyConfig(receiver.port),
           TESTS_TO_RUN: 'ci-visibility/test-early-flake-detection/jest-image-snapshot',
-          CI: '1'
-        },
-        stdio: 'inherit'
+          CI: '1',
+          SHOULD_CHECK_RESULTS: '1'
+        }
       })
 
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         eventsPromise
       ])
+      // Exit code is 0 because at least one retry of the new flaky test passes
       assert.strictEqual(exitCode, 0)
     })
 
@@ -2767,7 +2840,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           ...getCiVisEvpProxyConfig(receiver.port),
           TESTS_TO_RUN: 'test/ci-visibility-test'
         },
-        stdio: 'inherit'
       })
 
       childProcess.on('exit', () => {
@@ -2832,11 +2904,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port), // use agentless for this test, just for variety
             TESTS_TO_RUN: 'test/ci-visibility-test',
-            ENABLE_JSDOM: true,
+            ENABLE_JSDOM: 'true',
             DD_TRACE_DEBUG: '1',
             DD_TRACE_LOG_LEVEL: 'warn'
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2906,7 +2977,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'test/ci-visibility-test',
             ENABLE_HAPPY_DOM: 'true',
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2966,7 +3036,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -3029,7 +3098,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'jest/failing-test' },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -3103,9 +3171,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             env: {
               ...getCiVisEvpProxyConfig(receiver.port),
               TESTS_TO_RUN: 'test/efd-parallel/ci-visibility-test',
-              RUN_IN_PARALLEL: true
+              RUN_IN_PARALLEL: 'true'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -3158,9 +3225,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             env: {
               ...getCiVisEvpProxyConfig(receiver.port),
               TESTS_TO_RUN: 'test/efd-parallel/ci-visibility-test',
-              RUN_IN_PARALLEL: true
+              RUN_IN_PARALLEL: 'true'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -3231,10 +3297,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
             TESTS_TO_RUN: 'ci-visibility/test-early-flake-detection/jest-parallel-snapshot',
-            RUN_IN_PARALLEL: true,
+            RUN_IN_PARALLEL: 'true',
             CI: '1' // needs to be run as CI so snapshots are not written
           },
-          stdio: 'inherit'
         })
 
         await Promise.all([
@@ -3326,7 +3391,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisEvpProxyConfig(receiver.port),
             TESTS_TO_RUN: 'jest-flaky/flaky-'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3376,7 +3440,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'jest-flaky/flaky-',
             DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3429,7 +3492,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'jest-flaky/flaky-',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3477,7 +3539,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3524,7 +3585,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3606,7 +3666,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3691,9 +3750,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/parallel-test-hit-breakpoint-',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
-            RUN_IN_PARALLEL: true
+            RUN_IN_PARALLEL: 'true'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3742,7 +3800,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'dynamic-instrumentation/test-not-hit-breakpoint',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3782,7 +3839,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             TEST_SHOULD_PASS_AFTER_RETRY: '1'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3821,7 +3877,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'office-addin-mock/test'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3884,7 +3939,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
-          stdio: 'inherit'
         }
       )
 
@@ -3915,7 +3969,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           TESTS_TO_RUN: 'test/ci-visibility-test',
           DD_SERVICE: 'my-service'
         },
-        stdio: 'inherit'
       }
     )
 
@@ -4030,6 +4083,18 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             }
           })
 
+      /**
+       * @param {() => void} done
+       * @param {{
+       *   isAttemptToFix?: boolean,
+       *   isQuarantined?: boolean,
+       *   isDisabled?: boolean,
+       *   shouldAlwaysPass?: boolean,
+       *   shouldFailSometimes?: boolean,
+       *   extraEnvVars?: Record<string, string>,
+       *   isParallel?: boolean
+       * }} [options]
+       */
       const runAttemptToFixTest = (done, {
         isAttemptToFix,
         isQuarantined,
@@ -4061,15 +4126,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
               ...extraEnvVars
             },
-            stdio: 'inherit'
           }
         )
 
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           stdout += chunk.toString()
         })
 
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           stdout += chunk.toString()
         })
 
@@ -4157,7 +4221,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               ...getCiVisAgentlessConfig(receiver.port),
               TESTS_TO_RUN: 'jest-flaky/flaky-fails.js'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -4216,7 +4279,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               ...getCiVisAgentlessConfig(receiver.port),
               TESTS_TO_RUN: 'jest-flaky/flaky-fails.js'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -4224,6 +4286,79 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           once(childProcess, 'exit'),
           eventsPromise
         ])
+      })
+
+      it('resets mock state between attempt to fix retries', async () => {
+        const NUM_RETRIES = 3
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: NUM_RETRIES } })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-attempt-to-fix-with-mock.js': {
+                tests: {
+                  'attempt to fix tests with mock resets mock state between retries': {
+                    properties: {
+                      attempt_to_fix: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+
+        let stdout = ''
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            // Should have 1 original + NUM_RETRIES retry attempts
+            const mockTests = tests.filter(
+              test => test.meta[TEST_NAME] === 'attempt to fix tests with mock resets mock state between retries'
+            )
+            assert.strictEqual(mockTests.length, NUM_RETRIES + 1)
+
+            // All tests should pass because mock state is reset between retries
+            for (const test of mockTests) {
+              assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+            }
+
+            // Last attempt should be marked as attempt_to_fix_passed
+            const lastTest = mockTests[mockTests.length - 1]
+            assert.strictEqual(lastTest.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-attempt-to-fix-with-mock'
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        childProcess.stderr?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        const [exitCode] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise
+        ])
+
+        // Verify the test actually ran
+        assert.match(stdout, /I am running attempt to fix with mock/)
+
+        // All retries should pass, so exit code should be 0
+        assert.strictEqual(exitCode[0], 0)
       })
 
       it('does not fail retry if a test is quarantined', (done) => {
@@ -4321,7 +4456,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               ...getCiVisAgentlessConfig(receiver.port),
               TESTS_TO_RUN: 'test-management/test-snapshot-attempt-to-fix-1'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -4374,7 +4508,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               TESTS_TO_RUN: 'test-management/test-snapshot-attempt-to-fix-1',
               SHOULD_PASS_ALWAYS: '1'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -4436,7 +4569,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               ...getCiVisAgentlessConfig(receiver.port),
               TESTS_TO_RUN: 'test-management/test-snapshot-image'
             },
-            stdio: 'inherit'
           }
         )
 
@@ -4458,7 +4590,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               extraEnvVars: {
                 // we need to run more than 1 suite for parallel mode to kick in
                 TESTS_TO_RUN: 'test-management/test-attempt-to-fix',
-                RUN_IN_PARALLEL: true
+                RUN_IN_PARALLEL: 'true'
               }
             }
           )
@@ -4524,9 +4656,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TESTS_TO_RUN: 'test-management/test-snapshot-attempt-to-fix-',
-                RUN_IN_PARALLEL: true
+                RUN_IN_PARALLEL: 'true'
               },
-              stdio: 'inherit'
             }
           )
 
@@ -4614,12 +4745,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               SHOULD_CHECK_RESULTS: '1',
               ...extraEnvVars
             },
-            stdio: 'inherit'
           }
         )
 
         // jest uses stderr to output logs
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           stdout += chunk.toString()
         })
 
@@ -4665,7 +4795,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           {
             // we need to run more than 1 suite for parallel mode to kick in
             TESTS_TO_RUN: 'test-management/test-disabled',
-            RUN_IN_PARALLEL: true
+            RUN_IN_PARALLEL: 'true'
           },
           true
         )
@@ -4700,8 +4830,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
             if (isQuarantining) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+              // test session is passed even though a test fails because the test is quarantined
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
             } else {
               assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
             }
 
             const resourceNames = tests.map(span => span.resource)
@@ -4735,7 +4868,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             }
           })
 
-      const runQuarantineTest = (done, isQuarantining, extraEnvVars = {}, isParallel = false) => {
+      const runQuarantineTest = async (isQuarantining, extraEnvVars = {}, isParallel = false) => {
         let stdout = ''
         const testAssertionsPromise = getTestAssertions(isQuarantining, isParallel)
 
@@ -4748,62 +4881,124 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               TESTS_TO_RUN: 'test-management/test-quarantine-1',
               SHOULD_CHECK_RESULTS: '1',
               ...extraEnvVars
-            },
-            stdio: 'inherit'
+            }
           }
         )
 
         // jest uses stderr to output logs
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           stdout += chunk.toString()
         })
 
-        childProcess.on('exit', exitCode => {
-          testAssertionsPromise.then(() => {
-            // it runs regardless of quarantine status
-            assert.match(stdout, /I am running when quarantined/)
-            if (isQuarantining) {
-              // even though a test fails, the exit code is 0 because the test is quarantined
-              assert.strictEqual(exitCode, 0)
-            } else {
-              assert.strictEqual(exitCode, 1)
-            }
-            done()
-          }).catch(done)
-        })
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
+
+        // it runs regardless of quarantine status
+        assert.match(stdout, /I am running when quarantined/)
+        if (isQuarantining) {
+          // even though a test fails, the exit code is 0 because the test is quarantined
+          assert.strictEqual(exitCode, 0)
+        } else {
+          assert.strictEqual(exitCode, 1)
+        }
       }
 
-      it('can quarantine tests', (done) => {
+      it('can quarantine tests', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
 
-        runQuarantineTest(done, true)
+        await runQuarantineTest(true)
       })
 
-      it('fails if quarantine is not enabled', (done) => {
+      it('fails if quarantine is not enabled', async () => {
         receiver.setSettings({ test_management: { enabled: false } })
 
-        runQuarantineTest(done, false)
+        await runQuarantineTest(false)
       })
 
-      it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+      it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
 
-        runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+        await runQuarantineTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
       })
 
-      it('can quarantine in parallel mode', (done) => {
+      it('can quarantine in parallel mode', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
 
-        runQuarantineTest(
-          done,
+        await runQuarantineTest(
           true,
           {
             // we need to run more than 1 suite for parallel mode to kick in
             TESTS_TO_RUN: 'test-management/test-quarantine',
-            RUN_IN_PARALLEL: true
+            RUN_IN_PARALLEL: 'true'
           },
           true
         )
+      })
+
+      it('fails if a non-quarantined test fails even when a quarantined test also fails', async () => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        // Only quarantine one of the failing tests, leaving another failing test non-quarantined
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-partial-quarantine.js': {
+                tests: {
+                  'partial quarantine tests quarantined failing test': {
+                    properties: {
+                      quarantined: true
+                    }
+                  }
+                  // Note: 'partial quarantine tests non-quarantined failing test' is NOT quarantined
+                }
+              }
+            }
+          }
+        })
+
+        const testAssertionsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            // Session should be marked as failed because a non-quarantined test failed
+            assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+
+            // Verify the quarantined test has the quarantine tag
+            const quarantinedTest = tests.find(
+              test => test.meta[TEST_NAME] === 'partial quarantine tests quarantined failing test'
+            )
+            assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+            // Verify the non-quarantined test does NOT have the quarantine tag
+            const nonQuarantinedTest = tests.find(
+              test => test.meta[TEST_NAME] === 'partial quarantine tests non-quarantined failing test'
+            )
+            assert.strictEqual(nonQuarantinedTest.meta[TEST_STATUS], 'fail')
+            assert.ok(
+              !(TEST_MANAGEMENT_IS_QUARANTINED in nonQuarantinedTest.meta),
+              'Non-quarantined test should not have quarantine tag'
+            )
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-partial-quarantine',
+              SHOULD_CHECK_RESULTS: '1'
+            }
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
+
+        // Exit code should be 1 because a non-quarantined test failed
+        assert.strictEqual(exitCode, 1)
       })
     })
 
@@ -4832,13 +5027,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           TESTS_TO_RUN: 'test-management/test-attempt-to-fix-1',
           DD_TRACE_DEBUG: '1'
         },
-        stdio: 'inherit'
       })
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
 
@@ -4881,7 +5075,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             DD_TEST_SESSION_NAME: 'my-test-session-name'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -4917,7 +5110,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'ci-visibility/test-custom-tags'
           },
-          stdio: 'inherit'
         }
       )
 
@@ -4963,6 +5155,24 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
          })`
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-1.js', { cwd, stdio: 'ignore' })
+
+      // Also modify test file with mock for mock state reset test
+      fs.writeFileSync(
+        path.join(cwd, 'ci-visibility/test-impacted-test/test-impacted-with-mock.js'),
+        `'use strict'
+
+         const mockFn = jest.fn()
+
+         describe('impacted tests with mock', () => {
+           it('resets mock state between retries', () => {
+             console.log('I am running impacted test with mock')
+             mockFn()
+             expect(mockFn).toHaveBeenCalledTimes(1)
+           })
+         })`
+      )
+      execSync('git add ci-visibility/test-impacted-test/test-impacted-with-mock.js', { cwd, stdio: 'ignore' })
+
       execSync('git commit -m "modify test-impacted-1.js"', { cwd, stdio: 'ignore' })
     })
 
@@ -5064,7 +5274,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             GITHUB_BASE_REF: '',
             ...extraEnvVars
           },
-          stdio: 'inherit'
         }
       )
 
@@ -5139,7 +5348,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               TESTS_TO_RUN: 'test-impacted-test/test-impacted-1',
               GITHUB_BASE_REF: ''
             },
-            stdio: 'inherit'
           }
         )
 
@@ -5170,7 +5378,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         runImpactedTest(done, { isModified: true, isParallel: true }, {
           TESTS_TO_RUN: 'test-impacted-test/test-impacted',
-          RUN_IN_PARALLEL: true
+          RUN_IN_PARALLEL: 'true'
         })
       })
     })
@@ -5189,6 +5397,76 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           known_tests_enabled: true
         })
         runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
+      })
+
+      it('resets mock state between impacted test retries', async () => {
+        // Test is considered new (not in known tests)
+        receiver.setKnownTests({ jest: {} })
+        receiver.setSettings({
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES
+            },
+            faulty_session_threshold: 100
+          },
+          known_tests_enabled: true
+        })
+
+        let stdout = ''
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            // Should have 1 original + NUM_RETRIES retry attempts
+            const mockTests = tests.filter(
+              test => test.meta[TEST_NAME] === 'impacted tests with mock resets mock state between retries'
+            )
+            assert.strictEqual(mockTests.length, NUM_RETRIES + 1)
+
+            // All tests should pass because mock state is reset between retries
+            for (const test of mockTests) {
+              assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+            }
+
+            // All should be marked as modified (impacted)
+            for (const test of mockTests) {
+              assert.strictEqual(test.meta[TEST_IS_MODIFIED], 'true')
+            }
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-impacted-test/test-impacted-with-mock',
+              GITHUB_BASE_REF: ''
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        childProcess.stderr?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        const [exitCode] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise
+        ])
+
+        // Verify the test actually ran
+        assert.match(stdout, /I am running impacted test with mock/)
+
+        // All retries should pass, so exit code should be 0
+        assert.strictEqual(exitCode[0], 0)
       })
     })
   })
@@ -5277,15 +5555,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           ...getCiVisAgentlessConfig(receiver.port),
           TESTS_TO_RUN: 'jest-package-mock/non-dependency-mock-test',
           SETUP_FILES_AFTER_ENV: '<rootDir>/ci-visibility/jest-setup-files-after-env.js',
-          RUN_IN_PARALLEL: true,
+          RUN_IN_PARALLEL: 'true',
         }
       }
     )
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
 

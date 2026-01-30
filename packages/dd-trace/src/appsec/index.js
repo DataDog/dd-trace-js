@@ -110,6 +110,8 @@ function enable (_config) {
   }
 }
 
+const analyzedBodies = new WeakSet()
+
 function onRequestBodyParsed ({ req, res, body, abortController }) {
   if (body === undefined || body === null) return
 
@@ -126,6 +128,12 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
     storedBodies.set(req, body)
   }
 
+  // eslint-disable-next-line eslint-rules/eslint-safe-typeof-object
+  if (typeof body === 'object') {
+    if (isEmptyObject(body)) return
+    analyzedBodies.add(body)
+  }
+
   const results = waf.run({
     persistent: {
       [addresses.HTTP_INCOMING_BODY]: body
@@ -135,11 +143,16 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
   handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
+const analyzedCookies = new WeakSet()
+
 function onRequestCookieParser ({ req, res, abortController, cookies }) {
   if (!cookies || typeof cookies !== 'object') return
 
   const rootSpan = web.root(req)
   if (!rootSpan) return
+
+  if (isEmptyObject(cookies)) return
+  analyzedCookies.add(cookies)
 
   const results = waf.run({
     persistent: {
@@ -184,19 +197,34 @@ function incomingHttpEndTranslator ({ req, res }) {
   const persistent = {}
 
   // we need to keep this to support other body parsers
-  // TODO: no need to analyze it if it was already done by the body-parser hook
   if (req.body !== undefined && req.body !== null) {
-    persistent[addresses.HTTP_INCOMING_BODY] = req.body
+    // eslint-disable-next-line eslint-rules/eslint-safe-typeof-object
+    if (typeof req.body === 'object') {
+      if (!isEmptyObject(req.body) && !analyzedBodies.has(req.body)) {
+        persistent[addresses.HTTP_INCOMING_BODY] = req.body
+      }
+    } else {
+      persistent[addresses.HTTP_INCOMING_BODY] = req.body
+    }
   }
 
   // we need to keep this to support other cookie parsers
-  if (req.cookies !== null && typeof req.cookies === 'object') {
+  if (
+    req.cookies !== null &&
+    typeof req.cookies === 'object' &&
+    !isEmptyObject(req.cookies) &&
+    !analyzedCookies.has(req.cookies)
+  ) {
     persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
   // we need to keep this to support nextjs
   const query = req.query
-  if (query !== null && typeof query === 'object') {
+  if (
+    query !== null &&
+    typeof query === 'object' &&
+    !isEmptyObject(query)
+  ) {
     persistent[addresses.HTTP_INCOMING_QUERY] = query
   }
 
@@ -204,7 +232,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
-  if (Object.keys(persistent).length) {
+  if (!isEmptyObject(persistent)) {
     waf.run({ persistent }, req)
   }
 
@@ -279,6 +307,8 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
+  if (isEmptyObject(query)) return
+
   const results = waf.run({
     persistent: {
       [addresses.HTTP_INCOMING_QUERY]: query
@@ -292,7 +322,7 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (!params || typeof params !== 'object' || !Object.keys(params).length) return
+  if (!params || typeof params !== 'object' || isEmptyObject(params)) return
 
   const results = waf.run({
     persistent: {
@@ -316,7 +346,7 @@ function onResponseBody ({ req, res, body }) {
 }
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
-  if (Object.keys(responseHeaders).length) {
+  if (!isEmptyObject(responseHeaders)) {
     storedResponseHeaders.set(req, responseHeaders)
   }
 
@@ -492,6 +522,16 @@ function disable () {
   if (stripeCheckoutSessionCreate.hasSubscribers) stripeCheckoutSessionCreate.unsubscribe(onStripeCheckoutSessionCreate)
   if (stripePaymentIntentCreate.hasSubscribers) stripePaymentIntentCreate.unsubscribe(onStripePaymentIntentCreate)
   if (stripeConstructEvent.hasSubscribers) stripeConstructEvent.unsubscribe(onStripeConstructEvent)
+}
+
+// this is faster than Object.keys().length === 0
+function isEmptyObject (obj) {
+  // eslint-disable-next-line no-unreachable-loop
+  for (const _ in obj) {
+    return false
+  }
+
+  return true
 }
 
 module.exports = {

@@ -62,7 +62,7 @@ describe('startup logging', () => {
     const infoStub = /** @type {sinon.SinonStub} */ (console.info)
     // eslint-disable-next-line no-console
     const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-    startupLog({ agentError: { message: 'Error: fake error' } })
+    startupLog({ message: 'Error: fake error' })
     firstStderrCall = infoStub.firstCall
     secondStderrCall = warnStub.firstCall
     infoStub.restore()
@@ -83,7 +83,7 @@ describe('startup logging', () => {
       env: 'production',
       enabled: true,
       service: 'test',
-      agent_url: 'http://example.com:4321',
+      agent_url: 'http://example.com:4321/',
       debug: true,
       sample_rate: 1,
       sampling_rules: [

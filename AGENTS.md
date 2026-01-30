@@ -11,6 +11,7 @@
 **Package manager policy:**
 
 - Use **yarn only for installing dependencies and services**:
+  - `yarn add`
   - `yarn install`
   - `yarn services`
 - Use **npm for running scripts and other commands**: `npm run <script>`
@@ -34,9 +35,11 @@ dd-trace is the Datadog client library for Node.js.
 
 ## Testing Instructions
 
-### Running Individual Tests
+**IMPORTANT**: The root `npm test` is intentionally disabled. Always run a specific `*.spec.js` file, or a targeted `npm run test:<area>` script.
 
-**IMPORTANT**: Never run the root `npm test`. Prefer running a specific `*.spec.js` file, or a targeted `npm run test:<area>` script.
+**Integration Tests**: Tests in `integration-tests/` require `required_permissions: ["all"]` when run in Cursor's AI environment.
+
+### Running Individual Tests
 
 **Unit tests:**
 

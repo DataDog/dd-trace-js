@@ -1,5 +1,7 @@
 'use strict'
 
+const { inspect } = require('util')
+
 const request = require('../common/request')
 const { startupLog } = require('../../startup-log')
 const runtimeMetrics = require('../../runtime_metrics')
@@ -10,8 +12,9 @@ const BaseWriter = require('../common/writer')
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
 class AgentWriter extends BaseWriter {
-  constructor ({ prioritySampler, lookup, protocolVersion, headers, config = {} }) {
-    super(...arguments)
+  constructor (...args) {
+    super(...args)
+    const { prioritySampler, lookup, protocolVersion, headers, config = {} } = args[0]
     const AgentEncoder = getEncoder(protocolVersion)
 
     this._prioritySampler = prioritySampler
@@ -26,7 +29,10 @@ class AgentWriter extends BaseWriter {
     runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
 
     const { _headers, _lookup, _protocolVersion, _url } = this
-    makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, true, (err, res, status) => {
+    makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, (err, res, status) => {
+      // Note that logging will only happen once, regardless of how many times this is called.
+      startupLog(status !== 404 && status !== 200 ? { status, message: err?.message ?? inspect(err) } : undefined)
+
       if (status) {
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
@@ -38,8 +44,6 @@ class AgentWriter extends BaseWriter {
           runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
         }
       }
-
-      startupLog({ agentError: err })
 
       if (err) {
         log.errorWithoutTelemetry('Error sending payload to the agent (status code: %s)', err.status, err)
@@ -68,7 +72,7 @@ function getEncoder (protocolVersion) {
     : require('../../encode/0.4').AgentEncoder
 }
 
-function makeRequest (version, data, count, url, headers, lookup, needsStartupLog, cb) {
+function makeRequest (version, data, count, url, headers, lookup, cb) {
   const options = {
     path: `/v${version}/traces`,
     method: 'PUT',
@@ -79,7 +83,7 @@ function makeRequest (version, data, count, url, headers, lookup, needsStartupLo
       'X-Datadog-Trace-Count': String(count),
       'Datadog-Meta-Lang': 'nodejs',
       'Datadog-Meta-Lang-Version': process.version,
-      'Datadog-Meta-Lang-Interpreter': process.jsEngine || 'v8'
+      'Datadog-Meta-Lang-Interpreter': process.versions.bun ? 'JavaScriptCore' : 'v8'
     },
     lookup,
     url
@@ -87,15 +91,7 @@ function makeRequest (version, data, count, url, headers, lookup, needsStartupLo
 
   log.debug('Request to the agent: %j', options)
 
-  request(data, options, (err, res, status) => {
-    if (needsStartupLog) {
-      // Note that logging will only happen once, regardless of how many times this is called.
-      startupLog({
-        agentError: status !== 404 && status !== 200 ? err : undefined
-      })
-    }
-    cb(err, res, status)
-  })
+  request(data, options, cb)
 }
 
 module.exports = AgentWriter

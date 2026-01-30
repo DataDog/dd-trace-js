@@ -29,7 +29,7 @@
     "@elastic/transport": "9.3.0",
     "@fast-check/jest": "2.1.1",
     "@fastify/cookie": "11.0.2",
-    "@fastify/multipart": "9.3.0",
+    "@fastify/multipart": "9.4.0",
     "@google-cloud/pubsub": "5.2.2",
     "@google-cloud/vertexai": "1.10.0",
     "@google/genai": "1.37.0",

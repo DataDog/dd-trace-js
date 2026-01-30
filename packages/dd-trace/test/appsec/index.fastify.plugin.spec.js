@@ -561,6 +561,10 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           this.skip()
         }
 
+        if (semver.intersects(multipartLoadedVersion, '>=9.4.0') && semver.intersects(fastifyLoadedVersion, '<4')) {
+          this.skip()
+        }
+
         return agent.load(['fastify', '@fastify/multipart', 'http'], { client: false })
       })
 
