@@ -363,12 +363,12 @@ async function main () {
         }
 
         // Enable shared tarball caching for parallel runs to avoid redundant packing
-        const DD_TRACE_INTEGRATION_TARBALL_PATH = process.env.DD_TRACE_INTEGRATION_TARBALL_PATH ||
+        const DD_TEST_SANDBOX_TARBALL_PATH = process.env.DD_TEST_SANDBOX_TARBALL_PATH ||
           (jobs > 1 ? path.join(os.tmpdir(), 'dd-trace-integration-test.tgz') : undefined)
 
         const childEnv = {
           ...process.env,
-          DD_TRACE_INTEGRATION_TARBALL_PATH,
+          DD_TEST_SANDBOX_TARBALL_PATH,
           MOCHA_RUN_FILE_CONFIG: JSON.stringify(options),
         }
 

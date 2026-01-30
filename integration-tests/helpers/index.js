@@ -472,7 +472,7 @@ async function createSandbox (
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
   const folder = path.join(sandboxRoot, id().toString())
-  const tarballEnv = process.env.DD_TRACE_INTEGRATION_TARBALL_PATH
+  const tarballEnv = process.env.DD_TEST_SANDBOX_TARBALL_PATH
   const out = tarballEnv && tarballEnv !== '0' && tarballEnv !== 'false'
     ? tarballEnv
     : path.join(sandboxRoot, 'dd-trace.tgz')
