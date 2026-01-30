@@ -17,7 +17,7 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
-const coverageFixture = require('../ci-visibility/fixtures/coverage.json')
+const coverageFixture = require('../ci-visibility/fixtures/coverage-fixture.json')
 const {
   TEST_STATUS,
   TEST_COMMAND,

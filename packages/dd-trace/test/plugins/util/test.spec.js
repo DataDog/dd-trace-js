@@ -156,8 +156,8 @@ describe('coverage utils', () => {
   let coverage
 
   beforeEach(() => {
-    delete require.cache[require.resolve('./fixtures/coverage.json')]
-    coverage = require('./fixtures/coverage.json')
+    delete require.cache[require.resolve('./fixtures/coverage-fixture.json')]
+    coverage = require('./fixtures/coverage-fixture.json')
   })
 
   describe('getCoveredFilenamesFromCoverage', () => {

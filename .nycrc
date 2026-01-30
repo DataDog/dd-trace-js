@@ -2,5 +2,11 @@
   "reporter": [
     "text",
     "lcov"
-  ]
+  ],
+  "exclude": [
+    "**/test/**/fixtures/**",
+    "**/test/**/resources/**",
+    "**/integration-tests/**/fixtures/**"
+  ],
+  "excludeAfterRemap": true
 }
