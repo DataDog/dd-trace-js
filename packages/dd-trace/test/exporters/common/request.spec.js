@@ -305,6 +305,8 @@ describe('request', function () {
         method: 'PUT'
       },
       (err, _) => {
+        assert.notStrictEqual(err.code, 'ERR_INVALID_PROTOCOL',
+          'Should not get a protocol error when using named pipes.')
         assert.strictEqual(err.address, pipe)
         done()
       })
