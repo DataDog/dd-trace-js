@@ -2,6 +2,7 @@
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
+const { getDataStreamsContext } = require('../../dd-trace/src/datastreams/context')
 
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
 const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
@@ -88,6 +89,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     if (bootstrapServers) {
       span.setTag(BOOTSTRAP_SERVERS_KEY, bootstrapServers)
     }
+    let hasDsmContext = false
     for (const message of messages) {
       if (message !== null && typeof message === 'object') {
         // message headers are not supported for kafka broker versions <0.11
@@ -96,6 +98,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
           this.tracer.inject(span, 'text_map', message.headers)
         }
         if (this.config.dsmEnabled) {
+          hasDsmContext = true
           const payloadSize = getMessageSize(message)
           const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
 
@@ -109,6 +112,13 @@ class KafkajsProducerPlugin extends ProducerPlugin {
           }
         }
       }
+    }
+
+    // Sync DSM context to currentStore to ensure it's properly scoped
+    // to this handler's async continuations (fixes context leaking between
+    // concurrent handlers)
+    if (hasDsmContext) {
+      ctx.currentStore = { ...ctx.currentStore, dataStreamsContext: getDataStreamsContext() }
     }
 
     return ctx.currentStore
