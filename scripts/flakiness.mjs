@@ -3,6 +3,7 @@
 import { writeFileSync } from 'fs'
 import { inspect } from 'util'
 import { Octokit } from 'octokit'
+import pLimit from 'p-limit'
 
 const {
   BRANCH,
@@ -18,6 +19,7 @@ const {
 const ONE_DAY = 24 * 60 * 60 * 1000
 
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN })
+const limit = pLimit(25)
 const workflows = [
   '.github/workflows/apm-capabilities.yml',
   '.github/workflows/apm-integrations.yml',
@@ -43,7 +45,7 @@ let flakeCount = 0
 
 async function checkWorkflowRuns (id, page = 1) {
   // This only gets the last attempt of every run.
-  const response = await octokit.rest.actions.listWorkflowRuns({
+  const response = await limit(() => octokit.rest.actions.listWorkflowRuns({
     owner: 'DataDog',
     repo: 'dd-trace-js',
     page,
@@ -52,7 +54,7 @@ async function checkWorkflowRuns (id, page = 1) {
     created: `${startDate}..${endDate}`,
     branch: BRANCH,
     workflow_id: id
-  })
+  }))
 
   const runs = response.data.workflow_runs
 
@@ -80,7 +82,10 @@ async function checkWorkflowRuns (id, page = 1) {
     promises.push(checkWorkflowJobs(run.id, run.run_attempt - 1))
   }
 
-  promises.push(checkWorkflowRuns(id, page + 1))
+  // Only request next page if the current page was full.
+  if (runs.length === 100) {
+    promises.push(checkWorkflowRuns(id, page + 1))
+  }
 
   return Promise.all(promises)
 }
@@ -88,14 +93,14 @@ async function checkWorkflowRuns (id, page = 1) {
 async function checkWorkflowJobs (id, attempt, page = 1) {
   if (attempt < 1) return
 
-  const response = await octokit.rest.actions.listJobsForWorkflowRunAttempt({
+  const response = await limit(() => octokit.rest.actions.listJobsForWorkflowRunAttempt({
     attempt_number: attempt,
     owner: 'DataDog',
     repo: 'dd-trace-js',
     run_id: id,
     page,
     per_page: 100 // max is 100
-  })
+  }))
 
   const { jobs } = response.data
 
@@ -139,21 +144,21 @@ const logString = `jobs with at least ${OCCURRENCES} occurrences seen ${dateRang
 if (Object.keys(flaky).length === 0) {
   console.log(`*No flaky ${logString}`)
 } else {
-  const workflowSuccessRate = +((1 - flakeCount / totalCount) * 100).toFixed(1)
-  const pipelineSuccessRate = +((workflowSuccessRate / 100) ** workflows.length * 100).toFixed(1)
+  const workflowSuccessRate = Number(((1 - flakeCount / totalCount) * 100).toFixed(1))
+  const pipelineSuccessRate = Number((((workflowSuccessRate / 100) ** workflows.length) * 100).toFixed(1))
   const pipelineBadge = pipelineSuccessRate >= 85 ? '🟢' : pipelineSuccessRate >= 75 ? '🟡' : '🔴'
 
   let markdown = ''
   let slack = ''
 
   markdown += `**Flaky ${logString}**\n`
-  slack += `*Flaky ${logString}*\\n`
+  slack += String.raw`*Flaky ${logString}*\n`
 
   for (const [workflow, jobs] of Object.entries(flaky).sort()) {
     if (!reported.has(workflow)) continue
 
     markdown += `* ${workflow}\n`
-    slack += `  ●   ${workflow}\\n`
+    slack += String.raw`  ●   ${workflow}\n`
 
     for (const [job, urls] of Object.entries(jobs).sort()) {
       if (urls.length < OCCURRENCES) continue
@@ -161,7 +166,7 @@ if (Object.keys(flaky).length === 0) {
       const markdownLinks = urls.map((url, idx) => `[${String(idx + 1).padStart(2, '0')}](${url})`)
       const runsBadge = urls.length >= 3 ? ' 🔴' : urls.length === 2 ? ' 🟡' : ''
       markdown += `    * ${job} (${markdownLinks.join(', ')})${runsBadge}\n`
-      slack += `         ○   ${job} (${urls.length})${runsBadge}\\n`
+      slack += String.raw`         ○   ${job} (${urls.length})${runsBadge}\n`
     }
   }
 
@@ -175,15 +180,15 @@ if (Object.keys(flaky).length === 0) {
   if (GITHUB_REPOSITORY && GITHUB_RUN_ID) {
     const link = `https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`
 
-    slack += '\\n'
+    slack += String.raw`\n`
     slack += `View full report with links to failures on <${link}|GitHub>.`
   }
 
-  slack += '\\n'
-  slack += '*Flakiness stats*\\n'
-  slack += `  ●   Total runs: ${totalCount}\\n`
-  slack += `  ●   Flaky runs: ${flakeCount}\\n`
-  slack += `  ●   Workflow success rate: ${workflowSuccessRate}%\\n`
+  slack += String.raw`\n`
+  slack += String.raw`*Flakiness stats*\n`
+  slack += String.raw`  ●   Total runs: ${totalCount}\n`
+  slack += String.raw`  ●   Flaky runs: ${flakeCount}\n`
+  slack += String.raw`  ●   Workflow success rate: ${workflowSuccessRate}%\n`
   slack += `  ●   Pipeline success rate (approx): ${pipelineSuccessRate}% ${pipelineBadge}`
 
   console.log(markdown)

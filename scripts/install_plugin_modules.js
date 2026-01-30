@@ -4,12 +4,14 @@ const { lstat, mkdir, readdir, writeFile } = require('fs/promises')
 const { arch } = require('os')
 const { join } = require('path')
 const { createHash } = require('crypto')
+// eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
 const externals = require('../packages/dd-trace/test/plugins/externals.json')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
+const pLimit = require('p-limit')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
@@ -37,7 +39,8 @@ async function run () {
 async function assertPrerequisites () {
   const filter = process.env.PLUGINS?.split('|')
 
-  const moduleNames = (await readdir(join(__dirname, '..', 'packages', 'datadog-instrumentations', 'src')))
+  const instrumentationFiles = await readdir(join(__dirname, '..', 'packages', 'datadog-instrumentations', 'src'))
+  const moduleNames = instrumentationFiles
     .filter(file => file.endsWith('.js'))
     .map(file => file.slice(0, -3))
     .filter(file => !filter || filter.includes(file))
@@ -47,16 +50,15 @@ async function assertPrerequisites () {
     return internals
   }, [])
 
-  for (const inst of internals) {
-    await assertInstrumentation(inst, false)
-  }
+  const limit = pLimit(3)
+
+  await Promise.all(internals.map(inst => limit(() => assertInstrumentation(inst, false))))
 
   const externalNames = Object.keys(externals).filter(name => moduleNames.includes(name))
-  for (const name of externalNames) {
-    for (const inst of [].concat(externals[name])) {
-      await assertInstrumentation(inst, true)
-    }
-  }
+
+  await Promise.all(externalNames.map(name => limit(async () => {
+    await Promise.all(externals[name].map(inst => limit(() => assertInstrumentation(inst, true))))
+  })))
 
   await assertWorkspaces()
 }
@@ -68,19 +70,18 @@ async function assertPrerequisites () {
 async function assertInstrumentation (instrumentation, external) {
   const versions = process.env.PACKAGE_VERSION_RANGE && !external
     ? [process.env.PACKAGE_VERSION_RANGE]
-    : [].concat(instrumentation.versions || [])
+    : [instrumentation.versions || []].flat()
 
-  for (const version of versions) {
-    if (!version) continue
+  await Promise.all(versions.map(async version => {
+    if (!version) return
 
     if (version !== '*') {
       const result = semver.coerce(version)
       if (!result) throw new Error(`Invalid version: ${version}`)
       await assertModules(instrumentation.name, result.version, external)
     }
-
     await assertModules(instrumentation.name, version, external)
-  }
+  }))
 }
 
 /**
@@ -118,7 +119,7 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     [name]: getCappedRange(name, dependencyVersionRange)
   }
   const pkg = {
-    name: [name, sha1(name).slice(0, 8), sha1(version)].filter(val => val).join('-'),
+    name: [name, sha1(name).slice(0, 8), sha1(version)].filter(Boolean).join('-'),
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,
@@ -152,25 +153,28 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
 async function assertPeerDependencies (rootFolder, parent = '') {
   const entries = await readdir(rootFolder)
 
-  for (const entry of entries) {
+  const limit = pLimit(10)
+
+  await Promise.all(entries.map(entry => limit(async () => {
     const folder = join(rootFolder, entry)
 
-    if (!(await lstat(folder)).isDirectory()) continue
-    if (entry === 'node_modules') continue
+    const folderStat = await lstat(folder)
+    if (!folderStat.isDirectory()) return
+    if (entry === 'node_modules') return
     if (entry.startsWith('@')) {
       await assertPeerDependencies(folder, entry)
-      continue
+      return
     }
 
     const externalName = join(parent, entry.split('@')[0])
 
-    if (!externalDeps.has(externalName)) continue
+    if (!externalDeps.has(externalName)) return
 
     const versionPkgJsonPath = join(folder, 'package.json')
     const versionPkgJson = require(versionPkgJsonPath)
 
     for (const { dep, name, node } of externalDeps.get(externalName)) {
-      if (node && !semver.satisfies(process.versions.node, node)) continue
+      if (node && !semver.satisfies(process.versions.node, node)) return
       const pkgJsonPath = require(folder).pkgJsonPath()
       const pkgJson = require(pkgJsonPath)
 
@@ -186,13 +190,14 @@ async function assertPeerDependencies (rootFolder, parent = '') {
               : pkgJson[section][name]
           }
 
+          // eslint-disable-next-line no-await-in-loop
           await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
 
           break
         }
       }
     }
-  }
+  })))
 }
 
 /**
@@ -245,7 +250,7 @@ async function assertWorkspaces () {
     license: 'BSD-3-Clause',
     private: true,
     workspaces: {
-      packages: Array.from(workspaces)
+      packages: [...workspaces]
     }
   }, null, 2) + '\n')
 }
