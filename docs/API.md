@@ -67,6 +67,7 @@ tracer.use('pg', {
 <h5 id="knex"></h5>
 <h5 id="koa"></h5>
 <h5 id="langchain"></h5>
+<h5 id="langgraph"></h5>
 <h5 id="mariadb"></h5>
 <h5 id="memcached"></h5>
 <h5 id="microgateway-core"></h5>
@@ -145,6 +146,7 @@ tracer.use('pg', {
 * [knex](./interfaces/export_.plugins.knex.html)
 * [koa](./interfaces/export_.plugins.koa.html)
 * [langchain](./interfaces/export_.plugins.langchain.html)
+* [langgraph](./interfaces/export_.plugins.langgraph.html)
 * [mariadb](./interfaces/export_.plugins.mariadb.html)
 * [memcached](./interfaces/export_.plugins.memcached.html)
 * [microgateway-core](./interfaces/export_.plugins.microgateway_core.html)
