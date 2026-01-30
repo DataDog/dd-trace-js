@@ -198,13 +198,16 @@ jobs:
           git commit -m "update vendored dependencies with new versions"
           echo "commits=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
       - name: Push commit
-        uses: DataDog/commit-headless@583489e08d78037e7fa256c14adf998d5463f6a0 # action/v2.0.2
         env:
-          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
-        with:
-          branch: ${{ github.event.pull_request.head.ref }}
-          command: push
-          commits: "${{ steps.create-commit.outputs.commits }}"
+          DD_OCTO_STS_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          TARGET_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+
+          # Ensure the push is attributed to the octo-sts GitHub App token (not GITHUB_TOKEN),
+          # so the resulting push triggers CI workflows normally.
+          auth_header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$DD_OCTO_STS_TOKEN" | base64 | tr -d '\n')"
+          git -c "http.https://github.com/.extraheader=$auth_header" push origin "HEAD:$TARGET_BRANCH"
 
   vendor-validate:
     # Run validation after the generated vendor patch has been pushed, to ensure the PR contains
