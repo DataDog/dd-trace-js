@@ -141,3 +141,6 @@ __queuestorage__/AzuriteConfig
 
 # ignore claude settings
 .claude/
+
+# Husky generates a helper dir under .husky/_ (including husky.sh). Don't commit it.
+.husky/_/
