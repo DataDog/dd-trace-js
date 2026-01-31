@@ -13,12 +13,13 @@ const {
   GITHUB_RUN_ID,
   MERGE = 'true',
   OCCURRENCES = '1',
-  UNTIL
+  UNTIL,
+  GITHUB_TOKEN,
 } = process.env
 
 const ONE_DAY = 24 * 60 * 60 * 1000
 
-const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN })
+const octokit = new Octokit({ auth: GITHUB_TOKEN })
 const limit = pLimit(25)
 const workflows = [
   '.github/workflows/apm-capabilities.yml',
@@ -42,6 +43,51 @@ const startDate = new Date(new Date(endDate).getTime() - (Number(DAYS) - 1) * ON
 
 let totalCount = 0
 let flakeCount = 0
+
+function redactHeaders (headers) {
+  if (!headers || typeof headers !== 'object') return headers
+
+  const out = { ...headers }
+  for (const key of Object.keys(out)) {
+    if (key.toLowerCase() === 'authorization') out[key] = '<redacted>'
+  }
+  return out
+}
+
+/**
+ * @param {{ id: number, attempt: number, page: number }} params
+ * @returns {Promise<{ jobs: unknown }>}
+ */
+async function fetchJobsAttemptRest (params) {
+  const { id, attempt, page } = params
+  const url = new URL(`https://api.github.com/repos/DataDog/dd-trace-js/actions/runs/${id}/attempts/${attempt}/jobs`)
+  url.searchParams.set('page', String(page))
+  url.searchParams.set('per_page', '100')
+
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      accept: 'application/vnd.github+json',
+      authorization: `Bearer ${GITHUB_TOKEN}`,
+    }
+  })
+
+  const headers = Object.fromEntries(res.headers.entries())
+  const text = await res.text()
+  try {
+    return JSON.parse(text)
+  } catch (err) {
+    const summary = {
+      status: res.status,
+      headers: redactHeaders(headers),
+      bodyLength: text.length,
+      bodyPrefix: text.slice(0, 200),
+    }
+    throw new TypeError(
+      `Failed to parse jobs REST response as JSON (${inspect(summary, { depth: 5 })}): ${inspect(err, { depth: 5 })}`
+    )
+  }
+}
 
 async function checkWorkflowRuns (id, page = 1) {
   // This only gets the last attempt of every run.
@@ -102,7 +148,26 @@ async function checkWorkflowJobs (id, attempt, page = 1) {
     per_page: 100 // max is 100
   }))
 
-  const { jobs } = response.data
+  /** @type {unknown} */
+  let jobs = response?.data?.jobs
+
+  // If Octokit returns an invalid shape (including `data: ''`), fall back to a raw REST fetch.
+  if (!Array.isArray(jobs)) {
+    console.warn(
+      `Octokit jobs response invalid; attempting REST fallback: ${inspect({
+        id,
+        attempt,
+        page,
+        status: response?.status,
+        url: response?.url,
+        headers: redactHeaders(response?.headers),
+        data: response?.data
+      }, { depth: 5 })}`
+    )
+
+    const rest = await limit(() => fetchJobsAttemptRest({ id, attempt, page }))
+    jobs = rest?.jobs
+  }
 
   // Octokit v5 format: response.data.jobs is an array.
   if (!Array.isArray(jobs)) {
