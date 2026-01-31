@@ -27,7 +27,8 @@ const DEFAULT_SETTINGS = {
   test_management: {
     enabled: false
   },
-  impacted_tests_enabled: false
+  impacted_tests_enabled: false,
+  coverage_report_upload_enabled: false
 }
 
 const DEFAULT_SUITES_TO_SKIP = []
@@ -171,6 +172,30 @@ class FakeCiVisIntake extends FakeAgent {
       this.emit('message', {
         headers: req.headers,
         payload: coveragePayloads,
+        url: req.url
+      })
+    })
+
+    // Coverage report upload endpoint - one file per request
+    app.post([
+      '/api/v2/cicovreprt',
+      '/evp_proxy/:version/api/v2/cicovreprt'
+    ], upload.any(), (req, res) => {
+      res.status(200).send('OK')
+
+      const coverageFile = req.files.find(f => f.fieldname === 'coverage')
+      const eventFile = req.files.find(f => f.fieldname === 'event')
+
+      this.emit('message', {
+        headers: req.headers,
+        coverageFile: coverageFile && {
+          name: coverageFile.fieldname,
+          content: zlib.gunzipSync(coverageFile.buffer).toString('utf8')
+        },
+        eventFile: eventFile && {
+          name: eventFile.fieldname,
+          content: JSON.parse(eventFile.buffer.toString('utf8'))
+        },
         url: req.url
       })
     })

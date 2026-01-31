@@ -16,6 +16,7 @@ env:
 
 jobs:
   ubuntu:
+    name: ${{ github.workflow }} / ubuntu (node-${{ matrix.version }})
     strategy:
       matrix:
         version: [oldest, maintenance, active, latest]

@@ -37,6 +37,10 @@ if (process.env.COLLECT_COVERAGE_FROM) {
   options.collectCoverageFrom = process.env.COLLECT_COVERAGE_FROM.split(',')
 }
 
+if (process.env.COVERAGE_REPORTERS) {
+  options.coverageReporters = process.env.COVERAGE_REPORTERS.split(',')
+}
+
 if (process.env.DO_NOT_INJECT_GLOBALS) {
   options.injectGlobals = false
 }

@@ -301,17 +301,21 @@ function testBasicInputWithoutRC (t, probe, done) {
 function setupAssertionListeners (t, done, probe) {
   let traceId, spanId, dd
 
-  t.agent.on('message', ({ payload }) => {
+  const messageListener = ({ payload }) => {
     const span = payload.find((arr) => arr[0].name === 'fastify.request')?.[0]
     if (!span) return
 
     traceId = span.trace_id.toString()
     spanId = span.span_id.toString()
 
-    assertDD()
-  })
+    t.agent.removeListener('message', messageListener)
 
-  t.agent.on('debugger-input', ({ payload }) => {
+    assertDD()
+  }
+
+  t.agent.on('message', messageListener)
+
+  t.agent.once('debugger-input', ({ payload }) => {
     assertBasicInputPayload(t, payload, probe)
 
     payload = payload[0]

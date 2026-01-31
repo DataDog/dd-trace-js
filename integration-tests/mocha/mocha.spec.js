@@ -62,6 +62,8 @@ const {
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
+  GIT_COMMIT_SHA,
+  GIT_REPOSITORY_URL,
   TEST_IS_MODIFIED,
   CI_APP_ORIGIN,
   TEST_FRAMEWORK_VERSION,
@@ -4573,6 +4575,83 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         once(childProcess, 'exit'),
         getTestAssertions()
       ])
+    })
+  })
+
+  context('coverage report upload', () => {
+    const gitCommitSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    const gitRepositoryUrl = 'https://github.com/datadog/test-repo.git'
+
+    it('uploads coverage report when coverage_report_upload_enabled is true', async () => {
+      receiver.setSettings({
+        coverage_report_upload_enabled: true
+      })
+
+      const coverageReportPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/cicovreprt', (payloads) => {
+          assert.strictEqual(payloads.length, 1)
+
+          const coverageReport = payloads[0]
+
+          assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
+
+          assert.strictEqual(coverageReport.coverageFile.name, 'coverage')
+          assert.ok(coverageReport.coverageFile.content.includes('SF:')) // LCOV format
+
+          assert.strictEqual(coverageReport.eventFile.name, 'event')
+          assert.strictEqual(coverageReport.eventFile.content.type, 'coverage_report')
+          assert.strictEqual(coverageReport.eventFile.content.format, 'lcov')
+          assert.strictEqual(coverageReport.eventFile.content[GIT_COMMIT_SHA], gitCommitSha)
+          assert.strictEqual(coverageReport.eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
+        })
+
+      const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov ${runTestsCommand}`
+
+      childProcess = exec(
+        runTestsWithLcovCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_GIT_COMMIT_SHA: gitCommitSha,
+            DD_GIT_REPOSITORY_URL: gitRepositoryUrl
+          }
+        }
+      )
+
+      await Promise.all([
+        coverageReportPromise,
+        once(childProcess, 'exit')
+      ])
+    })
+
+    it('does not upload coverage report when coverage_report_upload_enabled is false', async () => {
+      receiver.setSettings({
+        coverage_report_upload_enabled: false
+      })
+
+      let coverageReportUploaded = false
+      receiver.assertPayloadReceived(() => {
+        coverageReportUploaded = true
+      }, ({ url }) => url === '/api/v2/cicovreprt')
+
+      const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov -r=text-summary ${runTestsCommand}`
+
+      childProcess = exec(
+        runTestsWithLcovCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_GIT_COMMIT_SHA: gitCommitSha,
+            DD_GIT_REPOSITORY_URL: gitRepositoryUrl
+          }
+        }
+      )
+
+      await once(childProcess, 'exit')
+
+      assert.strictEqual(coverageReportUploaded, false, 'coverage report should not be uploaded')
     })
   })
 })

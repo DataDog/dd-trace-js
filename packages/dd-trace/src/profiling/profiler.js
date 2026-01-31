@@ -14,13 +14,6 @@ const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./we
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')
 
-function maybeSourceMap (sourceMap, SourceMapper, debug) {
-  if (!sourceMap) return
-  return SourceMapper.create([
-    process.cwd()
-  ], debug)
-}
-
 function logError (logger, ...args) {
   if (logger) {
     logger.error(...args)
@@ -57,6 +50,7 @@ class Profiler extends EventEmitter {
   #logger
   #profileSeq = 0
   #spanFinishListener
+  #sourceMapCount = 0
   #timer
 
   constructor () {
@@ -151,13 +145,16 @@ class Profiler extends EventEmitter {
       const { setLogger, SourceMapper } = require('@datadog/pprof')
       setLogger(config.logger)
 
-      mapper = await maybeSourceMap(config.sourceMap, SourceMapper, config.debugSourceMaps)
-      if (config.sourceMap && config.debugSourceMaps) {
-        this.#logger.debug(() => {
-          return mapper.infoMap.size === 0
-            ? 'Found no source maps'
-            : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
-        })
+      if (config.sourceMap) {
+        mapper = await SourceMapper.create([process.cwd()], config.debugSourceMaps)
+        this.#sourceMapCount = mapper.infoMap.size
+        if (config.debugSourceMaps) {
+          this.#logger.debug(() => {
+            return this.#sourceMapCount === 0
+              ? 'Found no source maps'
+              : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
+          })
+        }
       }
 
       const clevel = config.uploadCompression.level
@@ -295,7 +292,8 @@ class Profiler extends EventEmitter {
   #createInitialInfos () {
     return {
       serverless: this.serverless,
-      settings: this.#config.systemInfoReport
+      settings: this.#config.systemInfoReport,
+      sourceMapCount: this.#sourceMapCount
     }
   }
 

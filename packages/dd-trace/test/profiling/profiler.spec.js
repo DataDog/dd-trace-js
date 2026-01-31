@@ -347,8 +347,8 @@ describe('profiler', function () {
     })
 
     it('should pass source mapper to profilers when enabled', async () => {
-      const mapper = {}
-      sourceMapCreate.returns(mapper)
+      const mapper = { infoMap: new Map() }
+      sourceMapCreate.returns(Promise.resolve(mapper))
       await profiler._start(makeStartOptions({ sourceMap: true }))
 
       const options = profilers[0].start.args[0][0]
@@ -383,6 +383,69 @@ describe('profiler', function () {
       const { infos } = await exporterPromise
 
       assert.strictEqual(infos.serverless, false)
+    })
+
+    it('should include sourceMapCount: 0 when source maps are disabled', async () => {
+      exporterPromise = new Promise(resolve => {
+        exporter.export = (exportSpec) => {
+          resolve(exportSpec)
+          return Promise.resolve()
+        }
+      })
+
+      await profiler._start(makeStartOptions({ sourceMap: false }))
+
+      clock.tick(interval)
+
+      const { infos } = await exporterPromise
+
+      assert.strictEqual(infos.sourceMapCount, 0)
+    })
+
+    it('should include sourceMapCount: 0 when no source maps are found', async () => {
+      const mapper = { infoMap: new Map() }
+      sourceMapCreate.returns(Promise.resolve(mapper))
+
+      exporterPromise = new Promise(resolve => {
+        exporter.export = (exportSpec) => {
+          resolve(exportSpec)
+          return Promise.resolve()
+        }
+      })
+
+      await profiler._start(makeStartOptions({ sourceMap: true }))
+
+      clock.tick(interval)
+
+      const { infos } = await exporterPromise
+
+      assert.strictEqual(infos.sourceMapCount, 0)
+    })
+
+    it('should include sourceMapCount with the number of loaded source maps', async () => {
+      const mapper = {
+        infoMap: new Map([
+          ['file1.js', {}],
+          ['file2.js', {}],
+          ['file3.js', {}]
+        ])
+      }
+      sourceMapCreate.returns(Promise.resolve(mapper))
+
+      exporterPromise = new Promise(resolve => {
+        exporter.export = (exportSpec) => {
+          resolve(exportSpec)
+          return Promise.resolve()
+        }
+      })
+
+      await profiler._start(makeStartOptions({ sourceMap: true }))
+
+      clock.tick(interval)
+
+      const { infos } = await exporterPromise
+
+      assert.strictEqual(infos.sourceMapCount, 3)
     })
   })
 
@@ -460,6 +523,34 @@ describe('profiler', function () {
       const { infos } = await exporterPromise
 
       assert.strictEqual(infos.serverless, true)
+    })
+
+    it('should include sourceMapCount in export infos', async () => {
+      const mapper = {
+        infoMap: new Map([
+          ['file1.js', {}],
+          ['file2.js', {}]
+        ])
+      }
+      sourceMapCreate.returns(Promise.resolve(mapper))
+
+      exporterPromise = new Promise(resolve => {
+        exporter.export = (exportSpec) => {
+          resolve(exportSpec)
+          return Promise.resolve()
+        }
+      })
+
+      await profiler._start(makeStartOptions({ sourceMap: true }))
+
+      // flushAfterIntervals + 1 because it flushes after last interval
+      for (let i = 0; i < flushAfterIntervals + 1; i++) {
+        clock.tick(interval)
+      }
+
+      const { infos } = await exporterPromise
+
+      assert.strictEqual(infos.sourceMapCount, 2)
     })
   })
 })

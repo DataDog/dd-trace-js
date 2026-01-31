@@ -29,7 +29,9 @@ describe('IAST - overhead-controller - integration', () => {
   })
 
   describe('vulnerability sampling algorithm', () => {
-    beforeEach(async () => {
+    beforeEach(async function () {
+      this.timeout(30_000)
+
       proc = await spawnProc(path.join(cwd, 'resources', 'overhead-controller.js'), {
         cwd,
         env: {

@@ -409,6 +409,27 @@ class VitestPlugin extends CiPlugin {
       })
       this.tracer._exporter.flush(onFinish)
     })
+
+    this.addSub('ci:vitest:coverage-report', ({ rootDir, onDone }) => {
+      this.handleCoverageReport(rootDir, onDone)
+    })
+  }
+
+  /**
+   * Handles the coverage report by discovering and uploading it if enabled.
+   * @param {string} rootDir - The root directory where coverage reports are located.
+   * @param {Function} [onDone] - Callback to signal completion.
+   */
+  handleCoverageReport (rootDir, onDone) {
+    if (!this.libraryConfig?.isCoverageReportUploadEnabled) {
+      onDone()
+      return
+    }
+    this.uploadCoverageReports({
+      rootDir,
+      testEnvironmentMetadata: this.testEnvironmentMetadata,
+      onDone
+    })
   }
 
   getTestProperties (testManagementTests, testSuite, testName) {

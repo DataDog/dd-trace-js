@@ -15,6 +15,27 @@ jobs:
   dependabot:
     if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    # Keep this job as a stable, always-green check on Dependabot PRs, even when the workflow is
+    # re-triggered by an automation commit (e.g., vendoring). Sensitive operations (OIDC token mint,
+    # approving, enabling auto-merge) are delegated to `dependabot-automation` below.
+    permissions:
+      contents: read
+    steps:
+      - name: Status
+        run: |
+          echo "Dependabot PR detected."
+          if [ "${{ github.actor }}" = "dependabot[bot]" ]; then
+            echo "Automation steps will run in the 'dependabot-automation' job."
+          else
+            echo "Skipping automation: workflow actor is '${{ github.actor }}'."
+          fi
+
+  dependabot-automation:
+    # Only run automation on the initial Dependabot-triggered run. If an automation commit is pushed
+    # (e.g. vendor output), GitHub re-triggers this workflow with `github.actor == 'dd-octo-sts[bot]'`.
+    # We intentionally avoid minting tokens / approving / enabling auto-merge on that follow-up run.
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
     permissions:
       id-token: write
     steps:
@@ -150,6 +171,11 @@ jobs:
         with:
           scope: DataDog/dd-trace-js
           policy: dependabot-automation
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # 2.5.0
+        with:
+          github-token: "${{ steps.octo-sts.outputs.token }}"
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ steps.octo-sts.outputs.token }}
@@ -198,13 +224,32 @@ jobs:
           git commit -m "update vendored dependencies with new versions"
           echo "commits=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
       - name: Push commit
-        uses: DataDog/commit-headless@583489e08d78037e7fa256c14adf998d5463f6a0 # action/v2.0.2
         env:
-          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
-        with:
-          branch: ${{ github.event.pull_request.head.ref }}
-          command: push
-          commits: "${{ steps.create-commit.outputs.commits }}"
+          DD_OCTO_STS_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          TARGET_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+
+          # Ensure the push is attributed to the octo-sts GitHub App token (not GITHUB_TOKEN),
+          # so the resulting push triggers CI workflows normally.
+          auth_header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$DD_OCTO_STS_TOKEN" | base64 | tr -d '\n')"
+          git -c "http.https://github.com/.extraheader=$auth_header" push origin "HEAD:$TARGET_BRANCH"
+
+      # If branch protection is configured to dismiss stale approvals when new commits are pushed,
+      # the vendoring commit will invalidate the earlier approval. Re-approve and (re-)enable
+      # auto-merge after pushing so Dependabot PRs can still merge automatically.
+      - name: Approve a PR (after vendoring commit)
+        if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+      - name: Enable auto-merge for Dependabot PRs (after vendoring commit)
+        if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
 
   vendor-validate:
     # Run validation after the generated vendor patch has been pushed, to ensure the PR contains

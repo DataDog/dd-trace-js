@@ -309,7 +309,9 @@ module.exports = {
   getPullRequestBaseBranch,
   getModifiedFilesFromDiff,
   isModifiedTest,
-  POSSIBLE_BASE_BRANCHES
+  POSSIBLE_BASE_BRANCHES,
+  GIT_COMMIT_SHA,
+  GIT_REPOSITORY_URL
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19

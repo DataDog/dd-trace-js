@@ -13,7 +13,7 @@ if (process.env.COVERAGE_PROVIDER) {
   config.test.coverage = {
     provider: process.env.COVERAGE_PROVIDER || 'v8',
     include: ['ci-visibility/vitest-tests/**'],
-    reporter: ['text-summary']
+    reporter: ['text-summary', 'lcov']
   }
 }
 
