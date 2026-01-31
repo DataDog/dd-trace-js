@@ -92,7 +92,6 @@ jobs:
     needs: 'publish-latest'
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -155,9 +154,8 @@ jobs:
     if: always() && contains(needs.*.result, 'success')
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: read
-      pull-requests: read
+      statuses: read
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
