@@ -144,12 +144,12 @@ function normalizeScriptGlob (raw, opts = {}) {
   let p = stripOuterQuotes(raw.trim())
 
   // Strip quotes that are meant for bash extglob options inside double-quoted strings.
-  p = p.replace(/'/g, '')
+  p = p.replaceAll('\'', '')
 
   // Convert bash extglob + command substitution patterns used in this repo into plain env vars.
   // Example: @($(echo $PLUGINS)) -> $PLUGINS
   // Example: @($(echo ${SPEC:-'*'})) -> ${SPEC:-*}
-  p = p.replace(/@\(\$\(\s*echo\s+([^)]+?)\s*\)\)/g, '$1')
+  p = p.replaceAll(/@\(\$\(\s*echo\s+([^)]+?)\s*\)\)/g, '$1')
 
   // For global analysis we treat env vars as wildcards, but when evaluating a specific CI run
   // we need to preserve them so they can be expanded with the provided env.
@@ -159,13 +159,13 @@ function normalizeScriptGlob (raw, opts = {}) {
     // - ${PLUGINS} -> *
     // - ${SPEC:-*} -> *
     // - $PLUGINS -> *
-    p = p.replace(/\$\{[^}]+\}/g, '*')
-    p = p.replace(/\$[A-Za-z_][A-Za-z0-9_]*/g, '*')
+    p = p.replaceAll(/\$\{[^}]+\}/g, '*')
+    p = p.replaceAll(/\$[A-Za-z_][A-Za-z0-9_]*/g, '*')
   }
 
   // Replace bash extglob constructs with a conservative wildcard to avoid parsing issues.
   // Examples: @(...), +(...), ?(...), !(...)
-  p = p.replace(/[@+?!]\([^)]*\)/g, '*')
+  p = p.replaceAll(/[@+?!]\([^)]*\)/g, '*')
 
   // Normalize leading './' which appears sometimes in scripts.
   if (p.startsWith('./')) p = p.slice(2)
@@ -179,38 +179,38 @@ function normalizeScriptGlob (raw, opts = {}) {
  * @returns {string}
  */
 function expandEnvInString (s, env) {
-  /**
-   * @param {string} name
-   * @param {string|undefined} value
-   * @returns {string}
-   */
-  const formatEnvValue = (name, value) => {
-    const val = typeof value === 'string' && value.length ? value : ''
-    if (!val) return '*'
-    // GitHub Actions expressions are not resolvable here; treat them as unknown.
-    if (val.includes('${{')) return '*'
-
-    if (name === 'PLUGINS') {
-      const items = val.split(/[,\s|]+/g).map(x => x.trim()).filter(Boolean)
-      if (items.length > 1) return `{${items.join(',')}}`
-      return items[0] || '*'
-    }
-
-    return val
-  }
-
   // ${NAME} / ${NAME:-default}
-  s = s.replace(/\$\{([^}]+)\}/g, (_m, inner) => {
+  s = s.replaceAll(/\$\{([^}]+)\}/g, (_m, inner) => {
     const name = String(inner).split(/[:\s]/, 1)[0]
     return formatEnvValue(name, env[name])
   })
 
   // $NAME
-  s = s.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_m, name) => {
+  s = s.replaceAll(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_m, name) => {
     return formatEnvValue(name, env[name])
   })
 
   return s
+}
+
+/**
+ * @param {string} name
+ * @param {string|undefined} value
+ * @returns {string}
+ */
+function formatEnvValue (name, value) {
+  const val = typeof value === 'string' && value.length ? value : ''
+  if (!val) return '*'
+  // GitHub Actions expressions are not resolvable here; treat them as unknown.
+  if (val.includes('${{')) return '*'
+
+  if (name === 'PLUGINS') {
+    const items = val.split(/[,\s|]+/g).map(x => x.trim()).filter(Boolean)
+    if (items.length > 1) return `{${items.join(',')}}`
+    return items[0] || '*'
+  }
+
+  return val
 }
 
 /**
@@ -242,7 +242,7 @@ function splitPlugins (value) {
  * @returns {v is Record<string, unknown>}
  */
 function isPlainObject (v) {
-  return Boolean(v) && typeof v === 'object' && !Array.isArray(v)
+  return Boolean(v) && v !== null && typeof v === 'object' && !Array.isArray(v)
 }
 
 /**
@@ -323,7 +323,7 @@ function expandScriptGlobs (repoRoot, scripts, env = {}) {
       const normalized = expandEnvInString(normalizeScriptGlob(token), env)
       allGlobs.push(normalized)
 
-      let expanded = []
+      let expanded
       try {
         expanded = globSyncCached(normalized, { cwd: repoRoot, nodir: true, windowsPathsNoEscape: true, ignore })
       } catch {
@@ -424,7 +424,7 @@ function expandInvokedScript (repoRoot, scripts, knownScripts, scriptName, env) 
       if (!looksLikeFileGlob(token)) continue
       const normalized = expandEnvInString(normalizeScriptGlob(token, { preserveEnv: true }), env)
       allGlobs.push(normalized)
-      let expanded = []
+      let expanded
       try {
         expanded = globSyncCached(normalized, { cwd: repoRoot, nodir: true, windowsPathsNoEscape: true, ignore })
       } catch {
@@ -467,7 +467,7 @@ function parseYamlFile (repoRoot, file) {
   if (cached !== undefined) return cached
 
   /** @type {unknown|null} */
-  let doc = null
+  let doc
   try {
     const raw = fs.readFileSync(path.join(repoRoot, file), 'utf8')
     doc = YAML.parse(raw)
@@ -1048,13 +1048,16 @@ function main () {
     // If PLUGINS is multi-valued and we have a matching :multi script, enforce using it.
     if (pluginsRaw && /[,|]/.test(pluginsRaw)) {
       const cmd = scripts[i.script]
-      if (typeof cmd === 'string' && cmd.includes(pluginsVar) && !cmd.includes(bracePluginsVar)) {
-        if (scripts[`${i.script}:multi`]) {
-          pushError(
+      if (
+        typeof cmd === 'string' &&
+        cmd.includes(pluginsVar) &&
+        !cmd.includes(bracePluginsVar) &&
+        scripts[`${i.script}:multi`]
+      ) {
+        pushError(
             `${i.workflowFile}#${i.jobId}: PLUGINS="${pluginsRaw}" but CI runs "${i.script}" ` +
             `which is single-plugin; use "${i.script}:multi" instead`
-          )
-        }
+        )
       }
     }
   }

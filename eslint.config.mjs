@@ -23,6 +23,8 @@ const SRC_FILES = [
   'ext/**/*.mjs',
   'ci/**/*.js',
   'ci/**/*.mjs',
+  'scripts/**/*.js',
+  'scripts/**/*.mjs',
   'packages/*/src/**/*.js',
   'packages/*/src/**/*.mjs'
 ]
@@ -502,6 +504,18 @@ export default [
     }
   },
   {
+    name: 'dd-trace/scripts/src-like-except-process-env',
+    files: [
+      'scripts/**/*.js',
+      'scripts/**/*.mjs',
+    ],
+    rules: {
+      'eslint-rules/eslint-process-env': 'off',
+      // Scripts are CLI/dev tooling where process.exit is acceptable.
+      'unicorn/no-process-exit': 'off',
+    }
+  },
+  {
     name: 'dd-trace/defaults/v0.8-oldest',
     plugins: {
       n: eslintPluginN
@@ -564,7 +578,6 @@ export default [
     },
     files: [
       'benchmark/**/*',
-      'scripts/**/*',
       ...TEST_FILES
     ],
     settings: {

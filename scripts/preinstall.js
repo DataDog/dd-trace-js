@@ -5,7 +5,7 @@
 const npmArgv = (() => {
   try {
     return JSON.parse(process.env.npm_config_argv)
-  } catch (e) {
+  } catch {
     return { original: [] }
   }
 })()

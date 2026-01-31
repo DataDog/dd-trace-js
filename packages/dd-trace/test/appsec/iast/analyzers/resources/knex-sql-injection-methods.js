@@ -6,7 +6,7 @@ function executeKnexRawQuery (knex, sql) {
 
 function executeKnexNestedRawQuery (knex, taintedSql, notTaintedSql) {
   return knex.raw(notTaintedSql).then(() => {
-    knex.raw(taintedSql)
+    return knex.raw(taintedSql)
   })
 }
 
@@ -14,7 +14,7 @@ function executeKnexNestedRawQueryOnRejectedInThen (knex, taintedSql, sqlToFail)
   return knex.raw(sqlToFail).then(
     () => {},
     () => {
-      knex.raw(taintedSql)
+      return knex.raw(taintedSql)
     }
   )
 }
@@ -25,7 +25,7 @@ function executeKnexNestedRawQueryWitCatch (knex, taintedSql, sqlToFail) {
       () => {}
     )
     .catch(() => {
-      knex.raw(taintedSql)
+      return knex.raw(taintedSql)
     })
 }
 
