@@ -52,6 +52,7 @@ async function assertPrerequisites () {
   }, [])
 
   for (const inst of internals) {
+    // eslint-disable-next-line no-await-in-loop
     await assertInstrumentation(inst, false)
   }
 
@@ -59,6 +60,7 @@ async function assertPrerequisites () {
 
   for (const name of externalNames) {
     for (const inst of externals[name]) {
+      // eslint-disable-next-line no-await-in-loop
       await assertInstrumentation(inst, true)
     }
   }
@@ -81,9 +83,11 @@ async function assertInstrumentation (instrumentation, external) {
     if (version !== '*') {
       const result = semver.coerce(version)
       if (!result) throw new Error(`Invalid version: ${version}`)
+      // eslint-disable-next-line no-await-in-loop
       await assertModules(instrumentation.name, result.version, external)
     }
 
+    // eslint-disable-next-line no-await-in-loop
     await assertModules(instrumentation.name, version, external)
   }
 }
