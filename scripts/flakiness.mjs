@@ -55,77 +55,17 @@ const LIMIT = 50
  * }} JobsAttemptResponse
  */
 
-function redactHeaders (headers) {
-  if (!headers || typeof headers !== 'object') return headers
-
-  const out = { ...headers }
-  for (const key of Object.keys(out)) {
-    if (key.toLowerCase() === 'authorization') out[key] = '<redacted>'
-  }
-  return out
-}
-
 /**
- * @param {{ id: number, attempt: number, page: number }} params
- * @returns {Promise<{ jobs: unknown }>}
+ * @param {JobsAttemptResponse} response
  */
-async function fetchJobsAttemptRest (params) {
-  const { id, attempt, page } = params
-  const url = new URL(`https://api.github.com/repos/DataDog/dd-trace-js/actions/runs/${id}/attempts/${attempt}/jobs`)
-  url.searchParams.set('page', String(page))
-  url.searchParams.set('per_page', String(LIMIT))
-
-  const res = await fetch(url, {
-    method: 'GET',
-    redirect: 'follow',
-    headers: {
-      accept: 'application/vnd.github+json',
-      authorization: `Bearer ${GITHUB_TOKEN}`,
+function redactHeaders (response) {
+  if (typeof response?.headers === 'object') {
+    for (const key of Object.keys(response.headers)) {
+      if (key.toLowerCase() === 'authorization') response.headers[key] = '<redacted>'
     }
-  })
-
-  const headers = Object.fromEntries(res.headers.entries())
-  let text = ''
-  try {
-    text = await res.text()
-  } catch (err) {
-    const summary = {
-      status: res.status,
-      headers: redactHeaders(headers),
-      bodyUsed: res.bodyUsed,
-      // Commonly useful when debugging truncated/gzipped payloads.
-      contentEncoding: headers['content-encoding'],
-      contentLength: headers['content-length'],
-      githubRequestId: headers['x-github-request-id'],
-    }
-    throw new TypeError(
-      `Failed to read jobs REST response body (${inspect(summary, { depth: 5 })}): ${inspect(err, { depth: 5 })}`
-    )
   }
 
-  if (!res.ok) {
-    const summary = {
-      status: res.status,
-      headers: redactHeaders(headers),
-      bodyLength: text.length,
-      bodyPrefix: text.slice(0, 200),
-    }
-    throw new TypeError(`GitHub REST request failed (${inspect(summary, { depth: 5 })})`)
-  }
-
-  try {
-    return JSON.parse(text)
-  } catch (err) {
-    const summary = {
-      status: res.status,
-      headers: redactHeaders(headers),
-      bodyLength: text.length,
-      bodyPrefix: text.slice(0, 200),
-    }
-    throw new TypeError(
-      `Failed to parse jobs REST response as JSON (${inspect(summary, { depth: 5 })}): ${inspect(err, { depth: 5 })}`
-    )
-  }
+  return response
 }
 
 async function checkWorkflowRuns (id, page = 1) {
@@ -179,66 +119,20 @@ async function checkWorkflowJobs (id, attempt, page = 1) {
   if (attempt < 1) return
 
   /** @type {JobsAttemptResponse | undefined} */
-  let response
-  try {
-    response = await limit(() => octokit.rest.actions.listJobsForWorkflowRunAttempt({
-      attempt_number: attempt,
-      owner: 'DataDog',
-      repo: 'dd-trace-js',
-      run_id: id,
-      page,
-      per_page: LIMIT,
-    }))
-  } catch (err) {
-    // Best-effort: GitHub APIs (and occasionally Octokit) return transient 5xx for this endpoint.
-    // Flakiness reporting should not fail CI on GitHub-side outages.
-    /** @type {number | undefined} */
-    let status
-    if (err && typeof err === 'object') {
-      /** @type {{ status?: unknown }} */
-      const e = err
-      if (typeof e.status === 'number') status = e.status
-    }
-    console.warn(
-      `Failed to fetch jobs via Octokit; skipping (${inspect({ id, attempt, page, status }, { depth: 5 })})`
-    )
-    return
-  }
+  const response = await limit(() => octokit.rest.actions.listJobsForWorkflowRunAttempt({
+    attempt_number: attempt,
+    owner: 'DataDog',
+    repo: 'dd-trace-js',
+    run_id: id,
+    page,
+    per_page: LIMIT,
+  }))
 
   /** @type {unknown} */
   let jobs = response?.data?.jobs
 
-  // If Octokit returns an invalid shape (including `data: ''`), fall back to a raw REST fetch.
-  // `@octokit/request` may return `data: ""` if it fails to read/parse the response body.
   if (!Array.isArray(jobs)) {
-    const headers = response?.headers || {}
-    console.warn(
-      `Octokit jobs response invalid; attempting REST fallback: ${inspect({
-        id,
-        attempt,
-        page,
-        status: response?.status,
-        url: response?.url,
-        githubRequestId: headers?.['x-github-request-id'],
-        contentEncoding: headers?.['content-encoding'],
-        contentLength: headers?.['content-length'],
-        headers: redactHeaders(response?.headers),
-        data: response?.data
-      }, { depth: 5 })}`
-    )
-
-    try {
-      const rest = await limit(() => fetchJobsAttemptRest({ id, attempt, page }))
-      jobs = rest?.jobs
-    } catch (err) {
-      // Best-effort: GitHub-side transient failures are expected.
-      console.warn(`Failed to fetch jobs via REST; skipping (${inspect({ id, attempt, page }, { depth: 5 })})`)
-      return
-    }
-  }
-
-  if (!Array.isArray(jobs)) {
-    throw new TypeError(`Unexpected jobs response shape (${inspect(response, { depth: Infinity })})`)
+    throw new TypeError(`Unexpected jobs response shape (${inspect(redactHeaders(response), { depth: Infinity })})`)
   }
 
   for (const job of jobs) {
