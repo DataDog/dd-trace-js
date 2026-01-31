@@ -1,17 +1,19 @@
 'use strict'
 
+const { createHash } = require('crypto')
 const { lstat, mkdir, readdir, writeFile } = require('fs/promises')
 const { arch } = require('os')
 const { join } = require('path')
-const { createHash } = require('crypto')
+
+const pLimit = require('p-limit')
 // eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
+
 const externals = require('../packages/dd-trace/test/plugins/externals.json')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
-const pLimit = require('p-limit')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
@@ -92,10 +94,8 @@ async function assertInstrumentation (instrumentation, external) {
 async function assertModules (name, version, external) {
   const range = process.env.RANGE
   if (range && !semver.subset(version, range)) return
-  await Promise.all([
-    assertPackage(name, null, version, external),
-    assertPackage(name, version, version, external)
-  ])
+  // Only create versioned folders (`versions/<name>@<versionKey>`).
+  await assertPackage(name, version, version, external)
 }
 
 /**
