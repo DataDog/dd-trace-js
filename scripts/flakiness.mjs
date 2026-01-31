@@ -44,6 +44,17 @@ const startDate = new Date(new Date(endDate).getTime() - (Number(DAYS) - 1) * ON
 let totalCount = 0
 let flakeCount = 0
 
+const LIMIT = 50
+
+/**
+ * @typedef {{
+ *   status?: number,
+ *   url?: string,
+ *   headers?: Record<string, string | number | undefined>,
+ *   data?: { jobs?: unknown }
+ * }} JobsAttemptResponse
+ */
+
 function redactHeaders (headers) {
   if (!headers || typeof headers !== 'object') return headers
 
@@ -62,10 +73,11 @@ async function fetchJobsAttemptRest (params) {
   const { id, attempt, page } = params
   const url = new URL(`https://api.github.com/repos/DataDog/dd-trace-js/actions/runs/${id}/attempts/${attempt}/jobs`)
   url.searchParams.set('page', String(page))
-  url.searchParams.set('per_page', '100')
+  url.searchParams.set('per_page', String(LIMIT))
 
   const res = await fetch(url, {
     method: 'GET',
+    redirect: 'follow',
     headers: {
       accept: 'application/vnd.github+json',
       authorization: `Bearer ${GITHUB_TOKEN}`,
@@ -122,7 +134,7 @@ async function checkWorkflowRuns (id, page = 1) {
     owner: 'DataDog',
     repo: 'dd-trace-js',
     page,
-    per_page: 100, // max is 100
+    per_page: LIMIT,
     status: 'success',
     created: `${startDate}..${endDate}`,
     branch: BRANCH,
@@ -156,7 +168,7 @@ async function checkWorkflowRuns (id, page = 1) {
   }
 
   // Only request next page if the current page was full.
-  if (runs.length === 100) {
+  if (runs.length === LIMIT) {
     promises.push(checkWorkflowRuns(id, page + 1))
   }
 
@@ -166,14 +178,32 @@ async function checkWorkflowRuns (id, page = 1) {
 async function checkWorkflowJobs (id, attempt, page = 1) {
   if (attempt < 1) return
 
-  const response = await limit(() => octokit.rest.actions.listJobsForWorkflowRunAttempt({
-    attempt_number: attempt,
-    owner: 'DataDog',
-    repo: 'dd-trace-js',
-    run_id: id,
-    page,
-    per_page: 100 // max is 100
-  }))
+  /** @type {JobsAttemptResponse | undefined} */
+  let response
+  try {
+    response = await limit(() => octokit.rest.actions.listJobsForWorkflowRunAttempt({
+      attempt_number: attempt,
+      owner: 'DataDog',
+      repo: 'dd-trace-js',
+      run_id: id,
+      page,
+      per_page: LIMIT,
+    }))
+  } catch (err) {
+    // Best-effort: GitHub APIs (and occasionally Octokit) return transient 5xx for this endpoint.
+    // Flakiness reporting should not fail CI on GitHub-side outages.
+    /** @type {number | undefined} */
+    let status
+    if (err && typeof err === 'object') {
+      /** @type {{ status?: unknown }} */
+      const e = err
+      if (typeof e.status === 'number') status = e.status
+    }
+    console.warn(
+      `Failed to fetch jobs via Octokit; skipping (${inspect({ id, attempt, page, status }, { depth: 5 })})`
+    )
+    return
+  }
 
   /** @type {unknown} */
   let jobs = response?.data?.jobs
@@ -197,8 +227,14 @@ async function checkWorkflowJobs (id, attempt, page = 1) {
       }, { depth: 5 })}`
     )
 
-    const rest = await limit(() => fetchJobsAttemptRest({ id, attempt, page }))
-    jobs = rest?.jobs
+    try {
+      const rest = await limit(() => fetchJobsAttemptRest({ id, attempt, page }))
+      jobs = rest?.jobs
+    } catch (err) {
+      // Best-effort: GitHub-side transient failures are expected.
+      console.warn(`Failed to fetch jobs via REST; skipping (${inspect({ id, attempt, page }, { depth: 5 })})`)
+      return
+    }
   }
 
   if (!Array.isArray(jobs)) {
@@ -222,7 +258,7 @@ async function checkWorkflowJobs (id, attempt, page = 1) {
   }
 
   // We've reached the last page and there are no more results.
-  if (jobs.length < 100) {
+  if (jobs.length < LIMIT) {
     // Check previous attempt to include successive failures.
     return checkWorkflowJobs(id, attempt - 1)
   }
