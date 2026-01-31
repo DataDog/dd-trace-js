@@ -1,11 +1,16 @@
 'use strict'
 
+const { createHash } = require('crypto')
 const { lstat, mkdir, readdir, writeFile } = require('fs/promises')
 const { arch } = require('os')
 const { join } = require('path')
-const { createHash } = require('crypto')
+
+const pLimit = require('p-limit')
+// eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
+
 const externals = require('../packages/dd-trace/test/plugins/externals.json')
+const latests = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
@@ -17,6 +22,10 @@ const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const externalDeps = new Map()
+const packagePromises = new Map()
+const externalSelfNames = new Set(Object.entries(externals)
+  .filter(([key, entries]) => entries.some(entry => entry.name === key))
+  .map(([key]) => key))
 
 Object.keys(externals).forEach(external => externals[external].forEach(thing => {
   if (thing.dep) {
@@ -37,7 +46,8 @@ async function run () {
 async function assertPrerequisites () {
   const filter = process.env.PLUGINS?.split('|')
 
-  const moduleNames = (await readdir(join(__dirname, '..', 'packages', 'datadog-instrumentations', 'src')))
+  const instrumentationFiles = await readdir(join(__dirname, '..', 'packages', 'datadog-instrumentations', 'src'))
+  const moduleNames = instrumentationFiles
     .filter(file => file.endsWith('.js'))
     .map(file => file.slice(0, -3))
     .filter(file => !filter || filter.includes(file))
@@ -47,16 +57,20 @@ async function assertPrerequisites () {
     return internals
   }, [])
 
-  for (const inst of internals) {
-    await assertInstrumentation(inst, false)
-  }
+  const limit = pLimit(3)
+
+  await Promise.all(internals.map(inst => limit(() => assertInstrumentation(inst, false))))
 
   const externalNames = Object.keys(externals).filter(name => moduleNames.includes(name))
+
+  const externalInstrumentations = []
   for (const name of externalNames) {
-    for (const inst of [].concat(externals[name])) {
-      await assertInstrumentation(inst, true)
+    for (const inst of externals[name]) {
+      externalInstrumentations.push(inst)
     }
   }
+
+  await Promise.all(externalInstrumentations.map(inst => limit(() => assertInstrumentation(inst, true))))
 
   await assertWorkspaces()
 }
@@ -68,19 +82,42 @@ async function assertPrerequisites () {
 async function assertInstrumentation (instrumentation, external) {
   const versions = process.env.PACKAGE_VERSION_RANGE && !external
     ? [process.env.PACKAGE_VERSION_RANGE]
-    : [].concat(instrumentation.versions || [])
+    : [instrumentation.versions || []].flat()
+
+  // Create the unversioned folder (e.g. `versions/bluebird`, `versions/@grpc/proto-loader`) once per module.
+  // Some tests depend on it, but creating it for every version key caused concurrent writes corrupting package.json.
+  // Prefer the pinned latest version (from `packages/dd-trace/test/plugins/versions/package.json`) when available, to
+  // avoid arbitrary selection from an array of ranges (and keep the unversioned folder representing "latest").
+  const unversionedVersion = latests[instrumentation.name]
+    ? latests[instrumentation.name]
+    : (versions.includes('*') ? '*' : versions.find(Boolean))
+  if (unversionedVersion) {
+    console.log('unversionedVersion', unversionedVersion)
+    // If the package is also defined in externals.json as a "self entry" (name === key), prefer the external variant
+    // for the unversioned install. This allows yarn to hoist it to `versions/node_modules`, making it available as a
+    // peer/optional dependency to other generated packages (e.g. sequelize -> mysql2).
+    const unversionedExternal = external || externalSelfNames.has(instrumentation.name)
+    await assertPackageOnce(instrumentation.name, null, unversionedVersion, unversionedExternal)
+  }
+
+  const versionKeys = new Set()
 
   for (const version of versions) {
     if (!version) continue
 
     if (version !== '*') {
-      const result = semver.coerce(version)
-      if (!result) throw new Error(`Invalid version: ${version}`)
-      await assertModules(instrumentation.name, result.version, external)
+      // Only normalize "exact" versions (e.g. "=1.2.3", "v1.2.3") to avoid collapsing distinct semver ranges.
+      const cleaned = semver.clean(version)
+      console.log('cleaned', cleaned, versionKeys)
+      if (cleaned) versionKeys.add(cleaned)
     }
 
-    await assertModules(instrumentation.name, version, external)
+    versionKeys.add(version)
   }
+
+  await Promise.all(
+    [...versionKeys].map(versionKey => assertModules(instrumentation.name, versionKey, external))
+  )
 }
 
 /**
@@ -91,10 +128,27 @@ async function assertInstrumentation (instrumentation, external) {
 async function assertModules (name, version, external) {
   const range = process.env.RANGE
   if (range && !semver.subset(version, range)) return
-  await Promise.all([
-    assertPackage(name, null, version, external),
-    assertPackage(name, version, version, external)
-  ])
+  await assertPackageOnce(name, version, version, external)
+}
+
+/**
+ * Memoized wrapper around assertPackage(), keyed by the destination folder path.
+ * This avoids concurrent writes to the same `versions/<name>` folder when the same module is processed multiple times.
+ *
+ * @param {string} name
+ * @param {string|null} version
+ * @param {string} dependencyVersionRange
+ * @param {boolean} external
+ * @returns {Promise<void>}
+ */
+function assertPackageOnce (name, version, dependencyVersionRange, external) {
+  const key = folder(name, version)
+  const existing = packagePromises.get(key)
+  if (existing) return existing
+
+  const promise = assertPackage(name, version, dependencyVersionRange, external)
+  packagePromises.set(key, promise)
+  return promise
 }
 
 /**
@@ -118,7 +172,7 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     [name]: getCappedRange(name, dependencyVersionRange)
   }
   const pkg = {
-    name: [name, sha1(name).slice(0, 8), sha1(version)].filter(val => val).join('-'),
+    name: [name, sha1(name).slice(0, 8), sha1(version)].filter(Boolean).join('-'),
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,
@@ -152,25 +206,28 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
 async function assertPeerDependencies (rootFolder, parent = '') {
   const entries = await readdir(rootFolder)
 
-  for (const entry of entries) {
+  const limit = pLimit(10)
+
+  await Promise.all(entries.map(entry => limit(async () => {
     const folder = join(rootFolder, entry)
 
-    if (!(await lstat(folder)).isDirectory()) continue
-    if (entry === 'node_modules') continue
+    const folderStat = await lstat(folder)
+    if (!folderStat.isDirectory()) return
+    if (entry === 'node_modules') return
     if (entry.startsWith('@')) {
       await assertPeerDependencies(folder, entry)
-      continue
+      return
     }
 
     const externalName = join(parent, entry.split('@')[0])
 
-    if (!externalDeps.has(externalName)) continue
+    if (!externalDeps.has(externalName)) return
 
     const versionPkgJsonPath = join(folder, 'package.json')
     const versionPkgJson = require(versionPkgJsonPath)
 
     for (const { dep, name, node } of externalDeps.get(externalName)) {
-      if (node && !semver.satisfies(process.versions.node, node)) continue
+      if (node && !semver.satisfies(process.versions.node, node)) return
       const pkgJsonPath = require(folder).pkgJsonPath()
       const pkgJson = require(pkgJsonPath)
 
@@ -186,13 +243,14 @@ async function assertPeerDependencies (rootFolder, parent = '') {
               : pkgJson[section][name]
           }
 
+          // eslint-disable-next-line no-await-in-loop
           await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
 
           break
         }
       }
     }
-  }
+  })))
 }
 
 /**
@@ -245,7 +303,7 @@ async function assertWorkspaces () {
     license: 'BSD-3-Clause',
     private: true,
     workspaces: {
-      packages: Array.from(workspaces)
+      packages: [...workspaces].sort()
     }
   }, null, 2) + '\n')
 }
