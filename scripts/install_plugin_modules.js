@@ -22,6 +22,9 @@ const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'ora
 const workspaces = new Set()
 const externalDeps = new Map()
 const packagePromises = new Map()
+const externalSelfNames = new Set(Object.entries(externals)
+  .filter(([key, entries]) => entries.some(entry => entry.name === key))
+  .map(([key]) => key))
 
 Object.keys(externals).forEach(external => externals[external].forEach(thing => {
   if (thing.dep) {
@@ -84,7 +87,11 @@ async function assertInstrumentation (instrumentation, external) {
   // Some tests depend on it, but creating it for every version key caused concurrent writes corrupting package.json.
   const unversionedVersion = versions.includes('*') ? '*' : versions.find(Boolean)
   if (unversionedVersion) {
-    await assertPackageOnce(instrumentation.name, null, unversionedVersion, external)
+    // If the package is also defined in externals.json as a "self entry" (name === key), prefer the external variant
+    // for the unversioned install. This allows yarn to hoist it to `versions/node_modules`, making it available as a
+    // peer/optional dependency to other generated packages (e.g. sequelize -> mysql2).
+    const unversionedExternal = external || externalSelfNames.has(instrumentation.name)
+    await assertPackageOnce(instrumentation.name, null, unversionedVersion, unversionedExternal)
   }
 
   const versionKeys = new Set()

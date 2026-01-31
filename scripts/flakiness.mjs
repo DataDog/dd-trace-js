@@ -73,7 +73,34 @@ async function fetchJobsAttemptRest (params) {
   })
 
   const headers = Object.fromEntries(res.headers.entries())
-  const text = await res.text()
+  let text = ''
+  try {
+    text = await res.text()
+  } catch (err) {
+    const summary = {
+      status: res.status,
+      headers: redactHeaders(headers),
+      bodyUsed: res.bodyUsed,
+      // Commonly useful when debugging truncated/gzipped payloads.
+      contentEncoding: headers['content-encoding'],
+      contentLength: headers['content-length'],
+      githubRequestId: headers['x-github-request-id'],
+    }
+    throw new TypeError(
+      `Failed to read jobs REST response body (${inspect(summary, { depth: 5 })}): ${inspect(err, { depth: 5 })}`
+    )
+  }
+
+  if (!res.ok) {
+    const summary = {
+      status: res.status,
+      headers: redactHeaders(headers),
+      bodyLength: text.length,
+      bodyPrefix: text.slice(0, 200),
+    }
+    throw new TypeError(`GitHub REST request failed (${inspect(summary, { depth: 5 })})`)
+  }
+
   try {
     return JSON.parse(text)
   } catch (err) {
@@ -152,7 +179,9 @@ async function checkWorkflowJobs (id, attempt, page = 1) {
   let jobs = response?.data?.jobs
 
   // If Octokit returns an invalid shape (including `data: ''`), fall back to a raw REST fetch.
+  // `@octokit/request` may return `data: ""` if it fails to read/parse the response body.
   if (!Array.isArray(jobs)) {
+    const headers = response?.headers || {}
     console.warn(
       `Octokit jobs response invalid; attempting REST fallback: ${inspect({
         id,
@@ -160,6 +189,9 @@ async function checkWorkflowJobs (id, attempt, page = 1) {
         page,
         status: response?.status,
         url: response?.url,
+        githubRequestId: headers?.['x-github-request-id'],
+        contentEncoding: headers?.['content-encoding'],
+        contentLength: headers?.['content-length'],
         headers: redactHeaders(response?.headers),
         data: response?.data
       }, { depth: 5 })}`
@@ -169,7 +201,6 @@ async function checkWorkflowJobs (id, attempt, page = 1) {
     jobs = rest?.jobs
   }
 
-  // Octokit v5 format: response.data.jobs is an array.
   if (!Array.isArray(jobs)) {
     throw new TypeError(`Unexpected jobs response shape (${inspect(response, { depth: Infinity })})`)
   }

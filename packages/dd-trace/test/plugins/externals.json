@@ -529,6 +529,10 @@
       "versions": [">=4"]
     },
     {
+      "name": "mysql2",
+      "dep": true
+    },
+    {
       "name": "sqlite3",
       "versions": ["^5.0.8"]
     }
