@@ -14,6 +14,8 @@ const NODE_OPTIONS = '--require dd-trace/init.js'
 const DD_TRACE_DEBUG = 'true'
 const DD_INJECTION_ENABLED = 'tracing'
 const DD_LOG_LEVEL = 'error'
+const NODE_MAJOR = Number(process.versions.node.split('.')[0])
+const FASTIFY_DEP = NODE_MAJOR < 20 ? 'fastify@4' : 'fastify'
 
 // These are on by default in release tests, so we'll turn them off for
 // more fine-grained control of these variables in these tests.
@@ -22,8 +24,8 @@ delete process.env.DD_INJECT_FORCE
 
 describe('package guardrails', () => {
   useEnv({ NODE_OPTIONS })
-  const runTest = (...args) =>
-    testFile('package-guardrails/index.js', ...args)
+  const runTest = (expectedOut, expectedTelemetryPoints, expectedSource = '') =>
+    testFile('package-guardrails/index.js', expectedOut, expectedTelemetryPoints, expectedSource)
 
   context('when package is out of range', () => {
     useSandbox(['bluebird@1.0.0'])
@@ -70,13 +72,13 @@ false
 
   context('when package is in range (fastify)', () => {
     context('when fastify is latest', () => {
-      useSandbox(['fastify'])
+      useSandbox([FASTIFY_DEP])
 
       it('should instrument the package', () => runTest('true\n', [], 'manual'))
     })
 
     context('when fastify is latest and logging enabled', () => {
-      useSandbox(['fastify'])
+      useSandbox([FASTIFY_DEP])
       useEnv({ DD_TRACE_DEBUG })
 
       it('should instrument the package', () =>
