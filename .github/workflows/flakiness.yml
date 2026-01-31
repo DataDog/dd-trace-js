@@ -25,7 +25,7 @@ jobs:
             yarn.lock
       - uses: ./.github/actions/node
         with:
-          version: active-lts
+          version: active
       - run: yarn install --frozen-lockfile --ignore-scripts
       - run: node scripts/flakiness.mjs
       - run: cat flakiness.md >> $GITHUB_STEP_SUMMARY
