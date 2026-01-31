@@ -493,20 +493,9 @@ function wrapTinyPoolRun (TinyPool) {
 addHook({
   name: 'tinypool',
   // version from tinypool@0.8 was used in vitest@1.6.0
-  versions: ['>=0.8.0 <1.0.0'],
-  file: 'dist/esm/index.js',
+  versions: ['>=0.8.0'],
 }, (TinyPool) => {
   wrapTinyPoolRun(TinyPool)
-  return TinyPool
-})
-
-addHook({
-  name: 'tinypool',
-  versions: ['>=1.0.0'],
-  file: 'dist/index.js',
-}, (TinyPool) => {
-  wrapTinyPoolRun(TinyPool)
-
   return TinyPool
 })
 
