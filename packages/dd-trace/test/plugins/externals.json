@@ -309,11 +309,9 @@
   "knex": [
     {
       "name": "pg",
-      "versions": ["8.7.3"]
-    },
-    {
-      "name": "sqlite3",
-      "dep": true
+      "versions": [
+        "8.7.3"
+      ]
     }
   ],
   "koa": [
