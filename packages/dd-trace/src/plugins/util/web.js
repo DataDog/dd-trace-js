@@ -54,6 +54,7 @@ function startSpanHelper (tracer, name, options, traceCtx, config = {}) {
 
 const web = {
   TYPE: WEB,
+  /** @type {TracingPlugin | null} */
   plugin: null,
 
   // Ensure the configuration has the correct structure and defaults.
