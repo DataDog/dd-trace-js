@@ -45,9 +45,10 @@ for (const dirAbs of reportDirsAbs) {
   const isMissingOrEmpty = lcovContent === undefined || !/(^|\n)SF:/.test(lcovContent)
 
   if (!isMissingOrEmpty) {
-    emptyReportDirs.push(dirAbs)
     continue
   }
+
+  emptyReportDirs.push(dirAbs)
 
   // If the file exists but is empty, remove it so uploaders don't pick it up.
   if (lcovContent !== undefined) {
