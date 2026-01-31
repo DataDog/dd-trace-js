@@ -5,7 +5,6 @@ const { lstat, mkdir, readdir, writeFile } = require('fs/promises')
 const { arch } = require('os')
 const { join } = require('path')
 
-const pLimit = require('p-limit')
 // eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
 
@@ -21,10 +20,6 @@ const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const externalDeps = new Map()
-const packagePromises = new Map()
-const externalSelfNames = new Set(Object.entries(externals)
-  .filter(([key, entries]) => entries.some(entry => entry.name === key))
-  .map(([key]) => key))
 
 Object.keys(externals).forEach(external => externals[external].forEach(thing => {
   if (thing.dep) {
@@ -56,20 +51,17 @@ async function assertPrerequisites () {
     return internals
   }, [])
 
-  const limit = pLimit(3)
-
-  await Promise.all(internals.map(inst => limit(() => assertInstrumentation(inst, false))))
+  for (const inst of internals) {
+    await assertInstrumentation(inst, false)
+  }
 
   const externalNames = Object.keys(externals).filter(name => moduleNames.includes(name))
 
-  const externalInstrumentations = []
   for (const name of externalNames) {
     for (const inst of externals[name]) {
-      externalInstrumentations.push(inst)
+      await assertInstrumentation(inst, true)
     }
   }
-
-  await Promise.all(externalInstrumentations.map(inst => limit(() => assertInstrumentation(inst, true))))
 
   await assertWorkspaces()
 }
@@ -81,20 +73,7 @@ async function assertPrerequisites () {
 async function assertInstrumentation (instrumentation, external) {
   const versions = process.env.PACKAGE_VERSION_RANGE && !external
     ? [process.env.PACKAGE_VERSION_RANGE]
-    : [instrumentation.versions || []].flat()
-
-  // Create the unversioned folder (e.g. `versions/bluebird`, `versions/@grpc/proto-loader`) once per module.
-  // Some tests depend on it, but creating it for every version key caused concurrent writes corrupting package.json.
-  const unversionedVersion = versions.includes('*') ? '*' : versions.find(Boolean)
-  if (unversionedVersion) {
-    // If the package is also defined in externals.json as a "self entry" (name === key), prefer the external variant
-    // for the unversioned install. This allows yarn to hoist it to `versions/node_modules`, making it available as a
-    // peer/optional dependency to other generated packages (e.g. sequelize -> mysql2).
-    const unversionedExternal = external || externalSelfNames.has(instrumentation.name)
-    await assertPackageOnce(instrumentation.name, null, unversionedVersion, unversionedExternal)
-  }
-
-  const versionKeys = new Set()
+    : (instrumentation.versions || [])
 
   for (const version of versions) {
     if (!version) continue
@@ -102,15 +81,11 @@ async function assertInstrumentation (instrumentation, external) {
     if (version !== '*') {
       const result = semver.coerce(version)
       if (!result) throw new Error(`Invalid version: ${version}`)
-      if (result.version !== version) versionKeys.add(result.version)
+      await assertModules(instrumentation.name, result.version, external)
     }
 
-    versionKeys.add(version)
+    await assertModules(instrumentation.name, version, external)
   }
-
-  await Promise.all(
-    [...versionKeys].map(versionKey => assertModules(instrumentation.name, versionKey, external))
-  )
 }
 
 /**
@@ -121,27 +96,10 @@ async function assertInstrumentation (instrumentation, external) {
 async function assertModules (name, version, external) {
   const range = process.env.RANGE
   if (range && !semver.subset(version, range)) return
-  await assertPackageOnce(name, version, version, external)
-}
-
-/**
- * Memoized wrapper around assertPackage(), keyed by the destination folder path.
- * This avoids concurrent writes to the same `versions/<name>` folder when the same module is processed multiple times.
- *
- * @param {string} name
- * @param {string|null} version
- * @param {string} dependencyVersionRange
- * @param {boolean} external
- * @returns {Promise<void>}
- */
-function assertPackageOnce (name, version, dependencyVersionRange, external) {
-  const key = folder(name, version)
-  const existing = packagePromises.get(key)
-  if (existing) return existing
-
-  const promise = assertPackage(name, version, dependencyVersionRange, external)
-  packagePromises.set(key, promise)
-  return promise
+  await Promise.all([
+    assertPackage(name, null, version, external),
+    assertPackage(name, version, version, external)
+  ])
 }
 
 /**
@@ -199,28 +157,28 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
 async function assertPeerDependencies (rootFolder, parent = '') {
   const entries = await readdir(rootFolder)
 
-  const limit = pLimit(10)
-
-  await Promise.all(entries.map(entry => limit(async () => {
+  for (const entry of entries) {
     const folder = join(rootFolder, entry)
 
+    // eslint-disable-next-line no-await-in-loop
     const folderStat = await lstat(folder)
-    if (!folderStat.isDirectory()) return
-    if (entry === 'node_modules') return
+    if (!folderStat.isDirectory()) continue
+    if (entry === 'node_modules') continue
     if (entry.startsWith('@')) {
+      // eslint-disable-next-line no-await-in-loop
       await assertPeerDependencies(folder, entry)
-      return
+      continue
     }
 
     const externalName = join(parent, entry.split('@')[0])
 
-    if (!externalDeps.has(externalName)) return
+    if (!externalDeps.has(externalName)) continue
 
     const versionPkgJsonPath = join(folder, 'package.json')
     const versionPkgJson = require(versionPkgJsonPath)
 
     for (const { dep, name, node } of externalDeps.get(externalName)) {
-      if (node && !semver.satisfies(process.versions.node, node)) return
+      if (node && !semver.satisfies(process.versions.node, node)) continue
       const pkgJsonPath = require(folder).pkgJsonPath()
       const pkgJson = require(pkgJsonPath)
 
@@ -243,7 +201,7 @@ async function assertPeerDependencies (rootFolder, parent = '') {
         }
       }
     }
-  })))
+  }
 }
 
 /**

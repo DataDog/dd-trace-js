@@ -12,7 +12,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('express-mongo-sanitize', () => {
-  withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
+  withVersions('express-mongo-sanitize', ['express-mongo-sanitize', 'express'], version => {
     describe('middleware', () => {
       const sanitizeMiddlewareFinished = channel('datadog:express-mongo-sanitize:filter:finish')
       let port, server, requestBody
@@ -22,6 +22,8 @@ describe('express-mongo-sanitize', () => {
       })
 
       before((done) => {
+        // Highest version of express that supports express-mongo-sanitize is <5
+        // This is defined in externals.json
         const express = require('../../../versions/express').get()
         const expressMongoSanitize = require(`../../../versions/express-mongo-sanitize@${version}`).get()
         const app = express()

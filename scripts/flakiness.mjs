@@ -59,7 +59,7 @@ const LIMIT = 50
  * @param {JobsAttemptResponse} response
  */
 function redactHeaders (response) {
-  if (typeof response?.headers === 'object') {
+  if (typeof response?.headers === 'object' && response.headers) {
     for (const key of Object.keys(response.headers)) {
       if (key.toLowerCase() === 'authorization') response.headers[key] = '<redacted>'
     }
@@ -129,7 +129,7 @@ async function checkWorkflowJobs (id, attempt, page = 1) {
   }))
 
   /** @type {unknown} */
-  let jobs = response?.data?.jobs
+  const jobs = response?.data?.jobs
 
   if (!Array.isArray(jobs)) {
     throw new TypeError(`Unexpected jobs response shape (${inspect(redactHeaders(response), { depth: Infinity })})`)
