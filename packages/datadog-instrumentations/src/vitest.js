@@ -974,7 +974,6 @@ addHook({
 addHook({
   name: '@vitest/runner',
   versions: ['>=1.6.0'],
-  file: 'dist/index.js',
 }, (vitestPackage, frameworkVersion) => {
   shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPaths) {
     let testSuiteError = null
