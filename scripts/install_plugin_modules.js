@@ -21,6 +21,7 @@ const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const externalDeps = new Map()
+const packagePromises = new Map()
 
 Object.keys(externals).forEach(external => externals[external].forEach(thing => {
   if (thing.dep) {
@@ -58,9 +59,14 @@ async function assertPrerequisites () {
 
   const externalNames = Object.keys(externals).filter(name => moduleNames.includes(name))
 
-  await Promise.all(externalNames.map(name => limit(async () => {
-    await Promise.all(externals[name].map(inst => limit(() => assertInstrumentation(inst, true))))
-  })))
+  const externalInstrumentations = []
+  for (const name of externalNames) {
+    for (const inst of externals[name]) {
+      externalInstrumentations.push(inst)
+    }
+  }
+
+  await Promise.all(externalInstrumentations.map(inst => limit(() => assertInstrumentation(inst, true))))
 
   await assertWorkspaces()
 }
@@ -74,16 +80,30 @@ async function assertInstrumentation (instrumentation, external) {
     ? [process.env.PACKAGE_VERSION_RANGE]
     : [instrumentation.versions || []].flat()
 
-  await Promise.all(versions.map(async version => {
-    if (!version) return
+  // Create the unversioned folder (e.g. `versions/bluebird`, `versions/@grpc/proto-loader`) once per module.
+  // Some tests depend on it, but creating it for every version key caused concurrent writes corrupting package.json.
+  const unversionedVersion = versions.includes('*') ? '*' : versions.find(Boolean)
+  if (unversionedVersion) {
+    await assertPackageOnce(instrumentation.name, null, unversionedVersion, external)
+  }
+
+  const versionKeys = new Set()
+
+  for (const version of versions) {
+    if (!version) continue
 
     if (version !== '*') {
       const result = semver.coerce(version)
       if (!result) throw new Error(`Invalid version: ${version}`)
-      await assertModules(instrumentation.name, result.version, external)
+      if (result.version !== version) versionKeys.add(result.version)
     }
-    await assertModules(instrumentation.name, version, external)
-  }))
+
+    versionKeys.add(version)
+  }
+
+  await Promise.all(
+    [...versionKeys].map(versionKey => assertModules(instrumentation.name, versionKey, external))
+  )
 }
 
 /**
@@ -94,8 +114,27 @@ async function assertInstrumentation (instrumentation, external) {
 async function assertModules (name, version, external) {
   const range = process.env.RANGE
   if (range && !semver.subset(version, range)) return
-  // Only create versioned folders (`versions/<name>@<versionKey>`).
-  await assertPackage(name, version, version, external)
+  await assertPackageOnce(name, version, version, external)
+}
+
+/**
+ * Memoized wrapper around assertPackage(), keyed by the destination folder path.
+ * This avoids concurrent writes to the same `versions/<name>` folder when the same module is processed multiple times.
+ *
+ * @param {string} name
+ * @param {string|null} version
+ * @param {string} dependencyVersionRange
+ * @param {boolean} external
+ * @returns {Promise<void>}
+ */
+function assertPackageOnce (name, version, dependencyVersionRange, external) {
+  const key = folder(name, version)
+  const existing = packagePromises.get(key)
+  if (existing) return existing
+
+  const promise = assertPackage(name, version, dependencyVersionRange, external)
+  packagePromises.set(key, promise)
+  return promise
 }
 
 /**
@@ -250,7 +289,7 @@ async function assertWorkspaces () {
     license: 'BSD-3-Clause',
     private: true,
     workspaces: {
-      packages: [...workspaces]
+      packages: [...workspaces].sort()
     }
   }, null, 2) + '\n')
 }
