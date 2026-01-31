@@ -6,11 +6,11 @@ module.exports = {
     'lcov'
   ],
   exclude: [
-    '**/test/**/fixtures/**',
-    '**/test/**/resources/**',
-    '**/integration-tests/**/fixtures/**',
+    '**/test/**',
+    '**/integration-tests/**',
     '**/.bun/**',
-    '**/vendor/**'
+    '**/vendor/**',
+    '**/*.spec.*',
   ],
   // Avoid collisions when a single CI job runs coverage sequentially across multiple Node.js versions.
   tempDir: `.nyc_output-node-${process.version}`,
