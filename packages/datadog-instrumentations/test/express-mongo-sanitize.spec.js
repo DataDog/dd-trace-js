@@ -12,7 +12,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('express-mongo-sanitize', () => {
-  withVersions('express-mongo-sanitize', ['express-mongo-sanitize', 'express'], version => {
+  withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
     describe('middleware', () => {
       const sanitizeMiddlewareFinished = channel('datadog:express-mongo-sanitize:filter:finish')
       let port, server, requestBody

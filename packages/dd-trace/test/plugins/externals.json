@@ -313,9 +313,7 @@
     },
     {
       "name": "sqlite3",
-      "versions": [
-        ">5"
-      ]
+      "dep": true
     }
   ],
   "koa": [
