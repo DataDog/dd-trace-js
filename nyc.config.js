@@ -15,13 +15,9 @@ module.exports = {
   // Avoid collisions when a single CI job runs coverage sequentially across multiple Node.js versions.
   tempDir: `.nyc_output-node-${process.version}`,
   reportDir: `coverage-node-${process.version}`,
-  // TODO: enable this once we have more coverage
-  // all: true,
-  'check-coverage': true,
-  // Baseline coverage
-  // TODO: increase these once we have more coverage
-  lines: 40,
-  statements: 40,
-  functions: 40,
-  branches: 40,
+  all: true,
+  // Baseline coverage is disabled because some of our CI suites only run
+  // coverage on a small subset of the codebase. The only value we may trust is
+  // the combined coverage of all suites.
+  'check-coverage': false
 }
