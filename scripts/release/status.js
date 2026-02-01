@@ -17,8 +17,8 @@ async function checkStatuses (contexts) {
     headers: {
       Accept: 'application/vnd.github+json',
       Authorization: `Bearer ${GITHUB_TOKEN}`,
-      'X-GitHub-Api-Version': '2022-11-28'
-    }
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
   })
 
   if (response.status !== 200) {
@@ -62,5 +62,5 @@ async function checkStatuses (contexts) {
 
 checkStatuses(new Set([
   'dd-gitlab/kubernetes-injection-test-ecr-publish',
-  'dd-gitlab/promote-oci-to-prod'
+  'dd-gitlab/promote-oci-to-prod',
 ]))

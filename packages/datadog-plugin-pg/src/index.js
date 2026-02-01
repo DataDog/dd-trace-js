@@ -24,8 +24,8 @@ class PGPlugin extends DatabasePlugin {
         'db.name': params.database,
         'db.user': params.user,
         'out.host': params.host,
-        [CLIENT_PORT_KEY]: params.port
-      }
+        [CLIENT_PORT_KEY]: params.port,
+      },
     }, ctx)
 
     if (stream) {

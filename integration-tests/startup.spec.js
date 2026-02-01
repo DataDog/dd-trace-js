@@ -12,25 +12,25 @@ const {
   spawnProcAndExpectExit,
   sandboxCwd,
   useSandbox,
-  curlAndAssertMessage
+  curlAndAssertMessage,
 } = require('./helpers')
 
 const execArgvs = [
   {
-    execArgv: []
+    execArgv: [],
   },
   {
     execArgv: ['--import', 'dd-trace/register.js'],
-    skip: semver.satisfies(process.versions.node, '<20.6')
+    skip: semver.satisfies(process.versions.node, '<20.6'),
   },
   {
     execArgv: ['--loader', 'dd-trace/loader-hook.mjs'],
-    skip: semver.satisfies(process.versions.node, '>=20.6')
+    skip: semver.satisfies(process.versions.node, '>=20.6'),
   },
   {
     execArgv: [],
-    optional: false
-  }
+    optional: false,
+  },
 ]
 
 execArgvs.forEach(({ execArgv, skip, optional = true }) => {
@@ -76,8 +76,8 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
           cwd,
           execArgv,
           env: {
-            AGENT_PORT: agent.port
-          }
+            AGENT_PORT: agent.port,
+          },
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
@@ -100,8 +100,8 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
             cwd,
             execArgv,
             env: {
-              AGENT_PORT: agent.port
-            }
+              AGENT_PORT: agent.port,
+            },
           })
 
           const containsDatadogMemfd = (fds) => {
@@ -130,8 +130,8 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
           cwd,
           execArgv,
           env: {
-            AGENT_URL: `http://localhost:${agent.port}`
-          }
+            AGENT_URL: `http://localhost:${agent.port}`,
+          },
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assert.strictEqual(headers.host, `localhost:${agent.port}`)
@@ -159,8 +159,8 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
           cwd,
           execArgv,
           env: {
-            DD_TRACE_AGENT_PORT: agent.port
-          }
+            DD_TRACE_AGENT_PORT: agent.port,
+          },
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
@@ -177,8 +177,8 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
           cwd,
           execArgv,
           env: {
-            DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
-          }
+            DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
+          },
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assert.strictEqual(headers.host, `localhost:${agent.port}`)
@@ -206,7 +206,7 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
       it('works for hostname and port', async () => {
         proc = await spawnProc(startupTestFile, {
           cwd,
-          execArgv
+          execArgv,
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assert.strictEqual(headers.host, '127.0.0.1:8126')
@@ -223,8 +223,8 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
           cwd,
           execArgv,
           env: {
-            STEALTHY_REQUIRE: 'true'
-          }
+            STEALTHY_REQUIRE: 'true',
+          },
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assert.strictEqual(headers.host, '127.0.0.1:8126')
@@ -241,7 +241,7 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
       it('skips the unsupported module', async () => {
         await spawnProcAndExpectExit(unsupportedTestFile, {
           cwd,
-          execArgv
+          execArgv,
         })
       })
     })

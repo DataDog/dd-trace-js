@@ -36,17 +36,17 @@ describe('SchemaBuilder', () => {
               name: { description: 'name of the person', type: 'string' },
               phone_numbers: { items: { type: 'string' }, type: 'array' },
               person_name: { type: 'string' },
-              address: { $ref: '#/components/schemas/address', type: 'object' }
+              address: { $ref: '#/components/schemas/address', type: 'object' },
             },
-            type: 'object'
+            type: 'object',
           },
           address: {
             properties: { zip: { format: 'int', type: 'number' }, street: { type: 'string' } },
-            type: 'object'
-          }
-        }
+            type: 'object',
+          },
+        },
       },
-      openapi: '3.0.0'
+      openapi: '3.0.0',
     }
 
     assert.deepStrictEqual(JSON.parse(schema.definition), expectedSchema)

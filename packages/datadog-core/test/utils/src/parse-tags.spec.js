@@ -12,11 +12,11 @@ describe('parseTags', () => {
     const obj = {
       'a.0.a': 'foo',
       'a.0.b': 'bar',
-      'a.1.a': 'baz'
+      'a.1.a': 'baz',
     }
 
     assert.deepStrictEqual(parseTags(obj), {
-      a: [{ a: 'foo', b: 'bar' }, { a: 'baz' }]
+      a: [{ a: 'foo', b: 'bar' }, { a: 'baz' }],
     })
   })
 

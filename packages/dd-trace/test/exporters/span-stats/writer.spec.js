@@ -24,16 +24,16 @@ describe('span-stats writer', () => {
     encoder = {
       encode: sinon.stub(),
       count: sinon.stub().returns(0),
-      makePayload: sinon.stub().returns([])
+      makePayload: sinon.stub().returns([]),
     }
 
     url = {
       protocol: 'https:',
-      hostname: '127.0.0.1:8126'
+      hostname: '127.0.0.1:8126',
     }
 
     log = {
-      error: sinon.spy()
+      error: sinon.spy(),
     }
 
     const SpanStatsEncoder = function () {
@@ -43,7 +43,7 @@ describe('span-stats writer', () => {
     Writer = proxyquire('../../../src/exporters/span-stats/writer', {
       '../common/request': request,
       '../../encode/span-stats': { SpanStatsEncoder },
-      '../../log': log
+      '../../log': log,
     }).Writer
     writer = new Writer({ url, tags: { 'runtime-id': 'runtime-id' } })
   })
@@ -90,8 +90,8 @@ describe('span-stats writer', () => {
           headers: {
             'Datadog-Meta-Lang': 'javascript',
             'Datadog-Meta-Tracer-Version': pkg.version,
-            'Content-Type': 'application/msgpack'
-          }
+            'Content-Type': 'application/msgpack',
+          },
         })
         done()
       })

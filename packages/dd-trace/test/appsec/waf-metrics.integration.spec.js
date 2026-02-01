@@ -30,8 +30,8 @@ describe('WAF Metrics', () => {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_APPSEC_ENABLED: 'true',
           DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
-          DD_APPSEC_WAF_TIMEOUT: '0.1'
-        }
+          DD_APPSEC_WAF_TIMEOUT: '0.1',
+        },
       })
       axios = Axios.create({ baseURL: proc.url })
     })
@@ -45,7 +45,7 @@ describe('WAF Metrics', () => {
       let appsecTelemetryMetricsReceived = false
 
       const body = {
-        name: 'hey'
+        name: 'hey',
       }
 
       await axios.post('/', body)
@@ -92,8 +92,8 @@ describe('WAF Metrics', () => {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_APPSEC_ENABLED: 'true',
           DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
-          DD_APPSEC_WAF_TIMEOUT: '1'
-        }
+          DD_APPSEC_WAF_TIMEOUT: '1',
+        },
       })
       axios = Axios.create({ baseURL: proc.url })
     })
@@ -144,8 +144,8 @@ describe('WAF Metrics', () => {
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_APPSEC_ENABLED: 'true',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1'
-        }
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        },
       })
       axios = Axios.create({ baseURL: proc.url })
     })
@@ -204,7 +204,7 @@ const createComplexPayload = () => {
   return {
     deepObject,
     longValue,
-    largeObject
+    largeObject,
   }
 }
 

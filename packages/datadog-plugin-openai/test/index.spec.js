@@ -29,7 +29,7 @@ describe('Plugin', () => {
   let globalFile
 
   useEnv({
-    OPENAI_API_KEY: 'sk-DATADOG-ACCEPTANCE-TESTS'
+    OPENAI_API_KEY: 'sk-DATADOG-ACCEPTANCE-TESTS',
   })
 
   describe('openai', () => {
@@ -51,7 +51,7 @@ describe('Plugin', () => {
 
       beforeEach(() => {
         clock = sinon.useFakeTimers({
-          toFake: ['Date']
+          toFake: ['Date'],
         })
 
         const requiredModule = require(moduleRequirePath)
@@ -74,7 +74,7 @@ describe('Plugin', () => {
 
           openai = new OpenAI({
             apiKey: process.env.OPENAI_API_KEY,
-            baseURL: 'http://127.0.0.1:9126/vcr/openai'
+            baseURL: 'http://127.0.0.1:9126/vcr/openai',
           })
 
           toFile = OpenAI.toFile
@@ -83,7 +83,7 @@ describe('Plugin', () => {
 
           const configuration = new Configuration({
             apiKey: process.env.OPENAI_API_KEY,
-            basePath: 'http://127.0.0.1:9126/vcr/openai'
+            basePath: 'http://127.0.0.1:9126/vcr/openai',
           })
 
           openai = new OpenAIApi(configuration)
@@ -107,8 +107,8 @@ describe('Plugin', () => {
             env: {
               ...process.env,
               PATH_TO_DDTRACE: tracerRequirePath,
-              PATH_TO_OPENAI: moduleRequirePath
-            }
+              PATH_TO_OPENAI: moduleRequirePath,
+            },
           }).on('exit', done) // non-zero exit status fails test
         })
       })
@@ -117,8 +117,8 @@ describe('Plugin', () => {
         const checkTraces = agent.assertFirstTraceSpan({
           error: 1,
           meta: {
-            'error.type': 'Error'
-          }
+            'error.type': 'Error',
+          },
         })
 
         const params = {
@@ -195,18 +195,18 @@ describe('Plugin', () => {
               messages: [
                 {
                   role: 'system',
-                  content: 'You are a helpful assistant.'
+                  content: 'You are a helpful assistant.',
                 },
                 {
                   role: 'user',
-                  content: 'Hello, OpenAI!'
-                }
+                  content: 'Hello, OpenAI!',
+                },
               ],
               temperature: 0.5,
               stream: true,
               max_tokens: 100,
               n: 1,
-              user: 'dd-trace-test'
+              user: 'dd-trace-test',
             })
 
             for await (const part of stream) {
@@ -240,8 +240,8 @@ describe('Plugin', () => {
                   'openai.request.endpoint': '/vcr/openai/completions',
                   component: 'openai',
                   '_dd.integration': 'openai',
-                  'openai.request.model': 'gpt-3.5-turbo-instruct'
-                }
+                  'openai.request.model': 'gpt-3.5-turbo-instruct',
+                },
               })
               assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
             })
@@ -403,8 +403,8 @@ describe('Plugin', () => {
               meta: {
                 'openai.request.endpoint': '/vcr/openai/embeddings',
                 'openai.request.method': 'POST',
-                'openai.request.model': 'text-embedding-ada-002'
-              }
+                'openai.request.model': 'text-embedding-ada-002',
+              },
             })
             assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
           })
@@ -412,7 +412,7 @@ describe('Plugin', () => {
         const params = {
           model: 'text-embedding-ada-002',
           input: 'hello world',
-          encoding_format: 'base64'
+          encoding_format: 'base64',
         }
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -442,8 +442,8 @@ describe('Plugin', () => {
               error: 0,
               meta: {
                 'openai.request.method': 'GET',
-                'openai.request.endpoint': '/vcr/openai/models'
-              }
+                'openai.request.endpoint': '/vcr/openai/models',
+              },
             })
 
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
@@ -479,8 +479,8 @@ describe('Plugin', () => {
                 'openai.request.method': 'GET',
                 'openai.request.endpoint': '/v1/models/*',
                 'openai.request.id': 'gpt-4',
-                'openai.response.owned_by': 'openai'
-              }
+                'openai.response.owned_by': 'openai',
+              },
             })
           })
 
@@ -513,11 +513,11 @@ describe('Plugin', () => {
               meta: {
                 'openai.request.method': 'DELETE',
                 'openai.request.endpoint': '/v1/models/*',
-                'openai.response.id': 'ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh'
+                'openai.response.id': 'ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh',
               },
               metrics: {
-                'openai.response.deleted': 1
-              }
+                'openai.response.deleted': 1,
+              },
             })
             assert.ok('openai.response.id' in traces[0][0].meta)
           })
@@ -550,8 +550,8 @@ describe('Plugin', () => {
               error: 0,
               meta: {
                 'openai.request.endpoint': '/vcr/openai/files',
-                'openai.request.method': 'GET'
-              }
+                'openai.request.method': 'GET',
+              },
             })
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
           })
@@ -593,8 +593,8 @@ describe('Plugin', () => {
                 'openai.request.filename': 'fine-tune.jsonl',
                 'openai.request.purpose': 'fine-tune',
                 'openai.response.purpose': 'fine-tune',
-                'openai.response.filename': 'fine-tune.jsonl'
-              }
+                'openai.response.filename': 'fine-tune.jsonl',
+              },
             })
             assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.status'))
             assert.match(traces[0][0].meta['openai.response.id'], /^file-/)
@@ -605,7 +605,7 @@ describe('Plugin', () => {
         if (semver.satisfies(realVersion, '>=4.0.0')) {
           const result = await openai.files.create({
             file: fs.createReadStream(Path.join(__dirname, 'fine-tune.jsonl')),
-            purpose: 'fine-tune'
+            purpose: 'fine-tune',
           })
 
           assert.deepStrictEqual(result.filename, 'fine-tune.jsonl')
@@ -636,8 +636,8 @@ describe('Plugin', () => {
                 'openai.request.endpoint': '/v1/files/*',
                 'openai.response.filename': 'fine-tune.jsonl',
                 'openai.response.id': 'file-RpTpuvRVtnKpdKZb7DDGto',
-                'openai.response.purpose': 'fine-tune'
-              }
+                'openai.response.purpose': 'fine-tune',
+              },
             })
             assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.status'))
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.bytes'))
@@ -673,8 +673,8 @@ describe('Plugin', () => {
               error: 0,
               meta: {
                 'openai.request.method': 'GET',
-                'openai.request.endpoint': '/v1/files/*/content'
-              }
+                'openai.request.endpoint': '/v1/files/*/content',
+              },
             })
           })
 
@@ -711,8 +711,8 @@ describe('Plugin', () => {
               meta: {
                 'openai.request.method': 'DELETE',
                 'openai.request.endpoint': '/v1/files/*',
-                'openai.response.id': 'file-RpTpuvRVtnKpdKZb7DDGto'
-              }
+                'openai.response.id': 'file-RpTpuvRVtnKpdKZb7DDGto',
+              },
             })
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.deleted'))
           })
@@ -753,8 +753,8 @@ describe('Plugin', () => {
                 'openai.request.method': 'POST',
                 'openai.request.endpoint': '/vcr/openai/fine_tuning/jobs',
                 'openai.request.model': 'gpt-4.1-mini-2025-04-14',
-                'openai.response.model': 'gpt-4.1-mini-2025-04-14'
-              }
+                'openai.response.model': 'gpt-4.1-mini-2025-04-14',
+              },
             })
             assert.match(traces[0][0].meta['openai.response.id'], /^ftjob-/)
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
@@ -790,8 +790,8 @@ describe('Plugin', () => {
               meta: {
                 'openai.request.method': 'GET',
                 'openai.request.endpoint': '/v1/fine_tuning/jobs/*',
-                'openai.response.id': 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf'
-              }
+                'openai.response.id': 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf',
+              },
             })
             assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
@@ -823,8 +823,8 @@ describe('Plugin', () => {
               meta: {
                 'openai.request.method': 'POST',
                 'openai.request.endpoint': '/v1/fine_tuning/jobs/*/cancel',
-                'openai.response.id': 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf'
-              }
+                'openai.response.id': 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf',
+              },
             })
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
           })
@@ -854,8 +854,8 @@ describe('Plugin', () => {
               error: 0,
               meta: {
                 'openai.request.method': 'GET',
-                'openai.request.endpoint': '/v1/fine_tuning/jobs/*/events'
-              }
+                'openai.request.endpoint': '/v1/fine_tuning/jobs/*/events',
+              },
             })
 
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
@@ -886,8 +886,8 @@ describe('Plugin', () => {
               error: 0,
               meta: {
                 'openai.request.method': 'GET',
-                'openai.request.endpoint': '/vcr/openai/fine_tuning/jobs'
-              }
+                'openai.request.endpoint': '/vcr/openai/fine_tuning/jobs',
+              },
             })
 
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
@@ -917,8 +917,8 @@ describe('Plugin', () => {
               error: 0,
               meta: {
                 'openai.request.method': 'POST',
-                'openai.request.endpoint': '/vcr/openai/moderations'
-              }
+                'openai.request.endpoint': '/vcr/openai/moderations',
+              },
             })
 
             assert.match(traces[0][0].meta['openai.response.id'], /^modr-/)
@@ -927,13 +927,13 @@ describe('Plugin', () => {
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
           const result = await openai.moderations.create({
-            input: 'I want to harm the robots'
+            input: 'I want to harm the robots',
           })
 
           assert.deepStrictEqual(result.results[0].flagged, true)
         } else {
           const result = await openai.createModeration({
-            input: 'I want to harm the robots'
+            input: 'I want to harm the robots',
           })
 
           assert.deepStrictEqual(result.data.results[0].flagged, true)
@@ -963,8 +963,8 @@ describe('Plugin', () => {
                 meta: {
                   'openai.request.method': 'POST',
                   'openai.request.endpoint': '/vcr/openai/images/generations',
-                  'openai.request.model': 'dall-e-3'
-                }
+                  'openai.request.model': 'dall-e-3',
+                },
               })
             })
 
@@ -974,7 +974,7 @@ describe('Plugin', () => {
               n: 1,
               size: '1024x1024',
               response_format: responseFormat,
-              model: 'dall-e-3'
+              model: 'dall-e-3',
             })
 
             if (responseFormat === 'url') {
@@ -988,7 +988,7 @@ describe('Plugin', () => {
               n: 1,
               size: '1024x1024',
               response_format: responseFormat,
-              model: 'dall-e-3'
+              model: 'dall-e-3',
             })
 
             if (responseFormat === 'url') {
@@ -1027,8 +1027,8 @@ describe('Plugin', () => {
               error: 0,
               meta: {
                 'openai.request.method': 'POST',
-                'openai.request.endpoint': '/vcr/openai/images/edits'
-              }
+                'openai.request.endpoint': '/vcr/openai/images/edits',
+              },
             })
             // TODO(sabrenner): fix in a follow-up (super simple - img.name)
           })
@@ -1036,7 +1036,7 @@ describe('Plugin', () => {
         const result = await openai.images.edit({
           image: await toFile(
             fs.createReadStream(Path.join(__dirname, 'image.png')), null, {
-              type: 'image/png'
+              type: 'image/png',
             }
           ),
           prompt: 'Change all red to blue',
@@ -1074,8 +1074,8 @@ describe('Plugin', () => {
               error: 0,
               meta: {
                 'openai.request.method': 'POST',
-                'openai.request.endpoint': '/vcr/openai/images/variations'
-              }
+                'openai.request.endpoint': '/vcr/openai/images/variations',
+              },
             })
           })
 
@@ -1084,7 +1084,7 @@ describe('Plugin', () => {
             image: fs.createReadStream(Path.join(__dirname, 'image.png')),
             n: 1,
             size: '256x256',
-            response_format: 'url'
+            response_format: 'url',
           })
 
           assert.strictEqual(result.data[0].url.startsWith('https://'), true)
@@ -1123,8 +1123,8 @@ describe('Plugin', () => {
               meta: {
                 'openai.request.endpoint': '/vcr/openai/audio/transcriptions',
                 'openai.request.method': 'POST',
-                'openai.request.model': 'gpt-4o-mini-transcribe'
-              }
+                'openai.request.model': 'gpt-4o-mini-transcribe',
+              },
             })
           })
 
@@ -1134,7 +1134,7 @@ describe('Plugin', () => {
           prompt: 'What does this say?',
           response_format: 'json',
           temperature: 0.5,
-          language: 'en'
+          language: 'en',
         })
 
         assert.deepStrictEqual(result.text, 'Hello friend.')
@@ -1168,8 +1168,8 @@ describe('Plugin', () => {
               meta: {
                 'openai.request.endpoint': '/vcr/openai/audio/translations',
                 'openai.request.method': 'POST',
-                'openai.request.model': 'whisper-1'
-              }
+                'openai.request.model': 'whisper-1',
+              },
             })
           })
 
@@ -1178,7 +1178,7 @@ describe('Plugin', () => {
             file: fs.createReadStream(Path.join(__dirname, 'translation.m4a')),
             model: 'whisper-1',
             response_format: 'json',
-            temperature: 0.5
+            temperature: 0.5,
           })
 
           assert.ok(result.text)
@@ -1222,8 +1222,8 @@ describe('Plugin', () => {
                 meta: {
                   'openai.request.method': 'POST',
                   'openai.request.endpoint': '/vcr/openai/chat/completions',
-                  'openai.request.model': 'gpt-3.5-turbo'
-                }
+                  'openai.request.model': 'gpt-3.5-turbo',
+                },
               })
               assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
             })
@@ -1233,18 +1233,18 @@ describe('Plugin', () => {
             messages: [
               {
                 role: 'system',
-                content: 'You are a helpful assistant.'
+                content: 'You are a helpful assistant.',
               },
               {
                 role: 'user',
-                content: 'Hello, OpenAI!'
-              }
+                content: 'Hello, OpenAI!',
+              },
             ],
             temperature: 0.5,
             stream: false,
             max_tokens: 100,
             n: 1,
-            user: 'dd-trace-test'
+            user: 'dd-trace-test',
           }
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -1285,18 +1285,18 @@ describe('Plugin', () => {
             messages: [
               {
                 role: 'system',
-                content: 'You are a helpful assistant.'
+                content: 'You are a helpful assistant.',
               },
               {
                 role: 'user',
-                content: 'Hello, OpenAI!'
-              }
+                content: 'Hello, OpenAI!',
+              },
             ],
             temperature: 0.5,
             stream: false,
             max_tokens: 100,
             n: 3,
-            user: 'dd-trace-test'
+            user: 'dd-trace-test',
           }
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -1328,17 +1328,17 @@ describe('Plugin', () => {
                 content: [
                   {
                     type: 'text',
-                    text: 'What is in this image?'
+                    text: 'What is in this image?',
                   },
                   {
                     type: 'image_url',
                     image_url: {
-                      url: 'https://tinyurl.com/4mfz54bx'
-                    }
-                  }
-                ]
-              }
-            ]
+                      url: 'https://tinyurl.com/4mfz54bx',
+                    },
+                  },
+                ],
+              },
+            ],
           }
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -1373,10 +1373,10 @@ describe('Plugin', () => {
                 parameters: {
                   type: 'object',
                   properties: {
-                    city: { type: 'string', description: 'The city to get the weather for' }
-                  }
-                }
-              }
+                    city: { type: 'string', description: 'The city to get the weather for' },
+                  },
+                },
+              },
             }],
             tool_choice: 'auto',
             stream: false,
@@ -1413,18 +1413,18 @@ describe('Plugin', () => {
               messages: [
                 {
                   role: 'system',
-                  content: 'You are a helpful assistant.'
+                  content: 'You are a helpful assistant.',
                 },
                 {
                   role: 'user',
-                  content: 'Hello, OpenAI!'
-                }
+                  content: 'Hello, OpenAI!',
+                },
               ],
               temperature: 0.5,
               stream: true,
               max_tokens: 100,
               n: 1,
-              user: 'dd-trace-test'
+              user: 'dd-trace-test',
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
@@ -1450,18 +1450,18 @@ describe('Plugin', () => {
               messages: [
                 {
                   role: 'system',
-                  content: 'You are a helpful assistant.'
+                  content: 'You are a helpful assistant.',
                 },
                 {
                   role: 'user',
-                  content: 'Hello, OpenAI!'
-                }
+                  content: 'Hello, OpenAI!',
+                },
               ],
               temperature: 0.5,
               stream: true,
               max_tokens: 100,
               n: 3,
-              user: 'dd-trace-test'
+              user: 'dd-trace-test',
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
@@ -1487,12 +1487,12 @@ describe('Plugin', () => {
               messages: [
                 {
                   role: 'system',
-                  content: 'You are a helpful assistant.'
+                  content: 'You are a helpful assistant.',
                 },
                 {
                   role: 'user',
-                  content: 'Hello, OpenAI!'
-                }
+                  content: 'Hello, OpenAI!',
+                },
               ],
               temperature: 0.5,
               stream: true,
@@ -1500,8 +1500,8 @@ describe('Plugin', () => {
               n: 1,
               user: 'dd-trace-test',
               stream_options: {
-                include_usage: true
-              }
+                include_usage: true,
+              },
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
@@ -1529,18 +1529,18 @@ describe('Plugin', () => {
               messages: [
                 {
                   role: 'system',
-                  content: 'You are a helpful assistant.'
+                  content: 'You are a helpful assistant.',
                 },
                 {
                   role: 'user',
-                  content: 'Hello, OpenAI!'
-                }
+                  content: 'Hello, OpenAI!',
+                },
               ],
               temperature: 0.5,
               stream: true,
               max_tokens: 100,
               n: 3,
-              user: 'dd-trace-test'
+              user: 'dd-trace-test',
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
@@ -1569,16 +1569,16 @@ describe('Plugin', () => {
                   content: [
                     {
                       type: 'text',
-                      text: 'What is in this image?'
+                      text: 'What is in this image?',
                     },
                     {
                       type: 'image_url',
                       image_url: {
-                        url: 'https://tinyurl.com/4mfz54bx'
-                      }
-                    }
-                  ]
-                }
+                        url: 'https://tinyurl.com/4mfz54bx',
+                      },
+                    },
+                  ],
+                },
               ],
               stream: true,
             }
@@ -1613,10 +1613,10 @@ describe('Plugin', () => {
                   parameters: {
                     type: 'object',
                     properties: {
-                      city: { type: 'string', description: 'The city to get the weather for' }
-                    }
-                  }
-                }
+                      city: { type: 'string', description: 'The city to get the weather for' },
+                    },
+                  },
+                },
               }],
               tool_choice: 'auto',
               stream: true,
@@ -1652,7 +1652,7 @@ describe('Plugin', () => {
           model: 'gpt-4o',
           messages: [
             { role: 'system', content: 'You are a helpful assistant' },
-            { role: 'user', content: 'Hello, OpenAI!' }
+            { role: 'user', content: 'Hello, OpenAI!' },
           ],
           temperature: 0.5,
           max_tokens: 100,

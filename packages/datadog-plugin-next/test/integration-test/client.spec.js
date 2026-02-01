@@ -10,7 +10,7 @@ const {
   spawnPluginIntegrationTestProc,
   sandboxCwd,
   useSandbox,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
@@ -36,8 +36,8 @@ describe('esm', () => {
         cwd: sandboxCwd(),
         env: {
           ...process.env,
-          NODE_OPTIONS: '--openssl-legacy-provider'
-        }
+          NODE_OPTIONS: '--openssl-legacy-provider',
+        },
       })
       variants = varySandbox('server.mjs', 'next')
     })
@@ -54,7 +54,7 @@ describe('esm', () => {
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, {
-          NODE_OPTIONS: `--loader=${hookFile} --require dd-trace/init --openssl-legacy-provider`
+          NODE_OPTIONS: `--loader=${hookFile} --require dd-trace/init --openssl-legacy-provider`,
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assertObjectContains(headers, { host: `127.0.0.1:${agent.port}` })

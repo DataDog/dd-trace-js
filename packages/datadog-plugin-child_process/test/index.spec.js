@@ -33,15 +33,15 @@ describe('Child process plugin', () => {
     beforeEach(() => {
       spanStub = {
         setTag: sinon.stub(),
-        finish: sinon.stub()
+        finish: sinon.stub(),
       }
 
       tracerStub = {
-        startSpan: sinon.stub()
+        startSpan: sinon.stub(),
       }
 
       configStub = {
-        service: 'test-service'
+        service: 'test-service',
       }
     })
 
@@ -66,10 +66,10 @@ describe('Child process plugin', () => {
               'resource.name': 'ls',
               'span.kind': undefined,
               'span.type': 'system',
-              'cmd.exec': JSON.stringify(['ls', '-l'])
+              'cmd.exec': JSON.stringify(['ls', '-l']),
             },
             integrationName: 'child_process',
-            links: undefined
+            links: undefined,
           }
         )
       })
@@ -90,10 +90,10 @@ describe('Child process plugin', () => {
               'resource.name': 'sh',
               'span.kind': undefined,
               'span.type': 'system',
-              'cmd.shell': 'ls -l'
+              'cmd.shell': 'ls -l',
             },
             integrationName: 'child_process',
-            links: undefined
+            links: undefined,
           }
         )
       })
@@ -117,10 +117,10 @@ describe('Child process plugin', () => {
               'span.kind': undefined,
               'span.type': 'system',
               'cmd.exec': JSON.stringify(['echo', arg, '']),
-              'cmd.truncated': 'true'
+              'cmd.truncated': 'true',
             },
             integrationName: 'child_process',
-            links: undefined
+            links: undefined,
           }
         )
       })
@@ -144,10 +144,10 @@ describe('Child process plugin', () => {
               'span.kind': undefined,
               'span.type': 'system',
               'cmd.shell': 'ls -l /h ',
-              'cmd.truncated': 'true'
+              'cmd.truncated': 'true',
             },
             integrationName: 'child_process',
-            links: undefined
+            links: undefined,
           }
         )
       })
@@ -172,10 +172,10 @@ describe('Child process plugin', () => {
               'span.kind': undefined,
               'span.type': 'system',
               'cmd.exec': JSON.stringify(['ls', '-l', '', '']),
-              'cmd.truncated': 'true'
+              'cmd.truncated': 'true',
             },
             integrationName: 'child_process',
-            links: undefined
+            links: undefined,
           }
         )
       })
@@ -200,10 +200,10 @@ describe('Child process plugin', () => {
               'span.kind': undefined,
               'span.type': 'system',
               'cmd.shell': 'ls -l /home -t',
-              'cmd.truncated': 'true'
+              'cmd.truncated': 'true',
             },
             integrationName: 'child_process',
-            links: undefined
+            links: undefined,
           }
         )
       })
@@ -414,7 +414,7 @@ describe('Child process plugin', () => {
         meta: {
           component: 'subprocess',
           'cmd.exec': '["echo","bluebird-test"]',
-        }
+        },
       })
 
       const result = await execFileAsync('echo', ['bluebird-test'])
@@ -453,8 +453,8 @@ describe('Child process plugin', () => {
         error: 1,
         meta: {
           component: 'subprocess',
-          'cmd.exec': '["node","-invalidFlag"]'
-        }
+          'cmd.exec': '["node","-invalidFlag"]',
+        },
       })
 
       try {
@@ -506,7 +506,7 @@ describe('Child process plugin', () => {
         describe(`${hasParentSpan ? 'with' : 'without'} parent span`, () => {
           const methods = [
             ...execAsyncMethods.map(methodName => ({ methodName, async: true })),
-            ...execSyncMethods.map(methodName => ({ methodName, async: false }))
+            ...execSyncMethods.map(methodName => ({ methodName, async: false })),
           ]
 
           beforeEach((done) => {
@@ -530,8 +530,8 @@ describe('Child process plugin', () => {
                   meta: {
                     component: 'subprocess',
                     'cmd.shell': 'ls',
-                    'cmd.exit_code': '0'
-                  }
+                    'cmd.exit_code': '0',
+                  },
                 }
 
                 expectSomeSpan(agent, expected).then(done, done)
@@ -574,8 +574,8 @@ describe('Child process plugin', () => {
                   meta: {
                     component: 'subprocess',
                     'cmd.shell': 'echo password ?',
-                    'cmd.exit_code': '0'
-                  }
+                    'cmd.exit_code': '0',
+                  },
                 }
                 expectSomeSpan(agent, expected).then(done, done)
 
@@ -596,7 +596,7 @@ describe('Child process plugin', () => {
               it('should be instrumented with error code', (done) => {
                 const command = ['node', '-badOption']
                 const options = {
-                  stdio: 'pipe'
+                  stdio: 'pipe',
                 }
                 const expected = {
                   type: 'system',
@@ -605,8 +605,8 @@ describe('Child process plugin', () => {
                   meta: {
                     component: 'subprocess',
                     'cmd.shell': 'node -badOption',
-                    'cmd.exit_code': '9'
-                  }
+                    'cmd.exit_code': '9',
+                  },
                 }
 
                 expectSomeSpan(agent, expected).then(done, done)
@@ -649,7 +649,7 @@ describe('Child process plugin', () => {
         describe(`${parentSpan ? 'with' : 'without'} parent span`, () => {
           const methods = [
             ...execAsyncMethods.map(methodName => ({ methodName, async: true })),
-            ...execSyncMethods.map(methodName => ({ methodName, async: false }))
+            ...execSyncMethods.map(methodName => ({ methodName, async: false })),
           ]
           if (parentSpan) {
             beforeEach((done) => {
@@ -669,8 +669,8 @@ describe('Child process plugin', () => {
                   meta: {
                     component: 'subprocess',
                     'cmd.exec': '["ls"]',
-                    'cmd.exit_code': '0'
-                  }
+                    'cmd.exit_code': '0',
+                  },
                 }
                 expectSomeSpan(agent, expected).then(done, done)
 
@@ -688,8 +688,8 @@ describe('Child process plugin', () => {
                   meta: {
                     component: 'subprocess',
                     'cmd.exec': '["echo","password","?"]',
-                    'cmd.exit_code': '0'
-                  }
+                    'cmd.exit_code': '0',
+                  },
                 }
                 expectSomeSpan(agent, expected).then(done, done)
 
@@ -710,7 +710,7 @@ describe('Child process plugin', () => {
               it('should be instrumented with error code', (done) => {
                 const command = ['node', '-badOption']
                 const options = {
-                  stdio: 'pipe'
+                  stdio: 'pipe',
                 }
 
                 const errorExpected = {
@@ -720,8 +720,8 @@ describe('Child process plugin', () => {
                   meta: {
                     component: 'subprocess',
                     'cmd.exec': '["node","-badOption"]',
-                    'cmd.exit_code': '9'
-                  }
+                    'cmd.exit_code': '9',
+                  },
                 }
 
                 const noErrorExpected = {
@@ -731,8 +731,8 @@ describe('Child process plugin', () => {
                   meta: {
                     component: 'subprocess',
                     'cmd.exec': '["node","-badOption"]',
-                    'cmd.exit_code': '9'
-                  }
+                    'cmd.exit_code': '9',
+                  },
                 }
 
                 const args = normalizeArgs(methodName, command, options)
@@ -759,7 +759,7 @@ describe('Child process plugin', () => {
                 const command = ['node', '-badOption']
                 const options = {
                   stdio: 'pipe',
-                  shell: true
+                  shell: true,
                 }
 
                 const errorExpected = {
@@ -769,8 +769,8 @@ describe('Child process plugin', () => {
                   meta: {
                     component: 'subprocess',
                     'cmd.shell': 'node -badOption',
-                    'cmd.exit_code': '9'
-                  }
+                    'cmd.exit_code': '9',
+                  },
                 }
 
                 const noErrorExpected = {
@@ -780,8 +780,8 @@ describe('Child process plugin', () => {
                   meta: {
                     component: 'subprocess',
                     'cmd.shell': 'node -badOption',
-                    'cmd.exit_code': '9'
-                  }
+                    'cmd.exit_code': '9',
+                  },
                 }
 
                 const args = normalizeArgs(methodName, command, options)

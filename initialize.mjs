@@ -41,7 +41,7 @@ const iitmExclusions = [
   /openai\/_shims/,
   /openai\/resources\/chat\/completions\/messages/,
   /openai\/agents-core\/dist\/shims/,
-  /@anthropic-ai\/sdk\/_shims/
+  /@anthropic-ai\/sdk\/_shims/,
 ]
 
 export async function load (url, context, nextLoad) {
@@ -61,7 +61,7 @@ if (isMainThread) {
   require('./init.js')
   if (Module.register) {
     Module.register('./loader-hook.mjs', import.meta.url, {
-      data: { exclude: iitmExclusions }
+      data: { exclude: iitmExclusions },
     })
   }
 }

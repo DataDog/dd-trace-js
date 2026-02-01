@@ -25,15 +25,15 @@ describe('startup logging', () => {
       setStartupLogPluginManager,
       setSamplingRules,
       startupLog,
-      tracerInfo
+      tracerInfo,
     } = require('../src/startup-log')
     tracerInfoMethod = tracerInfo
     setStartupLogPluginManager({
       _pluginsByName: {
         http: { _enabled: true },
         fs: { _enabled: true },
-        semver: { _enabled: true }
-      }
+        semver: { _enabled: true },
+      },
     })
     setStartupLogConfig({
       env: 'production',
@@ -44,18 +44,18 @@ describe('startup logging', () => {
       port: 4321,
       debug: true,
       sampler: {
-        sampleRate: 1
+        sampleRate: 1,
       },
       tags: { version: '1.2.3', invalid_but_listed_due_to_mocking: 42n },
       logInjection: true,
       runtimeMetrics: true,
       startupLogs: true,
-      appsec: { enabled: true }
+      appsec: { enabled: true },
     })
     setSamplingRules([
       new SamplingRule({ name: 'rule1', sampleRate: 0.4 }),
       'rule2',
-      new SamplingRule({ name: 'rule3', sampleRate: 1.4 })
+      new SamplingRule({ name: 'rule3', sampleRate: 1.4 }),
     ])
     // Use sinon's stub instance directly to avoid type errors
     // eslint-disable-next-line no-console
@@ -89,7 +89,7 @@ describe('startup logging', () => {
       sampling_rules: [
         { matchers: [{ pattern: 'rule1' }], _sampler: { _rate: 0.4 } },
         'rule2',
-        { matchers: [{ pattern: 'rule3' }], _sampler: { _rate: 1 } }
+        { matchers: [{ pattern: 'rule3' }], _sampler: { _rate: 1 } },
       ],
       tags: { version: '1.2.3', invalid_but_listed_due_to_mocking: '42' },
       dd_version: '1.2.3',
@@ -97,7 +97,7 @@ describe('startup logging', () => {
       runtime_metrics_enabled: true,
       profiling_enabled: false,
       integrations_loaded: ['http', 'fs', 'semver'],
-      appsec_enabled: true
+      appsec_enabled: true,
     })
   })
 
@@ -113,14 +113,14 @@ describe('profiling_enabled', () => {
       ['false', false],
       ['FileNotFound', false],
       ['auto', true],
-      ['true', true]
+      ['true', true],
     ].forEach(([envVar, expected]) => {
       sinon.stub(console, 'info')
       delete require.cache[require.resolve('../src/startup-log')]
       const {
         setStartupLogConfig,
         setStartupLogPluginManager,
-        startupLog
+        startupLog,
       } = require('../src/startup-log')
       process.env.DD_PROFILING_ENABLED = envVar
       process.env.DD_TRACE_STARTUP_LOGS = 'true'

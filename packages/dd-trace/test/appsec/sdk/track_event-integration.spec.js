@@ -44,7 +44,7 @@ describe('track_event - Integration with the tracer', () => {
     it('should track valid user', (done) => {
       controller = (req, res) => {
         tracer.appsec.trackUserLoginSuccessEvent({
-          id: 'test_user_id'
+          id: 'test_user_id',
         }, { metakey: 'metaValue' })
         res.end()
       }

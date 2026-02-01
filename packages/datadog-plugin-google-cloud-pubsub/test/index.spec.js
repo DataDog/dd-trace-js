@@ -78,8 +78,8 @@ describe('Plugin', () => {
               meta: {
                 'pubsub.method': 'createTopic',
                 'span.kind': 'client',
-                component: 'google-cloud-pubsub'
-              }
+                component: 'google-cloud-pubsub',
+              },
             })
             await pubsub.createTopic(topicName)
             return expectedSpanPromise
@@ -91,7 +91,7 @@ describe('Plugin', () => {
               projectId: project,
               servicePath: 'localhost',
               port: 8081,
-              sslCreds: gax.grpc.credentials.createInsecure()
+              sslCreds: gax.grpc.credentials.createInsecure(),
             }, gax)
 
             const expectedSpanPromise = expectSpanWithDefaults({
@@ -100,8 +100,8 @@ describe('Plugin', () => {
               meta: {
                 'pubsub.method': 'createTopic',
                 'span.kind': 'client',
-                component: 'google-cloud-pubsub'
-              }
+                component: 'google-cloud-pubsub',
+              },
             })
             const name = `projects/${project}/topics/${topicName}`
             const promise = publisher.createTopic({ name })
@@ -117,15 +117,15 @@ describe('Plugin', () => {
               error: 1,
               meta: {
                 'pubsub.method': 'createTopic',
-                component: 'google-cloud-pubsub'
-              }
+                component: 'google-cloud-pubsub',
+              },
             })
             const publisher = new v1.PublisherClient({
               projectId: project,
               grpc: gax.grpc,
               servicePath: 'localhost',
               port: 8081,
-              sslCreds: gax.grpc.credentials.createInsecure()
+              sslCreds: gax.grpc.credentials.createInsecure(),
             }, gax)
             const name = `projects/${project}/topics/${topicName}`
             try {
@@ -156,8 +156,8 @@ describe('Plugin', () => {
                 'pubsub.topic': resource,
                 'pubsub.method': 'publish',
                 'span.kind': 'producer',
-                component: 'google-cloud-pubsub'
-              }
+                component: 'google-cloud-pubsub',
+              },
             })
             const [topic] = await pubsub.createTopic(topicName)
             await publish(topic, { data: Buffer.from('hello') })
@@ -193,11 +193,11 @@ describe('Plugin', () => {
               meta: {
                 component: 'google-cloud-pubsub',
                 'span.kind': 'consumer',
-                'pubsub.topic': resource
+                'pubsub.topic': resource,
               },
               metrics: {
-                'pubsub.ack': 1
-              }
+                'pubsub.ack': 1,
+              },
             })
             const [topic] = await pubsub.createTopic(topicName)
             const [sub] = await topic.createSubscription('foo')
@@ -214,8 +214,8 @@ describe('Plugin', () => {
               meta: {
                 component: 'google-cloud-pubsub',
                 'span.kind': 'consumer',
-                'pubsub.topic': resource
-              }
+                'pubsub.topic': resource,
+              },
             })
             const [topic] = await pubsub.createTopic(topicName)
             const [sub] = await topic.createSubscription('foo')
@@ -244,8 +244,8 @@ describe('Plugin', () => {
                 [ERROR_STACK]: error.stack,
                 component: 'google-cloud-pubsub',
                 'span.kind': 'consumer',
-                'pubsub.topic': resource
-              }
+                'pubsub.topic': resource,
+              },
             })
             const [topic] = await pubsub.createTopic(topicName)
             const [sub] = await topic.createSubscription('foo')
@@ -292,7 +292,7 @@ describe('Plugin', () => {
                   }
                 }
                 return undefined
-              }
+              },
             }
           )
         })
@@ -334,7 +334,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           return agent.load('google-cloud-pubsub', {
             service: 'a_test_service',
-            dsmEnabled: false
+            dsmEnabled: false,
           })
         })
 
@@ -352,7 +352,7 @@ describe('Plugin', () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.controlPlane.opName,
               service: 'a_test_service',
-              meta: { 'pubsub.method': 'createTopic' }
+              meta: { 'pubsub.method': 'createTopic' },
             })
             await pubsub.createTopic(topicName)
             return expectedSpanPromise
@@ -369,7 +369,7 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           return agent.load('google-cloud-pubsub', {
-            dsmEnabled: true
+            dsmEnabled: true,
           })
         })
 
@@ -614,8 +614,8 @@ describe('Plugin', () => {
           error: 0,
           meta: {
             component: 'google-cloud-pubsub',
-            'gcloud.project_id': project
-          }
+            'gcloud.project_id': project,
+          },
         }, expected)
 
         return expectSomeSpan(agent, expected, TIMEOUT)

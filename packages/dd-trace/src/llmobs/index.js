@@ -8,7 +8,7 @@ const log = require('../log')
 const {
   ML_APP,
   PROPAGATED_ML_APP_KEY,
-  PROPAGATED_PARENT_ID_KEY
+  PROPAGATED_PARENT_ID_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
 const telemetry = require('./telemetry')

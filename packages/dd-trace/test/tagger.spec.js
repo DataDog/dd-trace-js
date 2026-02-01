@@ -83,7 +83,7 @@ describe('tagger', () => {
       [ERROR_TYPE]: 'foo',
       [ERROR_MESSAGE]: 'foo',
       [ERROR_STACK]: 'foo',
-      doNotSetTraceError: true
+      doNotSetTraceError: true,
     })
 
     assert.strictEqual(carrier[ERROR_TYPE], 'foo')
@@ -95,7 +95,7 @@ describe('tagger', () => {
     tagger.add(carrier, {
       [ERROR_TYPE]: 'foo',
       [ERROR_MESSAGE]: 'foo',
-      [ERROR_STACK]: 'foo'
+      [ERROR_STACK]: 'foo',
     })
 
     assert.strictEqual(carrier[ERROR_TYPE], 'foo')

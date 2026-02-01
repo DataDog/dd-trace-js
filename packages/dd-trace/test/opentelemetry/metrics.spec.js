@@ -34,13 +34,13 @@ describe('OpenTelemetry Meter Provider', () => {
 
     const proxy = proxyquire.noPreserveCache()('../../src/proxy', {
       './config': getConfigFresh,
-      './dogstatsd': dogstatsd
+      './dogstatsd': dogstatsd,
     })
     const TracerProxy = proxyquire.noPreserveCache()('../../src', {
-      './proxy': proxy
+      './proxy': proxy,
     })
     const tracer = proxyquire.noPreserveCache()('../../', {
-      './src': TracerProxy
+      './src': TracerProxy,
     })
     tracer._initialized = false
     tracer.init()
@@ -66,7 +66,7 @@ describe('OpenTelemetry Meter Provider', () => {
         const mockRes = {
           ...baseMockRes,
           on: (event, handler) => { responseHandlers[event] = handler; return mockRes },
-          once: (event, handler) => { responseHandlers[event] = handler; return mockRes }
+          once: (event, handler) => { responseHandlers[event] = handler; return mockRes },
         }
 
         const mockReq = {
@@ -80,13 +80,13 @@ describe('OpenTelemetry Meter Provider', () => {
               ? JSON.parse(capturedPayload.toString())
               : protoMetricsService.toObject(protoMetricsService.decode(capturedPayload), {
                 longs: Number,
-                defaults: false
+                defaults: false,
               })
 
             validator(decoded, capturedHeaders)
             validatorCalled = true
             if (responseHandlers.end) responseHandlers.end()
-          }
+          },
         }
         callback(mockRes)
         return mockReq
@@ -411,7 +411,7 @@ describe('OpenTelemetry Meter Provider', () => {
         double: 3.14,
         bool: true,
         arr: [1, 2, 3],
-        obj: { nested: 'dropped' }
+        obj: { nested: 'dropped' },
       })
 
       setTimeout(() => {
@@ -683,7 +683,7 @@ describe('OpenTelemetry Meter Provider', () => {
     it('uses default protobuf protocol', () => {
       const { meterProvider } = setupTracer({
         OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: undefined,
-        OTEL_EXPORTER_OTLP_PROTOCOL: undefined
+        OTEL_EXPORTER_OTLP_PROTOCOL: undefined,
       })
       assert(meterProvider.reader)
       assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/protobuf')
@@ -697,7 +697,7 @@ describe('OpenTelemetry Meter Provider', () => {
     it('prioritizes metrics-specific protocol over generic protocol', () => {
       const { meterProvider } = setupTracer({
         OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
-        OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf'
+        OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
       })
       assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/json')
     })
@@ -717,7 +717,7 @@ describe('OpenTelemetry Meter Provider', () => {
   describe('Endpoint Configuration', () => {
     it('configures OTLP endpoint from environment variable', () => {
       const { meterProvider } = setupTracer({
-        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://custom:4321/v1/metrics'
+        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://custom:4321/v1/metrics',
       })
       assert.strictEqual(meterProvider.reader.exporter.options.path, '/v1/metrics')
       assert.strictEqual(meterProvider.reader.exporter.options.hostname, 'custom')
@@ -727,7 +727,7 @@ describe('OpenTelemetry Meter Provider', () => {
     it('prioritizes metrics-specific endpoint over generic endpoint', () => {
       const { meterProvider } = setupTracer({
         OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://custom:4318/v1/metrics',
-        OTEL_EXPORTER_OTLP_ENDPOINT: 'http://generic:4318/v1/metrics'
+        OTEL_EXPORTER_OTLP_ENDPOINT: 'http://generic:4318/v1/metrics',
       })
       assert.strictEqual(meterProvider.reader.exporter.options.path, '/v1/metrics')
       assert.strictEqual(meterProvider.reader.exporter.options.hostname, 'custom')
@@ -752,7 +752,7 @@ describe('OpenTelemetry Meter Provider', () => {
     it('prioritizes metrics-specific headers over generic OTLP headers', () => {
       const { meterProvider } = setupTracer({
         OTEL_EXPORTER_OTLP_HEADERS: 'generic=value,shared=generic',
-        OTEL_EXPORTER_OTLP_METRICS_HEADERS: 'metrics-specific=value,shared=metrics'
+        OTEL_EXPORTER_OTLP_METRICS_HEADERS: 'metrics-specific=value,shared=metrics',
       })
       const exporter = meterProvider.reader.exporter
       assert.strictEqual(exporter.options.headers['metrics-specific'], 'value')
@@ -825,7 +825,7 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_METRIC_EXPORT_INTERVAL: '-1',
         OTEL_BSP_SCHEDULE_DELAY: '-1',
         OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '-1',
-        OTEL_BSP_MAX_QUEUE_SIZE: '-1'
+        OTEL_BSP_MAX_QUEUE_SIZE: '-1',
       }, false)
       assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_EXPORTER_OTLP_TIMEOUT/)))
       assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT/)))
@@ -846,7 +846,7 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_METRIC_EXPORT_INTERVAL: 'python!',
         OTEL_BSP_SCHEDULE_DELAY: 'NaN',
         OTEL_BSP_MAX_EXPORT_BATCH_SIZE: 'abc',
-        OTEL_BSP_MAX_QUEUE_SIZE: 'xyz'
+        OTEL_BSP_MAX_QUEUE_SIZE: 'xyz',
       }, false)
       assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_EXPORTER_OTLP_TIMEOUT/)))
       assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT/)))
@@ -1036,7 +1036,7 @@ describe('OpenTelemetry Meter Provider', () => {
           on: handler,
           once: handler,
           destroy: sinon.stub(),
-          setTimeout: sinon.stub()
+          setTimeout: sinon.stub(),
         }
 
         if (requestCount === 1) {

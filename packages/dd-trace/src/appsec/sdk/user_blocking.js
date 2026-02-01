@@ -56,5 +56,5 @@ function blockRequest (tracer, req, res) {
 
 module.exports = {
   checkUserAndSetUser,
-  blockRequest
+  blockRequest,
 }

@@ -18,8 +18,8 @@ const PROXY_HEADER_STAGE = 'x-dd-proxy-stage'
 const supportedProxies = {
   'aws-apigateway': {
     spanName: 'aws.apigateway',
-    component: 'aws-apigateway'
-  }
+    component: 'aws-apigateway',
+  },
 }
 
 function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, config, startSpanHelper) {
@@ -52,8 +52,8 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
       [SPAN_TYPE]: 'web',
       [HTTP_METHOD]: proxyContext.method,
       [HTTP_URL]: proxyContext.domainName + proxyContext.path,
-      stage: proxyContext.stage
-    }
+      stage: proxyContext.stage,
+    },
   }, traceCtx, config)
 
   reqCtx.inferredProxySpan = span
@@ -90,7 +90,7 @@ function extractInferredProxyContext (headers) {
     path: headers[PROXY_HEADER_PATH],
     stage: headers[PROXY_HEADER_STAGE],
     domainName: headers[PROXY_HEADER_DOMAIN],
-    proxySystemName: headers[PROXY_HEADER_SYSTEM]
+    proxySystemName: headers[PROXY_HEADER_SYSTEM],
   }
 }
 
@@ -112,5 +112,5 @@ function finishInferredProxySpan (context) {
 
 module.exports = {
   createInferredProxySpan,
-  finishInferredProxySpan
+  finishInferredProxySpan,
 }

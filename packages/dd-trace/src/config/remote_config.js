@@ -4,7 +4,7 @@ const RemoteConfigCapabilities = require('../remote_config/capabilities')
 const log = require('../log')
 
 module.exports = {
-  enable
+  enable,
 }
 
 /**

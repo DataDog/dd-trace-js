@@ -23,7 +23,7 @@ describe('Plugin', () => {
         before(async () => {
           await agent.load(['ws'], [{
             service: 'some',
-            traceWebsocketMessagesEnabled: true
+            traceWebsocketMessagesEnabled: true,
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
         })
@@ -50,7 +50,7 @@ describe('Plugin', () => {
         beforeEach(async () => {
           await agent.load(['ws'], [{
             service: 'some',
-            traceWebsocketMessagesEnabled: true
+            traceWebsocketMessagesEnabled: true,
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
@@ -91,7 +91,7 @@ describe('Plugin', () => {
             error: 0,
             meta: {
               'span.kind': 'producer',
-            }
+            },
           })
         })
 
@@ -171,8 +171,8 @@ describe('Plugin', () => {
             once(client, 'error'),
             agent.assertFirstTraceSpan({
               name: 'websocket.receive',
-              resource: `websocket /${route}`
-            })
+              resource: `websocket /${route}`,
+            }),
           ])
         })
 
@@ -192,7 +192,7 @@ describe('Plugin', () => {
         beforeEach(async () => {
           await agent.load(['ws'], [{
             service: 'custom-ws-service',
-            traceWebsocketMessagesEnabled: true
+            traceWebsocketMessagesEnabled: true,
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
@@ -280,7 +280,7 @@ describe('Plugin', () => {
         beforeEach(async () => {
           await agent.load(['ws'], [{
             service: 'custom-ws-service',
-            traceWebsocketMessagesEnabled: false
+            traceWebsocketMessagesEnabled: false,
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
@@ -310,7 +310,7 @@ describe('Plugin', () => {
             service: 'custom-ws-service',
             traceWebsocketMessagesEnabled: true,
             traceWebsocketMessagesInheritSampling: false,
-            traceWebsocketMessagesSeparateTraces: false
+            traceWebsocketMessagesSeparateTraces: false,
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
@@ -392,7 +392,7 @@ describe('Plugin', () => {
 
             // Inject distributed tracing headers to enable span pointers
             client = new WebSocket(`ws://localhost:${clientPort}/${route}?active=true`, {
-              headers
+              headers,
             })
           })
         })
@@ -430,8 +430,8 @@ describe('Plugin', () => {
               attributes: {
                 'ptr.kind': 'websocket',
                 'ptr.dir': 'd',
-                'link.name': 'span-pointer-down'
-              }
+                'link.name': 'span-pointer-down',
+              },
             })
             didFindPointerLink = true
 
@@ -474,8 +474,8 @@ describe('Plugin', () => {
               attributes: {
                 'ptr.kind': 'websocket',
                 'ptr.dir': 'u',
-                'link.name': 'span-pointer-up'
-              }
+                'link.name': 'span-pointer-up',
+              },
             })
             didFindPointerLink = true
 

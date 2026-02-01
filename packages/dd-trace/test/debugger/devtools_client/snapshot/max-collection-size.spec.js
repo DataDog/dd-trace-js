@@ -9,7 +9,7 @@ require('../../../setup/mocha')
 
 const {
   LARGE_OBJECT_SKIP_THRESHOLD,
-  DEFAULT_MAX_COLLECTION_SIZE
+  DEFAULT_MAX_COLLECTION_SIZE,
 } = require('../../../../src/debugger/devtools_client/snapshot/constants')
 const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
 
@@ -19,7 +19,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
   describe('maxCollectionSize', function () {
     const configs = [
       undefined,
-      { maxCollectionSize: 3 }
+      { maxCollectionSize: 3 },
     ]
 
     beforeEach(enable(__filename))
@@ -41,8 +41,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             { type: 'number', value: i.toString() },
             {
               type: 'Object',
-              fields: { i: { type: 'number', value: i.toString() } }
-            }
+              fields: { i: { type: 'number', value: i.toString() } },
+            },
           ])
         }
 
@@ -66,7 +66,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             type: 'Array',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
-            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
           })
         })
 
@@ -76,7 +76,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             type: 'Map',
             entries: expectedEntries,
             notCapturedReason: 'collectionSize',
-            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
           })
         })
 
@@ -86,7 +86,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             type: 'Set',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
-            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
           })
         })
 
@@ -94,7 +94,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           assertObjectContains(state.wmap, {
             type: 'WeakMap',
             notCapturedReason: 'collectionSize',
-            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
           })
 
           assert.strictEqual(state.wmap.entries.length, maxCollectionSize)
@@ -116,7 +116,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           assertObjectContains(state.wset, {
             type: 'WeakSet',
             notCapturedReason: 'collectionSize',
-            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
           })
 
           assert.strictEqual(state.wset.elements.length, maxCollectionSize)
@@ -137,7 +137,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             type: 'Uint16Array',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
-            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
           })
         })
       })

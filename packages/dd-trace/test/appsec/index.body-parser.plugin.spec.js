@@ -41,8 +41,8 @@ withVersions('body-parser', 'body-parser', version => {
       appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'body-parser-rules.json')
-        }
+          rules: path.join(__dirname, 'body-parser-rules.json'),
+        },
       }))
     })
 
@@ -88,7 +88,7 @@ withVersions('body-parser', 'body-parser', version => {
         const complexPayload = {
           deepObject,
           longValue,
-          largeObject
+          largeObject,
         }
 
         await axios.post(`http://localhost:${port}/`, { complexPayload })

@@ -11,11 +11,11 @@ require('../setup/core')
 
 const log = {
   error: sinon.stub(),
-  info: sinon.stub()
+  info: sinon.stub(),
 }
 
 const Plugin = proxyquire('../../src/plugins/plugin', {
-  '../log': log
+  '../log': log,
 })
 const { storage } = require('../../../datadog-core')
 

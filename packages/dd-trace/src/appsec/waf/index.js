@@ -38,7 +38,7 @@ const waf = {
   checkAsmDdFallback,
   run: noop,
   disposeContext: noop,
-  WafUpdateError
+  WafUpdateError,
 }
 
 /**

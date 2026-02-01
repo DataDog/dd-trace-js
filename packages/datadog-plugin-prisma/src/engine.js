@@ -6,20 +6,20 @@ const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const databaseDriverMapper = {
   postgresql: {
     type: 'sql',
-    'db.type': 'postgres'
+    'db.type': 'postgres',
   },
   mysql: {
     type: 'sql',
-    'db.type': 'mysql'
+    'db.type': 'mysql',
   },
   mongodb: {
     type: 'mongodb',
-    'db.type': 'mongodb'
+    'db.type': 'mongodb',
   },
   sqlite: {
     type: 'sql',
-    'db.type': 'sqlite'
-  }
+    'db.type': 'sqlite',
+  },
 }
 
 class PrismaEngine extends DatabasePlugin {
@@ -39,9 +39,9 @@ class PrismaEngine extends DatabasePlugin {
       meta: {
         prisma: {
           name: spanName,
-          type: 'engine'
-        }
-      }
+          type: 'engine',
+        },
+      },
     }
 
     if (spanName === 'db_query') {

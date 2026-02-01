@@ -41,7 +41,7 @@ describe('Plugin', () => {
     const localDataSources = Object.fromEntries(
       fixtures.map((f) => [
         f.name,
-        new LocalGraphQLDataSource(buildSubgraphSchema(f))
+        new LocalGraphQLDataSource(buildSubgraphSchema(f)),
       ])
     )
 
@@ -49,7 +49,7 @@ describe('Plugin', () => {
       localServiceList: fixtures,
       buildService (service) {
         return localDataSources[service.name]
-      }
+      },
     })
     return gateway
   }
@@ -59,12 +59,12 @@ describe('Plugin', () => {
       source,
       document: gql(source),
       request: {
-        variables
+        variables,
       },
       operationName,
       queryHash: 'hashed',
       context: null,
-      cache: {}
+      cache: {},
     })
     return resp
   }
@@ -95,11 +95,11 @@ describe('Plugin', () => {
 
           server = new ApolloServer({
             gateway: setupGateway(),
-            subscriptions: false // Disable subscriptions (not supported with Apollo Gateway)
+            subscriptions: false, // Disable subscriptions (not supported with Apollo Gateway)
           })
 
           return startStandaloneServer(server, {
-            listen: { port: 0 }
+            listen: { port: 0 },
           }).then(({ url }) => {
             port = new URL(url).port
           })
@@ -132,7 +132,7 @@ describe('Plugin', () => {
             .catch(done)
 
           axios.post(`http://localhost:${port}/`, {
-            query
+            query,
           })
         })
       })
@@ -159,8 +159,8 @@ describe('Plugin', () => {
                   'graphql.operation.name': operationName,
                   'graphql.operation.type': 'query',
                   component: 'apollo.gateway',
-                  '_dd.integration': 'apollo.gateway'
-                }
+                  '_dd.integration': 'apollo.gateway',
+                },
               })
               assert.ok(!('graphql.source' in traces[0][0].meta))
 
@@ -169,7 +169,7 @@ describe('Plugin', () => {
                 service: expectedSchema.server.serviceName,
                 type: 'web',
                 error: 0,
-                meta: { component: 'apollo.gateway' }
+                meta: { component: 'apollo.gateway' },
               })
 
               assertObjectContains(traces[0][2], {
@@ -177,7 +177,7 @@ describe('Plugin', () => {
                 service: expectedSchema.server.serviceName,
                 type: 'web',
                 error: 0,
-                meta: { component: 'apollo.gateway' }
+                meta: { component: 'apollo.gateway' },
               })
 
               assertObjectContains(traces[0][3], {
@@ -185,7 +185,7 @@ describe('Plugin', () => {
                 service: expectedSchema.server.serviceName,
                 type: 'web',
                 error: 0,
-                meta: { component: 'apollo.gateway' }
+                meta: { component: 'apollo.gateway' },
               })
 
               assertObjectContains(traces[0][4], {
@@ -195,8 +195,8 @@ describe('Plugin', () => {
                 error: 0,
                 meta: {
                   serviceName: 'accounts',
-                  component: 'apollo.gateway'
-                }
+                  component: 'apollo.gateway',
+                },
               })
 
               assertObjectContains(traces[0][5], {
@@ -204,7 +204,7 @@ describe('Plugin', () => {
                 service: expectedSchema.server.serviceName,
                 type: 'web',
                 error: 0,
-                meta: { component: 'apollo.gateway' }
+                meta: { component: 'apollo.gateway' },
               })
             })
             .then(done)
@@ -228,7 +228,7 @@ describe('Plugin', () => {
               assert.ok(!('graphql.source' in traces[0][0].meta))
               assertObjectContains(traces[0][0].meta, {
                 'graphql.operation.type': 'query',
-                component: 'apollo.gateway'
+                component: 'apollo.gateway',
               })
             })
             .then(done)
@@ -262,7 +262,7 @@ describe('Plugin', () => {
               assert.ok(!('graphql.source' in traces[0][0].meta))
               assertObjectContains(traces[0][0].meta, {
                 'graphql.operation.type': 'query',
-                component: 'apollo.gateway'
+                component: 'apollo.gateway',
               })
             })
             .then(done)
@@ -279,8 +279,8 @@ describe('Plugin', () => {
 
           agent.assertFirstTraceSpan({
             meta: {
-              'graphql.operation.type': 'mutation'
-            }
+              'graphql.operation.type': 'mutation',
+            },
           })
             .then(done)
             .catch(done)
@@ -324,8 +324,8 @@ describe('Plugin', () => {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
-                  component: 'apollo.gateway'
-                }
+                  component: 'apollo.gateway',
+                },
               })
 
               assertObjectContains(traces[0][1], {
@@ -336,8 +336,8 @@ describe('Plugin', () => {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
-                  component: 'apollo.gateway'
-                }
+                  component: 'apollo.gateway',
+                },
               })
             })
             .then(done)
@@ -373,8 +373,8 @@ describe('Plugin', () => {
                 meta: {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
-                  [ERROR_STACK]: error.stack
-                }
+                  [ERROR_STACK]: error.stack,
+                },
               })
             })
             .then(done)
@@ -403,8 +403,8 @@ describe('Plugin', () => {
                 meta: {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
-                  [ERROR_STACK]: error.stack
-                }
+                  [ERROR_STACK]: error.stack,
+                },
               })
 
               assert.strictEqual(traces[0][1].name, 'apollo.gateway.validate')
@@ -425,8 +425,8 @@ describe('Plugin', () => {
                   meta: {
                     [ERROR_TYPE]: error.name,
                     [ERROR_MESSAGE]: error.message,
-                    [ERROR_STACK]: error.stack
-                  }
+                    [ERROR_STACK]: error.stack,
+                  },
                 })
               } else { assert.strictEqual(traces[0][3].error, 0) }
 
@@ -437,8 +437,8 @@ describe('Plugin', () => {
                 meta: {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
-                  [ERROR_STACK]: error.stack
-                }
+                  [ERROR_STACK]: error.stack,
+                },
               })
 
               assert.strictEqual(traces[0][5].name, 'apollo.gateway.postprocessing')
@@ -451,7 +451,7 @@ describe('Plugin', () => {
             localServiceList: fixtures,
             fetcher: () => {
               throw Error('Nooo')
-            }
+            },
           })
           gateway.load().then(resp => {
             return execute(resp.executor, source, variableValues, operationName)
@@ -508,7 +508,7 @@ describe('Plugin', () => {
           {
             selectSpan: (traces) => {
               return traces[0][0]
-            }
+            },
           }
         )
 

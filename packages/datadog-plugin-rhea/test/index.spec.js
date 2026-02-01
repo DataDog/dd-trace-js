@@ -49,7 +49,7 @@ describe('Plugin', () => {
               username: 'admin',
               password: 'admin',
               host: 'localhost',
-              port: 5673
+              port: 5673,
             })
             connection.open_sender('amq.topic')
             connection.open_receiver('amq.topic')
@@ -68,7 +68,7 @@ describe('Plugin', () => {
               }
 
               assertObjectContains(produceSpanMeta, {
-                'pathway.hash': expectedProducerHash
+                'pathway.hash': expectedProducerHash,
               })
             }, { timeoutMs: 2000 }).then(done, done)
 
@@ -88,7 +88,7 @@ describe('Plugin', () => {
                 }
 
                 assertObjectContains(consumeSpanMeta, {
-                  'pathway.hash': expectedConsumerHash
+                  'pathway.hash': expectedConsumerHash,
                 })
               }, { timeoutMs: 2000 }).then(done, done)
             })
@@ -152,7 +152,7 @@ describe('Plugin', () => {
                   name: expectedSchema.send.opName,
                   resource: 'amq.topic',
                   error: 0,
-                  service: expectedSchema.send.serviceName
+                  service: expectedSchema.send.serviceName,
                 })
                 assert.ok(!('type' in span))
                 assertObjectContains(span.meta, {
@@ -161,10 +161,10 @@ describe('Plugin', () => {
                   'amqp.link.role': 'sender',
                   'amqp.delivery.state': 'accepted',
                   'out.host': 'localhost',
-                  component: 'rhea'
+                  component: 'rhea',
                 })
                 assertObjectContains(span.metrics, {
-                  'network.destination.port': 5673
+                  'network.destination.port': 5673,
                 })
               })
                 .then(done, done)
@@ -207,13 +207,13 @@ describe('Plugin', () => {
                   resource: 'amq.topic',
                   error: 0,
                   service: expectedSchema.receive.serviceName,
-                  type: 'worker'
+                  type: 'worker',
                 })
                 assertObjectContains(span.meta, {
                   'span.kind': 'consumer',
                   'amqp.link.source.address': 'amq.topic',
                   'amqp.link.role': 'receiver',
-                  component: 'rhea'
+                  component: 'rhea',
                 })
               })
                 .then(done, done)
@@ -238,7 +238,7 @@ describe('Plugin', () => {
 
         describe('with configuration', () => {
           beforeEach(() => agent.reload('rhea', {
-            service: 'a_test_service'
+            service: 'a_test_service',
           }))
 
           beforeEach(done => {
@@ -252,7 +252,7 @@ describe('Plugin', () => {
               username: 'admin',
               password: 'admin',
               host: 'localhost',
-              port: 5673
+              port: 5673,
             })
             connection.open_sender('amq.topic')
             connection.open_receiver('amq.topic')
@@ -263,12 +263,12 @@ describe('Plugin', () => {
             {
               v0: {
                 opName: 'amqp.receive',
-                serviceName: 'a_test_service'
+                serviceName: 'a_test_service',
               },
               v1: {
                 opName: 'amqp.process',
-                serviceName: 'a_test_service'
-              }
+                serviceName: 'a_test_service',
+              },
             }
           )
 
@@ -319,7 +319,7 @@ describe('Plugin', () => {
             username: 'admin',
             password: 'admin',
             host: 'localhost',
-            port: 5673
+            port: 5673,
           })
           connection.open_sender('amq.topic')
           connection.open_receiver('amq.topic')
@@ -455,8 +455,8 @@ describe('Plugin', () => {
                       [ERROR_MESSAGE]: 'this is an error',
                       [ERROR_TYPE]: 'Error',
                       [ERROR_STACK]: error.stack,
-                      component: 'rhea'
-                    }
+                      component: 'rhea',
+                    },
                   })
 
                   Session.prototype.on_transfer = onTransfer
@@ -656,7 +656,7 @@ describe('Plugin', () => {
                 name: expectedSchema.send.opName,
                 resource: 'amq.topic',
                 error: 1,
-                service: expectedSchema.send.serviceName
+                service: expectedSchema.send.serviceName,
               })
               assertObjectContains(span.meta, {
                 'span.kind': 'producer',
@@ -665,10 +665,10 @@ describe('Plugin', () => {
                 [ERROR_TYPE]: 'Error',
                 [ERROR_MESSAGE]: 'fake protocol error',
                 [ERROR_STACK]: err.stack,
-                component: 'rhea'
+                component: 'rhea',
               })
               assertObjectContains(span.metrics, {
-                'network.destination.port': expectedServerPort
+                'network.destination.port': expectedServerPort,
               })
             }).then(done, done)
             connection.output = function () {
@@ -688,7 +688,7 @@ describe('Plugin', () => {
                 name: expectedSchema.receive.opName,
                 resource: 'amq.topic',
                 error: 1,
-                service: expectedSchema.receive.serviceName
+                service: expectedSchema.receive.serviceName,
               })
               assertObjectContains(span.meta, {
                 'span.kind': 'consumer',
@@ -697,7 +697,7 @@ describe('Plugin', () => {
                 [ERROR_TYPE]: 'Error',
                 [ERROR_MESSAGE]: 'fake protocol error',
                 [ERROR_STACK]: err.stack,
-                component: 'rhea'
+                component: 'rhea',
               })
             }).then(done, done)
             client.on('message', msg => {
@@ -724,13 +724,13 @@ function expectReceiving (agent, expectedSchema, deliveryState, topic) {
       resource: topic,
       error: 0,
       service: expectedSchema.receive.serviceName,
-      type: 'worker'
+      type: 'worker',
     })
     const expectedMeta = {
       'span.kind': 'consumer',
       'amqp.link.source.address': topic,
       'amqp.link.role': 'receiver',
-      component: 'rhea'
+      component: 'rhea',
     }
     if (deliveryState) {
       expectedMeta['amqp.delivery.state'] = deliveryState
@@ -748,14 +748,14 @@ function expectSending (agent, expectedSchema, deliveryState, topic) {
       name: expectedSchema.send.opName,
       resource: topic,
       error: 0,
-      service: expectedSchema.send.serviceName
+      service: expectedSchema.send.serviceName,
     })
     assert.ok(!('type' in span))
     const expectedMeta = {
       'span.kind': 'producer',
       'amqp.link.target.address': topic,
       'amqp.link.role': 'sender',
-      component: 'rhea'
+      component: 'rhea',
     }
     if (deliveryState) {
       expectedMeta['amqp.delivery.state'] = deliveryState

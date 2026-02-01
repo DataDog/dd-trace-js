@@ -14,7 +14,7 @@ describe('RateLimiter', () => {
 
   beforeEach(() => {
     clock = sinon.useFakeTimers({
-      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'hrtime']
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'hrtime'],
     })
   })
 

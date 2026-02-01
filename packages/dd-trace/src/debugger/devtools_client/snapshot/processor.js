@@ -5,7 +5,7 @@ const { collectionSizeSym, largeCollectionSkipThresholdSym, fieldCountSym, timeB
 const { normalizeName, REDACTED_IDENTIFIERS } = require('./redaction')
 
 module.exports = {
-  processRawState: processProperties
+  processRawState: processProperties,
 }
 
 // Matches classes in source code, no matter how it's written:
@@ -150,7 +150,7 @@ function toString (str, maxLength) {
     type: 'string',
     value: str.slice(0, maxLength),
     truncated: true,
-    size
+    size,
   }
 }
 
@@ -160,7 +160,7 @@ function toObject (type, props, maxLength, timeBudgetReached) {
 
   const result = {
     type,
-    fields: processProperties(props, maxLength)
+    fields: processProperties(props, maxLength),
   }
 
   if (props[fieldCountSym] !== undefined) {
@@ -179,7 +179,7 @@ function toArray (type, elements, maxLength, timeBudgetReached) {
     type,
     elements: elements.map((element) => {
       return getPropertyValue(element, maxLength)
-    })
+    }),
   }
 
   setNotCaptureReasonOnCollection(result, elements)
@@ -218,7 +218,7 @@ function toMap (type, pairs, maxLength, timeBudgetReached) {
         ? notCapturedRedacted(value.properties[1].value.type)
         : getPropertyValue(value.properties[1], maxLength)
       return [key, val]
-    })
+    }),
   }
 
   setNotCaptureReasonOnCollection(result, pairs)
@@ -250,7 +250,7 @@ function toSet (type, values, maxLength, timeBudgetReached) {
       if (value.properties === undefined) return { notCapturedReason: 'unknown' }
 
       return getPropertyValue(value.properties[0], maxLength)
-    })
+    }),
   }
 
   setNotCaptureReasonOnCollection(result, values)
@@ -270,7 +270,7 @@ function toArrayBuffer (type, bytes, maxLength, timeBudgetReached) {
         type,
         value: arrayBufferToString(bytes, maxLength),
         truncated: true,
-        size: bytes.length
+        size: bytes.length,
       }
     : { type, value: arrayBufferToString(bytes, size) }
 }

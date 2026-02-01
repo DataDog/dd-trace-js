@@ -24,7 +24,7 @@ export async function initialize (data) {
     csiMethods,
     telemetryVerbosity: getName(telemetryVerbosity),
     chainSourceMap,
-    orchestrion: orchestrionConfig
+    orchestrion: orchestrionConfig,
   })
 }
 
@@ -59,16 +59,16 @@ export async function load (url, context, nextLoad) {
   } catch (e) {
     const newErrObject = {
       message: e.message,
-      stack: e.stack
+      stack: e.stack,
     }
 
     const data = {
       level: 'error',
-      messages: ['[ASM] Error rewriting file %s', url, newErrObject]
+      messages: ['[ASM] Error rewriting file %s', url, newErrObject],
     }
     port.postMessage({
       type: constants.LOG_MESSAGE,
-      data
+      data,
     })
   }
 

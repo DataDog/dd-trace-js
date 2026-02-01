@@ -3,7 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 const connectionAttributes = new WeakMap()
@@ -68,7 +68,7 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
         port,
         hostname,
         query: dbQuery,
-        connAttrs
+        connAttrs,
       }
 
       return startChannel.runStores(ctx, () => {

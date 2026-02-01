@@ -7,7 +7,7 @@ function getResourceName (method, fields = {}) {
     fields.routingKey,
     fields.queue,
     fields.source,
-    fields.destination
+    fields.destination,
   ].filter(Boolean).join(' ')
 }
 

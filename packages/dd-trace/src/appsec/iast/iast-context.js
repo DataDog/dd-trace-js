@@ -68,5 +68,5 @@ module.exports = {
   cleanIastContext,
   getIastStackTraceId,
   IAST_CONTEXT_KEY,
-  IAST_TRANSACTION_ID
+  IAST_TRANSACTION_ID,
 }

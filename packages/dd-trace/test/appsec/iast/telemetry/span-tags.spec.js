@@ -9,7 +9,7 @@ const { EXECUTED_SINK, EXECUTED_SOURCE, REQUEST_TAINTED } = require('../../../..
 const { addMetricsToSpan } = require('../../../../src/appsec/iast/telemetry/span-tags')
 const {
   getNamespaceFromContext,
-  initRequestNamespace
+  initRequestNamespace,
 } = require('../../../../src/appsec/iast/telemetry/namespaces')
 
 describe('Telemetry Span tags', () => {
@@ -18,7 +18,7 @@ describe('Telemetry Span tags', () => {
 
   beforeEach(() => {
     rootSpan = {
-      addTags: sinon.spy()
+      addTags: sinon.spy(),
     }
     context = {}
     initRequestNamespace(context)

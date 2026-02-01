@@ -50,7 +50,7 @@ function crashFlush () {
     const error = new ImpendingTimeout('Datadog detected an impending timeout')
     activeSpan.addTags({
       [ERROR_MESSAGE]: error.message,
-      [ERROR_TYPE]: error.name
+      [ERROR_TYPE]: error.name,
     })
   }
 

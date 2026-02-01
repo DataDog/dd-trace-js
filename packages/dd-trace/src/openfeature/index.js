@@ -73,5 +73,5 @@ function disable () {
 
 module.exports = {
   enable,
-  disable
+  disable,
 }

@@ -32,8 +32,8 @@ describe('RASP - command_injection - integration', () => {
         DD_APPSEC_ENABLED: 'true',
         DD_APPSEC_RASP_ENABLED: 'true',
         DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
-        DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp_rules.json')
-      }
+        DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp_rules.json'),
+      },
     })
     axios = Axios.create({ baseURL: proc.url })
   })

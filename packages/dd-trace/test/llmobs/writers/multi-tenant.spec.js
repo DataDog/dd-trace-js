@@ -20,7 +20,7 @@ describe('Multi-Tenant Routing', () => {
     site: 'default-site.com',
     hostname: 'localhost',
     port: 8126,
-    apiKey: 'default-key'
+    apiKey: 'default-key',
   }
 
   beforeEach(() => {
@@ -30,7 +30,7 @@ describe('Multi-Tenant Routing', () => {
     BaseLLMObsWriter = proxyquire('../../../src/llmobs/writers/base', {
       '../../exporters/common/request': request,
       '../../log': logger,
-      './util': proxyquire('../../../src/llmobs/writers/util', { '../../log': logger })
+      './util': proxyquire('../../../src/llmobs/writers/util', { '../../log': logger }),
     })
 
     writer = new BaseLLMObsWriter({ endpoint: '/endpoint', intake: 'intake', config })
@@ -68,7 +68,7 @@ describe('Multi-Tenant Routing', () => {
 
     const payloads = request.getCalls().map(c => ({
       apiKey: c.args[1].headers['DD-API-KEY'],
-      events: JSON.parse(c.args[0]).events
+      events: JSON.parse(c.args[0]).events,
     }))
 
     const payloadA = payloads.find(p => p.apiKey === 'key-a')
@@ -132,8 +132,8 @@ describe('Multi-Tenant Routing', () => {
         service: 'service',
         llmobs: {
           mlApp: 'mlApp',
-          agentlessEnabled: true
-        }
+          agentlessEnabled: true,
+        },
       })
       llmobs = tracer.llmobs
     })
@@ -231,7 +231,7 @@ describe('Multi-Tenant Routing', () => {
         llmobs.submitEvaluation(spanContext, {
           label: 'test-label',
           metricType: 'score',
-          value: 0.9
+          value: 0.9,
         })
       })
 
@@ -247,7 +247,7 @@ describe('Multi-Tenant Routing', () => {
       llmobs.submitEvaluation(spanContext, {
         label: 'default-label',
         metricType: 'categorical',
-        value: 'good'
+        value: 'good',
       })
 
       assert.strictEqual(evalAppendSpy.callCount, 1)

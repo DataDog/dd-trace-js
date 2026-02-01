@@ -26,10 +26,10 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
       method: 'POST',
       headers: {
         'dd-api-key': getValueFromEnvSources('DD_API_KEY'),
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       timeout: this.timeout,
-      url: this._url
+      url: this._url,
     }
 
     if (this._isAgentProxy) {

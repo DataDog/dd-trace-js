@@ -6,7 +6,7 @@ const defaultLogger = {
   debug: msg => console.debug(msg), /* eslint-disable-line no-console */
   info: msg => console.info(msg), /* eslint-disable-line no-console */
   warn: msg => console.warn(msg), /* eslint-disable-line no-console */
-  error: msg => console.error(msg) /* eslint-disable-line no-console */
+  error: msg => console.error(msg), /* eslint-disable-line no-console */
 }
 
 let enabled = false

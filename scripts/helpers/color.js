@@ -4,5 +4,5 @@
 module.exports = {
   GRAY: '\\033[1;90m',
   CYAN: '\\033[1;36m',
-  NONE: '\\033[0m'
+  NONE: '\\033[0m',
 }

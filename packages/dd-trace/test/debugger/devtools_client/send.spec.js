@@ -40,7 +40,7 @@ describe('input message http requests', function () {
 
   beforeEach(function () {
     clock = sinon.useFakeTimers({
-      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
 
     request = sinon.spy()
@@ -64,9 +64,9 @@ describe('input message http requests', function () {
         url,
         maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
         dynamicInstrumentation: {
-          uploadIntervalSeconds: 1
+          uploadIntervalSeconds: 1,
         },
-        '@noCallThru': true
+        '@noCallThru': true,
       },
       './json-buffer': JSONBufferSpy,
       '../../exporters/common/request': request,
@@ -95,7 +95,7 @@ describe('input message http requests', function () {
     sinon.assert.calledOnceWithMatch(request, JSON.stringify([
       getPayload({ message: 1 }),
       getPayload({ message: 2 }),
-      getPayload({ message: 3 })
+      getPayload({ message: 3 }),
     ]))
 
     const opts = getRequestOptions(request)
@@ -120,11 +120,11 @@ describe('input message http requests', function () {
         lines: {
           10: {
             locals: {
-              largeData: { type: 'string', value: 'x'.repeat(2 * 1024 * 1024) }
-            }
-          }
-        }
-      }
+              largeData: { type: 'string', value: 'x'.repeat(2 * 1024 * 1024) },
+            },
+          },
+        },
+      },
     }
     const prunedPayload = {
       ...getPayload(message),
@@ -136,13 +136,13 @@ describe('input message http requests', function () {
             lines: {
               10: {
                 locals: {
-                  largeData: { pruned: true }
-                }
-              }
-            }
-          }
-        }
-      }
+                  largeData: { pruned: true },
+                },
+              },
+            },
+          },
+        },
+      },
     }
 
     it('should not attempt to prune if payload is under size limit', function () {
@@ -202,6 +202,6 @@ function getPayload (_message = message, _snapshot = snapshot) {
     message: _message,
     logger,
     dd,
-    debugger: { snapshot: _snapshot }
+    debugger: { snapshot: _snapshot },
   }
 }

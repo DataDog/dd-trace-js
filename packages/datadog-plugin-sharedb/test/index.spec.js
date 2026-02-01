@@ -88,8 +88,8 @@ describe('Plugin', () => {
           connection.createFetchQuery('some-collection', {
             randomValues: {
               property: 'query',
-              one: 1
-            }
+              one: 1,
+            },
           }, {}, function (err) {
             if (err) { throw err }
 
@@ -122,8 +122,8 @@ describe('Plugin', () => {
           backend.use('receive', receiveSpy)
           const message = {
             data: {
-              a: 'some-unsupported-action'
-            }
+              a: 'some-unsupported-action',
+            },
           }
 
           backend.trigger(backend.MIDDLEWARE_ACTIONS.receive, {}, message, function noop () {})
@@ -170,8 +170,8 @@ describe('Plugin', () => {
             service: 'test-sharedb',
             hooks: {
               receive: receiveHookSpy,
-              reply: replyHookSpy
-            }
+              reply: replyHookSpy,
+            },
           })
         })
 
@@ -223,8 +223,8 @@ describe('Plugin', () => {
           return agent.load('sharedb', {
             hooks: {
               receive: receiveHookSpy,
-              reply: replyHookSpy
-            }
+              reply: replyHookSpy,
+            },
           })
         })
 

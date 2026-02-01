@@ -33,10 +33,10 @@ describe('SpanContext', () => {
       trace: {
         started: ['span1', 'span2'],
         finished: ['span1'],
-        tags: { foo: 'bar' }
+        tags: { foo: 'bar' },
       },
       traceparent: '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01',
-      tracestate: TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
+      tracestate: TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar'),
     }
     const spanContext = new SpanContext(props)
 
@@ -56,11 +56,11 @@ describe('SpanContext', () => {
       _trace: {
         started: ['span1', 'span2'],
         finished: ['span1'],
-        tags: { foo: 'bar' }
+        tags: { foo: 'bar' },
       },
       _traceparent: '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01',
       _tracestate: TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar'),
-      _otelSpanContext: undefined
+      _otelSpanContext: undefined,
     }
     Object.setPrototypeOf(expected, SpanContext.prototype)
     assert.deepStrictEqual(spanContext, expected)
@@ -69,7 +69,7 @@ describe('SpanContext', () => {
   it('should have the correct default values', () => {
     const spanContext = new SpanContext({
       traceId: '123',
-      spanId: '456'
+      spanId: '456',
     })
 
     const expected = {
@@ -88,11 +88,11 @@ describe('SpanContext', () => {
       _trace: {
         started: [],
         finished: [],
-        tags: {}
+        tags: {},
       },
       _traceparent: undefined,
       _tracestate: undefined,
-      _otelSpanContext: undefined
+      _otelSpanContext: undefined,
     }
     Object.setPrototypeOf(expected, SpanContext.prototype)
     assert.deepStrictEqual(spanContext, expected)
@@ -100,10 +100,10 @@ describe('SpanContext', () => {
 
   it('should share sampling object between contexts', () => {
     const first = new SpanContext({
-      sampling: { priority: 1 }
+      sampling: { priority: 1 },
     })
     const second = new SpanContext({
-      sampling: first._sampling
+      sampling: first._sampling,
     })
     second._sampling.priority = 2
 
@@ -114,7 +114,7 @@ describe('SpanContext', () => {
     it('should return the trace ID as string', () => {
       const spanContext = new SpanContext({
         traceId: id('123', 10),
-        spanId: id('456', 10)
+        spanId: id('456', 10),
       })
 
       assert.strictEqual(spanContext.toTraceId(), '123')
@@ -125,7 +125,7 @@ describe('SpanContext', () => {
     it('should return the span ID as string', () => {
       const spanContext = new SpanContext({
         traceId: id('123', 10),
-        spanId: id('456', 10)
+        spanId: id('456', 10),
       })
 
       assert.strictEqual(spanContext.toSpanId(), '456')
@@ -136,7 +136,7 @@ describe('SpanContext', () => {
     it('should return the traceparent', () => {
       const spanContext = new SpanContext({
         traceId: id('123', 16),
-        spanId: id('456', 16)
+        spanId: id('456', 16),
       })
 
       assert.strictEqual(spanContext.toTraceparent(), '00-00000000000000000000000000000123-0000000000000456-00')
@@ -145,7 +145,7 @@ describe('SpanContext', () => {
     it('should return the traceparent with 128-bit trace ID from the tag', () => {
       const spanContext = new SpanContext({
         traceId: id('123', 16),
-        spanId: id('456', 16)
+        spanId: id('456', 16),
       })
 
       spanContext._trace.tags['_dd.p.tid'] = '0000000000000789'
@@ -156,7 +156,7 @@ describe('SpanContext', () => {
     it('should return the traceparent with 128-bit trace ID from the traceparent', () => {
       const spanContext = new SpanContext({
         traceId: id('00000000000007890000000000000123', 16),
-        spanId: id('456', 16)
+        spanId: id('456', 16),
       })
 
       spanContext._trace.tags['_dd.p.tid'] = '0000000000000789'

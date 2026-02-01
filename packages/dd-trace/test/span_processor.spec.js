@@ -26,7 +26,7 @@ describe('SpanProcessor', () => {
     tracer = {}
     trace = {
       started: [],
-      finished: []
+      finished: [],
     }
 
     const span = {
@@ -34,35 +34,35 @@ describe('SpanProcessor', () => {
       context: sinon.stub().returns({
         _trace: trace,
         _sampling: {},
-        _tags: {}
-      })
+        _tags: {},
+      }),
     }
 
     activeSpan = { ...span }
     finishedSpan = { ...span, _duration: 100 }
 
     exporter = {
-      export: sinon.stub()
+      export: sinon.stub(),
     }
     prioritySampler = {
-      sample: sinon.stub()
+      sample: sinon.stub(),
     }
     config = {
       flushMinSpans: 3,
       stats: {
-        enabled: false
-      }
+        enabled: false,
+      },
     }
     spanFormat = sinon.stub().returns({ formatted: true })
 
     sample = sinon.stub()
     SpanSampler = sinon.stub().returns({
-      sample
+      sample,
     })
 
     SpanProcessor = proxyquire('../src/span_processor', {
       './span_format': spanFormat,
-      './span_sampler': SpanSampler
+      './span_sampler': SpanSampler,
     })
     processor = new SpanProcessor(exporter, prioritySampler, config)
   })
@@ -118,7 +118,7 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(exporter.export, [
       { formatted: true },
       { formatted: true },
-      { formatted: true }
+      { formatted: true },
     ])
 
     assert.ok('started' in trace)
@@ -137,10 +137,10 @@ describe('SpanProcessor', () => {
             service: 'foo',
             name: 'bar',
             sampleRate: 123,
-            maxPerSecond: 456
-          }
-        ]
-      }
+            maxPerSecond: 456,
+          },
+        ],
+      },
     }
 
     const processor = new SpanProcessor(exporter, prioritySampler, config)
@@ -153,8 +153,8 @@ describe('SpanProcessor', () => {
     const config = {
       tracing: false,
       stats: {
-        enabled: false
-      }
+        enabled: false,
+      },
     }
 
     const processor = new SpanProcessor(exporter, prioritySampler, config)

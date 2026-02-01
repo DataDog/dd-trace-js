@@ -46,5 +46,5 @@ class MultiSpanProcessor extends NoopSpanProcessor {
 
 module.exports = {
   MultiSpanProcessor,
-  NoopSpanProcessor
+  NoopSpanProcessor,
 }

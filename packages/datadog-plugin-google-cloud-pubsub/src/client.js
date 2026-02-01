@@ -18,8 +18,8 @@ class GoogleCloudPubsubClientPlugin extends ClientPlugin {
       kind: this.constructor.kind,
       meta: {
         'pubsub.method': api,
-        'gcloud.project_id': projectId
-      }
+        'gcloud.project_id': projectId,
+      },
     }
 
     /**

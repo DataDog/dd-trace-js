@@ -6,7 +6,7 @@ const {
   removeTransaction,
   setMaxTransactions,
   enableTaintOperations,
-  disableTaintOperations
+  disableTaintOperations,
 } = require('./operations')
 
 const taintTrackingPlugin = require('./plugin')
@@ -32,5 +32,5 @@ module.exports = {
   setMaxTransactions,
   createTransaction,
   removeTransaction,
-  taintTrackingPlugin
+  taintTrackingPlugin,
 }

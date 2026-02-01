@@ -13,6 +13,6 @@ module.exports = {
   external: [
     '@datadog/native-iast-taint-tracking',
     '@datadog/wasm-js-rewriter',
-    '@openfeature/server-sdk'
-  ]
+    '@openfeature/server-sdk',
+  ],
 }

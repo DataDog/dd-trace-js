@@ -25,13 +25,13 @@ describe('id', () => {
           data[i + 6] = 0xFF
           data[i + 7] = 0x00
         }
-      }
+      },
     }
 
     sinon.stub(Math, 'random')
 
     id = proxyquire('../src/id', {
-      crypto
+      crypto,
     })
   })
 
@@ -90,7 +90,7 @@ describe('id', () => {
     const ids = [
       ['13835058055282163712', 13835058055282163712n],
       ['10', 10n],
-      ['9007199254740991', 9007199254740991n]
+      ['9007199254740991', 9007199254740991n],
     ]
 
     for (const [tid, expected] of ids) {

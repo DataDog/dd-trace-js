@@ -27,9 +27,9 @@ describe('profilers/events', () => {
       context: () => ({
         toBigIntSpanId: () => 1234n,
         _trace: {
-          started: [span]
-        }
-      })
+          started: [span],
+        },
+      }),
     }
     storage('legacy').enterWith({ span })
 
@@ -37,7 +37,7 @@ describe('profilers/events', () => {
       samplingInterval,
       flushInterval,
       timelineSamplingEnabled: false, // don't discard any events
-      codeHotspotsEnabled: true // DNS events are only observed when code hotspots are enabled
+      codeHotspotsEnabled: true, // DNS events are only observed when code hotspots are enabled
     })
     const startTime = new Date()
     profiler.start()

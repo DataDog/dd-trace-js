@@ -11,7 +11,7 @@ describe('Appsec SDK utils', () => {
 
   before(() => {
     tracer = new DatadogTracer(getConfigFresh({
-      enabled: true
+      enabled: true,
     }))
   })
 

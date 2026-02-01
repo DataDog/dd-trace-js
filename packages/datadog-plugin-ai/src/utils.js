@@ -24,5 +24,5 @@ function getModelProvider (tags) {
 }
 
 module.exports = {
-  getModelProvider
+  getModelProvider,
 }

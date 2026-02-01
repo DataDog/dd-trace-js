@@ -18,7 +18,7 @@ describe('ESM', () => {
   const nodeOptionsList = [
     '--import dd-trace/initialize.mjs',
     '--require dd-trace/init.js --loader dd-trace/loader-hook.mjs',
-    '--import dd-trace/register.js --require dd-trace/init'
+    '--import dd-trace/register.js --require dd-trace/init',
   ]
 
   nodeOptionsList.forEach(nodeOptions => {
@@ -32,8 +32,8 @@ describe('ESM', () => {
             DD_TRACE_AGENT_PORT: agent.port,
             DD_IAST_ENABLED: 'true',
             DD_IAST_REQUEST_SAMPLING: '100',
-            NODE_OPTIONS: nodeOptions
-          }
+            NODE_OPTIONS: nodeOptions,
+          },
         })
 
         axios = Axios.create({ baseURL: proc.url })

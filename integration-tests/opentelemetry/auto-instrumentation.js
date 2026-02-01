@@ -22,11 +22,11 @@ registerInstrumentations({
         // Ignore spans from static assets.
         return req.path === '/v0.4/traces' || req.path === '/v0.7/config' ||
         req.path === '/telemetry/proxy/api/v2/apmtelemetry'
-      }
+      },
     }),
-    new ExpressInstrumentation()
+    new ExpressInstrumentation(),
   ],
-  tracerProvider: provider
+  tracerProvider: provider,
 })
 
 const express = require('express')

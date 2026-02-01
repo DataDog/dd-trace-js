@@ -12,7 +12,7 @@ const telemetry = require('../telemetry')
 const log = require('../../log')
 const {
   EVP_SUBDOMAIN_HEADER_NAME,
-  EVP_PROXY_AGENT_BASE_PATH
+  EVP_PROXY_AGENT_BASE_PATH,
 } = require('../constants/writers')
 const { getAgentUrl } = require('../../agent/url')
 const { parseResponseAndLog } = require('./util')
@@ -133,15 +133,15 @@ class BaseLLMObsWriter {
       const options = {
         headers: {
           'Content-Type': 'application/json',
-          'DD-API-KEY': apiKey
+          'DD-API-KEY': apiKey,
         },
         method: 'POST',
         timeout: this._timeout,
         url: new URL(format({
           protocol: 'https:',
-          hostname: `${this._intake}.${site}`
+          hostname: `${this._intake}.${site}`,
         })),
-        path: this._baseEndpoint
+        path: this._baseEndpoint,
       }
       const url = this.#buildUrl(options.url.href, options.path)
       const maskedApiKey = apiKey ? `****${apiKey.slice(-4)}` : ''
@@ -193,9 +193,9 @@ class BaseLLMObsWriter {
       return {
         url: new URL(format({
           protocol: 'https:',
-          hostname: `${this._intake}.${site}`
+          hostname: `${this._intake}.${site}`,
         })),
-        endpoint: this._endpoint
+        endpoint: this._endpoint,
       }
     }
 
@@ -205,19 +205,19 @@ class BaseLLMObsWriter {
 
     return {
       url: base,
-      endpoint: path.join(EVP_PROXY_AGENT_BASE_PATH, this._endpoint)
+      endpoint: path.join(EVP_PROXY_AGENT_BASE_PATH, this._endpoint),
     }
   }
 
   _getOptions () {
     const options = {
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       method: 'POST',
       timeout: this._timeout,
       url: this._baseUrl,
-      path: this._endpoint
+      path: this._endpoint,
     }
 
     if (this._agentless) {

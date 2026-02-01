@@ -22,10 +22,10 @@ const iastContext = {
       return {
         toSpanId () {
           return '123'
-        }
+        },
       }
-    }
-  }
+    },
+  },
 }
 
 const getRanges = (ctx, val) => {
@@ -36,9 +36,9 @@ const getRanges = (ctx, val) => {
       iinfo: {
         parameterName: 'param',
         parameterValue: val,
-        type: HTTP_REQUEST_PARAMETER
-      }
-    }
+        type: HTTP_REQUEST_PARAMETER,
+      },
+    },
   ]
 }
 
@@ -56,7 +56,7 @@ describe('path-traversal-analyzer', () => {
   beforeEach(() => {
     TaintTrackingMock = {
       isTainted: sinon.stub(),
-      getRanges: sinon.stub()
+      getRanges: sinon.stub(),
     }
 
     getIastContext = sinon.stub()
@@ -66,12 +66,12 @@ describe('path-traversal-analyzer', () => {
     ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
       '../iast-context': { getIastContext },
       '../overhead-controller': { hasQuota },
-      '../vulnerability-reporter': { addVulnerability }
+      '../vulnerability-reporter': { addVulnerability },
     })
 
     InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
       './vulnerability-analyzer': ProxyAnalyzer,
-      '../taint-tracking/operations': TaintTrackingMock
+      '../taint-tracking/operations': TaintTrackingMock,
     })
   })
 
@@ -101,7 +101,7 @@ describe('path-traversal-analyzer', () => {
     const getRanges = sinon.stub()
     const iastContext = {}
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
-      '../taint-tracking': { getRanges }
+      '../taint-tracking': { getRanges },
     })
 
     proxyPathAnalyzer._isVulnerable(undefined, iastContext)
@@ -111,7 +111,7 @@ describe('path-traversal-analyzer', () => {
   it('if context and value are valid it should call isTainted', () => {
     const iastContext = {}
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
-      './injection-analyzer': InjectionAnalyzer
+      './injection-analyzer': InjectionAnalyzer,
     })
     TaintTrackingMock.getRanges.returns([])
     const result = proxyPathAnalyzer._isVulnerable('test', iastContext)
@@ -122,7 +122,7 @@ describe('path-traversal-analyzer', () => {
   it('Should report proper vulnerability type', () => {
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
       './injection-analyzer': InjectionAnalyzer,
-      '../iast-context': { getIastContext: () => iastContext }
+      '../iast-context': { getIastContext: () => iastContext },
     })
 
     getIastContext.returns(iastContext)
@@ -138,7 +138,7 @@ describe('path-traversal-analyzer', () => {
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer',
       {
         './injection-analyzer': InjectionAnalyzer,
-        '../iast-context': { getIastContext: () => iastContext }
+        '../iast-context': { getIastContext: () => iastContext },
       })
 
     getIastContext.returns(iastContext)
@@ -153,7 +153,7 @@ describe('path-traversal-analyzer', () => {
   it('Should report 2nd argument', () => {
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
       './injection-analyzer': InjectionAnalyzer,
-      '../iast-context': { getIastContext: () => iastContext }
+      '../iast-context': { getIastContext: () => iastContext },
     })
 
     getIastContext.returns(iastContext)
@@ -171,7 +171,7 @@ describe('path-traversal-analyzer', () => {
     const mockPath = path.join('node_modules', 'send', 'send.js')
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
       './injection-analyzer': InjectionAnalyzer,
-      '../iast-context': { getIastContext: () => iastContext }
+      '../iast-context': { getIastContext: () => iastContext },
     })
 
     proxyPathAnalyzer._getLocation = function () {

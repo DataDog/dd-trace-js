@@ -23,12 +23,12 @@ function request (opts) {
 const opts = {
   headers: {},
   port,
-  path: '/'
+  path: '/',
 }
 
 if (Number(process.env.ATTACK_UA)) {
   Object.assign(opts.headers, {
-    'user-agent': 'Arachni/v1'
+    'user-agent': 'Arachni/v1',
   })
 }
 

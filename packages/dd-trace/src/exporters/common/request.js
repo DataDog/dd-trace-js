@@ -184,7 +184,7 @@ function byteLength (data) {
 Object.defineProperty(request, 'writable', {
   get () {
     return activeRequests < maxActiveRequests
-  }
+  },
 })
 
 module.exports = request

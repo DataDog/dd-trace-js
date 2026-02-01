@@ -15,7 +15,7 @@ const {
   params,
   pass,
   start,
-  run
+  run,
 } = require('./helpers/terminal')
 const { checkAll } = require('./helpers/requirements')
 

@@ -70,7 +70,7 @@ function analyzeLfi (ctx) {
 
 function analyzeLfiPath (path, req, res, abortController) {
   const ephemeral = {
-    [FS_OPERATION_PATH]: path
+    [FS_OPERATION_PATH]: path,
   }
 
   const raspRule = { type: RULE_TYPES.LFI }
@@ -90,7 +90,7 @@ function getPaths (ctx, fs) {
     ctx.path,
     ctx.prefix,
     ctx.src,
-    ctx.target
+    ctx.target,
   ]
 
   return pathArguments
@@ -125,5 +125,5 @@ function shouldAnalyzeURLFile (path, fs) {
 
 module.exports = {
   enable,
-  disable
+  disable,
 }

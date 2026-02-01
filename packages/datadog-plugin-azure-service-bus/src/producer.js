@@ -25,7 +25,7 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
         'messaging.operation': 'send',
         'messaging.system': 'servicebus',
         'network.destination.name': qualifiedSenderNamespace,
-      }
+      },
     }, ctx)
 
     if (ctx.functionName === 'tryAddMessage') {

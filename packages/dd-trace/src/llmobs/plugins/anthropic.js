@@ -114,7 +114,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     return {
       kind: 'llm',
       modelName: model,
-      modelProvider: 'anthropic'
+      modelProvider: 'anthropic',
     }
   }
 
@@ -162,7 +162,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
             name,
             arguments: input,
             toolId: id,
-            type
+            type,
           }
 
           inputMessages.push({ content: text ?? '', role, toolCalls: [toolCall] })
@@ -172,7 +172,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
           const toolResult = {
             result: formattedContent,
             toolId: block.tool_use_id,
-            type: 'tool_result'
+            type: 'tool_result',
           }
 
           inputMessages.push({ content: '', role, toolResults: [toolResult] })
@@ -210,7 +210,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
           name: block.name,
           arguments: input,
           toolId: block.id,
-          type: block.type
+          type: block.type,
         }
 
         outputMessages.push({ content: text ?? '', role, toolCalls: [toolCall] })
@@ -243,7 +243,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     const cacheReadTokens = usage.cache_read_input_tokens
 
     const metrics = {
-      inputTokens: (inputTokens ?? 0) + (cacheWriteTokens ?? 0) + (cacheReadTokens ?? 0)
+      inputTokens: (inputTokens ?? 0) + (cacheWriteTokens ?? 0) + (cacheReadTokens ?? 0),
     }
 
     if (outputTokens) metrics.outputTokens = outputTokens

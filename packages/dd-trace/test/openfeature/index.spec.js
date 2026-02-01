@@ -19,14 +19,14 @@ describe('OpenFeature Module', () => {
   beforeEach(() => {
     config = {
       ffeFlushInterval: 1000,
-      ffeTimeout: 5000
+      ffeTimeout: 5000,
     }
 
     mockWriter = {
       append: sinon.spy(),
       flush: sinon.spy(),
       destroy: sinon.spy(),
-      setEnabled: sinon.spy()
+      setEnabled: sinon.spy(),
     }
 
     ExposuresWriterStub = sinon.stub().returns(mockWriter)
@@ -34,7 +34,7 @@ describe('OpenFeature Module', () => {
 
     openfeatureModule = proxyquire('../../src/openfeature', {
       './writers/exposures': ExposuresWriterStub,
-      './writers/util': { setAgentStrategy: setAgentStrategyStub }
+      './writers/util': { setAgentStrategy: setAgentStrategyStub },
     })
   })
 
@@ -85,8 +85,8 @@ describe('OpenFeature Module', () => {
         subject: {
           id: 'user-123',
           type: 'user',
-          attributes: {}
-        }
+          attributes: {},
+        },
       }
 
       exposureSubmitCh.publish(exposureEvent)
@@ -102,15 +102,15 @@ describe('OpenFeature Module', () => {
           allocation: { key: 'test-allocation-1' },
           flag: { key: 'test-flag-1' },
           variant: { key: 'test-variant-1' },
-          subject: { id: 'user-123', type: 'user', attributes: {} }
+          subject: { id: 'user-123', type: 'user', attributes: {} },
         },
         {
           timestamp: Date.now(),
           allocation: { key: 'test-allocation-2' },
           flag: { key: 'test-flag-2' },
           variant: { key: 'test-variant-2' },
-          subject: { id: 'user-456', type: 'user', attributes: {} }
-        }
+          subject: { id: 'user-456', type: 'user', attributes: {} },
+        },
       ]
 
       exposureSubmitCh.publish(exposureEvents)

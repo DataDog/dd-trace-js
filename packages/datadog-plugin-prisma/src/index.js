@@ -10,7 +10,7 @@ class PrismaPlugin extends CompositePlugin {
   static get plugins () {
     return {
       client: PrismaClientPlugin,
-      engine: PrismaEnginePlugin
+      engine: PrismaEnginePlugin,
     }
   }
 

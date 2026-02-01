@@ -5,8 +5,8 @@ const { Kafka } = kafkaLib.KafkaJS
 const kafka = new Kafka({
   kafkaJS: {
     clientId: 'my-app',
-    brokers: ['127.0.0.1:9092']
-  }
+    brokers: ['127.0.0.1:9092'],
+  },
 })
 
 const sendMessage = async (topic, messages) => {
@@ -15,7 +15,7 @@ const sendMessage = async (topic, messages) => {
     await producer.connect()
     await producer.send({
       topic,
-      messages
+      messages,
     })
     await producer.disconnect()
   } catch (error) {

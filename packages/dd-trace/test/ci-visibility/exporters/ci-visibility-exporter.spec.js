@@ -35,7 +35,7 @@ describe('CI Visibility Exporter', () => {
       const scope = nock(url)
         .post('/api/v2/git/repository/search_commits')
         .reply(200, JSON.stringify({
-          data: []
+          data: [],
         }))
         .post('/api/v2/git/repository/packfile')
         .reply(202, '')
@@ -93,7 +93,7 @@ describe('CI Visibility Exporter', () => {
       const scope = nock(url)
         .post('/api/v2/git/repository/search_commits')
         .reply(200, JSON.stringify({
-          data: []
+          data: [],
         }))
         .post('/api/v2/git/repository/packfile')
         .reply(202, '')
@@ -120,23 +120,23 @@ describe('CI Visibility Exporter', () => {
                 itr_enabled: true,
                 require_git: false,
                 code_coverage: true,
-                tests_skipping: true
-              }
-            }
+                tests_skipping: true,
+              },
+            },
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({
           port,
           isIntelligentTestRunnerEnabled: true,
           tags: {
-            'test.configuration.my_custom_config': 'my_custom_config_value'
-          }
+            'test.configuration.my_custom_config': 'my_custom_config_value',
+          },
         })
 
         ciVisibilityExporter.getLibraryConfiguration({}, () => {
           assert.strictEqual(scope.isDone(), true)
           assert.deepStrictEqual(customConfig, {
-            my_custom_config: 'my_custom_config_value'
+            my_custom_config: 'my_custom_config_value',
           })
           done()
         })
@@ -155,16 +155,16 @@ describe('CI Visibility Exporter', () => {
                 itr_enabled: true,
                 require_git: false,
                 code_coverage: true,
-                tests_skipping: true
-              }
-            }
+                tests_skipping: true,
+              },
+            },
           }))
         const ciVisibilityExporter = new CiVisibilityExporter({
           port,
-          isIntelligentTestRunnerEnabled: true
+          isIntelligentTestRunnerEnabled: true,
         })
         const testConfiguration = {
-          tag: 'v1.0.0'
+          tag: 'v1.0.0',
         }
         ciVisibilityExporter.getLibraryConfiguration(testConfiguration, (err, libraryConfig) => {
           assert.strictEqual(err, null)
@@ -172,7 +172,7 @@ describe('CI Visibility Exporter', () => {
             requireGit: false,
             isCodeCoverageEnabled: true,
             isItrEnabled: true,
-            isSuitesSkippingEnabled: true
+            isSuitesSkippingEnabled: true,
           })
           assert.strictEqual(scope.isDone(), true)
           assert.strictEqual(requestBody.data.attributes.branch, 'v1.0.0')
@@ -190,9 +190,9 @@ describe('CI Visibility Exporter', () => {
                 require_git: false,
                 code_coverage: true,
                 tests_skipping: true,
-                known_tests_enabled: false
-              }
-            }
+                known_tests_enabled: false,
+              },
+            },
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({ port, isIntelligentTestRunnerEnabled: true })
@@ -203,7 +203,7 @@ describe('CI Visibility Exporter', () => {
             isCodeCoverageEnabled: true,
             isItrEnabled: true,
             isSuitesSkippingEnabled: true,
-            isEarlyFlakeDetectionEnabled: false
+            isEarlyFlakeDetectionEnabled: false,
           })
           assert.ok(err == null)
           assert.strictEqual(scope.isDone(), true)
@@ -220,9 +220,9 @@ describe('CI Visibility Exporter', () => {
                 itr_enabled: true,
                 require_git: false,
                 code_coverage: true,
-                tests_skipping: true
-              }
-            }
+                tests_skipping: true,
+              },
+            },
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({ port, isIntelligentTestRunnerEnabled: true })
@@ -244,9 +244,9 @@ describe('CI Visibility Exporter', () => {
               attributes: {
                 require_git: true,
                 code_coverage: true,
-                tests_skipping: true
-              }
-            }
+                tests_skipping: true,
+              },
+            },
           }))
           .post('/api/v2/libraries/tests/services/setting')
           .reply(200, JSON.stringify({
@@ -254,13 +254,13 @@ describe('CI Visibility Exporter', () => {
               attributes: {
                 require_git: false,
                 code_coverage: true,
-                tests_skipping: true
-              }
-            }
+                tests_skipping: true,
+              },
+            },
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({
-          port, isIntelligentTestRunnerEnabled: true
+          port, isIntelligentTestRunnerEnabled: true,
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
@@ -285,9 +285,9 @@ describe('CI Visibility Exporter', () => {
               attributes: {
                 require_git: true,
                 code_coverage: true,
-                tests_skipping: true
-              }
-            }
+                tests_skipping: true,
+              },
+            },
           }))
           .post('/api/v2/libraries/tests/services/setting')
           .reply(200, JSON.stringify({
@@ -295,13 +295,13 @@ describe('CI Visibility Exporter', () => {
               attributes: {
                 require_git: false,
                 code_coverage: true,
-                tests_skipping: true
-              }
-            }
+                tests_skipping: true,
+              },
+            },
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({
-          port, isIntelligentTestRunnerEnabled: true
+          port, isIntelligentTestRunnerEnabled: true,
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
@@ -358,7 +358,7 @@ describe('CI Visibility Exporter', () => {
         nock(url)
           .post('/api/v2/git/repository/search_commits')
           .reply(200, JSON.stringify({
-            data: []
+            data: [],
           }))
           .post('/api/v2/git/repository/packfile')
           .reply(202, '')
@@ -372,9 +372,9 @@ describe('CI Visibility Exporter', () => {
             data: [{
               type: 'suite',
               attributes: {
-                suite: 'ci-visibility/test/ci-visibility-test.js'
-              }
-            }]
+                suite: 'ci-visibility/test/ci-visibility-test.js',
+              },
+            }],
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({
@@ -382,8 +382,8 @@ describe('CI Visibility Exporter', () => {
           isIntelligentTestRunnerEnabled: true,
           isGitUploadEnabled: true,
           tags: {
-            'test.configuration.my_custom_config_2': 'my_custom_config_value_2'
-          }
+            'test.configuration.my_custom_config_2': 'my_custom_config_value_2',
+          },
         })
 
         ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
@@ -392,7 +392,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter.getSkippableSuites({}, () => {
           assert.strictEqual(scope.isDone(), true)
           assert.deepStrictEqual(customConfig, {
-            my_custom_config_2: 'my_custom_config_value_2'
+            my_custom_config_2: 'my_custom_config_value_2',
           })
           done()
         })
@@ -402,7 +402,7 @@ describe('CI Visibility Exporter', () => {
         nock(url)
           .post('/api/v2/git/repository/search_commits')
           .reply(200, JSON.stringify({
-            data: []
+            data: [],
           }))
           .post('/api/v2/git/repository/packfile')
           .reply(202, '')
@@ -411,20 +411,20 @@ describe('CI Visibility Exporter', () => {
           .post('/api/v2/ci/tests/skippable')
           .reply(200, JSON.stringify({
             meta: {
-              correlation_id: '1234'
+              correlation_id: '1234',
             },
             data: [{
               type: 'suite',
               attributes: {
-                suite: 'ci-visibility/test/ci-visibility-test.js'
-              }
-            }]
+                suite: 'ci-visibility/test/ci-visibility-test.js',
+              },
+            }],
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({
           port,
           isIntelligentTestRunnerEnabled: true,
-          isGitUploadEnabled: true
+          isGitUploadEnabled: true,
         })
 
         ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
@@ -464,7 +464,7 @@ describe('CI Visibility Exporter', () => {
         nock(url)
           .post('/api/v2/git/repository/search_commits')
           .reply(200, JSON.stringify({
-            data: []
+            data: [],
           }))
           .post('/api/v2/git/repository/packfile')
           .reply(202, '')
@@ -478,23 +478,23 @@ describe('CI Visibility Exporter', () => {
             return zlib.gzipSync(
               JSON.stringify({
                 meta: {
-                  correlation_id: '1234'
+                  correlation_id: '1234',
                 },
                 data: [{
                   type: 'suite',
                   attributes: {
-                    suite: 'ci-visibility/test/ci-visibility-test.js'
-                  }
-                }]
+                    suite: 'ci-visibility/test/ci-visibility-test.js',
+                  },
+                }],
               })
             )
           }, {
-            'content-encoding': 'gzip'
+            'content-encoding': 'gzip',
           })
         const ciVisibilityExporter = new CiVisibilityExporter({
           port,
           isIntelligentTestRunnerEnabled: true,
-          isGitUploadEnabled: true
+          isGitUploadEnabled: true,
         })
         ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
@@ -515,7 +515,7 @@ describe('CI Visibility Exporter', () => {
         nock(url)
           .post('/api/v2/git/repository/search_commits')
           .reply(200, JSON.stringify({
-            data: []
+            data: [],
           }))
           .post('/api/v2/git/repository/packfile')
           .reply(202, '')
@@ -528,20 +528,20 @@ describe('CI Visibility Exporter', () => {
 
             return JSON.stringify({
               meta: {
-                correlation_id: '1234'
+                correlation_id: '1234',
               },
               data: [{
                 type: 'suite',
                 attributes: {
-                  suite: 'ci-visibility/test/ci-visibility-test.js'
-                }
-              }]
+                  suite: 'ci-visibility/test/ci-visibility-test.js',
+                },
+              }],
             })
           })
         const ciVisibilityExporter = new CiVisibilityExporter({
           port,
           isIntelligentTestRunnerEnabled: true,
-          isGitUploadEnabled: true
+          isGitUploadEnabled: true,
         })
         ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
@@ -575,7 +575,7 @@ describe('CI Visibility Exporter', () => {
         const writer = {
           append: sinon.spy(),
           flush: sinon.spy(),
-          setUrl: sinon.spy()
+          setUrl: sinon.spy(),
         }
         const trace = []
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
@@ -591,10 +591,10 @@ describe('CI Visibility Exporter', () => {
         const writer = {
           append: sinon.spy(),
           flush: sinon.spy(),
-          setUrl: sinon.spy()
+          setUrl: sinon.spy(),
         }
         const trace = [{
-          type: 'test_session_end'
+          type: 'test_session_end',
         }]
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
         ciVisibilityExporter._isInitialized = true
@@ -609,10 +609,10 @@ describe('CI Visibility Exporter', () => {
         const writer = {
           append: sinon.spy(),
           flush: sinon.spy(),
-          setUrl: sinon.spy()
+          setUrl: sinon.spy(),
         }
         const trace = [{
-          type: 'test_session_end'
+          type: 'test_session_end',
         }]
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
         ciVisibilityExporter._isInitialized = true
@@ -641,7 +641,7 @@ describe('CI Visibility Exporter', () => {
         const writer = {
           append: sinon.spy(),
           flush: sinon.spy(),
-          setUrl: sinon.spy()
+          setUrl: sinon.spy(),
         }
         const coverage = {}
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
@@ -657,12 +657,12 @@ describe('CI Visibility Exporter', () => {
         const writer = {
           append: sinon.spy(),
           flush: sinon.spy(),
-          setUrl: sinon.spy()
+          setUrl: sinon.spy(),
         }
         const coverage = {
           traceId: '1',
           spanId: '2',
-          files: ['example.js']
+          files: ['example.js'],
         }
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
         ciVisibilityExporter._isInitialized = true
@@ -684,7 +684,7 @@ describe('CI Visibility Exporter', () => {
           .reply(200)
 
         const ciVisibilityExporter = new CiVisibilityExporter({
-          port
+          port,
         })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
@@ -728,11 +728,11 @@ describe('CI Visibility Exporter', () => {
                 tests: {
                   jest: {
                     suite1: ['test1'],
-                    suite2: ['test2']
-                  }
-                }
-              }
-            }
+                    suite2: ['test2'],
+                  },
+                },
+              },
+            },
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
@@ -744,8 +744,8 @@ describe('CI Visibility Exporter', () => {
           assert.deepStrictEqual(knownTests, {
             jest: {
               suite1: ['test1'],
-              suite2: ['test2']
-            }
+              suite2: ['test2'],
+            },
           })
           assert.strictEqual(scope.isDone(), true)
           done()
@@ -780,14 +780,14 @@ describe('CI Visibility Exporter', () => {
                   tests: {
                     jest: {
                       suite1: ['test1'],
-                      suite2: ['test2']
-                    }
-                  }
-                }
-              }
+                      suite2: ['test2'],
+                    },
+                  },
+                },
+              },
             }))
           }, {
-            'content-encoding': 'gzip'
+            'content-encoding': 'gzip',
           })
 
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
@@ -800,8 +800,8 @@ describe('CI Visibility Exporter', () => {
           assert.deepStrictEqual(knownTests, {
             jest: {
               suite1: ['test1'],
-              suite2: ['test2']
-            }
+              suite2: ['test2'],
+            },
           })
           assert.strictEqual(scope.isDone(), true)
           assert.strictEqual(requestHeaders['accept-encoding'], 'gzip')
@@ -822,11 +822,11 @@ describe('CI Visibility Exporter', () => {
                   tests: {
                     jest: {
                       suite1: ['test1'],
-                      suite2: ['test2']
-                    }
-                  }
-                }
-              }
+                      suite2: ['test2'],
+                    },
+                  },
+                },
+              },
             })
           })
 
@@ -841,8 +841,8 @@ describe('CI Visibility Exporter', () => {
           assert.deepStrictEqual(knownTests, {
             jest: {
               suite1: ['test1'],
-              suite2: ['test2']
-            }
+              suite2: ['test2'],
+            },
           })
           assert.strictEqual(scope.isDone(), true)
           assert.notStrictEqual(requestHeaders['accept-encoding'], 'gzip')
@@ -868,7 +868,7 @@ describe('CI Visibility Exporter', () => {
         const writer = {
           append: sinon.spy(),
           flush: sinon.spy(),
-          setUrl: sinon.spy()
+          setUrl: sinon.spy(),
         }
         const log = { message: 'log' }
         const ciVisibilityExporter = new CiVisibilityExporter({ port, isTestDynamicInstrumentationEnabled: true })
@@ -885,7 +885,7 @@ describe('CI Visibility Exporter', () => {
         const writer = {
           append: sinon.spy(),
           flush: sinon.spy(),
-          setUrl: sinon.spy()
+          setUrl: sinon.spy(),
         }
         const diLog = {
           message: 'log',
@@ -898,26 +898,26 @@ describe('CI Visibility Exporter', () => {
                 version: '1',
                 location: {
                   file: 'example.js',
-                  lines: ['1']
-                }
+                  lines: ['1'],
+                },
               },
               stack: [
                 {
                   fileName: 'example.js',
                   function: 'sum',
-                  lineNumber: 1
-                }
+                  lineNumber: 1,
+                },
               ],
-              language: 'javascript'
-            }
-          }
+              language: 'javascript',
+            },
+          },
         }
         const ciVisibilityExporter = new CiVisibilityExporter({
           env: 'ci',
           version: '1.0.0',
           port,
           isTestDynamicInstrumentationEnabled: true,
-          service: 'my-service'
+          service: 'my-service',
         })
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._logsWriter = writer
@@ -925,7 +925,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter.exportDiLogs(
           {
             'git.repository_url': 'https://github.com/datadog/dd-trace-js.git',
-            'git.commit.sha': '1234'
+            'git.commit.sha': '1234',
           },
           diLog
         )
@@ -937,9 +937,9 @@ describe('CI Visibility Exporter', () => {
           dd: {
             service: 'my-service',
             env: 'ci',
-            version: '1.0.0'
+            version: '1.0.0',
           },
-          ...diLog
+          ...diLog,
         }))
       })
     })

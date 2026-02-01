@@ -17,7 +17,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       configurable: true,
       writable: true,
       enumerable: true,
-      value: id
+      value: id,
     })
     return id
   }
@@ -40,7 +40,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         request,
         operation,
         awsRegion,
-        awsService
+        awsService,
       } = ctx
 
       const parentStore = ctx.parentStore = storage('legacy').getStore()
@@ -61,14 +61,14 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         'aws.partition': getPartition(awsRegion),
         aws_service: awsService,
         'aws.service': awsService,
-        component: 'aws-sdk'
+        component: 'aws-sdk',
       }
       if (this.requestTags) this.requestTags.set(request, meta)
 
       const span = this.startSpan(this.operationFromRequest(request), {
         childOf,
         meta,
-        integrationName: 'aws-sdk'
+        integrationName: 'aws-sdk',
       }, ctx)
 
       analyticsSampler.sample(span, this.config.measured)
@@ -174,7 +174,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       id: 'aws',
       type: 'web',
       kind: 'client',
-      awsService: this.serviceIdentifier
+      awsService: this.serviceIdentifier,
     })
   }
 
@@ -184,7 +184,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         id: 'aws',
         type: 'web',
         kind: 'client',
-        awsService: this.serviceIdentifier
+        awsService: this.serviceIdentifier,
       })
   }
 
@@ -204,7 +204,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       'aws.response.request_id': response.requestId,
       'resource.name': operation,
       'span.kind': 'client',
-      ...extraTags
+      ...extraTags,
     }
 
     span.addTags(tags)
@@ -283,7 +283,7 @@ function normalizeConfig (config, serviceIdentifier) {
     ...config,
     ...specificConfig,
     batchPropagationEnabled,
-    hooks
+    hooks,
   }
 }
 

@@ -121,7 +121,7 @@ class CiVisibilityExporter extends BufferingExporter {
       isGzipCompatible: this._isGzipCompatible,
       evpProxyPrefix: this.evpProxyPrefix,
       custom: getTestConfigurationTags(this._config.tags),
-      ...testConfiguration
+      ...testConfiguration,
     }
   }
 
@@ -213,7 +213,7 @@ class CiVisibilityExporter extends BufferingExporter {
       isTestManagementEnabled,
       testManagementAttemptToFixRetries,
       isImpactedTestsEnabled,
-      isCoverageReportUploadEnabled
+      isCoverageReportUploadEnabled,
     } = remoteConfiguration
     return {
       isCodeCoverageEnabled,
@@ -231,7 +231,7 @@ class CiVisibilityExporter extends BufferingExporter {
       testManagementAttemptToFixRetries:
         testManagementAttemptToFixRetries ?? this._config.testManagementAttemptToFixRetries,
       isImpactedTestsEnabled: isImpactedTestsEnabled && this._config.isImpactedTestsEnabled,
-      isCoverageReportUploadEnabled
+      isCoverageReportUploadEnabled,
     }
   }
 
@@ -287,7 +287,7 @@ class CiVisibilityExporter extends BufferingExporter {
   formatLogMessage (testEnvironmentMetadata, logMessage) {
     const {
       [GIT_REPOSITORY_URL]: gitRepositoryUrl,
-      [GIT_COMMIT_SHA]: gitCommitSha
+      [GIT_COMMIT_SHA]: gitCommitSha,
     } = testEnvironmentMetadata
 
     const { service, env, version } = this._config
@@ -296,7 +296,7 @@ class CiVisibilityExporter extends BufferingExporter {
       ddtags: [
         ...(logMessage.ddtags || []),
         `${GIT_REPOSITORY_URL}:${gitRepositoryUrl}`,
-        `${GIT_COMMIT_SHA}:${gitCommitSha}`
+        `${GIT_COMMIT_SHA}:${gitCommitSha}`,
       ].join(','),
       level: 'error',
       service,
@@ -304,10 +304,10 @@ class CiVisibilityExporter extends BufferingExporter {
         ...(logMessage.dd || []),
         service,
         env,
-        version
+        version,
       },
       ddsource: 'dd_debugger',
-      ...logMessage
+      ...logMessage,
     }
   }
 
@@ -334,7 +334,7 @@ class CiVisibilityExporter extends BufferingExporter {
     const writers = [
       this._writer,
       this._coverageWriter,
-      this._logsWriter
+      this._logsWriter,
     ].filter(Boolean)
 
     let remaining = writers.length
@@ -409,7 +409,7 @@ class CiVisibilityExporter extends BufferingExporter {
       testEnvironmentMetadata,
       url: this._codeCoverageReportUrl,
       isEvpProxy: !!this._isUsingEvpProxy,
-      evpProxyPrefix: this.evpProxyPrefix
+      evpProxyPrefix: this.evpProxyPrefix,
     }, callback)
   }
 }

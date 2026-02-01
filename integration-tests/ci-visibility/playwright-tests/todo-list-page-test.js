@@ -9,13 +9,13 @@ test.beforeEach(async ({ page }) => {
 test.describe('playwright', () => {
   test('should work with failing tests', async ({ page }) => {
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello Warld'
+      'Hello Warld',
     ])
   })
 })
 
 test.fixme('should work with fixme root', async ({ page }) => {
   await expect(page.locator('.hello-world')).toHaveText([
-    'Hello Warld'
+    'Hello Warld',
   ])
 })

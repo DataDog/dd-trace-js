@@ -138,8 +138,8 @@ describe('Plugin', () => {
             return agent.assertFirstTraceSpan({
               resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
               meta: {
-                'mongodb.query': '{"a":1}'
-              }
+                'mongodb.query': '{"a":1}',
+              },
             })
           })
 
@@ -150,8 +150,8 @@ describe('Plugin', () => {
             return agent.assertFirstTraceSpan({
               resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
               meta: {
-                'mongodb.query': '{"a":1}'
-              }
+                'mongodb.query': '{"a":1}',
+              },
             })
           })
 
@@ -162,8 +162,8 @@ describe('Plugin', () => {
             return agent.assertFirstTraceSpan({
               resource,
               meta: {
-                'mongodb.query': '{"a":1}'
-              }
+                'mongodb.query': '{"a":1}',
+              },
             })
           })
 
@@ -174,22 +174,22 @@ describe('Plugin', () => {
             return agent.assertFirstTraceSpan({
               resource,
               meta: {
-                'mongodb.query': '{"a":1}'
-              }
+                'mongodb.query': '{"a":1}',
+              },
             })
           })
 
           it('should have the statement tag when doing a multi statement update', async () => {
             collection.bulkWrite([
               { updateOne: { filter: { a: 1 }, update: { $set: { a: 2 } } } },
-              { updateOne: { filter: { b: 2 }, update: { $set: { b: 2 } } } }
+              { updateOne: { filter: { b: 2 }, update: { $set: { b: 2 } } } },
             ])
 
             return agent.assertFirstTraceSpan({
               resource: `update test.${collectionName}`,
               meta: {
-                'mongodb.query': '[{"a":1},{"b":2}]'
-              }
+                'mongodb.query': '[{"a":1},{"b":2}]',
+              },
             })
           })
 
@@ -199,22 +199,22 @@ describe('Plugin', () => {
             return agent.assertFirstTraceSpan({
               resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
               meta: {
-                'mongodb.query': '[{"a":1},{"b":2}]'
-              }
+                'mongodb.query': '[{"a":1},{"b":2}]',
+              },
             })
           })
 
           it('should sanitize buffers as values and not as objects when doing multi statement operations', async () => {
             collection.bulkWrite([
               { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
-              { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } }
+              { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
             ])
 
             return agent.assertFirstTraceSpan({
               resource: `update test.${collectionName}`,
               meta: {
-                'mongodb.query': '[{"_id":"?"},{"_id":"?"}]'
-              }
+                'mongodb.query': '[{"_id":"?"},{"_id":"?"}]',
+              },
             })
           })
 
@@ -224,8 +224,8 @@ describe('Plugin', () => {
             return agent.assertFirstTraceSpan({
               resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
               meta: {
-                'mongodb.query': '{"_id":"9999999999999999999999"}'
-              }
+                'mongodb.query': '{"_id":"9999999999999999999999"}',
+              },
             })
           })
 
@@ -235,36 +235,36 @@ describe('Plugin', () => {
             return agent.assertFirstTraceSpan({
               resource: `update test.${collectionName}`,
               meta: {
-                'mongodb.query': '{"_id":"9999999999999999999999"}'
-              }
+                'mongodb.query': '{"_id":"9999999999999999999999"}',
+              },
             })
           })
 
           it('should sanitize BigInts when doing a multi statement update', async () => {
             collection.bulkWrite([
               { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } },
-              { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } }
+              { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } },
             ])
 
             return agent.assertFirstTraceSpan({
               resource: `update test.${collectionName}`,
               meta: {
-                'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]'
-              }
+                'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]',
+              },
             })
           })
 
           it('should sanitize BigInts when doing a multi delete operation', async () => {
             collection.bulkWrite([
               { deleteOne: { filter: { _id: 9999999999999999999999n } } },
-              { deleteOne: { filter: { _id: 9999999999999999999999n } } }
+              { deleteOne: { filter: { _id: 9999999999999999999999n } } },
             ])
 
             return agent.assertFirstTraceSpan({
               resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
               meta: {
-                'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]'
-              }
+                'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]',
+              },
             })
           })
 
@@ -283,7 +283,7 @@ describe('Plugin', () => {
 
             db.command({
               planCacheListPlans: `test.${collectionName}`,
-              query: {}
+              query: {},
             }, () => {})
           })
 
@@ -301,7 +301,7 @@ describe('Plugin', () => {
               .catch(done)
 
             collection.find({
-              _id: Buffer.from('1234')
+              _id: Buffer.from('1234'),
             }).toArray()
           })
 
@@ -319,7 +319,7 @@ describe('Plugin', () => {
               .catch(done)
 
             collection.find({
-              _bin: new BSON.Binary()
+              _bin: new BSON.Binary(),
             }).toArray()
           })
 
@@ -339,7 +339,7 @@ describe('Plugin', () => {
               .catch(done)
 
             collection.find({
-              _id: new BSON.ObjectID(id)
+              _id: new BSON.ObjectID(id),
             }).toArray()
           })
 
@@ -357,7 +357,7 @@ describe('Plugin', () => {
               .catch(done)
 
             collection.find({
-              _time: new BSON.Timestamp()
+              _time: new BSON.Timestamp(),
             }).toArray()
           })
 
@@ -375,7 +375,7 @@ describe('Plugin', () => {
               .catch(done)
 
             collection.find({
-              _id: new BSON.MinKey()
+              _id: new BSON.MinKey(),
             }).toArray()
           })
 
@@ -394,7 +394,7 @@ describe('Plugin', () => {
 
             collection.find({
               _id: '1234',
-              foo: () => {}
+              foo: () => {},
             }).toArray()
           })
 
@@ -413,7 +413,7 @@ describe('Plugin', () => {
 
             collection.aggregate([
               { $match: { _id: '1234' } },
-              { $project: { _id: 1 } }
+              { $project: { _id: 1 } },
             ]).toArray()
           })
 
@@ -433,7 +433,7 @@ describe('Plugin', () => {
               .catch(done)
 
             collection.find({
-              _id: { toJSON: () => id }
+              _id: { toJSON: () => id },
             }).toArray()
           })
 
@@ -461,7 +461,7 @@ describe('Plugin', () => {
         before(() => {
           return agent.load('mongodb-core', {
             service: 'custom',
-            queryInResourceName: true
+            queryInResourceName: true,
           })
         })
 
@@ -499,21 +499,21 @@ describe('Plugin', () => {
             .catch(done)
 
           collection.find({
-            _bin: new BSON.Binary()
+            _bin: new BSON.Binary(),
           }).toArray()
         })
 
         it('should sanitize query in resource when configured and doing a multi statement update', async () => {
           collection.bulkWrite([
             { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
-            { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } }
+            { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
           ])
 
           return agent.assertFirstTraceSpan({
             resource: `update test.${collectionName} [{"_id":"?"},{"_id":"?"}]`,
             meta: {
-              'mongodb.query': '[{"_id":"?"},{"_id":"?"}]'
-            }
+              'mongodb.query': '[{"_id":"?"},{"_id":"?"}]',
+            },
           })
         })
 
@@ -522,12 +522,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'mongodb.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'mongodb.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })
@@ -535,7 +535,7 @@ describe('Plugin', () => {
       describe('with dbmPropagationMode service', () => {
         before(() => {
           return agent.load('mongodb-core', {
-            dbmPropagationMode: 'service'
+            dbmPropagationMode: 'service',
           })
         })
 
@@ -576,7 +576,7 @@ describe('Plugin', () => {
             .catch(done)
 
           collection.find({
-            _id: Buffer.from('1234')
+            _id: Buffer.from('1234'),
           }).toArray()
         })
       })
@@ -630,7 +630,7 @@ describe('Plugin', () => {
             .catch(done)
 
           collection.find({
-            _id: Buffer.from('1234')
+            _id: Buffer.from('1234'),
           }).toArray()
         })
       })
@@ -640,7 +640,7 @@ describe('Plugin', () => {
           tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
 
           return agent.load('mongodb-core', {
-            dbmPropagationMode: 'full'
+            dbmPropagationMode: 'full',
           })
         })
 
@@ -682,7 +682,7 @@ describe('Plugin', () => {
               .catch(done)
 
             collection.find({
-              _id: Buffer.from('1234')
+              _id: Buffer.from('1234'),
             }).toArray()
           })
       })
@@ -691,7 +691,7 @@ describe('Plugin', () => {
         describe('when heartbeat tracing is disabled via config', () => {
           before(() => {
             return agent.load('mongodb-core', {
-              heartbeatEnabled: false
+              heartbeatEnabled: false,
             })
           })
 
@@ -732,7 +732,7 @@ describe('Plugin', () => {
         describe('when heartbeat tracing is enabled via config (default)', () => {
           before(() => {
             return agent.load('mongodb-core', {
-              heartbeatEnabled: true
+              heartbeatEnabled: true,
             })
           })
 

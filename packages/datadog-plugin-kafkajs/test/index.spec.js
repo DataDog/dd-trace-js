@@ -48,7 +48,7 @@ describe('Plugin', () => {
           kafka = new Kafka({
             clientId: `kafkajs-test-${version}`,
             brokers: ['127.0.0.1:9092'],
-            logLevel: lib.logLevel.WARN
+            logLevel: lib.logLevel.WARN,
           })
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
@@ -56,8 +56,8 @@ describe('Plugin', () => {
             topics: [{
               topic: testTopic,
               numPartitions: 1,
-              replicationFactor: 1
-            }]
+              replicationFactor: 1,
+            }],
           })
           clusterIdAvailable = semver.intersects(version, '>=1.13')
         })
@@ -68,7 +68,7 @@ describe('Plugin', () => {
               'span.kind': 'producer',
               component: 'kafkajs',
               'messaging.destination.name': testTopic,
-              'messaging.kafka.bootstrap.servers': '127.0.0.1:9092'
+              'messaging.kafka.bootstrap.servers': '127.0.0.1:9092',
             }
             if (clusterIdAvailable) meta['kafka.cluster_id'] = testKafkaClusterId
 
@@ -77,10 +77,10 @@ describe('Plugin', () => {
               service: expectedSchema.send.serviceName,
               meta,
               metrics: {
-                'kafka.batch_size': messages.length
+                'kafka.batch_size': messages.length,
               },
               resource: testTopic,
-              error: 0
+              error: 0,
 
             })
 
@@ -114,8 +114,8 @@ describe('Plugin', () => {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
-                  component: 'kafkajs'
-                }
+                  component: 'kafkajs',
+                },
               })
             })
 
@@ -123,7 +123,7 @@ describe('Plugin', () => {
               await producer.connect()
               await producer.send({
                 testTopic,
-                messages: 'Oh no!'
+                messages: 'Oh no!',
               })
             } catch (e) {
               error = e
@@ -141,7 +141,7 @@ describe('Plugin', () => {
 
               kafka = new Kafka({
                 clientId: `kafkajs-test-${version}`,
-                brokers: () => ['127.0.0.1:9092']
+                brokers: () => ['127.0.0.1:9092'],
               })
 
               await sendMessages(kafka, testTopic, messages)
@@ -174,8 +174,8 @@ describe('Plugin', () => {
                 clientId: `kafkajs-test-${version}`,
                 brokers: ['127.0.0.1:9092'],
                 retry: {
-                  retries: 0
-                }
+                  retries: 0,
+                },
               })
 
               sendRequestStub = sinon.stub(Broker.prototype, 'produce').rejects(error)
@@ -228,15 +228,15 @@ describe('Plugin', () => {
               meta: {
                 'span.kind': 'consumer',
                 component: 'kafkajs',
-                'messaging.destination.name': testTopic
+                'messaging.destination.name': testTopic,
               },
               resource: testTopic,
               error: 0,
-              type: 'worker'
+              type: 'worker',
             })
 
             await consumer.run({
-              eachMessage: () => {}
+              eachMessage: () => {},
             })
             await sendMessages(kafka, testTopic, messages)
             return expectedSpanPromise
@@ -271,7 +271,7 @@ describe('Plugin', () => {
               assertObjectContains(span, {
                 name: 'kafka.consume',
                 service: 'test-kafka',
-                resource: testTopic
+                resource: testTopic,
               })
 
               assert.ok(parseInt(span.parent_id.toString()) > 0)
@@ -291,11 +291,11 @@ describe('Plugin', () => {
                 [ERROR_TYPE]: fakeError.name,
                 [ERROR_MESSAGE]: fakeError.message,
                 [ERROR_STACK]: fakeError.stack,
-                component: 'kafkajs'
+                component: 'kafkajs',
               },
               resource: testTopic,
               error: 1,
-              type: 'worker'
+              type: 'worker',
 
             })
 
@@ -303,7 +303,7 @@ describe('Plugin', () => {
             await consumer.run({
               eachMessage: async ({ topic, partition, message }) => {
                 throw fakeError
-              }
+              },
             })
             await sendMessages(kafka, testTopic, messages)
 
@@ -414,7 +414,7 @@ function expectSpanWithDefaults (expected) {
   expected = withDefaults({
     name: expected.name,
     service,
-    meta: expected.meta
+    meta: expected.meta,
   }, expected)
   return expectSomeSpan(agent, expected)
 }
@@ -424,7 +424,7 @@ async function sendMessages (kafka, topic, messages) {
   await producer.connect()
   await producer.send({
     topic,
-    messages
+    messages,
   })
   await producer.disconnect()
 }

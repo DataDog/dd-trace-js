@@ -22,7 +22,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
 
     inc = sinon.spy()
     count = sinon.stub(appsecNamespace, 'count').returns({
-      inc
+      inc,
     })
 
     appsecNamespace.metrics.clear()
@@ -45,18 +45,18 @@ describe('Appsec Rasp Telemetry metrics', () => {
           duration: 42,
           durationExt: 52,
           wafVersion: '1.0.0',
-          rulesVersion: '2.0.0'
+          rulesVersion: '2.0.0',
         }, req, { type: 'rule-type' })
 
         sinon.assert.calledWith(count, 'rasp.rule.eval', {
           rule_type: 'rule-type',
           waf_version: '1.0.0',
-          event_rules_version: '2.0.0'
+          event_rules_version: '2.0.0',
         })
         sinon.assert.neverCalledWith(count, 'rasp.timeout', {
           rule_type: 'rule-type',
           waf_version: '1.0.0',
-          event_rules_version: '2.0.0'
+          event_rules_version: '2.0.0',
         })
         sinon.assert.neverCalledWith(count, 'rasp.rule.match')
         sinon.assert.calledOnceWithExactly(inc, 1)
@@ -68,18 +68,18 @@ describe('Appsec Rasp Telemetry metrics', () => {
           durationExt: 52,
           wafTimeout: true,
           wafVersion: '1.0.0',
-          rulesVersion: '2.0.0'
+          rulesVersion: '2.0.0',
         }, req, { type: 'rule-type' })
 
         sinon.assert.calledWith(count, 'rasp.rule.eval', {
           rule_type: 'rule-type',
           waf_version: '1.0.0',
-          event_rules_version: '2.0.0'
+          event_rules_version: '2.0.0',
         })
         sinon.assert.calledWith(count, 'rasp.timeout', {
           rule_type: 'rule-type',
           waf_version: '1.0.0',
-          event_rules_version: '2.0.0'
+          event_rules_version: '2.0.0',
         })
         sinon.assert.neverCalledWith(count, 'rasp.rule.match')
         sinon.assert.calledTwice(inc)
@@ -89,39 +89,39 @@ describe('Appsec Rasp Telemetry metrics', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({
           errorCode: -127,
           wafVersion: '1.0.0',
-          rulesVersion: '2.0.0'
+          rulesVersion: '2.0.0',
         }, req, { type: 'rule-type' })
 
         sinon.assert.calledWith(count, 'rasp.error', {
           waf_version: '1.0.0',
           event_rules_version: '2.0.0',
           rule_type: 'rule-type',
-          waf_error: -127
+          waf_error: -127,
         })
 
         appsecTelemetry.updateRaspRequestsMetricTags({
           errorCode: -2,
           wafVersion: '1.0.0',
-          rulesVersion: '2.0.0'
+          rulesVersion: '2.0.0',
         }, req, { type: 'rule-type' })
 
         sinon.assert.calledWith(count, 'rasp.error', {
           waf_version: '1.0.0',
           event_rules_version: '2.0.0',
           rule_type: 'rule-type',
-          waf_error: -2
+          waf_error: -2,
         })
       })
 
       it('should sum rasp.duration and eval metrics', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 42,
-          durationExt: 52
+          durationExt: 52,
         }, req, { type: 'rule-type' })
 
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 24,
-          durationExt: 25
+          durationExt: 25,
         }, req, { type: 'rule-type' })
 
         const {
@@ -129,7 +129,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
           durationExt,
           raspDuration,
           raspDurationExt,
-          raspEvalCount
+          raspEvalCount,
         } = appsecTelemetry.getRequestMetrics(req)
 
         assert.strictEqual(duration, 0)
@@ -164,7 +164,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({
           ruleTriggered: true,
           wafVersion: '1.0.0',
-          rulesVersion: '2.0.0'
+          rulesVersion: '2.0.0',
         }, req, { type: 'rule-type' })
 
         count.resetHistory()
@@ -179,7 +179,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
           rule_variant: 'rule-variant',
           waf_version: '1.0.0',
           event_rules_version: '2.0.0',
-          block: 'success'
+          block: 'success',
         })
         sinon.assert.called(inc)
       })
@@ -192,7 +192,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
           rule_variant: 'rule-variant',
           waf_version: '1.0.0',
           event_rules_version: '2.0.0',
-          block: 'failure'
+          block: 'failure',
         })
         sinon.assert.called(inc)
       })
@@ -205,7 +205,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
           rule_variant: 'rule-variant',
           waf_version: '1.0.0',
           event_rules_version: '2.0.0',
-          block: 'irrelevant'
+          block: 'irrelevant',
         })
         sinon.assert.called(inc)
       })
@@ -226,7 +226,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
         sinon.assert.calledWith(count, 'rasp.rule.skipped', {
           reason: 'after-request',
           rule_type: 'rule-type',
-          rule_variant: 'rule-variant'
+          rule_variant: 'rule-variant',
         })
       })
     })
@@ -238,7 +238,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
           ruleTriggered: false,
           wafTimeout: false,
           wafVersion,
-          rulesVersion
+          rulesVersion,
         }, req)
 
         appsecTelemetry.updateRaspRequestsMetricTags({
@@ -247,7 +247,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
           wafTimeout: true,
           input_truncated: true,
           wafVersion,
-          rulesVersion
+          rulesVersion,
         }, req, { type: 'rule-type' })
 
         sinon.assert.neverCalledWith(count, 'waf.requests')
@@ -262,7 +262,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
           waf_error: false,
           waf_timeout: false,
           waf_version: wafVersion,
-          event_rules_version: rulesVersion
+          event_rules_version: rulesVersion,
         })
       })
     })
@@ -272,7 +272,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
     it('should not increment any metric if telemetry is disabled', () => {
       appsecTelemetry.enable({
         enabled: false,
-        metrics: true
+        metrics: true,
       })
 
       appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
@@ -284,7 +284,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
     it('should not increment any metric if telemetry metrics are disabled', () => {
       appsecTelemetry.enable({
         enabled: true,
-        metrics: false
+        metrics: false,
       })
 
       appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
@@ -297,17 +297,17 @@ describe('Appsec Rasp Telemetry metrics', () => {
       it('should sum rasp.duration and rasp.durationExt request metrics', () => {
         appsecTelemetry.enable({
           enabled: false,
-          metrics: true
+          metrics: true,
         })
 
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 42,
-          durationExt: 52
+          durationExt: 52,
         }, req, 'rasp_rule')
 
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 24,
-          durationExt: 25
+          durationExt: 25,
         }, req, 'rasp_rule')
 
         const { raspDuration, raspDurationExt, raspEvalCount } = appsecTelemetry.getRequestMetrics(req)
@@ -320,17 +320,17 @@ describe('Appsec Rasp Telemetry metrics', () => {
       it('should sum rasp.duration and rasp.durationExt with telemetry enabled and metrics disabled', () => {
         appsecTelemetry.enable({
           enabled: true,
-          metrics: false
+          metrics: false,
         })
 
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 42,
-          durationExt: 52
+          durationExt: 52,
         }, req, { type: 'rule-type' })
 
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 24,
-          durationExt: 25
+          durationExt: 25,
         }, req, { type: 'rule-type' })
 
         const { raspDuration, raspDurationExt, raspEvalCount } = appsecTelemetry.getRequestMetrics(req)
@@ -343,12 +343,12 @@ describe('Appsec Rasp Telemetry metrics', () => {
       it('should not increment any metric if telemetry metrics are disabled', () => {
         appsecTelemetry.enable({
           enabled: true,
-          metrics: false
+          metrics: false,
         })
 
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 24,
-          durationExt: 25
+          durationExt: 25,
         }, req, { type: 'rule-type' })
 
         sinon.assert.notCalled(count)

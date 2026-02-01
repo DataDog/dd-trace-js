@@ -44,7 +44,7 @@ function uploadCoverageReport (
   const eventPayload = {
     type: 'coverage_report',
     format,
-    ...testEnvironmentMetadata
+    ...testEnvironmentMetadata,
   }
 
   // Create multipart form
@@ -52,21 +52,21 @@ function uploadCoverageReport (
 
   form.append('coverage', compressedCoverage, {
     filename: 'coverage.gz',
-    contentType: 'application/gzip'
+    contentType: 'application/gzip',
   })
 
   form.append('event', JSON.stringify(eventPayload), {
     filename: 'event.json',
-    contentType: 'application/json'
+    contentType: 'application/json',
   })
 
   const options = {
     method: 'POST',
     headers: {
-      ...form.getHeaders()
+      ...form.getHeaders(),
     },
     timeout: UPLOAD_TIMEOUT_MS,
-    url
+    url,
   }
 
   if (isEvpProxy) {
