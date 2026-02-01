@@ -59,7 +59,7 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-      - run: yarn test:integration:testopt
+      - run: yarn test:integration:testopt:ci
 
   integration-playwright:
     strategy:
@@ -101,7 +101,7 @@ jobs:
         with:
           path: /github/home/.cache/ms-playwright
           key: playwright-browsers-oldest-dd${{ steps.dd-version.outputs.major }}
-      - run: yarn test:integration:playwright
+      - run: yarn test:integration:playwright:ci
         env:
           NODE_OPTIONS: '-r ./ci/init'
 
@@ -121,7 +121,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:mocha
+      - run: yarn test:integration:mocha:ci
         env:
           NODE_OPTIONS: '-r ./ci/init'
           MOCHA_VERSION: ${{ matrix.mocha-version }}
@@ -142,7 +142,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:jest
+      - run: yarn test:integration:jest:ci
         env:
           NODE_OPTIONS: '-r ./ci/init'
           JEST_VERSION: ${{ matrix.jest-version }}
@@ -163,7 +163,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:cucumber
+      - run: yarn test:integration:cucumber:ci
         env:
           NODE_OPTIONS: '-r ./ci/init'
           CUCUMBER_VERSION: ${{ matrix.cucumber-version }}
@@ -201,7 +201,7 @@ jobs:
           sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
           sudo chmod +x /usr/bin/chromedriver
       - uses: ./.github/actions/install
-      - run: yarn test:integration:selenium
+      - run: yarn test:integration:selenium:ci
         env:
           NODE_OPTIONS: '-r ./ci/init'
 
@@ -235,7 +235,7 @@ jobs:
           path: ~/.cache/Cypress
           key: cypress-binary-${{ matrix.cypress-version }}
       - run: yarn config set ignore-engines true
-      - run: yarn test:integration:cypress --ignore-engines
+      - run: yarn test:integration:cypress:ci --ignore-engines
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
           NODE_OPTIONS: '-r ./ci/init'
@@ -258,6 +258,6 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:vitest
+      - run: yarn test:integration:vitest:ci
         env:
           NODE_OPTIONS: '-r ./ci/init'

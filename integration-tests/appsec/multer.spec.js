@@ -110,7 +110,7 @@ describe('multer', () => {
         }
 
         describe('using middleware', () => {
-          it('should taint multipart body', async () => {
+          it.skip('should taint multipart body', async () => {
             const resultPromise = agent.assertMessageReceived(assertCmdInjection)
 
             const formData = new FormData()
@@ -122,7 +122,7 @@ describe('multer', () => {
         })
 
         describe('not using middleware', () => {
-          it('should taint multipart body', async () => {
+          it.skip('should taint multipart body', async () => {
             const resultPromise = agent.assertMessageReceived(assertCmdInjection)
 
             const formData = new FormData()

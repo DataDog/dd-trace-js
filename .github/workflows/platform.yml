@@ -414,8 +414,11 @@ jobs:
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
       - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: yarn test:integration
-      - run: yarn test:integration:esbuild
+      - run: yarn test:integration:ci
+      - run: yarn test:integration:esbuild:ci
+      - uses: ./.github/actions/coverage
+        with:
+          flags: platform-integration-${{ matrix.version }}
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:

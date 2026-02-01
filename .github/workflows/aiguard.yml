@@ -82,7 +82,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:aiguard
+      - run: yarn test:integration:aiguard:ci
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
