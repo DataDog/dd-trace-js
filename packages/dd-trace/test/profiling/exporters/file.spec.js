@@ -12,11 +12,11 @@ describe('exporters/file', () => {
 
   beforeEach(() => {
     fs = {
-      writeFile: sinon.stub().yields()
+      writeFile: sinon.stub().yields(),
     }
 
     FileExporter = proxyquire('../../../src/profiling/exporters/file', {
-      fs
+      fs,
     }).FileExporter
   })
 
@@ -24,12 +24,12 @@ describe('exporters/file', () => {
     const exporter = new FileExporter()
     const buffer = Buffer.from('profile')
     const profiles = {
-      test: buffer
+      test: buffer,
     }
     await exporter.export({
       profiles,
       start: new Date('2023-02-10T21:02:05Z'),
-      end: new Date('2023-02-10T21:03:05Z')
+      end: new Date('2023-02-10T21:03:05Z'),
     })
 
     sinon.assert.calledTwice(fs.writeFile)
@@ -40,12 +40,12 @@ describe('exporters/file', () => {
     const exporter = new FileExporter({ pprofPrefix: 'myprefix_' })
     const buffer = Buffer.from('profile')
     const profiles = {
-      test: buffer
+      test: buffer,
     }
     await exporter.export({
       profiles,
       start: new Date('2023-02-10T21:02:05Z'),
-      end: new Date('2023-02-10T21:03:05Z')
+      end: new Date('2023-02-10T21:03:05Z'),
     })
 
     sinon.assert.calledTwice(fs.writeFile)

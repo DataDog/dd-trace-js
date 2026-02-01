@@ -14,7 +14,7 @@ function buildClient (service, callback) {
       getBidi: () => {},
       getServerStream: () => {},
       getClientStream: () => {},
-      getUnary: () => {}
+      getUnary: () => {},
     },
     service
   )
@@ -46,7 +46,7 @@ function buildClient (service, callback) {
 }
 
 const client = await buildClient({
-  getUnary: (_, callback) => callback()
+  getUnary: (_, callback) => callback(),
 })
 
 client.getUnary({ first: 'foobar' }, () => {})

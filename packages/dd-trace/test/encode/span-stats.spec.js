@@ -15,7 +15,7 @@ const {
   MAX_RESOURCE_NAME_LENGTH,
   MAX_TYPE_LENGTH,
   DEFAULT_SPAN_NAME,
-  DEFAULT_SERVICE_NAME
+  DEFAULT_SERVICE_NAME,
 } = require('../../src/encode/tags-processors')
 const processTags = require('../../src/process-tags')
 
@@ -29,10 +29,10 @@ describe('span-stats-encode', () => {
 
   beforeEach(() => {
     logger = {
-      debug: sinon.stub()
+      debug: sinon.stub(),
     }
     const { SpanStatsEncoder } = proxyquire('../../src/encode/span-stats', {
-      '../log': logger
+      '../log': logger,
     })
     writer = { flush: sinon.spy() }
     encoder = new SpanStatsEncoder(writer)
@@ -51,15 +51,15 @@ describe('span-stats-encode', () => {
       Duration: 1230,
       Errors: 0,
       OkSummary: Buffer.from(''),
-      ErrorSummary: Buffer.from('')
+      ErrorSummary: Buffer.from(''),
     }
 
     bucket = {
       Start: 1660000000000,
       Duration: 10000000000,
       Stats: [
-        stat
-      ]
+        stat,
+      ],
     }
 
     stats = {
@@ -67,13 +67,13 @@ describe('span-stats-encode', () => {
       Env: 'env',
       Version: '4.0.0-pre',
       Stats: [
-        bucket
+        bucket,
       ],
       Lang: 'javascript',
       TracerVersion: '1.2.3',
       RuntimeID: 'some-runtime-id',
       Sequence: 1,
-      ProcessTags: processTags.serialized
+      ProcessTags: processTags.serialized,
     }
   })
 
@@ -119,11 +119,11 @@ describe('span-stats-encode', () => {
               Name: tooLongString,
               Type: tooLongString,
               Service: tooLongString,
-              Resource: resourceTooLongString
-            }
-          ]
-        }
-      ]
+              Resource: resourceTooLongString,
+            },
+          ],
+        },
+      ],
     }
     encoder.encode(statsToTruncate)
 
@@ -149,11 +149,11 @@ describe('span-stats-encode', () => {
             {
               ...stat,
               Name: undefined,
-              Service: undefined
-            }
-          ]
-        }
-      ]
+              Service: undefined,
+            },
+          ],
+        },
+      ],
     }
     encoder.encode(statsToTruncate)
 

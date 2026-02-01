@@ -23,7 +23,7 @@ describe('agent/url', () => {
     it('should construct URL from hostname and port', () => {
       const config = {
         hostname: 'custom-host',
-        port: '9999'
+        port: '9999',
       }
 
       const result = getAgentUrl(config)
@@ -36,7 +36,7 @@ describe('agent/url', () => {
 
     it('should use default hostname when not provided', () => {
       const config = {
-        port: '9999'
+        port: '9999',
       }
 
       const result = getAgentUrl(config)
@@ -47,7 +47,7 @@ describe('agent/url', () => {
 
     it('should use default port when not provided in config', () => {
       const config = {
-        hostname: 'custom-host'
+        hostname: 'custom-host',
       }
 
       const result = getAgentUrl(config)
@@ -72,7 +72,7 @@ describe('agent/url', () => {
       const config = {
         url,
         hostname: 'ignored-host',
-        port: '2222'
+        port: '2222',
       }
 
       const result = getAgentUrl(config)
@@ -85,7 +85,7 @@ describe('agent/url', () => {
     it('should support IPv6 hostnames', () => {
       const config = {
         hostname: '::1',
-        port: '8126'
+        port: '8126',
       }
 
       const result = getAgentUrl(config)

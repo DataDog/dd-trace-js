@@ -26,7 +26,7 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
         'messaging.system': 'eventhubs',
         'messaging.destination.name': entityPath,
         'network.destination.name': qualifiedNamespace,
-      }
+      },
     }, ctx)
 
     if (ctx.functionName === 'tryAdd') {

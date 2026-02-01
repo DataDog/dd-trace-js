@@ -9,7 +9,7 @@ class BedrockRuntimePlugin extends CompositePlugin {
   static get plugins () {
     return {
       llmobs: BedrockRuntimeLLMObsPlugin,
-      tracing: BedrockRuntimeTracing
+      tracing: BedrockRuntimeTracing,
     }
   }
 }

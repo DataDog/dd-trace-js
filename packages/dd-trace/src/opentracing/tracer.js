@@ -40,7 +40,7 @@ class DatadogTracer {
       [formats.HTTP_HEADERS]: new HttpPropagator(config),
       [formats.BINARY]: new BinaryPropagator(config),
       [formats.LOG]: new LogPropagator(config),
-      [formats.TEXT_MAP_DSM]: new DSMTextMapPropagator(config)
+      [formats.TEXT_MAP_DSM]: new DSMTextMapPropagator(config),
     }
     if (config.reportHostname) {
       this._hostname = os.hostname()
@@ -54,7 +54,7 @@ class DatadogTracer {
 
     // as per spec, allow the setting of service name through options
     const tags = {
-      'service.name': options?.tags?.service ? String(options.tags.service) : this._service
+      'service.name': options?.tags?.service ? String(options.tags.service) : this._service,
     }
 
     // As per unified service tagging spec if a span is created with a service name different from the global
@@ -71,7 +71,7 @@ class DatadogTracer {
       hostname: this._hostname,
       traceId128BitGenerationEnabled: this._traceId128BitGenerationEnabled,
       integrationName: options.integrationName,
-      links: options.links
+      links: options.links,
     }, this._debug)
 
     span.addTags(this._config.tags)

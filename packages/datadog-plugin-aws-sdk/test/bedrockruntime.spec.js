@@ -37,7 +37,7 @@ describe('Plugin', () => {
               endpoint: { url: 'http://127.0.0.1:9126/vcr/bedrock-runtime' },
               region: 'us-east-1',
               ServiceId: serviceName,
-              requestHandler: new NodeHttpHandler()
+              requestHandler: new NodeHttpHandler(),
             }
           )
         })
@@ -52,7 +52,7 @@ describe('Plugin', () => {
               body: JSON.stringify(model.requestBody),
               contentType: 'application/json',
               accept: 'application/json',
-              modelId: model.modelId
+              modelId: model.modelId,
             }
 
             const command = new AWS.InvokeModelCommand(request)
@@ -62,7 +62,7 @@ describe('Plugin', () => {
                 'aws.operation': 'invokeModel',
                 'aws.bedrock.request.model': model.modelId.split('.')[1],
                 'aws.bedrock.request.model_provider': model.provider.toLowerCase(),
-              }
+              },
             })
 
             await bedrockRuntimeClient.send(command)
@@ -74,7 +74,7 @@ describe('Plugin', () => {
               body: JSON.stringify(model.requestBody),
               contentType: 'application/json',
               accept: 'application/json',
-              modelId: model.modelId
+              modelId: model.modelId,
             }
 
             const command = new AWS.InvokeModelWithResponseStreamCommand(request)
@@ -84,7 +84,7 @@ describe('Plugin', () => {
                 'aws.operation': 'invokeModelWithResponseStream',
                 'aws.bedrock.request.model': model.modelId.split('.')[1],
                 'aws.bedrock.request.model_provider': model.provider.toLowerCase(),
-              }
+              },
             })
 
             const stream = await bedrockRuntimeClient.send(command)

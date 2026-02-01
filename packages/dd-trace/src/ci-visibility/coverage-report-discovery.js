@@ -32,7 +32,7 @@ const COVERAGE_REPORT_PATTERNS = [
 
   // SimpleCov JSON format
   { path: 'coverage/.resultset.json', format: 'simplecov' },
-  { path: '.resultset.json', format: 'simplecov' }
+  { path: '.resultset.json', format: 'simplecov' },
 ]
 
 /**
@@ -59,7 +59,7 @@ function discoverCoverageReports (rootDir) {
         if (stats.isFile()) {
           discoveredReports.push({
             filePath: fullPath,
-            format: pattern.format
+            format: pattern.format,
           })
           log.debug('Found coverage report: %s (format: %s)', fullPath, pattern.format)
         }

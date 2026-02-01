@@ -20,7 +20,7 @@ const {
   useEnv,
   useSandbox,
   sandboxCwd,
-  setShouldKill
+  setShouldKill,
 } = require('./helpers')
 const supportedRange = engines.node
 const currentVersionIsSupported = semver.satisfies(NODE_VERSION, supportedRange)

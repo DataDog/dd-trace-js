@@ -12,18 +12,18 @@ const resolvers = {
   Query: {
     hello: (_, { name }) => {
       return `Hello, ${name || 'world'}!`
-    }
-  }
+    },
+  },
 }
 
 const schema = createSchema({
   typeDefs,
-  resolvers
+  resolvers,
 })
 
 const yoga = createYoga({
   schema,
-  graphqlEndpoint: '/graphql'
+  graphqlEndpoint: '/graphql',
 })
 
 const server = createServer(yoga)

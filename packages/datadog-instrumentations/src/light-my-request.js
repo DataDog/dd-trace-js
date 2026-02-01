@@ -14,7 +14,7 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 // Reuse the same channels as HTTP server instrumentation

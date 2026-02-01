@@ -4,7 +4,7 @@ const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook,
-  AsyncResource
+  AsyncResource,
 } = require('./helpers/instrument')
 
 function isString (value) {

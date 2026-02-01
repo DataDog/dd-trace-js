@@ -25,7 +25,7 @@ class TracingPlugin extends Plugin {
     const {
       type = this.constructor.type,
       id = this.constructor.id,
-      kind = this.constructor.kind
+      kind = this.constructor.kind,
     } = opts
 
     return this._tracer._nomenclature.serviceName(type, kind, id, opts)
@@ -35,7 +35,7 @@ class TracingPlugin extends Plugin {
     const {
       type = this.constructor.type,
       id = this.constructor.id,
-      kind = this.constructor.kind
+      kind = this.constructor.kind,
     } = opts
 
     return this._tracer._nomenclature.opName(type, kind, id, opts)
@@ -46,8 +46,8 @@ class TracingPlugin extends Plugin {
       ...config,
       hooks: {
         [this.operation]: () => {},
-        ...config.hooks
-      }
+        ...config.hooks,
+      },
     })
   }
 
@@ -114,7 +114,7 @@ class TracingPlugin extends Plugin {
       service,
       startTime,
       resource,
-      type
+      type,
     } = options
 
     const tracer = options.tracer || this.tracer
@@ -135,10 +135,10 @@ class TracingPlugin extends Plugin {
         'span.kind': kind,
         'span.type': type,
         ...meta,
-        ...metrics
+        ...metrics,
       },
       integrationName: integrationName || component,
-      links: childOf?._links
+      links: childOf?._links,
     })
 
     analyticsSampler.sample(span, config.measured)

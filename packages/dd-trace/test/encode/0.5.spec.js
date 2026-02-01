@@ -34,14 +34,14 @@ describe('encode 0.5', () => {
       service: 'test-s',
       error: 0,
       meta: {
-        bar: 'baz'
+        bar: 'baz',
       },
       metrics: {
-        example: 1
+        example: 1,
       },
       start: 123123123123123120,
       duration: 4564564564564564,
-      links: []
+      links: [],
     }]
   })
 
@@ -75,8 +75,8 @@ describe('encode 0.5', () => {
       {
         name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
         time_unix_nano: 1633023102000000,
-        attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false }
-      }
+        attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false },
+      },
     ]
 
     const encodedLink = '[{"name":"Something went so wrong","time_unix_nano":1000000},' +
@@ -94,7 +94,7 @@ describe('encode 0.5', () => {
     assertObjectContains(stringMap, ['events', encodedLink])
     assertObjectContains(trace[0][9], {
       [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
-      [stringMap.indexOf('events')]: stringMap.indexOf(encodedLink)
+      [stringMap.indexOf('events')]: stringMap.indexOf(encodedLink),
     })
   })
 
@@ -131,7 +131,7 @@ describe('encode 0.5', () => {
     assert.strictEqual(trace[0][8], 0)
     assert.deepStrictEqual(trace[0][9], {
       [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
-      [stringMap.indexOf('_dd.span_links')]: stringMap.indexOf(encodedLink)
+      [stringMap.indexOf('_dd.span_links')]: stringMap.indexOf(encodedLink),
     })
     assert.deepStrictEqual(trace[0][10], { [stringMap.indexOf('example')]: 1 })
     assert.strictEqual(stringMap[trace[0][11]], '') // unset
@@ -164,7 +164,7 @@ describe('encode 0.5', () => {
     assert.strictEqual(trace[0][8], 0)
     assert.deepStrictEqual(trace[0][9], {
       [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
-      [stringMap.indexOf('_dd.span_links')]: stringMap.indexOf(encodedLink)
+      [stringMap.indexOf('_dd.span_links')]: stringMap.indexOf(encodedLink),
     })
     assert.deepStrictEqual(trace[0][10], { [stringMap.indexOf('example')]: 1 })
     assert.strictEqual(stringMap[trace[0][11]], '') // unset

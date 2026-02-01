@@ -55,11 +55,11 @@ describe('TracerProxy', () => {
     appsecSdk = {
       trackUserLoginSuccessEvent: sinon.stub(),
       trackUserLoginFailureEvent: sinon.stub(),
-      trackCustomEvent: sinon.stub()
+      trackCustomEvent: sinon.stub(),
     }
 
     pluginManager = {
-      configure: sinon.spy()
+      configure: sinon.spy(),
     }
 
     tracer = {
@@ -70,7 +70,7 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
-      configure: sinon.spy()
+      configure: sinon.spy(),
     }
 
     noop = {
@@ -81,7 +81,7 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('noop'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
-      configure: sinon.spy()
+      configure: sinon.spy(),
     }
 
     noopAiguardSdk = {
@@ -91,7 +91,7 @@ describe('TracerProxy', () => {
     noopAppsecSdk = {
       trackUserLoginSuccessEvent: sinon.stub(),
       trackUserLoginFailureEvent: sinon.stub(),
-      trackCustomEvent: sinon.stub()
+      trackCustomEvent: sinon.stub(),
     }
 
     noopDogStatsDClient = {
@@ -100,7 +100,7 @@ describe('TracerProxy', () => {
       gauge: sinon.spy(),
       distribution: sinon.spy(),
       histogram: sinon.spy(),
-      flush: sinon.spy()
+      flush: sinon.spy(),
     }
 
     {
@@ -126,12 +126,12 @@ describe('TracerProxy', () => {
         CustomMetrics: FauxDogStatsDClient,
         _increments: () => dogstatsdIncrements,
         _config: () => dogstatsdConfig,
-        _flushes: () => dogstatsdFlushes
+        _flushes: () => dogstatsdFlushes,
       }
     }
 
     log = {
-      error: sinon.spy()
+      error: sinon.spy(),
     }
 
     DatadogTracer = sinon.stub().returns(tracer)
@@ -148,8 +148,8 @@ describe('TracerProxy', () => {
       experimental: {
         flaggingProvider: {},
         aiguard: {
-          enabled: true
-        }
+          enabled: true,
+        },
       },
       injectionEnabled: [],
       logger: 'logger',
@@ -161,46 +161,46 @@ describe('TracerProxy', () => {
       crashtracking: {},
       dynamicInstrumentation: {},
       remoteConfig: {
-        enabled: true
+        enabled: true,
       },
       runtimeMetrics: {
-        enabled: false
+        enabled: false,
       },
       setRemoteConfig: sinon.spy(),
       llmobs: {},
-      heapSnapshot: {}
+      heapSnapshot: {},
     }
     Config = sinon.stub().returns(config)
 
     runtimeMetrics = {
-      start: sinon.spy()
+      start: sinon.spy(),
     }
 
     profiler = {
-      start: sinon.spy()
+      start: sinon.spy(),
     }
 
     appsec = {
       enable: sinon.spy(),
-      disable: sinon.spy()
+      disable: sinon.spy(),
     }
 
     telemetry = {
-      start: sinon.spy()
+      start: sinon.spy(),
     }
 
     iast = {
       enable: sinon.spy(),
-      disable: sinon.spy()
+      disable: sinon.spy(),
     }
 
     openfeature = {
       enable: sinon.spy(),
-      disable: sinon.spy()
+      disable: sinon.spy(),
     }
 
     openfeatureProvider = {
-      _setConfiguration: sinon.spy()
+      _setConfiguration: sinon.spy(),
     }
 
     OpenFeatureProvider = sinon.stub().returns(openfeatureProvider)
@@ -210,7 +210,7 @@ describe('TracerProxy', () => {
       disable: sinon.spy(),
       prepare: sinon.spy(),
       send: sinon.spy(),
-      cleanup: sinon.spy()
+      cleanup: sinon.spy(),
     }
 
     handlers = new Map()
@@ -225,7 +225,7 @@ describe('TracerProxy', () => {
       },
       removeBatchHandler: sinon.spy(),
       subscribeProducts: sinon.spy(),
-      unsubscribeProducts: sinon.spy()
+      unsubscribeProducts: sinon.spy(),
     }
 
     RemoteConfig = sinon.stub().returns(rc)
@@ -234,7 +234,7 @@ describe('TracerProxy', () => {
       './tracer': NoopTracer,
       '../aiguard/noop': NoopAIGuardSdk,
       '../appsec/sdk/noop': NoopAppsecSdk,
-      './dogstatsd': NoopDogStatsDClient
+      './dogstatsd': NoopDogStatsDClient,
     })
 
     Proxy = proxyquire('../src/proxy', {
@@ -255,7 +255,7 @@ describe('TracerProxy', () => {
       './noop/dogstatsd': NoopDogStatsDClient,
       './flare': flare,
       './openfeature': openfeature,
-      './openfeature/flagging_provider': OpenFeatureProvider
+      './openfeature/flagging_provider': OpenFeatureProvider,
     })
 
     proxy = new Proxy()
@@ -327,9 +327,9 @@ describe('TracerProxy', () => {
 
         handlers.get('AGENT_CONFIG')('apply', {
           config: {
-            log_level: logLevel
+            log_level: logLevel,
           },
-          name: 'flare-log-level.debug'
+          name: 'flare-log-level.debug',
         })
 
         sinon.assert.calledWith(flare.enable, config)
@@ -340,7 +340,7 @@ describe('TracerProxy', () => {
         const task = {
           case_id: '111',
           hostname: 'myhostname',
-          user_handle: 'user.name@datadoghq.com'
+          user_handle: 'user.name@datadoghq.com',
         }
 
         proxy.init()
@@ -348,7 +348,7 @@ describe('TracerProxy', () => {
         handlers.get('AGENT_TASK')('apply', {
           args: task,
           task_type: 'tracer_flare',
-          uuid: 'd53fc8a4-8820-47a2-aa7d-d565582feb81'
+          uuid: 'd53fc8a4-8820-47a2-aa7d-d565582feb81',
         })
 
         sinon.assert.calledWith(flare.enable, config)
@@ -358,9 +358,9 @@ describe('TracerProxy', () => {
       it('should cleanup flares when the config is removed', () => {
         const conf = {
           config: {
-            log_level: 'debug'
+            log_level: 'debug',
           },
-          name: 'flare-log-level.debug'
+          name: 'flare-log-level.debug',
         }
 
         proxy.init()
@@ -401,7 +401,7 @@ describe('TracerProxy', () => {
           './appsec': appsec,
           './appsec/iast': iast,
           './remote_config': RemoteConfig,
-          './appsec/sdk': AppsecSdk
+          './appsec/sdk': AppsecSdk,
         })
 
         const remoteConfigProxy = new RemoteConfigProxy()
@@ -432,7 +432,7 @@ describe('TracerProxy', () => {
           './appsec': appsec,
           './appsec/iast': iast,
           './remote_config': RemoteConfig,
-          './appsec/sdk': AppsecSdk
+          './appsec/sdk': AppsecSdk,
         })
 
         config.telemetry = {}
@@ -484,12 +484,12 @@ describe('TracerProxy', () => {
       it('should expose real metrics methods after init when configured', () => {
         config.dogstatsd = {
           hostname: 'localhost',
-          port: 9876
+          port: 9876,
         }
         config.tags = {
           service: 'photos',
           env: 'prod',
-          version: '1.2.3'
+          version: '1.2.3',
         }
 
         proxy.init()
@@ -572,7 +572,7 @@ describe('TracerProxy', () => {
           './profiler': null, // this will cause the import failure error
           './appsec': appsec,
           './telemetry': telemetry,
-          './remote_config': RemoteConfig
+          './remote_config': RemoteConfig,
         })
 
         const profilerImportFailureProxy = new ProfilerImportFailureProxy()
@@ -591,7 +591,7 @@ describe('TracerProxy', () => {
 
       it('should configure standalone', () => {
         const standalone = {
-          configure: sinon.stub()
+          configure: sinon.stub(),
         }
 
         const options = {}
@@ -603,7 +603,7 @@ describe('TracerProxy', () => {
           './remote_config': RemoteConfig,
           './appsec/sdk': AppsecSdk,
           './standalone': standalone,
-          './telemetry': telemetry
+          './telemetry': telemetry,
         })
 
         const proxy = new DatadogProxy()
@@ -959,7 +959,7 @@ function createApmTracingTransaction (configId, libConfig, action = 'apply') {
   const item = {
     id: configId,
     file: { lib_config: libConfig },
-    path: `datadog/1/APM_TRACING/${configId}`
+    path: `datadog/1/APM_TRACING/${configId}`,
   }
 
   return {
@@ -967,6 +967,6 @@ function createApmTracingTransaction (configId, libConfig, action = 'apply') {
     toApply: action === 'apply' ? [item] : [],
     toModify: action === 'modify' ? [item] : [],
     ack: sinon.spy(),
-    error: sinon.spy()
+    error: sinon.spy(),
   }
 }

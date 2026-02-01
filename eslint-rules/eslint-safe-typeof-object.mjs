@@ -6,7 +6,7 @@ export default {
     type: 'problem',
     docs: {
       description: "Ensure that `typeof x === 'object'` checks are guarded against not-null values",
-      recommended: true
+      recommended: true,
     },
     fixable: 'code',
     schema: [],
@@ -63,13 +63,13 @@ export default {
                 return fixer.insertTextBefore(node, `${targetExpression} !== null && `)
               },
               message: `"typeof ${targetExpression} === 'object'" missing not-null guard`,
-              node
+              node,
             })
           }
         }
-      }
+      },
     }
-  }
+  },
 }
 
 // Helper function to get source text of a node

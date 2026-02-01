@@ -10,93 +10,93 @@ const messaging = {
   producer: {
     amqplib: {
       opName: () => 'amqp.command',
-      serviceName: amqpServiceName
+      serviceName: amqpServiceName,
     },
     amqp10: {
       opName: () => 'amqp.send',
-      serviceName: amqpServiceName
+      serviceName: amqpServiceName,
     },
     'azure-event-hubs': {
       opName: () => 'azure.eventhubs.send',
-      serviceName: ({ tracerService }) => `${tracerService}-azure-event-hubs`
+      serviceName: ({ tracerService }) => `${tracerService}-azure-event-hubs`,
     },
     'azure-service-bus': {
       opName: () => 'azure.servicebus.send',
-      serviceName: ({ tracerService }) => `${tracerService}-azure-service-bus`
+      serviceName: ({ tracerService }) => `${tracerService}-azure-service-bus`,
     },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',
-      serviceName: ({ tracerService }) => `${tracerService}-pubsub`
+      serviceName: ({ tracerService }) => `${tracerService}-pubsub`,
     },
     kafkajs: {
       opName: () => 'kafka.produce',
-      serviceName: ({ tracerService }) => `${tracerService}-kafka`
+      serviceName: ({ tracerService }) => `${tracerService}-kafka`,
     },
     'confluentinc-kafka-javascript': {
       opName: () => 'kafka.produce',
-      serviceName: ({ tracerService }) => `${tracerService}-kafka`
+      serviceName: ({ tracerService }) => `${tracerService}-kafka`,
     },
     rhea: {
       opName: () => 'amqp.send',
-      serviceName: ({ tracerService }) => `${tracerService}-amqp-producer`
+      serviceName: ({ tracerService }) => `${tracerService}-amqp-producer`,
     },
     sqs: {
       opName: () => 'aws.request',
-      serviceName: awsServiceV0
+      serviceName: awsServiceV0,
     },
     sns: {
       opName: () => 'aws.request',
-      serviceName: awsServiceV0
+      serviceName: awsServiceV0,
     },
     bullmq: {
       opName: () => 'bullmq.add',
-      serviceName: ({ tracerService }) => `${tracerService}-bullmq`
-    }
+      serviceName: ({ tracerService }) => `${tracerService}-bullmq`,
+    },
   },
   consumer: {
     amqplib: {
       opName: () => 'amqp.command',
-      serviceName: amqpServiceName
+      serviceName: amqpServiceName,
     },
     amqp10: {
       opName: () => 'amqp.receive',
-      serviceName: amqpServiceName
+      serviceName: amqpServiceName,
     },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.receive',
-      serviceName: identityService
+      serviceName: identityService,
     },
     kafkajs: {
       opName: () => 'kafka.consume',
-      serviceName: ({ tracerService }) => `${tracerService}-kafka`
+      serviceName: ({ tracerService }) => `${tracerService}-kafka`,
     },
     'confluentinc-kafka-javascript': {
       opName: () => 'kafka.consume',
-      serviceName: ({ tracerService }) => `${tracerService}-kafka`
+      serviceName: ({ tracerService }) => `${tracerService}-kafka`,
     },
     rhea: {
       opName: () => 'amqp.receive',
-      serviceName: identityService
+      serviceName: identityService,
     },
     sqs: {
       opName: () => 'aws.request',
-      serviceName: awsServiceV0
+      serviceName: awsServiceV0,
     },
     bullmq: {
       opName: () => 'bullmq.processJob',
-      serviceName: ({ tracerService }) => `${tracerService}-bullmq`
-    }
+      serviceName: ({ tracerService }) => `${tracerService}-bullmq`,
+    },
   },
   client: {
     amqplib: {
       opName: () => 'amqp.command',
-      serviceName: amqpServiceName
+      serviceName: amqpServiceName,
     },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',
-      serviceName: ({ tracerService }) => `${tracerService}-pubsub`
-    }
-  }
+      serviceName: ({ tracerService }) => `${tracerService}-pubsub`,
+    },
+  },
 }
 
 module.exports = messaging

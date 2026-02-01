@@ -52,21 +52,21 @@ describe('spanFormat', () => {
       _sampling: {},
       _trace: {
         started: [],
-        tags: {}
+        tags: {},
       },
       _name: 'operation',
       toTraceId: sinon.stub().returns(spanId),
-      toSpanId: sinon.stub().returns(spanId)
+      toSpanId: sinon.stub().returns(spanId),
     }
 
     span = {
       context: sinon.stub().returns(spanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
       setTag: sinon.stub(),
       _startTime: 1500000000000.123,
-      _duration: 100
+      _duration: 100,
     }
 
     spanContext._trace.started.push(span)
@@ -77,7 +77,7 @@ describe('spanFormat', () => {
       _spanId: spanId2,
       _parentId: spanId2,
       toTraceId: sinon.stub().returns(spanId2.toString(16)),
-      toSpanId: sinon.stub().returns(spanId2.toString(16))
+      toSpanId: sinon.stub().returns(spanId2.toString(16)),
     }
     spanContext3 = {
       ...spanContext,
@@ -85,7 +85,7 @@ describe('spanFormat', () => {
       _spanId: spanId3,
       _parentId: spanId3,
       toTraceId: sinon.stub().returns(spanId3.toString(16)),
-      toSpanId: sinon.stub().returns(spanId3.toString(16))
+      toSpanId: sinon.stub().returns(spanId3.toString(16)),
     }
 
     spanFormat = require('../src/span_format')
@@ -98,8 +98,8 @@ describe('spanFormat', () => {
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
           attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false },
-          startTime: 1633023102
-        }
+          startTime: 1633023102,
+        },
       ]
 
       trace = spanFormat(span)
@@ -107,11 +107,11 @@ describe('spanFormat', () => {
       assert.deepStrictEqual(spanEvents, [{
         name: 'Something went so wrong',
         time_unix_nano: 1000000,
-        attributes: undefined
+        attributes: undefined,
       }, {
         name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
         time_unix_nano: 1633023102000000,
-        attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false }
+        attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false },
       }])
     })
 
@@ -192,7 +192,7 @@ describe('spanFormat', () => {
       assertObjectContains(trace.metrics, {
         [SAMPLING_AGENT_DECISION]: 0.8,
         [SAMPLING_LIMIT_DECISION]: 0.2,
-        [SAMPLING_RULE_DECISION]: 0.5
+        [SAMPLING_RULE_DECISION]: 0.5,
       })
     })
 
@@ -211,14 +211,14 @@ describe('spanFormat', () => {
     it('should always add single span ingestion tags from options if present', () => {
       spanContext._spanSampling = {
         maxPerSecond: 5,
-        sampleRate: 1.0
+        sampleRate: 1.0,
       }
       trace = spanFormat(span)
 
       assertObjectContains(trace.metrics, {
         [SPAN_SAMPLING_MECHANISM]: SAMPLING_MECHANISM_SPAN,
         [SPAN_SAMPLING_MAX_PER_SECOND]: 5,
-        [SPAN_SAMPLING_RULE_RATE]: 1.0
+        [SPAN_SAMPLING_RULE_RATE]: 1.0,
       })
     })
 
@@ -233,11 +233,11 @@ describe('spanFormat', () => {
     it('should format span links', () => {
       span._links = [
         {
-          context: spanContext2
+          context: spanContext2,
         },
         {
-          context: spanContext3
-        }
+          context: spanContext3,
+        },
       ]
 
       trace = spanFormat(span)
@@ -245,10 +245,10 @@ describe('spanFormat', () => {
 
       assert.deepStrictEqual(spanLinks, [{
         trace_id: spanId2.toString(16),
-        span_id: spanId2.toString(16)
+        span_id: spanId2.toString(16),
       }, {
         trace_id: spanId3.toString(16),
-        span_id: spanId3.toString(16)
+        span_id: spanId3.toString(16),
       }])
     })
 
@@ -261,14 +261,14 @@ describe('spanFormat', () => {
         finished: [],
         origin: 'synthetics',
         tags: {
-          '_dd.p.tid': traceIdHigh
-        }
+          '_dd.p.tid': traceIdHigh,
+        },
       }
 
       spanContext2._sampling.priority = 0
       const link = {
         context: spanContext2,
-        attributes: { foo: 'bar' }
+        attributes: { foo: 'bar' },
       }
       span._links = [link]
 
@@ -280,31 +280,31 @@ describe('spanFormat', () => {
         span_id: spanId2.toString(16),
         attributes: { foo: 'bar' },
         tracestate: ts.toString(),
-        flags: 0
+        flags: 0,
       }])
     })
 
     it('should extract trace chunk tags', () => {
       spanContext._trace.tags = {
         chunk: 'test',
-        count: 1
+        count: 1,
       }
 
       trace = spanFormat(span, true)
 
       assertObjectContains(trace.meta, {
-        chunk: 'test'
+        chunk: 'test',
       })
 
       assertObjectContains(trace.metrics, {
-        count: 1
+        count: 1,
       })
     })
 
     it('should not extract trace chunk tags when not chunk root', () => {
       spanContext._trace.tags = {
         chunk: 'test',
-        count: 1
+        count: 1,
       }
 
       trace = spanFormat(span, false)
@@ -315,17 +315,17 @@ describe('spanFormat', () => {
     it('should extract empty tags', () => {
       spanContext._trace.tags = {
         foo: '',
-        count: 1
+        count: 1,
       }
 
       trace = spanFormat(span, true)
 
       assertObjectContains(trace.meta, {
-        foo: ''
+        foo: '',
       })
 
       assertObjectContains(trace.metrics, {
-        count: 1
+        count: 1,
       })
     })
 
@@ -506,7 +506,7 @@ describe('spanFormat', () => {
       spanContext._name = null
       spanContext._tags = {
         'foo.bar': null,
-        'baz.qux': undefined
+        'baz.qux': undefined,
       }
       span._startTime = NaN
       span._duration = NaN
@@ -531,9 +531,9 @@ describe('spanFormat', () => {
       const tag = {
         A: {
           B: {},
-          num: '2'
+          num: '2',
         },
-        num: '1'
+        num: '1',
       }
 
       spanContext._tags.nested = tag

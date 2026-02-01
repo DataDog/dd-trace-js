@@ -53,10 +53,10 @@ module.exports = {
   WEBSOCKET_PTR_KIND: 'websocket',
   SPAN_POINTER_DIRECTION: Object.freeze({
     UPSTREAM: 'u',
-    DOWNSTREAM: 'd'
+    DOWNSTREAM: 'd',
   }),
   SPAN_POINTER_DIRECTION_NAME: Object.freeze({
     UPSTREAM: 'span-pointer-up',
-    DOWNSTREAM: 'span-pointer-down'
-  })
+    DOWNSTREAM: 'span-pointer-down',
+  }),
 }

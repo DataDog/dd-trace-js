@@ -13,14 +13,14 @@ const V4_PACKAGE_SHIMS = [
     targetClass: 'Completions',
     baseResource: 'chat.completions',
     methods: ['create'],
-    streamedResponse: true
+    streamedResponse: true,
   },
   {
     file: 'resources/completions',
     targetClass: 'Completions',
     baseResource: 'completions',
     methods: ['create'],
-    streamedResponse: true
+    streamedResponse: true,
   },
   {
     file: 'resources/responses/responses',
@@ -28,13 +28,13 @@ const V4_PACKAGE_SHIMS = [
     baseResource: 'responses',
     methods: ['create'],
     streamedResponse: true,
-    versions: ['>=4.87.0']
+    versions: ['>=4.87.0'],
   },
   {
     file: 'resources/embeddings',
     targetClass: 'Embeddings',
     baseResource: 'embeddings',
-    methods: ['create']
+    methods: ['create'],
   },
   {
     file: 'resources/files',
@@ -47,93 +47,93 @@ const V4_PACKAGE_SHIMS = [
     targetClass: 'Files',
     baseResource: 'files',
     methods: ['del'],
-    versions: ['>=4.0.0 <5.0.0']
+    versions: ['>=4.0.0 <5.0.0'],
   },
   {
     file: 'resources/files',
     targetClass: 'Files',
     baseResource: 'files',
     methods: ['delete'],
-    versions: ['>=5']
+    versions: ['>=5'],
   },
   {
     file: 'resources/files',
     targetClass: 'Files',
     baseResource: 'files',
     methods: ['retrieveContent'],
-    versions: ['>=4.0.0 <4.17.1']
+    versions: ['>=4.0.0 <4.17.1'],
   },
   {
     file: 'resources/files',
     targetClass: 'Files',
     baseResource: 'files',
     methods: ['content'], // replaced `retrieveContent` in v4.17.1
-    versions: ['>=4.17.1']
+    versions: ['>=4.17.1'],
   },
   {
     file: 'resources/images',
     targetClass: 'Images',
     baseResource: 'images',
-    methods: ['createVariation', 'edit', 'generate']
+    methods: ['createVariation', 'edit', 'generate'],
   },
   {
     file: 'resources/fine-tuning/jobs/jobs',
     targetClass: 'Jobs',
     baseResource: 'fine_tuning.jobs',
     methods: ['cancel', 'create', 'list', 'listEvents', 'retrieve'],
-    versions: ['>=4.34.0'] // file location changed in 4.34.0
+    versions: ['>=4.34.0'], // file location changed in 4.34.0
   },
   {
     file: 'resources/fine-tuning/jobs',
     targetClass: 'Jobs',
     baseResource: 'fine_tuning.jobs',
     methods: ['cancel', 'create', 'list', 'listEvents', 'retrieve'],
-    versions: ['>=4.1.0 <4.34.0']
+    versions: ['>=4.1.0 <4.34.0'],
   },
   {
     file: 'resources/fine-tunes', // deprecated after 4.1.0
     targetClass: 'FineTunes',
     baseResource: 'fine-tune',
     methods: ['cancel', 'create', 'list', 'listEvents', 'retrieve'],
-    versions: ['>=4.0.0 <4.1.0']
+    versions: ['>=4.0.0 <4.1.0'],
   },
   {
     file: 'resources/models',
     targetClass: 'Models',
     baseResource: 'models',
-    methods: ['list', 'retrieve']
+    methods: ['list', 'retrieve'],
   },
   {
     file: 'resources/models',
     targetClass: 'Models',
     baseResource: 'models',
     methods: ['del'],
-    versions: ['>=4 <5']
+    versions: ['>=4 <5'],
   },
   {
     file: 'resources/models',
     targetClass: 'Models',
     baseResource: 'models',
     methods: ['delete'],
-    versions: ['>=5']
+    versions: ['>=5'],
   },
   {
     file: 'resources/moderations',
     targetClass: 'Moderations',
     baseResource: 'moderations',
-    methods: ['create']
+    methods: ['create'],
   },
   {
     file: 'resources/audio/transcriptions',
     targetClass: 'Transcriptions',
     baseResource: 'audio.transcriptions',
-    methods: ['create']
+    methods: ['create'],
   },
   {
     file: 'resources/audio/translations',
     targetClass: 'Translations',
     baseResource: 'audio.translations',
-    methods: ['create']
+    methods: ['create'],
   },
   {
     file: 'resources/chat/completions/completions',
@@ -141,8 +141,8 @@ const V4_PACKAGE_SHIMS = [
     baseResource: 'chat.completions',
     methods: ['create'],
     streamedResponse: true,
-    versions: ['>=4.85.0']
-  }
+    versions: ['>=4.85.0'],
+  },
 ]
 
 addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, exports => {
@@ -188,8 +188,8 @@ function wrapStreamIterator (response, options, ctx) {
                 headers: response.headers,
                 request: {
                   path: response.url,
-                  method: options.method
-                }
+                  method: options.method,
+                },
               })
             }
 
@@ -293,8 +293,8 @@ function handleUnwrappedAPIPromise (apiProm, ctx, stream) {
           data: body,
           request: {
             path: response.url,
-            method: options.method
-          }
+            method: options.method,
+          },
         })
       }
 

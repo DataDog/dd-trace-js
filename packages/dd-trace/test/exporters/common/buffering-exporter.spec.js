@@ -12,7 +12,7 @@ describe('BufferingExporter', () => {
   const writer = {
     append: sinon.spy(),
     flush: sinon.spy(),
-    setUrl: sinon.spy()
+    setUrl: sinon.spy(),
   }
   const flushInterval = 100
   const port = 8126

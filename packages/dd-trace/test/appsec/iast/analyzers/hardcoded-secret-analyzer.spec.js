@@ -46,9 +46,9 @@ describe('Hardcoded Secret Analyzer', () => {
               locations: [{
                 line,
                 column,
-                ident
-              }]
-            }]
+                ident,
+              }],
+            }],
           })
 
           assertObjectContains([NameAndValue, ValueOnly], [testCase.type])
@@ -68,7 +68,7 @@ describe('Hardcoded Secret Analyzer', () => {
     it('should not report secrets in line 0', () => {
       hardcodedSecretAnalyzer.analyze({
         file,
-        literals: [{ value: 'test', line: 0 }]
+        literals: [{ value: 'test', line: 0 }],
       })
 
       sinon.assert.notCalled(report)
@@ -99,9 +99,9 @@ describe('Hardcoded Secret Analyzer', () => {
           experimental: {
             iast: {
               enabled: true,
-              requestSampling: 100
-            }
-          }
+              requestSampling: 100,
+            },
+          },
         })
         iast.enable(config, tracer)
         rewriter = require('../../../../src/appsec/iast/taint-tracking/rewriter')

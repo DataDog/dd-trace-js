@@ -6,36 +6,36 @@ const rawExpectedSchema = {
   send: {
     v0: {
       opName: 'pubsub.request',
-      serviceName: 'test-pubsub'
+      serviceName: 'test-pubsub',
     },
     v1: {
       opName: 'gcp.pubsub.send',
-      serviceName: 'test'
-    }
+      serviceName: 'test',
+    },
   },
   receive: {
     v0: {
       opName: 'pubsub.receive',
-      serviceName: 'test-pubsub'
+      serviceName: 'test-pubsub',
     },
     v1: {
       opName: 'gcp.pubsub.process',
-      serviceName: 'test-pubsub'
-    }
+      serviceName: 'test-pubsub',
+    },
   },
   controlPlane: {
     v0: {
       opName: 'pubsub.request',
-      serviceName: 'test-pubsub'
+      serviceName: 'test-pubsub',
     },
     v1: {
       opName: 'gcp.pubsub.request',
-      serviceName: 'test'
-    }
-  }
+      serviceName: 'test',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

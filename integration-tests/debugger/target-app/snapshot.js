@@ -25,9 +25,9 @@ fastify.get('/:name', function handler (request) {
       baz: 42,
       nil: null,
       undef: undefined,
-      deep: { nested: { obj: { that: { goes: { on: { forever: true } } } } } }
+      deep: { nested: { obj: { that: { goes: { on: { forever: true } } } } } },
     },
-    bar: true
+    bar: true,
   }
   const emptyObj = {}
   const p = Promise.resolve()

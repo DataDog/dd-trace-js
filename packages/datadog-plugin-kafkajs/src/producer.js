@@ -45,7 +45,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       type: 'kafka_produce',
       partition,
       offset: offsetAsLong ? Number(offsetAsLong) : undefined,
-      topic
+      topic,
     }
   }
 
@@ -63,7 +63,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       'type',
       'partition',
       'offset',
-      'topic'
+      'topic',
     ]
     for (const commit of commitList.map(this.transformProduceResponse)) {
       if (keys.some(key => !commit.hasOwnProperty(key))) continue
@@ -79,11 +79,11 @@ class KafkajsProducerPlugin extends ProducerPlugin {
         component: this.constructor.id,
         'kafka.topic': topic,
         'kafka.cluster_id': clusterId,
-        [MESSAGING_DESTINATION_KEY]: topic
+        [MESSAGING_DESTINATION_KEY]: topic,
       },
       metrics: {
-        'kafka.batch_size': messages.length
-      }
+        'kafka.batch_size': messages.length,
+      },
     }, ctx)
     if (bootstrapServers) {
       span.setTag(BOOTSTRAP_SERVERS_KEY, bootstrapServers)

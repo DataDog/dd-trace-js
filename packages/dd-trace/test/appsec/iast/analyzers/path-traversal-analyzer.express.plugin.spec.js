@@ -51,7 +51,7 @@ describe('Path traversal analyzer', () => {
                   .catch((err, ...args) => {
                     done(err)
                   })
-              }
+              },
             })
 
           testThatRequestHasNoVulnerability(
@@ -64,7 +64,7 @@ describe('Path traversal analyzer', () => {
               makeRequest: (done, config) => {
                 axios.get(`http://localhost:${config.port}/?file=template`)
                   .catch(done)
-              }
+              },
             })
         })
     })

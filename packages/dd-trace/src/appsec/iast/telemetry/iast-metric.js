@@ -4,19 +4,19 @@ const { getNamespaceFromContext, globalNamespace } = require('./namespaces')
 
 const Scope = {
   GLOBAL: 'GLOBAL',
-  REQUEST: 'REQUEST'
+  REQUEST: 'REQUEST',
 }
 
 const PropagationType = {
   STRING: 'STRING',
   JSON: 'JSON',
-  URL: 'URL'
+  URL: 'URL',
 }
 
 const TagKey = {
   VULNERABILITY_TYPE: 'vulnerability_type',
   SOURCE_TYPE: 'source_type',
-  PROPAGATION_TYPE: 'propagation_type'
+  PROPAGATION_TYPE: 'propagation_type',
 }
 
 function formatTags (tags, tagKey) {
@@ -109,5 +109,5 @@ module.exports = {
   getExecutedMetric,
   getInstrumentedMetric,
 
-  formatTags
+  formatTags,
 }

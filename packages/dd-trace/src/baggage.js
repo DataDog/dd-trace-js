@@ -68,5 +68,5 @@ module.exports = {
   getBaggageItem,
   getAllBaggageItems,
   removeBaggageItem,
-  removeAllBaggageItems
+  removeAllBaggageItems,
 }

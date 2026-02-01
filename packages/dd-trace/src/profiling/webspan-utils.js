@@ -10,7 +10,7 @@ function isWebServerSpan (tags) {
 function endpointNameFromTags (tags) {
   return tags[RESOURCE_NAME] || [
     tags[HTTP_METHOD],
-    tags[HTTP_ROUTE]
+    tags[HTTP_ROUTE],
   ].filter(Boolean).join(' ')
 }
 
@@ -21,5 +21,5 @@ function getStartedSpans (context) {
 module.exports = {
   isWebServerSpan,
   endpointNameFromTags,
-  getStartedSpans
+  getStartedSpans,
 }

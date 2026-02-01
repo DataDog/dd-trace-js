@@ -9,7 +9,7 @@ const {
   useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProcAndExpectExit,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -22,7 +22,7 @@ describe('esm', () => {
     useSandbox([
       `@anthropic-ai/sdk@${version}`,
     ], false, [
-      './packages/datadog-plugin-anthropic/test/integration-test/*'
+      './packages/datadog-plugin-anthropic/test/integration-test/*',
     ])
 
     beforeEach(async () => {
@@ -48,7 +48,7 @@ describe('esm', () => {
 
         proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
           NODE_OPTIONS: '--import dd-trace/initialize.mjs',
-          ANTHROPIC_API_KEY: '<not-a-real-key>'
+          ANTHROPIC_API_KEY: '<not-a-real-key>',
         })
 
         await res

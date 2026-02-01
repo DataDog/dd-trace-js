@@ -34,8 +34,8 @@ describe('sql-injection-analyzer with knex', () => {
                 host: '127.0.0.1',
                 database: 'postgres',
                 user: 'postgres',
-                password: 'postgres'
-              }
+                password: 'postgres',
+              },
             })
 
             fs.copyFileSync(srcFilePath, dstFilePath)
@@ -60,8 +60,8 @@ describe('sql-injection-analyzer with knex', () => {
               occurrences: 1,
               location: {
                 path: 'knex-sql-injection-methods.js',
-                line: 4
-              }
+                line: 4,
+              },
             })
 
             testThatRequestHasNoVulnerability(() => {
@@ -84,8 +84,8 @@ describe('sql-injection-analyzer with knex', () => {
               occurrences: 1,
               location: {
                 path: 'knex-sql-injection-methods.js',
-                line: 9
-              }
+                line: 9,
+              },
             })
           })
 
@@ -104,8 +104,8 @@ describe('sql-injection-analyzer with knex', () => {
               occurrences: 1,
               location: {
                 path: 'knex-sql-injection-methods.js',
-                line: 40
-              }
+                line: 40,
+              },
             })
           })
 
@@ -124,8 +124,8 @@ describe('sql-injection-analyzer with knex', () => {
               occurrences: 1,
               location: {
                 path: 'knex-sql-injection-methods.js',
-                line: 17
-              }
+                line: 17,
+              },
             })
           })
 
@@ -144,8 +144,8 @@ describe('sql-injection-analyzer with knex', () => {
               occurrences: 1,
               location: {
                 path: 'knex-sql-injection-methods.js',
-                line: 28
-              }
+                line: 28,
+              },
             })
           })
 
@@ -164,8 +164,8 @@ describe('sql-injection-analyzer with knex', () => {
               occurrences: 1,
               location: {
                 path: 'knex-sql-injection-methods.js',
-                line: 47
-              }
+                line: 47,
+              },
             })
           })
 
@@ -192,8 +192,8 @@ describe('sql-injection-analyzer with knex', () => {
               occurrences: 1,
               location: {
                 path: 'knex-sql-injection-methods.js',
-                line: 34
-              }
+                line: 34,
+              },
             })
           })
         })

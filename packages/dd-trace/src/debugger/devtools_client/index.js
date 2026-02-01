@@ -131,7 +131,7 @@ session.on('Debugger.paused', async ({ params }) => {
           await session.post('Debugger.evaluateOnCallFrame', {
             callFrameId: params.callFrames[0].callFrameId,
             expression: probe.condition,
-            returnByValue: true
+            returnByValue: true,
           })
         )
         if (result.value !== true) continue
@@ -162,7 +162,7 @@ session.on('Debugger.paused', async ({ params }) => {
         ? `[${getDDTagsExpression}]`
         : `${templateExpressionSetupCode}[${getDDTagsExpression}${templateExpressions}]`,
       returnByValue: true,
-      includeCommandLineAPI: true
+      includeCommandLineAPI: true,
     })
   )
   if (result?.subtype === 'error') {
@@ -180,7 +180,7 @@ session.on('Debugger.paused', async ({ params }) => {
       maxCollectionSize,
       maxFieldCount,
       maxLength,
-      deadlineNs: start + config.dynamicInstrumentation.captureTimeoutNs
+      deadlineNs: start + config.dynamicInstrumentation.captureTimeoutNs,
     }
     ;({ processLocalState, captureErrors } = await getLocalStateForCallFrame(params.callFrames[0], opts))
   }
@@ -201,7 +201,7 @@ session.on('Debugger.paused', async ({ params }) => {
     method: params.callFrames[0].functionName, // name of the method/function emitting the snapshot
     version,
     thread_id: threadId,
-    thread_name: threadName
+    thread_name: threadName,
   }
 
   const stack = await getStackFromCallFrames(params.callFrames)
@@ -216,10 +216,10 @@ session.on('Debugger.paused', async ({ params }) => {
       probe: {
         id: probe.id,
         version: probe.version,
-        location: probe.location
+        location: probe.location,
       },
       stack,
-      language: 'javascript'
+      language: 'javascript',
     }
 
     if (config.propagateProcessTags.enabled) {
@@ -232,11 +232,11 @@ session.on('Debugger.paused', async ({ params }) => {
         probe.captureSnapshot = false
         probe.permanentEvaluationErrors = captureErrors.map(error => ({
           expr: '',
-          message: error.message
+          message: error.message,
         }))
       }
       snapshot.captures = {
-        lines: { [probe.location.lines[0]]: { locals: processLocalState() } }
+        lines: { [probe.location.lines[0]]: { locals: processLocalState() } },
       }
     }
 

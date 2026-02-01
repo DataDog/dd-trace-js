@@ -14,13 +14,13 @@ describe('Debugger snapshot time budget', () => {
       '../config': {
         dynamicInstrumentation: {
           redactedIdentifiers: [],
-          redactionExcludedIdentifiers: []
+          redactionExcludedIdentifiers: [],
         },
-      }
+      },
     })
 
     const processorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/processor', {
-      './redaction': redactionWithStub
+      './redaction': redactionWithStub,
     })
 
     processRawState = processorWithStub.processRawState
@@ -33,14 +33,14 @@ describe('Debugger snapshot time budget', () => {
         type: 'function',
         className: 'Function',
         description: 'function foo() {}',
-        [timeBudgetSym]: true
-      }
+        [timeBudgetSym]: true,
+      },
     }]
 
     const out = processRawState(raw, MAX_LENGTH)
     assert.deepStrictEqual(out.fn, {
       type: 'Function',
-      notCapturedReason: 'timeout'
+      notCapturedReason: 'timeout',
     })
   })
 
@@ -50,14 +50,14 @@ describe('Debugger snapshot time budget', () => {
       value: {
         type: 'object',
         className: 'Object',
-        [timeBudgetSym]: true
-      }
+        [timeBudgetSym]: true,
+      },
     }]
 
     const out = processRawState(raw, MAX_LENGTH)
     assert.deepStrictEqual(out.obj, {
       type: 'Object',
-      notCapturedReason: 'timeout'
+      notCapturedReason: 'timeout',
     })
   })
 
@@ -68,14 +68,14 @@ describe('Debugger snapshot time budget', () => {
         type: 'object',
         subtype: 'array',
         className: 'Array',
-        [timeBudgetSym]: true
-      }
+        [timeBudgetSym]: true,
+      },
     }]
 
     const out = processRawState(raw, MAX_LENGTH)
     assert.deepStrictEqual(out.arr, {
       type: 'Array',
-      notCapturedReason: 'timeout'
+      notCapturedReason: 'timeout',
     })
   })
 
@@ -86,8 +86,8 @@ describe('Debugger snapshot time budget', () => {
         subtype: 'internal#entry',
         className: 'Object',
         description: 'Object',
-        [timeBudgetSym]: true
-      }
+        [timeBudgetSym]: true,
+      },
     }]
 
     const raw = [{
@@ -96,14 +96,14 @@ describe('Debugger snapshot time budget', () => {
         type: 'object',
         subtype: 'map',
         className: 'Map',
-        properties: pairs
-      }
+        properties: pairs,
+      },
     }]
 
     const out = processRawState(raw, MAX_LENGTH)
     assert.deepStrictEqual(out.map, {
       type: 'Map',
-      notCapturedReason: 'timeout'
+      notCapturedReason: 'timeout',
     })
   })
 
@@ -114,8 +114,8 @@ describe('Debugger snapshot time budget', () => {
         subtype: 'internal#entry',
         className: 'Object',
         description: 'Object',
-        [timeBudgetSym]: true
-      }
+        [timeBudgetSym]: true,
+      },
     }]
 
     const raw = [{
@@ -124,14 +124,14 @@ describe('Debugger snapshot time budget', () => {
         type: 'object',
         subtype: 'set',
         className: 'Set',
-        properties: values
-      }
+        properties: values,
+      },
     }]
 
     const out = processRawState(raw, MAX_LENGTH)
     assert.deepStrictEqual(out.set, {
       type: 'Set',
-      notCapturedReason: 'timeout'
+      notCapturedReason: 'timeout',
     })
   })
 })

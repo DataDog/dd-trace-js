@@ -9,14 +9,14 @@ const schema = new graphqlLib.GraphQLSchema({
         type: graphqlLib.GraphQLString,
         resolve (obj, args) {
           return args.name
-        }
-      }
-    }
-  })
+        },
+      },
+    },
+  }),
 })
 
 await graphqlLib.graphql({
   schema,
   source: 'query MyQuery { hello(name: "world") }',
-  variableValues: { who: 'world' }
+  variableValues: { who: 'world' },
 })

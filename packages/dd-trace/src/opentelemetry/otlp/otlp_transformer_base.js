@@ -68,7 +68,7 @@ class OtlpTransformerBase {
   transformResource () {
     return {
       attributes: this.#resourceAttributes,
-      droppedAttributesCount: 0
+      droppedAttributesCount: 0,
     }
   }
 
@@ -81,7 +81,7 @@ class OtlpTransformerBase {
   transformAttributes (attributes) {
     return Object.entries(attributes).map(([key, value]) => ({
       key,
-      value: this.transformAnyValue(value)
+      value: this.transformAnyValue(value),
     }))
   }
 
@@ -96,7 +96,7 @@ class OtlpTransformerBase {
 
     return Object.entries(attributes).map(([key, value]) => ({
       key,
-      value: { stringValue: String(value) }
+      value: { stringValue: String(value) },
     }))
   }
 
@@ -121,8 +121,8 @@ class OtlpTransformerBase {
     } else if (Array.isArray(value)) {
       return {
         arrayValue: {
-          values: value.map(v => this.transformAnyValue(v))
-        }
+          values: value.map(v => this.transformAnyValue(v)),
+        },
       }
     }
     // Fallback for any unexpected types

@@ -185,7 +185,7 @@ class SensitiveHandler {
       }
       redactedSourcesContext[sourceIndex].push({
         start,
-        end
+        end,
       })
     }
   }
@@ -238,7 +238,7 @@ class SensitiveHandler {
           if (_sourceRedactionContext.start > 0) {
             valueParts.push({
               source: sourceIndex,
-              value: _value.substring(0, _sourceRedactionContext.start - offset)
+              value: _value.substring(0, _sourceRedactionContext.start - offset),
             })
 
             _value = _value.substring(_sourceRedactionContext.start - offset)
@@ -256,7 +256,7 @@ class SensitiveHandler {
           valueParts.push({
             redacted: true,
             source: sourceIndex,
-            pattern
+            pattern,
           })
 
           _value = _value.slice(pattern.length)
@@ -266,7 +266,7 @@ class SensitiveHandler {
         if (_value.length) {
           valueParts.push({
             source: sourceIndex,
-            value: _value
+            value: _value,
           })
         }
       }

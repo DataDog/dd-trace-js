@@ -9,7 +9,7 @@ class FastifyPlugin extends CompositePlugin {
   static get plugins () {
     return {
       tracing: FastifyTracingPlugin,
-      codeOriginForSpans: FastifyCodeOriginForSpansPlugin
+      codeOriginForSpans: FastifyCodeOriginForSpansPlugin,
     }
   }
 }

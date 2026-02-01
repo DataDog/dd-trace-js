@@ -11,7 +11,7 @@ const patched = new WeakSet()
 // mocha-each support
 addHook({
   name: 'mocha-each',
-  versions: ['>=2.0.1']
+  versions: ['>=2.0.1'],
 }, mochaEach => {
   if (patched.has(mochaEach)) return mochaEach
 
@@ -25,7 +25,7 @@ addHook({
         parameterizedTestCh.publish({ title, params })
         it.apply(this, arguments)
       },
-      ...rest
+      ...rest,
     }
   })
 })
@@ -34,7 +34,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
-  file: 'lib/suite.js'
+  file: 'lib/suite.js',
 }, (Suite) => {
   shimmer.wrap(Suite.prototype, 'addTest', addTest => function (test) {
     const callSites = getCallSites()

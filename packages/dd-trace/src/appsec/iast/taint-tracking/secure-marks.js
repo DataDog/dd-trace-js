@@ -24,5 +24,5 @@ module.exports = {
   ...marks,
   getMarkFromVulnerabilityType,
 
-  ALL: marks
+  ALL: marks,
 }

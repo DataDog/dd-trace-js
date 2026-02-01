@@ -92,5 +92,5 @@ module.exports = {
   parse,
 
   INPUT_VALIDATOR_TYPE,
-  SANITIZER_TYPE
+  SANITIZER_TYPE,
 }

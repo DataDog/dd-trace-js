@@ -14,7 +14,7 @@ module.exports = http.createServer((req, res) => {
     method: req.method,
     headers: req.headers,
     responseType: 'stream',
-    data: req
+    data: req,
   }).then(r => r.data.pipe(res))
 }).on('connect', (req, cltSocket, head) => {
   let proto, netLib
@@ -30,7 +30,7 @@ module.exports = http.createServer((req, res) => {
     cltSocket.write([
       'HTTP/1.1 200 Connection Established\r\n',
       'Proxy-agent: Node.js-Proxy\r\n',
-      '\r\n'
+      '\r\n',
     ].join(''))
 
     targetConnection.write(head)

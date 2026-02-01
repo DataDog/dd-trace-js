@@ -66,5 +66,5 @@ function onSpanExtract ({ spanContext = {} }) {
 
 module.exports = {
   configure,
-  hasTraceSourcePropagationTag
+  hasTraceSourcePropagationTag,
 }

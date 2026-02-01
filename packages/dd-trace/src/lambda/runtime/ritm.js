@@ -15,7 +15,7 @@ const Hook = require('../../../../datadog-instrumentations/src/helpers/hook')
 const instrumentations = require('../../../../datadog-instrumentations/src/helpers/instrumentations')
 const {
   filename,
-  pathSepExpr
+  pathSepExpr,
 } = require('../../../../datadog-instrumentations/src/helpers/register')
 
 /**
@@ -69,7 +69,7 @@ function _getLambdaFilePaths (lambdaStylePath) {
   return [
     `${lambdaStylePath}.js`,
     `${lambdaStylePath}.mjs`,
-    `${lambdaStylePath}.cjs`
+    `${lambdaStylePath}.cjs`,
   ]
 }
 
@@ -129,5 +129,5 @@ module.exports = {
   _extractModuleRootAndHandler,
   _extractModuleNameAndHandlerPath,
   _getLambdaFilePaths,
-  registerLambdaHook
+  registerLambdaHook,
 }

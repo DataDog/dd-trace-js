@@ -13,7 +13,7 @@ const {
   enable,
   teardown,
   setAndTriggerBreakpoint,
-  getLocalStateForCallFrame
+  getLocalStateForCallFrame,
 } = require('./utils')
 
 const target = getTargetCodePath(__filename)
@@ -59,16 +59,16 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           wmo2: { type: 'Object', fields: { b: { type: 'number', value: '3' } } },
           wso1: { type: 'Object', fields: { a: { type: 'number', value: '1' } } },
           wso2: { type: 'Object', fields: { a: { type: 'number', value: '2' } } },
-          wso3: { type: 'Object', fields: { a: { type: 'number', value: '3' } } }
-        }
+          wso3: { type: 'Object', fields: { a: { type: 'number', value: '3' } } },
+        },
       })
       assert.ok('get' in state)
       assert.deepStrictEqual(state.get, {
         type: 'Function',
         fields: {
           length: { type: 'number', value: '0' },
-          name: { type: 'string', value: 'get' }
-        }
+          name: { type: 'string', value: 'get' },
+        },
       })
     })
 
@@ -83,8 +83,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           d: { type: 'getter' },
           e: { type: 'getter' },
           f: { type: 'setter' },
-          g: { type: 'getter/setter' }
-        }
+          g: { type: 'getter/setter' },
+        },
       })
     })
 
@@ -94,8 +94,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         type: 'MyClass',
         fields: {
           foo: { type: 'number', value: '42' },
-          '#secret': { type: 'number', value: '42' }
-        }
+          '#secret': { type: 'number', value: '42' },
+        },
       })
     })
 
@@ -106,8 +106,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         elements: [
           { type: 'number', value: '1' },
           { type: 'number', value: '2' },
-          { type: 'number', value: '3' }
-        ]
+          { type: 'number', value: '3' },
+        ],
       })
     })
 
@@ -120,7 +120,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       assert.ok('date' in state)
       assert.deepStrictEqual(state.date, {
         type: 'Date',
-        value: '2024-09-20T07:22:59Z' // missing milliseconds due to API limitation (should have been `998`)
+        value: '2024-09-20T07:22:59Z', // missing milliseconds due to API limitation (should have been `998`)
       })
     })
 
@@ -130,8 +130,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         type: 'Map',
         entries: [
           [{ type: 'number', value: '1' }, { type: 'number', value: '2' }],
-          [{ type: 'number', value: '3' }, { type: 'number', value: '4' }]
-        ]
+          [{ type: 'number', value: '3' }, { type: 'number', value: '4' }],
+        ],
       })
     })
 
@@ -144,12 +144,12 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             type: 'Array',
             elements: [
               { type: 'number', value: '1' },
-              { type: 'number', value: '2' }
-            ]
+              { type: 'number', value: '2' },
+            ],
           },
           { type: 'number', value: '3' },
-          { type: 'number', value: '4' }
-        ]
+          { type: 'number', value: '4' },
+        ],
       })
     })
 
@@ -164,11 +164,11 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         type: 'WeakMap',
         entries: [[
           { type: 'Object', fields: { a: { type: 'number', value: '1' } } },
-          { type: 'number', value: '2' }
+          { type: 'number', value: '2' },
         ], [
           { type: 'Object', fields: { b: { type: 'number', value: '3' } } },
-          { type: 'number', value: '4' }
-        ]]
+          { type: 'number', value: '4' },
+        ]],
       })
     })
 
@@ -184,8 +184,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         elements: [
           { type: 'Object', fields: { a: { type: 'number', value: '1' } } },
           { type: 'Object', fields: { a: { type: 'number', value: '2' } } },
-          { type: 'Object', fields: { a: { type: 'number', value: '3' } } }
-        ]
+          { type: 'Object', fields: { a: { type: 'number', value: '3' } } },
+        ],
       })
     })
 
@@ -193,7 +193,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       assert.ok('gen' in state)
       assert.deepStrictEqual(state.gen, {
         type: 'generator',
-        fields: { foo: { type: 'number', value: '42' } }
+        fields: { foo: { type: 'number', value: '42' } },
       })
     })
 
@@ -207,7 +207,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       assert.ok((['stack', 'message', 'foo']).every(k => Object.hasOwn(state.err.fields, k)))
       assertObjectContains(state.err.fields, {
         message: { type: 'string', value: 'boom!' },
-        foo: { type: 'number', value: '42' }
+        foo: { type: 'number', value: '42' },
       })
       assert.strictEqual(Object.keys(state.err.fields.stack).length, (['type', 'value', 'truncated', 'size']).length)
       assert.ok((['type', 'value', 'truncated', 'size']).every(k => Object.hasOwn(state.err.fields.stack, k)))
@@ -217,7 +217,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       assert.ok(((state.err.fields.stack.size) > (255)))
       assertObjectContains(state.err.fields.stack, {
         type: 'string',
-        truncated: true
+        truncated: true,
       })
     })
 
@@ -228,11 +228,11 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         fields: {
           foo: {
             type: 'Object',
-            fields: { bar: { type: 'number', value: '42' } }
+            fields: { bar: { type: 'number', value: '42' } },
           },
           length: { type: 'number', value: '2' },
-          name: { type: 'string', value: 'fnWithProperties' }
-        }
+          name: { type: 'string', value: 'fnWithProperties' },
+        },
       })
     })
 
@@ -242,8 +242,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         type: 'Function',
         fields: {
           length: { type: 'number', value: '0' },
-          name: { type: 'string', value: 'bound fnWithProperties' }
-        }
+          name: { type: 'string', value: 'bound fnWithProperties' },
+        },
       })
     })
 
@@ -253,8 +253,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         type: 'Function',
         fields: {
           length: { type: 'number', value: '0' },
-          name: { type: 'string', value: 'afn' }
-        }
+          name: { type: 'string', value: 'afn' },
+        },
       })
     })
 
@@ -273,8 +273,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       assert.deepStrictEqual(state.prox, {
         type: NODE_20_PLUS ? 'Proxy(Object)' : 'Proxy',
         fields: {
-          target: { type: 'boolean', value: 'true' }
-        }
+          target: { type: 'boolean', value: 'true' },
+        },
       })
     })
 
@@ -283,8 +283,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       assert.deepStrictEqual(state.custProx, {
         type: NODE_20_PLUS ? 'Proxy(MyClass)' : 'Proxy',
         fields: {
-          foo: { type: 'number', value: '42' }
-        }
+          foo: { type: 'number', value: '42' },
+        },
       })
     })
 
@@ -294,8 +294,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         type: 'Promise',
         fields: {
           '[[PromiseState]]': { type: 'string', value: 'pending' },
-          '[[PromiseResult]]': { type: 'undefined' }
-        }
+          '[[PromiseResult]]': { type: 'undefined' },
+        },
       })
     })
 
@@ -305,8 +305,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         type: 'Promise',
         fields: {
           '[[PromiseState]]': { type: 'string', value: 'fulfilled' },
-          '[[PromiseResult]]': { type: 'string', value: 'resolved value' }
-        }
+          '[[PromiseResult]]': { type: 'string', value: 'resolved value' },
+        },
       })
     })
 
@@ -316,8 +316,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         type: 'Promise',
         fields: {
           '[[PromiseState]]': { type: 'string', value: 'rejected' },
-          '[[PromiseResult]]': { type: 'string', value: 'rejected value' }
-        }
+          '[[PromiseResult]]': { type: 'string', value: 'rejected value' },
+        },
       })
     })
 
@@ -328,8 +328,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         elements: [
           { type: 'number', value: '72' },
           { type: 'number', value: '65' },
-          { type: 'number', value: '76' }
-        ]
+          { type: 'number', value: '76' },
+        ],
       })
     })
 
@@ -337,7 +337,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       assert.ok('ab' in state)
       assert.deepStrictEqual(state.ab, {
         type: 'ArrayBuffer',
-        value: 'HAL'
+        value: 'HAL',
       })
     })
 
@@ -345,7 +345,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       assert.ok('sab' in state)
       assert.deepStrictEqual(state.sab, {
         type: 'SharedArrayBuffer',
-        value: 'hello\x01\x02\x03world'
+        value: 'hello\x01\x02\x03world',
       })
     })
 
@@ -355,7 +355,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       assert.ok(Object.hasOwn(state.circular, 'fields'))
       // For the circular field, just check that at least one of the expected properties are present
       assertObjectContains(state.circular.fields, {
-        regex: { type: 'RegExp', value: '/foo/' }
+        regex: { type: 'RegExp', value: '/foo/' },
       })
     })
 

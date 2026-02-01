@@ -26,7 +26,7 @@ function request (http2, url, options = {}) {
 
     const req = client.request({
       ':path': urlObj.pathname,
-      ':method': 'GET'
+      ':method': 'GET',
     })
     req.on('error', reject)
 
@@ -150,8 +150,8 @@ describe('Plugin', () => {
                 'http.url': `http://localhost:${port}/user`,
                 'http.method': 'GET',
                 'http.status_code': '200',
-                component: 'http2'
-              }
+                component: 'http2',
+              },
             })
           })
 
@@ -162,7 +162,7 @@ describe('Plugin', () => {
 
           const req = client.request({
             ':path': url.pathname,
-            ':method': 'GET'
+            ':method': 'GET',
           })
           req.on('error', noop)
 
@@ -242,8 +242,8 @@ describe('Plugin', () => {
                 'http.url': `http://localhost:${port}/user`,
                 'http.method': 'GET',
                 'http.status_code': '200',
-                component: 'http2'
-              }
+                component: 'http2',
+              },
             })
             .then(done)
             .catch(done)

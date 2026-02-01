@@ -8,25 +8,25 @@ describe('IAST TaintTracking', () => {
   let taintTracking
   const config = {
     iast: {
-      maxConcurrentRequests: 2
-    }
+      maxConcurrentRequests: 2,
+    },
   }
 
   const taintTrackingOperations = {
     enableTaintOperations: sinon.spy(),
     disableTaintOperations: sinon.spy(),
-    setMaxTransactions: sinon.spy()
+    setMaxTransactions: sinon.spy(),
   }
 
   const taintTrackingPlugin = {
     enable: sinon.spy(),
-    disable: sinon.spy()
+    disable: sinon.spy(),
   }
 
   beforeEach(() => {
     taintTracking = proxyquire('../../../../src/appsec/iast/taint-tracking/', {
       './operations': taintTrackingOperations,
-      './plugin': taintTrackingPlugin
+      './plugin': taintTrackingPlugin,
     })
   })
 

@@ -10,7 +10,7 @@ const codeCoverageReportCh = channel('ci:nyc:report')
 
 addHook({
   name: 'nyc',
-  versions: ['>=17']
+  versions: ['>=17'],
 }, (nycPackage) => {
   // Set up the cache file path early (when nyc is required) so it's available
   // when dd-trace fetches library configuration
@@ -44,7 +44,7 @@ addHook({
         return new Promise((resolve) => {
           codeCoverageReportCh.publish({
             rootDir: nycInstance.cwd,
-            onDone: resolve
+            onDone: resolve,
           })
         })
       }).catch(() => {

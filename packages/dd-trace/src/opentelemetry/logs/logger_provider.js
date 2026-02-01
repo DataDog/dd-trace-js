@@ -111,14 +111,14 @@ class LoggerProvider {
     return {
       instrumentationScope: {
         name: 'dd-trace-js',
-        version: ''
+        version: '',
       },
       emit: () => {},
       debug: () => {},
       info: () => {},
       warn: () => {},
       error: () => {},
-      fatal: () => {}
+      fatal: () => {},
     }
   }
 }

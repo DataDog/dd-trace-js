@@ -8,7 +8,7 @@ const {
   sandboxCwd,
   useSandbox,
   spawnPluginIntegrationTestProcAndExpectExit,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -28,9 +28,9 @@ describe('esm', () => {
     useSandbox([
       `ai@${version}`,
       `@ai-sdk/openai@${getOpenaiVersion(realVersion)}`,
-      'zod@3.25.75'
+      'zod@3.25.75',
     ], false, [
-      './packages/datadog-plugin-ai/test/integration-test/*'
+      './packages/datadog-plugin-ai/test/integration-test/*',
     ])
 
     beforeEach(async () => {
@@ -65,7 +65,7 @@ describe('esm', () => {
         })
 
         proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
-          NODE_OPTIONS: '--import dd-trace/initialize.mjs'
+          NODE_OPTIONS: '--import dd-trace/initialize.mjs',
         })
 
         await res

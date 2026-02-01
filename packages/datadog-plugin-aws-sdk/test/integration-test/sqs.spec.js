@@ -6,7 +6,7 @@ const {
   sandboxCwd,
   useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProcAndExpectExit
+  spawnPluginIntegrationTestProcAndExpectExit,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -36,7 +36,7 @@ describe('recursion regression test', () => {
 
       proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'recursion.mjs', agent.port, {
         AWS_SECRET_ACCESS_KEY: '0000000000/00000000000000000000000000000',
-        AWS_ACCESS_KEY_ID: '00000000000000000000'
+        AWS_ACCESS_KEY_ID: '00000000000000000000',
       }, ['--stack-size=128'])
 
       await res

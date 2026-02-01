@@ -16,5 +16,5 @@ class SpanStatsExporter {
 }
 
 module.exports = {
-  SpanStatsExporter
+  SpanStatsExporter,
 }

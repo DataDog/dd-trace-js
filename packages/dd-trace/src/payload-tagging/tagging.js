@@ -3,7 +3,7 @@
 const { PAYLOAD_TAGGING_MAX_TAGS } = require('../constants')
 
 const redactedKeys = new Set([
-  'authorization', 'x-authorization', 'password', 'token'
+  'authorization', 'x-authorization', 'password', 'token',
 ])
 const truncated = 'truncated'
 const redacted = 'redacted'

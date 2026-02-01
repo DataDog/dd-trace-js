@@ -64,7 +64,7 @@ async function main () {
     require: config.require ?? [],
     fullTrace: config.fullTrace ?? false,
     reporter: config.reporter ?? 'spec',
-    reporterOptions: config.reporterOptions
+    reporterOptions: config.reporterOptions,
   })
 
   for (const req of config.require ?? []) {
@@ -96,7 +96,7 @@ async function main () {
       failures: stats.failures ?? failures ?? 0,
       pending: stats.pending ?? 0,
       tests: stats.tests ?? 0,
-      duration: stats.duration ?? 0
+      duration: stats.duration ?? 0,
     })
   }
 

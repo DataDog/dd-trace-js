@@ -22,7 +22,7 @@ describe('BinaryPropagator', () => {
       const carrier = {}
       const spanContext = new SpanContext({
         traceId: id('123', 10),
-        spanId: id('456', 10)
+        spanId: id('456', 10),
       })
 
       propagator.inject(spanContext, carrier)

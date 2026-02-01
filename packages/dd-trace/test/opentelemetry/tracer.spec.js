@@ -28,7 +28,7 @@ function isChildOf (child, parent) {
 describe('OTel Tracer', () => {
   it('should get resource', () => {
     const tracerProvider = new TracerProvider({
-      resource: 'some resource'
+      resource: 'some resource',
     })
 
     const tracer = new Tracer({}, {}, tracerProvider)
@@ -63,8 +63,8 @@ describe('OTel Tracer', () => {
 
     const span = otelTracer.startSpan('name', {
       attributes: {
-        foo: 'bar'
-      }
+        foo: 'bar',
+      },
     })
 
     const ddSpanContext = span._ddSpan.context()
@@ -81,12 +81,12 @@ describe('OTel Tracer', () => {
       [api.SpanKind.SERVER, api.SpanKind.SERVER],
       [api.SpanKind.CLIENT, api.SpanKind.CLIENT],
       [api.SpanKind.PRODUCER, api.SpanKind.PRODUCER],
-      [api.SpanKind.CONSUMER, api.SpanKind.CONSUMER]
+      [api.SpanKind.CONSUMER, api.SpanKind.CONSUMER],
     ]
 
     for (const [input, output] of checks) {
       const span = otelTracer.startSpan('name', {
-        kind: input
+        kind: input,
       })
 
       assert.strictEqual(span.kind, output)
@@ -107,12 +107,12 @@ describe('OTel Tracer', () => {
       // performance.now()
       [perfnow, hrTime(perfnow)],
       // Date.now()
-      [datenow, timeInputToHrTime(datenow)]
+      [datenow, timeInputToHrTime(datenow)],
     ]
 
     for (const [input, output] of checks) {
       const span = otelTracer.startSpan('name', {
-        startTime: input
+        startTime: input,
       })
       assert.deepStrictEqual(span.startTime, output)
     }
@@ -171,7 +171,7 @@ describe('OTel Tracer', () => {
 
     otelTracer.startActiveSpan('name', (outer) => {
       const inner = otelTracer.startSpan('name', {
-        root: true
+        root: true,
       })
 
       const parentContext = outer._ddSpan.context()

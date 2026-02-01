@@ -126,7 +126,7 @@ function buildEndpointObjects (endpoints) {
       method,
       path,
       operation_name: operationName,
-      resource_name: endpointKey(method, path)
+      resource_name: endpointKey(method, path),
     }
   })
 }
@@ -148,7 +148,7 @@ function flushAndSend () {
 
   const payloadObj = {
     is_first: isFirstPayload,
-    endpoints: buildEndpointObjects(batchEndpoints)
+    endpoints: buildEndpointObjects(batchEndpoints),
   }
 
   /** @type {import('./send-data').TelemetryRequestType} */
@@ -161,7 +161,7 @@ function flushAndSend () {
   if (retryData) {
     payload = [
       { request_type: 'app-endpoints', payload: payloadObj },
-      { request_type: retryData.reqType, payload: retryData.payload }
+      { request_type: retryData.reqType, payload: retryData.payload },
     ]
     reqType = 'message-batch'
   }
@@ -208,5 +208,5 @@ function stop () {
 
 module.exports = {
   start,
-  stop
+  stop,
 }

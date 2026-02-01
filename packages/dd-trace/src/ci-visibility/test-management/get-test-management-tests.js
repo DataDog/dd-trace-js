@@ -15,16 +15,16 @@ function getTestManagementTests ({
   sha,
   commitHeadSha,
   commitHeadMessage,
-  branch
+  branch,
 }, done) {
   const options = {
     path: '/api/v2/test/libraries/test-management/tests',
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
     timeout: 20_000,
-    url
+    url,
   }
 
   if (isGzipCompatible) {
@@ -51,9 +51,9 @@ function getTestManagementTests ({
         repository_url: repositoryUrl,
         commit_message: commitHeadMessage || commitMessage,
         sha: commitHeadSha || sha,
-        branch
-      }
-    }
+        branch,
+      },
+    },
   })
 
   log.debug('Requesting test management tests: %s', data)

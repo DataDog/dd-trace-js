@@ -19,7 +19,7 @@ class NetTCPPlugin extends ClientPlugin {
 
       span.addTags({
         'tcp.local.address': ctx.socket.localAddress,
-        'tcp.local.port': ctx.socket.localPort
+        'tcp.local.port': ctx.socket.localPort,
       })
     })
   }
@@ -37,13 +37,13 @@ class NetTCPPlugin extends ClientPlugin {
         'tcp.remote.host': host,
         'tcp.family': `IPv${family}`,
         'tcp.local.address': '',
-        'out.host': host
+        'out.host': host,
       },
       metrics: {
         'tcp.remote.port': port,
         'tcp.local.port': 0,
-        [CLIENT_PORT_KEY]: port
-      }
+        [CLIENT_PORT_KEY]: port,
+      },
     }, ctx)
 
     return ctx.currentStore

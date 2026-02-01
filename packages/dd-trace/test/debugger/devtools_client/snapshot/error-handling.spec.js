@@ -11,7 +11,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     it('should generate a notCapturedReason if getRuntimeObject rejects', async function () {
       const mockCallFrame = {
         // `42` isn't a valid object id, so we should get an error
-        scopeChain: [{ type: 'local', object: { objectId: '42' } }]
+        scopeChain: [{ type: 'local', object: { objectId: '42' } }],
       }
       const { captureErrors, processLocalState } = await getLocalStateForCallFrame(mockCallFrame)
 

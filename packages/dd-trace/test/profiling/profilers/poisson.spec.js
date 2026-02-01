@@ -19,7 +19,7 @@ describe('PoissonProcessSamplingFilter', () => {
     assert.throws(() => new PoissonProcessSamplingFilter({
       samplingInterval: 100,
       resetInterval: 50,
-      now
+      now,
     }), RangeError)
   })
 
@@ -27,7 +27,7 @@ describe('PoissonProcessSamplingFilter', () => {
     assert.throws(() => new PoissonProcessSamplingFilter({
       samplingInterval: 100,
       resetInterval: 200,
-      now: 123
+      now: 123,
     }), (err) => err instanceof TypeError && err.message === 'now must be a function')
   })
 
@@ -36,7 +36,7 @@ describe('PoissonProcessSamplingFilter', () => {
     assert.throws(() => new PoissonProcessSamplingFilter({
       samplingInterval: 100,
       resetInterval: 200,
-      now: badNow
+      now: badNow,
     }), (err) => err instanceof TypeError && err.message === 'now() must return a number')
   })
 
@@ -49,7 +49,7 @@ describe('PoissonProcessSamplingFilter', () => {
     const filter = new PoissonProcessSamplingFilter({
       samplingInterval: 10,
       resetInterval: 20,
-      now: decreasingNow
+      now: decreasingNow,
     })
     const event = { startTime: 0, duration: filter.nextSamplingInstant + 1 }
     assert.throws(() => filter.filter(event), (err) => err instanceof RangeError &&
@@ -65,7 +65,7 @@ describe('PoissonProcessSamplingFilter', () => {
     const filter = new PoissonProcessSamplingFilter({
       samplingInterval: 10,
       resetInterval: 20,
-      now: constantNow
+      now: constantNow,
     })
     assert.strictEqual(callCount, 1)
     const event = { startTime: 0, duration: Number.POSITIVE_INFINITY }
@@ -78,7 +78,7 @@ describe('PoissonProcessSamplingFilter', () => {
     const filter = new PoissonProcessSamplingFilter({
       samplingInterval: 100,
       resetInterval: 200,
-      now
+      now,
     })
     assert.strictEqual(typeof filter.currentSamplingInstant, 'number')
     assert.strictEqual(filter.currentSamplingInstant, 0)
@@ -91,12 +91,12 @@ describe('PoissonProcessSamplingFilter', () => {
     const filter = new PoissonProcessSamplingFilter({
       samplingInterval: 100,
       resetInterval: 200,
-      now
+      now,
     })
     const prevNextSamplingInstant = filter.nextSamplingInstant
     const event = {
       startTime: -10,
-      duration: prevNextSamplingInstant + 15
+      duration: prevNextSamplingInstant + 15,
     }
     assert.strictEqual(filter.currentSamplingInstant, 0)
     nowValue = prevNextSamplingInstant + 15
@@ -110,7 +110,7 @@ describe('PoissonProcessSamplingFilter', () => {
     const filter = new PoissonProcessSamplingFilter({
       samplingInterval: 100,
       resetInterval: 200,
-      now
+      now,
     })
     const prevSamplingInstant = filter.currentSamplingInstant
     const prevNextSamplingInstant = filter.nextSamplingInstant
@@ -125,7 +125,7 @@ describe('PoissonProcessSamplingFilter', () => {
     const filter = new PoissonProcessSamplingFilter({
       samplingInterval: 100,
       resetInterval: 200,
-      now
+      now,
     })
     const prevNextSamplingInstant = filter.nextSamplingInstant
     nowValue = 1000
@@ -141,7 +141,7 @@ describe('PoissonProcessSamplingFilter', () => {
     const filter = new PoissonProcessSamplingFilter({
       samplingInterval: 100,
       resetInterval: 200,
-      now
+      now,
     })
     const event = { startTime: 100000, duration: 100 }
     nowValue = event.startTime + event.duration
@@ -156,7 +156,7 @@ describe('PoissonProcessSamplingFilter', () => {
     const filter = new PoissonProcessSamplingFilter({
       samplingInterval: 100,
       resetInterval: 200,
-      now
+      now,
     })
     const event = { startTime: filter.currentSamplingInstant - 1, duration: 1 }
     assert.strictEqual(filter.filter(event), true)
@@ -166,7 +166,7 @@ describe('PoissonProcessSamplingFilter', () => {
     const filter = new PoissonProcessSamplingFilter({
       samplingInterval: 100,
       resetInterval: 200,
-      now
+      now,
     })
     const event = { startTime: filter.currentSamplingInstant, duration: 1 }
     assert.strictEqual(filter.filter(event), false)
@@ -176,7 +176,7 @@ describe('PoissonProcessSamplingFilter', () => {
     const filter = new PoissonProcessSamplingFilter({
       samplingInterval: 10,
       resetInterval: 100,
-      now
+      now,
     })
     const initialCount = filter.samplingInstantCount
     for (let i = 0; i < 5; i++) {

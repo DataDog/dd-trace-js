@@ -3,14 +3,14 @@
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const {
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 const producerCh = dc.tracingChannel('apm:azure-event-hubs:send')
 
 addHook({
   name: '@azure/event-hubs',
-  versions: ['>=6.0.0']
+  versions: ['>=6.0.0'],
 }, obj => {
   const EventHubProducerClient = obj.EventHubProducerClient
 

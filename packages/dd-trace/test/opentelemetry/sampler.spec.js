@@ -12,7 +12,7 @@ describe('OTel Sampler', () => {
     const sampler = new Sampler()
 
     assert.deepStrictEqual(sampler.shouldSample(), {
-      decision: 2
+      decision: 2,
     })
   })
 

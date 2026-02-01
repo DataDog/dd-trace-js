@@ -8,7 +8,7 @@ const {
   useSandbox,
   getCiVisAgentlessConfig,
   assertObjectContains,
-  getCiVisEvpProxyConfig
+  getCiVisEvpProxyConfig,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
@@ -17,7 +17,7 @@ const {
   TEST_BROWSER_VERSION,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_IS_RUM_ACTIVE,
-  TEST_TYPE
+  TEST_TYPE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { NODE_MAJOR } = require('../../version')
 
@@ -36,7 +36,7 @@ versionRange.forEach(version => {
       'mocha',
       'jest',
       '@cucumber/cucumber',
-      `selenium-webdriver@${version}`
+      `selenium-webdriver@${version}`,
     ])
 
     before(function (done) {
@@ -68,16 +68,16 @@ versionRange.forEach(version => {
     const testFrameworks = [
       {
         name: 'mocha',
-        command: 'mocha ./ci-visibility/test/selenium-test.js --timeout 10000'
+        command: 'mocha ./ci-visibility/test/selenium-test.js --timeout 10000',
       },
       {
         name: 'jest',
-        command: 'node ./node_modules/jest/bin/jest --config config-jest.js'
+        command: 'node ./node_modules/jest/bin/jest --config config-jest.js',
       },
       {
         name: 'cucumber',
-        command: './node_modules/.bin/cucumber-js ci-visibility/features-selenium/*.feature'
-      }
+        command: './node_modules/.bin/cucumber-js ci-visibility/features-selenium/*.feature',
+      },
     ]
     testFrameworks.forEach(({ name, command }) => {
       if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && name === 'cucumber') return
@@ -95,7 +95,7 @@ versionRange.forEach(version => {
                   [TEST_BROWSER_NAME]: 'chrome',
                   [TEST_TYPE]: 'browser',
                   [TEST_IS_RUM_ACTIVE]: 'true',
-                }
+                },
               })
 
               assert.ok(Object.hasOwn(seleniumTest.meta, TEST_BROWSER_VERSION))
@@ -128,15 +128,15 @@ versionRange.forEach(version => {
                 ...getCiVisEvpProxyConfig(receiver.port),
                 WEB_APP_URL: `http://localhost:${webAppPort}`,
                 TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*',
-                DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true'
-              }
+                DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+              },
             }
           )
 
           await Promise.all([
             once(childProcess, 'exit'),
             assertionPromise,
-            telemetryPromise
+            telemetryPromise,
           ])
         })
       })
@@ -151,8 +151,8 @@ versionRange.forEach(version => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             WEB_APP_URL: `http://localhost:${webAppPort}`,
-            TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*'
-          }
+            TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*',
+          },
         }
       )
 

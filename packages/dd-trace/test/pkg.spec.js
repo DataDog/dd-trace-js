@@ -17,7 +17,7 @@ describe('pkg', () => {
     describe('in pre-require', () => {
       it('should load the package.json correctly', () => {
         const pkg = JSON.parse(execSync('node --require ./pkg-loader.js -e ""', {
-          cwd: __dirname
+          cwd: __dirname,
         }).toString())
         assert.strictEqual(pkg.name, 'dd-trace')
       })

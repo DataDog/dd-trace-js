@@ -10,7 +10,7 @@ const {
   clearState,
   locationToBreakpoint,
   breakpointToProbes,
-  probeToLocation
+  probeToLocation,
 } = require('./state')
 const log = require('./log')
 
@@ -38,7 +38,7 @@ session.on('scriptLoadingStabilized', () => {
 module.exports = {
   addBreakpoint: lock(addBreakpoint),
   removeBreakpoint: lock(removeBreakpoint),
-  modifyBreakpoint: lock(modifyBreakpoint)
+  modifyBreakpoint: lock(modifyBreakpoint),
 }
 
 async function addBreakpoint (probe) {
@@ -119,13 +119,13 @@ async function addBreakpoint (probe) {
     const location = {
       scriptId,
       lineNumber: lineNumber - 1, // Beware! lineNumber is zero-indexed
-      columnNumber
+      columnNumber,
     }
     let result
     try {
       result = await session.post('Debugger.setBreakpoint', {
         location,
-        condition: probe.condition
+        condition: probe.condition,
       })
     } catch (err) {
       throw new Error(`Error setting breakpoint for probe ${probe.id} (version: ${probe.version})`, { cause: err })
@@ -202,7 +202,7 @@ async function updateBreakpointInternal (breakpoint, probe) {
     try {
       result = await session.post('Debugger.setBreakpoint', {
         location: breakpoint.location,
-        condition
+        condition,
       })
     } catch (err) {
       throw new Error(`Error setting breakpoint for probe ${probe.id} (version: ${probe.version})`, { cause: err })

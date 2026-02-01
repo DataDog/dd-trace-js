@@ -75,7 +75,7 @@ class Profiler extends EventEmitter {
       tags,
       repositoryUrl,
       commitSHA,
-      injectionEnabled
+      injectionEnabled,
     } = config
     const { enabled, sourceMap, exporters } = config.profiling
     const { heartbeatInterval } = config.telemetry
@@ -85,7 +85,7 @@ class Profiler extends EventEmitter {
       debug (message) { log.debug(message) },
       info (message) { log.info(message) },
       warn (message) { log.warn(message) },
-      error (...args) { log.error(...args) }
+      error (...args) { log.error(...args) },
     }
 
     const libraryInjected = injectionEnabled.length > 0
@@ -111,7 +111,7 @@ class Profiler extends EventEmitter {
       commitSHA,
       libraryInjected,
       activation,
-      heartbeatInterval
+      heartbeatInterval,
     }
 
     return this._start(options).catch((err) => {
@@ -163,7 +163,7 @@ class Profiler extends EventEmitter {
           this.#compressionFn = promisify(zlib.gzip)
           if (clevel !== undefined) {
             this.#compressionOptions = {
-              level: clevel
+              level: clevel,
             }
           }
           break
@@ -175,8 +175,8 @@ class Profiler extends EventEmitter {
               this.#compressionOptions = {
                 params: {
                   // eslint-disable-next-line n/no-unsupported-features/node-builtins
-                  [zlib.constants.ZSTD_c_compressionLevel]: clevel
-                }
+                  [zlib.constants.ZSTD_c_compressionLevel]: clevel,
+                },
               }
             }
           } else {
@@ -197,7 +197,7 @@ class Profiler extends EventEmitter {
         // TODO: move this out of Profiler when restoring sourcemap support
         profiler.start({
           mapper,
-          nearOOMCallback
+          nearOOMCallback,
         })
         this.#logger.debug(`Started ${profiler.type} profiler in ${threadNamePrefix} thread`)
       }
@@ -222,7 +222,7 @@ class Profiler extends EventEmitter {
     const infos = this.#createInitialInfos()
     processInfo(infos, info, profileType)
     this.#submit({
-      [profileType]: encodedProfile
+      [profileType]: encodedProfile,
     }, infos, start, end, snapshotKinds.ON_OUT_OF_MEMORY)
   }
 
@@ -293,7 +293,7 @@ class Profiler extends EventEmitter {
     return {
       serverless: this.serverless,
       settings: this.#config.systemInfoReport,
-      sourceMapCount: this.#sourceMapCount
+      sourceMapCount: this.#sourceMapCount,
     }
   }
 

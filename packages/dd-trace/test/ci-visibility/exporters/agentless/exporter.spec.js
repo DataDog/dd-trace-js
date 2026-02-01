@@ -47,15 +47,15 @@ describe('CI Visibility Agentless Exporter', () => {
             attributes: {
               require_git: false,
               code_coverage: true,
-              tests_skipping: true
-            }
-          }
+              tests_skipping: true,
+            },
+          },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
         site: 'datadoge.c0m',
         isGitUploadEnabled: true,
         isIntelligentTestRunnerEnabled: true,
-        tags: {}
+        tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
         assert.strictEqual(scope.isDone(), true)
@@ -73,20 +73,20 @@ describe('CI Visibility Agentless Exporter', () => {
             attributes: {
               require_git: false,
               code_coverage: true,
-              tests_skipping: true
-            }
-          }
+              tests_skipping: true,
+            },
+          },
         }))
         .post('/api/v2/ci/tests/skippable')
         .reply(200, JSON.stringify({
-          data: []
+          data: [],
         }))
 
       const agentlessExporter = new AgentlessCiVisibilityExporter({
         site: 'datadoge.c0m',
         isGitUploadEnabled: true,
         isIntelligentTestRunnerEnabled: true,
-        tags: {}
+        tags: {},
       })
       agentlessExporter._resolveGit()
       agentlessExporter.getLibraryConfiguration({}, () => {
@@ -105,12 +105,12 @@ describe('CI Visibility Agentless Exporter', () => {
             attributes: {
               require_git: false,
               code_coverage: true,
-              tests_skipping: true
-            }
-          }
+              tests_skipping: true,
+            },
+          },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
+        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
         assert.strictEqual(scope.isDone(), true)
@@ -128,12 +128,12 @@ describe('CI Visibility Agentless Exporter', () => {
             attributes: {
               require_git: false,
               code_coverage: true,
-              tests_skipping: true
-            }
-          }
+              tests_skipping: true,
+            },
+          },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
+        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
         assert.strictEqual(scope.isDone(), true)
@@ -153,13 +153,13 @@ describe('CI Visibility Agentless Exporter', () => {
             attributes: {
               require_git: false,
               code_coverage: true,
-              tests_skipping: true
-            }
-          }
+              tests_skipping: true,
+            },
+          },
         }))
 
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
+        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.sendGitMetadata = () => {
         return new Promise(resolve => {
@@ -186,7 +186,7 @@ describe('CI Visibility Agentless Exporter', () => {
     it('should initialise DynamicInstrumentationLogsWriter', async () => {
       const agentProxyCiVisibilityExporter = new AgentlessCiVisibilityExporter({
         tags: {},
-        isTestDynamicInstrumentationEnabled: true
+        isTestDynamicInstrumentationEnabled: true,
       })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       assert.ok(agentProxyCiVisibilityExporter._logsWriter instanceof DynamicInstrumentationLogsWriter)
@@ -195,11 +195,11 @@ describe('CI Visibility Agentless Exporter', () => {
     it('should process logs', async () => {
       const mockWriter = {
         append: sinon.spy(),
-        flush: sinon.spy()
+        flush: sinon.spy(),
       }
       const agentProxyCiVisibilityExporter = new AgentlessCiVisibilityExporter({
         tags: {},
-        isTestDynamicInstrumentationEnabled: true
+        isTestDynamicInstrumentationEnabled: true,
       })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       agentProxyCiVisibilityExporter._logsWriter = mockWriter

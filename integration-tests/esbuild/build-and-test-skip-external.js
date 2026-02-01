@@ -15,8 +15,8 @@ esbuild.build({
   platform: 'node',
   target: ['node18'],
   external: [
-    'knex'
-  ]
+    'knex',
+  ],
 }).then(() => {
   const output = fs.readFileSync('./skip-external-out.js').toString()
   // Note that esbuild converts 'foo' into "foo"

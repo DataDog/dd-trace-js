@@ -22,12 +22,12 @@ describe('diagnostic message http requests', function () {
     ['ackReceived', 'RECEIVED'],
     ['ackInstalled', 'INSTALLED'],
     ['ackEmitting', 'EMITTING'],
-    ['ackError', 'ERROR', new Error('boom')]
+    ['ackError', 'ERROR', new Error('boom')],
   ]
 
   beforeEach(function () {
     clock = sinon.useFakeTimers({
-      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
 
     request = sinon.spy()
@@ -47,12 +47,12 @@ describe('diagnostic message http requests', function () {
         runtimeId,
         maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
         dynamicInstrumentation: {
-          uploadIntervalSeconds: 1
+          uploadIntervalSeconds: 1,
         },
-        '@noCallThru': true
+        '@noCallThru': true,
       },
       './json-buffer': JSONBufferSpy,
-      '../../exporters/common/request': request
+      '../../exporters/common/request': request,
     })
   })
 
@@ -69,7 +69,7 @@ describe('diagnostic message http requests', function () {
           ackFn = statusproxy[ackFnName].bind(null, err)
           exception = {
             message: err.message,
-            stacktrace: err.stack
+            stacktrace: err.stack,
           }
         } else {
           ackFn = statusproxy[ackFnName]
@@ -136,7 +136,7 @@ describe('diagnostic message http requests', function () {
         assert.deepStrictEqual(payload, [
           formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }),
           formatAsDiagnosticsEvent({ probeId: 'foo', version: 1, status, exception }),
-          formatAsDiagnosticsEvent({ probeId: 'bar', version: 0, status, exception })
+          formatAsDiagnosticsEvent({ probeId: 'bar', version: 0, status, exception }),
         ])
 
         const opts = getRequestOptions(request)

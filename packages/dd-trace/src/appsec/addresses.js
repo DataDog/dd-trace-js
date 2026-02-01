@@ -36,5 +36,5 @@ module.exports = {
   SHELL_COMMAND: 'server.sys.shell.cmd',
 
   LOGIN_SUCCESS: 'server.business_logic.users.login.success',
-  LOGIN_FAILURE: 'server.business_logic.users.login.failure'
+  LOGIN_FAILURE: 'server.business_logic.users.login.failure',
 }

@@ -117,7 +117,7 @@ module.exports = {
       const handle = nativeMetrics.track(span)
 
       return {
-        finish: () => nativeMetrics.finish(handle)
+        finish: () => nativeMetrics.finish(handle),
       }
     }
 
@@ -146,7 +146,7 @@ module.exports = {
 
   decrement (name, tag) {
     this.count(name, -1, tag)
-  }
+  },
 }
 
 function captureCpuUsage () {
@@ -206,7 +206,7 @@ function captureEventLoopDelay () {
         total: sum,
         avg,
         count: eventLoopDelayObserver.count,
-        p95: Math.max(eventLoopDelayObserver.percentile(95) - minimum, 0)
+        p95: Math.max(eventLoopDelayObserver.percentile(95) - minimum, 0),
       }
 
       histogram('runtime.node.event_loop.delay', stats)

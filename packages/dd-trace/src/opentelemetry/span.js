@@ -40,7 +40,7 @@ const spanKindNames = {
   [api.SpanKind.SERVER]: kinds.SERVER,
   [api.SpanKind.CLIENT]: kinds.CLIENT,
   [api.SpanKind.PRODUCER]: kinds.PRODUCER,
-  [api.SpanKind.CONSUMER]: kinds.CONSUMER
+  [api.SpanKind.CONSUMER]: kinds.CONSUMER,
 }
 
 /**
@@ -147,9 +147,9 @@ class Span {
       tags: {
         [SERVICE_NAME]: _tracer._service,
         [RESOURCE_NAME]: spanName,
-        [SPAN_KIND]: spanKindNames[kind]
+        [SPAN_KIND]: spanKindNames[kind],
       },
-      links
+      links,
     }, _tracer._debug)
 
     if (attributes) {
@@ -233,13 +233,13 @@ class Span {
   addSpanPointer (ptrKind, ptrDir, ptrHash) {
     const zeroContext = new SpanContext({
       traceId: id('0'),
-      spanId: id('0')
+      spanId: id('0'),
     })
     const attributes = {
       'ptr.kind': ptrKind,
       'ptr.dir': ptrDir,
       'ptr.hash': ptrHash,
-      'link.kind': 'span-pointer'
+      'link.kind': 'span-pointer',
     }
     return this.addLink(zeroContext, attributes)
   }
@@ -250,7 +250,7 @@ class Span {
       if (code === 2) {
         this._ddSpan.addTags({
           [ERROR_MESSAGE]: message,
-          [IGNORE_OTEL_ERROR]: false
+          [IGNORE_OTEL_ERROR]: false,
         })
       }
     }
@@ -295,7 +295,7 @@ class Span {
       [ERROR_TYPE]: exception.name,
       [ERROR_MESSAGE]: exception.message,
       [ERROR_STACK]: exception.stack,
-      [IGNORE_OTEL_ERROR]: this._ddSpan.context()._tags[IGNORE_OTEL_ERROR] ?? true
+      [IGNORE_OTEL_ERROR]: this._ddSpan.context()._tags[IGNORE_OTEL_ERROR] ?? true,
     })
     const attributes = {}
     if (exception.message) attributes['exception.message'] = exception.message

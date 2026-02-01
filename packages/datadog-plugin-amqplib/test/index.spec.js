@@ -347,12 +347,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'amqp.command',
-              serviceName: 'test-custom-service'
+              serviceName: 'test-custom-service',
             },
             v1: {
               opName: 'amqp.command',
-              serviceName: 'test-custom-service'
-            }
+              serviceName: 'test-custom-service',
+            },
           }
         )
       })

@@ -263,7 +263,7 @@ class TextMapPropagator {
     const {
       _sampling: { priority, mechanism },
       _tracestate: ts = new TraceState(),
-      _trace: { origin, tags }
+      _trace: { origin, tags },
     } = spanContext
 
     carrier[traceparentKey] = spanContext.toTraceparent()
@@ -393,7 +393,7 @@ class TextMapPropagator {
           extractedContext.toTraceId(true) !== context.toTraceId(true)) {
           const link = {
             context: extractedContext,
-            attributes: { reason: 'terminated_context', context_headers: extractor }
+            attributes: { reason: 'terminated_context', context_headers: extractor },
           }
           context._links.push(link)
         }
@@ -409,8 +409,8 @@ class TextMapPropagator {
           context,
           attributes:
           {
-            reason: 'propagation_behavior_extract', context_headers: style
-          }
+            reason: 'propagation_behavior_extract', context_headers: style,
+          },
         })
       }
       this._extractBaggageItems(carrier, context)
@@ -466,7 +466,7 @@ class TextMapPropagator {
           traceId: id(),
           spanId: null,
           sampling: { priority },
-          isRemote: true
+          isRemote: true,
         })
       }
 
@@ -517,7 +517,7 @@ class TextMapPropagator {
         isRemote: true,
         sampling: { priority: Number.parseInt(flags, 10) & 1 ? 1 : 0 },
         traceparent,
-        tracestate
+        tracestate,
       })
 
       this._extract128BitTraceId(traceId, spanContext)
@@ -582,7 +582,7 @@ class TextMapPropagator {
       return new DatadogSpanContext({
         traceId: id(carrier[traceKey], radix),
         spanId: id(carrier[spanKey], radix),
-        isRemote: true
+        isRemote: true,
       })
     }
 
@@ -621,16 +621,16 @@ class TextMapPropagator {
     if (parts[0] === 'd') {
       return {
         [b3SampledKey]: '1',
-        [b3FlagsKey]: '1'
+        [b3FlagsKey]: '1',
       }
     } else if (parts.length === 1) {
       return {
-        [b3SampledKey]: parts[0]
+        [b3SampledKey]: parts[0],
       }
     }
     const b3 = {
       [b3TraceKey]: parts[0],
-      [b3SpanKey]: parts[1]
+      [b3SpanKey]: parts[1],
     }
 
     if (parts[2]) {

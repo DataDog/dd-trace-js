@@ -41,8 +41,8 @@ describe('msgpack/encoder', () => {
         biguint: BigInt('9223372036854775807'),
         bigint: BigInt('-9223372036854775807'),
         buffer: Buffer.from('test'),
-        uint8array: new Uint8Array([1, 2, 3, 4])
-      }
+        uint8array: new Uint8Array([1, 2, 3, 4]),
+      },
     ]
 
     const buffer = encoder.encode(data)

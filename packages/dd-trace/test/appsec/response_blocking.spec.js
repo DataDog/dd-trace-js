@@ -45,7 +45,7 @@ describe('HTTP Response Blocking', () => {
 
           axios = Axios.create(({
             baseURL: `http://localhost:${port}`,
-            validateStatus: null
+            validateStatus: null,
           }))
 
           resolve(...args)
@@ -58,12 +58,12 @@ describe('HTTP Response Blocking', () => {
         enabled: true,
         rules: path.join(__dirname, 'response_blocking_rules.json'),
         rasp: {
-          enabled: false // disable rasp to not trigger waf.run executions due to lfi
+          enabled: false, // disable rasp to not trigger waf.run executions due to lfi
         },
         apiSecurity: {
-          enabled: false
-        }
-      }
+          enabled: false,
+        },
+      },
     }))
   })
 

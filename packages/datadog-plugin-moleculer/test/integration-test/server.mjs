@@ -5,7 +5,7 @@ const broker = new moleculer.ServiceBroker({
   namespace: 'multi',
   nodeID: `server-${process.pid}`,
   logger: false,
-  transporter: `tcp://127.0.0.1:0/server-${process.pid}`
+  transporter: `tcp://127.0.0.1:0/server-${process.pid}`,
 })
 
 broker.createService({
@@ -13,8 +13,8 @@ broker.createService({
   actions: {
     sayHello (ctx) {
       return 'Hello, ' + ctx.params.name
-    }
-  }
+    },
+  },
 })
 
 await broker.start()
