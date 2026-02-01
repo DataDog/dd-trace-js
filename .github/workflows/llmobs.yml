@@ -39,7 +39,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}-${{ matrix.version }}
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: llmobs-sdk-${{ matrix.version }}
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
@@ -64,7 +64,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
       - if: always()
@@ -93,7 +93,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
       - if: always()
@@ -120,7 +120,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
       - if: always()
@@ -149,7 +149,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
       - if: always()
@@ -178,7 +178,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
       - if: always()
@@ -207,7 +207,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
       - if: always()
@@ -236,7 +236,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
       - if: always()

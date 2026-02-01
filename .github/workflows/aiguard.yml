@@ -24,7 +24,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:aiguard:ci
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: aiguard-macos
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
@@ -47,7 +47,7 @@ jobs:
       - run: yarn test:aiguard:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:aiguard:ci
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: aiguard-ubuntu
 
@@ -61,7 +61,7 @@ jobs:
         with:
           cache: 'true'
       - run: yarn test:aiguard:ci
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: aiguard-windows
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1

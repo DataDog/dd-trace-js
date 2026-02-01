@@ -42,7 +42,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: lambda
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: serverless-lambda
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
@@ -119,7 +119,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.spec }}
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: serverless-aws-sdk-${{ matrix.node-version }}-${{ matrix.spec }}
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
@@ -221,6 +221,9 @@ jobs:
       - run: npm install -g azure-functions-core-tools@4.3.0
       - run: echo "$(dirname $(which func))" >> $GITHUB_PATH
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/coverage
+        with:
+          flags: serverless-azure-functions-${{ matrix.spec }}
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:

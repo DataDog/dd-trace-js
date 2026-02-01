@@ -6,7 +6,6 @@ const http = require('node:http')
 const { inspect } = require('node:util')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
-const proxyquire = require('proxyquire').noPreserveCache()
 const semver = require('semver')
 const sinon = require('sinon')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -56,7 +55,7 @@ describe('Plugin', () => {
   async function setupTest (version, winstonConfiguration) {
     span = tracer.startSpan('test')
 
-    winston = proxyquire(`../../../versions/winston@${version}`, {}).get()
+    winston = require(`../../../versions/winston@${version}`).get()
 
     logServer = await createLogServer()
 

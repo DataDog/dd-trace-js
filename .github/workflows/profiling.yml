@@ -31,7 +31,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: profiling-macos
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
@@ -58,7 +58,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: profiling-ubuntu
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
@@ -78,7 +78,7 @@ jobs:
           cache: 'true'
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: profiling-windows
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1

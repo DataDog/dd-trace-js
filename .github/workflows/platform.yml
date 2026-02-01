@@ -71,7 +71,7 @@ jobs:
       - run: yarn test:core:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:core:ci
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: platform-core
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
@@ -100,7 +100,7 @@ jobs:
       - run: yarn test:esbuild:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:esbuild:ci
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: platform-esbuild
 
@@ -382,7 +382,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:instrumentations:misc:ci
         shell: bash
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: platform-instrumentations-misc
       - if: always()
@@ -429,7 +429,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:trace:guardrails:ci
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: platform-unit-guardrails
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
@@ -487,7 +487,7 @@ jobs:
       - run: yarn test:shimmer:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:shimmer:ci
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: platform-shimmer
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
