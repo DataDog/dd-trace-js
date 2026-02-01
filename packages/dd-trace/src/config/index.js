@@ -1169,7 +1169,9 @@ class Config {
 
     const tags = {}
     tagger.add(tags, options.tracing_tags)
-    if (Object.keys(tags).length) tags['runtime-id'] = RUNTIME_ID
+    if (Object.keys(tags).length) {
+      tags['runtime-id'] = RUNTIME_ID
+    }
     setTags(opts, 'tags', tags)
   }
 

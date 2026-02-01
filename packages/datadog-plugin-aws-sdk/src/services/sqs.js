@@ -177,7 +177,7 @@ class Sqs extends BaseAwsSdkPlugin {
     // we only want to set the payloadSize on the span if we have one message
     span = response.Messages.length > 1 ? null : span
 
-    response.Messages.forEach(message => {
+    for (let message of response.Messages) {
       // we may have already parsed the message attributes when extracting trace context
       if (!parsedAttributes) {
         if (message.Body) {
@@ -206,7 +206,7 @@ class Sqs extends BaseAwsSdkPlugin {
       }
       this.tracer
         .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
-    })
+    }
   }
 
   requestInject (span, request) {

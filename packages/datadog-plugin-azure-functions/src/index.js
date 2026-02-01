@@ -145,7 +145,9 @@ function setSpanLinks (triggerType, tracer, span, ctx) {
   }
 
   if (cardinality === 'many' && propertiesArray?.length > 0) {
-    propertiesArray.forEach(addLinkFromProperties)
+    for (const prop of propertiesArray) {
+      addLinkFromProperties(prop)
+    }
   } else if (cardinality === 'one') {
     addLinkFromProperties(properties)
   }

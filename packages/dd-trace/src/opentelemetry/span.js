@@ -226,7 +226,7 @@ class Span {
   }
 
   addLinks (links) {
-    links.forEach(link => this.addLink(link))
+    for (const link of links) this.addLink(link)
     return this
   }
 

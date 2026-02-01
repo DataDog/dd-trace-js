@@ -355,12 +355,12 @@ addHook({
 
     const runner = run.apply(this, arguments)
 
-    this.files.forEach(path => {
+    for (const path of this.files) {
       const isUnskippable = isMarkedAsUnskippable({ path })
       if (isUnskippable) {
         unskippableSuites.push(path)
       }
-    })
+    }
 
     getExecutionConfiguration(runner, false, frameworkVersion, () => {
       if (config.isKnownTestsEnabled) {
@@ -494,6 +494,7 @@ addHook({
         status = 'skip'
       } else {
         // has to check every test in the test file
+        // eslint-disable-next-line unicorn/no-array-for-each
         suitesInTestFile.forEach(suite => {
           suite.eachTest(test => {
             if (test.state === 'failed' || test.timedOut) {

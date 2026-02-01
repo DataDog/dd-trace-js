@@ -14,11 +14,12 @@ class ProducerPlugin extends OutboundPlugin {
     if (!options.service) {
       options.service = this.config.service || this.serviceName()
     }
-    Object.keys(spanDefaults).forEach(
-      key => {
-        if (!options[key]) options[key] = spanDefaults[key]
+    for (const key of Object.keys(spanDefaults)) {
+      if (!options[key]) {
+        options[key] = spanDefaults[key]
       }
-    )
+    }
+
     return super.startSpan(this.operationName(), options, enterOrCtx)
   }
 }

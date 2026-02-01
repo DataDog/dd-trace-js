@@ -120,13 +120,13 @@ function deepCloneSuite (suite, filterTest, tags = []) {
     } else {
       if (filterTest(entry)) {
         const copiedTest = entry._clone()
-        tags.forEach(tag => {
+        for (const tag of tags) {
           const resolvedTag = typeof tag === 'function' ? tag(entry) : tag
 
           if (resolvedTag) {
             copiedTest[resolvedTag] = true
           }
-        })
+        }
         copy._addTest(copiedTest)
       }
     }
@@ -487,9 +487,9 @@ function dispatcherRunWrapperNew (run) {
     // Filter out disabled tests from testGroups before they get scheduled,
     // unless they have attemptToFix (in which case they should still run and be retried)
     if (isTestManagementTestsEnabled) {
-      testGroups.forEach(group => {
+      for (const group of testGroups) {
         group.tests = group.tests.filter(test => !test._ddIsDisabled || test._ddIsAttemptToFix)
-      })
+      }
       // Remove empty groups
       testGroups = testGroups.filter(group => group.tests.length > 0)
     }
@@ -696,11 +696,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     // preventing them from being retried by ATR or `--retries`.
     const shouldSetATRRetries = isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0
     if (shouldSetATRRetries) {
-      projects.forEach(project => {
+      for (const project of projects) {
         if (project.retries === 0) { // Only if it hasn't been set by the user
           project.retries = flakyTestRetriesCount
         }
-      })
+      }
     }
 
     let runAllTestsReturn = await runAllTests.apply(this, arguments)
@@ -708,11 +708,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     // Tests that have only skipped tests may reach this point
     // Skipped tests may or may not go through `testBegin` or `testEnd`
     // depending on the playwright configuration
-    Object.values(remainingTestsByFile).forEach(tests => {
+    for (const tests of Object.values(remainingTestsByFile)) {
       // `tests` should normally be empty, but if it isn't,
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
-      tests.forEach(test => {
+      for (const test of tests) {
         const browser = getBrowserNameFromProjects(projects, test)
         testBeginHandler(test, browser, true)
         testEndHandler({
@@ -724,8 +724,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
           shouldCreateTestSpan: true,
           projects,
         })
-      })
-    })
+      }
+    }
 
     let preventedToFail = false
 
@@ -970,7 +970,7 @@ addHook({
       })
 
       const fileSuitesWithImpactedTestsToProjects = new Map()
-      impactedTests.forEach(impactedTest => {
+      for (const impactedTest of impactedTests) {
         impactedTest._ddIsModified = true
         if (isEarlyFlakeDetectionEnabled && impactedTest.expectedStatus !== 'skipped') {
           const fileSuite = getSuiteType(impactedTest, 'file')
@@ -978,7 +978,7 @@ addHook({
             fileSuitesWithImpactedTestsToProjects.set(fileSuite, getSuiteType(impactedTest, 'project'))
           }
         }
-      })
+      }
       // If something change in the file, all tests in the file are impacted, hence the () => true filter
       applyRetriesToTests(
         fileSuitesWithImpactedTestsToProjects,
@@ -1007,7 +1007,7 @@ addHook({
         isEarlyFlakeDetectionFaulty = true
       } else {
         const fileSuitesWithNewTestsToProjects = new Map()
-        newTests.forEach(newTest => {
+        for (const newTest of newTests) {
           newTest._ddIsNew = true
           if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
             // Prevent ATR or `--retries` from retrying new tests if EFD is enabled
@@ -1017,7 +1017,7 @@ addHook({
               fileSuitesWithNewTestsToProjects.set(fileSuite, getSuiteType(newTest, 'project'))
             }
           }
-        })
+        }
 
         applyRetriesToTests(
           fileSuitesWithNewTestsToProjects,

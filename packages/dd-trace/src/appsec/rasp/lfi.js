@@ -63,9 +63,9 @@ function analyzeLfi (ctx) {
   const { req, fs, res } = store
   if (!req || !fs) return
 
-  getPaths(ctx, fs).forEach(path => {
+  for (const path of getPaths(ctx, fs)) {
     analyzeLfiPath(path, req, res, ctx.abortController)
-  })
+  }
 }
 
 function analyzeLfiPath (path, req, res, abortController) {

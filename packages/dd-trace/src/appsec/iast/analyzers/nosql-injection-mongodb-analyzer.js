@@ -25,13 +25,12 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     this.configureSanitizers()
 
     // Anything that accesses the storage is context dependent
-    // eslint-disable-next-line unicorn/consistent-function-scoping
     const onStart = ({ filters }) => {
       const store = storage('legacy').getStore()
       if (store && !store.nosqlAnalyzed && filters?.length) {
-        filters.forEach(filter => {
+        for (const filter of filters) {
           this.analyze({ filter }, store)
-        })
+        }
       }
 
       return store
@@ -69,7 +68,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       const iastContext = getIastContext(store)
 
       if (iastContext) { // do nothing if we are not in an iast request
-        sanitizedProperties.forEach(key => {
+        for (const key of sanitizedProperties) {
           iterateObjectStrings(req[key], function (value, levelKeys) {
             if (typeof value === 'string') {
               let parentObj = req[key]
@@ -86,7 +85,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
               }
             }
           })
-        })
+        }
       }
     })
 
@@ -175,8 +174,8 @@ function iterateMongodbQueryStrings (target, fn, levelKeys = [], depth = 10, vis
 
     visited.add(target)
 
-    Object.keys(target).forEach((key) => {
-      if (SAFE_OPERATORS.has(key)) return
+    for (const key of Object.keys(target)) {
+      if (SAFE_OPERATORS.has(key)) continue
 
       const nextLevelKeys = [...levelKeys, key]
       const val = target[key]
@@ -186,7 +185,7 @@ function iterateMongodbQueryStrings (target, fn, levelKeys = [], depth = 10, vis
       } else if (depth > 0) {
         iterateMongodbQueryStrings(val, fn, nextLevelKeys, depth - 1, visited)
       }
-    })
+    }
   }
 }
 
