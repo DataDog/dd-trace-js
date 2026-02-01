@@ -6,7 +6,7 @@ const satisfies = require('../../../../vendor/dist/semifies')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
-const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
+const { IS_SERVERLESS } = require('../../../dd-trace/src/serverless')
 const { getValueFromEnvSources } = require('../../../dd-trace/src/config/helper')
 const checkRequireCache = require('./check-require-cache')
 const Hook = require('./hook')
@@ -59,7 +59,7 @@ for (const packageName of names) {
   let hook = hooks[packageName]
 
   if (hook !== null && typeof hook === 'object') {
-    if (hook.serverless === false && isInServerlessEnvironment()) continue
+    if (hook.serverless === false && IS_SERVERLESS) continue
 
     hookOptions.internals = hook.esmFirst
     hook = hook.fn

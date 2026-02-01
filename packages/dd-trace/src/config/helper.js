@@ -43,8 +43,8 @@ function loadStableConfig () {
   stableConfigLoaded = true
 
   // Lazy require to avoid circular dependency at module load time.
-  const { isInServerlessEnvironment } = require('../serverless')
-  if (isInServerlessEnvironment()) {
+  const { IS_SERVERLESS } = require('../serverless')
+  if (IS_SERVERLESS) {
     // Stable config is not supported in serverless environments.
     return
   }

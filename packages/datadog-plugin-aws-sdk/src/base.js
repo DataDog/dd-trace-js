@@ -6,6 +6,7 @@ const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { IS_SERVERLESS } = require('../../dd-trace/src/serverless')
 
 class BaseAwsSdkPlugin extends ClientPlugin {
   static id = 'aws'
@@ -87,7 +88,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     })
 
     this.addSub(`apm:aws:request:start:${this.serviceIdentifier}`, (ctx) => {
-      if (!this._tracerConfig?._isInServerlessEnvironment()) return
+      if (!IS_SERVERLESS) return
 
       const { awsRegion, awsService, currentStore, request } = ctx
       const peerServerlessStorage = storage('peerServerless')
@@ -120,7 +121,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         span.setTag('aws.partition', partition)
       }
 
-      if (!this._tracerConfig?._isInServerlessEnvironment()) return
+      if (!IS_SERVERLESS) return
 
       const hostname = getHostname(store, region)
       if (!hostname) return
