@@ -25,7 +25,7 @@ const execArgvs = [
   },
   {
     execArgv: ['--import', 'dd-trace/loader-hook.mjs'],
-    skip: semver.satisfies(process.versions.node, '<20.6')
+    skip: semver.satisfies(process.versions.node, '<20.6'),
   },
   {
     execArgv: ['--loader', 'dd-trace/loader-hook.mjs'],

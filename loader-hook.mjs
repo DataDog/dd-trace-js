@@ -71,7 +71,7 @@ export const iitmExclusions = [
   /openai\/_shims/,
   /openai\/resources\/chat\/completions\/messages/,
   /openai\/agents-core\/dist\/shims/,
-  /@anthropic-ai\/sdk\/_shims/
+  /@anthropic-ai\/sdk\/_shims/,
 ]
 
 export { initialize, load, resolve }
