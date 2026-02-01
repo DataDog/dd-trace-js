@@ -8,7 +8,7 @@ const {
   spawnPluginIntegrationTestProcAndExpectExit,
   sandboxCwd,
   useSandbox,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 describe('esm', () => {
   let agent

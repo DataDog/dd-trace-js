@@ -175,5 +175,5 @@ function disable () {
 
 module.exports = {
   configure,
-  disable
+  disable,
 }

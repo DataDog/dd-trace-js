@@ -13,7 +13,7 @@ const agent = require('../../../../plugins/agent')
 const { withVersions } = require('../../../../setup/mocha')
 const {
   HTTP_REQUEST_PATH_PARAM,
-  HTTP_REQUEST_URI
+  HTTP_REQUEST_URI,
 } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 const { getConfigFresh } = require('../../../../helpers/config')
 
@@ -35,9 +35,9 @@ describe('URI sourcing with fastify', () => {
         experimental: {
           iast: {
             enabled: true,
-            requestSampling: 100
-          }
-        }
+            requestSampling: 100,
+          },
+        },
       }))
 
       fastify = require(`../../../../../../../versions/fastify@${version}`).get()
@@ -93,9 +93,9 @@ describe('Path params sourcing with fastify', () => {
         experimental: {
           iast: {
             enabled: true,
-            requestSampling: 100
-          }
-        }
+            requestSampling: 100,
+          },
+        },
       }))
 
       fastify = require(`../../../../../../../versions/fastify@${version}`).get()

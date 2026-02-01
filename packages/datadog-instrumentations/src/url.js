@@ -17,7 +17,7 @@ addHook({ name: names }, function (url) {
       parseFinishedChannel.publish({
         input,
         parsed: parsedValue,
-        isURL: false
+        isURL: false,
       })
 
       return parsedValue
@@ -50,7 +50,7 @@ addHook({ name: names }, function (url) {
           input,
           base,
           parsed: this,
-          isURL: true
+          isURL: true,
         })
       }
 
@@ -70,7 +70,7 @@ addHook({ name: names }, function (url) {
           input,
           base,
           parsed: parsedValue,
-          isURL: true
+          isURL: true,
         })
 
         return parsedValue

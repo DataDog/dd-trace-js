@@ -21,11 +21,11 @@ describe('register', () => {
 
     hooksMock = {
       '@confluentinc/kafka-javascript': {
-        fn: sinon.stub().returns('hooked')
+        fn: sinon.stub().returns('hooked'),
       },
       'mongodb-core': {
-        fn: sinon.stub().returns('hooked')
-      }
+        fn: sinon.stub().returns('hooked'),
+      },
     }
 
     HookMock = sinon.stub()
@@ -37,7 +37,7 @@ describe('register', () => {
       if (this.filename === registerPath) {
         const stubs = {
           './hooks': hooksMock,
-          './hook': HookMock
+          './hook': HookMock,
         }
         return stubs[request] || originalModuleProtoRequire.call(this, request)
       }

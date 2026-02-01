@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const {
   useSandbox, sandboxCwd, varySandbox,
-  FakeAgent, spawnPluginIntegrationTestProc, curl
+  FakeAgent, spawnPluginIntegrationTestProc, curl,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 

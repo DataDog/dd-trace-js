@@ -18,7 +18,7 @@ suite
     },
     fn () {
       operation()
-    }
+    },
   })
   .add('1 span (large tags)', {
     onStart () {
@@ -27,14 +27,14 @@ suite
         span.addTags({
           tag1: str + generateString(10),
           tag2: str + str + generateString(10),
-          tag3: str + str + str + generateString(10)
+          tag3: str + str + str + generateString(10),
         })
         span.finish()
       }
     },
     fn () {
       operation()
-    }
+    },
   })
   .add('3 spans (small tags)', {
     onStart () {
@@ -43,21 +43,21 @@ suite
         rootSpan.addTags({
           tag1: generateString(20),
           tag2: generateString(20),
-          tag3: generateString(20)
+          tag3: generateString(20),
         })
 
         const parentSpan = tracer.startSpan('parent', { childOf: rootSpan })
         parentSpan.addTags({
           tag1: generateString(20),
           tag2: generateString(20),
-          tag3: generateString(20)
+          tag3: generateString(20),
         })
 
         const childSpan = tracer.startSpan('child', { childOf: parentSpan })
         childSpan.addTags({
           tag1: generateString(20),
           tag2: generateString(20),
-          tag3: generateString(20)
+          tag3: generateString(20),
         })
 
         childSpan.finish()
@@ -67,7 +67,7 @@ suite
     },
     fn () {
       operation()
-    }
+    },
   })
 
 suite.run()

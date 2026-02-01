@@ -23,6 +23,7 @@ env:
 
 jobs:
   macos:
+    name: ${{ github.workflow }} / macos
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -40,6 +41,7 @@ jobs:
           service: dd-trace-js-tests
 
   ubuntu:
+    name: ${{ github.workflow }} / ubuntu
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -66,6 +68,7 @@ jobs:
           service: dd-trace-js-tests
 
   windows:
+    name: ${{ github.workflow }} / windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

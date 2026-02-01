@@ -6,7 +6,7 @@ const {
   addRaspRequestMetrics,
   trackRaspMetrics,
   trackRaspRuleMatch,
-  trackRaspRuleSkipped
+  trackRaspRuleSkipped,
 } = require('./rasp')
 const {
   addWafRequestMetrics,
@@ -14,7 +14,7 @@ const {
   incrementWafInit,
   incrementWafUpdates,
   incrementWafConfigErrors,
-  incrementWafRequests
+  incrementWafRequests,
 } = require('./waf')
 
 const metricsStoreMap = new WeakMap()
@@ -42,8 +42,8 @@ function newStore () {
       wafErrorCode: null,
       raspErrorCode: null,
       wafVersion: null,
-      rulesVersion: null
-    }
+      rulesVersion: null,
+    },
   }
 }
 
@@ -180,5 +180,5 @@ module.exports = {
   incrementMissingUserIdMetric,
   incrementSdkEventMetric,
 
-  getRequestMetrics
+  getRequestMetrics,
 }

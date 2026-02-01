@@ -9,7 +9,7 @@ const {
   hookFile,
   sandboxCwd,
   useSandbox,
-  curlAndAssertMessage
+  curlAndAssertMessage,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 const { NODE_MAJOR } = require('../../../../../version')
@@ -41,7 +41,7 @@ describe('esm', () => {
 
     it('propagates a single message through a queue with cardinality of one', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -54,8 +54,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'servicebus',
             'messaging.destination.name': 'queue.1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
       })
@@ -63,7 +63,7 @@ describe('esm', () => {
 
     it('propagates multiple messages through a queue with cardinality of one', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -76,8 +76,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'servicebus',
             'messaging.destination.name': 'queue.1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
         assertObjectContains(payload[2][0], {
@@ -87,8 +87,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'servicebus',
             'messaging.destination.name': 'queue.1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
@@ -96,7 +96,7 @@ describe('esm', () => {
 
     it('propagates a single amqp message through a queue with cardinality of one', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -109,8 +109,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'servicebus',
             'messaging.destination.name': 'queue.1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
       })
@@ -118,7 +118,7 @@ describe('esm', () => {
 
     it('propagates multiple amqp messages through a queue with cardinality of one', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -131,8 +131,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'servicebus',
             'messaging.destination.name': 'queue.1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
         assertObjectContains(payload[2][0], {
@@ -142,8 +142,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'servicebus',
             'messaging.destination.name': 'queue.1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
@@ -151,7 +151,7 @@ describe('esm', () => {
 
     it('propagates a message batch through a queue with cardinality of one', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -164,8 +164,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'servicebus',
             'messaging.destination.name': 'queue.1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
         assertObjectContains(payload[2][0], {
@@ -175,8 +175,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'servicebus',
             'messaging.destination.name': 'queue.1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
@@ -184,7 +184,7 @@ describe('esm', () => {
 
     it('propagates a single message through a queue with cardinality of many', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -197,8 +197,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'servicebus',
             'messaging.destination.name': 'queue.2',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
       })
@@ -206,7 +206,7 @@ describe('esm', () => {
 
     it('propagates multiple messages through a queue with cardinality of many', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -219,8 +219,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'servicebus',
             'messaging.destination.name': 'queue.2',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
@@ -228,7 +228,7 @@ describe('esm', () => {
 
     it('propagates a single amqp message through a queue with cardinality of many', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -241,8 +241,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'servicebus',
             'messaging.destination.name': 'queue.2',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
       })
@@ -250,7 +250,7 @@ describe('esm', () => {
 
     it('propagates multiple amqp messages through a queue with cardinality of many', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -263,8 +263,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'servicebus',
             'messaging.destination.name': 'queue.2',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
@@ -272,7 +272,7 @@ describe('esm', () => {
 
     it('propagates a message batch through a queue with cardinality of many', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -285,8 +285,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'servicebus',
             'messaging.destination.name': 'queue.2',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
@@ -295,7 +295,7 @@ describe('esm', () => {
     it('should not create a tryAdd span or add span links to arrays when batch links are disabled', async () => {
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: 'false'
+        DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: 'false',
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-messages-2', ({ headers, payload }) => {
@@ -308,7 +308,7 @@ describe('esm', () => {
     it('should not create a tryAdd span or add span links to batches when batch links are disabled', async () => {
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: 'false'
+        DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: 'false',
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-batch-2', ({ headers, payload }) => {
@@ -328,12 +328,12 @@ async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, st
   let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
-    DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net'
+    DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net',
   }
   env = { ...env, ...additionalEnvArgs }
   return spawnProc(command, args, {
     cwd,
-    env
+    env,
   }, stdioHandler)
 }
 

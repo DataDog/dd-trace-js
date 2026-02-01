@@ -10,8 +10,8 @@ const sinon = require('sinon')
 const constants = require('../../../../src/appsec/iast/taint-tracking/constants')
 const iastEnabledConfig = {
   iast: {
-    enabled: true
-  }
+    enabled: true,
+  },
 }
 
 describe('IAST Rewriter', () => {
@@ -32,35 +32,35 @@ describe('IAST Rewriter', () => {
         return {
           content: content + 'rewritten',
           metrics: {
-            instrumentedPropagation: 2
-          }
+            instrumentedPropagation: 2,
+          },
         }
       }
     }
 
     beforeEach(() => {
       iastTelemetry = {
-        add: sinon.spy()
+        add: sinon.spy(),
       }
 
       shimmer = {
         wrap: sinon.spy(),
-        unwrap: sinon.spy()
+        unwrap: sinon.spy(),
       }
 
       Module = {
-        register: sinon.stub()
+        register: sinon.stub(),
       }
 
       cacheRewrittenSourceMap = sinon.stub()
 
       log = {
-        error: sinon.stub()
+        error: sinon.stub(),
       }
 
       const kSymbolPrepareStackTrace = Symbol('kTestSymbolPrepareStackTrace')
       rewriterTelemetry = {
-        incrementTelemetryIfNeeded: sinon.stub()
+        incrementTelemetryIfNeeded: sinon.stub(),
       }
 
       workerThreads = require('worker_threads')
@@ -87,22 +87,22 @@ describe('IAST Rewriter', () => {
             }
 
             Object.defineProperty(testWrap, kSymbolPrepareStackTrace, {
-              value: true
+              value: true,
             })
             return testWrap
           },
           kSymbolPrepareStackTrace,
-          cacheRewrittenSourceMap
+          cacheRewrittenSourceMap,
         },
         '@datadog/wasm-js-rewriter/js/source-map': {
-          cacheRewrittenSourceMap
+          cacheRewrittenSourceMap,
         },
         '../../../../../datadog-shimmer': shimmer,
         '../../telemetry': iastTelemetry,
         module: Module,
         '../../../log': log,
         './rewriter-telemetry': rewriterTelemetry,
-        worker_threads: workerThreads
+        worker_threads: workerThreads,
       })
     })
 
@@ -268,9 +268,9 @@ describe('IAST Rewriter', () => {
           const data = {
             rewritten: {
               metrics: { status: 'modified' },
-              content
+              content,
             },
-            url: 'file://file.js'
+            url: 'file://file.js',
           }
 
           port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
@@ -288,9 +288,9 @@ describe('IAST Rewriter', () => {
           const data = {
             rewritten: {
               metrics,
-              content
+              content,
             },
-            url: 'file://file.js'
+            url: 'file://file.js',
           }
 
           port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
@@ -310,9 +310,9 @@ describe('IAST Rewriter', () => {
             rewritten: {
               metrics,
               content,
-              literalsResult
+              literalsResult,
             },
-            url: 'file://file.js'
+            url: 'file://file.js',
           }
           const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 
@@ -332,7 +332,7 @@ describe('IAST Rewriter', () => {
           const messages = ['this is a %s', 'test']
           const data = {
             level: 'error',
-            messages
+            messages,
           }
 
           port.postMessage({ type: constants.LOG_MESSAGE, data })
@@ -357,8 +357,8 @@ describe('IAST Rewriter', () => {
       getOriginalPathAndLineFromSourceMap = sinon.spy()
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
         '@datadog/wasm-js-rewriter': {
-          getOriginalPathAndLineFromSourceMap
-        }
+          getOriginalPathAndLineFromSourceMap,
+        },
       })
       argvs = [...process.execArgv].filter(arg => arg !== '--enable-source-maps')
     })

@@ -25,7 +25,7 @@ describe('Unvalidated Redirect vulnerability', () => {
 
   function getAxiosInstance (config) {
     return Axios.create({
-      baseURL: `http://localhost:${config.port}`
+      baseURL: `http://localhost:${config.port}`,
     })
   }
 
@@ -39,8 +39,8 @@ describe('Unvalidated Redirect vulnerability', () => {
           occurrences: 1,
           location: {
             path: redirectFunctionsFilename,
-            line: 4
-          }
+            line: 4,
+          },
         }, null, (done, config) => {
           getAxiosInstance(config).get('/?location=https://app.com?id=tron').catch(done)
         })
@@ -51,8 +51,8 @@ describe('Unvalidated Redirect vulnerability', () => {
           occurrences: 1,
           location: {
             path: redirectFunctionsFilename,
-            line: 8
-          }
+            line: 8,
+          },
         }, null, (done, config) => {
           getAxiosInstance(config).get('/?location=http://user@app.com/').catch(done)
         })
@@ -63,8 +63,8 @@ describe('Unvalidated Redirect vulnerability', () => {
           occurrences: 1,
           location: {
             path: redirectFunctionsFilename,
-            line: 12
-          }
+            line: 12,
+          },
         }, null, (done, config) => {
           getAxiosInstance(config).get('/?location=http://user@app.com/').catch(done)
         })
@@ -75,11 +75,11 @@ describe('Unvalidated Redirect vulnerability', () => {
           occurrences: 1,
           location: {
             path: redirectFunctionsFilename,
-            line: 12
-          }
+            line: 12,
+          },
         }, null, (done, config) => {
           getAxiosInstance(config).post('', {
-            location: 'http://user@app.com/'
+            location: 'http://user@app.com/',
           }).catch(done)
         })
 
@@ -98,8 +98,8 @@ describe('Unvalidated Redirect vulnerability', () => {
         }, UNVALIDATED_REDIRECT, (done, config) => {
           getAxiosInstance(config).get('', {
             headers: {
-              redirectlocation: 'http://user@app.com/'
-            }
+              redirectlocation: 'http://user@app.com/',
+            },
           }).catch(done)
         })
       })

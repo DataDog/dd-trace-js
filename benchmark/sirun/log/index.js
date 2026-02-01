@@ -4,18 +4,18 @@ const log = require('../../../packages/dd-trace/src/log')
 
 const {
   DD_TRACE_DEBUG = 'true',
-  WITH_LEVEL = 'debug'
+  WITH_LEVEL = 'debug',
 } = process.env
 
 require('../../..').init({
-  debug: DD_TRACE_DEBUG
+  debug: DD_TRACE_DEBUG,
 })
 
 log.use({
   debug () {},
   info () {},
   warn () {},
-  error () {}
+  error () {},
 })
 
 for (let i = 0; i < 10000000; i++) {

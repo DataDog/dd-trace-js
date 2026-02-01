@@ -12,7 +12,7 @@ class AmqplibPlugin extends CompositePlugin {
     return {
       producer: ProducerPlugin,
       consumer: ConsumerPlugin,
-      client: ClientPlugin
+      client: ClientPlugin,
     }
   }
 }

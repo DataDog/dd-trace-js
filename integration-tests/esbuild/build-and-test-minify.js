@@ -19,8 +19,8 @@ esbuild.build({
   platform: 'node',
   target: ['node18'],
   external: [
-    'knex'
-  ]
+    'knex',
+  ],
 }).then(() => {
   console.error('Expected build to throw an error, but it succeeded')
   process.exitCode = 1

@@ -4,7 +4,7 @@ function getTokensFromLlmOutput (result) {
   const tokens = {
     input: 0,
     output: 0,
-    total: 0
+    total: 0,
   }
   const { llmOutput } = result
   if (!llmOutput) return tokens
@@ -31,5 +31,5 @@ function getTokensFromLlmOutput (result) {
 }
 
 module.exports = {
-  getTokensFromLlmOutput
+  getTokensFromLlmOutput,
 }

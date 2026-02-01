@@ -13,5 +13,5 @@ module.exports = {
 
   stop: () => {
     profiler.stop()
-  }
+  },
 }

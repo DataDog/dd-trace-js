@@ -83,7 +83,7 @@ function finish (ctx, result, error) {
 // Hook the main package entry point
 addHook({
   name: '@google/genai',
-  versions: ['>=1.19.0']
+  versions: ['>=1.19.0'],
 }, exports => {
   // Wrap GoogleGenAI to intercept when it creates Models instances
   if (!exports.GoogleGenAI) return exports

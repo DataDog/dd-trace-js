@@ -13,7 +13,7 @@ const {
   SCHEMA_NAME,
   SCHEMA_OPERATION,
   SCHEMA_WEIGHT,
-  SCHEMA_TYPE
+  SCHEMA_TYPE,
 } = require('../../dd-trace/src/constants')
 const { SchemaBuilder } = require('../../dd-trace/src/datastreams/schemas/schema_builder')
 const { loadMessage } = require('./helpers')
@@ -197,7 +197,7 @@ describe('Plugin', () => {
           const OtherMessage = root.lookupType('OtherMessage')
           const messageObject = {
             name: ['Alice'],
-            age: 30
+            age: 30,
           }
           const message = OtherMessage.fromObject(messageObject)
 
@@ -222,7 +222,7 @@ describe('Plugin', () => {
           const OtherMessage = root.lookupType('OtherMessage')
           const message = OtherMessage.create({
             name: ['Alice'],
-            age: 30
+            age: 30,
           })
 
           const bytes = OtherMessage.encodeDelimited(message).finish()
@@ -248,7 +248,7 @@ describe('Plugin', () => {
 
           const message = OtherMessage.create({
             name: ['Alice'],
-            age: 30
+            age: 30,
           })
 
           const bytes = OtherMessage.encodeDelimited(message).finish()
@@ -274,7 +274,7 @@ describe('Plugin', () => {
 
           const message = OtherMessage.create({
             name: ['Alice'],
-            age: 30
+            age: 30,
           })
 
           const bytes = OtherMessage.encodeDelimited(message).finish()

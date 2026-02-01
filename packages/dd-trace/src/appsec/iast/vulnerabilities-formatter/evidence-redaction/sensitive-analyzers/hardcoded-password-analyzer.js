@@ -5,7 +5,7 @@ module.exports = function extractSensitiveRanges (evidence, valuePattern) {
   if (valuePattern.test(value)) {
     return [{
       start: 0,
-      end: value.length
+      end: value.length,
     }]
   }
 

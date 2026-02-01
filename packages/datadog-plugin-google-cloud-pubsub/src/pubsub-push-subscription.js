@@ -96,7 +96,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     const subscription = req.headers['x-goog-pubsub-subscription-name']
     const message = {
       messageId: req.headers['x-goog-pubsub-message-id'],
-      publishTime: req.headers['x-goog-pubsub-publish-time']
+      publishTime: req.headers['x-goog-pubsub-publish-time'],
     }
 
     const topicName = req.headers['pubsub.topic'] || 'push-subscription-topic'
@@ -136,7 +136,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     return new SpanContext({
       traceId,
       spanId: parentId,
-      tags
+      tags,
     })
   }
 
@@ -165,8 +165,8 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
         'pubsub.topic': topicName,
         '_dd.base_service': baseService,
         '_dd.serviceoverride.type': 'integration',
-        'resource.name': `Push Subscription ${subscriptionName}`
-      }
+        'resource.name': `Push Subscription ${subscriptionName}`,
+      },
     })
 
     if (!span) {

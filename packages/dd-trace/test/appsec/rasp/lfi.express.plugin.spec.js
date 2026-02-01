@@ -65,14 +65,14 @@ describe('RASP - lfi', () => {
           appsec: {
             enabled: true,
             rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),
-            rasp: { enabled: true }
-          }
+            rasp: { enabled: true },
+          },
         }))
 
         server = expressApp.listen(0, () => {
           const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
           axios = Axios.create({
-            baseURL: `http://localhost:${port}`
+            baseURL: `http://localhost:${port}`,
           })
           done()
         })
@@ -266,7 +266,7 @@ describe('RASP - lfi', () => {
               } catch (e) {
                 // some ops are blocked
               }
-            }
+            },
           }, dirname)
         })
 
@@ -279,7 +279,7 @@ describe('RASP - lfi', () => {
                 fs.close(fd, () => {
                 })
               }
-            }
+            },
           }, __filename, 'r')
         })
 
@@ -296,7 +296,7 @@ describe('RASP - lfi', () => {
           runFsMethodTestThreeWay('opendir', {
             onfinish: (dir) => {
               dir.close()
-            }
+            },
           }, dirname)
         })
 
@@ -477,14 +477,14 @@ describe('RASP - lfi', () => {
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),
-          rasp: { enabled: true }
-        }
+          rasp: { enabled: true },
+        },
       }))
 
       server.listen(0, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({
-          baseURL: `http://localhost:${port}`
+          baseURL: `http://localhost:${port}`,
         })
 
         done()
@@ -513,8 +513,8 @@ describe('RASP - lfi', () => {
 
       return testBlockingRequest('/', {
         headers: {
-          file: '/test.file'
-        }
+          file: '/test.file',
+        },
       })
     })
   })

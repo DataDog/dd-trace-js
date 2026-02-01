@@ -9,7 +9,7 @@ const {
   curlAndAssertMessage,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 

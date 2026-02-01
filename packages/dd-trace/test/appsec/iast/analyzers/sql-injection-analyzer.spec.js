@@ -25,9 +25,9 @@ describe('sql-injection-analyzer', () => {
       iinfo: {
         parameterName: 'param',
         parameterValue: string,
-        type: HTTP_REQUEST_PARAMETER
+        type: HTTP_REQUEST_PARAMETER,
       },
-      secureMarks
+      secureMarks,
     }
 
     return [range]
@@ -48,17 +48,17 @@ describe('sql-injection-analyzer', () => {
         default:
           return []
       }
-    }
+    },
   }
 
   const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
-    '../taint-tracking/operations': TaintTrackingMock
+    '../taint-tracking/operations': TaintTrackingMock,
   })
   const StoredInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/stored-injection-analyzer', {
-    './injection-analyzer': InjectionAnalyzer
+    './injection-analyzer': InjectionAnalyzer,
   })
   const sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
-    './stored-injection-analyzer': StoredInjectionAnalyzer
+    './stored-injection-analyzer': StoredInjectionAnalyzer,
   })
 
   afterEach(() => {
@@ -119,27 +119,27 @@ describe('sql-injection-analyzer', () => {
           return {
             toSpanId () {
               return '123'
-            }
+            },
           }
-        }
-      }
+        },
+      },
     }
     const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
       '../iast-context': {
-        getIastContext: () => iastContext
+        getIastContext: () => iastContext,
       },
-      '../overhead-controller': { hasQuota: () => true }
+      '../overhead-controller': { hasQuota: () => true },
     })
     sinon.stub(ProxyAnalyzer.prototype, '_reportEvidence')
     const reportEvidence = ProxyAnalyzer.prototype._reportEvidence
 
     const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
       '../taint-tracking/operations': TaintTrackingMock,
-      './vulnerability-analyzer': ProxyAnalyzer
+      './vulnerability-analyzer': ProxyAnalyzer,
     })
 
     const StoredInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/stored-injection-analyzer', {
-      './injection-analyzer': InjectionAnalyzer
+      './injection-analyzer': InjectionAnalyzer,
     })
 
     const proxiedSqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer',
@@ -147,15 +147,15 @@ describe('sql-injection-analyzer', () => {
         './stored-injection-analyzer': StoredInjectionAnalyzer,
         '../taint-tracking/operations': TaintTrackingMock,
         '../iast-context': {
-          getIastContext: () => iastContext
+          getIastContext: () => iastContext,
         },
-        '../vulnerability-reporter': { addVulnerability }
+        '../vulnerability-reporter': { addVulnerability },
       })
     proxiedSqlInjectionAnalyzer.analyze(TAINTED_QUERY, undefined, dialect)
     sinon.assert.calledOnce(reportEvidence)
     sinon.assert.calledWithMatch(reportEvidence, TAINTED_QUERY, {}, {
       value: TAINTED_QUERY,
-      dialect
+      dialect,
     })
   })
 
@@ -180,27 +180,27 @@ describe('sql-injection-analyzer', () => {
       const datadogCore = {
         storage: () => {
           return {
-            getStore
+            getStore,
           }
-        }
+        },
       }
 
       const iastPlugin = proxyquire('../../../../src/appsec/iast/iast-plugin', {
         '../../../../datadog-core': datadogCore,
-        './iast-context': { getIastContext }
+        './iast-context': { getIastContext },
       })
 
       const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
         '../iast-plugin': iastPlugin,
-        '../overhead-controller': { hasQuota: () => true }
+        '../overhead-controller': { hasQuota: () => true },
       })
       const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
         '../taint-tracking/operations': TaintTrackingMock,
-        './vulnerability-analyzer': ProxyAnalyzer
+        './vulnerability-analyzer': ProxyAnalyzer,
       })
 
       sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
-        './injection-analyzer': InjectionAnalyzer
+        './injection-analyzer': InjectionAnalyzer,
       })
       analyze = sinon.stub(sqlInjectionAnalyzer, 'analyze')
       sqlInjectionAnalyzer.configure(true)
@@ -242,7 +242,7 @@ describe('sql-injection-analyzer', () => {
       mysql: 'MYSQL',
       redshift: 'REDSHIFT',
       postgresql: 'POSTGRES',
-      sqlite3: 'SQLITE'
+      sqlite3: 'SQLITE',
     }
 
     Object.keys(knexDialects).forEach((knexDialect) => {

@@ -20,7 +20,7 @@ module.exports = {
   isStarted,
   start,
   configure,
-  stop
+  stop,
 }
 
 /**
@@ -94,9 +94,9 @@ function start (config, rcInstance) {
         parentThreadId,
         probePort: probeChannel.port1,
         logPort: logChannel.port1,
-        configPort: configChannel.port1
+        configPort: configChannel.port1,
       },
-      transferList: [probeChannel.port1, logChannel.port1, configChannel.port1]
+      transferList: [probeChannel.port1, logChannel.port1, configChannel.port1],
     }
   )
 

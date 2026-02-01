@@ -53,7 +53,7 @@ describe('ip extractor', () => {
     'x-cluster-client-ip',
     'fastly-client-ip',
     'cf-connecting-ip',
-    'cf-connecting-ipv6'
+    'cf-connecting-ipv6',
   ]
   ipHeaderList.forEach(ipHeader => {
     it(`should detect ip in header '${ipHeader}'`, (done) => {
@@ -83,8 +83,8 @@ describe('ip extractor', () => {
     }
     axios.get(`http://localhost:${port}/`, {
       headers: {
-        [clientIpHeader]: expectedIp
-      }
+        [clientIpHeader]: expectedIp,
+      },
     }).catch(done)
   })
 
@@ -102,8 +102,8 @@ describe('ip extractor', () => {
     }
     axios.get(`http://localhost:${port}/`, {
       headers: {
-        [clientIpHeader]: expectedIp
-      }
+        [clientIpHeader]: expectedIp,
+      },
     }).catch(done)
   })
 
@@ -121,8 +121,8 @@ describe('ip extractor', () => {
     }
     axios.get(`http://localhost:${port}/`, {
       headers: {
-        [clientIpHeader]: invalidIp
-      }
+        [clientIpHeader]: invalidIp,
+      },
     }).catch(done)
   })
 
@@ -134,7 +134,7 @@ describe('ip extractor', () => {
     testIp({
       'x-forwarded-for': ip1,
       'x-client-ip': ip2,
-      'true-client-ip': ip3
+      'true-client-ip': ip3,
     }, ip1, done)
   })
 
@@ -146,7 +146,7 @@ describe('ip extractor', () => {
     testIp({
       'x-forwarded-for': ip1,
       'x-client-ip': ip2,
-      'true-client-ip': ip3
+      'true-client-ip': ip3,
     }, ip1, done)
   })
 
@@ -157,7 +157,7 @@ describe('ip extractor', () => {
     const ip4 = '1.2.3.6'
 
     testIp({
-      'x-forwarded-for': `${ip1},${ip2},${expectedIp},${ip4}`
+      'x-forwarded-for': `${ip1},${ip2},${expectedIp},${ip4}`,
     }, expectedIp, done)
   })
 
@@ -168,7 +168,7 @@ describe('ip extractor', () => {
     const ip4 = '::1'
 
     testIp({
-      'x-forwarded-for': `${ip1},${ip2},  ${expectedIp} ,${ip4}`
+      'x-forwarded-for': `${ip1},${ip2},  ${expectedIp} ,${ip4}`,
     }, expectedIp, done)
   })
 
@@ -177,7 +177,7 @@ describe('ip extractor', () => {
     const ip2 = '172.16.3.5'
 
     testIp({
-      'x-forwarded-for': `${expectedIp},${ip2}`
+      'x-forwarded-for': `${expectedIp},${ip2}`,
     }, expectedIp, done)
   })
 
@@ -186,7 +186,7 @@ describe('ip extractor', () => {
     const ip2 = '::1'
 
     testIp({
-      'x-forwarded-for': `${expectedIp},${ip2}`
+      'x-forwarded-for': `${expectedIp},${ip2}`,
     }, expectedIp, done)
   })
 
@@ -212,7 +212,7 @@ describe('ip extractor', () => {
     testIp({
       'x-forwarded-for': ip1,
       'x-client-ip': ip2,
-      'true-client-ip': ip3
+      'true-client-ip': ip3,
     }, ip3Public, done)
   })
 
@@ -231,8 +231,8 @@ describe('ip extractor', () => {
         'x-forwarded-for': 'bonjour',
         'x-client-ip': '[::1',
         'true-client-ip': '256.256.256.256',
-        forwarded: 'by=1.1.1.1;proto=https'
-      }
+        forwarded: 'by=1.1.1.1;proto=https',
+      },
     }).catch(done)
   })
 
@@ -240,7 +240,7 @@ describe('ip extractor', () => {
     const expectedIp = '1.2.3.4'
 
     testIp({
-      'x-forwarded-for': `"${expectedIp}  ",1.1.1.1`
+      'x-forwarded-for': `"${expectedIp}  ",1.1.1.1`,
     }, expectedIp, done)
   })
 
@@ -248,7 +248,7 @@ describe('ip extractor', () => {
     const expectedIp = '1.2.3.4'
 
     testIp({
-      'x-forwarded-for': `${expectedIp}  :1234,1.1.1.1`
+      'x-forwarded-for': `${expectedIp}  :1234,1.1.1.1`,
     }, expectedIp, done)
   })
 
@@ -256,7 +256,7 @@ describe('ip extractor', () => {
     const expectedIp = '9f7b:5e67:5472:4464:90b0:6b0a:9aa6:f9dc'
 
     testIp({
-      'x-forwarded-for': `[ ${expectedIp} ]`
+      'x-forwarded-for': `[ ${expectedIp} ]`,
     }, expectedIp, done)
   })
 
@@ -264,7 +264,7 @@ describe('ip extractor', () => {
     const expectedIp = '9f7b:5e67:5472:4464:90b0:6b0a:9aa6:f9dc'
 
     testIp({
-      'x-forwarded-for': `"[${expectedIp}]:4485"`
+      'x-forwarded-for': `"[${expectedIp}]:4485"`,
     }, expectedIp, done)
   })
 
@@ -273,7 +273,7 @@ describe('ip extractor', () => {
       const expectedIp = '1.2.3.4'
 
       testIp({
-        Forwarded: `for=${expectedIp}`
+        Forwarded: `for=${expectedIp}`,
       }, expectedIp, done)
     })
 
@@ -281,7 +281,7 @@ describe('ip extractor', () => {
       const expectedIp = '5a54:f844:006c:b8f1:0e96:9e54:54ac:4a2d'
 
       testIp({
-        Forwarded: `for="[${expectedIp}]"`
+        Forwarded: `for="[${expectedIp}]"`,
       }, expectedIp, done)
     })
 
@@ -290,7 +290,7 @@ describe('ip extractor', () => {
 
       testIp({
         'x-client-ip': expectedIp,
-        Forwarded: 'for=5.6.7.8'
+        Forwarded: 'for=5.6.7.8',
       }, expectedIp, done)
     })
 
@@ -299,7 +299,7 @@ describe('ip extractor', () => {
 
       testIp({
         'forwarded-for': '5.6.7.8',
-        Forwarded: `for=${expectedIp}`
+        Forwarded: `for=${expectedIp}`,
       }, expectedIp, done)
     })
 
@@ -307,7 +307,7 @@ describe('ip extractor', () => {
       const expectedIp = '1.2.3.4'
 
       testIp({
-        Forwarded: `proto=http;host="for=";FOR="${expectedIp}";`
+        Forwarded: `proto=http;host="for=";FOR="${expectedIp}";`,
       }, expectedIp, done)
     })
   })

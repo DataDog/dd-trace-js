@@ -9,7 +9,7 @@ class ExpressPlugin extends CompositePlugin {
   static get plugins () {
     return {
       tracing: ExpressTracingPlugin,
-      codeOriginForSpans: ExpressCodeOriginForSpansPlugin
+      codeOriginForSpans: ExpressCodeOriginForSpansPlugin,
     }
   }
 }

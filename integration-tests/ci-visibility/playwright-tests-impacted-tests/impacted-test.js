@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
 test.describe('impacted test', () => {
   test('should be impacted', async ({ page }) => {
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello World'
+      'Hello World',
     ])
   })
 })
@@ -17,7 +17,7 @@ test.describe('impacted test', () => {
 test.describe('impacted test 2', () => {
   test('should be impacted 2', async ({ page }) => {
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello World'
+      'Hello World',
     ])
   })
 })

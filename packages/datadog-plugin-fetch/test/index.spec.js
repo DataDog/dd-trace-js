@@ -81,8 +81,8 @@ describe('Plugin', function () {
               'http.status_code': '200',
               component: 'fetch',
               '_dd.integration': 'fetch',
-              'out.host': 'localhost'
-            }
+              'out.host': 'localhost',
+            },
           })
             .then(done)
             .catch(done)
@@ -107,8 +107,8 @@ describe('Plugin', function () {
               'http.method': 'POST',
               'http.status_code': '200',
               component: 'fetch',
-              'out.host': 'localhost'
-            }
+              'out.host': 'localhost',
+            },
           })
             .then(done)
             .catch(done)
@@ -133,8 +133,8 @@ describe('Plugin', function () {
               'http.method': 'GET',
               'http.status_code': '200',
               component: 'fetch',
-              'out.host': 'localhost'
-            }
+              'out.host': 'localhost',
+            },
           })
             .then(done)
             .catch(done)
@@ -169,8 +169,8 @@ describe('Plugin', function () {
           agent.assertFirstTraceSpan({
             meta: {
               'http.status_code': '200',
-              'http.url': `http://localhost:${port}/user`
-            }
+              'http.url': `http://localhost:${port}/user`,
+            },
           })
             .then(done)
             .catch(done)
@@ -192,8 +192,8 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent.assertFirstTraceSpan({
             meta: {
-              'http.status_code': '200'
-            }
+              'http.status_code': '200',
+            },
           })
             .then(done)
             .catch(done)
@@ -216,8 +216,8 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent.assertFirstTraceSpan({
             meta: {
-              'http.status_code': '200'
-            }
+              'http.status_code': '200',
+            },
           })
             .then(done)
             .catch(done)
@@ -235,7 +235,7 @@ describe('Plugin', function () {
               [ERROR_TYPE]: error.name,
               [ERROR_MESSAGE]: error.message || error.code,
               [ERROR_STACK]: error.stack,
-              component: 'fetch'
+              component: 'fetch',
             })
           })
           .then(done)
@@ -301,7 +301,7 @@ describe('Plugin', function () {
           const controller = new AbortController()
 
           fetch(`http://localhost:${port}/user`, {
-            signal: controller.signal
+            signal: controller.signal,
           }).catch(e => {})
 
           controller.abort()
@@ -326,7 +326,7 @@ describe('Plugin', function () {
           const controller = new AbortController()
 
           fetch(`http://localhost:${port}/user`, {
-            signal: controller.signal
+            signal: controller.signal,
           }).catch(e => {})
 
           controller.abort()
@@ -365,7 +365,7 @@ describe('Plugin', function () {
 
       beforeEach(() => {
         config = {
-          service: 'custom'
+          service: 'custom',
         }
 
         return agent.load('fetch', config)
@@ -400,7 +400,7 @@ describe('Plugin', function () {
 
       beforeEach(() => {
         config = {
-          validateStatus: status => status < 500
+          validateStatus: status => status < 500,
         }
 
         return agent.load('fetch', config)
@@ -435,7 +435,7 @@ describe('Plugin', function () {
 
       beforeEach(() => {
         config = {
-          splitByDomain: true
+          splitByDomain: true,
         }
 
         return agent.load('fetch', config)
@@ -470,7 +470,7 @@ describe('Plugin', function () {
 
       beforeEach(() => {
         config = {
-          headers: ['x-baz', 'x-foo']
+          headers: ['x-baz', 'x-foo'],
         }
 
         return agent.load('fetch', config)
@@ -501,8 +501,8 @@ describe('Plugin', function () {
 
           fetch(`http://localhost:${port}/user`, {
             headers: {
-              'x-baz': 'qux'
-            }
+              'x-baz': 'qux',
+            },
           }).catch(() => {})
         })
       })
@@ -516,8 +516,8 @@ describe('Plugin', function () {
           hooks: {
             request: (span, req, res) => {
               span.setTag('foo', '/foo')
-            }
-          }
+            },
+          },
         }
 
         return agent.load('fetch', config)
@@ -552,7 +552,7 @@ describe('Plugin', function () {
 
       beforeEach(() => {
         config = {
-          propagationBlocklist: [/\/users/]
+          propagationBlocklist: [/\/users/],
         }
 
         return agent.load('fetch', config)
@@ -589,7 +589,7 @@ describe('Plugin', function () {
 
       beforeEach(() => {
         config = {
-          blocklist: [/\/user/]
+          blocklist: [/\/user/],
         }
 
         return agent.load('fetch', config)
@@ -670,8 +670,8 @@ describe('Plugin', function () {
               'http.method': 'GET',
               'http.status_code': '200',
               component: 'fetch',
-              'out.host': 'localhost'
-            }
+              'out.host': 'localhost',
+            },
           })
             .then(done)
             .catch(done)

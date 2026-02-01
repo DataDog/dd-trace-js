@@ -90,7 +90,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     return new SpanContext({
       traceId,
       spanId: parentId,
-      tags
+      tags,
     })
   }
 
@@ -130,7 +130,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       'pubsub.span_type': 'message_processing',
       'messaging.operation': 'receive',
       base_service: baseService,
-      service_override_type: 'custom'
+      service_override_type: 'custom',
     }
 
     if (batchRequestTraceId && batchRequestSpanId) {
@@ -139,12 +139,12 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       meta['_dd.span_links'] = JSON.stringify([{
         trace_id: batchRequestTraceId,
         span_id: batchRequestSpanId,
-        flags: 0
+        flags: 0,
       }])
     }
 
     const metrics = {
-      'pubsub.ack': 0
+      'pubsub.ack': 0,
     }
 
     if (batchSize) {
@@ -166,7 +166,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       type: 'worker',
       service: serviceName,
       meta,
-      metrics
+      metrics,
     }, ctx)
 
     if (message.id) {

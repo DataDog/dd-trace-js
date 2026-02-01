@@ -40,14 +40,14 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       lookup,
       protocolVersion,
       headers,
-      isTestDynamicInstrumentationEnabled
+      isTestDynamicInstrumentationEnabled,
     } = config
 
     fetchAgentInfo(this._url, (err, agentInfo) => {
       this._isInitialized = true
       let latestEvpProxyVersion = getLatestEvpProxyVersion(err, agentInfo)
       const isEvpCompatible = latestEvpProxyVersion >= 2
-      const isGzipCompatible = latestEvpProxyVersion >= 4
+      this._isGzipCompatible = latestEvpProxyVersion >= 4
 
       // v3 does not work well citestcycle, so we downgrade to v2
       if (latestEvpProxyVersion === 3) {
@@ -61,20 +61,20 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
         this._writer = new AgentlessWriter({
           url: this._url,
           tags,
-          evpProxyPrefix
+          evpProxyPrefix,
         })
         this._coverageWriter = new CoverageWriter({
           url: this._url,
-          evpProxyPrefix
+          evpProxyPrefix,
         })
+        this._codeCoverageReportUrl = this._url
         if (isTestDynamicInstrumentationEnabled) {
           const canFowardLogs = getCanForwardDebuggerLogs(err, agentInfo)
           if (canFowardLogs) {
             const DynamicInstrumentationLogsWriter = require('../agentless/di-logs-writer')
             this._logsWriter = new DynamicInstrumentationLogsWriter({
               url: this._url,
-              tags,
-              isAgentProxy: true
+              isAgentProxy: true,
             })
             this._canForwardLogs = true
           }
@@ -85,7 +85,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           prioritySampler,
           lookup,
           protocolVersion,
-          headers
+          headers,
         })
         // coverages will never be used, so we discard them
         this._coverageBuffer = []
@@ -93,7 +93,6 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       this._resolveCanUseCiVisProtocol(isEvpCompatible)
       this.exportUncodedTraces()
       this.exportUncodedCoverages()
-      this._isGzipCompatible = isGzipCompatible
     })
   }
 

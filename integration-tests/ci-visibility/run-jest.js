@@ -13,7 +13,7 @@ const options = {
   shard: process.env.TEST_SHARD || undefined,
   setupFilesAfterEnv: process.env.SETUP_FILES_AFTER_ENV ? process.env.SETUP_FILES_AFTER_ENV.split(',') : [],
   testRunner: 'jest-circus/runner',
-  testEnvironment: 'node'
+  testEnvironment: 'node',
 }
 
 if (process.env.RUN_IN_PARALLEL) {
@@ -35,6 +35,10 @@ if (process.env.ENABLE_HAPPY_DOM) {
 
 if (process.env.COLLECT_COVERAGE_FROM) {
   options.collectCoverageFrom = process.env.COLLECT_COVERAGE_FROM.split(',')
+}
+
+if (process.env.COVERAGE_REPORTERS) {
+  options.coverageReporters = process.env.COVERAGE_REPORTERS.split(',')
 }
 
 if (process.env.DO_NOT_INJECT_GLOBALS) {

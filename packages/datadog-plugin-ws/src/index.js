@@ -14,7 +14,7 @@ class WSPlugin extends CompositePlugin {
       server: WSServerPlugin,
       producer: WSProducerPlugin,
       receiver: WSReceiverPlugin,
-      close: WSClosePlugin
+      close: WSClosePlugin,
     }
   }
 

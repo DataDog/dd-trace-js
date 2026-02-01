@@ -66,14 +66,14 @@ function isESMBuild (build) {
 function getGitMetadata () {
   const gitMetadata = {
     repositoryURL: null,
-    commitSHA: null
+    commitSHA: null,
   }
 
   try {
     gitMetadata.repositoryURL = execSync('git config --get remote.origin.url', {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'ignore'],
-      cwd: process.cwd()
+      cwd: process.cwd(),
     }).trim()
   } catch (e) {
     if (DEBUG) {
@@ -85,7 +85,7 @@ function getGitMetadata () {
     gitMetadata.commitSHA = execSync('git rev-parse HEAD', {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'ignore'],
-      cwd: process.cwd()
+      cwd: process.cwd(),
     }).trim()
   } catch (e) {
     if (DEBUG) {
@@ -202,8 +202,8 @@ ${build.initialOptions.banner.js}`
         pluginData: {
           path: args.path,
           full: fullPathToModule,
-          applicationFile: true
-        }
+          applicationFile: true,
+        },
       }
     }
 
@@ -228,8 +228,8 @@ ${build.initialOptions.banner.js}`
             pkgOfInterest: true,
             kind: args.kind,
             internal,
-            isESM: true
-          }
+            isESM: true,
+          },
         }
       }
       // The file namespace is used when requiring files from disk in userland
@@ -274,8 +274,8 @@ ${build.initialOptions.banner.js}`
             pkgOfInterest: true,
             kind: args.kind,
             internal,
-            isESM
-          }
+            isESM,
+          },
         }
       } catch (e) {
         // Skip vendored dependencies which never have a `package.json`. This
@@ -286,7 +286,7 @@ ${build.initialOptions.banner.js}`
           if (DEBUG) {
             console.log([
               'Skipping `package.json` lookup.',
-              'This usually means the package was vendored but could indicate an issue otherwise.'
+              'This usually means the package was vendored but could indicate an issue otherwise.',
             ].join(' '))
           }
         } else {
@@ -322,7 +322,7 @@ ${build.initialOptions.banner.js}`
           const setters = await processModule({
             path: args.path,
             internal: data.internal,
-            context: { format: 'module' }
+            context: { format: 'module' },
           })
 
           const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
@@ -368,7 +368,7 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
       return {
         contents,
         loader: 'js',
-        resolveDir: path.dirname(args.path)
+        resolveDir: path.dirname(args.path),
       }
     }
     if (DD_IAST_ENABLED && args.pluginData?.applicationFile) {
@@ -382,7 +382,7 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
       return {
         contents: rewritten.content,
         loader: 'js',
-        resolveDir: path.dirname(args.path)
+        resolveDir: path.dirname(args.path),
       }
     }
   })

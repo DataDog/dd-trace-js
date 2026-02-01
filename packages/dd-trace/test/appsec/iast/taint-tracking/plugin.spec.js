@@ -14,7 +14,7 @@ const {
   HTTP_REQUEST_HEADER_VALUE,
   HTTP_REQUEST_PATH_PARAM,
   HTTP_REQUEST_URI,
-  SQL_ROW_VALUE
+  SQL_ROW_VALUE,
 } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 const { getConfigFresh } = require('../../../helpers/config')
 
@@ -34,15 +34,15 @@ describe('IAST Taint tracking plugin', () => {
   const datadogCore = {
     storage: () => {
       return {
-        getStore: () => store
+        getStore: () => store,
       }
-    }
+    },
   }
 
   beforeEach(() => {
     taintTrackingPlugin = proxyquire('../../../../src/appsec/iast/taint-tracking/plugin', {
       './operations': sinon.spy(taintTrackingOperations),
-      '../../../../../datadog-core': datadogCore
+      '../../../../../datadog-core': datadogCore,
     })
     const config = getConfigFresh()
     taintTrackingPlugin.enable(config.iast)
@@ -98,8 +98,8 @@ describe('IAST Taint tracking plugin', () => {
       const originType = 'ORIGIN_TYPE'
       const objToBeTainted = {
         foo: {
-          bar: 'taintValue'
-        }
+          bar: 'taintValue',
+        },
       }
 
       taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted)
@@ -110,8 +110,8 @@ describe('IAST Taint tracking plugin', () => {
       const propertyToBeTainted = 'foo'
       const objToBeTainted = {
         [propertyToBeTainted]: {
-          bar: 'taintValue'
-        }
+          bar: 'taintValue',
+        },
       }
 
       taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted)
@@ -127,8 +127,8 @@ describe('IAST Taint tracking plugin', () => {
       const propertyToBeTainted = 'foo'
       const objToBeTainted = {
         [propertyToBeTainted]: {
-          bar: 'taintValue'
-        }
+          bar: 'taintValue',
+        },
       }
 
       objToBeTainted[propertyToBeTainted].self = objToBeTainted
@@ -145,7 +145,7 @@ describe('IAST Taint tracking plugin', () => {
     it('Should non fail on null value', () => {
       const propertyToBeTainted = 'invalid'
       const objToBeTainted = {
-        [propertyToBeTainted]: null
+        [propertyToBeTainted]: null,
       }
 
       taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted)
@@ -155,8 +155,8 @@ describe('IAST Taint tracking plugin', () => {
     it('Should taint request parameter when qs event is published', () => {
       const req = {
         query: {
-          bar: 'taintValue'
-        }
+          bar: 'taintValue',
+        },
       }
 
       queryReadFinishChannel.publish({ query: req.query })
@@ -172,8 +172,8 @@ describe('IAST Taint tracking plugin', () => {
     it('Should taint request body when body-parser event is published', () => {
       const req = {
         body: {
-          bar: 'taintValue'
-        }
+          bar: 'taintValue',
+        },
       }
 
       bodyParserFinishChannel.publish({ req })
@@ -189,8 +189,8 @@ describe('IAST Taint tracking plugin', () => {
     it('Should taint request body when express middleware next event is published', () => {
       const req = {
         body: {
-          bar: 'taintValue'
-        }
+          bar: 'taintValue',
+        },
       }
 
       middlewareNextChannel.publish({ req })
@@ -206,8 +206,8 @@ describe('IAST Taint tracking plugin', () => {
     it('Should taint request body only once when bodyparser and express events are published', () => {
       const req = {
         body: {
-          bar: 'taintValue'
-        }
+          bar: 'taintValue',
+        },
       }
 
       bodyParserFinishChannel.publish({ req })
@@ -224,7 +224,7 @@ describe('IAST Taint tracking plugin', () => {
 
     it('Should taint cookies when cookie parser event is published', () => {
       const cookies = {
-        cookie1: 'tainted_cookie'
+        cookie1: 'tainted_cookie',
       }
 
       cookieParseFinishCh.publish({ cookies })
@@ -240,8 +240,8 @@ describe('IAST Taint tracking plugin', () => {
     it('Should taint request params when process params event is published with processParamsStartCh', () => {
       const req = {
         params: {
-          parameter1: 'tainted1'
-        }
+          parameter1: 'tainted1',
+        },
       }
 
       processParamsStartCh.publish({ req })
@@ -256,8 +256,8 @@ describe('IAST Taint tracking plugin', () => {
     it('Should taint request params when process params event is published with routerParamStartCh', () => {
       const req = {
         params: {
-          parameter1: 'tainted1'
-        }
+          parameter1: 'tainted1',
+        },
       }
 
       routerParamStartCh.publish({ req })
@@ -279,9 +279,9 @@ describe('IAST Taint tracking plugin', () => {
     it('Should taint headers and uri from request', () => {
       const req = {
         headers: {
-          'x-iast-header': 'header-value'
+          'x-iast-header': 'header-value',
         },
-        url: 'https://testurl'
+        url: 'https://testurl',
       }
       taintTrackingPlugin.taintRequest(req, iastContext)
 
@@ -311,11 +311,11 @@ describe('IAST Taint tracking plugin', () => {
         const result = [
           {
             id: 1,
-            name: 'string value 1'
+            name: 'string value 1',
           },
           {
             id: 2,
-            name: 'string value 2'
+            name: 'string value 2',
           }]
         sequelizeFinish.publish({ result })
 
@@ -327,11 +327,11 @@ describe('IAST Taint tracking plugin', () => {
           const result = [
             {
               id: 1,
-              name: 'string value 1'
+              name: 'string value 1',
             },
             {
               id: 2,
-              name: 'string value 2'
+              name: 'string value 2',
             }]
           sequelizeFinish.publish({ result })
 
@@ -365,13 +365,13 @@ describe('IAST Taint tracking plugin', () => {
               children: [
                 {
                   id: 11,
-                  name: 'child1'
+                  name: 'child1',
                 },
                 {
                   id: 12,
-                  name: 'child2'
-                }
-              ]
+                  name: 'child2',
+                },
+              ],
             },
             {
               id: 2,
@@ -379,14 +379,14 @@ describe('IAST Taint tracking plugin', () => {
               children: [
                 {
                   id: 21,
-                  name: 'child3'
+                  name: 'child3',
                 },
                 {
                   id: 22,
-                  name: 'child4'
-                }
-              ]
-            }
+                  name: 'child4',
+                },
+              ],
+            },
           ]
           sequelizeFinish.publish({ result })
 
@@ -420,15 +420,15 @@ describe('IAST Taint tracking plugin', () => {
           const result = [
             {
               id: 1,
-              name: 'string value 1'
+              name: 'string value 1',
             },
             {
               id: 2,
-              name: 'string value 2'
+              name: 'string value 2',
             },
             {
               id: 3,
-              name: 'string value 2'
+              name: 'string value 2',
             }]
           sequelizeFinish.publish({ result })
 
@@ -470,17 +470,17 @@ describe('IAST Taint tracking plugin', () => {
               children: [
                 {
                   id: 11,
-                  name: 'child1'
+                  name: 'child1',
                 },
                 {
                   id: 12,
-                  name: 'child2'
+                  name: 'child2',
                 },
                 {
                   id: 13,
-                  name: 'child3'
-                }
-              ]
+                  name: 'child3',
+                },
+              ],
             },
             {
               id: 2,
@@ -488,17 +488,17 @@ describe('IAST Taint tracking plugin', () => {
               children: [
                 {
                   id: 21,
-                  name: 'child4'
+                  name: 'child4',
                 },
                 {
                   id: 22,
-                  name: 'child5'
+                  name: 'child5',
                 },
                 {
                   id: 23,
-                  name: 'child6'
-                }
-              ]
+                  name: 'child6',
+                },
+              ],
             },
             {
               id: 3,
@@ -506,18 +506,18 @@ describe('IAST Taint tracking plugin', () => {
               children: [
                 {
                   id: 31,
-                  name: 'child7'
+                  name: 'child7',
                 },
                 {
                   id: 32,
-                  name: 'child8'
+                  name: 'child8',
                 },
                 {
                   id: 33,
-                  name: 'child9'
-                }
-              ]
-            }
+                  name: 'child9',
+                },
+              ],
+            },
           ]
           sequelizeFinish.publish({ result })
 

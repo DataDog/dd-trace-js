@@ -58,13 +58,13 @@ describe('Push Subscription Plugin', () => {
       'User-Agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)',
       'x-goog-pubsub-message-id': 'test-message-id',
       'x-goog-pubsub-subscription-name': 'projects/test-project/subscriptions/test-sub',
-      'x-goog-pubsub-publish-time': new Date().toISOString()
+      'x-goog-pubsub-publish-time': new Date().toISOString(),
     }
 
     return axios.post(`http://localhost:${port}/push-endpoint`, {
-      message: { data: 'dGVzdA==', messageId: 'test-message-id' }
+      message: { data: 'dGVzdA==', messageId: 'test-message-id' },
     }, {
-      headers: { ...defaultHeaders, ...headers }
+      headers: { ...defaultHeaders, ...headers },
     })
   }
 
@@ -91,7 +91,7 @@ describe('Push Subscription Plugin', () => {
               'span.kind': 'consumer',
               component: 'google-cloud-pubsub',
               'pubsub.message_id': messageId,
-              'pubsub.subscription_type': 'push'
+              'pubsub.subscription_type': 'push',
             })
 
             // Verify delivery_duration_ms
@@ -105,7 +105,7 @@ describe('Push Subscription Plugin', () => {
         sendPushRequest(port, {
           'x-goog-pubsub-message-id': messageId,
           'x-dd-publish-start-time': publishStartTime,
-          'pubsub.topic': 'projects/test-project/topics/test-topic'
+          'pubsub.topic': 'projects/test-project/topics/test-topic',
         }).catch(done)
       })
     })
@@ -134,7 +134,7 @@ describe('Push Subscription Plugin', () => {
         sendPushRequest(port, {
           'x-datadog-trace-id': producerTraceId,
           'x-datadog-parent-id': producerSpanId,
-          'x-datadog-sampling-priority': '1'
+          'x-datadog-sampling-priority': '1',
         }).catch(done)
       })
     })
@@ -152,11 +152,11 @@ describe('Push Subscription Plugin', () => {
 
             assertObjectContains(pubsubSpan.meta, {
               'pubsub.batch.description': 'Message 1 of 3',
-              'pubsub.batch.request_trace_id': batchTraceId
+              'pubsub.batch.request_trace_id': batchTraceId,
             })
             assertObjectContains(pubsubSpan.metrics, {
               'pubsub.batch.message_count': 3,
-              'pubsub.batch.message_index': 0
+              'pubsub.batch.message_index': 0,
             })
           })
           .then(done)
@@ -166,7 +166,7 @@ describe('Push Subscription Plugin', () => {
           '_dd.batch.size': '3',
           '_dd.batch.index': '0',
           '_dd.pubsub_request.trace_id': batchTraceId,
-          '_dd.pubsub_request.span_id': batchSpanId
+          '_dd.pubsub_request.span_id': batchSpanId,
         }).catch(done)
       })
     })
@@ -182,7 +182,7 @@ describe('Push Subscription Plugin', () => {
             assert.strictEqual(pubsubSpan.service, 'test-pubsub')
             assertObjectContains(pubsubSpan.meta, {
               '_dd.base_service': 'test',
-              '_dd.serviceoverride.type': 'integration'
+              '_dd.serviceoverride.type': 'integration',
             })
           })
           .then(done)
@@ -210,8 +210,8 @@ describe('Push Subscription Plugin', () => {
         axios.post(`http://localhost:${port}/push-endpoint`, { data: 'regular' }, {
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0' // Not Google user agent
-          }
+            'User-Agent': 'Mozilla/5.0', // Not Google user agent
+          },
         }).catch(done)
       })
     })
@@ -234,9 +234,9 @@ describe('Push Subscription Plugin', () => {
         axios.post(`http://localhost:${port}/push-endpoint`, { message: { data: 'dGVzdA==' } }, {
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)'
+            'User-Agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)',
             // Missing x-goog-pubsub-message-id
-          }
+          },
         }).catch(done)
       })
     })
@@ -302,7 +302,7 @@ describe('Push Subscription Plugin', () => {
             for (let i = 0; i < 100; i++) {
               promises.push(
                 sendPushRequest(port, {
-                  'x-goog-pubsub-message-id': `msg-${i}`
+                  'x-goog-pubsub-message-id': `msg-${i}`,
                 }).catch(() => {})
               )
             }

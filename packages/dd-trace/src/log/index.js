@@ -10,7 +10,7 @@ const { memoize } = require('./utils')
 const config = {
   enabled: false,
   logger: undefined,
-  logLevel: 'debug'
+  logLevel: 'debug',
 }
 
 // in most places where we know we want to mute a log we use log.error() directly
@@ -127,7 +127,7 @@ const log = {
       getValueFromEnvSources('OTEL_LOG_LEVEL') ??
       localStableConfigValue ??
       config.logLevel
-  }
+  },
 }
 
 function publishFormatted (ch, formatter, ...args) {

@@ -9,7 +9,7 @@ const IAST_MODULE = 'iast'
 
 const enabledFor = {
   [RASP_MODULE]: false,
-  [IAST_MODULE]: false
+  [IAST_MODULE]: false,
 }
 
 let fsPlugin
@@ -21,8 +21,8 @@ function getStoreToStart (fsProps, store = storage('legacy').getStore()) {
       fs: {
         ...store.fs,
         ...fsProps,
-        parentStore: store
-      }
+        parentStore: store,
+      },
     }
   }
 
@@ -99,5 +99,5 @@ module.exports = {
   AppsecFsPlugin,
 
   RASP_MODULE,
-  IAST_MODULE
+  IAST_MODULE,
 }

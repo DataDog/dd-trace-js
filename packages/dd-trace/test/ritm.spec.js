@@ -34,12 +34,12 @@ describe('Ritm', () => {
         if (argArray[0] === monkeyPatchedModuleName) {
           return {
             version: '1.0.0',
-            registerHook: () => { }
+            registerHook: () => { },
           }
         } else {
           return Reflect.apply(target, thisArg, argArray)
         }
-      }
+      },
     })
 
     utilHook = Hook('util')

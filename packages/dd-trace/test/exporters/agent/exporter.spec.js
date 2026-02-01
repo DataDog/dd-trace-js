@@ -26,13 +26,13 @@ describe('Exporter', () => {
     writer = {
       append: sinon.spy(),
       flush: sinon.spy(),
-      setUrl: sinon.spy()
+      setUrl: sinon.spy(),
     }
     prioritySampler = {}
     Writer = sinon.stub().returns(writer)
 
     Exporter = proxyquire('../../../src/exporters/agent', {
-      './writer': Writer
+      './writer': Writer,
     })
   })
 
@@ -41,8 +41,8 @@ describe('Exporter', () => {
     exporter = new Exporter({ url, flushInterval, stats }, prioritySampler)
     sinon.assert.calledWithMatch(Writer, {
       headers: {
-        'Datadog-Client-Computed-Stats': 'yes'
-      }
+        'Datadog-Client-Computed-Stats': 'yes',
+      },
     })
   })
 
@@ -53,8 +53,8 @@ describe('Exporter', () => {
 
     sinon.assert.calledWithMatch(Writer, {
       headers: {
-        'Datadog-Client-Computed-Stats': 'yes'
-      }
+        'Datadog-Client-Computed-Stats': 'yes',
+      },
     })
   })
 
@@ -62,7 +62,7 @@ describe('Exporter', () => {
     const stats = { enabled: true }
     exporter = new Exporter({ hostname: '::1', flushInterval, stats }, prioritySampler)
     sinon.assert.calledWithMatch(Writer, {
-      url: new URL('http://[::1]:8126/')
+      url: new URL('http://[::1]:8126/'),
     })
   })
 

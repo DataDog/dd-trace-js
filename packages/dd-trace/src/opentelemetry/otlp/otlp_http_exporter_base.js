@@ -44,12 +44,12 @@ class OtlpHttpExporterBase {
       timeout,
       headers: {
         'Content-Type': isJson ? 'application/json' : 'application/x-protobuf',
-        ...this.#parseAdditionalHeaders(headers)
-      }
+        ...this.#parseAdditionalHeaders(headers),
+      },
     }
     this.telemetryTags = [
       'protocol:http',
-      `encoding:${isJson ? 'json' : 'protobuf'}`
+      `encoding:${isJson ? 'json' : 'protobuf'}`,
     ]
   }
 
@@ -79,8 +79,8 @@ class OtlpHttpExporterBase {
       ...this.options,
       headers: {
         ...this.options.headers,
-        'Content-Length': payload.length
-      }
+        'Content-Length': payload.length,
+      },
     }
 
     const req = http.request(options, (res) => {

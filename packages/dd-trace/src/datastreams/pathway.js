@@ -54,7 +54,7 @@ function encodePathwayContext (dataStreamsContext) {
   return Buffer.concat([
     dataStreamsContext.hash,
     Buffer.from(encodeVarint(Math.round(dataStreamsContext.pathwayStartNs / 1e6))),
-    Buffer.from(encodeVarint(Math.round(dataStreamsContext.edgeStartNs / 1e6)))
+    Buffer.from(encodeVarint(Math.round(dataStreamsContext.edgeStartNs / 1e6))),
   ], 20)
 }
 
@@ -153,7 +153,7 @@ const DsmPathwayCodec = {
     }
 
     return ctx
-  }
+  },
 }
 
 module.exports = {
@@ -162,5 +162,5 @@ module.exports = {
   decodePathwayContext,
   encodePathwayContextBase64,
   decodePathwayContextBase64,
-  DsmPathwayCodec
+  DsmPathwayCodec,
 }

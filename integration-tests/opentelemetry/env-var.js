@@ -8,7 +8,7 @@ const opentelemetry = require('@opentelemetry/sdk-node')
 const { JaegerExporter } = require('@opentelemetry/exporter-jaeger')
 
 const sdk = new opentelemetry.NodeSDK({
-  traceExporter: new JaegerExporter()
+  traceExporter: new JaegerExporter(),
 })
 
 sdk.start()

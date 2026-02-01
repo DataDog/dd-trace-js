@@ -8,7 +8,7 @@ const sinon = require('sinon')
 const { withVersions } = require('../../../setup/mocha')
 const {
   assertLlmObsSpanEvent,
-  useLlmObs
+  useLlmObs,
 } = require('../../util')
 
 /**
@@ -46,8 +46,8 @@ function useScenario ({ scenario, statusCode = 200, stream = false }) {
       return new Response(body, {
         status: statusCode,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       })
     }
   })
@@ -63,7 +63,7 @@ describe('integrations', () => {
 
   function getInputMessages (content) {
     const messages = [
-      { role: 'user', content }
+      { role: 'user', content },
     ]
 
     if (model.systemInstruction) {
@@ -88,7 +88,7 @@ describe('integrations', () => {
 
         const client = new VertexAI({
           project: 'datadog-sandbox',
-          location: 'us-central1'
+          location: 'us-central1',
         })
 
         model = client.getGenerativeModel({
@@ -96,8 +96,8 @@ describe('integrations', () => {
           systemInstruction: 'Please provide an answer',
           generationConfig: {
             maxOutputTokens: 50,
-            temperature: 1.0
-          }
+            temperature: 1.0,
+          },
         })
       })
 
@@ -110,7 +110,7 @@ describe('integrations', () => {
 
         it('makes a successful call', async () => {
           await model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: 'Hello, how are you?' }] }]
+            contents: [{ role: 'user', parts: [{ text: 'Hello, how are you?' }] }],
           })
 
           const { apmSpans, llmobsSpans } = await getEvents()
@@ -124,15 +124,15 @@ describe('integrations', () => {
             outputMessages: [
               {
                 role: 'model',
-                content: 'Hello! How can I assist you today?'
-              }
+                content: 'Hello! How can I assist you today?',
+              },
             ],
             metadata: {
               temperature: 1,
-              max_output_tokens: 50
+              max_output_tokens: 50,
             },
             metrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
-            tags: { ml_app: 'test', integration: 'vertexai' }
+            tags: { ml_app: 'test', integration: 'vertexai' },
           })
         })
       })
@@ -142,7 +142,7 @@ describe('integrations', () => {
 
         it('makes a successful call', async () => {
           await model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: 'what is 2 + 2?' }] }]
+            contents: [{ role: 'user', parts: [{ text: 'what is 2 + 2?' }] }],
           })
 
           const { apmSpans, llmobsSpans } = await getEvents()
@@ -162,18 +162,18 @@ describe('integrations', () => {
                     name: 'add',
                     arguments: {
                       a: 2,
-                      b: 2
-                    }
-                  }
-                ]
-              }
+                      b: 2,
+                    },
+                  },
+                ],
+              },
             ],
             metadata: {
               temperature: 1,
-              max_output_tokens: 50
+              max_output_tokens: 50,
             },
             metrics: { input_tokens: 20, output_tokens: 3, total_tokens: 23 },
-            tags: { ml_app: 'test', integration: 'vertexai' }
+            tags: { ml_app: 'test', integration: 'vertexai' },
           })
         })
       })
@@ -186,8 +186,8 @@ describe('integrations', () => {
             const chat = model.startChat({
               history: [
                 { role: 'user', parts: [{ text: 'Foobar?' }] },
-                { role: 'model', parts: [{ text: 'Foobar!' }] }
-              ]
+                { role: 'model', parts: [{ text: 'Foobar!' }] },
+              ],
             })
 
             await chat.sendMessage([{ text: 'Hello, how are you?' }])
@@ -214,15 +214,15 @@ describe('integrations', () => {
               outputMessages: [
                 {
                   role: 'model',
-                  content: 'Hello! How can I assist you today?'
-                }
+                  content: 'Hello! How can I assist you today?',
+                },
               ],
               metadata: {
                 temperature: 1,
-                max_output_tokens: 50
+                max_output_tokens: 50,
               },
               metrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
-              tags: { ml_app: 'test', integration: 'vertexai' }
+              tags: { ml_app: 'test', integration: 'vertexai' },
             })
           })
         })

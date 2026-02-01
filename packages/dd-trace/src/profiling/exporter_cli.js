@@ -30,7 +30,7 @@ function exporterFromURL (url) {
     logger,
     uploadTimeout: timeoutMs,
     libraryInjected,
-    activation
+    activation,
   })
 }
 
@@ -49,11 +49,11 @@ async function exportProfile (urls, tags, profileType, profile) {
 
     await exporter.export({
       profiles: {
-        [profileType]: encodedProfile
+        [profileType]: encodedProfile,
       },
       start,
       end: start,
-      tags
+      tags,
     })
   }))
 }

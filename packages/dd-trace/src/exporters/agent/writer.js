@@ -83,10 +83,10 @@ function makeRequest (version, data, count, url, headers, lookup, cb) {
       'X-Datadog-Trace-Count': String(count),
       'Datadog-Meta-Lang': 'nodejs',
       'Datadog-Meta-Lang-Version': process.version,
-      'Datadog-Meta-Lang-Interpreter': process.versions.bun ? 'JavaScriptCore' : 'v8'
+      'Datadog-Meta-Lang-Interpreter': process.versions.bun ? 'JavaScriptCore' : 'v8',
     },
     lookup,
-    url
+    url,
   }
 
   log.debug('Request to the agent: %j', options)

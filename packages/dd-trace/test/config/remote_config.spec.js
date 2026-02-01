@@ -22,13 +22,13 @@ describe('Tracing Remote Config', () => {
       subscribeProducts: sinon.spy(),
       setBatchHandler: sinon.spy((products, handler) => {
         batchHandlers.set(products[0], handler)
-      })
+      }),
     }
 
     config = {
       service: 'test-service',
       env: 'test-env',
-      setRemoteConfig: sinon.spy()
+      setRemoteConfig: sinon.spy(),
     }
 
     onConfigUpdated = sinon.spy()
@@ -68,7 +68,7 @@ describe('Tracing Remote Config', () => {
         const libConfig = { service: 'test-service' }
 
         const transaction = createTransaction([
-          { id: 'config-1', file: { lib_config: libConfig } }
+          { id: 'config-1', file: { lib_config: libConfig } },
         ])
 
         handler(transaction)
@@ -84,7 +84,7 @@ describe('Tracing Remote Config', () => {
 
         // First apply a config
         let transaction = createTransaction([
-          { id: 'config-1', file: { lib_config: { service: 'test' } } }
+          { id: 'config-1', file: { lib_config: { service: 'test' } } },
         ])
         handler(transaction)
 
@@ -93,7 +93,7 @@ describe('Tracing Remote Config', () => {
 
         // Then unapply it
         transaction = createTransaction([], [], [
-          { id: 'config-1', file: {} }
+          { id: 'config-1', file: {} },
         ])
         handler(transaction)
 
@@ -111,7 +111,7 @@ describe('Tracing Remote Config', () => {
         const transaction = createTransaction([
           { id: 'config-1', file: { lib_config: { tracing_sampling_rate: 0.5 } } },
           { id: 'config-2', file: { lib_config: { log_injection_enabled: true } } },
-          { id: 'config-3', file: { lib_config: { tracing_enabled: true } } }
+          { id: 'config-3', file: { lib_config: { tracing_enabled: true } } },
         ])
 
         handler(transaction)
@@ -134,16 +134,16 @@ describe('Tracing Remote Config', () => {
           id: 'config-org',
           file: {
             service_target: { service: '*', env: '*' },
-            lib_config: { tracing_sampling_rate: 0.5 }
-          }
+            lib_config: { tracing_sampling_rate: 0.5 },
+          },
         },
         {
           id: 'config-service',
           file: {
             service_target: { service: 'test-service', env: '*' },
-            lib_config: { tracing_sampling_rate: 0.8 }
-          }
-        }
+            lib_config: { tracing_sampling_rate: 0.8 },
+          },
+        },
       ])
 
       handler(transaction)
@@ -162,20 +162,20 @@ describe('Tracing Remote Config', () => {
         id: 'config-1',
         file: {
           service_target: { service: '*', env: '*' },
-          lib_config: { tracing_sampling_rate: 0.5 }
-        }
+          lib_config: { tracing_sampling_rate: 0.5 },
+        },
       }, {
         id: 'config-2',
         file: {
           service_target: { service: 'test-service', env: '*' },
-          lib_config: { tracing_sampling_rate: 0.8 }
-        }
+          lib_config: { tracing_sampling_rate: 0.8 },
+        },
       }])
       handler(transaction)
 
       // Remove higher priority config
       transaction = createTransaction([], [], [
-        { id: 'config-2', file: {} }
+        { id: 'config-2', file: {} },
       ])
       handler(transaction)
 
@@ -193,8 +193,8 @@ describe('Tracing Remote Config', () => {
         id: 'config-other',
         file: {
           service_target: { service: 'other-service', env: '*' },
-          lib_config: { tracing_sampling_rate: 0.9 }
-        }
+          lib_config: { tracing_sampling_rate: 0.9 },
+        },
       }])
 
       handler(transaction)
@@ -214,17 +214,17 @@ describe('Tracing Remote Config', () => {
           service_target: { service: '*', env: '*' },
           lib_config: {
             tracing_sampling_rate: 0.5,
-            log_injection_enabled: true
-          }
-        }
+            log_injection_enabled: true,
+          },
+        },
       }, {
         id: 'config-service',
         file: {
           service_target: { service: 'test-service', env: '*' },
           lib_config: {
-            tracing_sampling_rate: 0.8
-          }
-        }
+            tracing_sampling_rate: 0.8,
+          },
+        },
       }])
 
       handler(transaction)
@@ -233,7 +233,7 @@ describe('Tracing Remote Config', () => {
       const lastCall = config.setRemoteConfig.lastCall
       sinon.assert.match(lastCall.args[0], {
         tracing_sampling_rate: 0.8,
-        log_injection_enabled: true
+        log_injection_enabled: true,
       })
     })
 
@@ -243,7 +243,7 @@ describe('Tracing Remote Config', () => {
 
       // Apply a config that has lib_config set to null
       const transaction = createTransaction([
-        { id: 'config-1', file: { service_target: { service: 'test-service', env: '*' }, lib_config: null } }
+        { id: 'config-1', file: { service_target: { service: 'test-service', env: '*' }, lib_config: null } },
       ])
 
       handler(transaction)
@@ -259,7 +259,7 @@ function createTransaction (toApply = [], toModify = [], toUnapply = []) {
   const addDefaults = (item) => ({
     product: 'APM_TRACING',
     path: `datadog/1/APM_TRACING/${item.id}`,
-    ...item
+    ...item,
   })
 
   return {
@@ -267,6 +267,6 @@ function createTransaction (toApply = [], toModify = [], toUnapply = []) {
     toModify: toModify.map(addDefaults),
     toUnapply: toUnapply.map(addDefaults),
     ack: () => {},
-    error: () => {}
+    error: () => {},
   }
 }

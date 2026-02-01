@@ -15,15 +15,15 @@ describe('Dynamic Instrumentation', function () {
       const expectedPayloads = [{
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'RECEIVED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'RECEIVED' } },
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } },
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'EMITTING' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'EMITTING' } },
       }]
 
       t.agent.on('remote-config-ack-update', (id, version, state, error) => {
@@ -72,26 +72,26 @@ describe('Dynamic Instrumentation', function () {
       const expectedPayloads = [{
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'RECEIVED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'RECEIVED' } },
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } },
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, probeVersion: 1, status: 'RECEIVED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 1, status: 'RECEIVED' } },
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, probeVersion: 1, status: 'INSTALLED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 1, status: 'INSTALLED' } },
       }]
       const triggers = [
         () => {
           t.rcConfig.config.version++
           t.agent.updateRemoteConfig(t.rcConfig.id, t.rcConfig.config)
         },
-        () => {}
+        () => {},
       ]
 
       t.agent.on('remote-config-ack-update', (id, version, state, error) => {
@@ -135,11 +135,11 @@ describe('Dynamic Instrumentation', function () {
       const expectedPayloads = [{
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'RECEIVED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'RECEIVED' } },
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } },
       }]
 
       t.agent.on('remote-config-ack-update', (id, version, state, error) => {
@@ -217,11 +217,11 @@ describe('Dynamic Instrumentation', function () {
         const expectedPayloads = [{
           ddsource: 'dd_debugger',
           service: 'node',
-          debugger: { diagnostics: { status: 'RECEIVED' } }
+          debugger: { diagnostics: { status: 'RECEIVED' } },
         }, {
           ddsource: 'dd_debugger',
           service: 'node',
-          debugger: { diagnostics: customErrorDiagnosticsObj ?? { probeId, probeVersion: 0, status: 'ERROR' } }
+          debugger: { diagnostics: customErrorDiagnosticsObj ?? { probeId, probeVersion: 0, status: 'ERROR' } },
         }]
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {
@@ -245,7 +245,7 @@ describe('Dynamic Instrumentation', function () {
         t.agent.addRemoteConfig({
           product: 'LIVE_DEBUGGING',
           id: `logProbe_${config.id}`,
-          config
+          config,
         })
 
         function endIfDone () {
@@ -261,19 +261,19 @@ describe('Dynamic Instrumentation', function () {
         const expectedPayloads = [{
           ddsource: 'dd_debugger',
           service: 'node',
-          debugger: { diagnostics: { probeId: rcConfig1.config.id, probeVersion: 0, status: 'RECEIVED' } }
+          debugger: { diagnostics: { probeId: rcConfig1.config.id, probeVersion: 0, status: 'RECEIVED' } },
         }, {
           ddsource: 'dd_debugger',
           service: 'node',
-          debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'RECEIVED' } }
+          debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'RECEIVED' } },
         }, {
           ddsource: 'dd_debugger',
           service: 'node',
-          debugger: { diagnostics: { probeId: rcConfig1.config.id, probeVersion: 0, status: 'INSTALLED' } }
+          debugger: { diagnostics: { probeId: rcConfig1.config.id, probeVersion: 0, status: 'INSTALLED' } },
         }, {
           ddsource: 'dd_debugger',
           service: 'node',
-          debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'INSTALLED' } }
+          debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'INSTALLED' } },
         }]
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {
@@ -300,13 +300,13 @@ describe('Dynamic Instrumentation', function () {
           [rcConfig1.config.id, {
             ddsource: 'dd_debugger',
             service: 'node',
-            debugger: { diagnostics: { probeId: rcConfig1.config.id, probeVersion: 0, status: 'EMITTING' } }
+            debugger: { diagnostics: { probeId: rcConfig1.config.id, probeVersion: 0, status: 'EMITTING' } },
           }],
           [rcConfig2.config.id, {
             ddsource: 'dd_debugger',
             service: 'node',
-            debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'EMITTING' } }
-          }]
+            debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'EMITTING' } },
+          }],
         ])
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {
@@ -360,17 +360,17 @@ describe('Dynamic Instrumentation', function () {
       it('should only trigger the probes whose conditions are met (all have conditions)', function (done) {
         let installed = 0
         const rcConfig1 = t.generateRemoteConfig({
-          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } }
+          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } },
         })
         const rcConfig2 = t.generateRemoteConfig({
-          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } }
+          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } },
         })
         const expectedPayloads = new Map([
           [rcConfig2.config.id, {
             ddsource: 'dd_debugger',
             service: 'node',
-            debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'EMITTING' } }
-          }]
+            debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'EMITTING' } },
+          }],
         ])
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {
@@ -403,14 +403,14 @@ describe('Dynamic Instrumentation', function () {
         // this condition will throw because `foo` is not defined
         const rcConfig1 = t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'bar'] } } })
         const rcConfig2 = t.generateRemoteConfig({
-          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } }
+          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } },
         })
         const expectedPayloads = new Map([
           [rcConfig2.config.id, {
             ddsource: 'dd_debugger',
             service: 'node',
-            debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'EMITTING' } }
-          }]
+            debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'EMITTING' } },
+          }],
         ])
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {
@@ -441,23 +441,23 @@ describe('Dynamic Instrumentation', function () {
       it('should only trigger the probes whose conditions are met (not all have conditions)', function (done) {
         let installed = 0
         const rcConfig1 = t.generateRemoteConfig({
-          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } }
+          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } },
         })
         const rcConfig2 = t.generateRemoteConfig({
-          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } }
+          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } },
         })
         const rcConfig3 = t.generateRemoteConfig()
         const expectedPayloads = new Map([
           [rcConfig2.config.id, {
             ddsource: 'dd_debugger',
             service: 'node',
-            debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'EMITTING' } }
+            debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'EMITTING' } },
           }],
           [rcConfig3.config.id, {
             ddsource: 'dd_debugger',
             service: 'node',
-            debugger: { diagnostics: { probeId: rcConfig3.config.id, probeVersion: 0, status: 'EMITTING' } }
-          }]
+            debugger: { diagnostics: { probeId: rcConfig3.config.id, probeVersion: 0, status: 'EMITTING' } },
+          }],
         ])
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {

@@ -15,7 +15,7 @@ test.describe('playwright', () => {
   })
   test('should work with passing tests', async ({ page }) => {
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello World'
+      'Hello World',
     ])
   })
 })

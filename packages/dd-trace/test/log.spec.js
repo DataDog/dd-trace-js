@@ -34,7 +34,7 @@ describe('log', () => {
       assert.deepStrictEqual(log.getConfig(), {
         enabled: false,
         logger: undefined,
-        logLevel: 'debug'
+        logLevel: 'debug',
       })
     })
 
@@ -47,7 +47,7 @@ describe('log', () => {
       assert.deepStrictEqual(log.getConfig(), {
         enabled: false,
         logger: undefined,
-        logLevel: 'debug'
+        logLevel: 'debug',
       })
     })
 
@@ -137,7 +137,7 @@ describe('log', () => {
 
       logger = {
         debug: sinon.spy(),
-        error: sinon.spy()
+        error: sinon.spy(),
       }
 
       log = proxyquire('../src/log', {})

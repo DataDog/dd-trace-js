@@ -28,7 +28,7 @@ const ALLOWED = new Set(['string', 'number', 'boolean'])
 
 const integrationCounters = {
   spans_created: {},
-  spans_finished: {}
+  spans_finished: {},
 }
 
 const startCh = channel('dd-trace:span:start')
@@ -43,7 +43,7 @@ function getIntegrationCounter (event, integration) {
 
   const counter = tracerMetrics.count(event, [
     `integration_name:${integration.toLowerCase()}`,
-    `otel_enabled:${OTEL_ENABLED}`
+    `otel_enabled:${OTEL_ENABLED}`,
   ])
 
   integrationCounters[event][integration] = counter
@@ -88,7 +88,7 @@ class DatadogSpan {
 
     this._links = fields.links?.map(link => ({
       context: link.context._ddContext ?? link.context,
-      attributes: this._sanitizeAttributes(link.attributes)
+      attributes: this._sanitizeAttributes(link.attributes),
     })) ?? []
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
@@ -123,7 +123,7 @@ class DatadogSpan {
       ...this,
       _parentTracer: `[${this._parentTracer.constructor.name}]`,
       _prioritySampler: `[${this._prioritySampler.constructor.name}]`,
-      _processor: `[${this._processor.constructor.name}]`
+      _processor: `[${this._processor.constructor.name}]`,
     }
   }
 
@@ -139,7 +139,7 @@ class DatadogSpan {
       parentId: spanContext._parentId,
       service: spanContext._tags['service.name'],
       name: spanContext._name,
-      resource
+      resource,
     })
 
     return `Span${json}`
@@ -208,7 +208,7 @@ class DatadogSpan {
 
     this._links.push({
       context: context._ddContext ?? context,
-      attributes: this._sanitizeAttributes(attributes)
+      attributes: this._sanitizeAttributes(attributes),
     })
   }
 
@@ -220,13 +220,13 @@ class DatadogSpan {
   addSpanPointer (ptrKind, ptrDir, ptrHash) {
     const zeroContext = new SpanContext({
       traceId: id('0'),
-      spanId: id('0')
+      spanId: id('0'),
     })
     const attributes = {
       'ptr.kind': ptrKind,
       'ptr.dir': ptrDir,
       'ptr.hash': ptrHash,
-      'link.kind': 'span-pointer'
+      'link.kind': 'span-pointer',
     }
     this.addLink({ context: zeroContext, attributes })
   }
@@ -351,7 +351,7 @@ class DatadogSpan {
         sampling: parent._sampling,
         baggageItems: { ...parent._baggageItems },
         trace: parent._trace,
-        tracestate: parent._tracestate
+        tracestate: parent._tracestate,
       })
 
       if (!spanContext._trace.startTime) {
@@ -362,7 +362,7 @@ class DatadogSpan {
       startTime = dateNow()
       spanContext = new SpanContext({
         traceId: spanId,
-        spanId
+        spanId,
       })
       spanContext._trace.startTime = startTime
 

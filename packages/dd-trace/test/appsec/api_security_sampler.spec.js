@@ -16,7 +16,7 @@ describe('API Security Sampler', () => {
   beforeEach(() => {
     clock = sinon.useFakeTimers({
       now: 10,
-      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
     performanceNowStub = sinon.stub(performance, 'now').callsFake(() => clock.now)
 
@@ -24,18 +24,18 @@ describe('API Security Sampler', () => {
       root: sinon.stub(),
       getContext: sinon.stub(),
       _prioritySampler: {
-        isSampled: sinon.stub()
-      }
+        isSampled: sinon.stub(),
+      },
     }
 
     apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
-      '../plugins/util/web': webStub
+      '../plugins/util/web': webStub,
     })
 
     span = {
       context: sinon.stub().returns({
-        _sampling: { priority: AUTO_KEEP }
-      })
+        _sampling: { priority: AUTO_KEEP },
+      }),
     }
 
     webStub.root.returns(span)
@@ -180,7 +180,7 @@ describe('API Security Sampler', () => {
       const requests = [
         { req: { method: 'GET', route: { path: '/test1' } }, res: { statusCode: 200 } },
         { req: { method: 'POST', route: { path: '/test2' } }, res: { statusCode: 201 } },
-        { req: { method: 'PUT', route: { path: '/test3' } }, res: { statusCode: 204 } }
+        { req: { method: 'PUT', route: { path: '/test3' } }, res: { statusCode: 204 } },
       ]
 
       requests.forEach(({ req, res }) => {
@@ -212,20 +212,20 @@ describe('API Security Sampler', () => {
       apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
         '../plugins/util/web': webStub,
         '../priority_sampler': {
-          keepTrace: keepTraceStub
+          keepTrace: keepTraceStub,
         },
         '../standalone/product': {
-          ASM: 'asm'
-        }
+          ASM: 'asm',
+        },
       })
       apiSecuritySampler.configure({
         appsec: {
           apiSecurity: {
             enabled: true,
-            sampleDelay: 30
-          }
+            sampleDelay: 30,
+          },
         },
-        apmTracingEnabled: false
+        apmTracingEnabled: false,
       })
     })
 

@@ -8,7 +8,7 @@ const options = {
   factor: 1,
   minTimeout: 1000,
   maxTimeout: 1000,
-  randomize: false
+  randomize: false,
 }
 
 class RetryOperation extends BaseRetryOperation {

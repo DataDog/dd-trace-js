@@ -28,7 +28,7 @@ describe('Test IntermediateCookiesAnalyzer', () => {
     setHeaderChannel.publish({
       name: 'set-cookie',
       value: 'key=value; Secure; HttpOnly',
-      res: {}
+      res: {},
     })
 
     sinon.assert.calledOnceWithExactly(setCookieCallback, {
@@ -36,7 +36,7 @@ describe('Test IntermediateCookiesAnalyzer', () => {
       cookieValue: 'value',
       cookieProperties: ['Secure', 'HttpOnly'],
       cookieString: 'key=value; Secure; HttpOnly',
-      location: undefined
+      location: undefined,
     }, 'datadog:iast:set-cookie')
   })
 
@@ -44,7 +44,7 @@ describe('Test IntermediateCookiesAnalyzer', () => {
     setHeaderChannel.publish({
       name: 'location',
       value: 'https://www.datadoghq.com',
-      res: {}
+      res: {},
     })
 
     sinon.assert.notCalled(setCookieCallback)
@@ -55,12 +55,12 @@ describe('Test IntermediateCookiesAnalyzer', () => {
     setHeaderChannel.publish({
       name: 'set-cookie',
       value: 'key1=value1',
-      res
+      res,
     })
     setHeaderChannel.publish({
       name: 'set-cookie',
       value: ['key1=value1', 'key2=value2; Secure'],
-      res
+      res,
     })
 
     sinon.assert.calledTwice(setCookieCallback)
@@ -70,7 +70,7 @@ describe('Test IntermediateCookiesAnalyzer', () => {
       cookieValue: 'value1',
       cookieProperties: [],
       cookieString: 'key1=value1',
-      location: undefined
+      location: undefined,
     }, 'datadog:iast:set-cookie')
 
     sinon.assert.calledWithExactly(setCookieCallback.secondCall, {
@@ -78,7 +78,7 @@ describe('Test IntermediateCookiesAnalyzer', () => {
       cookieValue: 'value2',
       cookieProperties: ['Secure'],
       cookieString: 'key2=value2; Secure',
-      location: undefined
+      location: undefined,
     }, 'datadog:iast:set-cookie')
   })
 
@@ -99,7 +99,7 @@ describe('Test IntermediateCookiesAnalyzer', () => {
     setHeaderChannel.publish({
       name: 'set-cookie',
       value: ['key1=value1', 'key2=value2'],
-      res
+      res,
     })
 
     sinon.assert.calledTwice(setCookieCallback)

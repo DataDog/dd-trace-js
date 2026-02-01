@@ -10,7 +10,7 @@ const {
   DD_IAST_METRICS_NAMESPACE,
   globalNamespace,
 
-  IastNamespace
+  IastNamespace,
 } = require('../../../../src/appsec/iast/telemetry/namespaces')
 
 const { Namespace } = require('../../../../src/telemetry/metrics')
@@ -28,7 +28,7 @@ describe('IAST metric namespaces', () => {
 
   beforeEach(() => {
     rootSpan = {
-      addTags: sinon.spy()
+      addTags: sinon.spy(),
     }
     context = {}
     namespace = initRequestNamespace(context)
@@ -42,7 +42,7 @@ describe('IAST metric namespaces', () => {
   it('should set a rootSpan tag with the flattened value of the metric', () => {
     namespace.metrics.set(REQUEST_TAINTED, {
       metric: REQUEST_TAINTED,
-      points: [[now(), 5], [now(), 5]]
+      points: [[now(), 5], [now(), 5]],
     })
 
     finalizeRequestNamespace(context, rootSpan)
@@ -80,7 +80,7 @@ describe('IAST metric namespaces', () => {
     namespace.count(EXECUTED_SINK).inc(1)
 
     const metric = {
-      inc: sinon.spy()
+      inc: sinon.spy(),
     }
     const count = sinon.stub(Namespace.prototype, 'count').returns(metric)
 

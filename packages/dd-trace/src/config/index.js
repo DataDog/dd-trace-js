@@ -18,7 +18,7 @@ const {
   isInServerlessEnvironment,
   getIsGCPFunction,
   getIsAzureFunction,
-  enableGCPPubSubPushSubscription
+  enableGCPPubSubPushSubscription,
 } = require('../serverless')
 const { ORIGIN_KEY } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
@@ -33,7 +33,7 @@ const changeTracker = {}
 
 const telemetryCounters = {
   'otel.env.hiding': {},
-  'otel.env.invalid': {}
+  'otel.env.invalid': {},
 }
 
 function getCounter (event, ddVar, otelVar) {
@@ -67,7 +67,7 @@ const otelDdEnvMapping = {
   OTEL_METRICS_EXPORTER: 'DD_RUNTIME_METRICS_ENABLED',
   OTEL_RESOURCE_ATTRIBUTES: 'DD_TAGS',
   OTEL_SDK_DISABLED: 'DD_TRACE_OTEL_ENABLED',
-  OTEL_LOGS_EXPORTER: undefined
+  OTEL_LOGS_EXPORTER: undefined,
 }
 
 const VALID_PROPAGATION_STYLES = new Set(['datadog', 'tracecontext', 'b3', 'b3 single header', 'none'])
@@ -85,7 +85,7 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
     traceidratio: otelTracesSamplerArg,
     parentbased_always_on: '1.0',
     parentbased_always_off: '0.0',
-    parentbased_traceidratio: otelTracesSamplerArg
+    parentbased_traceidratio: otelTracesSamplerArg,
   }
   return OTEL_TRACES_SAMPLER_MAPPING[otelTracesSampler]
 }
@@ -238,7 +238,7 @@ function reformatSpanSamplingRules (rules) {
   return rules.map(rule => {
     return remapify(rule, {
       sample_rate: 'sampleRate',
-      max_per_second: 'maxPerSecond'
+      max_per_second: 'maxPerSecond',
     })
   })
 }
@@ -270,7 +270,7 @@ class Config {
       { container: this.#env, origin: 'env_var', unprocessed: this.#envUnprocessed },
       { container: this.#localStableConfig, origin: 'local_stable_config' },
       { container: this.#calculated, origin: 'calculated' },
-      { container: this.#defaults, origin: 'default' }
+      { container: this.#defaults, origin: 'default' },
     ]
   }
 
@@ -280,14 +280,14 @@ class Config {
       this.stableConfig = {
         fleetEntries: configEnvSources.fleetStableConfig,
         localEntries: configEnvSources.localStableConfig,
-        warnings: configEnvSources.stableConfigWarnings
+        warnings: configEnvSources.stableConfigWarnings,
       }
     }
 
     options = {
       ...options,
       appsec: options.appsec == null ? options.experimental?.appsec : options.appsec,
-      iast: options.iast == null ? options.experimental?.iast : options.iast
+      iast: options.iast == null ? options.experimental?.iast : options.iast,
     }
 
     // Configure the logger first so it can be used to warn about other configs
@@ -314,13 +314,13 @@ class Config {
 
     if (typeof options.appsec === 'boolean') {
       options.appsec = {
-        enabled: options.appsec
+        enabled: options.appsec,
       }
     }
 
     if (typeof options.runtimeMetrics === 'boolean') {
       options.runtimeMetrics = {
-        enabled: options.runtimeMetrics
+        enabled: options.runtimeMetrics,
       }
     }
 
@@ -337,12 +337,12 @@ class Config {
       service: this.service,
       env: this.env,
       version: this.version,
-      'runtime-id': runtimeId
+      'runtime-id': runtimeId,
     })
 
     if (this.isCiVisibility) {
       tagger.add(this.tags, {
-        [ORIGIN_KEY]: 'ciapp-test'
+        [ORIGIN_KEY]: 'ciapp-test',
       })
     }
 
@@ -600,6 +600,7 @@ class Config {
       OTEL_TRACES_SAMPLER,
       OTEL_TRACES_SAMPLER_ARG,
       DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED,
+      DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
       OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
       OTEL_EXPORTER_OTLP_LOGS_HEADERS,
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
@@ -618,7 +619,7 @@ class Config {
       OTEL_BSP_MAX_EXPORT_BATCH_SIZE,
       OTEL_BSP_MAX_QUEUE_SIZE,
       OTEL_METRIC_EXPORT_INTERVAL,
-      NX_TASK_TARGET_PROJECT
+      NX_TASK_TARGET_PROJECT,
     } = source
 
     const tags = {}
@@ -776,7 +777,15 @@ class Config {
       maybeFloat(DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS)
     unprocessedTarget['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
     this.#setString(target, 'env', DD_ENV || tags.env)
-    this.#setBoolean(target, 'experimental.flaggingProvider.enabled', DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED)
+    this.#setBoolean(
+      target,
+      'experimental.flaggingProvider.enabled',
+      DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
+    )
+    if (DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS != null) {
+      target['experimental.flaggingProvider.initializationTimeoutMs'] =
+        maybeInt(DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS)
+    }
     this.#setBoolean(target, 'traceEnabled', DD_TRACE_ENABLED)
     this.#setBoolean(target, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
     this.#setString(target, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
@@ -1112,6 +1121,11 @@ class Config {
     this.#setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
     this.#setString(opts, 'experimental.exporter', options.experimental?.exporter)
     this.#setBoolean(opts, 'experimental.flaggingProvider.enabled', options.experimental?.flaggingProvider?.enabled)
+    opts['experimental.flaggingProvider.initializationTimeoutMs'] = maybeInt(
+      options.experimental?.flaggingProvider?.initializationTimeoutMs
+    )
+    this.#optsUnprocessed['experimental.flaggingProvider.initializationTimeoutMs'] =
+      options.experimental?.flaggingProvider?.initializationTimeoutMs
     opts.flushInterval = maybeInt(options.flushInterval)
     this.#optsUnprocessed.flushInterval = options.flushInterval
     opts.flushMinSpans = maybeInt(options.flushMinSpans)
@@ -1445,7 +1459,7 @@ class Config {
     if (Array.isArray(value)) {
       value = value.map(rule => {
         return remapify(rule, {
-          sample_rate: 'sampleRate'
+          sample_rate: 'sampleRate',
         })
       })
       obj[name] = value
@@ -1480,7 +1494,7 @@ class Config {
       changes.push({
         name,
         value: unprocessedValue || value,
-        origin
+        origin,
       })
     }
   }
@@ -1505,7 +1519,7 @@ class Config {
             value,
             origin,
             unprocessedValue: unprocessed?.[name],
-            changes
+            changes,
           })
         }
       }

@@ -96,7 +96,7 @@ function getHeaders (config, application, reqType) {
     'dd-telemetry-api-version': 'v2',
     'dd-telemetry-request-type': reqType,
     'dd-client-library-language': application.language_name,
-    'dd-client-library-version': application.tracer_version
+    'dd-client-library-version': application.tracer_version,
   }
   const debug = config.telemetry && config.telemetry.debug
   if (debug) {
@@ -147,7 +147,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   const {
     hostname,
     port,
-    isCiVisibility
+    isCiVisibility,
   } = config
 
   let url = config.url
@@ -171,7 +171,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     port,
     method: 'POST',
     path: isCiVisibilityAgentlessMode ? '/api/v2/apmtelemetry' : '/telemetry/proxy/api/v2/apmtelemetry',
-    headers: getHeaders(config, application, reqType)
+    headers: getHeaders(config, application, reqType),
   }
 
   const data = JSON.stringify({
@@ -183,7 +183,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     seq_id: ++seqId,
     payload: getPayload(payload),
     application,
-    host
+    host,
   })
 
   request(data, options, (error) => {
@@ -199,7 +199,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
         ...options,
         url: backendUrl,
         headers: backendHeader,
-        path: '/api/v2/apmtelemetry'
+        path: '/api/v2/apmtelemetry',
       }
       if (backendUrl) {
         request(data, backendOptions, (error) => {

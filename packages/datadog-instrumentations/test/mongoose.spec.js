@@ -58,23 +58,23 @@ describe('mongoose instrumentations', () => {
             {
               name: 'test1',
               other: 'other1',
-              type: 'test'
+              type: 'test',
             },
             {
               name: 'test2',
               other: 'other2',
-              type: 'test'
+              type: 'test',
             },
             {
               name: 'test3',
               other: 'other3',
-              type: 'test'
+              type: 'test',
             }]).then(() => done())
         })
 
         afterEach((done) => {
           const deleteFilter = {
-            type: 'test'
+            type: 'test',
           }
 
           // some versions have deleteMany methods and others just delete
@@ -299,7 +299,7 @@ describe('mongoose instrumentations', () => {
                 it('continue working as expected with cb', (done) => {
                   Test.findOneAndReplace({ name: 'test1' }, {
                     name: 'test1-modified',
-                    type: 'test'
+                    type: 'test',
                   }, (err) => {
                     assert.strictEqual(err, null)
 
@@ -316,7 +316,7 @@ describe('mongoose instrumentations', () => {
               it('continue working as expected with then', (done) => {
                 Test.findOneAndReplace({ name: 'test1' }, {
                   name: 'test1-modified',
-                  type: 'test'
+                  type: 'test',
                 }).then(() => {
                   Test.find({ name: 'test1-modified' }).then((item) => {
                     assert.notStrictEqual(item, null)
@@ -328,7 +328,7 @@ describe('mongoose instrumentations', () => {
 
               testCallbacksCalled('findOneAndDelete', [{ type: 'test' }], {
                 name: 'test1-modified',
-                type: 'test'
+                type: 'test',
               })
             })
           }
@@ -339,7 +339,7 @@ describe('mongoose instrumentations', () => {
                 it('continue working as expected with cb', (done) => {
                   Test.replaceOne({ name: 'test1' }, {
                     name: 'test1-modified',
-                    type: 'test'
+                    type: 'test',
                   }, (err) => {
                     assert.strictEqual(err, null)
 
@@ -356,7 +356,7 @@ describe('mongoose instrumentations', () => {
               it('continue working as expected with then', (done) => {
                 Test.replaceOne({ name: 'test1' }, {
                   name: 'test1-modified',
-                  type: 'test'
+                  type: 'test',
                 }).then(() => {
                   Test.find({ name: 'test1-modified' }).then((item) => {
                     assert.notStrictEqual(item, null)
@@ -368,7 +368,7 @@ describe('mongoose instrumentations', () => {
 
               testCallbacksCalled('replaceOne', [{ type: 'test' }], {
                 name: 'test1-modified',
-                type: 'test'
+                type: 'test',
               })
             })
           }
@@ -408,8 +408,8 @@ describe('mongoose instrumentations', () => {
                 it('continue working as expected with cb', (done) => {
                   Test.updateMany({ type: 'test' }, {
                     $set: {
-                      other: 'modified-other'
-                    }
+                      other: 'modified-other',
+                    },
                   }, (err) => {
                     assert.strictEqual(err, null)
 
@@ -430,8 +430,8 @@ describe('mongoose instrumentations', () => {
               it('continue working as expected with then', (done) => {
                 Test.updateMany({ type: 'test' }, {
                   $set: {
-                    other: 'modified-other'
-                  }
+                    other: 'modified-other',
+                  },
                 }).then((err) => {
                   Test.find({ type: 'test' }).then((items) => {
                     assert.strictEqual(items.length, 3)
@@ -455,8 +455,8 @@ describe('mongoose instrumentations', () => {
                 it('continue working as expected with cb', (done) => {
                   Test.updateOne({ name: 'test1' }, {
                     $set: {
-                      other: 'modified-other'
-                    }
+                      other: 'modified-other',
+                    },
                   }, (err) => {
                     assert.strictEqual(err, null)
 
@@ -473,8 +473,8 @@ describe('mongoose instrumentations', () => {
               it('continue working as expected with then', (done) => {
                 Test.updateOne({ name: 'test1' }, {
                   $set: {
-                    other: 'modified-other'
-                  }
+                    other: 'modified-other',
+                  },
                 }).then(() => {
                   Test.findOne({ name: 'test1' }).then((item) => {
                     assert.strictEqual(item.other, 'modified-other')

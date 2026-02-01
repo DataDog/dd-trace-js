@@ -9,7 +9,7 @@ const sender = client.createSender(queueName)
 
 const messages = [
   { body: 'Test message 1' },
-  { body: 'Test message 2' }
+  { body: 'Test message 2' },
 ]
 
 // Test that tryAddMessage returns a boolean, not a Promise

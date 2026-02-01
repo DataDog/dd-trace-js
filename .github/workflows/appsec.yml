@@ -23,6 +23,7 @@ env:
 
 jobs:
   macos:
+    name: ${{ github.workflow }} / macos
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -39,6 +40,7 @@ jobs:
           service: dd-trace-js-tests
 
   ubuntu:
+    name: ${{ github.workflow }} / ubuntu
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -61,6 +63,7 @@ jobs:
           service: dd-trace-js-tests
 
   windows:
+    name: ${{ github.workflow }} / windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -79,6 +82,7 @@ jobs:
           service: dd-trace-js-tests
 
   ldapjs:
+    name: ${{ github.workflow }} / ldapjs
     runs-on: ubuntu-latest
     env:
       PLUGINS: ldapjs
@@ -110,6 +114,7 @@ jobs:
           service: dd-trace-js-tests
 
   postgres:
+    name: ${{ github.workflow }} / postgres
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -139,6 +144,7 @@ jobs:
           service: dd-trace-js-tests
 
   mysql:
+    name: ${{ github.workflow }} / mysql
     runs-on: ubuntu-latest
     services:
       mysql:
@@ -168,6 +174,7 @@ jobs:
           service: dd-trace-js-tests
 
   express:
+    name: ${{ github.workflow }} / express
     runs-on: ubuntu-latest
     env:
       PLUGINS: express|body-parser|cookie-parser|multer
@@ -188,6 +195,7 @@ jobs:
           service: dd-trace-js-tests
 
   fastify:
+    name: ${{ github.workflow }} / fastify
     runs-on: ubuntu-latest
     env:
       PLUGINS: fastify
@@ -208,6 +216,7 @@ jobs:
           service: dd-trace-js-tests
 
   graphql:
+    name: ${{ github.workflow }} / graphql
     runs-on: ubuntu-latest
     env:
       PLUGINS: apollo-server|apollo-server-express|apollo-server-fastify|apollo-server-core
@@ -228,6 +237,7 @@ jobs:
           service: dd-trace-js-tests
 
   mongodb-core:
+    name: ${{ github.workflow }} / mongodb-core
     runs-on: ubuntu-latest
     services:
       mongodb:
@@ -254,6 +264,7 @@ jobs:
           service: dd-trace-js-tests
 
   mongoose:
+    name: ${{ github.workflow }} / mongoose
     runs-on: ubuntu-latest
     services:
       mongodb:
@@ -338,6 +349,7 @@ jobs:
             range_clean: gte.14.2.7.and.lt.15
           - range: ">=15.0.0"
             range_clean: gte.15.0.0
+    name: ${{ github.workflow }} / next (node-${{ matrix.version }}, ${{ matrix.range_clean }})
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
@@ -364,6 +376,7 @@ jobs:
           service: dd-trace-js-tests
 
   lodash:
+    name: ${{ github.workflow }} / lodash
     runs-on: ubuntu-latest
     env:
       PLUGINS: lodash
@@ -387,6 +400,7 @@ jobs:
     strategy:
       matrix:
         version: [oldest, maintenance, active, latest]
+    name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -442,6 +456,7 @@ jobs:
           service: dd-trace-js-tests
 
   node-serialize:
+    name: ${{ github.workflow }} / node-serialize
     runs-on: ubuntu-latest
     env:
       PLUGINS: node-serialize

@@ -23,8 +23,8 @@ describe('dd-trace', () => {
   it('should record and send a trace to the agent', () => {
     const span = tracer.startSpan('hello', {
       tags: {
-        'resource.name': '/hello/:name'
-      }
+        'resource.name': '/hello/:name',
+      },
     })
 
     span.finish()

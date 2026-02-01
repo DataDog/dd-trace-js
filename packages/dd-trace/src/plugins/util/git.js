@@ -10,7 +10,7 @@ const {
   distributionMetric,
   TELEMETRY_GIT_COMMAND,
   TELEMETRY_GIT_COMMAND_MS,
-  TELEMETRY_GIT_COMMAND_ERRORS
+  TELEMETRY_GIT_COMMAND_ERRORS,
 } = require('../../ci-visibility/telemetry')
 const { storage } = require('../../../../datadog-core')
 const {
@@ -32,7 +32,7 @@ const {
   GIT_COMMIT_HEAD_COMMITTER_DATE,
   GIT_COMMIT_HEAD_COMMITTER_EMAIL,
   GIT_COMMIT_HEAD_COMMITTER_NAME,
-  GIT_COMMIT_HEAD_MESSAGE
+  GIT_COMMIT_HEAD_MESSAGE,
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
 const { cachedExec } = require('./git-cache')
@@ -73,7 +73,7 @@ function sanitizedExec (
       incrementCountMetric(errorMetric.name, {
         ...errorMetric.tags,
         errorType: err.code,
-        exitCode: err.status || err.errno
+        exitCode: err.status || err.errno,
       })
     }
     log.error('Git plugin error executing command', err)
@@ -121,7 +121,7 @@ function getGitVersion () {
     return {
       major: Number.parseInt(gitVersionMatches[1]),
       minor: Number.parseInt(gitVersionMatches[2]),
-      patch: Number.parseInt(gitVersionMatches[3])
+      patch: Number.parseInt(gitVersionMatches[3]),
     }
   } catch {
     return null
@@ -147,14 +147,14 @@ function unshallowRepository (parentOnly = false) {
     '--update-shallow',
     '--filter=blob:none',
     '--recurse-submodules=no',
-    defaultRemoteName
+    defaultRemoteName,
   ]
 
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'unshallow' })
   const start = Date.now()
   let flags = [
     ...baseGitOptions,
-    revParseHead
+    revParseHead,
   ]
   try {
     cachedExec('git', flags)
@@ -171,7 +171,7 @@ function unshallowRepository (parentOnly = false) {
     )
     flags = [
       ...baseGitOptions,
-      upstreamRemote
+      upstreamRemote,
     ]
     try {
       cachedExec('git', flags)
@@ -373,7 +373,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
         '--filter=blob:none',
         '--since="1 month ago"',
         ...commitsToExcludeString,
-        ...commitsToInclude
+        ...commitsToInclude,
       ],
       { stdio: 'pipe', maxBuffer: GIT_REV_LIST_MAX_BUFFER })
       .toString()
@@ -415,7 +415,7 @@ function generatePackFilesForCommits (commitsToUpload) {
         'pack-objects',
         '--compression=9',
         '--max-pack-size=3m',
-        targetPath
+        targetPath,
       ],
       { stdio: 'pipe', input: commitsToUpload.join('\n') }
     ).toString().split('\n').filter(Boolean).map(commit => `${targetPath}-${commit}.pack`)
@@ -474,7 +474,7 @@ function getGitMetadata (ciMetadata) {
     authorName: ciAuthorName,
     authorEmail: ciAuthorEmail,
     ciWorkspacePath,
-    headCommitSha
+    headCommitSha,
   } = ciMetadata
 
   // With stdio: 'pipe', errors in this command will not be output to the parent process,
@@ -485,7 +485,7 @@ function getGitMetadata (ciMetadata) {
     authorDate,
     committerName,
     committerEmail,
-    committerDate
+    committerDate,
   ] = sanitizedExec('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI']).split(',')
 
   const tags = {
@@ -509,14 +509,14 @@ function getGitMetadata (ciMetadata) {
       headCommitterDate,
       headCommitterName,
       headCommitterEmail,
-      headCommitMessage
+      headCommitMessage,
     ] = sanitizedExec(
       'git',
       [
         'show',
         '-s',
         '--format=\'%H","%aI","%an","%ae","%cI","%cn","%ce","%B\'',
-        headCommitSha
+        headCommitSha,
       ],
       null,
       null,
@@ -544,7 +544,7 @@ function getGitMetadata (ciMetadata) {
     GIT_COMMIT_COMMITTER_DATE, committerDate,
     GIT_COMMIT_COMMITTER_NAME, committerName,
     GIT_COMMIT_COMMITTER_EMAIL, committerEmail,
-    GIT_TAG, tag
+    GIT_TAG, tag,
   ]
 
   for (let i = 0; i < entries.length; i += 2) {
@@ -583,7 +583,7 @@ function fetchHeadCommitSha (headSha) {
       '--recurse-submodules=no',
       '--no-write-fetch-head',
       remoteName,
-      headSha
+      headSha,
     ],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'fetch_head_commit_sha' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'fetch_head_commit_sha' } },
@@ -610,5 +610,5 @@ module.exports = {
   getMergeBase,
   getCounts,
   fetchHeadCommitSha,
-  getRepositoryRoot
+  getRepositoryRoot,
 }

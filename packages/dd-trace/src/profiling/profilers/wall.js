@@ -13,7 +13,7 @@ const {
   LOCAL_ROOT_SPAN_ID_LABEL,
   getNonJSThreadsLabels,
   getThreadLabels,
-  encodeProfileAsync
+  encodeProfileAsync,
 } = require('./shared')
 const TRACE_ENDPOINT_LABEL = 'trace endpoint'
 
@@ -183,7 +183,7 @@ class NativeWallProfiler {
       sourceMapper: this.#mapper,
       useCPED: this.#asyncContextFrameEnabled,
       withContexts: this.#withContexts,
-      workaroundV8Bug: this.#v8ProfilerBugWorkaroundEnabled
+      workaroundV8Bug: this.#v8ProfilerBugWorkaroundEnabled,
     })
 
     if (this.#withContexts) {
@@ -298,7 +298,7 @@ class NativeWallProfiler {
   #setNewContext () {
     this.#pprof.time.setContext(
       this._currentContext = {
-        ref: {}
+        ref: {},
       }
     )
   }
@@ -414,7 +414,7 @@ class NativeWallProfiler {
     const { totalAsyncContextCount, usedAsyncContextCount } = this.#pprof.time.getMetrics()
     return {
       totalAsyncContextCount,
-      usedAsyncContextCount
+      usedAsyncContextCount,
     }
   }
 

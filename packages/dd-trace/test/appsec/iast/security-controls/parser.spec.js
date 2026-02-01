@@ -9,7 +9,7 @@ const {
   COMMAND_INJECTION_MARK,
   CODE_INJECTION_MARK,
   CUSTOM_SECURE_MARK,
-  ASTERISK_MARK
+  ASTERISK_MARK,
 } = require('../../../../src/appsec/iast/taint-tracking/secure-marks')
 
 const civFilename = 'bar/foo/custom_input_validator.js'
@@ -65,7 +65,7 @@ describe('IAST Security Controls parser', () => {
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
-        parameters: undefined
+        parameters: undefined,
       })
     })
 
@@ -80,7 +80,7 @@ describe('IAST Security Controls parser', () => {
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
-        parameters: undefined
+        parameters: undefined,
       })
     })
 
@@ -95,7 +95,7 @@ describe('IAST Security Controls parser', () => {
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: undefined,
-        parameters: undefined
+        parameters: undefined,
       })
     })
 
@@ -111,7 +111,7 @@ describe('IAST Security Controls parser', () => {
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
-        parameters: undefined
+        parameters: undefined,
       })
     })
 
@@ -126,7 +126,7 @@ describe('IAST Security Controls parser', () => {
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK | CODE_INJECTION_MARK,
         method: 'validate',
-        parameters: undefined
+        parameters: undefined,
       })
     })
 
@@ -141,7 +141,7 @@ describe('IAST Security Controls parser', () => {
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK | CODE_INJECTION_MARK,
         method: 'validate',
-        parameters: undefined
+        parameters: undefined,
       })
     })
 
@@ -156,7 +156,7 @@ describe('IAST Security Controls parser', () => {
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validator.validate',
-        parameters: undefined
+        parameters: undefined,
       })
     })
 
@@ -171,7 +171,7 @@ describe('IAST Security Controls parser', () => {
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validator.validate',
-        parameters: [1]
+        parameters: [1],
       })
     })
 
@@ -186,7 +186,7 @@ describe('IAST Security Controls parser', () => {
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
-        parameters: [0]
+        parameters: [0],
       })
     })
 
@@ -201,7 +201,7 @@ describe('IAST Security Controls parser', () => {
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
-        parameters: [1, 2]
+        parameters: [1, 2],
       })
     })
 
@@ -218,7 +218,7 @@ SANITIZER:COMMAND_INJECTION:bar/foo/custom_input_validator.js:sanitize'
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
-        parameters: [1, 2]
+        parameters: [1, 2],
       })
 
       assert.deepStrictEqual(civ[1], {
@@ -226,7 +226,7 @@ SANITIZER:COMMAND_INJECTION:bar/foo/custom_input_validator.js:sanitize'
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'sanitize',
-        parameters: undefined
+        parameters: undefined,
       })
     })
 
@@ -243,7 +243,7 @@ SANITIZER:COMMAND_INJECTION:bar/foo/sanitizer.js:sanitize'
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
-        parameters: [1, 2]
+        parameters: [1, 2],
       })
 
       const sanitizerJs = securityControls.get(sanitizerFilename)
@@ -252,7 +252,7 @@ SANITIZER:COMMAND_INJECTION:bar/foo/sanitizer.js:sanitize'
         file: sanitizerFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'sanitize',
-        parameters: undefined
+        parameters: undefined,
       })
     })
 
@@ -267,7 +267,7 @@ SANITIZER:COMMAND_INJECTION:bar/foo/sanitizer.js:sanitize'
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
-        parameters: [1, 2]
+        parameters: [1, 2],
       })
     })
 
@@ -283,7 +283,7 @@ SANITIZER:COMMAND_INJECTION:bar/foo/sanitizer.js:sanitize'
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | ASTERISK_MARK,
         method: 'validate',
-        parameters: [1, 2]
+        parameters: [1, 2],
       })
     })
   })

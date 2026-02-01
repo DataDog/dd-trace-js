@@ -46,12 +46,12 @@ describe('Flare', () => {
   beforeEach(() => {
     startupLog = {
       tracerInfo: () => ({
-        lang: 'nodejs'
-      })
+        lang: 'nodejs',
+      }),
     }
 
     flare = proxyquire('../src/flare', {
-      '../startup-log': startupLog
+      '../startup-log': startupLog,
     })
   })
 
@@ -59,13 +59,13 @@ describe('Flare', () => {
 
   beforeEach(() => {
     tracerConfig = getConfigFresh({
-      url: `http://127.0.0.1:${port}`
+      url: `http://127.0.0.1:${port}`,
     })
 
     task = {
       case_id: '111',
       hostname: 'myhostname',
-      user_handle: 'user.name@datadoghq.com'
+      user_handle: 'user.name@datadoghq.com',
     }
   })
 
@@ -90,7 +90,7 @@ describe('Flare', () => {
           case_id: task.case_id,
           hostname: task.hostname,
           email: task.user_handle,
-          source: 'tracer_nodejs'
+          source: 'tracer_nodejs',
         })
 
         done()
@@ -110,7 +110,7 @@ describe('Flare', () => {
         assertObjectContains(req.files[0], {
           fieldname: 'flare_file',
           originalname: 'tracer_info.txt',
-          mimetype: 'application/octet-stream'
+          mimetype: 'application/octet-stream',
         })
 
         const content = JSON.parse(req.files[0].buffer.toString())
@@ -137,7 +137,7 @@ describe('Flare', () => {
         assertObjectContains(file, {
           fieldname: 'flare_file',
           originalname: 'tracer_logs.txt',
-          mimetype: 'application/octet-stream'
+          mimetype: 'application/octet-stream',
         })
 
         const content = file.buffer.toString()

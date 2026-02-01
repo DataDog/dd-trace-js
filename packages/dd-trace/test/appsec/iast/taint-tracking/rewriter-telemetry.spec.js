@@ -13,10 +13,10 @@ describe('rewriter telemetry', () => {
 
   beforeEach(() => {
     iastTelemetry = {
-      add: sinon.spy()
+      add: sinon.spy(),
     }
     const rewriterTelemetry = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter-telemetry', {
-      '../telemetry': iastTelemetry
+      '../telemetry': iastTelemetry,
     })
     incrementTelemetryIfNeeded = rewriterTelemetry.incrementTelemetryIfNeeded
     instrumentedPropagationInc = sinon.stub(INSTRUMENTED_PROPAGATION, 'inc')
@@ -30,7 +30,7 @@ describe('rewriter telemetry', () => {
     it('should not increment telemetry when verbosity is OFF', () => {
       iastTelemetry.verbosity = Verbosity.OFF
       const metrics = {
-        instrumentedPropagation: 2
+        instrumentedPropagation: 2,
       }
       incrementTelemetryIfNeeded(metrics)
 
@@ -40,7 +40,7 @@ describe('rewriter telemetry', () => {
     it('should increment telemetry when verbosity is not OFF', () => {
       iastTelemetry.verbosity = Verbosity.DEBUG
       const metrics = {
-        instrumentedPropagation: 2
+        instrumentedPropagation: 2,
       }
       incrementTelemetryIfNeeded(metrics)
 

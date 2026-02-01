@@ -28,7 +28,7 @@ function setUser (tracer, user) {
   setUserTags(user, rootSpan)
 
   const persistent = {
-    [addresses.USER_ID]: String(user.id)
+    [addresses.USER_ID]: String(user.id),
   }
 
   if (user.session_id && typeof user.session_id === 'string') {
@@ -40,5 +40,5 @@ function setUser (tracer, user) {
 
 module.exports = {
   setUserTags,
-  setUser
+  setUser,
 }

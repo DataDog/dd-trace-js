@@ -19,8 +19,8 @@ class MoleculerServerPlugin extends ServerPlugin {
       type: 'web',
       meta: {
         'resource.name': action.name,
-        ...moleculerTags(broker, middlewareCtx, this.config)
-      }
+        ...moleculerTags(broker, middlewareCtx, this.config),
+      },
     }, ctx)
 
     return ctx.currentStore

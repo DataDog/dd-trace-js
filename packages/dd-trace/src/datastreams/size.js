@@ -49,5 +49,5 @@ module.exports = {
   getMessageSize,
   getHeadersSize,
   getSizeOrZero,
-  getAmqpMessageSize
+  getAmqpMessageSize,
 }
