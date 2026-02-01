@@ -97,9 +97,9 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:esbuild:ci
+      - run: yarn test:esbuild
       - uses: ./.github/actions/node/latest
-      - run: yarn test:esbuild:ci
+      - run: yarn test:esbuild
       - uses: ./.github/actions/coverage
         with:
           flags: platform-esbuild

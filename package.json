@@ -33,7 +33,6 @@
     "test:trace:guardrails": "mocha packages/dd-trace/test/guardrails/**/*.spec.js",
     "test:trace:guardrails:ci": "nyc --include \"packages/dd-trace/src/guardrails/**/*.js\" -- npm run test:trace:guardrails",
     "test:esbuild": "mocha packages/datadog-esbuild/test/**/*.spec.js",
-    "test:esbuild:ci": "nyc --include \"packages/datadog-esbuild/test/**/*.js\" -- npm run test:esbuild",
     "test:instrumentations": "mocha \"packages/datadog-instrumentations/test/@(${PLUGINS}).spec.js\"",
     "test:instrumentations:ci": "yarn services && nyc --include \"packages/datadog-instrumentations/src/@(${PLUGINS}).js\" --include \"packages/datadog-instrumentations/src/@(${PLUGINS})/**/*.js\" -- npm run test:instrumentations",
     "test:instrumentations:misc": "mocha packages/datadog-instrumentations/test/*/**/*.spec.js",
