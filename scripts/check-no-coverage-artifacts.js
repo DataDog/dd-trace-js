@@ -25,27 +25,23 @@ function listFilesFromGit () {
   return stdout.split('\0').filter(Boolean)
 }
 
-const matches = []
+const foundFiles = []
 for (const file of listFilesFromGit()) {
   const basename = path.basename(file)
 
   // Be extra conservative: JSON fixtures that look like coverage reports are commonly misidentified by tooling.
-  if (basename.endsWith('.json') && /coverage/i.test(basename)) {
-    matches.push(file.replaceAll('\\', '/'))
-    continue
-  }
-
-  if (FORBIDDEN_BASENAMES.has(basename)) {
-    matches.push(file.replaceAll('\\', '/'))
+  if (basename.endsWith('.json') && /coverage/i.test(basename) ||
+      FORBIDDEN_BASENAMES.has(basename)) {
+    foundFiles.push(file.replaceAll('\\', '/'))
   }
 }
 
-if (matches.length) {
+if (foundFiles.length) {
   // eslint-disable-next-line no-console
   console.error('Forbidden coverage artifact file(s) found in the repository:\n')
-  for (const m of matches.sort()) {
+  for (const filename of foundFiles.sort()) {
     // eslint-disable-next-line no-console
-    console.error(`- ${m}`)
+    console.error(`- ${filename}`)
   }
 
   throw new Error('Please remove/rename these files (fixtures should not use coverage artifact filenames).')

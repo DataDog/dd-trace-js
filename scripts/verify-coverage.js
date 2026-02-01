@@ -43,7 +43,6 @@ for (const dirAbs of reportDirsAbs) {
 
   // Consider it empty unless we see at least one `SF:` record.
   const isMissingOrEmpty = lcovContent === undefined || !/(^|\n)SF:/.test(lcovContent)
-
   if (!isMissingOrEmpty) {
     continue
   }

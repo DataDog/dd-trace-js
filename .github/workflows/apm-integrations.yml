@@ -980,7 +980,6 @@ jobs:
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
-  # TODO: Figure out why nyc stopped working with EACCESS errors.
   oracledb:
     runs-on: ubuntu-latest
     services:

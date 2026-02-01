@@ -72,7 +72,7 @@
     "test:integration:testopt": "mocha --timeout 120000 \"integration-tests/ci-visibility/*.spec.js\"",
     "test:integration:profiler": "mocha --timeout 180000 \"integration-tests/profiler/*.spec.js\"",
     "test:integration:plugins": "mocha \"packages/datadog-plugin-@(${PLUGINS})/test/integration-test/**/*.spec.js\"",
-    "test:unit:plugins": "mocha \"packages/datadog-instrumentations/test/@(${PLUGINS}).spec.js\" \"packages/datadog-plugin-@(${PLUGINS})/test/**/*.spec.js\"",
+    "test:unit:plugins": "mocha \"packages/datadog-instrumentations/test/@(${PLUGINS}).spec.js\" \"packages/datadog-plugin-@(${PLUGINS})/test/**/*.spec.js\" --exclude \"packages/datadog-plugin-@(${PLUGINS})/test/integration-test/**/*.spec.js\"",
     "test:shimmer": "mocha \"packages/datadog-shimmer/test/**/*.spec.js\"",
     "test:shimmer:ci": "nyc -- npm run test:shimmer",
     "verify:workflow-job-names": "node scripts/verify-workflow-job-names.js",
