@@ -86,6 +86,35 @@ ruleTester.run('no-typeof-object', /** @type {import('eslint').Rule.RuleModule} 
         if (typeof x === 'object') return x
       }
     `,
+    // Guard in an outer block should apply inside nested blocks (e.g., try)
+    `
+      function f (value) {
+        if (value === null) return
+        try {
+          if (typeof value === 'object') return value
+        } catch (e) {}
+      }
+    `,
+    // Guard via `continue` in an outer loop should apply inside nested blocks (matches operations-taint-object.js)
+    `
+      function f (object) {
+        const queue = [{ value: object }]
+        const visited = new WeakSet()
+
+        while (queue.length > 0) {
+          const { value } = queue.pop()
+          if (value === null) continue
+
+          try {
+            if (typeof value === 'string') {
+              // noop
+            } else if (typeof value === 'object' && !visited.has(value)) {
+              visited.add(value)
+            }
+          } catch (e) {}
+        }
+      }
+    `,
   ],
   invalid: [
     {

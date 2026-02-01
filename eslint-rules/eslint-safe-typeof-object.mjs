@@ -23,64 +23,12 @@ export default {
         ) {
           // Get the expression being checked (x or x.y)
           const targetNode = node.left.argument
-          const targetExpression = getSourceText(context, targetNode)
+          const targetExpression = context.getSourceCode().getText(targetNode)
 
-          let hasNullCheck = false
-
-          // First check if there's a null guard at the immediate AND level
-          let current = node.parent
-          if (current && current.type === 'LogicalExpression' && current.operator === '&&') {
-            const conditions = collectAndConditions(current)
-            hasNullCheck = conditions.some(condition =>
-              condition !== node && isNullGuard(condition, targetNode, context)
-            )
-          }
-
-          // If not found at immediate level, check broader logical expression
-          if (!hasNullCheck) {
-            current = node.parent
-            let rootLogicalExpression = null
-
-            // Find the root of any logical expression chain
-            while (current && current.type === 'LogicalExpression') {
-              rootLogicalExpression = current
-              current = current.parent
-            }
-
-            if (rootLogicalExpression) {
-              // Collect all conditions in the AND chain
-              const conditions = collectAndConditions(rootLogicalExpression)
-
-              // Check if any condition is a null check for our variable
-              hasNullCheck = conditions.some(condition =>
-                condition !== node && isNullGuard(condition, targetNode, context)
-              )
-            }
-          }
-
-          // If still not found, allow conditional guards like:
-          // - x != null ? typeof x === 'object' : false
-          // - x == null ? false : typeof x === 'object'
-          if (!hasNullCheck) {
-            const parent = node.parent
-
-            if (parent?.type === 'ConditionalExpression') {
-              if (parent.consequent === node) {
-                hasNullCheck = isNotNullTest(parent.test, targetNode, context)
-              } else if (parent.alternate === node) {
-                hasNullCheck = isNullTest(parent.test, targetNode, context)
-              }
-            }
-          }
-
-          // If still not found, allow control-flow guards inside methods, like:
-          // - if (x === null) return; ... typeof x === 'object'
-          // - if (x == null) { throw ... } ... typeof x === 'object'
-          // - if (x == null) { ... } else { typeof x === 'object' }
-          if (!hasNullCheck) {
-            hasNullCheck = isGuardedByIfStatement(node, targetNode, context) ||
-              isGuaranteedNotNullByPriorStatements(node, targetNode, context)
-          }
+          const hasNullCheck = isGuardedInLogicalExpression(node, targetNode) ||
+            isGuardedInConditionalExpression(node, targetNode) ||
+            isGuardedByIfStatement(node, targetNode) ||
+            isGuaranteedNotNullByPriorStatements(node, targetNode, context)
 
           if (!hasNullCheck) {
             context.report({
@@ -95,11 +43,6 @@ export default {
       },
     }
   },
-}
-
-// Helper function to get source text of a node
-function getSourceText (context, node) {
-  return context.getSourceCode().getText(node)
 }
 
 function unwrapChainExpression (node) {
@@ -163,8 +106,35 @@ function collectAndConditions (node) {
   return conditions
 }
 
+function isGuardedInLogicalExpression (node, targetNode) {
+  // Find the nearest `&&` chain that contains `node` (this naturally handles cases where the `&&`
+  // is nested inside a larger `||` expression).
+  let current = node.parent
+  while (current) {
+    if (current.type === 'LogicalExpression' && current.operator === '&&') {
+      const conditions = collectAndConditions(current)
+      return conditions.some(condition => condition !== node && isNullGuard(condition, targetNode))
+    }
+    current = current.parent
+  }
+
+  return false
+}
+
+function isGuardedInConditionalExpression (node, targetNode) {
+  const parent = node.parent
+  if (parent?.type !== 'ConditionalExpression') return false
+
+  // - x != null ? typeof x === 'object' : false
+  // - x == null ? false : typeof x === 'object'
+  if (parent.consequent === node) return isNotNullTest(parent.test, targetNode)
+  if (parent.alternate === node) return isNullTest(parent.test, targetNode)
+
+  return false
+}
+
 // Helper function to check if an expression acts as a "not-null guard" for the target reference.
-function isNullGuard (condition, targetNode, context) {
+function isNullGuard (condition, targetNode) {
   condition = unwrapChainExpression(condition)
 
   // Check for x !== null, x != null, null !== x, null != x (and member-expression variants)
@@ -217,32 +187,18 @@ function isNullGuard (condition, targetNode, context) {
   return false
 }
 
-function isNotNullTest (test, targetNode, context) {
+function isNotNullTest (test, targetNode) {
   test = unwrapChainExpression(test)
 
   if (!test) return false
 
   if (test.type === 'LogicalExpression' && test.operator === '&&') {
     // For `a && b`, the consequent only runs when both are true, so any not-null guard in the chain is sufficient.
-    return isNotNullTest(test.left, targetNode, context) || isNotNullTest(test.right, targetNode, context)
+    return isNotNullTest(test.left, targetNode) || isNotNullTest(test.right, targetNode)
   }
 
-  // x, !!x, Boolean(x)
-  if (isNullGuard(test, targetNode, context)) return true
-
-  // x != null / x !== null / null != x / null !== x
-  if (
-    test.type === 'BinaryExpression' &&
-    (test.operator === '!==' || test.operator === '!=') &&
-    (
-      (test.right?.type === 'Literal' && test.right.value === null && isSameReference(test.left, targetNode)) ||
-      (test.left?.type === 'Literal' && test.left.value === null && isSameReference(test.right, targetNode))
-    )
-  ) {
-    return true
-  }
-
-  return false
+  // Covers: x, !!x, Boolean(x), and x != null / x !== null (and member-expression variants).
+  return isNullGuard(test, targetNode)
 }
 
 function isUndefinedNode (node) {
@@ -257,7 +213,24 @@ function isUndefinedNode (node) {
   return false
 }
 
-function isNullTest (test, targetNode, context) {
+function isTargetEqualityCheck (test, targetNode, otherSideCheck) {
+  test = unwrapChainExpression(test)
+
+  if (
+    !test ||
+    test.type !== 'BinaryExpression' ||
+    (test.operator !== '===' && test.operator !== '==')
+  ) {
+    return false
+  }
+
+  return (
+    (isSameReference(test.left, targetNode) && otherSideCheck(test.right)) ||
+    (isSameReference(test.right, targetNode) && otherSideCheck(test.left))
+  )
+}
+
+function isNullTest (test, targetNode) {
   test = unwrapChainExpression(test)
 
   if (!test) return false
@@ -265,30 +238,16 @@ function isNullTest (test, targetNode, context) {
   // (x === undefined || x === null) and friends
   // If the OR expression is false, it implies x is neither undefined nor null.
   if (test.type === 'LogicalExpression' && test.operator === '||') {
-    return isNullTest(test.left, targetNode, context) && isNullTest(test.right, targetNode, context)
+    return isNullTest(test.left, targetNode) && isNullTest(test.right, targetNode)
   }
 
   // x == null / x === null / null == x / null === x
-  if (
-    test.type === 'BinaryExpression' &&
-    (test.operator === '===' || test.operator === '==') &&
-    (
-      (test.right?.type === 'Literal' && test.right.value === null && isSameReference(test.left, targetNode)) ||
-      (test.left?.type === 'Literal' && test.left.value === null && isSameReference(test.right, targetNode))
-    )
-  ) {
+  if (isTargetEqualityCheck(test, targetNode, node => node?.type === 'Literal' && node.value === null)) {
     return true
   }
 
   // x == undefined / x === undefined / undefined == x / undefined === x
-  if (
-    test.type === 'BinaryExpression' &&
-    (test.operator === '===' || test.operator === '==') &&
-    (
-      (isUndefinedNode(test.right) && isSameReference(test.left, targetNode)) ||
-      (isUndefinedNode(test.left) && isSameReference(test.right, targetNode))
-    )
-  ) {
+  if (isTargetEqualityCheck(test, targetNode, isUndefinedNode)) {
     return true
   }
 
@@ -376,18 +335,44 @@ function isNonNullishAssignmentInConsequent (consequent, targetNode) {
   return isDefinitelyNonNullishValue(expr.right)
 }
 
-function isGuardedByIfStatement (node, targetNode, context) {
+function getEnclosingBodyInfo (node) {
+  // Find the closest statement containing `node`.
+  let statement = node
+  while (statement && !/Statement$/.test(statement.type)) {
+    statement = statement.parent
+  }
+
+  if (!statement) return null
+
+  // Lift to the statement that is directly contained in a BlockStatement/Program `body` array.
+  // Example: for `else if (...)`, the inner IfStatement is nested under `alternate`, so we lift
+  // to the outer IfStatement that actually sits in the block.
+  while (statement?.parent && statement.parent.type !== 'BlockStatement' && statement.parent.type !== 'Program') {
+    statement = statement.parent
+  }
+
+  const container = statement.parent
+  if (!container || (container.type !== 'BlockStatement' && container.type !== 'Program')) return null
+
+  const body = container.body
+  const idx = body.indexOf(statement)
+  if (idx === -1) return null
+
+  return { body, container, idx, statement }
+}
+
+function isGuardedByIfStatement (node, targetNode) {
   let child = node
   let parent = node.parent
 
   while (parent) {
     if (parent.type === 'IfStatement') {
       if (parent.consequent === child) {
-        if (isNotNullTest(parent.test, targetNode, context)) return true
+        if (isNotNullTest(parent.test, targetNode)) return true
       } else if (parent.alternate === child) {
         // Inside the alternate, we know the test is false.
         // If the test was a null-check, then the alternate implies not-null.
-        if (isNullTest(parent.test, targetNode, context)) return true
+        if (isNullTest(parent.test, targetNode)) return true
       }
     }
 
@@ -398,38 +383,120 @@ function isGuardedByIfStatement (node, targetNode, context) {
   return false
 }
 
-function isGuaranteedNotNullByPriorStatements (node, targetNode, context) {
-  // Find the closest statement that contains `node`.
-  let statement = node
-  while (statement && !/Statement$/.test(statement.type)) {
-    statement = statement.parent
+function walkAst (context, node, visitor) {
+  const visitorKeys = context.getSourceCode().visitorKeys
+
+  /** @type {unknown[]} */
+  const stack = [node]
+
+  while (stack.length) {
+    const current = stack.pop()
+    if (!current || typeof current !== 'object') continue
+
+    const unwrapped = unwrapChainExpression(current)
+    if (!unwrapped || typeof unwrapped !== 'object') continue
+
+    if (visitor(unwrapped)) return true
+
+    const keys = visitorKeys[unwrapped.type]
+    if (!keys) continue
+
+    for (const key of keys) {
+      const value = unwrapped[key]
+      if (!value) continue
+
+      if (Array.isArray(value)) {
+        for (const item of value) stack.push(item)
+      } else {
+        stack.push(value)
+      }
+    }
   }
 
-  if (!statement) return false
+  return false
+}
 
-  const container = statement.parent
-  if (!container || (container.type !== 'BlockStatement' && container.type !== 'Program')) return false
+function statementWritesToTarget (statement, targetNode, context) {
+  return walkAst(context, statement, node => {
+    if (node.type === 'AssignmentExpression') {
+      return isSameReference(node.left, targetNode)
+    }
 
-  const body = container.body
-  const idx = body.indexOf(statement)
-  if (idx <= 0) return false
+    if (node.type === 'UpdateExpression') {
+      return isSameReference(node.argument, targetNode)
+    }
+
+    return false
+  })
+}
+
+function getRootIdentifierName (reference) {
+  reference = unwrapChainExpression(reference)
+
+  let current = reference
+  while (current?.type === 'MemberExpression') {
+    current = current.object
+  }
+
+  return current?.type === 'Identifier' ? current.name : undefined
+}
+
+function statementMentionsIdentifierName (statement, name, context) {
+  return walkAst(context, statement, node => node.type === 'Identifier' && node.name === name)
+}
+
+function hasDominatingGuardBeforeIndex (body, idx, targetNode, context) {
+  const rootIdentifierName = getRootIdentifierName(targetNode)
 
   for (let i = idx - 1; i >= 0; i--) {
     const prev = body[i]
-    if (prev?.type !== 'IfStatement') continue
 
-    // if (x == null) return;  -> after this, x is not-null (and possibly not-undefined)
-    // if (!x) return;         -> after this, x is truthy
-    const isNullish = isNullTest(prev.test, targetNode, context)
-    const isFalsy = isFalsyTest(prev.test, targetNode)
-    if (!isNullish && !isFalsy) continue
+    // First: if this statement is itself a dominating guard, accept it even if it writes
+    // to the target (e.g., normalization `if (x == null) { x = 1 }`).
+    if (prev?.type === 'IfStatement') {
+      // if (x == null) return;  -> after this, x is not-null (and possibly not-undefined)
+      // if (!x) return;         -> after this, x is truthy
+      const isNullish = isNullTest(prev.test, targetNode)
+      const isFalsy = isFalsyTest(prev.test, targetNode)
 
-    // Most reliable: an early return/throw/etc.
-    if (isTerminatingStatement(prev.consequent)) return true
+      if (isNullish || isFalsy) {
+        // Most reliable: an early return/throw/etc.
+        if (isTerminatingStatement(prev.consequent)) return true
 
-    // Also accept nullish "normalization" like:
-    // if (x === undefined || x === null) { x = 1 } ... typeof x === 'object'
-    if (isNullish && isNonNullishAssignmentInConsequent(prev.consequent, targetNode)) return true
+        // Also accept nullish "normalization" like:
+        // if (x === undefined || x === null) { x = 1 } ... typeof x === 'object'
+        if (isNullish && isNonNullishAssignmentInConsequent(prev.consequent, targetNode)) return true
+      }
+    }
+
+    // Otherwise: if the target gets written to between the guard and the typeof check, we
+    // can't safely assume earlier checks still apply.
+    // Short-circuit: if this statement doesn't even mention the root identifier, it can't write to it.
+    if (rootIdentifierName && !statementMentionsIdentifierName(prev, rootIdentifierName, context)) continue
+
+    if (statementWritesToTarget(prev, targetNode, context)) break
+  }
+
+  return false
+}
+
+function isGuaranteedNotNullByPriorStatements (node, targetNode, context) {
+  // Walk outward across nested blocks (e.g., try blocks) and look for dominating guards
+  // like `if (x === null) return;` that appear before the enclosing statement.
+  let info = getEnclosingBodyInfo(node)
+
+  while (info) {
+    const { body, container, idx } = info
+
+    if (idx > 0 && hasDominatingGuardBeforeIndex(body, idx, targetNode, context)) {
+      return true
+    }
+
+    // Move up one nesting level: treat the enclosing statement (e.g., TryStatement)
+    // as the current "statement" inside its parent block.
+    let next = container.parent
+    while (next && !/Statement$/.test(next.type)) next = next.parent
+    info = next ? getEnclosingBodyInfo(next) : null
   }
 
   return false
