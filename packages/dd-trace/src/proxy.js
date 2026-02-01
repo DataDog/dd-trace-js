@@ -21,6 +21,8 @@ const {
   removeAllBaggageItems,
 } = require('./baggage')
 
+const IS_SERVERLESS = isInServerlessEnvironment()
+
 class LazyModule {
   constructor (provider) {
     this.provider = provider
@@ -37,7 +39,7 @@ class LazyModule {
 }
 
 function lazyProxy (...args) {
-  if (isInServerlessEnvironment() === false) {
+  if (IS_SERVERLESS === false) {
     defineEagerly(...args)
   } else {
     defineLazily(...args)

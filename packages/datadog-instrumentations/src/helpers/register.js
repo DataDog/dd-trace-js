@@ -25,6 +25,8 @@ const disabledInstrumentations = new Set(
   DD_TRACE_DISABLED_INSTRUMENTATIONS?.split(',')
 )
 
+const IS_SERVERLESS = isInServerlessEnvironment()
+
 const loadChannel = channel('dd-trace:instrumentation:load')
 
 // Globals
@@ -59,7 +61,7 @@ for (const packageName of names) {
   let hook = hooks[packageName]
 
   if (hook !== null && typeof hook === 'object') {
-    if (hook.serverless === false && isInServerlessEnvironment()) continue
+    if (hook.serverless === false && IS_SERVERLESS) continue
 
     hookOptions.internals = hook.esmFirst
     hook = hook.fn

@@ -27,6 +27,8 @@ const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOrigi
 const { getEnvironmentVariable: getEnv, getEnvironmentVariables, getStableConfigSources } = require('./helper')
 const defaults = require('./defaults')
 
+const IS_SERVERLESS = isInServerlessEnvironment()
+
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 const changeTracker = {}
@@ -275,7 +277,7 @@ class Config {
   }
 
   constructor (options = {}) {
-    if (!isInServerlessEnvironment()) {
+    if (!IS_SERVERLESS) {
       const configEnvSources = getStableConfigSources()
       this.stableConfig = {
         fleetEntries: configEnvSources.fleetStableConfig,
@@ -410,7 +412,7 @@ class Config {
   #applyDefaults () {
     const defaults = this.#defaults
 
-    if (isInServerlessEnvironment()) {
+    if (IS_SERVERLESS) {
       this.#setBoolean(defaults, 'crashtracking.enabled', false)
       this.#setString(defaults, 'profiling.enabled', 'false')
       this.#setBoolean(defaults, 'telemetry.enabled', false)

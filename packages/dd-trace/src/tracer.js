@@ -11,6 +11,8 @@ const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = re
 const { isInServerlessEnvironment } = require('./serverless')
 const log = require('./log/writer')
 
+const IS_SERVERLESS = isInServerlessEnvironment()
+
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
@@ -26,7 +28,7 @@ class DatadogTracer extends Tracer {
     setStartupLogConfig(config)
     flushStartupLogs(log)
 
-    if (!isInServerlessEnvironment()) {
+    if (!IS_SERVERLESS) {
       const storeConfig = require('./tracer_metadata')
       // Keep a reference to the handle, to keep the memfd alive in memory.
       // It is read by the service discovery feature.

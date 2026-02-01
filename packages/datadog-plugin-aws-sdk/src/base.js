@@ -8,6 +8,8 @@ const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payloa
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const { isInServerlessEnvironment } = require('../../dd-trace/src/serverless')
 
+const IS_SERVERLESS = isInServerlessEnvironment()
+
 class BaseAwsSdkPlugin extends ClientPlugin {
   static id = 'aws'
   static isPayloadReporter = false
@@ -88,7 +90,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     })
 
     this.addSub(`apm:aws:request:start:${this.serviceIdentifier}`, (ctx) => {
-      if (!isInServerlessEnvironment()) return
+      if (!IS_SERVERLESS) return
 
       const { awsRegion, awsService, currentStore, request } = ctx
       const peerServerlessStorage = storage('peerServerless')
@@ -121,7 +123,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         span.setTag('aws.partition', partition)
       }
 
-      if (!isInServerlessEnvironment()) return
+      if (!IS_SERVERLESS) return
 
       const hostname = getHostname(store, region)
       if (!hostname) return
