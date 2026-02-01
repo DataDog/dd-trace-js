@@ -15,7 +15,9 @@ runs:
     - uses: ./.github/actions/node/latest
     - run: yarn test:plugins:ci
       shell: bash
-    - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+    - uses: ./.github/actions/coverage
+      with:
+        flags: plugins-${{ github.job }}
     - if: always()
       uses: ./.github/actions/testagent/logs
       with:
