@@ -7,11 +7,11 @@ const {
   SCHEMA_NAME,
   SCHEMA_OPERATION,
   SCHEMA_WEIGHT,
-  SCHEMA_TYPE
+  SCHEMA_TYPE,
 } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
 const {
-  SchemaBuilder
+  SchemaBuilder,
 } = require('../../dd-trace/src/datastreams')
 
 class SchemaExtractor {
@@ -32,7 +32,7 @@ class SchemaExtractor {
       enum: 'string',
       array: 'array',
       map: 'object',
-      fixed: 'string'
+      fixed: 'string',
     }
     const typeName = type.typeName ?? type.name ?? type
     return typeName === 'null' ? typeName : typeMapping[typeName] || 'string'

@@ -35,7 +35,7 @@ describe('shimmer', () => {
         get method () {
           index++
           return returned
-        }
+        },
       }
 
       shimmer.wrap(obj, 'method', method => () => {
@@ -59,7 +59,7 @@ describe('shimmer', () => {
       const obj = { set setter (_method_) {} }
 
       assert.throws(() => shimmer.wrap(obj, 'setter', setter => () => {}), {
-        message: 'Replacing setters is not supported. Implement if required.'
+        message: 'Replacing setters is not supported. Implement if required.',
       })
     })
 
@@ -259,7 +259,7 @@ describe('shimmer', () => {
 
       Object.defineProperty(obj, 'count', {
         value: () => {},
-        configurable: true
+        configurable: true,
       })
 
       shimmer.wrap(obj, 'count', () => () => {})
@@ -276,7 +276,7 @@ describe('shimmer', () => {
       Object.defineProperty(obj, 'count', {
         value: () => {},
         writable: true,
-        configurable: false
+        configurable: false,
       })
 
       shimmer.wrap(obj, 'count', () => () => {})
@@ -290,12 +290,12 @@ describe('shimmer', () => {
 
     it('should skip non-configurable/writable string keyed methods', () => {
       const obj = {
-        configurable () {}
+        configurable () {},
       }
       Object.defineProperty(obj, 'count', {
         value: () => {},
         configurable: false, // Explicit, even if it's the default
-        writable: false
+        writable: false,
       })
 
       const countDescriptorBefore = Object.getOwnPropertyDescriptor(obj, 'count')
@@ -317,13 +317,13 @@ describe('shimmer', () => {
     it('should skip non-configurable/writable symbol keyed methods', () => {
       const configurable = Symbol('configurable')
       const obj = {
-        [configurable] () {}
+        [configurable] () {},
       }
       const symbol = Symbol('count')
       Object.defineProperty(obj, symbol, {
         value: () => {},
         configurable: false, // Explicit, even if it's the default
-        writable: false
+        writable: false,
       })
 
       const descriptorBefore = Object.getOwnPropertyDescriptor(obj, symbol)
@@ -481,12 +481,12 @@ describe('shimmer', () => {
     it('should mass wrap methods on objects', () => {
       const foo = {
         a: () => 'original',
-        b: () => 'original'
+        b: () => 'original',
       }
 
       const bar = {
         a: () => 'original',
-        b: () => 'original'
+        b: () => 'original',
       }
 
       shimmer.massWrap([foo, bar], ['a', 'b'], () => () => 'wrapped')

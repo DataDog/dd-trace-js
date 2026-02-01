@@ -12,7 +12,7 @@ const {
   useSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
-  assertObjectContains
+  assertObjectContains,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
@@ -52,7 +52,7 @@ const {
   TEST_BROWSER_VERSION,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
-  DD_CAPABILITIES_IMPACTED_TESTS
+  DD_CAPABILITIES_IMPACTED_TESTS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -176,7 +176,7 @@ versions.forEach((version) => {
             assert.deepStrictEqual(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]).sort(), [
               'fail',
               'pass',
-              'skip'
+              'skip',
             ])
 
             testSuiteEvents.forEach(testSuiteEvent => {
@@ -205,7 +205,7 @@ versions.forEach((version) => {
             assertObjectContains(testEvents.map(test => test.content.meta[TEST_STATUS]), [
               'pass',
               'fail',
-              'skip'
+              'skip',
             ])
 
             testEvents.forEach(testEvent => {
@@ -221,7 +221,7 @@ versions.forEach((version) => {
                 'test.customtag2': 'customvalue2',
                 // Adds the browser used
                 [TEST_BROWSER_NAME]: 'chromium',
-                [TEST_PARAMETERS]: JSON.stringify({ arguments: { browser: 'chromium' }, metadata: {} })
+                [TEST_PARAMETERS]: JSON.stringify({ arguments: { browser: 'chromium' }, metadata: {} }),
               })
               assert.ok(testEvent.content.metrics[DD_HOST_CPU_COUNT])
               if (version === 'latest' || satisfies(version, '>=1.38.0')) {
@@ -229,12 +229,12 @@ versions.forEach((version) => {
                   testEvent.content.meta[TEST_SUITE].includes('landing-page-test.js')) {
                   assertObjectContains(testEvent.content.meta, {
                     'custom_tag.beforeEach': 'hello beforeEach',
-                    'custom_tag.afterEach': 'hello afterEach'
+                    'custom_tag.afterEach': 'hello afterEach',
                   })
                 }
                 if (testEvent.content.meta[TEST_NAME].includes('should work with passing tests')) {
                   assertObjectContains(testEvent.content.meta, {
-                    'custom_tag.it': 'hello it'
+                    'custom_tag.it': 'hello it',
                   })
                 }
               }
@@ -253,8 +253,8 @@ versions.forEach((version) => {
                 'test.memory.usage': 'low',
               },
               metrics: {
-                'test.memory.allocations': 16
-              }
+                'test.memory.allocations': 16,
+              },
             })
             assert.ok(!('test.invalid' in annotatedTest.content.meta))
           }).then(() => done()).catch(done)
@@ -268,7 +268,7 @@ versions.forEach((version) => {
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
                 DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
                 DD_TEST_SESSION_NAME: 'my-test-session',
-                DD_SERVICE: undefined
+                DD_SERVICE: undefined,
               },
             }
           )
@@ -301,7 +301,7 @@ versions.forEach((version) => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             PW_BASE_URL: `http://localhost:${webAppPort}`,
-            PW_RUNNER_DEBUG: '1'
+            PW_RUNNER_DEBUG: '1',
           },
         }
       )
@@ -321,10 +321,10 @@ versions.forEach((version) => {
         const testSessionEvent = events.find(event => event.type === 'test_session_end').content
 
         assertObjectContains(testSuiteEvent.meta, {
-          [TEST_STATUS]: 'fail'
+          [TEST_STATUS]: 'fail',
         })
         assertObjectContains(testSessionEvent.meta, {
-          [TEST_STATUS]: 'fail'
+          [TEST_STATUS]: 'fail',
         })
         assert.ok(testSuiteEvent.meta[ERROR_MESSAGE])
         assert.match(testSessionEvent.meta[ERROR_MESSAGE], /Test suites failed: 1/)
@@ -338,7 +338,7 @@ versions.forEach((version) => {
             ...getCiVisAgentlessConfig(receiver.port),
             PW_BASE_URL: `http://localhost:${webAppPort}`,
             TEST_DIR: './ci-visibility/playwright-tests-error',
-            TEST_TIMEOUT: '3000'
+            TEST_TIMEOUT: '3000',
           },
         }
       )
@@ -350,10 +350,10 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests(
@@ -368,13 +368,13 @@ versions.forEach((version) => {
                 // 'highest-level-describe  leading and trailing spaces    should work with annotated tests'
               ],
               'skipped-suite-test.js': [
-                'should work with fixme root'
+                'should work with fixme root',
               ],
               'todo-list-page-test.js': [
                 'playwright should work with failing tests',
-                'should work with fixme root'
-              ]
-            }
+                'should work with fixme root',
+              ],
+            },
           }
         )
 
@@ -384,7 +384,7 @@ versions.forEach((version) => {
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assertObjectContains(testSession.meta, {
-              [TEST_EARLY_FLAKE_ENABLED]: 'true'
+              [TEST_EARLY_FLAKE_ENABLED]: 'true',
             })
 
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -393,7 +393,7 @@ versions.forEach((version) => {
             )
             newPassingTests.forEach(test => {
               assertObjectContains(test.meta, {
-                [TEST_IS_NEW]: 'true'
+                [TEST_IS_NEW]: 'true',
               })
             })
             assert.strictEqual(
@@ -406,7 +406,7 @@ versions.forEach((version) => {
             )
             newAnnotatedTests.forEach(test => {
               assertObjectContains(test.meta, {
-                [TEST_IS_NEW]: 'true'
+                [TEST_IS_NEW]: 'true',
               })
             })
             assert.strictEqual(
@@ -438,7 +438,7 @@ versions.forEach((version) => {
 
             totalRetriedTests.forEach(test => {
               assertObjectContains(test.meta, {
-                [TEST_RETRY_REASON]: TEST_RETRY_REASON_TYPES.efd
+                [TEST_RETRY_REASON]: TEST_RETRY_REASON_TYPES.efd,
               })
             })
 
@@ -452,14 +452,14 @@ versions.forEach((version) => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
 
@@ -468,10 +468,10 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests(
@@ -482,16 +482,16 @@ versions.forEach((version) => {
                 // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
                 'highest-level-describe  leading and trailing spaces    should work with skipped tests',
                 'highest-level-describe  leading and trailing spaces    should work with fixme',
-                'highest-level-describe  leading and trailing spaces    should work with annotated tests'
+                'highest-level-describe  leading and trailing spaces    should work with annotated tests',
               ],
               'skipped-suite-test.js': [
-                'should work with fixme root'
+                'should work with fixme root',
               ],
               'todo-list-page-test.js': [
                 'playwright should work with failing tests',
-                'should work with fixme root'
-              ]
-            }
+                'should work with fixme root',
+              ],
+            },
           }
         )
 
@@ -506,7 +506,7 @@ versions.forEach((version) => {
             // new tests are detected but not retried
             newTests.forEach(test => {
               assertObjectContains(test.meta, {
-                [TEST_IS_NEW]: 'true'
+                [TEST_IS_NEW]: 'true',
               })
             })
 
@@ -521,7 +521,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
-              DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
+              DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false',
             },
           }
         )
@@ -536,10 +536,10 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests(
@@ -551,16 +551,16 @@ versions.forEach((version) => {
                 // 'highest-level-describe  leading and trailing spaces    should work with skipped tests',
                 // new but not retried because it's skipped
                 // 'highest-level-describe  leading and trailing spaces    should work with fixme',
-                'highest-level-describe  leading and trailing spaces    should work with annotated tests'
+                'highest-level-describe  leading and trailing spaces    should work with annotated tests',
               ],
               'skipped-suite-test.js': [
-                'should work with fixme root'
+                'should work with fixme root',
               ],
               'todo-list-page-test.js': [
                 'playwright should work with failing tests',
-                'should work with fixme root'
-              ]
-            }
+                'should work with fixme root',
+              ],
+            },
           }
         )
 
@@ -577,7 +577,7 @@ versions.forEach((version) => {
             assert.strictEqual(newTests.length, 2)
             newTests.forEach(test => {
               assertObjectContains(test.meta, {
-                [TEST_IS_NEW]: 'true'
+                [TEST_IS_NEW]: 'true',
               })
             })
 
@@ -592,7 +592,7 @@ versions.forEach((version) => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
             },
           }
         )
@@ -607,15 +607,15 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTestsResponseCode(500)
         receiver.setKnownTests({
-          playwright: {}
+          playwright: {},
         })
 
         const receiverPromise = receiver
@@ -640,7 +640,7 @@ versions.forEach((version) => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
             },
           }
         )
@@ -657,10 +657,10 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: false
+          known_tests_enabled: false,
         })
 
         receiver.setKnownTests(
@@ -671,16 +671,16 @@ versions.forEach((version) => {
                 // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
                 'highest-level-describe  leading and trailing spaces    should work with skipped tests',
                 'highest-level-describe  leading and trailing spaces    should work with fixme',
-                'highest-level-describe  leading and trailing spaces    should work with annotated tests'
+                'highest-level-describe  leading and trailing spaces    should work with annotated tests',
               ],
               'skipped-suite-test.js': [
-                'should work with fixme root'
+                'should work with fixme root',
               ],
               'todo-list-page-test.js': [
                 'playwright should work with failing tests',
-                'should work with fixme root'
-              ]
-            }
+                'should work with fixme root',
+              ],
+            },
           }
         )
 
@@ -709,7 +709,7 @@ versions.forEach((version) => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
             },
           }
         )
@@ -724,15 +724,15 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests(
           {
-            'not-playwright': {}
+            'not-playwright': {},
           }
         )
 
@@ -743,7 +743,7 @@ versions.forEach((version) => {
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
             assertObjectContains(testSession.meta, {
-              [TEST_EARLY_FLAKE_ABORT_REASON]: 'faulty'
+              [TEST_EARLY_FLAKE_ABORT_REASON]: 'faulty',
             })
 
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -764,7 +764,7 @@ versions.forEach((version) => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
             },
           }
         )
@@ -780,11 +780,11 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
+              '5s': NUM_RETRIES_EFD,
             },
-            faulty_session_threshold: 0
+            faulty_session_threshold: 0,
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({ playwright: {} })
@@ -795,7 +795,7 @@ versions.forEach((version) => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
             },
           }
         )
@@ -810,14 +810,14 @@ versions.forEach((version) => {
               const testSession = events.find(event => event.type === 'test_session_end').content
               assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
               assertObjectContains(testSession.meta, {
-                [TEST_EARLY_FLAKE_ABORT_REASON]: 'faulty'
+                [TEST_EARLY_FLAKE_ABORT_REASON]: 'faulty',
               })
 
               const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
               assert.strictEqual(newTests.length, 0)
               const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
               assert.strictEqual(retriedTests.length, 0)
-            })
+            }),
         ])
       })
 
@@ -828,15 +828,15 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
-          }
+              '5s': NUM_RETRIES_EFD,
+            },
+          },
         })
 
         receiver.setKnownTests({
           playwright: {
-            'flaky-test.js': ['playwright should retry old flaky tests']
-          }
+            'flaky-test.js': ['playwright should retry old flaky tests'],
+          },
         })
 
         childProcess = exec(
@@ -846,7 +846,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-efd-and-retries'
+              TEST_DIR: './ci-visibility/playwright-efd-and-retries',
             },
           }
         )
@@ -890,7 +890,7 @@ versions.forEach((version) => {
               assert.strictEqual(passedFlakyTests[0].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
               const failedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
               assert.strictEqual(failedFlakyTests.length, 1)
-            })
+            }),
         ])
       })
 
@@ -900,16 +900,16 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          flaky_test_retries_enabled: true
+          flaky_test_retries_enabled: true,
         })
 
         receiver.setKnownTests({
           playwright: {
-            'flaky-test.js': ['playwright should retry old flaky tests']
-          }
+            'flaky-test.js': ['playwright should retry old flaky tests'],
+          },
         })
 
         childProcess = exec(
@@ -920,7 +920,7 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-efd-and-retries',
-              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             },
           }
         )
@@ -962,7 +962,7 @@ versions.forEach((version) => {
               assert.strictEqual(passedFlakyTests[0].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
               const failedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
               assert.strictEqual(failedFlakyTests.length, 1)
-            })
+            }),
         ])
       })
     })
@@ -975,7 +975,7 @@ versions.forEach((version) => {
 
         assertObjectContains(testEvents.map(test => test.content.resource), [
           'failing-test-and-another-test.js.should work with failing tests',
-          'failing-test-and-another-test.js.does not crash afterwards'
+          'failing-test-and-another-test.js.does not crash afterwards',
         ])
       }).then(() => done()).catch(done)
 
@@ -987,7 +987,7 @@ versions.forEach((version) => {
             ...getCiVisAgentlessConfig(receiver.port),
             PW_BASE_URL: `http://localhost:${webAppPort}`,
             MAX_FAILURES: '1',
-            TEST_DIR: './ci-visibility/playwright-tests-max-failures'
+            TEST_DIR: './ci-visibility/playwright-tests-max-failures',
           },
         }
       )
@@ -1001,8 +1001,8 @@ versions.forEach((version) => {
           tests_skipping: false,
           flaky_test_retries_enabled: true,
           early_flake_detection: {
-            enabled: false
-          }
+            enabled: false,
+          },
         })
 
         const receiverPromise = receiver
@@ -1033,7 +1033,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry'
+              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
             },
           }
         )
@@ -1052,8 +1052,8 @@ versions.forEach((version) => {
           tests_skipping: false,
           flaky_test_retries_enabled: true,
           early_flake_detection: {
-            enabled: false
-          }
+            enabled: false,
+          },
         })
 
         const receiverPromise = receiver
@@ -1075,7 +1075,7 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
-              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry'
+              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
             },
           }
         )
@@ -1094,8 +1094,8 @@ versions.forEach((version) => {
           tests_skipping: false,
           flaky_test_retries_enabled: true,
           early_flake_detection: {
-            enabled: false
-          }
+            enabled: false,
+          },
         })
 
         const receiverPromise = receiver
@@ -1122,7 +1122,7 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
-              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             },
           }
         )
@@ -1156,7 +1156,7 @@ versions.forEach((version) => {
             ...getCiVisAgentlessConfig(receiver.port),
             PW_BASE_URL: `http://localhost:${webAppPort}`,
             PW_RUNNER_DEBUG: '1',
-            TEST_DIR: '.'
+            TEST_DIR: '.',
           },
         }
       )
@@ -1171,7 +1171,7 @@ versions.forEach((version) => {
     contextNewVersions('known tests without early flake detection', () => {
       it('detects new tests without retrying them', (done) => {
         receiver.setSettings({
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests(
@@ -1182,16 +1182,16 @@ versions.forEach((version) => {
                 // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
                 'highest-level-describe  leading and trailing spaces    should work with skipped tests',
                 'highest-level-describe  leading and trailing spaces    should work with fixme',
-                'highest-level-describe  leading and trailing spaces    should work with annotated tests'
+                'highest-level-describe  leading and trailing spaces    should work with annotated tests',
               ],
               'skipped-suite-test.js': [
-                'should work with fixme root'
+                'should work with fixme root',
               ],
               'todo-list-page-test.js': [
                 'playwright should work with failing tests',
-                'should work with fixme root'
-              ]
-            }
+                'should work with fixme root',
+              ],
+            },
           }
         )
 
@@ -1209,7 +1209,7 @@ versions.forEach((version) => {
             // new tests detected but no retries
             newTests.forEach(test => {
               assertObjectContains(test.meta, {
-                [TEST_IS_NEW]: 'true'
+                [TEST_IS_NEW]: 'true',
               })
             })
 
@@ -1223,7 +1223,7 @@ versions.forEach((version) => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
             },
           }
         )
@@ -1252,7 +1252,7 @@ versions.forEach((version) => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             PW_BASE_URL: `http://localhost:${webAppPort}`,
-            DD_SERVICE: 'my-service'
+            DD_SERVICE: 'my-service',
           },
         }
       )
@@ -1273,18 +1273,18 @@ versions.forEach((version) => {
                   tests: {
                     'attempt to fix should attempt to fix failed test': {
                       properties: {
-                        attempt_to_fix: true
-                      }
+                        attempt_to_fix: true,
+                      },
                     },
                     'attempt to fix should attempt to fix passed test': {
                       properties: {
-                        attempt_to_fix: true
-                      }
-                    }
-                  }
-                }
-              }
-            }
+                        attempt_to_fix: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
           })
         })
 
@@ -1294,7 +1294,7 @@ versions.forEach((version) => {
           shouldFailSometimes,
           isDisabled,
           isQuarantined,
-          shouldIncludeFlakyTest
+          shouldIncludeFlakyTest,
         }) =>
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -1304,7 +1304,7 @@ versions.forEach((version) => {
 
               if (isAttemptingToFix) {
                 assertObjectContains(testSession.meta, {
-                  [TEST_MANAGEMENT_ENABLED]: 'true'
+                  [TEST_MANAGEMENT_ENABLED]: 'true',
                 })
               } else {
                 assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
@@ -1432,7 +1432,7 @@ versions.forEach((version) => {
           shouldFailSometimes,
           isDisabled,
           shouldIncludeFlakyTest,
-          cliArgs = 'attempt-to-fix-test.js'
+          cliArgs = 'attempt-to-fix-test.js',
         } = {}) => {
           const testAssertionsPromise = getTestAssertions({
             isAttemptingToFix,
@@ -1440,7 +1440,7 @@ versions.forEach((version) => {
             shouldFailSometimes,
             isDisabled,
             isQuarantined,
-            shouldIncludeFlakyTest
+            shouldIncludeFlakyTest,
           })
 
           childProcess = exec(
@@ -1454,14 +1454,14 @@ versions.forEach((version) => {
                 ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
                 ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
                 ...(shouldIncludeFlakyTest ? { SHOULD_INCLUDE_FLAKY_TEST: '1' } : {}),
-                ...extraEnvVars
+                ...extraEnvVars,
               },
             }
           )
 
           const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
-            testAssertionsPromise
+            testAssertionsPromise,
           ])
 
           if (isQuarantined || isDisabled || shouldAlwaysPass) {
@@ -1474,7 +1474,7 @@ versions.forEach((version) => {
 
         it('can attempt to fix and mark last attempt as failed if every attempt fails', async () => {
           receiver.setSettings({
-            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
 
           await runAttemptToFixTest({ isAttemptingToFix: true })
@@ -1482,7 +1482,7 @@ versions.forEach((version) => {
 
         it('can attempt to fix and mark last attempt as passed if every attempt passes', async () => {
           receiver.setSettings({
-            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
 
           await runAttemptToFixTest({ isAttemptingToFix: true, shouldAlwaysPass: true })
@@ -1490,7 +1490,7 @@ versions.forEach((version) => {
 
         it('can attempt to fix and not mark last attempt if attempts both pass and fail', async () => {
           receiver.setSettings({
-            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
 
           await runAttemptToFixTest({ isAttemptingToFix: true, shouldFailSometimes: true })
@@ -1498,7 +1498,7 @@ versions.forEach((version) => {
 
         it('does not attempt to fix tests if test management is not enabled', async () => {
           receiver.setSettings({
-            test_management: { enabled: false, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+            test_management: { enabled: false, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
 
           await runAttemptToFixTest()
@@ -1506,7 +1506,7 @@ versions.forEach((version) => {
 
         it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
           receiver.setSettings({
-            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
 
           await runAttemptToFixTest({ extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
@@ -1514,7 +1514,7 @@ versions.forEach((version) => {
 
         it('does not fail retry if a test is quarantined', async () => {
           receiver.setSettings({
-            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
           receiver.setTestManagementTests({
             playwright: {
@@ -1524,19 +1524,19 @@ versions.forEach((version) => {
                     'attempt to fix should attempt to fix failed test': {
                       properties: {
                         attempt_to_fix: true,
-                        quarantined: true
-                      }
+                        quarantined: true,
+                      },
                     },
                     'attempt to fix should attempt to fix passed test': {
                       properties: {
                         attempt_to_fix: true,
-                        quarantined: true
-                      }
-                    }
-                  }
-                }
-              }
-            }
+                        quarantined: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
           })
 
           await runAttemptToFixTest({ isAttemptingToFix: true, isQuarantined: true })
@@ -1544,7 +1544,7 @@ versions.forEach((version) => {
 
         it('does not fail retry if a test is disabled', async () => {
           receiver.setSettings({
-            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
           receiver.setTestManagementTests({
             playwright: {
@@ -1554,19 +1554,19 @@ versions.forEach((version) => {
                     'attempt to fix should attempt to fix failed test': {
                       properties: {
                         attempt_to_fix: true,
-                        disabled: true
-                      }
+                        disabled: true,
+                      },
                     },
                     'attempt to fix should attempt to fix passed test': {
                       properties: {
                         attempt_to_fix: true,
-                        disabled: true
-                      }
-                    }
-                  }
-                }
-              }
-            }
+                        disabled: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
           })
 
           await runAttemptToFixTest({ isAttemptingToFix: true, isDisabled: true })
@@ -1574,7 +1574,7 @@ versions.forEach((version) => {
 
         it('--retries is disabled for an attempt to fix test', async () => {
           receiver.setSettings({
-            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
 
           await runAttemptToFixTest({
@@ -1582,21 +1582,21 @@ versions.forEach((version) => {
             shouldFailSometimes: true,
             // passing retries has no effect
             cliArgs: 'attempt-to-fix-test.js --retries=20',
-            shouldIncludeFlakyTest: true
+            shouldIncludeFlakyTest: true,
           })
         })
 
         it('ATR is disabled for an attempt to fix test', async () => {
           receiver.setSettings({
             test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
-            flaky_test_retries_enabled: true
+            flaky_test_retries_enabled: true,
           })
 
           await runAttemptToFixTest({
             isAttemptingToFix: true,
             shouldFailSometimes: true,
             extraEnvVars: { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '20' },
-            shouldIncludeFlakyTest: true
+            shouldIncludeFlakyTest: true,
           })
         })
       })
@@ -1612,22 +1612,22 @@ versions.forEach((version) => {
                   tests: {
                     'disable should disable test': {
                       properties: {
-                        disabled: true
-                      }
-                    }
-                  }
+                        disabled: true,
+                      },
+                    },
+                  },
                 },
                 'disabled-2-test.js': {
                   tests: {
                     'disable should disable test': {
                       properties: {
-                        disabled: true
-                      }
-                    }
-                  }
-                }
-              }
-            }
+                        disabled: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
           })
         })
 
@@ -1651,7 +1651,7 @@ versions.forEach((version) => {
               const testSession = events.find(event => event.type === 'test_session_end').content
               if (isDisabling) {
                 assertObjectContains(testSession.meta, {
-                  [TEST_MANAGEMENT_ENABLED]: 'true'
+                  [TEST_MANAGEMENT_ENABLED]: 'true',
                 })
               } else {
                 assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
@@ -1667,7 +1667,7 @@ versions.forEach((version) => {
                 if (isDisabling) {
                   assert.strictEqual(test.meta[TEST_STATUS], 'skip')
                   assertObjectContains(test.meta, {
-                    [TEST_MANAGEMENT_IS_DISABLED]: 'true'
+                    [TEST_MANAGEMENT_IS_DISABLED]: 'true',
                   })
                 } else {
                   assert.strictEqual(test.meta[TEST_STATUS], 'fail')
@@ -1687,7 +1687,7 @@ versions.forEach((version) => {
                 ...getCiVisAgentlessConfig(receiver.port),
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
-                ...extraEnvVars
+                ...extraEnvVars,
               },
             }
           )
@@ -1703,7 +1703,7 @@ versions.forEach((version) => {
             once(childProcess, 'exit'),
             once(childProcess.stdout, 'end'),
             once(childProcess.stderr, 'end'),
-            testAssertionsPromise
+            testAssertionsPromise,
           ])
 
           // the testOutput checks whether the test is actually skipped
@@ -1750,13 +1750,13 @@ versions.forEach((version) => {
                   tests: {
                     'quarantine should quarantine failed test': {
                       properties: {
-                        quarantined: true
-                      }
-                    }
-                  }
-                }
-              }
-            }
+                        quarantined: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
           })
         })
 
@@ -1797,7 +1797,7 @@ versions.forEach((version) => {
                 }
                 assert.strictEqual(quarantinedTests[0].meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
                 assertObjectContains(testSession.meta, {
-                  [TEST_MANAGEMENT_ENABLED]: 'true'
+                  [TEST_MANAGEMENT_ENABLED]: 'true',
                 })
               } else {
                 if (hasFlakyTests) {
@@ -1822,7 +1822,7 @@ versions.forEach((version) => {
           isQuarantining,
           extraEnvVars,
           cliArgs = 'quarantine-test.js',
-          hasFlakyTests = false
+          hasFlakyTests = false,
         }) => {
           const testAssertionsPromise = getTestAssertions({ isQuarantining, hasFlakyTests })
 
@@ -1834,14 +1834,14 @@ versions.forEach((version) => {
                 ...getCiVisAgentlessConfig(receiver.port),
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
-                ...extraEnvVars
+                ...extraEnvVars,
               },
             }
           )
 
           const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
-            testAssertionsPromise
+            testAssertionsPromise,
           ])
 
           if (isQuarantining) {
@@ -1863,21 +1863,21 @@ versions.forEach((version) => {
           await runQuarantineTest({
             isQuarantining: true,
             cliArgs: 'quarantine-test.js quarantine-2-test.js --retries=1',
-            hasFlakyTests: true
+            hasFlakyTests: true,
           })
         })
 
         it('can quarantine tests when there are other flaky tests retried with ATR', async () => {
           receiver.setSettings({
             test_management: { enabled: true },
-            flaky_test_retries_enabled: true
+            flaky_test_retries_enabled: true,
           })
 
           await runQuarantineTest({
             isQuarantining: true,
             cliArgs: 'quarantine-test.js quarantine-2-test.js',
             hasFlakyTests: true,
-            extraEnvVars: { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1' }
+            extraEnvVars: { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1' },
           })
         })
 
@@ -1898,7 +1898,7 @@ versions.forEach((version) => {
         let testOutput = ''
         receiver.setSettings({
           test_management: { enabled: true },
-          flaky_test_retries_enabled: false
+          flaky_test_retries_enabled: false,
         })
         receiver.setTestManagementTestsResponseCode(500)
 
@@ -1922,7 +1922,7 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-test-management',
-              DD_TRACE_DEBUG: '1'
+              DD_TRACE_DEBUG: '1',
             },
           }
         )
@@ -1938,7 +1938,7 @@ versions.forEach((version) => {
           once(childProcess, 'exit'),
           once(childProcess.stdout, 'end'),
           once(childProcess.stderr, 'end'),
-          eventsPromise
+          eventsPromise,
         ])
         assert.match(testOutput, /Test management tests could not be fetched/)
       })
@@ -1982,7 +1982,7 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-test-capabilities',
-              DD_TEST_SESSION_NAME: 'my-test-session-name'
+              DD_TEST_SESSION_NAME: 'my-test-session-name',
             },
           }
         )
@@ -2013,7 +2013,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-active-test-span'
+              TEST_DIR: './ci-visibility/playwright-tests-active-test-span',
             },
           }
         )
@@ -2048,7 +2048,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-active-test-span'
+              TEST_DIR: './ci-visibility/playwright-tests-active-test-span',
             },
           }
         )
@@ -2069,7 +2069,7 @@ versions.forEach((version) => {
               if (isRedirecting) {
                 // can't do assertions because playwright has been redirected
                 assertObjectContains(test.meta, {
-                  [TEST_STATUS]: 'fail'
+                  [TEST_STATUS]: 'fail',
                 })
                 assert.ok(!(TEST_IS_RUM_ACTIVE in test.meta))
                 assert.ok(!(TEST_BROWSER_VERSION in test.meta))
@@ -2094,14 +2094,14 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${isRedirecting ? webPortWithRedirect : webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-rum',
-              ...extraEnvVars
+              ...extraEnvVars,
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          testAssertionsPromise
+          testAssertionsPromise,
         ])
       }
 
@@ -2133,10 +2133,10 @@ versions.forEach((version) => {
             { isRedirecting: false },
             {
               ...getCiVisEvpProxyConfig(receiver.port),
-              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true'
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
             }
           ),
-          telemetryPromise
+          telemetryPromise,
         ])
       })
 
@@ -2163,7 +2163,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-exit-code'
+              TEST_DIR: './ci-visibility/playwright-tests-exit-code',
             },
           }
         )
@@ -2180,8 +2180,8 @@ versions.forEach((version) => {
         receiver.setKnownTests({
           playwright: {
             'ci-visibility/playwright-tests-impacted-tests/impacted-test.js':
-              ['impacted test should be impacted', 'impacted test 2 should be impacted 2']
-          }
+              ['impacted test should be impacted', 'impacted test 2 should be impacted 2'],
+          },
         })
       })
 
@@ -2229,7 +2229,7 @@ versions.forEach((version) => {
 
             if (isEfd) {
               assertObjectContains(testSession.meta, {
-                [TEST_EARLY_FLAKE_ENABLED]: 'true'
+                [TEST_EARLY_FLAKE_ENABLED]: 'true',
               })
             } else {
               assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
@@ -2240,7 +2240,7 @@ versions.forEach((version) => {
             assertObjectContains(resourceNames,
               [
                 'impacted-test.js.impacted test should be impacted',
-                'impacted-test.js.impacted test 2 should be impacted 2'
+                'impacted-test.js.impacted test 2 should be impacted 2',
               ]
             )
 
@@ -2256,14 +2256,14 @@ versions.forEach((version) => {
             for (const impactedTest of impactedTests) {
               if (isModified) {
                 assertObjectContains(impactedTest.meta, {
-                  [TEST_IS_MODIFIED]: 'true'
+                  [TEST_IS_MODIFIED]: 'true',
                 })
               } else {
                 assert.ok(!(TEST_IS_MODIFIED in impactedTest.meta))
               }
               if (isNew) {
                 assertObjectContains(impactedTest.meta, {
-                  [TEST_IS_NEW]: 'true'
+                  [TEST_IS_NEW]: 'true',
                 })
               } else {
                 assert.ok(!(TEST_IS_NEW in impactedTest.meta))
@@ -2305,14 +2305,14 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-impacted-tests',
               GITHUB_BASE_REF: '',
-              ...extraEnvVars
+              ...extraEnvVars,
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          testAssertionsPromise
+          testAssertionsPromise,
         ])
       }
 
@@ -2343,17 +2343,17 @@ versions.forEach((version) => {
       context('test is new', () => {
         it('should be retried and marked both as new and modified', async () => {
           receiver.setKnownTests({
-            playwright: {}
+            playwright: {},
           })
           receiver.setSettings({
             impacted_tests_enabled: true,
             early_flake_detection: {
               enabled: true,
               slow_test_retries: {
-                '5s': NUM_RETRIES_EFD
-              }
+                '5s': NUM_RETRIES_EFD,
+              },
             },
-            known_tests_enabled: true
+            known_tests_enabled: true,
           })
           await runImpactedTest(
             { isModified: true, isEfd: true, isNew: true }
@@ -2381,13 +2381,13 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
           known_tests_enabled: true,
           test_management: {
-            attempt_to_fix_retries: NUM_RETRIES_EFD
-          }
+            attempt_to_fix_retries: NUM_RETRIES_EFD,
+          },
         })
 
         childProcess = exec(
@@ -2433,7 +2433,7 @@ versions.forEach((version) => {
               assertObjectContains(
                 skippedTest.meta,
                 {
-                  [TEST_NAME]: 'short suite should skip and not mess up the duration of the test suite'
+                  [TEST_NAME]: 'short suite should skip and not mess up the duration of the test suite',
                 },
               )
               const shortSuite = testSuites.find(suite => suite.meta[TEST_SUITE].endsWith('short-suite-test.js'))
@@ -2458,14 +2458,14 @@ versions.forEach((version) => {
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-test-duration',
                 FULLY_PARALLEL: String(parallelism),
-                PLAYWRIGHT_WORKERS: '2'
+                PLAYWRIGHT_WORKERS: '2',
               },
             }
           )
 
           await Promise.all([
             receiverPromise,
-            once(childProcess, 'exit')
+            once(childProcess, 'exit'),
           ])
         })
       })
@@ -2480,11 +2480,11 @@ versions.forEach((version) => {
             assert.strictEqual(tests.length, 2)
             const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
             assertObjectContains(failedTest.meta, {
-              [TEST_NAME]: 'failing test fails and causes early bail'
+              [TEST_NAME]: 'failing test fails and causes early bail',
             })
             const didNotRunTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
             assertObjectContains(didNotRunTest.meta, {
-              [TEST_NAME]: 'did not run because of early bail'
+              [TEST_NAME]: 'did not run because of early bail',
             })
           })
 
@@ -2496,14 +2496,14 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-did-not-run',
-              ADD_EXTRA_PLAYWRIGHT_PROJECT: 'true'
+              ADD_EXTRA_PLAYWRIGHT_PROJECT: 'true',
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
     })

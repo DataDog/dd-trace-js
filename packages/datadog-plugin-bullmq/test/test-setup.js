@@ -4,7 +4,7 @@ class BullmqTestSetup {
   async setup (module) {
     const connection = {
       host: '127.0.0.1',
-      port: 6379
+      port: 6379,
     }
 
     this.queue = new module.Queue('test-queue', { connection })
@@ -40,14 +40,14 @@ class BullmqTestSetup {
   async queueAdd () {
     const job = await this.queue.add('test-job', {
       message: 'Hello from BullMQ',
-      timestamp: Date.now()
+      timestamp: Date.now(),
     })
     return job
   }
 
   async queueAddError () {
     await this.queue.add('error-job', { data: 'test' }, {
-      repeat: { pattern: 'invalid-cron-pattern' }
+      repeat: { pattern: 'invalid-cron-pattern' },
     })
   }
 
@@ -55,7 +55,7 @@ class BullmqTestSetup {
     const jobs = await this.queue.addBulk([
       { name: 'bulk-job-1', data: { message: 'First bulk job' } },
       { name: 'bulk-job-2', data: { message: 'Second bulk job' } },
-      { name: 'bulk-job-3', data: { message: 'Third bulk job' } }
+      { name: 'bulk-job-3', data: { message: 'Third bulk job' } },
     ])
     return jobs
   }
@@ -63,7 +63,7 @@ class BullmqTestSetup {
   async queueAddBulkError () {
     await this.queue.addBulk([
       { name: 'valid-job', data: { ok: true } },
-      { name: null, data: null, opts: { invalid: true } }
+      { name: null, data: null, opts: { invalid: true } },
     ])
   }
 
@@ -76,14 +76,14 @@ class BullmqTestSetup {
         {
           name: 'child-job-1',
           queueName: 'test-queue',
-          data: { type: 'child', message: 'I am child 1' }
+          data: { type: 'child', message: 'I am child 1' },
         },
         {
           name: 'child-job-2',
           queueName: 'test-queue',
-          data: { type: 'child', message: 'I am child 2' }
-        }
-      ]
+          data: { type: 'child', message: 'I am child 2' },
+        },
+      ],
     })
     return flow
   }
@@ -95,20 +95,20 @@ class BullmqTestSetup {
     await this.flowProducer.add({
       name: 'invalid-flow',
       queueName: 'test-queue',
-      data: circularData
+      data: circularData,
     })
   }
 
   async workerProcessJob () {
     const job = await this.queue.add('process-test-job', {
-      message: 'Test job for worker processing'
+      message: 'Test job for worker processing',
     })
     await job.waitUntilFinished(this.queueEvents)
   }
 
   async workerProcessJobError () {
     const job = await this.queue.add('error-test-job', {
-      shouldFail: true
+      shouldFail: true,
     })
     await job.waitUntilFinished(this.queueEvents).catch(() => {})
   }
@@ -116,7 +116,7 @@ class BullmqTestSetup {
   async workerProcessJobBulk () {
     const jobs = await this.queue.addBulk([
       { name: 'bulk-process-job-1', data: { message: 'First bulk job for processing' } },
-      { name: 'bulk-process-job-2', data: { message: 'Second bulk job for processing' } }
+      { name: 'bulk-process-job-2', data: { message: 'Second bulk job for processing' } },
     ])
     await jobs[0].waitUntilFinished(this.queueEvents)
   }

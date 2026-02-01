@@ -9,7 +9,7 @@ class ProducerPlugin extends OutboundPlugin {
 
   startSpan (options, enterOrCtx) {
     const spanDefaults = {
-      kind: this.constructor.kind
+      kind: this.constructor.kind,
     }
     if (!options.service) {
       options.service = this.config.service || this.serviceName()

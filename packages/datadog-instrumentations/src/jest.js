@@ -13,17 +13,18 @@ const {
   getIsFaultyEarlyFlakeDetection,
   JEST_WORKER_LOGS_PAYLOAD_CODE,
   getTestEndLine,
-  isModifiedTest
+  isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getFormattedJestTestParameters,
   getJestTestName,
-  getJestSuitesToRun
+  getJestSuitesToRun,
 } = require('../../datadog-plugin-jest/src/util')
 const { addHook, channel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
+const codeCoverageReportCh = channel('ci:jest:coverage-report')
 
 const testSessionConfigurationCh = channel('ci:jest:session:configuration')
 
@@ -284,7 +285,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         return {
           attemptToFix: [],
           disabled: [],
-          quarantined: []
+          quarantined: [],
         }
       }
       let testManagementTestsForSuite = testManagementTests
@@ -297,7 +298,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const result = {
         attemptToFix: [],
         disabled: [],
-        quarantined: []
+        quarantined: [],
       }
 
       Object.entries(testManagementTestsForSuite).forEach(([testName, { properties }]) => {
@@ -319,7 +320,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     retryTest ({
       jestEvent,
       retryCount,
-      retryType
+      retryType,
     }) {
       const { testName, fn, timeout } = jestEvent
       for (let retryIndex = 0; retryIndex < retryCount; retryIndex++) {
@@ -428,7 +429,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           isDisabled,
           isQuarantined,
           isModified,
-          testSuiteAbsolutePath: this.testSuiteAbsolutePath
+          testSuiteAbsolutePath: this.testSuiteAbsolutePath,
         }
         testContexts.set(event.test, ctx)
 
@@ -475,7 +476,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           this.retryTest({
             jestEvent: event,
             retryCount: testManagementAttemptToFixRetries,
-            retryType: 'Test Management (Attempt to Fix)'
+            retryType: 'Test Management (Attempt to Fix)',
           })
         }
         if (!isAttemptToFix && this.isImpactedTestsEnabled) {
@@ -494,7 +495,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             this.retryTest({
               jestEvent: event,
               retryCount: earlyFlakeDetectionNumRetries,
-              retryType: 'Impacted tests'
+              retryType: 'Impacted tests',
             })
           }
         }
@@ -507,7 +508,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
               this.retryTest({
                 jestEvent: event,
                 retryCount: earlyFlakeDetectionNumRetries,
-                retryType: 'Early flake detection'
+                retryType: 'Early flake detection',
               })
             }
           }
@@ -587,7 +588,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             ...ctx.currentStore,
             error: formatJestError(event.test.errors[0]),
             shouldSetProbe,
-            promises
+            promises,
           })
         }
 
@@ -613,7 +614,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           attemptToFixPassed,
           failedAllTests,
           attemptToFixFailed,
-          isAtrRetry
+          isAtrRetry,
         })
 
         if (promises.isProbeReady) {
@@ -635,9 +636,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             testSourceFile: this.testSourceFile,
             displayName: this.displayName,
             frameworkVersion: jestVersion,
-            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
+            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
           },
-          isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(testName)
+          isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(testName),
         })
       }
     }
@@ -667,7 +668,7 @@ function getTestEnvironment (pkg, jestVersion) {
           return wrappedTestEnvironment
         }
         return target[prop]
-      }
+      },
     })
   }
   return getWrappedEnvironment(pkg, jestVersion)
@@ -692,17 +693,17 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
 
 addHook({
   name: 'jest-environment-node',
-  versions: ['>=24.8.0']
+  versions: ['>=24.8.0'],
 }, getTestEnvironment)
 
 addHook({
   name: 'jest-environment-jsdom',
-  versions: ['>=24.8.0']
+  versions: ['>=24.8.0'],
 }, getTestEnvironment)
 
 addHook({
   name: '@happy-dom/jest-environment',
-  versions: ['>=10.0.0']
+  versions: ['>=10.0.0'],
 }, getTestEnvironment)
 
 function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
@@ -892,8 +893,8 @@ function getCliWrapper (isNewJestVersion) {
           numFailedTestSuites,
           numFailedTests,
           numTotalTests,
-          numTotalTestSuites
-        }
+          numTotalTestSuites,
+        },
       } = result
 
       let testCodeCoverageLinesTotal
@@ -1009,7 +1010,7 @@ function getCliWrapper (isNewJestVersion) {
         isEarlyFlakeDetectionEnabled,
         isEarlyFlakeDetectionFaulty,
         isTestManagementTestsEnabled,
-        onDone
+        onDone,
       })
 
       const waitingResult = await Promise.race([flushPromise, timeoutPromise])
@@ -1018,11 +1019,18 @@ function getCliWrapper (isNewJestVersion) {
         log.error('Timeout waiting for the tracer to flush')
       }
 
+      if (codeCoverageReportCh.hasSubscribers) {
+        const rootDir = result.globalConfig?.rootDir || process.cwd()
+        await new Promise((resolve) => {
+          codeCoverageReportCh.publish({ rootDir, onDone: resolve })
+        })
+      }
+
       numSkippedSuites = 0
 
       return result
     }, {
-      replaceGetter: true
+      replaceGetter: true,
     })
   }
 }
@@ -1051,7 +1059,7 @@ function coverageReporterWrapper (coverageReporter) {
 addHook({
   name: '@jest/core',
   file: 'build/TestScheduler.js',
-  versions: ['>=27.0.0']
+  versions: ['>=27.0.0'],
 }, (testSchedulerPackage, frameworkVersion) => {
   const oldCreateTestScheduler = testSchedulerPackage.createTestScheduler
   const newCreateTestScheduler = async function () {
@@ -1070,7 +1078,7 @@ addHook({
 addHook({
   name: '@jest/core',
   file: 'build/TestScheduler.js',
-  versions: ['>=24.8.0 <27.0.0']
+  versions: ['>=24.8.0 <27.0.0'],
 }, (testSchedulerPackage, frameworkVersion) => {
   shimmer.wrap(
     testSchedulerPackage.default.prototype,
@@ -1081,7 +1089,7 @@ addHook({
 
 addHook({
   name: '@jest/test-sequencer',
-  versions: ['>=28']
+  versions: ['>=28'],
 }, (sequencerPackage, frameworkVersion) => {
   shimmer.wrap(sequencerPackage.default.prototype, 'shard', shard => function () {
     const shardedTests = shard.apply(this, arguments)
@@ -1100,18 +1108,18 @@ addHook({
 addHook({
   name: '@jest/reporters',
   file: 'build/coverage_reporter.js',
-  versions: ['>=24.8.0 <26.6.2']
+  versions: ['>=24.8.0 <26.6.2'],
 }, coverageReporterWrapper)
 
 addHook({
   name: '@jest/reporters',
   file: 'build/CoverageReporter.js',
-  versions: ['>=26.6.2']
+  versions: ['>=26.6.2'],
 }, coverageReporterWrapper)
 
 addHook({
   name: '@jest/reporters',
-  versions: ['>=30.0.0']
+  versions: ['>=30.0.0'],
 }, (reporters) => {
   return shimmer.wrap(reporters, 'CoverageReporter', coverageReporterWrapper, { replaceGetter: true })
 })
@@ -1119,12 +1127,12 @@ addHook({
 addHook({
   name: '@jest/core',
   file: 'build/cli/index.js',
-  versions: ['>=24.8.0 <30.0.0']
+  versions: ['>=24.8.0 <30.0.0'],
 }, getCliWrapper(false))
 
 addHook({
   name: '@jest/core',
-  versions: ['>=30.0.0']
+  versions: ['>=30.0.0'],
 }, getCliWrapper(true))
 
 function jestAdapterWrapper (jestAdapter, jestVersion) {
@@ -1140,7 +1148,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       testSourceFile: environment.testSourceFile,
       displayName: environment.displayName,
       frameworkVersion: jestVersion,
-      testSuiteAbsolutePath: environment.testSuiteAbsolutePath
+      testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
     })
     return adapter.apply(this, arguments).then(suiteResults => {
       const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults
@@ -1168,7 +1176,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
           coverageFiles,
           testSuite: environment.testSourceFile,
           mockedFiles,
-          testSuiteAbsolutePath: environment.testSuiteAbsolutePath
+          testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
         })
       }
       testSuiteFinishCh.publish({ status, errorMessage, testSuiteAbsolutePath: environment.testSuiteAbsolutePath })
@@ -1200,13 +1208,13 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
 addHook({
   name: 'jest-circus',
   file: 'build/runner.js',
-  versions: ['>=30.0.0']
+  versions: ['>=30.0.0'],
 }, jestAdapterWrapper)
 
 addHook({
   name: 'jest-circus',
   file: 'build/legacy-code-todo-rewrite/jestAdapter.js',
-  versions: ['>=24.8.0']
+  versions: ['>=24.8.0'],
 }, jestAdapterWrapper)
 
 function configureTestEnvironment (readConfigsResult) {
@@ -1227,7 +1235,7 @@ function configureTestEnvironment (readConfigsResult) {
   if (isCodeCoverageEnabled) {
     const globalConfig = {
       ...readConfigsResult.globalConfig,
-      collectCoverage: true
+      collectCoverage: true,
     }
     readConfigsResult.globalConfig = globalConfig
   }
@@ -1238,7 +1246,7 @@ function configureTestEnvironment (readConfigsResult) {
     const globalConfig = {
       ...readConfigsResult.globalConfig,
       coverageReporters: ['none'],
-      passWithNoTests: true
+      passWithNoTests: true,
     }
     readConfigsResult.globalConfig = globalConfig
   }
@@ -1265,7 +1273,7 @@ function jestConfigSyncWrapper (jestConfig) {
 addHook({
   name: '@jest/transform',
   versions: ['>=24.8.0'],
-  file: 'build/ScriptTransformer.js'
+  file: 'build/ScriptTransformer.js',
 }, transformPackage => {
   const originalCreateScriptTransformer = transformPackage.createScriptTransformer
 
@@ -1311,18 +1319,18 @@ addHook({
 addHook({
   name: '@jest/core',
   versions: ['>=24.8.0 <30.0.0'],
-  file: 'build/SearchSource.js'
+  file: 'build/SearchSource.js',
 }, searchSourceWrapper)
 
 // from 25.1.0 on, readConfigs becomes async
 addHook({
   name: 'jest-config',
-  versions: ['>=25.1.0']
+  versions: ['>=25.1.0'],
 }, jestConfigAsyncWrapper)
 
 addHook({
   name: 'jest-config',
-  versions: ['24.8.0 - 24.9.0']
+  versions: ['24.8.0 - 24.9.0'],
 }, jestConfigSyncWrapper)
 
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
@@ -1333,12 +1341,12 @@ const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'selenium-webdriver/firefox',
   'selenium-webdriver/ie',
   'selenium-webdriver/chromium',
-  'winston'
+  'winston',
 ])
 
 addHook({
   name: 'jest-runtime',
-  versions: ['>=24.8.0']
+  versions: ['>=24.8.0'],
 }, (runtimePackage) => {
   const Runtime = runtimePackage.default ?? runtimePackage
 
@@ -1395,12 +1403,12 @@ addHook({
           const errorMessage = [...this.loggedReferenceErrors][0]
           testSuiteErrorCh.publish({
             errorMessage,
-            testSuiteAbsolutePath: this._testPath
+            testSuiteAbsolutePath: this._testPath,
           })
         } else {
           testSuiteErrorCh.publish({
             errorMessage: 'An error occurred while importing a module',
-            testSuiteAbsolutePath: this._testPath
+            testSuiteAbsolutePath: this._testPath,
           })
         }
       }
@@ -1466,8 +1474,8 @@ function sendWrapper (send) {
           _ddTestManagementTests: suiteTestManagementTests,
           // TODO: figure out if we can reduce the size of the modified files object
           // Can we use `testSuite` (it'd have to be relative to repository root though)
-          _ddModifiedFiles: modifiedFiles
-        }
+          _ddModifiedFiles: modifiedFiles,
+        },
       }
     }
     return send.apply(this, arguments)
@@ -1499,7 +1507,7 @@ function enqueueWrapper (enqueue) {
 addHook({
   name: 'jest-worker',
   versions: ['>=24.9.0 <30.0.0'],
-  file: 'build/workers/ChildProcessWorker.js'
+  file: 'build/workers/ChildProcessWorker.js',
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
   shimmer.wrap(ChildProcessWorker.prototype, 'send', sendWrapper)
@@ -1513,7 +1521,7 @@ addHook({
 
 addHook({
   name: 'jest-worker',
-  versions: ['>=30.0.0']
+  versions: ['>=30.0.0'],
 }, (jestWorkerPackage) => {
   shimmer.wrap(jestWorkerPackage.FifoQueue.prototype, 'enqueue', enqueueWrapper)
   shimmer.wrap(jestWorkerPackage.PriorityQueue.prototype, 'enqueue', enqueueWrapper)

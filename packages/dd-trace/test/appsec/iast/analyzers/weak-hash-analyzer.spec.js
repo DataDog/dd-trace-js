@@ -48,21 +48,21 @@ describe('weak-hash-analyzer', () => {
           return {
             toSpanId () {
               return '123'
-            }
+            },
           }
-        }
-      }
+        },
+      },
     }
     const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
       '../iast-context': {
-        getIastContext: () => iastContext
+        getIastContext: () => iastContext,
       },
       '../overhead-controller': { hasQuota: () => true },
-      '../vulnerability-reporter': { addVulnerability }
+      '../vulnerability-reporter': { addVulnerability },
     })
     const proxiedWeakHashAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/weak-hash-analyzer',
       {
-        './vulnerability-analyzer': ProxyAnalyzer
+        './vulnerability-analyzer': ProxyAnalyzer,
       })
     proxiedWeakHashAnalyzer.analyze(VULNERABLE_ALGORITHM)
     sinon.assert.calledOnce(addVulnerability)
@@ -83,7 +83,7 @@ describe('weak-hash-analyzer', () => {
     it('redlock', () => {
       const location = {
         path: path.join(locationPrefix, 'node_modules', 'redlock', 'dist', 'cjs'),
-        line: 183
+        line: 183,
       }
       assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })
@@ -91,7 +91,7 @@ describe('weak-hash-analyzer', () => {
     it('etag', () => {
       const location = {
         path: path.join(locationPrefix, 'node_modules', 'etag', 'index.js'),
-        line: 47
+        line: 47,
       }
       assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })
@@ -99,7 +99,7 @@ describe('weak-hash-analyzer', () => {
     it('websocket-server', () => {
       const location = {
         path: path.join(locationPrefix, 'node_modules', 'ws', 'lib', 'websocket-server.js'),
-        line: 371
+        line: 371,
       }
       assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })
@@ -107,7 +107,7 @@ describe('weak-hash-analyzer', () => {
     it('mysql 41 authentication mechanism', () => {
       const location = {
         path: path.join(locationPrefix, 'node_modules', 'mysql2', 'lib', 'auth_41.js'),
-        line: 30
+        line: 30,
       }
       assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })
@@ -115,7 +115,7 @@ describe('weak-hash-analyzer', () => {
     it('@micro-orm hash for keys', () => {
       const location = {
         path: path.join(locationPrefix, 'node_modules', '@mikro-orm', 'core', 'utils', 'Utils.js'),
-        line: 30
+        line: 30,
       }
       assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })
@@ -123,7 +123,7 @@ describe('weak-hash-analyzer', () => {
     it('mongodb host address hash', () => {
       const location = {
         path: path.join(locationPrefix, 'node_modules', 'mongodb', 'lib', 'core', 'connection', 'connection.js'),
-        line: 137
+        line: 137,
       }
       assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })
@@ -131,7 +131,7 @@ describe('weak-hash-analyzer', () => {
     it('sqreen package list fingerprint', () => {
       const location = {
         path: path.join(locationPrefix, 'node_modules', 'sqreen', 'lib', 'package-reader', 'index.js'),
-        line: 135
+        line: 135,
       }
       assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })
@@ -139,7 +139,7 @@ describe('weak-hash-analyzer', () => {
     it('pusher request body fingerprint', () => {
       const location = {
         path: path.join(locationPrefix, 'node_modules', 'pusher', 'lib', 'utils.js'),
-        line: 23
+        line: 23,
       }
       assert.strictEqual(weakHashAnalyzer._isExcluded(location), true)
     })

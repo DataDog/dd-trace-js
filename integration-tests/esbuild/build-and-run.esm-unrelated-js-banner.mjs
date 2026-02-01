@@ -8,8 +8,8 @@ import commonConfig from './build.esm.common-config.js'
 await esbuild.build({
   ...commonConfig,
   banner: {
-    js: '/* js test */'
-  }
+    js: '/* js test */',
+  },
 })
 
 const { status, stdout, stderr } = spawnSync('node', ['out.mjs'])

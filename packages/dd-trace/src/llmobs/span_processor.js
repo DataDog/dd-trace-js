@@ -7,7 +7,7 @@ const logger = require('../log')
 const {
   ERROR_MESSAGE,
   ERROR_TYPE,
-  ERROR_STACK
+  ERROR_STACK,
 } = require('../constants')
 const {
   SPAN_KIND,
@@ -29,7 +29,7 @@ const {
   NAME,
   INPUT_PROMPT,
   ROUTING_API_KEY,
-  ROUTING_SITE
+  ROUTING_SITE,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
@@ -84,7 +84,7 @@ class LLMObsSpanProcessor {
       const mlObsTags = LLMObsTagger.tagMap.get(span)
       const routing = {
         apiKey: mlObsTags[ROUTING_API_KEY],
-        site: mlObsTags[ROUTING_SITE]
+        site: mlObsTags[ROUTING_SITE],
       }
 
       this.#writer.append(formattedEvent, routing)
@@ -200,8 +200,8 @@ class LLMObsSpanProcessor {
       metrics,
       _dd: {
         span_id: span.context().toSpanId(),
-        trace_id: span.context().toTraceId(true)
-      }
+        trace_id: span.context().toTraceId(true),
+      },
     }
 
     if (sessionId) llmObsSpanEvent.session_id = sessionId
@@ -256,7 +256,7 @@ class LLMObsSpanProcessor {
       ml_app: mlApp,
       'ddtrace.version': tracerVersion,
       error: Number(!!error) || 0,
-      language: 'javascript'
+      language: 'javascript',
     }
 
     const errType = span.context()._tags[ERROR_TYPE] || error?.name

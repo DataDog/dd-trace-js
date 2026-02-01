@@ -8,7 +8,7 @@ const {
   useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProcAndExpectExit,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
@@ -22,7 +22,7 @@ describe('esm', () => {
       `@langchain/core@${version}`,
       `@langchain/openai@${version}`,
     ], false, [
-      './packages/datadog-plugin-langchain/test/integration-test/*'
+      './packages/datadog-plugin-langchain/test/integration-test/*',
     ])
 
     beforeEach(async () => {
@@ -47,7 +47,7 @@ describe('esm', () => {
         })
 
         proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
-          NODE_OPTIONS: '--import dd-trace/initialize.mjs'
+          NODE_OPTIONS: '--import dd-trace/initialize.mjs',
         })
 
         await res

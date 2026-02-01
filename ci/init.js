@@ -14,7 +14,7 @@ const EXPORTER_MAP = {
   cucumber: 'cucumber_worker',
   mocha: 'mocha_worker',
   playwright: 'playwright_worker',
-  vitest: 'vitest_worker'
+  vitest: 'vitest_worker',
 }
 
 function isPackageManager () {
@@ -40,7 +40,7 @@ const isJestWorker = testWorkerType === 'jest'
 const baseOptions = {
   startupLogs: false,
   isCiVisibility: true,
-  flushInterval: isJestWorker ? JEST_FLUSH_INTERVAL : DEFAULT_FLUSH_INTERVAL
+  flushInterval: isJestWorker ? JEST_FLUSH_INTERVAL : DEFAULT_FLUSH_INTERVAL,
 }
 
 let shouldInit = !isFalse(getValueFromEnvSources('DD_CIVISIBILITY_ENABLED'))
@@ -54,13 +54,13 @@ if (!isTestWorker && isPackageManager()) {
 if (isTestWorker) {
   baseOptions.telemetry = { enabled: false }
   baseOptions.experimental = {
-    exporter: EXPORTER_MAP[testWorkerType]
+    exporter: EXPORTER_MAP[testWorkerType],
   }
 } else {
   if (isAgentlessEnabled) {
     if (getValueFromEnvSources('DD_API_KEY')) {
       baseOptions.experimental = {
-        exporter: 'datadog'
+        exporter: 'datadog',
       }
     } else {
       console.error(
@@ -72,7 +72,7 @@ if (isTestWorker) {
     }
   } else {
     baseOptions.experimental = {
-      exporter: 'agent_proxy'
+      exporter: 'agent_proxy',
     }
   }
 }

@@ -147,5 +147,5 @@ module.exports = {
   generatePointerHash,
   encodeValue,
   extractPrimaryKeys,
-  extractQueueMetadata
+  extractQueueMetadata,
 }

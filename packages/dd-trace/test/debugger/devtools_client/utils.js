@@ -4,7 +4,7 @@ const { randomUUID } = require('node:crypto')
 
 module.exports = {
   generateProbeConfig,
-  getRequestOptions
+  getRequestOptions,
 }
 
 /**
@@ -61,7 +61,7 @@ function generateProbeConfig (breakpoint, overrides = {}) {
     evaluateAt: 'EXIT',
     ...overrides,
     capture: { maxReferenceDepth: 3, ...overrides.capture },
-    sampling: { snapshotsPerSecond: 5000, ...overrides.sampling }
+    sampling: { snapshotsPerSecond: 5000, ...overrides.sampling },
   }
 }
 

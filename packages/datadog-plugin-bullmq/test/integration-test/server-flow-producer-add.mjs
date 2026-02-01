@@ -3,7 +3,7 @@ import { FlowProducer } from 'bullmq'
 
 const connection = {
   host: '127.0.0.1',
-  port: 6379
+  port: 6379,
 }
 
 const queueName = 'esm-test-flow-producer'
@@ -19,9 +19,9 @@ await flowProducer.add({
     {
       name: 'child-job-1',
       queueName,
-      data: { type: 'child', message: 'Child job' }
-    }
-  ]
+      data: { type: 'child', message: 'Child job' },
+    },
+  ],
 })
 
 await flowProducer.close()

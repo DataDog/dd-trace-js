@@ -23,6 +23,6 @@ function getAgentUrl (config) {
   return new URL(format({
     protocol: 'http:',
     hostname: hostname || defaults.hostname,
-    port: port || defaults.port
+    port: port || defaults.port,
   }))
 }

@@ -9,7 +9,7 @@ const clientCH = tracingChannel('apm:prisma:client')
 const allowedClientSpanOperations = new Set([
   'operation',
   'serialize',
-  'transaction'
+  'transaction',
 ])
 
 class DatadogTracingHelper {
@@ -44,14 +44,14 @@ class DatadogTracingHelper {
   runInChildSpan (options, callback) {
     if (typeof options === 'string') {
       options = {
-        name: options
+        name: options,
       }
     }
 
     if (allowedClientSpanOperations.has(options.name)) {
       const ctx = {
         resourceName: options.name,
-        attributes: options.attributes || {}
+        attributes: options.attributes || {},
       }
 
       if (options.name !== 'serialize') {
@@ -102,14 +102,14 @@ const prismaHook = (runtime, versions, name, isIitm) => {
         return wrappedGetPrismaClient
       }
       return target[prop]
-    }
+    },
   })
 }
 
 const prismaConfigs = [
   { name: '@prisma/client', versions: ['>=6.1.0 <7.0.0'], filePattern: 'runtime/library.*' },
   { name: './runtime/library.js', versions: ['>=6.1.0 <7.0.0'], file: 'runtime/library.js' },
-  { name: '@prisma/client', versions: ['>=7.0.0'], filePattern: 'runtime/client.*' }
+  { name: '@prisma/client', versions: ['>=7.0.0'], filePattern: 'runtime/client.*' },
 ]
 
 prismaConfigs.forEach(config => {
@@ -123,7 +123,7 @@ function parseDBString (dbString) {
     password: url.password,
     host: url.hostname,
     port: url.port,
-    database: url.pathname.slice(1) // Remove leading slash
+    database: url.pathname.slice(1), // Remove leading slash
   }
   return dbConfig
 }

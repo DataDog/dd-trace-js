@@ -66,7 +66,7 @@ describe('light-my-request instrumentation', () => {
     it('should publish to start channel on inject', async () => {
       await app.inject({
         method: 'GET',
-        url: '/test'
+        url: '/test',
       })
 
       sinon.assert.called(startStub)
@@ -88,7 +88,7 @@ describe('light-my-request instrumentation', () => {
     it('should publish to exit channel after inject dispatch', async () => {
       await app.inject({
         method: 'GET',
-        url: '/test'
+        url: '/test',
       })
 
       sinon.assert.called(exitStub)
@@ -104,7 +104,7 @@ describe('light-my-request instrumentation', () => {
     it('should publish to finish channel when response completes', async () => {
       await app.inject({
         method: 'GET',
-        url: '/test'
+        url: '/test',
       })
 
       // Wait a tick for finish event to propagate
@@ -133,7 +133,7 @@ describe('light-my-request instrumentation', () => {
       try {
         await app.inject({
           method: 'GET',
-          url: '/test'
+          url: '/test',
         })
 
         assert(capturedRes, 'response should be captured')
@@ -157,7 +157,7 @@ describe('light-my-request instrumentation', () => {
       try {
         await app.inject({
           method: 'GET',
-          url: '/test'
+          url: '/test',
         })
 
         assert(capturedAbortController, 'abortController should be captured')
@@ -184,8 +184,8 @@ describe('light-my-request instrumentation', () => {
           url: '/test',
           headers: {
             'x-custom-header': 'test-value',
-            'x-trace-id': '12345'
-          }
+            'x-trace-id': '12345',
+          },
         })
 
         assert(capturedHeaders, 'headers should be captured')
@@ -237,7 +237,7 @@ describe('light-my-request instrumentation', () => {
 
       await inject(dispatchFunc, {
         method: 'GET',
-        url: '/standalone-test'
+        url: '/standalone-test',
       })
 
       sinon.assert.called(startStub)

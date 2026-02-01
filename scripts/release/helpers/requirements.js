@@ -33,7 +33,7 @@ function checkBranchDiff () {
   } catch (e) {
     const link = [
       'https://datadoghq.atlassian.net/wiki/spaces/DL/pages/4987160870/Legacy+proposal+process',
-      '#Install-and-Configure-branch-diff-to-automate-some-operations'
+      '#Install-and-Configure-branch-diff-to-automate-some-operations',
     ].join('')
     fatal(
       'The "branch-diff" CLI could not be found.',

@@ -30,7 +30,7 @@ function wrapDeserialization (Type) {
 
 addHook({
   name: 'avsc',
-  versions: ['>=5.0.0']
+  versions: ['>=5.0.0'],
 }, avro => {
   wrapDeserialization(avro.Type)
   wrapSerialization(avro.Type)

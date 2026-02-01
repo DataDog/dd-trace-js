@@ -16,7 +16,7 @@ const setup = () => {
     LAMBDA_TASK_ROOT: './packages/dd-trace/test/lambda/fixtures',
     AWS_LAMBDA_FUNCTION_NAME: 'mock-function-name',
     DD_TRACE_ENABLED: 'true',
-    DD_LOG_LEVEL: 'debug'
+    DD_LOG_LEVEL: 'debug',
   }
   process.env = { ...oldEnv, ...newEnv }
 }
@@ -36,8 +36,8 @@ const loadAgent = () => {
   require('../../src/lambda')
   return agent.load([], [], {
     experimental: {
-      exporter: 'agent'
-    }
+      exporter: 'agent',
+    },
   })
 }
 
@@ -73,7 +73,7 @@ describe('lambda', () => {
       await loadAgent()
 
       const _context = {
-        getRemainingTimeInMillis: () => 150
+        getRemainingTimeInMillis: () => 150,
       }
       const _event = {}
 
@@ -107,7 +107,7 @@ describe('lambda', () => {
       await loadAgent()
 
       const _context = {
-        getRemainingTimeInMillis: () => 150
+        getRemainingTimeInMillis: () => 150,
       }
       const _event = {}
 
@@ -144,7 +144,7 @@ describe('lambda', () => {
       await loadAgent()
 
       const _context = {
-        getRemainingTimeInMillis: () => 150
+        getRemainingTimeInMillis: () => 150,
       }
       const _event = {}
 
@@ -177,7 +177,7 @@ describe('lambda', () => {
       await loadAgent()
 
       const _context = {
-        getRemainingTimeInMillis: () => 150
+        getRemainingTimeInMillis: () => 150,
       }
       const _event = {}
       const _ = {}
@@ -231,7 +231,7 @@ describe('lambda', () => {
       await loadAgent()
 
       const _context = {
-        getRemainingTimeInMillis: () => 25
+        getRemainingTimeInMillis: () => 25,
       }
       const _event = {}
 
@@ -252,17 +252,17 @@ describe('lambda', () => {
 
     const deadlines = [
       {
-        envVar: 'default'
+        envVar: 'default',
         // will use default remaining time
       },
       {
         envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
-        value: '-100' // will default to 0
+        value: '-100', // will default to 0
       },
       {
         envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
-        value: '10' // subtract 10 from the remaining time
-      }
+        value: '10', // subtract 10 from the remaining time
+      },
     ]
 
     deadlines.forEach(deadline => {
@@ -274,7 +274,7 @@ describe('lambda', () => {
         process.env.DD_LAMBDA_HANDLER = 'handler.timeoutHandler'
 
         const _context = {
-          getRemainingTimeInMillis: () => 25
+          getRemainingTimeInMillis: () => 25,
         }
         const _event = {}
 

@@ -9,7 +9,7 @@ const {
   HTTP_STATUS_CODE,
   HTTP_ENDPOINT,
   HTTP_ROUTE,
-  HTTP_METHOD
+  HTTP_METHOD,
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('./constants')
 const { version } = require('./pkg')
@@ -19,7 +19,7 @@ const { SpanStatsExporter } = require('./exporters/span-stats')
 
 const {
   DEFAULT_SPAN_NAME,
-  DEFAULT_SERVICE_NAME
+  DEFAULT_SERVICE_NAME,
 } = require('./encode/tags-processors')
 
 class SpanAggStats {
@@ -59,7 +59,7 @@ class SpanAggStats {
       statusCode,
       synthetics,
       method,
-      endpoint
+      endpoint,
     } = this.aggKey
 
     return {
@@ -76,7 +76,7 @@ class SpanAggStats {
       Errors: this.errors,
       Duration: this.duration,
       OkSummary: this.okDistribution.toProto(), // TODO: custom proto encoding
-      ErrorSummary: this.errorDistribution.toProto() // TODO: custom proto encoding
+      ErrorSummary: this.errorDistribution.toProto(), // TODO: custom proto encoding
     }
   }
 }
@@ -102,7 +102,7 @@ class SpanAggKey {
       this.statusCode,
       this.synthetics,
       this.method,
-      this.endpoint
+      this.endpoint,
     ].join(',')
   }
 }
@@ -134,20 +134,20 @@ class SpanStatsProcessor {
   constructor ({
     stats: {
       enabled = false,
-      interval = 10
+      interval = 10,
     },
     hostname,
     port,
     url,
     env,
     tags,
-    version
+    version,
   } = {}) {
     this.exporter = new SpanStatsExporter({
       hostname,
       port,
       tags,
-      url
+      url,
     })
     this.interval = interval
     this.bucketSizeNs = interval * 1e9
@@ -178,7 +178,7 @@ class SpanStatsProcessor {
       TracerVersion: pkg.version,
       RuntimeID: this.tags['runtime-id'],
       Sequence: ++this.sequence,
-      ProcessTags: processTags.serialized
+      ProcessTags: processTags.serialized,
     })
   }
 
@@ -208,7 +208,7 @@ class SpanStatsProcessor {
       serializedBuckets.push({
         Start: timeNs,
         Duration: bucketSizeNs,
-        Stats: bucketAggStats
+        Stats: bucketAggStats,
       })
     }
 
@@ -223,5 +223,5 @@ module.exports = {
   SpanAggKey,
   SpanBuckets,
   TimeBuckets,
-  SpanStatsProcessor
+  SpanStatsProcessor,
 }

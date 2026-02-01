@@ -17,8 +17,8 @@ class PrismaClientPlugin extends DatabasePlugin {
         prisma: {
           method: ctx.attributes.method,
           model: ctx.attributes.model,
-          type: 'client'
-        }
+          type: 'client',
+        },
       }
     }
     const operationName = this.operationName({ operation: this.operation })

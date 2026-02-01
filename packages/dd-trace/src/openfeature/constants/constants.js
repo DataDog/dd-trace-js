@@ -47,5 +47,5 @@ module.exports = {
    * @constant
    * @type {string} Reason code for noop provider evaluations
    */
-  NOOP_REASON: 'STATIC'
+  NOOP_REASON: 'STATIC',
 }

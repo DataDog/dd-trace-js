@@ -26,7 +26,7 @@ class AerospikePlugin extends DatabasePlugin {
       type: 'aerospike',
       kind: 'client',
       resource: resourceName,
-      meta
+      meta,
     }, false)
 
     ctx.parentStore = store
@@ -85,7 +85,7 @@ function getMetaForIndex (ns, set, bin, index) {
     [AEROSPIKE_PEER_SERVICE]: ns,
     'aerospike.setname': set,
     'aerospike.bin': bin,
-    'aerospike.index': index
+    'aerospike.index': index,
   }
 }
 
@@ -94,7 +94,7 @@ function getMetaForKey (ns, set, key) {
     'aerospike.key': `${ns}:${set}:${key}`,
     [AEROSPIKE_PEER_SERVICE]: ns,
     'aerospike.setname': set,
-    'aerospike.userkey': key
+    'aerospike.userkey': key,
   }
 }
 
@@ -102,7 +102,7 @@ function getMetaForQuery (queryObj) {
   const { ns, set } = queryObj
   return {
     [AEROSPIKE_PEER_SERVICE]: ns,
-    'aerospike.setname': set
+    'aerospike.setname': set,
   }
 }
 

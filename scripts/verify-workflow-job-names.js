@@ -56,7 +56,7 @@ function extractJobRecords (workflowFileName, workflowName, jobsDefinition) {
         workflowFileName,
         workflowName,
         jobId,
-        message: 'Resolved check name is empty. Set `jobs.' + jobId + '.name` to a non-empty string.'
+        message: 'Resolved check name is empty. Set `jobs.' + jobId + '.name` to a non-empty string.',
       })
       continue
     }
@@ -65,7 +65,7 @@ function extractJobRecords (workflowFileName, workflowName, jobsDefinition) {
       workflowFileName,
       workflowName,
       jobId,
-      checkName: resolvedCheckName
+      checkName: resolvedCheckName,
     })
   }
 

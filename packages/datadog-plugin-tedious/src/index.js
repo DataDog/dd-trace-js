@@ -22,8 +22,8 @@ class TediousPlugin extends DatabasePlugin {
         [CLIENT_PORT_KEY]: ctx.connectionConfig.options.port,
         'db.user': ctx.connectionConfig.userName || ctx.connectionConfig.authentication.options.userName,
         'db.name': ctx.connectionConfig.options.database,
-        'db.instance': ctx.connectionConfig.options.instanceName
-      }
+        'db.instance': ctx.connectionConfig.options.instanceName,
+      },
     }, ctx)
 
     // SQL Server includes comments when caching queries

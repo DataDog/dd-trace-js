@@ -7,7 +7,7 @@ const {
   FakeAgent,
   curlAndAssertMessage,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
 
@@ -15,7 +15,7 @@ describe('esm', () => {
   let agent
   let proc
   const env = {
-    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`,
   }
 
   // skip older versions of fastify due to syntax differences

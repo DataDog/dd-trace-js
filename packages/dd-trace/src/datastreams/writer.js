@@ -17,9 +17,9 @@ function makeRequest (data, url, cb) {
       'Datadog-Meta-Lang': 'javascript',
       'Datadog-Meta-Tracer-Version': pkg.version,
       'Content-Type': 'application/msgpack',
-      'Content-Encoding': 'gzip'
+      'Content-Encoding': 'gzip',
     },
-    url
+    url,
   }
 
   log.debug('Request to the intake: %j', options)
@@ -66,5 +66,5 @@ class DataStreamsWriter {
 }
 
 module.exports = {
-  DataStreamsWriter
+  DataStreamsWriter,
 }

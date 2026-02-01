@@ -29,7 +29,7 @@ class NoopFlaggingProvider {
   resolveBooleanEvaluation (flagKey, defaultValue, context, logger) {
     return Promise.resolve({
       value: defaultValue,
-      reason: NOOP_REASON
+      reason: NOOP_REASON,
     })
   }
 
@@ -43,7 +43,7 @@ class NoopFlaggingProvider {
   resolveStringEvaluation (flagKey, defaultValue, context, logger) {
     return Promise.resolve({
       value: defaultValue,
-      reason: NOOP_REASON
+      reason: NOOP_REASON,
     })
   }
 
@@ -71,7 +71,7 @@ class NoopFlaggingProvider {
   resolveObjectEvaluation (flagKey, defaultValue, context, logger) {
     return Promise.resolve({
       value: defaultValue,
-      reason: NOOP_REASON
+      reason: NOOP_REASON,
     })
   }
 

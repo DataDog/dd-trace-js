@@ -28,7 +28,7 @@ const ddtags = [
   ['debugger_version', version],
   ['host_name', hostname],
   [GIT_COMMIT_SHA, config.commitSHA],
-  [GIT_REPOSITORY_URL, config.repositoryUrl]
+  [GIT_REPOSITORY_URL, config.repositoryUrl],
 ].filter(([, value]) => value !== undefined).map((pair) => pair.join(':')).join(',')
 
 const path = `/debugger/v1/input?${stringify({ ddtags })}`
@@ -36,7 +36,7 @@ const path = `/debugger/v1/input?${stringify({ ddtags })}`
 const jsonBuffer = new JSONBuffer({
   size: config.maxTotalPayloadSize,
   timeout: config.dynamicInstrumentation.uploadIntervalSeconds * 1000,
-  onFlush
+  onFlush,
 })
 
 function send (message, logger, dd, snapshot) {
@@ -49,7 +49,7 @@ function send (message, logger, dd, snapshot) {
       : message,
     logger,
     dd,
-    debugger: { snapshot }
+    debugger: { snapshot },
   }
 
   let json = JSON.stringify(payload)
@@ -85,7 +85,7 @@ function onFlush (payload) {
     method: 'POST',
     url: config.url,
     path,
-    headers: { 'Content-Type': 'application/json; charset=utf-8' }
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
   }
 
   request(payload, opts, (err) => {

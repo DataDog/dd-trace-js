@@ -24,13 +24,13 @@ const {
   getIsFaultyEarlyFlakeDetection,
   getNumFromKnownTests,
   getModifiedFilesFromDiff,
-  isModifiedTest
+  isModifiedTest,
 } = require('../../../src/plugins/util/test')
 
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
 const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
-  TELEMETRY_GIT_SHA_MATCH
+  TELEMETRY_GIT_SHA_MATCH,
 } = require('../../../src/ci-visibility/telemetry')
 
 describe('getTestParametersString', () => {
@@ -87,11 +87,11 @@ describe('getCodeOwnersFileEntries', () => {
 
     assert.deepStrictEqual(codeOwnersFileEntries[0], {
       pattern: 'packages/dd-trace/test/plugins/util/test.spec.js',
-      owners: ['@datadog-ci-app']
+      owners: ['@datadog-ci-app'],
     })
     assert.deepStrictEqual(codeOwnersFileEntries[1], {
       pattern: 'packages/dd-trace/test/plugins/util/*',
-      owners: ['@datadog-dd-trace-js']
+      owners: ['@datadog-dd-trace-js'],
     })
   })
 
@@ -115,11 +115,11 @@ describe('getCodeOwnersFileEntries', () => {
 
     assert.deepStrictEqual(codeOwnersFileEntries[0], {
       pattern: 'packages/dd-trace/test/plugins/util/test.spec.js',
-      owners: ['@datadog-ci-app']
+      owners: ['@datadog-ci-app'],
     })
     assert.deepStrictEqual(codeOwnersFileEntries[1], {
       pattern: 'packages/dd-trace/test/plugins/util/*',
-      owners: ['@datadog-dd-trace-js']
+      owners: ['@datadog-dd-trace-js'],
     })
     process.chdir(oldCwd)
   })
@@ -219,22 +219,22 @@ describe('metadata validation', () => {
     const invalidMetadata1 = {
       [GIT_REPOSITORY_URL]: 'www.datadog.com',
       [CI_PIPELINE_URL]: 'www.datadog.com',
-      [GIT_COMMIT_SHA]: 'abc123'
+      [GIT_COMMIT_SHA]: 'abc123',
     }
     const invalidMetadata2 = {
       [GIT_REPOSITORY_URL]: 'htps://datadog.com/repo',
       [CI_PIPELINE_URL]: 'datadog.com',
-      [GIT_COMMIT_SHA]: 'abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123'
+      [GIT_COMMIT_SHA]: 'abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123',
     }
     const invalidMetadata3 = {
       [GIT_REPOSITORY_URL]: 'datadog.com',
       [CI_PIPELINE_URL]: 'datadog.com',
-      [GIT_COMMIT_SHA]: 'abc123'
+      [GIT_COMMIT_SHA]: 'abc123',
     }
     const invalidMetadata4 = {
       [GIT_REPOSITORY_URL]: 'datadog.com/repo.git',
       [CI_PIPELINE_URL]: 'www.datadog.com5',
-      [GIT_COMMIT_SHA]: 'abc123'
+      [GIT_COMMIT_SHA]: 'abc123',
     }
     const invalidMetadata5 = { [GIT_REPOSITORY_URL]: '', [CI_PIPELINE_URL]: '', [GIT_COMMIT_SHA]: '' }
     const invalidMetadatas = [invalidMetadata1, invalidMetadata2, invalidMetadata3, invalidMetadata4, invalidMetadata5]
@@ -247,17 +247,17 @@ describe('metadata validation', () => {
     const validMetadata1 = {
       [GIT_REPOSITORY_URL]: 'https://datadoghq.com/myrepo/repo.git',
       [CI_PIPELINE_URL]: 'https://datadog.com',
-      [GIT_COMMIT_SHA]: 'cb466452bfe18d4f6be2836c2a5551843013cf381234223920318230492823f3'
+      [GIT_COMMIT_SHA]: 'cb466452bfe18d4f6be2836c2a5551843013cf381234223920318230492823f3',
     }
     const validMetadata2 = {
       [GIT_REPOSITORY_URL]: 'http://datadoghq.com/myrepo/repo.git',
       [CI_PIPELINE_URL]: 'http://datadog.com',
-      [GIT_COMMIT_SHA]: 'cb466452bfe18d4f6be2836c2a5551843013cf38'
+      [GIT_COMMIT_SHA]: 'cb466452bfe18d4f6be2836c2a5551843013cf38',
     }
     const validMetadata3 = {
       [GIT_REPOSITORY_URL]: 'git@github.com:DataDog/dd-trace-js.git',
       [CI_PIPELINE_URL]: 'https://datadog.com/pipeline',
-      [GIT_COMMIT_SHA]: 'cb466452bfe18d4f6be2836c2a5551843013cf381234223920318230492823f3'
+      [GIT_COMMIT_SHA]: 'cb466452bfe18d4f6be2836c2a5551843013cf381234223920318230492823f3',
     }
     const validMetadatas = [validMetadata1, validMetadata2, validMetadata3]
     validMetadatas.forEach((validMetadata) => {
@@ -271,16 +271,16 @@ describe('parseAnnotations', () => {
     const tags = parseAnnotations([
       {
         type: 'DD_TAGS[test.requirement]',
-        description: 'high'
+        description: 'high',
       },
       {
         type: 'DD_TAGS[test.responsible_team]',
-        description: 'sales'
-      }
+        description: 'sales',
+      },
     ])
     assert.deepStrictEqual(tags, {
       'test.requirement': 'high',
-      'test.responsible_team': 'sales'
+      'test.responsible_team': 'sales',
     })
   })
 
@@ -292,7 +292,7 @@ describe('parseAnnotations', () => {
       'invalid',
       { type: 'DD_TAGS', description: 'yeah' },
       { type: 'DD_TAGS[v', description: 'invalid' },
-      { type: 'test.requirement', description: 'sure' }
+      { type: 'test.requirement', description: 'sure' },
     ])
     assert.deepStrictEqual(tags, {})
   })
@@ -354,8 +354,8 @@ describe('getNumFromKnownTests', () => {
     const knownTests = {
       testModule: {
         'test1.spec.js': ['test1', 'test2'],
-        'test2.spec.js': ['test3']
-      }
+        'test2.spec.js': ['test3'],
+      },
     }
 
     const numTests = getNumFromKnownTests(knownTests)
@@ -398,7 +398,7 @@ index 1234567..89abcde 100644
 
     const expected = {
       'test/file1.js': [2, 4],
-      'test/file2.js': [5]
+      'test/file2.js': [5],
     }
 
     assert.deepStrictEqual(getModifiedFilesFromDiff(diff), expected)
@@ -424,7 +424,7 @@ index 1234567..89abcde 100644
 +another new line`
 
     const expected = {
-      'test/file.js': [2, 4, 6]
+      'test/file.js': [2, 4, 6],
     }
 
     assert.deepStrictEqual(getModifiedFilesFromDiff(diff), expected)
@@ -437,7 +437,7 @@ describe('isModifiedTest', () => {
 
     it('should return true when test lines overlap with modified lines', () => {
       const modifiedFiles = {
-        'test/file.js': [2, 4, 6]
+        'test/file.js': [2, 4, 6],
       }
       // Overlaps with lines 2, 4, 6
       assert.strictEqual(isModifiedTest('test/file.js', 1, 3, modifiedFiles, testFramework), true)
@@ -447,7 +447,7 @@ describe('isModifiedTest', () => {
 
     it('should return false when test lines do not overlap with modified lines', () => {
       const modifiedFiles = {
-        'test/file.js': [2, 4, 6]
+        'test/file.js': [2, 4, 6],
       }
       assert.strictEqual(isModifiedTest('test/file.js', 7, 9, modifiedFiles, testFramework), false)
       assert.strictEqual(isModifiedTest('test/file.js', 0, 1, modifiedFiles, testFramework), false)
@@ -455,14 +455,14 @@ describe('isModifiedTest', () => {
 
     it('should return false when file is not in modified tests', () => {
       const modifiedFiles = {
-        'test/file.js': [2, 4, 6]
+        'test/file.js': [2, 4, 6],
       }
       assert.strictEqual(isModifiedTest('test/other.js', 1, 3, modifiedFiles, testFramework), false)
     })
 
     it('should handle single line tests', () => {
       const modifiedFiles = {
-        'test/file.js': [2, 4, 6]
+        'test/file.js': [2, 4, 6],
       }
       assert.strictEqual(isModifiedTest('test/file.js', 2, 2, modifiedFiles, testFramework), true)
       assert.strictEqual(isModifiedTest('test/file.js', 3, 3, modifiedFiles, testFramework), false)
@@ -475,7 +475,7 @@ describe('isModifiedTest', () => {
     it('should return true when test file is in modifiedFiles', () => {
       const modifiedFiles = {
         'test/file.js': [2, 4, 6],
-        'test/other.js': [2, 4, 6]
+        'test/other.js': [2, 4, 6],
       }
       assert.strictEqual(isModifiedTest('test/file.js', 1, 10, modifiedFiles, testFramework), true)
       assert.strictEqual(isModifiedTest('test/other.js', 1, 10, modifiedFiles, testFramework), true)
@@ -483,7 +483,7 @@ describe('isModifiedTest', () => {
 
     it('should return false when test file is not in modifiedFiles', () => {
       const modifiedFiles = {
-        'test/file.js': [2, 4, 6]
+        'test/file.js': [2, 4, 6],
       }
       assert.strictEqual(isModifiedTest('test/other.js', 1, 10, modifiedFiles, testFramework), false)
     })
@@ -507,8 +507,8 @@ describe('getPullRequestBaseBranch', () => {
           getSourceBranch: () => 'feature-branch',
           getMergeBase: getMergeBaseStub,
           checkAndFetchBranch: checkAndFetchBranchStub,
-          getLocalBranches: getLocalBranchesStub
-        }
+          getLocalBranches: getLocalBranchesStub,
+        },
       })
       const baseBranch = getPullRequestBaseBranch('trunk')
       assert.strictEqual(baseBranch, '1234af')
@@ -539,8 +539,8 @@ describe('getPullRequestBaseBranch', () => {
           getMergeBase: getMergeBaseStub,
           checkAndFetchBranch: checkAndFetchBranchStub,
           getLocalBranches: getLocalBranchesStub,
-          getCounts: getCountsStub
-        }
+          getCounts: getCountsStub,
+        },
       })
       const baseBranch = getPullRequestBaseBranch()
       assert.strictEqual(baseBranch, 'fa4321')
@@ -563,24 +563,24 @@ describe('checkShaDiscrepancies', () => {
   it('return true if the CI/Git Client repository URL is different from the user provided repository URL', () => {
     const ciMetadata = {
       [GIT_COMMIT_SHA]: '1234af',
-      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git'
+      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git',
     }
     const userProvidedGitMetadata = {
       [GIT_COMMIT_SHA]: '1234af',
-      [GIT_REPOSITORY_URL]: 'Bad URL'
+      [GIT_REPOSITORY_URL]: 'Bad URL',
     }
     const getGitInformationDiscrepancyStub = sinon.stub()
     getGitInformationDiscrepancyStub.returns({
       gitRepositoryUrl: 'Bad URL 2',
-      gitCommitSHA: '1234af'
+      gitCommitSHA: '1234af',
     })
     const { checkShaDiscrepancies } = proxyquire('../../../src/plugins/util/test', {
       './git': {
-        getGitInformationDiscrepancy: getGitInformationDiscrepancyStub
+        getGitInformationDiscrepancy: getGitInformationDiscrepancyStub,
       },
       '../../ci-visibility/telemetry': {
-        incrementCountMetric: incrementCountMetricStub
-      }
+        incrementCountMetric: incrementCountMetricStub,
+      },
     })
 
     checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
@@ -588,14 +588,14 @@ describe('checkShaDiscrepancies', () => {
     const expectedCalls = [
       { type: 'repository_discrepancy', expectedProvider: 'user_supplied', discrepantProvider: 'git_client' },
       { type: 'repository_discrepancy', expectedProvider: 'user_supplied', discrepantProvider: 'ci_provider' },
-      { type: 'repository_discrepancy', expectedProvider: 'ci_provider', discrepantProvider: 'git_client' }
+      { type: 'repository_discrepancy', expectedProvider: 'ci_provider', discrepantProvider: 'git_client' },
     ]
 
     expectedCalls.forEach(({ type, expectedProvider, discrepantProvider }) => {
       sinon.assert.calledWith(incrementCountMetricStub, TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY, {
         type,
         expected_provider: expectedProvider,
-        discrepant_provider: discrepantProvider
+        discrepant_provider: discrepantProvider,
       })
     })
     sinon.assert.calledWith(incrementCountMetricStub, TELEMETRY_GIT_SHA_MATCH, { matched: false })
@@ -605,24 +605,24 @@ describe('checkShaDiscrepancies', () => {
     incrementCountMetricStub.resetHistory()
     const ciMetadata = {
       [GIT_COMMIT_SHA]: 'abcd',
-      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git'
+      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git',
     }
     const userProvidedGitMetadata = {
       [GIT_COMMIT_SHA]: 'efgh',
-      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git'
+      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git',
     }
     const getGitInformationDiscrepancyStub = sinon.stub()
     getGitInformationDiscrepancyStub.returns({
       gitRepositoryUrl: 'https://github.com/datadog/dd-trace-js.git',
-      gitCommitSHA: 'ijkl'
+      gitCommitSHA: 'ijkl',
     })
     const { checkShaDiscrepancies } = proxyquire('../../../src/plugins/util/test', {
       './git': {
-        getGitInformationDiscrepancy: getGitInformationDiscrepancyStub
+        getGitInformationDiscrepancy: getGitInformationDiscrepancyStub,
       },
       '../../ci-visibility/telemetry': {
-        incrementCountMetric: incrementCountMetricStub
-      }
+        incrementCountMetric: incrementCountMetricStub,
+      },
     })
 
     checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
@@ -630,14 +630,14 @@ describe('checkShaDiscrepancies', () => {
     const expectedCalls = [
       { type: 'commit_discrepancy', expectedProvider: 'user_supplied', discrepantProvider: 'git_client' },
       { type: 'commit_discrepancy', expectedProvider: 'user_supplied', discrepantProvider: 'ci_provider' },
-      { type: 'commit_discrepancy', expectedProvider: 'ci_provider', discrepantProvider: 'git_client' }
+      { type: 'commit_discrepancy', expectedProvider: 'ci_provider', discrepantProvider: 'git_client' },
     ]
 
     expectedCalls.forEach(({ type, expectedProvider, discrepantProvider }) => {
       sinon.assert.calledWith(incrementCountMetricStub, TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY, {
         type,
         expected_provider: expectedProvider,
-        discrepant_provider: discrepantProvider
+        discrepant_provider: discrepantProvider,
       })
     })
     sinon.assert.calledWith(incrementCountMetricStub, TELEMETRY_GIT_SHA_MATCH, { matched: false })
@@ -647,24 +647,24 @@ describe('checkShaDiscrepancies', () => {
     incrementCountMetricStub.resetHistory()
     const ciMetadata = {
       [GIT_COMMIT_SHA]: '1234af',
-      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git'
+      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git',
     }
     const userProvidedGitMetadata = {
       [GIT_COMMIT_SHA]: '1234af',
-      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git'
+      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git',
     }
     const getGitInformationDiscrepancyStub = sinon.stub()
     getGitInformationDiscrepancyStub.returns({
       gitRepositoryUrl: 'https://github.com/datadog/dd-trace-js.git',
-      gitCommitSHA: '1234af'
+      gitCommitSHA: '1234af',
     })
     const { checkShaDiscrepancies } = proxyquire('../../../src/plugins/util/test', {
       './git': {
-        getGitInformationDiscrepancy: getGitInformationDiscrepancyStub
+        getGitInformationDiscrepancy: getGitInformationDiscrepancyStub,
       },
       '../../ci-visibility/telemetry': {
-        incrementCountMetric: incrementCountMetricStub
-      }
+        incrementCountMetric: incrementCountMetricStub,
+      },
     })
 
     checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)

@@ -47,7 +47,7 @@ describe('Config', () => {
     log.error = sinon.spy()
 
     const configDefaults = proxyquire('../../src/config/defaults', {
-      '../pkg': pkg
+      '../pkg': pkg,
     })
 
     // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
@@ -58,7 +58,7 @@ describe('Config', () => {
         '../log': log,
         '../telemetry': { updateConfig },
         fs,
-        './helper': configHelper
+        './helper': configHelper,
       })(options)
     }
   }
@@ -66,7 +66,7 @@ describe('Config', () => {
   beforeEach(() => {
     pkg = {
       name: '',
-      version: ''
+      version: '',
     }
 
     updateConfig = sinon.stub()
@@ -103,7 +103,7 @@ describe('Config', () => {
     it('should return aliased value', () => {
       process.env.DATADOG_API_KEY = '12345'
       assert.throws(() => getEnvironmentVariable('DATADOG_API_KEY'), {
-        message: /Missing DATADOG_API_KEY env\/configuration in "supported-configurations.json" file./
+        message: /Missing DATADOG_API_KEY env\/configuration in "supported-configurations.json" file./,
       })
       assert.strictEqual(getEnvironmentVariable('DD_API_KEY'), '12345')
       const { DD_API_KEY, DATADOG_API_KEY } = getEnvironmentVariables()
@@ -160,7 +160,7 @@ describe('Config', () => {
     assertObjectContains(config, {
       debug: true,
       logger: undefined,
-      logLevel: 'error'
+      logLevel: 'error',
     })
   })
 
@@ -194,17 +194,17 @@ describe('Config', () => {
       logLevel: 'error',
       sampleRate: 0.5,
       runtimeMetrics: {
-        enabled: true
+        enabled: true,
       },
       tags: {
         foo: 'bar',
-        baz: 'qux'
+        baz: 'qux',
       },
       tracePropagationStyle: {
         inject: ['b3', 'tracecontext'],
         extract: ['b3', 'tracecontext'],
-        otelPropagators: false
-      }
+        otelPropagators: false,
+      },
     })
 
     const indexFile = require('../../src/index')
@@ -233,17 +233,17 @@ describe('Config', () => {
       logLevel: 'debug',
       sampleRate: 0.1,
       runtimeMetrics: {
-        enabled: false
+        enabled: false,
       },
       tags: {
         foo: 'bar1',
-        baz: 'qux1'
+        baz: 'qux1',
       },
       tracePropagationStyle: {
         inject: ['b3', 'datadog'],
         extract: ['b3', 'datadog'],
-        otelPropagators: true
-      }
+        otelPropagators: true,
+      },
     })
 
     delete require.cache[require.resolve('../../src/index')]
@@ -263,8 +263,8 @@ describe('Config', () => {
       version: '5',
       tags: {
         foo: 'bar1',
-        baz: 'qux1'
-      }
+        baz: 'qux1',
+      },
     })
   })
 
@@ -306,35 +306,35 @@ describe('Config', () => {
           enabled: true,
           sampleDelay: 30,
           endpointCollectionEnabled: true,
-          endpointCollectionMessageLimit: 300
+          endpointCollectionMessageLimit: 300,
         },
         blockedTemplateHtml: undefined,
         blockedTemplateJson: undefined,
         blockedTemplateGraphql: undefined,
         enabled: undefined,
         eventTracking: {
-          mode: 'identification'
+          mode: 'identification',
         },
         extendedHeadersCollection: {
           enabled: false,
           maxHeaders: 50,
-          redaction: true
+          redaction: true,
         },
         rules: undefined,
         rasp: {
           bodyCollection: false,
-          enabled: true
+          enabled: true,
         },
         rateLimit: 100,
         sca: {
-          enabled: null
+          enabled: null,
         },
         stackTrace: {
           enabled: true,
           maxDepth: 32,
-          maxStackTraces: 2
+          maxStackTraces: 2,
         },
-        wafTimeout: 5e3
+        wafTimeout: 5e3,
       },
       clientIpEnabled: false,
       clientIpHeader: null,
@@ -342,22 +342,22 @@ describe('Config', () => {
         enabled: true,
         experimental: {
           exit_spans: {
-            enabled: false
-          }
-        }
+            enabled: false,
+          },
+        },
       },
       crashtracking: {
-        enabled: true
+        enabled: true,
       },
       debug: false,
       dogstatsd: {
         hostname: '127.0.0.1',
-        port: '8125'
+        port: '8125',
       },
       dynamicInstrumentation: {
         enabled: false,
         probeFile: undefined,
-        uploadIntervalSeconds: 1
+        uploadIntervalSeconds: 1,
       },
       env: undefined,
       experimental: {
@@ -369,14 +369,14 @@ describe('Config', () => {
           maxContentSize: 512 * 1024,
         },
         exporter: undefined,
-        enableGetRumData: false
+        enableGetRumData: false,
       },
       flushInterval: 2000,
       flushMinSpans: 1000,
       heapSnapshot: {
         count: 0,
         destination: '',
-        interval: 3600
+        interval: 3600,
       },
       iast: {
         enabled: false,
@@ -385,21 +385,21 @@ describe('Config', () => {
         redactionValuePattern: null,
         telemetryVerbosity: 'INFORMATION',
         stackTrace: {
-          enabled: true
-        }
+          enabled: true,
+        },
       },
       injectForce: null,
       installSignature: {
         id: null,
         time: null,
-        type: null
+        type: null,
       },
       instrumentationSource: 'manual',
       instrumentation_config_id: undefined,
       llmobs: {
         agentlessEnabled: undefined,
         enabled: false,
-        mlApp: undefined
+        mlApp: undefined,
       },
       logLevel: 'debug',
       middlewareTracingEnabled: true,
@@ -407,17 +407,17 @@ describe('Config', () => {
       protocolVersion: '0.4',
       tracing: true,
       tags: {
-        service: 'node'
+        service: 'node',
       },
       remoteConfig: {
         enabled: true,
-        pollInterval: 5
+        pollInterval: 5,
       },
       reportHostname: false,
       runtimeMetrics: {
         enabled: false,
         eventLoop: true,
-        gc: true
+        gc: true,
       },
       runtimeMetricsRuntimeId: false,
       sampleRate: undefined,
@@ -429,7 +429,7 @@ describe('Config', () => {
       traceEnabled: true,
       traceId128BitGenerationEnabled: true,
       traceId128BitLoggingEnabled: true,
-      tracePropagationBehaviorExtract: 'continue'
+      tracePropagationBehaviorExtract: 'continue',
     })
     assert.deepStrictEqual(config.dynamicInstrumentation?.redactedIdentifiers, [])
     assert.deepStrictEqual(config.dynamicInstrumentation?.redactionExcludedIdentifiers, [])
@@ -462,13 +462,13 @@ describe('Config', () => {
         name: 'appsec.obfuscatorKeyRegex',
         // eslint-disable-next-line @stylistic/max-len
         value: '(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt',
-        origin: 'default'
+        origin: 'default',
       },
       {
         name: 'appsec.obfuscatorValueRegex',
         // eslint-disable-next-line @stylistic/max-len
         value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=([^;&]+)|"\\s*:\\s*("[^"]+"|\\d+))|bearer\\s+([a-z0-9\\._\\-]+)|token\\s*:\\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\\w=-]+\\.(ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?)|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}([^\\-]+)[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*([a-z0-9\\/\\.+]{100,})',
-        origin: 'default'
+        origin: 'default',
       },
       { name: 'appsec.rasp.bodyCollection', value: false, origin: 'default' },
       { name: 'appsec.rasp.enabled', value: true, origin: 'default' },
@@ -551,7 +551,7 @@ describe('Config', () => {
         name: 'queryStringObfuscation',
         // eslint-disable-next-line @stylistic/max-len
         value: '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}',
-        origin: 'default'
+        origin: 'default',
       },
       { name: 'remoteConfig.enabled', value: true, origin: 'default' },
       { name: 'remoteConfig.pollInterval', value: 5, origin: 'default' },
@@ -583,14 +583,14 @@ describe('Config', () => {
       { name: 'url', value: undefined, origin: 'default' },
       { name: 'version', value: '', origin: 'default' },
       { name: 'vertexai.spanCharLimit', value: 128, origin: 'default' },
-      { name: 'vertexai.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' }
+      { name: 'vertexai.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' },
     ].sort(comparator))
   })
 
   it('should support logging', () => {
     const config = getConfig({
       logger: {},
-      debug: true
+      debug: true,
     })
 
     sinon.assert.calledWith(log.use, config.logger)
@@ -600,7 +600,7 @@ describe('Config', () => {
   it('should not warn on undefined DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', () => {
     const config = getConfig({
       logger: {},
-      debug: true
+      debug: true,
     })
     sinon.assert.notCalled(log.warn)
     assert.strictEqual(config.spanAttributeSchema, 'v0')
@@ -759,37 +759,37 @@ describe('Config', () => {
           enabled: true,
           sampleDelay: 25,
           endpointCollectionEnabled: false,
-          endpointCollectionMessageLimit: 500
+          endpointCollectionMessageLimit: 500,
         },
         blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
         blockedTemplateHtml: BLOCKED_TEMPLATE_HTML,
         blockedTemplateJson: BLOCKED_TEMPLATE_JSON,
         enabled: true,
         eventTracking: {
-          mode: 'extended'
+          mode: 'extended',
         },
         extendedHeadersCollection: {
           enabled: true,
           maxHeaders: 42,
-          redaction: false
+          redaction: false,
         },
         obfuscatorKeyRegex: '.*',
         obfuscatorValueRegex: '.*',
         rasp: {
           bodyCollection: true,
-          enabled: false
+          enabled: false,
         },
         rateLimit: 42,
         rules: RULES_JSON_PATH,
         sca: {
-          enabled: true
+          enabled: true,
         },
         stackTrace: {
           enabled: false,
           maxDepth: 42,
-          maxStackTraces: 5
+          maxStackTraces: 5,
         },
-        wafTimeout: 42
+        wafTimeout: 42,
       },
       clientIpEnabled: true,
       clientIpHeader: 'x-true-client-ip',
@@ -797,24 +797,24 @@ describe('Config', () => {
         enabled: false,
         experimental: {
           exit_spans: {
-            enabled: true
-          }
-        }
+            enabled: true,
+          },
+        },
       },
       crashtracking: {
-        enabled: false
+        enabled: false,
       },
       debug: true,
       dogstatsd: {
         hostname: 'dsd-agent',
-        port: '5218'
+        port: '5218',
       },
       dynamicInstrumentation: {
         enabled: true,
         probeFile: 'probes.json',
         redactedIdentifiers: ['foo', 'bar'],
         redactionExcludedIdentifiers: ['a', 'b', 'c'],
-        uploadIntervalSeconds: 0.1
+        uploadIntervalSeconds: 0.1,
       },
       env: 'test',
       experimental: {
@@ -823,16 +823,16 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
-          timeout: 2000
+          timeout: 2000,
         },
         enableGetRumData: true,
-        exporter: 'log'
+        exporter: 'log',
       },
       hostname: 'agent',
       heapSnapshot: {
         count: 1,
         destination: '/tmp',
-        interval: 1800
+        interval: 1800,
       },
       iast: {
         dbRowsToTaint: 2,
@@ -846,27 +846,27 @@ describe('Config', () => {
         requestSampling: 40,
         securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
         stackTrace: {
-          enabled: false
+          enabled: false,
         },
-        telemetryVerbosity: 'DEBUG'
+        telemetryVerbosity: 'DEBUG',
       },
       instrumentation_config_id: 'abcdef123',
       llmobs: {
         agentlessEnabled: true,
-        mlApp: 'myMlApp'
+        mlApp: 'myMlApp',
       },
       middlewareTracingEnabled: false,
       protocolVersion: '0.5',
       queryStringObfuscation: '.*',
       remoteConfig: {
         enabled: false,
-        pollInterval: 42
+        pollInterval: 42,
       },
       reportHostname: true,
       runtimeMetrics: {
         enabled: true,
         eventLoop: false,
-        gc: false
+        gc: false,
       },
       runtimeMetricsRuntimeId: true,
       sampleRate: 0.5,
@@ -879,14 +879,14 @@ describe('Config', () => {
         baz: 'qux',
         service: 'service',
         version: '1.0.0',
-        env: 'test'
+        env: 'test',
       },
       traceEnabled: true,
       traceId128BitGenerationEnabled: true,
       traceId128BitLoggingEnabled: true,
       tracePropagationBehaviorExtract: 'restart',
       tracing: false,
-      version: '1.0.0'
+      version: '1.0.0',
     })
     assert.deepStrictEqual(config.grpc.client.error.statuses, [3, 13, 400, 401, 402, 403])
     assert.deepStrictEqual(config.grpc.server.error.statuses, [3, 13, 400, 401, 402, 403])
@@ -902,14 +902,14 @@ describe('Config', () => {
         { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
         { service: 'usersvc', sampleRate: 0.5 },
         { service: 'authsvc', sampleRate: 1.0 },
-        { sampleRate: 0.1 }
+        { sampleRate: 0.1 },
       ],
       spanSamplingRules: [
         { service: 'mysql', name: 'mysql.query', sampleRate: 0.0, maxPerSecond: 1 },
         { service: 'mysql', sampleRate: 0.5 },
         { service: 'mysql', sampleRate: 1.0 },
-        { sampleRate: 0.1 }
-      ]
+        { sampleRate: 0.1 },
+      ],
     })
     assert.deepStrictEqual(config.serviceMapping, { a: 'aa', b: 'bb' })
     assert.deepStrictEqual(config.tracePropagationStyle?.extract, ['b3', 'tracecontext'])
@@ -974,7 +974,7 @@ describe('Config', () => {
       {
         name: 'iast.securityControlsConfiguration',
         value: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
-        origin: 'env_var'
+        origin: 'env_var',
       },
       { name: 'iast.stackTrace.enabled', value: false, origin: 'env_var' },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' },
@@ -1009,7 +1009,7 @@ describe('Config', () => {
       { name: 'tracing', value: false, origin: 'env_var' },
       { name: 'version', value: '1.0.0', origin: 'env_var' },
       { name: 'vertexai.spanCharLimit', value: 50, origin: 'env_var' },
-      { name: 'vertexai.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' }
+      { name: 'vertexai.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' },
     ].sort(comparator))
   })
 
@@ -1021,7 +1021,7 @@ describe('Config', () => {
     assertObjectContains(config, {
       service: 'node',
       env: undefined,
-      version: ''
+      version: '',
     })
 
     process.env.DD_TAGS = 'service: env: version:'
@@ -1031,7 +1031,7 @@ describe('Config', () => {
     assertObjectContains(config, {
       service: 'node',
       env: undefined,
-      version: ''
+      version: '',
     })
   })
 
@@ -1050,7 +1050,7 @@ describe('Config', () => {
       env: 'test',
       aKey: 'aVal',
       bKey: 'bVal',
-      cKey: ''
+      cKey: '',
     })
 
     process.env.DD_TAGS = 'env:test,aKey:aVal bKey:bVal cKey:'
@@ -1059,7 +1059,7 @@ describe('Config', () => {
 
     assertObjectContains(config.tags, {
       env: 'test',
-      aKey: 'aVal bKey:bVal cKey:'
+      aKey: 'aVal bKey:bVal cKey:',
     })
 
     process.env.DD_TAGS = 'a:b:c:d'
@@ -1074,7 +1074,7 @@ describe('Config', () => {
 
     assertObjectContains(config.tags, {
       a: '',
-      1: ''
+      1: '',
     })
   })
 
@@ -1089,8 +1089,8 @@ describe('Config', () => {
       tracing: false,
       tracePropagationExtractFirst: true,
       runtimeMetrics: {
-        enabled: false
-      }
+        enabled: false,
+      },
     })
   })
 
@@ -1110,11 +1110,11 @@ describe('Config', () => {
     assertObjectContains(config, {
       tracing: false,
       dogstatsd: {
-        hostname: 'agent'
+        hostname: 'agent',
       },
       site: 'datadoghq.eu',
       service: 'service',
-      env: 'test'
+      env: 'test',
     })
   })
 
@@ -1158,14 +1158,14 @@ describe('Config', () => {
   it('should initialize from the options', () => {
     const logger = {}
     const tags = {
-      foo: 'bar'
+      foo: 'bar',
     }
     const logLevel = 'error'
     const samplingRules = [
       { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
       { service: 'usersvc', sampleRate: 0.5 },
       { service: 'authsvc', sampleRate: 1.0 },
-      { sampleRate: 0.1 }
+      { sampleRate: 0.1 },
     ]
     const config = getConfig({
       appsec: false,
@@ -1175,21 +1175,21 @@ describe('Config', () => {
         enabled: false,
         experimental: {
           exit_spans: {
-            enabled: true
-          }
-        }
+            enabled: true,
+          },
+        },
       },
       debug: true,
       dogstatsd: {
         hostname: 'agent-dsd',
-        port: 5218
+        port: 5218,
       },
       dynamicInstrumentation: {
         enabled: true,
         probeFile: 'probes.json',
         redactedIdentifiers: ['foo', 'bar'],
         redactionExcludedIdentifiers: ['a', 'b', 'c'],
-        uploadIntervalSeconds: 0.1
+        uploadIntervalSeconds: 0.1,
       },
       enabled: false,
       env: 'test',
@@ -1200,7 +1200,7 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
-          timeout: 2000
+          timeout: 2000,
         },
         exporter: 'log',
         enableGetRumData: true,
@@ -1216,11 +1216,11 @@ describe('Config', () => {
           requestSampling: 50,
           securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
           stackTrace: {
-            enabled: false
+            enabled: false,
           },
           telemetryVerbosity: 'DEBUG',
         },
-        traceparent: true
+        traceparent: true,
       },
       flushInterval: 5000,
       flushMinSpans: 500,
@@ -1228,26 +1228,26 @@ describe('Config', () => {
       llmobs: {
         mlApp: 'myMlApp',
         agentlessEnabled: true,
-        apiKey: 'myApiKey'
+        apiKey: 'myApiKey',
       },
       logger,
       logLevel,
       middlewareTracingEnabled: false,
       peerServiceMapping: {
-        d: 'dd'
+        d: 'dd',
       },
       plugins: false,
       port: 6218,
       protocolVersion: '0.5',
       rateLimit: 1000,
       remoteConfig: {
-        pollInterval: 42
+        pollInterval: 42,
       },
       reportHostname: true,
       runtimeMetrics: {
         enabled: true,
         eventLoop: false,
-        gc: false
+        gc: false,
       },
       runtimeMetricsRuntimeId: true,
       sampleRate: 0.5,
@@ -1255,7 +1255,7 @@ describe('Config', () => {
       service: 'service',
       serviceMapping: {
         a: 'aa',
-        b: 'bb'
+        b: 'bb',
       },
       site: 'datadoghq.eu',
       spanAttributeSchema: 'v1',
@@ -1265,21 +1265,21 @@ describe('Config', () => {
         { service: 'mysql', name: 'mysql.query', sampleRate: 0.0, maxPerSecond: 1 },
         { service: 'mysql', sampleRate: 0.5 },
         { service: 'mysql', sampleRate: 1.0 },
-        { sampleRate: 0.1 }
+        { sampleRate: 0.1 },
       ],
       tags,
       traceId128BitGenerationEnabled: true,
       traceId128BitLoggingEnabled: true,
       tracePropagationStyle: {
         inject: ['datadog'],
-        extract: ['datadog']
+        extract: ['datadog'],
       },
-      version: '0.1.0'
+      version: '0.1.0',
     })
 
     assertObjectContains(config, {
       appsec: {
-        enabled: false
+        enabled: false,
       },
       clientIpEnabled: true,
       clientIpHeader: 'x-true-client-ip',
@@ -1287,42 +1287,42 @@ describe('Config', () => {
         enabled: false,
         experimental: {
           exit_spans: {
-            enabled: true
-          }
-        }
+            enabled: true,
+          },
+        },
       },
       dogstatsd: {
         hostname: 'agent-dsd',
-        port: '5218'
+        port: '5218',
       },
       dynamicInstrumentation: {
         enabled: true,
-        probeFile: 'probes.json'
-      }
+        probeFile: 'probes.json',
+      },
     })
     assert.deepStrictEqual(config.dynamicInstrumentation?.redactedIdentifiers, ['foo', 'bar'])
     assert.deepStrictEqual(config.dynamicInstrumentation?.redactionExcludedIdentifiers, ['a', 'b', 'c'])
     assertObjectContains(config, {
       dynamicInstrumentation: {
-        uploadIntervalSeconds: 0.1
+        uploadIntervalSeconds: 0.1,
       },
       env: 'test',
       experimental: {
         aiguard: {
           enabled: true,
-          endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard'
-        }
-      }
+          endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
+        },
+      },
     })
     assert.strictEqual(config.experimental?.aiguard?.maxContentSize, 1024 * 1024)
     assertObjectContains(config, {
       experimental: {
         aiguard: {
           maxMessagesLength: 32,
-          timeout: 2000
+          timeout: 2000,
         },
         enableGetRumData: true,
-        exporter: 'log'
+        exporter: 'log',
       },
       flushInterval: 5000,
       flushMinSpans: 500,
@@ -1336,8 +1336,8 @@ describe('Config', () => {
         redactionEnabled: false,
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
         redactionValuePattern: 'REDACTION_VALUE_PATTERN',
-        requestSampling: 50
-      }
+        requestSampling: 50,
+      },
     })
     if (DD_MAJOR < 6) {
       assert.strictEqual(config.iast?.securityControlsConfiguration, 'SANITIZER:CODE_INJECTION:sanitizer.js:method')
@@ -1347,14 +1347,14 @@ describe('Config', () => {
     assertObjectContains(config, {
       iast: {
         stackTrace: {
-          enabled: false
+          enabled: false,
         },
-        telemetryVerbosity: 'DEBUG'
+        telemetryVerbosity: 'DEBUG',
       },
       llmobs: {
         agentlessEnabled: true,
-        mlApp: 'myMlApp'
-      }
+        mlApp: 'myMlApp',
+      },
     })
     assert.strictEqual(config.logLevel, logLevel)
     assert.strictEqual(config.logger, logger)
@@ -1365,16 +1365,16 @@ describe('Config', () => {
       port: '6218',
       protocolVersion: '0.5',
       remoteConfig: {
-        pollInterval: 42
+        pollInterval: 42,
       },
       reportHostname: true,
       runtimeMetrics: {
         enabled: true,
         eventLoop: false,
-        gc: false
+        gc: false,
       },
       runtimeMetricsRuntimeId: true,
-      sampleRate: 0.5
+      sampleRate: 0.5,
     })
     assert.deepStrictEqual(config.sampler, {
       rateLimit: 1000,
@@ -1382,37 +1382,37 @@ describe('Config', () => {
         { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
         { service: 'usersvc', sampleRate: 0.5 },
         { service: 'authsvc', sampleRate: 1.0 },
-        { sampleRate: 0.1 }
+        { sampleRate: 0.1 },
       ],
       sampleRate: 0.5,
       spanSamplingRules: [
         { service: 'mysql', name: 'mysql.query', sampleRate: 0.0, maxPerSecond: 1 },
         { service: 'mysql', sampleRate: 0.5 },
         { service: 'mysql', sampleRate: 1.0 },
-        { sampleRate: 0.1 }
-      ]
+        { sampleRate: 0.1 },
+      ],
     })
     assert.strictEqual(config.service, 'service')
     assert.deepStrictEqual(config.serviceMapping, { a: 'aa', b: 'bb' })
     assertObjectContains(config, {
       site: 'datadoghq.eu',
       spanComputePeerService: true,
-      spanRemoveIntegrationFromService: true
+      spanRemoveIntegrationFromService: true,
     })
     assert.ok(Object.hasOwn(config, 'tags'))
     assertObjectContains(config.tags, {
       env: 'test',
-      foo: 'bar'
+      foo: 'bar',
     })
     assert.ok(Object.hasOwn(config.tags, 'runtime-id'))
     assert.match(config.tags['runtime-id'], /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
     assertObjectContains(config.tags, {
       service: 'service',
-      version: '0.1.0'
+      version: '0.1.0',
     })
     assertObjectContains(config, {
       traceId128BitGenerationEnabled: true,
-      traceId128BitLoggingEnabled: true
+      traceId128BitLoggingEnabled: true,
     })
     assert.deepStrictEqual(config.tracePropagationStyle?.extract, ['datadog'])
     assert.deepStrictEqual(config.tracePropagationStyle?.inject, ['datadog'])
@@ -1456,7 +1456,7 @@ describe('Config', () => {
       DD_MAJOR < 6 && {
         name: 'iast.securityControlsConfiguration',
         value: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
-        origin: 'code'
+        origin: 'code',
       },
       { name: 'iast.stackTrace.enabled', value: false, origin: 'code' },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'code' },
@@ -1482,7 +1482,7 @@ describe('Config', () => {
       { name: 'stats.enabled', value: false, origin: 'calculated' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'code' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'code' },
-      { name: 'version', value: '0.1.0', origin: 'code' }
+      { name: 'version', value: '0.1.0', origin: 'code' },
     ].filter(v => v).sort(comparator))
   })
 
@@ -1501,7 +1501,7 @@ describe('Config', () => {
       tags,
       flushInterval: 5000,
       flushMinSpans: 500,
-      plugins: false
+      plugins: false,
     })
 
     assert.strictEqual(config.url.toString(), 'https://agent2:7777/')
@@ -1510,14 +1510,14 @@ describe('Config', () => {
       site: 'datadoghq.eu',
       service: 'service',
       env: 'test',
-      sampleRate: 0.5
+      sampleRate: 0.5,
     })
     assert.strictEqual(config.logger, logger)
     assert.strictEqual(config.tags?.foo, 'bar')
     assertObjectContains(config, {
       flushInterval: 5000,
       flushMinSpans: 500,
-      plugins: false
+      plugins: false,
     })
   })
 
@@ -1714,34 +1714,34 @@ describe('Config', () => {
         apiSecurity: {
           enabled: true,
           endpointCollectionEnabled: true,
-          endpointCollectionMessageLimit: 150
+          endpointCollectionMessageLimit: 150,
         },
         blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL_PATH,
         blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
         blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH,
         enabled: true,
         eventTracking: {
-          mode: 'anonymous'
+          mode: 'anonymous',
         },
         extendedHeadersCollection: {
           enabled: true,
           redaction: true,
-          maxHeaders: 42
+          maxHeaders: 42,
         },
         obfuscatorKeyRegex: '.*',
         obfuscatorValueRegex: '.*',
         rasp: {
           enabled: false,
-          bodyCollection: true
+          bodyCollection: true,
         },
         rateLimit: 42,
         stackTrace: {
           enabled: false,
           maxDepth: 42,
-          maxStackTraces: 5
+          maxStackTraces: 5,
         },
         rules: RULES_JSON_PATH,
-        wafTimeout: 42
+        wafTimeout: 42,
       },
       clientIpEnabled: true,
       clientIpHeader: 'x-true-client-ip',
@@ -1749,19 +1749,19 @@ describe('Config', () => {
         enabled: true,
         experimental: {
           exit_spans: {
-            enabled: false
-          }
-        }
+            enabled: false,
+          },
+        },
       },
       dogstatsd: {
-        port: 8888
+        port: 8888,
       },
       dynamicInstrumentation: {
         enabled: false,
         probeFile: 'probes2.json',
         redactedIdentifiers: ['foo2', 'bar2'],
         redactionExcludedIdentifiers: ['a2', 'b2'],
-        uploadIntervalSeconds: 0.2
+        uploadIntervalSeconds: 0.2,
       },
       env: 'development',
       experimental: {
@@ -1770,12 +1770,12 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
-          timeout: 2000
+          timeout: 2000,
         },
         b3: false,
         traceparent: false,
         exporter: 'agent',
-        enableGetRumData: false
+        enableGetRumData: false,
       },
       flushMinSpans: 500,
       flushInterval: 500,
@@ -1787,44 +1787,44 @@ describe('Config', () => {
         redactionValuePattern: 'REDACTION_VALUE_PATTERN',
         securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method2',
         stackTrace: {
-          enabled: false
-        }
+          enabled: false,
+        },
       },
       llmobs: {
         agentlessEnabled: false,
-        mlApp: 'myOtherMlApp'
+        mlApp: 'myOtherMlApp',
       },
       middlewareTracingEnabled: true,
       peerServiceMapping: {
-        d: 'dd'
+        d: 'dd',
       },
       port: 7777,
       protocol: 'https',
       protocolVersion: '0.5',
       remoteConfig: {
-        pollInterval: 42
+        pollInterval: 42,
       },
       reportHostname: false,
       runtimeMetrics: false,
       runtimeMetricsRuntimeId: false,
       service: 'test',
       serviceMapping: {
-        b: 'bb'
+        b: 'bb',
       },
       site: 'datadoghq.com',
       spanAttributeSchema: 'v1',
       spanComputePeerService: true,
       spanRemoveIntegrationFromService: true,
       tags: {
-        foo: 'foo'
+        foo: 'foo',
       },
       traceId128BitGenerationEnabled: false,
       traceId128BitLoggingEnabled: false,
       tracePropagationStyle: {
         inject: [],
-        extract: []
+        extract: [],
       },
-      version: '1.0.0'
+      version: '1.0.0',
     })
 
     assertObjectContains(config, {
@@ -1833,7 +1833,7 @@ describe('Config', () => {
         apiSecurity: {
           enabled: true,
           endpointCollectionEnabled: true,
-          endpointCollectionMessageLimit: 150
+          endpointCollectionMessageLimit: 150,
         },
         blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
         blockedTemplateHtml: BLOCKED_TEMPLATE_HTML,
@@ -1841,26 +1841,26 @@ describe('Config', () => {
         rules: RULES_JSON_PATH,
         enabled: true,
         eventTracking: {
-          mode: 'anonymous'
+          mode: 'anonymous',
         },
         extendedHeadersCollection: {
           enabled: true,
           maxHeaders: 42,
-          redaction: true
+          redaction: true,
         },
         obfuscatorKeyRegex: '.*',
         obfuscatorValueRegex: '.*',
         rasp: {
           bodyCollection: true,
-          enabled: false
+          enabled: false,
         },
         rateLimit: 42,
         stackTrace: {
           enabled: false,
           maxDepth: 42,
-          maxStackTraces: 5
+          maxStackTraces: 5,
         },
-        wafTimeout: 42
+        wafTimeout: 42,
       },
       clientIpEnabled: true,
       clientIpHeader: 'x-true-client-ip',
@@ -1868,20 +1868,20 @@ describe('Config', () => {
         enabled: true,
         experimental: {
           exit_spans: {
-            enabled: false
-          }
-        }
+            enabled: false,
+          },
+        },
       },
       dogstatsd: {
         hostname: 'server',
-        port: '8888'
+        port: '8888',
       },
       dynamicInstrumentation: {
         enabled: false,
         probeFile: 'probes2.json',
         redactedIdentifiers: ['foo2', 'bar2'],
         redactionExcludedIdentifiers: ['a2', 'b2'],
-        uploadIntervalSeconds: 0.2
+        uploadIntervalSeconds: 0.2,
       },
       env: 'development',
       experimental: {
@@ -1890,10 +1890,10 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
-          timeout: 2000
+          timeout: 2000,
         },
         enableGetRumData: false,
-        exporter: 'agent'
+        exporter: 'agent',
       },
       flushMinSpans: 500,
       flushInterval: 500,
@@ -1909,22 +1909,22 @@ describe('Config', () => {
         requestSampling: 30,
         securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method' + (DD_MAJOR < 6 ? '2' : '1'),
         stackTrace: {
-          enabled: false
-        }
+          enabled: false,
+        },
       },
       llmobs: {
         agentlessEnabled: false,
-        mlApp: 'myOtherMlApp'
+        mlApp: 'myOtherMlApp',
       },
       middlewareTracingEnabled: true,
       peerServiceMapping: { d: 'dd' },
       protocolVersion: '0.5',
       remoteConfig: {
-        pollInterval: 42
+        pollInterval: 42,
       },
       reportHostname: false,
       runtimeMetrics: {
-        enabled: false
+        enabled: false,
       },
       runtimeMetricsRuntimeId: false,
       service: 'test',
@@ -1940,12 +1940,12 @@ describe('Config', () => {
         foo: 'foo',
         service: 'test',
         version: '1.0.0',
-        env: 'development'
+        env: 'development',
       },
       tracePropagationStyle: {
         extract: [],
-        inject: []
-      }
+        inject: [],
+      },
     })
     assert.strictEqual(config.url.toString(), 'https://agent2:6218/')
   })
@@ -1956,29 +1956,29 @@ describe('Config', () => {
         apiSecurity: {
           enabled: true,
           endpointCollectionEnabled: true,
-          endpointCollectionMessageLimit: 500
+          endpointCollectionMessageLimit: 500,
         },
         blockedTemplateGraphql: undefined,
         blockedTemplateHtml: undefined,
         blockedTemplateJson: undefined,
         enabled: true,
         eventTracking: {
-          mode: 'disabled'
+          mode: 'disabled',
         },
         extendedHeadersCollection: {
           enabled: true,
           redaction: true,
-          maxHeaders: 42
+          maxHeaders: 42,
         },
         obfuscatorKeyRegex: '.*',
         obfuscatorValueRegex: '.*',
         rasp: {
           enabled: false,
-          bodyCollection: true
+          bodyCollection: true,
         },
         rateLimit: 42,
         rules: undefined,
-        wafTimeout: 42
+        wafTimeout: 42,
       },
       iast: {
         dbRowsToTaint: 3,
@@ -1991,38 +1991,38 @@ describe('Config', () => {
         redactionValuePattern: 'REDACTION_VALUE_PATTERN',
         requestSampling: 15,
         stackTrace: {
-          enabled: false
+          enabled: false,
         },
-        telemetryVerbosity: 'DEBUG'
+        telemetryVerbosity: 'DEBUG',
       },
       experimental: {
         appsec: {
           apiSecurity: {
             enabled: false,
             endpointCollectionEnabled: false,
-            endpointCollectionMessageLimit: 42
+            endpointCollectionMessageLimit: 42,
           },
           blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL_PATH,
           blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
           blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH,
           enabled: false,
           eventTracking: {
-            mode: 'anonymous'
+            mode: 'anonymous',
           },
           extendedHeadersCollection: {
             enabled: false,
             redaction: false,
-            maxHeaders: 0
+            maxHeaders: 0,
           },
           obfuscatorKeyRegex: '^$',
           obfuscatorValueRegex: '^$',
           rasp: {
             enabled: true,
-            bodyCollection: false
+            bodyCollection: false,
           },
           rateLimit: 11,
           rules: RULES_JSON_PATH,
-          wafTimeout: 11
+          wafTimeout: 11,
         },
         iast: {
           dbRowsToTaint: 2,
@@ -2035,11 +2035,11 @@ describe('Config', () => {
           redactionValuePattern: 'IGNORED_REDACTION_VALUE_PATTERN',
           requestSampling: 25,
           stackTrace: {
-            enabled: true
+            enabled: true,
           },
-          telemetryVerbosity: 'OFF'
-        }
-      }
+          telemetryVerbosity: 'OFF',
+        },
+      },
     })
 
     assert.deepStrictEqual(config.appsec, {
@@ -2047,37 +2047,37 @@ describe('Config', () => {
         enabled: true,
         sampleDelay: 30,
         endpointCollectionEnabled: true,
-        endpointCollectionMessageLimit: 500
+        endpointCollectionMessageLimit: 500,
       },
       blockedTemplateGraphql: undefined,
       blockedTemplateHtml: undefined,
       blockedTemplateJson: undefined,
       enabled: true,
       eventTracking: {
-        mode: 'disabled'
+        mode: 'disabled',
       },
       extendedHeadersCollection: {
         enabled: true,
         redaction: true,
-        maxHeaders: 42
+        maxHeaders: 42,
       },
       obfuscatorKeyRegex: '.*',
       obfuscatorValueRegex: '.*',
       rasp: {
         enabled: false,
-        bodyCollection: true
+        bodyCollection: true,
       },
       rateLimit: 42,
       rules: undefined,
       sca: {
-        enabled: null
+        enabled: null,
       },
       stackTrace: {
         enabled: true,
         maxStackTraces: 2,
-        maxDepth: 32
+        maxDepth: 32,
       },
-      wafTimeout: 42
+      wafTimeout: 42,
     })
 
     assert.deepStrictEqual(config.iast, {
@@ -2092,9 +2092,9 @@ describe('Config', () => {
       requestSampling: 15,
       securityControlsConfiguration: null,
       stackTrace: {
-        enabled: false
+        enabled: false,
       },
-      telemetryVerbosity: 'DEBUG'
+      telemetryVerbosity: 'DEBUG',
     })
   })
 
@@ -2111,14 +2111,14 @@ describe('Config', () => {
       hostname: 'server',
       port: 7777,
       service: 'test',
-      env: 'development'
+      env: 'development',
     })
 
     assert.strictEqual(config.url.toString(), 'https://agent3:7778/')
 
     assertObjectContains(config, {
       service: 'test',
-      env: 'development'
+      env: 'development',
     })
   })
 
@@ -2133,7 +2133,7 @@ describe('Config', () => {
     assertObjectContains(config.tags, {
       service: 'test',
       env: 'dev',
-      version: '1.0.0'
+      version: '1.0.0',
     })
   })
 
@@ -2149,7 +2149,7 @@ describe('Config', () => {
     const config = getConfig()
 
     assertObjectContains(config.tags, {
-      service: 'node'
+      service: 'node',
     })
   })
 
@@ -2158,14 +2158,14 @@ describe('Config', () => {
       tags: {
         service: 'service',
         env: 'test',
-        version: '0.1.0'
-      }
+        version: '0.1.0',
+      },
     })
 
     assertObjectContains(config, {
       service: 'service',
       version: '0.1.0',
-      env: 'test'
+      env: 'test',
     })
   })
 
@@ -2338,11 +2338,11 @@ describe('Config', () => {
     const config = getConfig()
 
     config.setRemoteConfig({
-      tracing_sampling_rate: 0
+      tracing_sampling_rate: 0,
     })
 
     assert.deepStrictEqual(updateConfig.getCall(1).args[0], [
-      { name: 'sampleRate', value: 0, origin: 'remote_config' }
+      { name: 'sampleRate', value: 0, origin: 'remote_config' },
     ])
   })
 
@@ -2355,11 +2355,11 @@ describe('Config', () => {
           resource: '*',
           tags: [
             { key: 'tag-a', value_glob: 'tag-a-val*' },
-            { key: 'tag-b', value_glob: 'tag-b-val*' }
+            { key: 'tag-b', value_glob: 'tag-b-val*' },
           ],
-          provenance: 'customer'
-        }
-      ]
+          provenance: 'customer',
+        },
+      ],
     })
     assert.deepStrictEqual(config.sampler, {
       spanSamplingRules: [],
@@ -2368,10 +2368,10 @@ describe('Config', () => {
         {
           resource: '*',
           tags: { 'tag-a': 'tag-a-val*', 'tag-b': 'tag-b-val*' },
-          provenance: 'customer'
-        }
+          provenance: 'customer',
+        },
       ],
-      sampleRate: undefined
+      sampleRate: undefined,
     })
   })
 
@@ -2379,7 +2379,7 @@ describe('Config', () => {
     const config = getConfig()
     const runtimeId = config.tags['runtime-id']
     config.setRemoteConfig({
-      tracing_tags: { foo: 'bar' }
+      tracing_tags: { foo: 'bar' },
     })
 
     assert.strictEqual(config.tags?.foo, 'bar')
@@ -2390,9 +2390,9 @@ describe('Config', () => {
     const config = getConfig({
       experimental: {
         iast: {
-          requestSampling: 105
-        }
-      }
+          requestSampling: 105,
+        },
+      },
     })
     assert.strictEqual(config.iast.requestSampling, 30)
   })
@@ -2407,7 +2407,7 @@ describe('Config', () => {
       { service: 'mysql', name: 'mysql.query', sampleRate: 0.0, maxPerSecond: 1 },
       { service: 'mysql', sampleRate: 0.5 },
       { service: 'mysql', sampleRate: 1.0 },
-      { sampleRate: 0.1 }
+      { sampleRate: 0.1 },
     ])
   })
 
@@ -2421,8 +2421,8 @@ describe('Config', () => {
         rules: 'path/to/rules.json',
         blockedTemplateHtml: 'DOES_NOT_EXIST.html',
         blockedTemplateJson: 'DOES_NOT_EXIST.json',
-        blockedTemplateGraphql: 'DOES_NOT_EXIST.json'
-      }
+        blockedTemplateGraphql: 'DOES_NOT_EXIST.json',
+      },
     })
 
     sinon.assert.callCount(log.error, 3)
@@ -2685,7 +2685,7 @@ describe('Config', () => {
         const config = getConfig(options)
         assertObjectContains(config, {
           isIntelligentTestRunnerEnabled: false,
-          isGitUploadEnabled: false
+          isGitUploadEnabled: false,
         })
       })
     })
@@ -2765,7 +2765,7 @@ describe('Config', () => {
       const config = getConfig({})
       assertObjectContains(config, {
         commitSHA: '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d',
-        repositoryUrl: 'https://github.com/datadog/dd-trace-js'
+        repositoryUrl: 'https://github.com/datadog/dd-trace-js',
       })
     })
     it('does not read git metadata if DD_TRACE_GIT_METADATA_ENABLED is false', () => {
@@ -2779,7 +2779,7 @@ describe('Config', () => {
       const config = getConfig({})
       assertObjectContains(config, {
         repositoryUrl: 'git@github.com:DataDog/dd-trace-js.git',
-        commitSHA: '964886d9ec0c9fc68778e4abb0aab4d9982ce2b5'
+        commitSHA: '964886d9ec0c9fc68778e4abb0aab4d9982ce2b5',
       })
     })
     it('does not crash if .git/ folder is not available', () => {
@@ -2803,7 +2803,7 @@ describe('Config', () => {
       const config = getConfig({})
       assertObjectContains(config, {
         commitSHA: '964886d9ec0c9fc68778e4abb0aab4d9982ce2b5',
-        repositoryUrl: 'git@github.com:DataDog/dummy-dd-trace-js.git'
+        repositoryUrl: 'git@github.com:DataDog/dummy-dd-trace-js.git',
       })
     })
   })
@@ -2815,7 +2815,7 @@ describe('Config', () => {
 
       // check origin computation
       assertObjectContains(updateConfig.getCall(0).args[0], [{
-        name: 'llmobs.enabled', value: false, origin: 'default'
+        name: 'llmobs.enabled', value: false, origin: 'default',
       }])
     })
 
@@ -2826,7 +2826,7 @@ describe('Config', () => {
 
       // check origin computation
       assertObjectContains(updateConfig.getCall(0).args[0], [{
-        name: 'llmobs.enabled', value: true, origin: 'env_var'
+        name: 'llmobs.enabled', value: true, origin: 'env_var',
       }])
     })
 
@@ -2837,7 +2837,7 @@ describe('Config', () => {
 
       // check origin computation
       assertObjectContains(updateConfig.getCall(0).args[0], [{
-        name: 'llmobs.enabled', value: false, origin: 'env_var'
+        name: 'llmobs.enabled', value: false, origin: 'env_var',
       }])
     })
 
@@ -2847,7 +2847,7 @@ describe('Config', () => {
 
       // check origin computation
       assertObjectContains(updateConfig.getCall(0).args[0], [{
-        name: 'llmobs.enabled', value: true, origin: 'code'
+        name: 'llmobs.enabled', value: true, origin: 'code',
       }])
     })
 
@@ -2858,7 +2858,7 @@ describe('Config', () => {
 
       // check origin computation
       assertObjectContains(updateConfig.getCall(0).args[0], [{
-        name: 'llmobs.enabled', value: false, origin: 'env_var'
+        name: 'llmobs.enabled', value: false, origin: 'env_var',
       }])
     })
   })
@@ -2881,7 +2881,7 @@ describe('Config', () => {
       assertObjectContains(taggingConfig, {
         requestsEnabled: false,
         responsesEnabled: false,
-        maxDepth: 10
+        maxDepth: 10,
       })
     })
 
@@ -2891,7 +2891,7 @@ describe('Config', () => {
       assertObjectContains(taggingConfig, {
         requestsEnabled: true,
         responsesEnabled: false,
-        maxDepth: 10
+        maxDepth: 10,
       })
       const awsRules = taggingConfig.rules.aws
       for (const [serviceName, service] of Object.entries(awsRules)) {
@@ -2905,7 +2905,7 @@ describe('Config', () => {
       assertObjectContains(taggingConfig, {
         requestsEnabled: true,
         responsesEnabled: false,
-        maxDepth: 10
+        maxDepth: 10,
       })
       const awsRules = taggingConfig.rules.aws
       for (const [, service] of Object.entries(awsRules)) {
@@ -2921,7 +2921,7 @@ describe('Config', () => {
       assertObjectContains(taggingConfig, {
         requestsEnabled: false,
         responsesEnabled: true,
-        maxDepth: 10
+        maxDepth: 10,
       })
       const awsRules = taggingConfig.rules.aws
       for (const [serviceName, service] of Object.entries(awsRules)) {
@@ -2935,7 +2935,7 @@ describe('Config', () => {
       assertObjectContains(taggingConfig, {
         requestsEnabled: false,
         responsesEnabled: true,
-        maxDepth: 10
+        maxDepth: 10,
       })
       const awsRules = taggingConfig.rules.aws
       for (const [, service] of Object.entries(awsRules)) {
@@ -2954,7 +2954,7 @@ describe('Config', () => {
       assertObjectContains(cloudPayloadTagging, {
         maxDepth: 7,
         requestsEnabled: true,
-        responsesEnabled: true
+        responsesEnabled: true,
       })
 
       delete process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH
@@ -2963,7 +2963,7 @@ describe('Config', () => {
       assertObjectContains(cloudPayloadTagging, {
         maxDepth: 7,
         requestsEnabled: true,
-        responsesEnabled: true
+        responsesEnabled: true,
       })
     })
 
@@ -3012,7 +3012,7 @@ describe('Config', () => {
 
       const config = getConfig({
         apmTracingEnabled: false,
-        experimental: { appsec: { standalone: { enabled: true } } }
+        experimental: { appsec: { standalone: { enabled: true } } },
       })
       assert.strictEqual(config.apmTracingEnabled, false)
     })
@@ -3024,12 +3024,12 @@ describe('Config', () => {
       assertObjectContains(config, {
         apmTracingEnabled: true,
         stats: {
-          enabled: true
-        }
+          enabled: true,
+        },
       })
 
       assertObjectContains(updateConfig.getCall(0).args[0], [
-        { name: 'stats.enabled', value: true, origin: 'calculated' }
+        { name: 'stats.enabled', value: true, origin: 'calculated' },
       ])
     })
 
@@ -3041,24 +3041,24 @@ describe('Config', () => {
       assertObjectContains(config, {
         apmTracingEnabled: false,
         stats: {
-          enabled: false
-        }
+          enabled: false,
+        },
       })
 
       assertObjectContains(updateConfig.getCall(0).args[0], [
-        { name: 'stats.enabled', value: false, origin: 'calculated' }
+        { name: 'stats.enabled', value: false, origin: 'calculated' },
       ])
     })
 
     it('should disable stats if config property is used', () => {
       const config = getConfig({
-        apmTracingEnabled: false
+        apmTracingEnabled: false,
       })
       assertObjectContains(config, {
         apmTracingEnabled: false,
         stats: {
-          enabled: false
-        }
+          enabled: false,
+        },
       })
     })
   })
@@ -3250,27 +3250,27 @@ apm_configuration_default:
         appsec: {
           rateLimit: 100,
           stackTrace: {
-            maxStackTraces: 2
+            maxStackTraces: 2,
           },
-          obfuscatorKeyRegex: 'password|token'
+          obfuscatorKeyRegex: 'password|token',
         },
         iast: {
           requestSampling: 50,
-          maxConcurrentRequests: 10
+          maxConcurrentRequests: 10,
         },
         telemetry: {
           heartbeatInterval: 42000,
-          metrics: false
+          metrics: false,
         },
         llmobs: {
-          mlApp: 'my-llm-app'
+          mlApp: 'my-llm-app',
         },
         profiling: {
-          exporters: 'agent'
+          exporters: 'agent',
         },
         dynamicInstrumentation: {
-          probeFile: '/tmp/probes'
-        }
+          probeFile: '/tmp/probes',
+        },
       })
     })
 
@@ -3297,12 +3297,12 @@ apm_configuration_default:
         installSignature: {
           id: 'local-install-id',
           time: '1234567890',
-          type: 'local_install'
+          type: 'local_install',
         },
         cloudPayloadTagging: {
           requestsEnabled: true,
-          maxDepth: 5
-        }
+          maxDepth: 5,
+        },
       })
 
       // Test 2: Env vars should take precedence over local stable config
@@ -3315,11 +3315,11 @@ apm_configuration_default:
         apiKey: 'env-api-key',
         appKey: 'env-app-key',
         installSignature: {
-          id: 'env-install-id'
+          id: 'env-install-id',
         },
         cloudPayloadTagging: {
-          maxDepth: 7
-        }
+          maxDepth: 7,
+        },
       })
 
       // Test 3: Fleet stable config should take precedence over env vars
@@ -3349,13 +3349,13 @@ rules:
         installSignature: {
           id: 'fleet-install-id',
           time: '9999999999',
-          type: 'fleet_install'
+          type: 'fleet_install',
         },
         cloudPayloadTagging: {
           requestsEnabled: false,
           responsesEnabled: true,
-          maxDepth: 15
-        }
+          maxDepth: 15,
+        },
       })
     })
   })
@@ -3663,7 +3663,7 @@ rules:
 
     it('should return code', () => {
       const config = getConfig({
-        appsec: true
+        appsec: true,
       })
 
       assert.strictEqual(config.getOrigin('appsec.enabled'), 'code')
@@ -3720,7 +3720,7 @@ rules:
       assert.deepStrictEqual(config.headerTags, [
         // TODO: There's an unrelated bug in the tracer resulting in headerTags not being merged.
         // 'foo:bar',
-        'x-custom-header:custom.tag'
+        'x-custom-header:custom.tag',
       ])
     })
 
@@ -3732,7 +3732,7 @@ rules:
       assertObjectContains(config.tags, {
         // TODO: There's an unrelated bug in the tracer resulting in tags not being merged.
         // foo: 'bar',
-        team: 'backend'
+        team: 'backend',
       })
     })
   })
@@ -3774,7 +3774,7 @@ rules:
       config.setRemoteConfig({
         tracing_enabled: true,
         log_injection_enabled: false,
-        tracing_sampling_rate: 0.8
+        tracing_sampling_rate: 0.8,
       })
 
       assert.strictEqual(config.tracing, true)
@@ -3782,7 +3782,7 @@ rules:
       assert.strictEqual(config.sampleRate, 0.8)
 
       config.setRemoteConfig({
-        tracing_enabled: false
+        tracing_enabled: false,
       })
 
       assert.strictEqual(config.tracing, false)

@@ -92,5 +92,5 @@ module.exports = {
   disable,
   sampleRequest,
   isSampled,
-  computeKey
+  computeKey,
 }

@@ -23,14 +23,14 @@ describe('EventBridge', () => {
         context: () => {
           return {
             _sampling: {
-              priority: 1
+              priority: 1,
             },
             _trace: {
               started: [],
-              origin: ''
+              origin: '',
             },
             _traceFlags: {
-              sampled: 1
+              sampled: 1,
             },
             _baggageItems: {},
             'x-datadog-trace-id': traceId,
@@ -41,11 +41,11 @@ describe('EventBridge', () => {
             },
             toSpanId: () => {
               return spanId
-            }
+            },
           }
         },
         addTags: sinon.stub(),
-        setTag: sinon.stub()
+        setTag: sinon.stub(),
       }
       tracer._tracer.startSpan = sinon.spy(() => {
         return span
@@ -56,18 +56,18 @@ describe('EventBridge', () => {
       const eventbridge = new EventBridge(tracer)
       const params = {
         source: 'my.event',
-        Name: 'my-rule-name'
+        Name: 'my-rule-name',
       }
       assert.deepStrictEqual(eventbridge.generateTags(params, 'putEvent', {}), {
         'aws.eventbridge.source': 'my.event',
         'resource.name': 'putEvent my.event',
-        rulename: 'my-rule-name'
+        rulename: 'my-rule-name',
       })
     })
     it('won\'t create tags for a malformed event', () => {
       const eventbridge = new EventBridge(tracer)
       const params = {
-        foo: 'bar'
+        foo: 'bar',
       }
       assert.deepStrictEqual(eventbridge.generateTags(params, 'putEvent', {}), {})
     })
@@ -81,12 +81,12 @@ describe('EventBridge', () => {
               Detail: JSON.stringify({
                 custom: 'data',
                 for: 'my users',
-                from: 'Aaron Stuyvenberg'
-              })
-            }
-          ]
+                from: 'Aaron Stuyvenberg',
+              }),
+            },
+          ],
         },
-        operation: 'putEvents'
+        operation: 'putEvents',
       }
 
       traceId = '456853219676779160'
@@ -100,8 +100,8 @@ describe('EventBridge', () => {
             '"x-datadog-trace-id":"456853219676779160",' +
             '"x-datadog-parent-id":"456853219676779160",' +
             '"x-datadog-sampling-priority":"1"' +
-          '}}'
-        }]
+          '}}',
+        }],
       })
     })
 
@@ -111,11 +111,11 @@ describe('EventBridge', () => {
         params: {
           Entries: [
             {
-              Detail: JSON.stringify({ myGreatData: randomBytes(256000).toString('base64') })
-            }
-          ]
+              Detail: JSON.stringify({ myGreatData: randomBytes(256000).toString('base64') }),
+            },
+          ],
         },
-        operation: 'putEvents'
+        operation: 'putEvents',
       }
 
       traceId = '456853219676779160'
@@ -133,7 +133,7 @@ describe('EventBridge', () => {
     it('returns an empty object when params.source is an empty string', () => {
       const eventbridge = new EventBridge(tracer)
       const params = {
-        source: ''
+        source: '',
       }
       assert.deepStrictEqual(eventbridge.generateTags(params, 'putEvent', {}), {})
     })
@@ -142,12 +142,12 @@ describe('EventBridge', () => {
       const eventbridge = new EventBridge(tracer)
       const params = {
         source: 'my.event',
-        Name: null
+        Name: null,
       }
       assert.deepStrictEqual(eventbridge.generateTags(params, 'putEvent', {}), {
         'aws.eventbridge.source': 'my.event',
         'resource.name': 'putEvent my.event',
-        rulename: ''
+        rulename: '',
       })
     })
 
@@ -155,24 +155,24 @@ describe('EventBridge', () => {
       const eventbridge = new EventBridge(tracer)
       const params = {
         source: 'my.event',
-        Name: 'my-rule-name'
+        Name: 'my-rule-name',
       }
       assert.deepStrictEqual(eventbridge.generateTags(params, null, {}), {
         'aws.eventbridge.source': 'my.event',
         'resource.name': 'my.event',
-        rulename: 'my-rule-name'
+        rulename: 'my-rule-name',
       })
     })
     it('handles null response gracefully', () => {
       const eventbridge = new EventBridge(tracer)
       const params = {
         source: 'my.event',
-        Name: 'my-rule-name'
+        Name: 'my-rule-name',
       }
       assert.deepStrictEqual(eventbridge.generateTags(params, 'putEvent', null), {
         'aws.eventbridge.source': 'my.event',
         'resource.name': 'putEvent my.event',
-        rulename: 'my-rule-name'
+        rulename: 'my-rule-name',
       })
     })
   })

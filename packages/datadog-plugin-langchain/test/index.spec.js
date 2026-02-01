@@ -27,14 +27,14 @@ describe('Plugin', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
     ANTHROPIC_API_KEY: '<not-a-real-key>',
-    GOOGLE_API_KEY: '<not-a-real-key>'
+    GOOGLE_API_KEY: '<not-a-real-key>',
   })
 
   function getLangChainOpenAiClient (type = 'llm', options = {}) {
     Object.assign(options, {
       configuration: {
-        baseURL: 'http://127.0.0.1:9126/vcr/openai'
-      }
+        baseURL: 'http://127.0.0.1:9126/vcr/openai',
+      },
     })
 
     if (type === 'llm') {
@@ -55,8 +55,8 @@ describe('Plugin', () => {
   function getLangChainAnthropicClient (type = 'chat', options = {}) {
     Object.assign(options, {
       clientOptions: {
-        baseURL: 'http://127.0.0.1:9126/vcr/anthropic'
-      }
+        baseURL: 'http://127.0.0.1:9126/vcr/anthropic',
+      },
     })
 
     if (type === 'chat') {
@@ -68,7 +68,7 @@ describe('Plugin', () => {
 
   function getLangChainGoogleGenAIClient (type = 'embedding', options = {}) {
     Object.assign(options, {
-      baseUrl: 'http://127.0.0.1:9126/vcr/genai'
+      baseUrl: 'http://127.0.0.1:9126/vcr/genai',
     })
 
     if (type === 'embedding') {
@@ -168,8 +168,8 @@ describe('Plugin', () => {
                 meta: {
                   'langchain.request.provider': 'openai',
                   'langchain.request.model': 'gpt-3.5-turbo-instruct',
-                  'langchain.request.type': 'llm'
-                }
+                  'langchain.request.type': 'llm',
+                },
               })
             })
 
@@ -187,7 +187,7 @@ describe('Plugin', () => {
               const span = traces[0][0]
               assertObjectContains(span.meta, {
                 'langchain.request.provider': 'openai',
-                'langchain.request.model': 'gpt-3.5-turbo-instruct'
+                'langchain.request.model': 'gpt-3.5-turbo-instruct',
               })
             })
 
@@ -208,7 +208,7 @@ describe('Plugin', () => {
 
               assertObjectContains(span.meta, {
                 'langchain.request.provider': 'openai',
-                'langchain.request.model': 'gpt-3.5-turbo-instruct'
+                'langchain.request.model': 'gpt-3.5-turbo-instruct',
               })
             })
 
@@ -259,8 +259,8 @@ describe('Plugin', () => {
                 meta: {
                   'langchain.request.provider': 'openai',
                   'langchain.request.model': 'gpt-4',
-                  'langchain.request.type': 'chat_model'
-                }
+                  'langchain.request.type': 'chat_model',
+                },
               })
             })
 
@@ -280,14 +280,14 @@ describe('Plugin', () => {
 
               assertObjectContains(span.meta, {
                 'langchain.request.provider': 'openai',
-                'langchain.request.model': 'gpt-4'
+                'langchain.request.model': 'gpt-4',
               })
             })
 
           const chatModel = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
           const messages = [
             { role: 'system', content: 'You only respond with one word answers' },
-            { role: 'human', content: 'Hello!' }
+            { role: 'human', content: 'Hello!' },
           ]
 
           const result = await chatModel.invoke(messages)
@@ -304,14 +304,14 @@ describe('Plugin', () => {
 
               assertObjectContains(span.meta, {
                 'langchain.request.provider': 'openai',
-                'langchain.request.model': 'gpt-4'
+                'langchain.request.model': 'gpt-4',
               })
             })
 
           const chatModel = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
           const messages = [
             new langchainMessages.SystemMessage('You only respond with one word answers'),
-            new langchainMessages.HumanMessage('Hello!')
+            new langchainMessages.HumanMessage('Hello!'),
           ]
           const result = await chatModel.invoke(messages)
 
@@ -328,7 +328,7 @@ describe('Plugin', () => {
 
               assertObjectContains(span.meta, {
                 'langchain.request.provider': 'openai',
-                'langchain.request.model': 'gpt-4'
+                'langchain.request.model': 'gpt-4',
               })
             })
 
@@ -342,11 +342,11 @@ describe('Plugin', () => {
                   type: 'object',
                   properties: {
                     name: { type: 'string', description: 'Name of the character' },
-                    origin: { type: 'string', description: 'Where they live' }
-                  }
-                }
-              }
-            }
+                    origin: { type: 'string', description: 'Where they live' },
+                  },
+                },
+              },
+            },
           ]
 
           const model = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
@@ -371,8 +371,8 @@ describe('Plugin', () => {
                 resource: 'langchain.chat_models.anthropic.ChatAnthropic',
                 meta: {
                   'langchain.request.provider': 'anthropic',
-                  'langchain.request.type': 'chat_model'
-                }
+                  'langchain.request.type': 'chat_model',
+                },
               })
 
               assert.ok(Object.hasOwn(span.meta, 'langchain.request.model'))
@@ -432,8 +432,8 @@ describe('Plugin', () => {
                 name: 'langchain.request',
                 resource: 'langchain_core.runnables.RunnableSequence',
                 meta: {
-                  'langchain.request.type': 'chain'
-                }
+                  'langchain.request.type': 'chain',
+                },
               })
             })
 
@@ -443,7 +443,7 @@ describe('Plugin', () => {
           const chain = model.pipe(parser)
           const messages = [
             new langchainMessages.SystemMessage('You only respond with one word answers'),
-            new langchainMessages.HumanMessage('Hello!')
+            new langchainMessages.HumanMessage('Hello!'),
           ]
           const result = await chain.invoke(messages)
 
@@ -464,11 +464,11 @@ describe('Plugin', () => {
           const chain = langchainRunnables.RunnableSequence.from([
             {
               topic: new langchainRunnables.RunnablePassthrough(),
-              style: new langchainRunnables.RunnablePassthrough()
+              style: new langchainRunnables.RunnablePassthrough(),
             },
             prompt,
             model,
-            parser
+            parser,
           ])
 
           const checkTraces = agent
@@ -481,7 +481,7 @@ describe('Plugin', () => {
               assert.strictEqual(spans[1].resource, 'langchain.chat_models.openai.ChatOpenAI')
 
               assertObjectContains(chainSpan.meta, {
-                'langchain.request.type': 'chain'
+                'langchain.request.type': 'chain',
               })
             })
 
@@ -501,11 +501,11 @@ describe('Plugin', () => {
 
           const chain = langchainRunnables.RunnableSequence.from([
             {
-              topic: new langchainRunnables.RunnablePassthrough()
+              topic: new langchainRunnables.RunnablePassthrough(),
             },
             prompt,
             model,
-            parser
+            parser,
           ])
 
           const checkTraces = agent
@@ -516,7 +516,7 @@ describe('Plugin', () => {
               const chainSpan = spans[0]
 
               assertObjectContains(chainSpan.meta, {
-                'langchain.request.type': 'chain'
+                'langchain.request.type': 'chain',
               })
             })
 
@@ -540,7 +540,7 @@ describe('Plugin', () => {
               const chainSpan = spans[0]
 
               assertObjectContains(chainSpan.meta, {
-                'langchain.request.type': 'chain'
+                'langchain.request.type': 'chain',
               })
             })
 
@@ -595,8 +595,8 @@ describe('Plugin', () => {
                   meta: {
                     'langchain.request.provider': 'openai',
                     'langchain.request.model': 'text-embedding-ada-002',
-                    'langchain.request.type': 'embedding'
-                  }
+                    'langchain.request.type': 'embedding',
+                  },
                 })
               })
 
@@ -617,7 +617,7 @@ describe('Plugin', () => {
                 assertObjectContains(span.meta, {
                   'langchain.request.type': 'embedding',
                   'langchain.request.provider': 'openai',
-                  'langchain.request.model': 'text-embedding-ada-002'
+                  'langchain.request.model': 'text-embedding-ada-002',
                 })
               })
 
@@ -641,7 +641,7 @@ describe('Plugin', () => {
             const embeddings = getLangChainGoogleGenAIClient('embedding', {
               model: 'text-embedding-004',
               taskType: 'RETRIEVAL_DOCUMENT',
-              title: 'Document title'
+              title: 'Document title',
             })
 
             const checkTraces = agent
@@ -655,8 +655,8 @@ describe('Plugin', () => {
                   meta: {
                     'langchain.request.provider': 'googlegenerativeai',
                     'langchain.request.model': 'text-embedding-004',
-                    'langchain.request.type': 'embedding'
-                  }
+                    'langchain.request.type': 'embedding',
+                  },
                 })
               })
 
@@ -677,7 +677,7 @@ describe('Plugin', () => {
             () => 'Hello, world!',
             {
               name: 'myTool',
-              description: 'A tool that returns a greeting'
+              description: 'A tool that returns a greeting',
             }
           )
 
@@ -700,7 +700,7 @@ describe('Plugin', () => {
             () => { throw new Error('This is a test error') },
             {
               name: 'myTool',
-              description: 'A tool that throws an error'
+              description: 'A tool that throws an error',
             }
           )
 
@@ -734,7 +734,7 @@ describe('Plugin', () => {
           const document = {
             pageContent: 'The powerhouse of the cell is the mitochondria',
             metadata: { source: 'https://example.com' },
-            id: '1'
+            id: '1',
           }
 
           return vectorstore.addDocuments([document])

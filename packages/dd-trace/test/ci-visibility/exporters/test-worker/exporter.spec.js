@@ -11,7 +11,7 @@ const {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
-  MOCHA_WORKER_TRACE_PAYLOAD_CODE
+  MOCHA_WORKER_TRACE_PAYLOAD_CODE,
 } = require('../../../../src/plugins/util/test')
 
 describe('CI Visibility Test Worker Exporter', () => {

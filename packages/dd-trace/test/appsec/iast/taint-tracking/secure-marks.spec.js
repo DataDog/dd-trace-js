@@ -5,7 +5,7 @@ const {
   SQL_INJECTION_MARK,
   getMarkFromVulnerabilityType,
   ASTERISK_MARK,
-  ALL
+  ALL,
 } = require('../../../../src/appsec/iast/taint-tracking/secure-marks')
 const { SQL_INJECTION } = require('../../../../src/appsec/iast/vulnerabilities')
 

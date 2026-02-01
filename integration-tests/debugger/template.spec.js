@@ -25,10 +25,10 @@ describe('Dynamic Instrumentation', function () {
           { str: 'Hello ' },
           {
             dsl: 'request.params.name',
-            json: { getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }
+            json: { getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] },
           },
-          { str: '!' }
-        ]
+          { str: '!' },
+        ],
       }))
     })
 
@@ -165,8 +165,8 @@ describe('Dynamic Instrumentation', function () {
           { str: ';' },
           { dsl: 'abuf', json: { ref: 'abuf' } },
           { str: ';' },
-          { dsl: 'tarr', json: { ref: 'tarr' } }
-        ]
+          { dsl: 'tarr', json: { ref: 'tarr' } },
+        ],
       }))
     })
 
@@ -181,13 +181,13 @@ describe('Dynamic Instrumentation', function () {
       })
 
       t.agent.addRemoteConfig(t.generateRemoteConfig({
-        template: '0123456789'.repeat(1000)
+        template: '0123456789'.repeat(1000),
       }))
 
       t.agent.addRemoteConfig(t.generateRemoteConfig({
         segments: [
-          { dsl: 'lstr', json: { ref: 'lstr' } }
-        ]
+          { dsl: 'lstr', json: { ref: 'lstr' } },
+        ],
       }))
     })
 
@@ -219,19 +219,19 @@ describe('Dynamic Instrumentation', function () {
           { str: 'This should fail: ' },
           {
             dsl: 'request.invalid.name',
-            json: { getmember: [{ getmember: [{ ref: 'request' }, 'invalid'] }, 'name'] }
+            json: { getmember: [{ getmember: [{ ref: 'request' }, 'invalid'] }, 'name'] },
           },
           { str: ', this should work: ' },
           {
             dsl: 'request.params.name',
-            json: { getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }
+            json: { getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] },
           },
           { str: ', and this should fail: ' },
           {
             dsl: 'invalid',
-            json: { ref: 'invalid' }
-          }
-        ]
+            json: { ref: 'invalid' },
+          },
+        ],
       }))
     })
   })

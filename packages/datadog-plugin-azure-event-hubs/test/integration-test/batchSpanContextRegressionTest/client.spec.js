@@ -5,7 +5,7 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  spawnPluginIntegrationTestProcAndExpectExit
+  spawnPluginIntegrationTestProcAndExpectExit,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 

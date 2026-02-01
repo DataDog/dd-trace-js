@@ -63,8 +63,8 @@ describe('Tracer', () => {
         resource: 'resource',
         type: 'type',
         tags: {
-          foo: 'bar'
-        }
+          foo: 'bar',
+        },
       }
 
       tracer.trace('name', options, span => {
@@ -73,7 +73,7 @@ describe('Tracer', () => {
         assertObjectContains(span.context()._tags, {
           [SERVICE_NAME]: 'service',
           [RESOURCE_NAME]: 'resource',
-          [SPAN_TYPE]: 'type'
+          [SPAN_TYPE]: 'type',
         })
       })
     })
@@ -161,7 +161,7 @@ describe('Tracer', () => {
         assertObjectContains(tags, {
           [ERROR_TYPE]: e.name,
           [ERROR_MESSAGE]: e.message,
-          [ERROR_STACK]: e.stack
+          [ERROR_STACK]: e.stack,
         })
       }
     })
@@ -203,7 +203,7 @@ describe('Tracer', () => {
         assertObjectContains(tags, {
           [ERROR_TYPE]: error.name,
           [ERROR_MESSAGE]: error.message,
-          [ERROR_STACK]: error.stack
+          [ERROR_STACK]: error.stack,
         })
       })
     })
@@ -250,7 +250,7 @@ describe('Tracer', () => {
             assertObjectContains(tags, {
               [ERROR_TYPE]: e.name,
               [ERROR_MESSAGE]: e.message,
-              [ERROR_STACK]: e.stack
+              [ERROR_STACK]: e.stack,
             })
             done()
           })
@@ -367,7 +367,7 @@ describe('Tracer', () => {
       fn('hello', 'goodbye')
 
       sinon.assert.calledWith(tracer.trace, 'name', {
-        tags: { sometag: 'somevalue' }
+        tags: { sometag: 'somevalue' },
       })
     })
 
@@ -391,13 +391,13 @@ describe('Tracer', () => {
       fn.call(it, 'hello', 'goodbye')
 
       sinon.assert.calledWith(tracer.trace, 'name', {
-        tags: { sometag: 'somevalue', invocations: 1 }
+        tags: { sometag: 'somevalue', invocations: 1 },
       })
 
       fn.call(it, 'hello', 'goodbye')
 
       sinon.assert.calledWith(tracer.trace, 'name', {
-        tags: { sometag: 'somevalue', invocations: 2 }
+        tags: { sometag: 'somevalue', invocations: 2 },
       })
     })
   })

@@ -29,7 +29,7 @@ function getProtobufTypes () {
       protoLogsService,
       protoSeverityNumber,
       protoMetricsService,
-      protoAggregationTemporality
+      protoAggregationTemporality,
     }
   }
   // Load the proto files
@@ -40,7 +40,7 @@ function getProtobufTypes () {
     'logs.proto',
     'logs_service.proto',
     'metrics.proto',
-    'metrics_service.proto'
+    'metrics_service.proto',
   ].map(file => path.join(protoDir, file))
 
   _root = protobuf.loadSync(protoFiles)
@@ -57,7 +57,7 @@ function getProtobufTypes () {
     protoLogsService,
     protoSeverityNumber,
     protoMetricsService,
-    protoAggregationTemporality
+    protoAggregationTemporality,
   }
 }
 

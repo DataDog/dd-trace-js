@@ -155,5 +155,5 @@ module.exports = {
   convertBuffersToObjects,
   constructCompletionResponseFromStreamedChunks,
   constructChatCompletionResponseFromStreamedChunks,
-  constructResponseResponseFromStreamedChunks
+  constructResponseResponseFromStreamedChunks,
 }

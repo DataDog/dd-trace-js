@@ -21,7 +21,7 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
         { id: `${this.constructor.id}.${this.constructor.operation}`, pluginConfig: this.config }),
       type: this.constructor.type,
       kind: this.constructor.kind,
-      meta: {}
+      meta: {},
     }
 
     const { requestContext, gateway } = ctx
@@ -95,7 +95,7 @@ function buildOperationContext (schema, operationDocument, operationName) {
   return {
     schema,
     operation,
-    fragments
+    fragments,
   }
 }
 

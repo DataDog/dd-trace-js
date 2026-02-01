@@ -22,9 +22,9 @@ function request (opts) {
 const path = '/?param=value'
 const opts = {
   headers: {
-    accept: 'text/html'
+    accept: 'text/html',
   },
   port,
-  path
+  path,
 }
 request(opts)

@@ -6,7 +6,7 @@ const shimmer = require('../../datadog-shimmer')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 const MIN_VERSION = ((NODE_MAJOR > 22) || (NODE_MAJOR === 22 && NODE_MINOR >= 2)) ? '>=0.5.3' : '>=0.5.0'
 

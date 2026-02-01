@@ -31,8 +31,8 @@ class RedisPlugin extends CachePlugin {
         'db.name': db || '0',
         [`${this._spanType}.raw_command`]: formatCommand(normalizedCommand, args),
         'out.host': connectionOptions.host,
-        [CLIENT_PORT_KEY]: connectionOptions.port
-      }
+        [CLIENT_PORT_KEY]: connectionOptions.port,
+      },
     }, ctx)
 
     return ctx.currentStore

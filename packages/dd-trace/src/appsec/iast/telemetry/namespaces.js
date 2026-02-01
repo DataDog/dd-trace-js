@@ -108,5 +108,5 @@ module.exports = {
 
   DD_IAST_METRICS_NAMESPACE,
 
-  IastNamespace
+  IastNamespace,
 }

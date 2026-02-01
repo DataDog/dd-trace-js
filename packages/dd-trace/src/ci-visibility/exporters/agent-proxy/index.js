@@ -40,7 +40,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       lookup,
       protocolVersion,
       headers,
-      isTestDynamicInstrumentationEnabled
+      isTestDynamicInstrumentationEnabled,
     } = config
 
     fetchAgentInfo(this._url, (err, agentInfo) => {
@@ -61,19 +61,20 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
         this._writer = new AgentlessWriter({
           url: this._url,
           tags,
-          evpProxyPrefix
+          evpProxyPrefix,
         })
         this._coverageWriter = new CoverageWriter({
           url: this._url,
-          evpProxyPrefix
+          evpProxyPrefix,
         })
+        this._codeCoverageReportUrl = this._url
         if (isTestDynamicInstrumentationEnabled) {
           const canFowardLogs = getCanForwardDebuggerLogs(err, agentInfo)
           if (canFowardLogs) {
             const DynamicInstrumentationLogsWriter = require('../agentless/di-logs-writer')
             this._logsWriter = new DynamicInstrumentationLogsWriter({
               url: this._url,
-              isAgentProxy: true
+              isAgentProxy: true,
             })
             this._canForwardLogs = true
           }
@@ -84,7 +85,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           prioritySampler,
           lookup,
           protocolVersion,
-          headers
+          headers,
         })
         // coverages will never be used, so we discard them
         this._coverageBuffer = []

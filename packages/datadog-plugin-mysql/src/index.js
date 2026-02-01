@@ -30,8 +30,8 @@ class MySQLPlugin extends DatabasePlugin {
         'db.user': ctx.conf.user,
         'db.name': ctx.conf.database,
         'out.host': ctx.conf.host,
-        [CLIENT_PORT_KEY]: ctx.conf.port
-      }
+        [CLIENT_PORT_KEY]: ctx.conf.port,
+      },
     }, ctx)
     ctx.sql = this.injectDbmQuery(span, ctx.sql, service)
 

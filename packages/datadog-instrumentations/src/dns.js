@@ -14,7 +14,7 @@ const rrtypes = {
   resolveSrv: 'SRV',
   resolvePtr: 'PTR',
   resolveNaptr: 'NAPTR',
-  resolveSoa: 'SOA'
+  resolveSoa: 'SOA',
 }
 
 const rrtypeMap = new WeakMap()

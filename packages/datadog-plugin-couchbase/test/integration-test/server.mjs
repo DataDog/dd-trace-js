@@ -5,7 +5,7 @@ const cluster = await couch.connect(
   'couchbase://127.0.0.1',
   {
     username: 'Administrator',
-    password: 'password'
+    password: 'password',
   })
 
 const bucket = cluster.bucket('datadog-test')

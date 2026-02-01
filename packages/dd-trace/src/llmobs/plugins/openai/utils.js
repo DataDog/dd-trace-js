@@ -4,7 +4,7 @@ const {
   INPUT_TYPE_IMAGE,
   INPUT_TYPE_FILE,
   IMAGE_FALLBACK,
-  FILE_FALLBACK
+  FILE_FALLBACK,
 } = require('./constants')
 
 const REGEX_SPECIAL_CHARS = /[.*+?^${}()|[\]\\]/g
@@ -106,7 +106,7 @@ function normalizePromptVariables (variables) {
   return Object.fromEntries(
     Object.entries(variables).map(([key, value]) => [
       key,
-      extractTextFromContentItem(value) ?? String(value ?? '')
+      extractTextFromContentItem(value) ?? String(value ?? ''),
     ])
   )
 }
@@ -122,5 +122,5 @@ module.exports = {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractTextFromContentItem,
-  hasMultimodalInputs
+  hasMultimodalInputs,
 }

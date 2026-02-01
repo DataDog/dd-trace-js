@@ -9,7 +9,7 @@ class Amqp10Plugin extends CompositePlugin {
   static get plugins () {
     return {
       producer: ProducerPlugin,
-      consumer: ConsumerPlugin
+      consumer: ConsumerPlugin,
     }
   }
 }

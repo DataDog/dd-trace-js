@@ -29,8 +29,8 @@ describe('no HttpOnly cookie vulnerability', () => {
           occurrences: 1,
           location: {
             path: setCookieFunctionsFilename,
-            line: 4
-          }
+            line: 4,
+          },
         })
 
         testThatRequestHasVulnerability((req, res) => {
@@ -40,8 +40,8 @@ describe('no HttpOnly cookie vulnerability', () => {
           occurrences: 1,
           location: {
             path: setCookieFunctionsFilename,
-            line: 4
-          }
+            line: 4,
+          },
         })
 
         testThatRequestHasVulnerability((req, res) => {
@@ -50,8 +50,8 @@ describe('no HttpOnly cookie vulnerability', () => {
           occurrences: 1,
           location: {
             path: setCookieFunctionsFilename,
-            line: 8
-          }
+            line: 8,
+          },
         })
 
         testThatRequestHasVulnerability((req, res) => {
@@ -60,8 +60,8 @@ describe('no HttpOnly cookie vulnerability', () => {
           occurrences: 1,
           location: {
             path: setCookieFunctionsFilename,
-            line: 12
-          }
+            line: 12,
+          },
         })
 
         testThatRequestHasNoVulnerability((req, res) => {

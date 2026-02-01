@@ -8,7 +8,7 @@ const PROVIDER = {
   ANTHROPIC: 'ANTHROPIC',
   COHERE: 'COHERE',
   META: 'META',
-  MISTRAL: 'MISTRAL'
+  MISTRAL: 'MISTRAL',
 }
 
 const systemPrompt = 'Please respond with one sentence.'
@@ -25,8 +25,8 @@ bedrockruntime.models = [
       inputText: prompt,
       textGenerationConfig: {
         temperature,
-        maxTokenCount: maxTokens
-      }
+        maxTokenCount: maxTokens,
+      },
     },
     response: {
       inputTokens: 7,
@@ -38,7 +38,7 @@ bedrockruntime.models = [
         'with a population of more than 2 million people. It is also one of the most ' +
         'visited cities in the world, with millions of tourists visiting each year. ' +
         'Paris is known for its rich history, culture, and architecture, including ' +
-        'the Eiffel Tower, Notre Dame Cathedral, and the Louvre Museum. '
+        'the Eiffel Tower, Notre Dame Cathedral, and the Louvre Museum. ',
     },
     streamedResponse: {
       inputTokens: 7,
@@ -47,8 +47,8 @@ bedrockruntime.models = [
       'that has been a center of art, culture, and cuisine for centuries. The city is ' +
       'home to some of the world\'s most famous landmarks, including the Eiffel Tower, ' +
       'Notre Dame Cathedral, and the Louvre Museum. Paris is also a major international ' +
-      'hub for business, finance, and tourism.'
-    }
+      'hub for business, finance, and tourism.',
+    },
   },
   {
     provider: PROVIDER.AMAZON,
@@ -63,30 +63,30 @@ bedrockruntime.models = [
           content: [
             {
               text: prompt,
-            }
+            },
           ],
-        }
+        },
       ],
       inferenceConfig: {
         maxTokens,
         topP: 0.1,
         topK: 20,
-        temperature
-      }
+        temperature,
+      },
     },
     response: {
       inputTokens: 13,
       outputTokens: 7,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
-      text: 'The capital of France is Paris.'
+      text: 'The capital of France is Paris.',
     },
     streamedResponse: {
       inputTokens: 13,
       outputTokens: 8,
-      text: 'The capital city of France is Paris.'
+      text: 'The capital city of France is Paris.',
     },
-    outputRole: 'assistant'
+    outputRole: 'assistant',
   },
   {
     provider: PROVIDER.AI21,
@@ -95,7 +95,7 @@ bedrockruntime.models = [
     requestBody: {
       messages: [{
         role: 'user',
-        content: prompt
+        content: prompt,
       }],
       max_tokens: maxTokens,
       temperature,
@@ -105,9 +105,9 @@ bedrockruntime.models = [
       outputTokens: 8,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
-      text: ' The capital of France is Paris.'
+      text: ' The capital of France is Paris.',
     },
-    outputRole: 'assistant'
+    outputRole: 'assistant',
   },
   {
     provider: PROVIDER.ANTHROPIC,
@@ -116,15 +116,15 @@ bedrockruntime.models = [
     requestBody: {
       prompt: `\n\nHuman:${prompt}\n\nAssistant:`,
       temperature,
-      max_tokens_to_sample: maxTokens
+      max_tokens_to_sample: maxTokens,
     },
     response: {
       inputTokens: 16,
       outputTokens: 11,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
-      text: ' The capital of France is Paris.'
-    }
+      text: ' The capital of France is Paris.',
+    },
   },
   {
     provider: PROVIDER.ANTHROPIC,
@@ -139,10 +139,10 @@ bedrockruntime.models = [
           content: [
             {
               type: 'text',
-              text: prompt
-            }
-          ]
-        }
+              text: prompt,
+            },
+          ],
+        },
       ],
       max_tokens: maxTokens,
     },
@@ -151,8 +151,8 @@ bedrockruntime.models = [
       outputTokens: 10,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
-      text: 'The capital of France is Paris.'
-    }
+      text: 'The capital of France is Paris.',
+    },
   },
   // TODO(sabrenner): input messages are undefined?
   // {
@@ -206,7 +206,7 @@ bedrockruntime.models = [
     requestBody: {
       prompt,
       temperature,
-      max_gen_len: maxTokens
+      max_gen_len: maxTokens,
     },
     response: {
       inputTokens: 7,
@@ -234,7 +234,7 @@ bedrockruntime.models = [
         'City\nB) Monaco\nC) Nauru\nD) Tuvalu\n\nAnswer: A) Vatican City\n\n**What ' +
         'is the chemical symbol for sulfur?**\nA) S\nB) P\nC) Cl\nD) Br\n\nAnswer: ' +
         'A) S\n\n**What is the largest species of shark?**\nA) Great white shark\nB) ' +
-        'Whale shark\nC) Tiger'
+        'Whale shark\nC) Tiger',
     },
     streamedResponse: {
       inputTokens: 7,
@@ -257,8 +257,8 @@ bedrockruntime.models = [
       'ancient philosophers is known for his concept of the "examined life"?\nA. Socrates\nB. ' +
       'Plato\nC. Aristotle\nD. Epicurus\n\nAnswer: A. Socrates\n\nNote: The answers to these questions are ' +
       'not necessarily absolute or definitive, as there may be multiple correct answers or nuances ' +
-      'to each question. However, the answers provided are generally accepted and accurate.'
-    }
+      'to each question. However, the answers provided are generally accepted and accurate.',
+    },
   },
   {
     provider: PROVIDER.MISTRAL,
@@ -281,7 +281,7 @@ bedrockruntime.models = [
         'Cathedral. It is also famous for its cuisine, fashion, and cafe culture. Paris ' +
         'has a rich history and is home to many world-renowned institutions, including ' +
         'the Sorbonne University and the École Normale Supérieure. It is a popular ' +
-        'tourist destination and attracts millions of visitors every year.'
+        'tourist destination and attracts millions of visitors every year.',
     },
     streamedResponse: {
       inputTokens: 8,
@@ -290,13 +290,13 @@ bedrockruntime.models = [
       'and it is also one of the most visited cities in the world. Paris is known for its ' +
       'iconic landmarks such as the Eiffel Tower, the Louvre Museum, and Notre Dame Cathedral. ' +
       'It is also famous for its cuisine, fashion, and art scene. Paris has a rich history ' +
-      'and is considered to be the cultural center of France.'
-    }
-  }
+      'and is considered to be the cultural center of France.',
+    },
+  },
 ]
 bedrockruntime.modelConfig = {
   temperature,
-  maxTokens
+  maxTokens,
 }
 
 bedrockruntime.cacheWriteRequest = {
@@ -314,11 +314,11 @@ bedrockruntime.cacheWriteRequest = {
             type: 'text',
             text: 'You are a geography expert'.repeat(200) + prompt,
             cache_control: {
-              type: 'ephemeral'
-            }
-          }
+              type: 'ephemeral',
+            },
+          },
         ],
-      }
+      },
     ],
     max_tokens: 10,
   },
@@ -327,9 +327,9 @@ bedrockruntime.cacheWriteRequest = {
     outputTokens: 10,
     cacheReadTokens: 0,
     cacheWriteTokens: 1209,
-    text: 'The capital of France is Paris.\n\nParis is'
+    text: 'The capital of France is Paris.\n\nParis is',
   },
-  outputRole: 'assistant'
+  outputRole: 'assistant',
 }
 bedrockruntime.cacheReadRequest = {
   provider: PROVIDER.ANTHROPIC,
@@ -346,11 +346,11 @@ bedrockruntime.cacheReadRequest = {
             type: 'text',
             text: 'You are a geography expert'.repeat(200) + 'What is the capital of Italy?',
             cache_control: {
-              type: 'ephemeral'
-            }
-          }
+              type: 'ephemeral',
+            },
+          },
         ],
-      }
+      },
     ],
     max_tokens: 10,
   },
@@ -359,9 +359,9 @@ bedrockruntime.cacheReadRequest = {
     outputTokens: 10,
     cacheReadTokens: 1209,
     cacheWriteTokens: 0,
-    text: 'The capital of Italy is Rome (Roma in Italian'
+    text: 'The capital of Italy is Rome (Roma in Italian',
   },
-  outputRole: 'assistant'
+  outputRole: 'assistant',
 }
 
 module.exports = bedrockruntime

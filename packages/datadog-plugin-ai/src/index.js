@@ -9,7 +9,7 @@ class VercelAIPlugin extends CompositePlugin {
   static get plugins () {
     return {
       llmobs: VercelAILLMObsPlugin,
-      tracing: VercelAITracingPlugin
+      tracing: VercelAITracingPlugin,
     }
   }
 }

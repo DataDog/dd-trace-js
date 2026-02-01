@@ -3,7 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   addHook,
-  channel
+  channel,
 } = require('./helpers/instrument')
 
 const ddGlobal = globalThis[Symbol.for('dd-trace')]
@@ -80,7 +80,7 @@ function normalizePositional (args, defaultFieldResolver) {
     contextValue: args[3],
     variableValues: args[4],
     operationName: args[5],
-    fieldResolver: args[6]
+    fieldResolver: args[6],
   }
 }
 
@@ -172,7 +172,7 @@ function wrapExecute (execute) {
         docSource: documentSources.get(document),
         source,
         fields: {},
-        abortController: new AbortController()
+        abortController: new AbortController(),
       }
 
       return startExecuteCh.runStores(ctx, () => {
@@ -281,7 +281,7 @@ function assertField (rootCtx, info, args) {
     startResolveCh.publish(fieldCtx)
     field = fields[pathString] = {
       error: null,
-      ctx: fieldCtx
+      ctx: fieldCtx,
     }
   }
 

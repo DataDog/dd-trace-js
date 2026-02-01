@@ -22,12 +22,12 @@ function exec (cmd, opts = {}) {
   const time = [
     String(date.getHours()).padStart(2, '0'),
     String(date.getMinutes()).padStart(2, '0'),
-    String(date.getSeconds()).padStart(2, '0')
+    String(date.getSeconds()).padStart(2, '0'),
   ].join(':')
   console.log(time, '❯', cmd)
   return new Promise((resolve, reject) => {
     const proc = childProcess.spawn(cmd, Object.assign({
-      shell: true
+      shell: true,
     }, opts))
     proc.on('error', reject)
     const stdout = []
@@ -38,7 +38,7 @@ function exec (cmd, opts = {}) {
       resolve({
         code,
         stdout: Buffer.concat(stdout).toString('utf8'),
-        stderr: Buffer.concat(stderr).toString('utf8')
+        stderr: Buffer.concat(stderr).toString('utf8'),
       })
     })
   })
@@ -110,7 +110,7 @@ async function run (modName, repoUrl, commitish, testCmd, parallel) {
 async function runParallel (testCmd) {
   const [withoutTracer, withTracer] = await Promise.all([
     runOne(false, testCmd),
-    runOne(true, testCmd)
+    runOne(true, testCmd),
   ])
 
   return { withoutTracer, withTracer }
@@ -149,7 +149,7 @@ function getOpts (args) {
     commitish,
     testCmd,
     runner,
-    timeout
+    timeout,
   }
   if (testCmd) {
     options.testCmd = testCmd
@@ -174,7 +174,7 @@ module.exports = async function runWithOptions (options) {
       commitish,
       testCmd = 'npm test',
       runner = defaultRunner,
-      parallel = true
+      parallel = true,
     } = options
     return runner(await run(modName, repoUrl, commitish, testCmd, parallel))
   } catch (e) {

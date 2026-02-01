@@ -13,7 +13,7 @@ const { getConfigFresh } = require('../../../../helpers/config')
 const { withVersions } = require('../../../../setup/mocha')
 const {
   HTTP_REQUEST_COOKIE_NAME,
-  HTTP_REQUEST_COOKIE_VALUE
+  HTTP_REQUEST_COOKIE_VALUE,
 } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 const { testInRequest } = require('../../utils')
 
@@ -45,9 +45,9 @@ describe('Cookies sourcing with cookies', () => {
           experimental: {
             iast: {
               enabled: true,
-              requestSampling: 100
-            }
-          }
+              requestSampling: 100,
+            },
+          },
         }))
 
         cookie = require(`../../../../../../../versions/cookie@${version}`).get()

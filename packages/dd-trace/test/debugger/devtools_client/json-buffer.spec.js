@@ -91,7 +91,7 @@ describe('JSONBuffer', () => {
     it('should call onFlush with the expected payload when the size is reached', function () {
       const expectedPayloads = [
         '[{"message":1},{"message":2}]',
-        '[{"message":3},{"message":4}]'
+        '[{"message":3},{"message":4}]',
       ]
 
       const onFlush = (json) => {
@@ -212,7 +212,7 @@ describe('JSONBuffer', () => {
       const parsed = JSON.parse(flushedJson)
       assert.deepStrictEqual(parsed, [
         { num: 1 }, { num: 2 }, { num: 3 }, { num: 4 }, { num: 5 },
-        { num: 6 }, { num: 7 }, { num: 8 }, { num: 9 }, { num: 10 }
+        { num: 6 }, { num: 7 }, { num: 8 }, { num: 9 }, { num: 10 },
       ])
     })
 

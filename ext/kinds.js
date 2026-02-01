@@ -5,5 +5,5 @@ module.exports = {
   CLIENT: 'client',
   PRODUCER: 'producer',
   CONSUMER: 'consumer',
-  INTERNAL: 'internal'
+  INTERNAL: 'internal',
 }

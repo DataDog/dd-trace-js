@@ -20,8 +20,8 @@ describe('telemetry logs', () => {
       telemetry: {
         enabled: true,
         logCollection: true,
-        debug: false
-      }
+        debug: false,
+      },
     }
 
     telemetryLog = {
@@ -29,18 +29,18 @@ describe('telemetry logs', () => {
         return this.subscribe.callCount > 0
       },
       subscribe: sinon.stub(),
-      unsubscribe: sinon.stub()
+      unsubscribe: sinon.stub(),
     }
 
     dc = {
-      channel: () => telemetryLog
+      channel: () => telemetryLog,
     }
   })
 
   describe('start', () => {
     it('should be enabled by default and subscribe', () => {
       const logs = proxyquire('../../../src/telemetry/logs', {
-        'dc-polyfill': dc
+        'dc-polyfill': dc,
       })
 
       logs.start(defaultConfig)
@@ -50,7 +50,7 @@ describe('telemetry logs', () => {
 
     it('should be subscribe only once', () => {
       const logs = proxyquire('../../../src/telemetry/logs', {
-        'dc-polyfill': dc
+        'dc-polyfill': dc,
       })
 
       logs.start(defaultConfig)
@@ -62,7 +62,7 @@ describe('telemetry logs', () => {
 
     it('should be disabled and not subscribe if DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
       const logs = proxyquire('../../../src/telemetry/logs', {
-        'dc-polyfill': dc
+        'dc-polyfill': dc,
       })
 
       defaultConfig.telemetry.logCollection = false
@@ -75,7 +75,7 @@ describe('telemetry logs', () => {
   describe('stop', () => {
     it('should unsubscribe configured listeners', () => {
       const logs = proxyquire('../../../src/telemetry/logs', {
-        'dc-polyfill': dc
+        'dc-polyfill': dc,
       })
       logs.start(defaultConfig)
 
@@ -98,8 +98,8 @@ describe('telemetry logs', () => {
       logCollectorAdd = sinon.stub()
       const logs = proxyquire('../../../src/telemetry/logs', {
         './log-collector': {
-          add: logCollectorAdd
-        }
+          add: logCollectorAdd,
+        },
       })
       logs.start(defaultConfig)
     })
@@ -155,7 +155,7 @@ describe('telemetry logs', () => {
           message: 'Generic Error',
           level: 'ERROR',
           errorType: 'Error',
-          stack_trace: stack
+          stack_trace: stack,
         }))
       })
 
@@ -165,7 +165,7 @@ describe('telemetry logs', () => {
         sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
           message: 'custom error message',
           level: 'ERROR',
-          stack_trace: undefined
+          stack_trace: undefined,
         }))
       })
 
@@ -205,11 +205,11 @@ describe('telemetry logs', () => {
 
       logs = proxyquire('../../../src/telemetry/logs', {
         './log-collector': {
-          drain: logCollectorDrain
+          drain: logCollectorDrain,
         },
         '../send-data': {
-          sendData
-        }
+          sendData,
+        },
       })
     })
 

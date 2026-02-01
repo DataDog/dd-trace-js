@@ -16,8 +16,8 @@ describe('user_blocking - Integration with the tracer', () => {
   const config = getConfigFresh({
     appsec: {
       enabled: true,
-      rules: path.join(__dirname, './user_blocking_rules.json')
-    }
+      rules: path.join(__dirname, './user_blocking_rules.json'),
+    },
   })
 
   let http
@@ -165,16 +165,16 @@ describe('user_blocking - Integration with the tracer', () => {
           id: 'notblock',
           parameters: {
             location: '/notfound',
-            status_code: 404
-          }
+            status_code: 404,
+          },
         },
         {
           id: 'block',
           parameters: {
             location: '/redirected',
-            status_code: 302
-          }
-        }
+            status_code: 302,
+          },
+        },
       ])
       controller = (req, res) => {
         const ret = tracer.appsec.blockRequest(req, res)

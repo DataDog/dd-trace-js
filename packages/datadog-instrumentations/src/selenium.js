@@ -23,7 +23,7 @@ const DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME = 'datadog-ci-visibility-tes
 // TODO: can we increase the supported version range?
 addHook({
   name: 'selenium-webdriver',
-  versions: ['>=4.11.0']
+  versions: ['>=4.11.0'],
 }, (seleniumPackage, seleniumVersion) => {
   // TODO: do not turn this into async. Use promises
   shimmer.wrap(seleniumPackage.WebDriver.prototype, 'get', get => async function () {
@@ -44,13 +44,13 @@ addHook({
       seleniumVersion,
       browserName: capabilities.getBrowserName(),
       browserVersion: capabilities.getBrowserVersion(),
-      isRumActive
+      isRumActive,
     })
 
     if (traceId && isRumActive) {
       await this.manage().addCookie({
         name: DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME,
-        value: traceId
+        value: traceId,
       })
     }
 

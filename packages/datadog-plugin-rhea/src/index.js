@@ -9,7 +9,7 @@ class RheaPlugin extends CompositePlugin {
   static get plugins () {
     return {
       producer: ProducerPlugin,
-      consumer: ConsumerPlugin
+      consumer: ConsumerPlugin,
     }
   }
 }

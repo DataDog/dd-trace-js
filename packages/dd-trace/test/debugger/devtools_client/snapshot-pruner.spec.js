@@ -21,7 +21,7 @@ describe('snapshot-pruner', function () {
         logger: {
           name: 'test.js',
           method: 'testMethod',
-          version: '1.0.0'
+          version: '1.0.0',
         },
         dd: { service: 'my-service' },
         debugger: {
@@ -30,24 +30,24 @@ describe('snapshot-pruner', function () {
             timestamp: 123456789,
             probe: { id: 'probe-1', version: 1 },
             stack: [
-              { function: 'test', fileName: 'test.js', lineNumber: 10 }
+              { function: 'test', fileName: 'test.js', lineNumber: 10 },
             ],
             language: 'javascript',
             captures: {
               lines: {
                 10: {
-                  locals
-                }
-              }
-            }
-          }
-        }
+                  locals,
+                },
+              },
+            },
+          },
+        },
       }
     })
 
     it('should return original JSON if already under size limit', function () {
       Object.assign(locals, {
-        smallVar: { type: 'number', value: '42' }
+        smallVar: { type: 'number', value: '42' },
       })
 
       const json = JSON.stringify(snapshot)
@@ -91,9 +91,9 @@ describe('snapshot-pruner', function () {
 
     it('should preserve schema fields at levels 0-5', function () {
       assertPrunedSnapshot(400, {
-        data: { type: 'string', value: 'x'.repeat(1000) }
+        data: { type: 'string', value: 'x'.repeat(1000) },
       }, {
-        pruned: true
+        pruned: true,
       })
     })
 
@@ -107,14 +107,14 @@ describe('snapshot-pruner', function () {
       assertPrunedSnapshot(-40, {
         deepObj1: {
           type: 'object',
-          notCapturedReason: 'depth'
+          notCapturedReason: 'depth',
         },
         deepObj2: {
           type: 'object',
-          notCapturedReason: 'depth'
+          notCapturedReason: 'depth',
         },
         normalObj1: { type: 'object', fields: { z: { type: 'string', value: '3'.repeat(100) } } },
-        normalObj2: { type: 'object', fields: { w: { type: 'string', value: '4'.repeat(100) } } }
+        normalObj2: { type: 'object', fields: { w: { type: 'string', value: '4'.repeat(100) } } },
       }, {
         // Objects with notCapturedReason="depth" should be pruned first
         deepObj1: { pruned: true },
@@ -129,27 +129,27 @@ describe('snapshot-pruner', function () {
       assertPrunedSnapshot(-1, {
         objWithReason: {
           type: 'object',
-          notCapturedReason: 'timeout' // Generic reason (not "depth")
+          notCapturedReason: 'timeout', // Generic reason (not "depth")
         },
         normalObj: {
           type: 'string',
-          value: 'x'.repeat(150)
-        }
+          value: 'x'.repeat(150),
+        },
       }, {
         // Object with generic notCapturedReason should be pruned first
         objWithReason: { pruned: true },
         // Normal object should be preserved if possible
-        normalObj: { type: 'string', value: 'x'.repeat(150) }
+        normalObj: { type: 'string', value: 'x'.repeat(150) },
       })
     })
 
     it('should prioritize larger nodes when level and capture reason are equal', function () {
       assertPrunedSnapshot(-1, {
         largeObj: { type: 'string', value: 'x'.repeat(500) },
-        smallObj: { type: 'string', value: 'y'.repeat(100) }
+        smallObj: { type: 'string', value: 'y'.repeat(100) },
       }, {
         largeObj: { pruned: true },
-        smallObj: { type: 'string', value: 'y'.repeat(100) }
+        smallObj: { type: 'string', value: 'y'.repeat(100) },
       })
     })
 
@@ -158,11 +158,11 @@ describe('snapshot-pruner', function () {
         shallowObj: { type: 'object', fields: { data: { type: 'string', value: 'x'.repeat(200) } } },
         deeperObj: {
           type: 'object',
-          fields: { nested: { type: 'object', fields: { deepData: { type: 'string', value: 'y'.repeat(100) } } } }
+          fields: { nested: { type: 'object', fields: { deepData: { type: 'string', value: 'y'.repeat(100) } } } },
         },
       }, {
         shallowObj: { type: 'object', fields: { data: { type: 'string', value: 'x'.repeat(200) } } },
-        deeperObj: { pruned: true }
+        deeperObj: { pruned: true },
       })
     })
 
@@ -202,26 +202,26 @@ describe('snapshot-pruner', function () {
                               fields: {
                                 level6a: {
                                   type: 'string',
-                                  value: 'x'.repeat(500)
+                                  value: 'x'.repeat(500),
                                 },
                                 // Add an extra random field to make sure we don't prune the parent when all children
                                 // are pruned
                                 level6b: {
                                   type: 'number',
-                                  value: 42
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
+                                  value: 42,
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       }, {
         complexObj: {
           type: 'object',
@@ -244,20 +244,20 @@ describe('snapshot-pruner', function () {
                                 level6a: { pruned: true },
                                 level6b: {
                                   type: 'number',
-                                  value: 42
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
+                                  value: 42,
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       })
     })
 
@@ -269,12 +269,12 @@ describe('snapshot-pruner', function () {
         strWithPruned: { type: 'string', value: '{"pruned":true}' },
         // Normal large value that should actually be pruned
         actualLargeValue: { type: 'string', value: 'x'.repeat(500) },
-        smallValue: { type: 'number', value: '42' }
+        smallValue: { type: 'number', value: '42' },
       }, {
         strWithNotCaptured: { type: 'string', value: '{"notCapturedReason":"depth","type":"object"}' },
         strWithPruned: { type: 'string', value: '{"pruned":true}' },
         actualLargeValue: { pruned: true },
-        smallValue: { type: 'number', value: '42' }
+        smallValue: { type: 'number', value: '42' },
       })
     })
 
@@ -289,13 +289,13 @@ describe('snapshot-pruner', function () {
         multipleEscapes: { type: 'string', value: 'line1\\nline2\\"quoted\\"' },
         // Large value to force pruning
         largeValue: { type: 'string', value: 'x'.repeat(500) },
-        smallValue: { type: 'number', value: '1' }
+        smallValue: { type: 'number', value: '1' },
       }, {
         escapedBackslash: { type: 'string', value: 'test\\' },
         escapedQuote: { type: 'string', value: 'test"quote' },
         multipleEscapes: { type: 'string', value: 'line1\\nline2\\"quoted\\"' },
         largeValue: { pruned: true },
-        smallValue: { type: 'number', value: '1' }
+        smallValue: { type: 'number', value: '1' },
       })
     })
 
@@ -333,20 +333,20 @@ describe('snapshot-pruner', function () {
             child1: {
               type: 'object',
               fields: {
-                data: { type: 'string', value: 'x'.repeat(100) }
-              }
+                data: { type: 'string', value: 'x'.repeat(100) },
+              },
             },
             child2: {
               type: 'object',
               fields: {
-                data: { type: 'string', value: 'y'.repeat(100) }
-              }
-            }
-          }
-        }
+                data: { type: 'string', value: 'y'.repeat(100) },
+              },
+            },
+          },
+        },
       }, {
         smallVar: { type: 'number', value: '42' },
-        parent: { pruned: true }
+        parent: { pruned: true },
       })
     })
 
@@ -373,28 +373,28 @@ describe('snapshot-pruner', function () {
           elements: [
             {
               type: 'object',
-              fields: { id: { type: 'number', value: '1' }, data: { type: 'string', value: 'x'.repeat(200) } }
+              fields: { id: { type: 'number', value: '1' }, data: { type: 'string', value: 'x'.repeat(200) } },
             },
             {
               type: 'object',
-              fields: { id: { type: 'number', value: '2' }, data: { type: 'string', value: 'y'.repeat(10) } }
-            }
-          ]
-        }
+              fields: { id: { type: 'number', value: '2' }, data: { type: 'string', value: 'y'.repeat(10) } },
+            },
+          ],
+        },
       }, {
         list: {
           type: 'array',
           elements: [
             {
               type: 'object',
-              fields: { id: { type: 'number', value: '1' }, data: { pruned: true } }
+              fields: { id: { type: 'number', value: '1' }, data: { pruned: true } },
             },
             {
               type: 'object',
-              fields: { id: { type: 'number', value: '2' }, data: { type: 'string', value: 'y'.repeat(10) } }
-            }
-          ]
-        }
+              fields: { id: { type: 'number', value: '2' }, data: { type: 'string', value: 'y'.repeat(10) } },
+            },
+          ],
+        },
       })
     })
 
@@ -405,28 +405,28 @@ describe('snapshot-pruner', function () {
           entries: [
             [
               { type: 'string', value: 'key1' },
-              { type: 'string', value: 'x'.repeat(500) } // Should be pruned
+              { type: 'string', value: 'x'.repeat(500) }, // Should be pruned
             ],
             [
               { type: 'string', value: 'key2' },
-              { type: 'string', value: 'small' }
-            ]
-          ]
-        }
+              { type: 'string', value: 'small' },
+            ],
+          ],
+        },
       }, {
         myMap: {
           type: 'map',
           entries: [
             [
               { type: 'string', value: 'key1' },
-              { pruned: true }
+              { pruned: true },
             ],
             [
               { type: 'string', value: 'key2' },
-              { type: 'string', value: 'small' }
-            ]
-          ]
-        }
+              { type: 'string', value: 'small' },
+            ],
+          ],
+        },
       })
     })
 

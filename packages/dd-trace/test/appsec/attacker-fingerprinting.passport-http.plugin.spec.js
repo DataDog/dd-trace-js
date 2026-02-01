@@ -28,7 +28,7 @@ withVersions('passport-http', 'passport-http', version => {
 
     before(() => {
       appsec.enable(getConfigFresh({
-        appsec: true
+        appsec: true,
       }))
     })
 
@@ -47,7 +47,7 @@ withVersions('passport-http', 'passport-http', version => {
           if (username === 'success') {
             done(null, {
               id: 1234,
-              username
+              username,
             })
           } else {
             done(null, false)
@@ -64,8 +64,8 @@ withVersions('passport-http', 'passport-http', version => {
         axios = Axios.create({
           baseURL: `http://localhost:${port}`,
           headers: {
-            'User-Agent': 'test-user-agent'
-          }
+            'User-Agent': 'test-user-agent',
+          },
         })
         done()
       })
@@ -86,8 +86,8 @@ withVersions('passport-http', 'passport-http', version => {
           `http://localhost:${port}/login`, {}, {
             auth: {
               username: 'fail',
-              password: '1234'
-            }
+              password: '1234',
+            },
           }
         )
       } catch (e) {}
@@ -100,8 +100,8 @@ withVersions('passport-http', 'passport-http', version => {
         `http://localhost:${port}/login`, {}, {
           auth: {
             username: 'success',
-            password: '1234'
-          }
+            password: '1234',
+          },
         }
       )
 

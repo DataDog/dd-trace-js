@@ -8,7 +8,7 @@ const {
   MAX_RESOURCE_NAME_LENGTH,
   MAX_TYPE_LENGTH,
   DEFAULT_SPAN_NAME,
-  DEFAULT_SERVICE_NAME
+  DEFAULT_SERVICE_NAME,
 } = require('./tags-processors')
 
 function truncate (value, maxLength, suffix = '') {
@@ -132,5 +132,5 @@ class SpanStatsEncoder extends AgentEncoder {
 }
 
 module.exports = {
-  SpanStatsEncoder
+  SpanStatsEncoder,
 }

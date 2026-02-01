@@ -45,12 +45,12 @@ class BaseFFEWriter {
     this._requestOptions = {
       headers: {
         ...this._headers,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       method: 'POST',
       timeout: this._timeout,
       url: this._baseUrl,
-      path: this._endpoint
+      path: this._endpoint,
     }
 
     this._periodic = setInterval(() => {

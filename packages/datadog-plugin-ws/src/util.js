@@ -11,7 +11,7 @@ function initWebSocketMessageCounters (socket) {
   if (!socketCounters.has(socket)) {
     socketCounters.set(socket, {
       receiveCounter: 0,
-      sendCounter: 0
+      sendCounter: 0,
     })
   }
 }
@@ -103,5 +103,5 @@ module.exports = {
   initWebSocketMessageCounters,
   incrementWebSocketCounter,
   buildWebSocketSpanPointerHash,
-  hasDistributedTracingContext
+  hasDistributedTracingContext,
 }

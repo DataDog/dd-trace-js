@@ -26,8 +26,8 @@ describe('OpenFeature Exposures Writer', () => {
       subject: {
         id: 'user_123',
         type: 'user',
-        attributes: { plan: 'premium' }
-      }
+        attributes: { plan: 'premium' },
+      },
     }
 
     request = sinon.stub().yieldsAsync(null, 'OK', 200)
@@ -42,13 +42,13 @@ describe('OpenFeature Exposures Writer', () => {
       ffeTimeout: 5000,
       service: 'test-service',
       version: '1.0.0',
-      env: 'test'
+      env: 'test',
     }
 
     log = {
       debug: sinon.spy(),
       error: sinon.spy(),
-      warn: sinon.spy()
+      warn: sinon.spy(),
     }
 
     clock = sinon.useFakeTimers()
@@ -56,8 +56,8 @@ describe('OpenFeature Exposures Writer', () => {
     ExposuresWriter = proxyquire('../../../src/openfeature/writers/exposures', {
       './base': proxyquire('../../../src/openfeature/writers/base', {
         '../../exporters/common/request': request,
-        '../../log': log
-      })
+        '../../log': log,
+      }),
     })
 
     writer = new ExposuresWriter(config)
@@ -118,7 +118,7 @@ describe('OpenFeature Exposures Writer', () => {
     it('should drop events exceeding 1MB size limit', () => {
       const largeEvent = {
         ...exposureEvent,
-        largeData: 'x'.repeat(1024 * 1024 + 1) // > 1MB
+        largeData: 'x'.repeat(1024 * 1024 + 1), // > 1MB
       }
 
       writer.append(largeEvent)
@@ -134,7 +134,7 @@ describe('OpenFeature Exposures Writer', () => {
       // Use ~1020KB events to safely stay under individual limit
       const largeEvent = {
         ...exposureEvent,
-        largeData: 'x'.repeat(1020 * 1024) // ~1020KB each
+        largeData: 'x'.repeat(1020 * 1024), // ~1020KB each
       }
 
       // Add 5 events (~5MB total)
@@ -186,7 +186,7 @@ describe('OpenFeature Exposures Writer', () => {
       assert.deepStrictEqual(payload.context, {
         service: 'test-service',
         version: '1.0.0',
-        env: 'test'
+        env: 'test',
       })
     })
 
@@ -203,8 +203,8 @@ describe('OpenFeature Exposures Writer', () => {
         subject: {
           id: 'user_123',
           type: 'user',
-          attributes: { plan: 'premium' }
-        }
+          attributes: { plan: 'premium' },
+        },
       })
     })
 
@@ -212,14 +212,14 @@ describe('OpenFeature Exposures Writer', () => {
       const writerWithoutOptionals = new ExposuresWriter({
         ...config,
         version: undefined,
-        env: undefined
+        env: undefined,
       })
 
       const events = [exposureEvent]
       const payload = writerWithoutOptionals.makePayload(events)
 
       assert.deepStrictEqual(payload.context, {
-        service: 'test-service'
+        service: 'test-service',
       })
       assert.ok(!(Object.hasOwn(payload.context, 'version')))
       assert.ok(!(Object.hasOwn(payload.context, 'env')))
@@ -231,7 +231,7 @@ describe('OpenFeature Exposures Writer', () => {
         'allocation.key': 'allocation_123',
         'flag.key': 'test_flag',
         'variant.key': 'A',
-        'subject.id': 'user_123'
+        'subject.id': 'user_123',
       }
 
       const payload = writer.makePayload([flatEvent])

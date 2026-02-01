@@ -49,5 +49,5 @@ module.exports = {
   INSTRUMENTATION_METHOD_UNKNOWN: 'unknown',
 
   ROUTING_API_KEY: '_dd.llmobs.routing.api_key',
-  ROUTING_SITE: '_dd.llmobs.routing.site'
+  ROUTING_SITE: '_dd.llmobs.routing.site',
 }

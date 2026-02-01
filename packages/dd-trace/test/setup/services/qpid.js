@@ -9,7 +9,7 @@ function waitForQpid () {
 
     operation.attempt(currentAttempt => {
       const client = new amqp.Client(amqp.Policy.merge({
-        reconnect: null
+        reconnect: null,
       }))
 
       client.connect('amqp://admin:admin@localhost:5673')

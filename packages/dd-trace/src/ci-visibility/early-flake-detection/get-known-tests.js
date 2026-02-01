@@ -12,7 +12,7 @@ const {
   TELEMETRY_KNOWN_TESTS_MS,
   TELEMETRY_KNOWN_TESTS_ERRORS,
   TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS,
-  TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES
+  TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES,
 } = require('../../ci-visibility/telemetry')
 
 const { getNumFromKnownTests } = require('../../plugins/util/test')
@@ -31,16 +31,16 @@ function getKnownTests ({
   osArchitecture,
   runtimeName,
   runtimeVersion,
-  custom
+  custom,
 }, done) {
   const options = {
     path: '/api/v2/ci/libraries/tests',
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
     timeout: 20_000,
-    url
+    url,
   }
 
   if (isGzipCompatible) {
@@ -70,14 +70,14 @@ function getKnownTests ({
           'os.architecture': osArchitecture,
           'runtime.name': runtimeName,
           'runtime.version': runtimeVersion,
-          custom
+          custom,
         },
         service,
         env,
         repository_url: repositoryUrl,
-        sha
-      }
-    }
+        sha,
+      },
+    },
   })
 
   incrementCountMetric(TELEMETRY_KNOWN_TESTS)

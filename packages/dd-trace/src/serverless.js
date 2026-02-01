@@ -48,5 +48,5 @@ module.exports = {
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
-  isInServerlessEnvironment
+  isInServerlessEnvironment,
 }

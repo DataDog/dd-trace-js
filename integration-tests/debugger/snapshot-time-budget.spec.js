@@ -3,7 +3,7 @@
 const assert = require('node:assert')
 const {
   DEFAULT_MAX_COLLECTION_SIZE,
-  LARGE_OBJECT_SKIP_THRESHOLD
+  LARGE_OBJECT_SKIP_THRESHOLD,
 } = require('../../packages/dd-trace/src/debugger/devtools_client/snapshot/constants')
 const { setup } = require('./utils')
 
@@ -15,7 +15,7 @@ describe('Dynamic Instrumentation', function () {
         const budget = 1
         const t = setup({
           dependencies: ['fastify'],
-          env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) }
+          env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) },
         })
 
         it(
@@ -45,7 +45,7 @@ describe('Dynamic Instrumentation', function () {
               expr: '',
               message: 'An object with 1000000 properties was detected while collecting a snapshot. This exceeds ' +
                 `the maximum number of allowed properties of ${LARGE_OBJECT_SKIP_THRESHOLD}. Future snapshots for ` +
-                'existing probes in this location will be skipped until the Node.js process is restarted'
+                'existing probes in this location will be skipped until the Node.js process is restarted',
             }]
 
             // Listen for the first snapshot payload (should contain notCapturedReason: "timeout")
@@ -65,7 +65,7 @@ describe('Dynamic Instrumentation', function () {
             // Install probe with snapshot capture enabled
             t.agent.addRemoteConfig(breakpoint.generateRemoteConfig({
               captureSnapshot: true,
-              capture: { maxReferenceDepth: 1 }
+              capture: { maxReferenceDepth: 1 },
             }))
 
             // Trigger once; this run is expected to be slow and mark fields with "timeout"
@@ -106,7 +106,7 @@ describe('Dynamic Instrumentation', function () {
         const budget = 100
         const t = setup({
           dependencies: ['fastify'],
-          env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) }
+          env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) },
         })
 
         it(
@@ -158,7 +158,7 @@ describe('Dynamic Instrumentation', function () {
 
             const t = setup({
               dependencies: ['fastify'],
-              env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) }
+              env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) },
             })
 
             // If this test uncovers any issues, it will show itself as being flaky, as the exact timing of how long it
@@ -166,7 +166,7 @@ describe('Dynamic Instrumentation', function () {
             it('should send a probe result to the agent', async function () {
               t.agent.addRemoteConfig(t.generateRemoteConfig({
                 captureSnapshot: true,
-                capture: { maxReferenceDepth: 5 }
+                capture: { maxReferenceDepth: 5 },
               }))
               t.triggerBreakpoint()
 
@@ -206,7 +206,7 @@ function test ({ t, maxPausedTime, breakpointIndex, maxReferenceDepth }, assertF
 
     t.agent.addRemoteConfig(breakpoint.generateRemoteConfig({
       captureSnapshot: true,
-      capture: { maxReferenceDepth }
+      capture: { maxReferenceDepth },
     }))
 
     const { data } = await breakpoint.triggerBreakpoint()

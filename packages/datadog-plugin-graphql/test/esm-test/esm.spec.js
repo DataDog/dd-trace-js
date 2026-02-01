@@ -9,7 +9,7 @@ const {
   sandboxCwd,
   useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -54,7 +54,7 @@ describe('Plugin (ESM)', () => {
 
         try {
           await axios.post(`${proc.url}/graphql`, {
-            query
+            query,
           })
         } catch (error) {
           // Server might not respond correctly, but we care about tracing
@@ -92,7 +92,7 @@ describe('Plugin (ESM)', () => {
 
           try {
             await axios.post(`${proc.url}/graphql`, {
-              query
+              query,
             })
           } catch (error) {
             // Server might not respond correctly, but we care about tracing

@@ -21,17 +21,17 @@ describe('track_event - Internal API', () => {
 
   beforeEach(() => {
     log = {
-      warn: sinon.stub()
+      warn: sinon.stub(),
     }
 
     prioritySampler = {
-      setPriority: sinon.stub()
+      setPriority: sinon.stub(),
     }
 
     rootSpan = {
       _prioritySampler: prioritySampler,
       addTags: sinon.stub(),
-      keep: sinon.stub()
+      keep: sinon.stub(),
     }
 
     getRootSpan = sinon.stub().callsFake(() => rootSpan)
@@ -39,23 +39,23 @@ describe('track_event - Internal API', () => {
     setUserTags = sinon.stub()
 
     waf = {
-      run: sinon.spy()
+      run: sinon.spy(),
     }
 
     telemetry = {
-      incrementSdkEventMetric: sinon.stub()
+      incrementSdkEventMetric: sinon.stub(),
     }
 
     const trackEvents = proxyquire('../../../src/appsec/sdk/track_event', {
       '../../log': log,
       './utils': {
-        getRootSpan
+        getRootSpan,
       },
       './set_user': {
-        setUserTags
+        setUserTags,
       },
       '../waf': waf,
-      '../telemetry': telemetry
+      '../telemetry': telemetry,
     })
 
     trackUserLoginSuccessEvent = trackEvents.trackUserLoginSuccessEvent
@@ -94,7 +94,7 @@ describe('track_event - Internal API', () => {
       trackUserLoginSuccessEvent(tracer, user, {
         metakey1: 'metaValue1',
         metakey2: 'metaValue2',
-        metakey3: 'metaValue3'
+        metakey3: 'metaValue3',
       })
 
       sinon.assert.notCalled(log.warn)
@@ -105,15 +105,15 @@ describe('track_event - Internal API', () => {
         'appsec.events.users.login.success.usr.login': 'user_id',
         'appsec.events.users.login.success.metakey1': 'metaValue1',
         'appsec.events.users.login.success.metakey2': 'metaValue2',
-        'appsec.events.users.login.success.metakey3': 'metaValue3'
+        'appsec.events.users.login.success.metakey3': 'metaValue3',
       })
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           [LOGIN_SUCCESS]: null,
           [USER_ID]: 'user_id',
-          [USER_LOGIN]: 'user_id'
-        }
+          [USER_LOGIN]: 'user_id',
+        },
       })
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'login_success', 'v1')
     })
@@ -128,15 +128,15 @@ describe('track_event - Internal API', () => {
       sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
         'appsec.events.users.login.success.track': 'true',
         '_dd.appsec.events.users.login.success.sdk': 'true',
-        'appsec.events.users.login.success.usr.login': 'user_id'
+        'appsec.events.users.login.success.usr.login': 'user_id',
       })
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           [LOGIN_SUCCESS]: null,
           [USER_ID]: 'user_id',
-          [USER_LOGIN]: 'user_id'
-        }
+          [USER_LOGIN]: 'user_id',
+        },
       })
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'login_success', 'v1')
     })
@@ -151,15 +151,15 @@ describe('track_event - Internal API', () => {
       sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
         'appsec.events.users.login.success.track': 'true',
         '_dd.appsec.events.users.login.success.sdk': 'true',
-        'appsec.events.users.login.success.usr.login': 'user_login'
+        'appsec.events.users.login.success.usr.login': 'user_login',
       })
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           [LOGIN_SUCCESS]: null,
           [USER_ID]: 'user_id',
-          [USER_LOGIN]: 'user_login'
-        }
+          [USER_LOGIN]: 'user_login',
+        },
       })
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'login_success', 'v1')
     })
@@ -192,7 +192,7 @@ describe('track_event - Internal API', () => {
       trackUserLoginFailureEvent(tracer, 'user_id', true, {
         metakey1: 'metaValue1',
         metakey2: 'metaValue2',
-        metakey3: 'metaValue3'
+        metakey3: 'metaValue3',
       })
 
       sinon.assert.notCalled(log.warn)
@@ -205,14 +205,14 @@ describe('track_event - Internal API', () => {
         'appsec.events.users.login.failure.usr.exists': 'true',
         'appsec.events.users.login.failure.metakey1': 'metaValue1',
         'appsec.events.users.login.failure.metakey2': 'metaValue2',
-        'appsec.events.users.login.failure.metakey3': 'metaValue3'
+        'appsec.events.users.login.failure.metakey3': 'metaValue3',
       })
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           [LOGIN_FAILURE]: null,
-          [USER_LOGIN]: 'user_id'
-        }
+          [USER_LOGIN]: 'user_id',
+        },
       })
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'login_failure', 'v1')
     })
@@ -221,7 +221,7 @@ describe('track_event - Internal API', () => {
       trackUserLoginFailureEvent(tracer, 'user_id', false, {
         metakey1: 'metaValue1',
         metakey2: 'metaValue2',
-        metakey3: 'metaValue3'
+        metakey3: 'metaValue3',
       })
 
       sinon.assert.notCalled(log.warn)
@@ -234,14 +234,14 @@ describe('track_event - Internal API', () => {
         'appsec.events.users.login.failure.usr.exists': 'false',
         'appsec.events.users.login.failure.metakey1': 'metaValue1',
         'appsec.events.users.login.failure.metakey2': 'metaValue2',
-        'appsec.events.users.login.failure.metakey3': 'metaValue3'
+        'appsec.events.users.login.failure.metakey3': 'metaValue3',
       })
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           [LOGIN_FAILURE]: null,
-          [USER_LOGIN]: 'user_id'
-        }
+          [USER_LOGIN]: 'user_id',
+        },
       })
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'login_failure', 'v1')
     })
@@ -256,14 +256,14 @@ describe('track_event - Internal API', () => {
         '_dd.appsec.events.users.login.failure.sdk': 'true',
         'appsec.events.users.login.failure.usr.id': 'user_id',
         'appsec.events.users.login.failure.usr.login': 'user_id',
-        'appsec.events.users.login.failure.usr.exists': 'true'
+        'appsec.events.users.login.failure.usr.exists': 'true',
       })
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           [LOGIN_FAILURE]: null,
-          [USER_LOGIN]: 'user_id'
-        }
+          [USER_LOGIN]: 'user_id',
+        },
       })
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'login_failure', 'v1')
     })
@@ -295,7 +295,7 @@ describe('track_event - Internal API', () => {
     it('should call addTags with metadata', () => {
       trackCustomEvent(tracer, 'custom_event', {
         metaKey1: 'metaValue1',
-        metakey2: 'metaValue2'
+        metakey2: 'metaValue2',
       })
 
       sinon.assert.notCalled(log.warn)
@@ -304,7 +304,7 @@ describe('track_event - Internal API', () => {
         'appsec.events.custom_event.track': 'true',
         '_dd.appsec.events.custom_event.sdk': 'true',
         'appsec.events.custom_event.metaKey1': 'metaValue1',
-        'appsec.events.custom_event.metakey2': 'metaValue2'
+        'appsec.events.custom_event.metakey2': 'metaValue2',
       })
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.notCalled(waf.run)
@@ -318,7 +318,7 @@ describe('track_event - Internal API', () => {
       sinon.assert.notCalled(setUserTags)
       sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
         'appsec.events.custom_event.track': 'true',
-        '_dd.appsec.events.custom_event.sdk': 'true'
+        '_dd.appsec.events.custom_event.sdk': 'true',
       })
       sinon.assert.notCalled(waf.run)
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
@@ -330,8 +330,8 @@ describe('track_event - Internal API', () => {
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
-          [LOGIN_SUCCESS]: null
-        }
+          [LOGIN_SUCCESS]: null,
+        },
       })
     })
 
@@ -340,8 +340,8 @@ describe('track_event - Internal API', () => {
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
-          [LOGIN_FAILURE]: null
-        }
+          [LOGIN_FAILURE]: null,
+        },
       })
     })
   })
@@ -387,14 +387,14 @@ describe('track_event - Internal API', () => {
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.sdk': 'true',
-          'appsec.events.users.login.success.usr.login': 'login'
+          'appsec.events.users.login.success.usr.login': 'login',
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             [LOGIN_SUCCESS]: null,
-            [USER_LOGIN]: 'login'
-          }
+            [USER_LOGIN]: 'login',
+          },
         })
       })
 
@@ -408,22 +408,22 @@ describe('track_event - Internal API', () => {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.sdk': 'true',
           'appsec.events.users.login.success.usr.id': 'userId',
-          'appsec.events.users.login.success.usr.login': 'login'
+          'appsec.events.users.login.success.usr.login': 'login',
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             [LOGIN_SUCCESS]: null,
             [USER_ID]: 'userId',
-            [USER_LOGIN]: 'login'
-          }
+            [USER_LOGIN]: 'login',
+          },
         })
       })
 
       it('should call to setUser, addTags and waf with login and user object', () => {
         const user = {
           id: 'userId',
-          email: 'email@to.com'
+          email: 'email@to.com',
         }
 
         trackUserLoginSuccessV2(tracer, 'login', user)
@@ -436,15 +436,15 @@ describe('track_event - Internal API', () => {
           '_dd.appsec.events.users.login.success.sdk': 'true',
           'appsec.events.users.login.success.usr.id': 'userId',
           'appsec.events.users.login.success.usr.email': 'email@to.com',
-          'appsec.events.users.login.success.usr.login': 'login'
+          'appsec.events.users.login.success.usr.login': 'login',
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             [LOGIN_SUCCESS]: null,
             [USER_ID]: 'userId',
-            [USER_LOGIN]: 'login'
-          }
+            [USER_LOGIN]: 'login',
+          },
         })
       })
 
@@ -452,7 +452,7 @@ describe('track_event - Internal API', () => {
         const metadata = {
           metakey1: 'metaValue1',
           metakey2: 'metaValue2',
-          metakey3: 'metaValue3'
+          metakey3: 'metaValue3',
         }
 
         trackUserLoginSuccessV2(tracer, 'login', null, metadata)
@@ -466,14 +466,14 @@ describe('track_event - Internal API', () => {
           'appsec.events.users.login.success.usr.login': 'login',
           'appsec.events.users.login.success.metakey1': 'metaValue1',
           'appsec.events.users.login.success.metakey2': 'metaValue2',
-          'appsec.events.users.login.success.metakey3': 'metaValue3'
+          'appsec.events.users.login.success.metakey3': 'metaValue3',
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             [LOGIN_SUCCESS]: null,
-            [USER_LOGIN]: 'login'
-          }
+            [USER_LOGIN]: 'login',
+          },
         })
       })
 
@@ -481,14 +481,14 @@ describe('track_event - Internal API', () => {
         const metadata = {
           metakey1: 'metaValue1',
           metakey2: 'metaValue2',
-          metakey3: 'metaValue3'
+          metakey3: 'metaValue3',
         }
 
         trackUserLoginSuccessV2(tracer, 'login', 'userId', metadata)
 
         sinon.assert.notCalled(log.warn)
         sinon.assert.calledOnceWithExactly(setUserTags, {
-          id: 'userId'
+          id: 'userId',
         }, rootSpan)
 
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
@@ -498,15 +498,15 @@ describe('track_event - Internal API', () => {
           'appsec.events.users.login.success.usr.id': 'userId',
           'appsec.events.users.login.success.metakey1': 'metaValue1',
           'appsec.events.users.login.success.metakey2': 'metaValue2',
-          'appsec.events.users.login.success.metakey3': 'metaValue3'
+          'appsec.events.users.login.success.metakey3': 'metaValue3',
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             [LOGIN_SUCCESS]: null,
             [USER_ID]: 'userId',
-            [USER_LOGIN]: 'login'
-          }
+            [USER_LOGIN]: 'login',
+          },
         })
       })
 
@@ -518,28 +518,28 @@ describe('track_event - Internal API', () => {
                 prop4: {
                   data1: 'metavalue1',
                   prop5: {
-                    prop6: 'ignored value'
-                  }
-                }
-              }
-            }
+                    prop6: 'ignored value',
+                  },
+                },
+              },
+            },
           },
           prop7: {
             prop8: {
               prop9: {
                 prop10: {
                   prop11: {
-                    prop12: 'ignored value'
-                  }
-                }
-              }
-            }
+                    prop12: 'ignored value',
+                  },
+                },
+              },
+            },
           },
           arr: [{
-            key: 'metavalue2'
+            key: 'metavalue2',
           },
-          'metavalue3'
-          ]
+          'metavalue3',
+          ],
         }
 
         trackUserLoginSuccessV2(tracer, 'login', null, metadata)
@@ -555,14 +555,14 @@ describe('track_event - Internal API', () => {
           'appsec.events.users.login.success.usr.login': 'login',
           'appsec.events.users.login.success.prop1.prop2.prop3.prop4.data1': 'metavalue1',
           'appsec.events.users.login.success.arr.0.key': 'metavalue2',
-          'appsec.events.users.login.success.arr.1': 'metavalue3'
+          'appsec.events.users.login.success.arr.1': 'metavalue3',
         })
       })
 
       it('Should ignore undefined properties and set to \'null\' the null values in the metadata', () => {
         const metadata = {
           prop1: undefined,
-          prop2: null
+          prop2: null,
         }
 
         trackUserLoginSuccessV2(tracer, 'login', null, metadata)
@@ -571,7 +571,7 @@ describe('track_event - Internal API', () => {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.sdk': 'true',
           'appsec.events.users.login.success.usr.login': 'login',
-          'appsec.events.users.login.success.prop2': 'null'
+          'appsec.events.users.login.success.prop2': 'null',
         })
       })
 
@@ -629,14 +629,14 @@ describe('track_event - Internal API', () => {
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.sdk': 'true',
           'appsec.events.users.login.failure.usr.login': 'login',
-          'appsec.events.users.login.failure.usr.exists': 'false'
+          'appsec.events.users.login.failure.usr.exists': 'false',
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             [LOGIN_FAILURE]: null,
-            [USER_LOGIN]: 'login'
-          }
+            [USER_LOGIN]: 'login',
+          },
         })
       })
 
@@ -649,14 +649,14 @@ describe('track_event - Internal API', () => {
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.sdk': 'true',
           'appsec.events.users.login.failure.usr.login': 'login',
-          'appsec.events.users.login.failure.usr.exists': 'true'
+          'appsec.events.users.login.failure.usr.exists': 'true',
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             [LOGIN_FAILURE]: null,
-            [USER_LOGIN]: 'login'
-          }
+            [USER_LOGIN]: 'login',
+          },
         })
       })
 
@@ -669,14 +669,14 @@ describe('track_event - Internal API', () => {
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.sdk': 'true',
           'appsec.events.users.login.failure.usr.login': 'login',
-          'appsec.events.users.login.failure.usr.exists': 'false'
+          'appsec.events.users.login.failure.usr.exists': 'false',
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             [LOGIN_FAILURE]: null,
-            [USER_LOGIN]: 'login'
-          }
+            [USER_LOGIN]: 'login',
+          },
         })
       })
 
@@ -684,7 +684,7 @@ describe('track_event - Internal API', () => {
         const metadata = {
           metakey1: 'metaValue1',
           metakey2: 'metaValue2',
-          metakey3: 'metaValue3'
+          metakey3: 'metaValue3',
         }
 
         trackUserLoginFailureV2(tracer, 'login', metadata)
@@ -698,14 +698,14 @@ describe('track_event - Internal API', () => {
           'appsec.events.users.login.failure.usr.exists': 'false',
           'appsec.events.users.login.failure.metakey1': 'metaValue1',
           'appsec.events.users.login.failure.metakey2': 'metaValue2',
-          'appsec.events.users.login.failure.metakey3': 'metaValue3'
+          'appsec.events.users.login.failure.metakey3': 'metaValue3',
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             [LOGIN_FAILURE]: null,
-            [USER_LOGIN]: 'login'
-          }
+            [USER_LOGIN]: 'login',
+          },
         })
       })
 
@@ -713,7 +713,7 @@ describe('track_event - Internal API', () => {
         const metadata = {
           metakey1: 'metaValue1',
           metakey2: 'metaValue2',
-          metakey3: 'metaValue3'
+          metakey3: 'metaValue3',
         }
 
         trackUserLoginFailureV2(tracer, 'login', true, metadata)
@@ -727,14 +727,14 @@ describe('track_event - Internal API', () => {
           'appsec.events.users.login.failure.usr.exists': 'true',
           'appsec.events.users.login.failure.metakey1': 'metaValue1',
           'appsec.events.users.login.failure.metakey2': 'metaValue2',
-          'appsec.events.users.login.failure.metakey3': 'metaValue3'
+          'appsec.events.users.login.failure.metakey3': 'metaValue3',
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             [LOGIN_FAILURE]: null,
-            [USER_LOGIN]: 'login'
-          }
+            [USER_LOGIN]: 'login',
+          },
         })
       })
 
@@ -746,28 +746,28 @@ describe('track_event - Internal API', () => {
                 prop4: {
                   data1: 'metavalue1',
                   prop5: {
-                    prop6: 'ignored value'
-                  }
-                }
-              }
-            }
+                    prop6: 'ignored value',
+                  },
+                },
+              },
+            },
           },
           prop7: {
             prop8: {
               prop9: {
                 prop10: {
                   prop11: {
-                    prop12: 'ignored value'
-                  }
-                }
-              }
-            }
+                    prop12: 'ignored value',
+                  },
+                },
+              },
+            },
           },
           arr: [{
-            key: 'metavalue2'
+            key: 'metavalue2',
           },
-          'metavalue3'
-          ]
+          'metavalue3',
+          ],
         }
 
         trackUserLoginFailureV2(tracer, 'login', false, metadata)
@@ -784,14 +784,14 @@ describe('track_event - Internal API', () => {
           'appsec.events.users.login.failure.usr.exists': 'false',
           'appsec.events.users.login.failure.prop1.prop2.prop3.prop4.data1': 'metavalue1',
           'appsec.events.users.login.failure.arr.0.key': 'metavalue2',
-          'appsec.events.users.login.failure.arr.1': 'metavalue3'
+          'appsec.events.users.login.failure.arr.1': 'metavalue3',
         })
       })
 
       it('Should ignore undefined properties and set to \'null\' the null values in the metadata', () => {
         const metadata = {
           prop1: undefined,
-          prop2: null
+          prop2: null,
         }
 
         trackUserLoginFailureV2(tracer, 'login', true, metadata)
@@ -801,7 +801,7 @@ describe('track_event - Internal API', () => {
           '_dd.appsec.events.users.login.failure.sdk': 'true',
           'appsec.events.users.login.failure.usr.login': 'login',
           'appsec.events.users.login.failure.usr.exists': 'true',
-          'appsec.events.users.login.failure.prop2': 'null'
+          'appsec.events.users.login.failure.prop2': 'null',
         })
       })
 

@@ -63,14 +63,14 @@ function resolve (specifier, context) {
 
   return {
     url: pathToFileURL(resolved),
-    format: isESMFile(resolved) ? 'module' : 'commonjs'
+    format: isESMFile(resolved) ? 'module' : 'commonjs',
   }
 }
 
 function getSource (url, { format }) {
   return {
     source: fs.readFileSync(fileURLToPath(url), 'utf8'),
-    format
+    format,
   }
 }
 
@@ -144,7 +144,7 @@ async function processModule ({ path, internal, context, excludeDefault }) {
       const subSetters = await processModule({
         path: fileURLToPath(result.url),
         context: { ...context, format: result.format },
-        excludeDefault: true
+        excludeDefault: true,
       })
 
       for (const [name, setter] of subSetters.entries()) {
@@ -210,5 +210,5 @@ function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
 
 module.exports = {
   processModule,
-  isESMFile
+  isESMFile,
 }

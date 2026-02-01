@@ -29,7 +29,7 @@ describe('OTel Context Manager', () => {
       getSomeValue: async () => {
         await new Promise(resolve => setTimeout(resolve, 100))
         return { name: 'Dummy Name' }
-      }
+      },
     }
   })
 
@@ -128,7 +128,7 @@ describe('OTel Context Manager', () => {
 
   it('should propagate baggage from an otel span to a datadog span', () => {
     const entries = {
-      foo: { value: 'bar' }
+      foo: { value: 'bar' },
     }
     const baggage = propagation.createBaggage(entries)
     const contextWithBaggage = propagation.setBaggage(context.active(), baggage)

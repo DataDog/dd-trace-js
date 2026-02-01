@@ -17,7 +17,7 @@ const noopTask = {
   },
   'dd:addTags': () => {
     return null
-  }
+  },
 }
 
 module.exports = function CypressPlugin (on, config) {

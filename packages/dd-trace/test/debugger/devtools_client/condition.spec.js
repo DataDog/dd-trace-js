@@ -8,7 +8,7 @@ require('../../setup/mocha')
 const {
   compile,
   compileSegments,
-  templateRequiresEvaluation
+  templateRequiresEvaluation,
 } = require('../../../src/debugger/devtools_client/condition')
 const {
   literals,
@@ -21,7 +21,7 @@ const {
   logicalOperators,
   collectionOperations,
   membershipAndMatching,
-  typeAndDefinitionChecks
+  typeAndDefinitionChecks,
 } = require('./condition-test-cases')
 
 // Each test case is either a tuple of [ast, vars, expected] where:
@@ -46,7 +46,7 @@ const testCases = [
   ...logicalOperators,
   ...collectionOperations,
   ...membershipAndMatching,
-  ...typeAndDefinitionChecks
+  ...typeAndDefinitionChecks,
 ]
 
 describe('Expression language', function () {
@@ -186,7 +186,7 @@ function runWithDebug (fn, args = []) {
       'Compiled expression:',
       '--------------------------------------------------------------------------------',
       fn.toString(),
-      '--------------------------------------------------------------------------------'
+      '--------------------------------------------------------------------------------',
     ].join('\n'))
     throw e
   }

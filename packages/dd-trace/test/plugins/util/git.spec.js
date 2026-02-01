@@ -35,14 +35,14 @@ const {
   GIT_COMMIT_HEAD_AUTHOR_NAME,
   GIT_COMMIT_HEAD_COMMITTER_DATE,
   GIT_COMMIT_HEAD_COMMITTER_EMAIL,
-  GIT_COMMIT_HEAD_COMMITTER_NAME
+  GIT_COMMIT_HEAD_COMMITTER_NAME,
 } = require('../../../src/plugins/util/tags')
 
 const { getGitMetadata, unshallowRepository, getGitDiff } = proxyquire('../../../src/plugins/util/git',
   {
     './git-cache': {
-      cachedExec: cachedExecStub
-    }
+      cachedExec: cachedExecStub,
+    },
   }
 )
 
@@ -76,7 +76,7 @@ describe('git', () => {
       commitMessage: 'myCommitMessage',
       authorName: 'ciAuthorName',
       ciWorkspacePath: 'ciWorkspacePath',
-      headCommitSha: 'headCommitSha'
+      headCommitSha: 'headCommitSha',
     }
     const metadata = getGitMetadata(ciMetadata)
 
@@ -85,7 +85,7 @@ describe('git', () => {
       [GIT_BRANCH]: 'myBranch',
       [GIT_COMMIT_MESSAGE]: 'myCommitMessage',
       [GIT_COMMIT_AUTHOR_NAME]: 'ciAuthorName',
-      [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
+      [CI_WORKSPACE_PATH]: 'ciWorkspacePath',
     })
     assert.notStrictEqual(metadata[GIT_REPOSITORY_URL], 'ciRepositoryUrl')
     sinon.assert.calledWith(cachedExecStub, 'git', ['ls-remote', '--get-url'])
@@ -110,7 +110,7 @@ describe('git', () => {
       [GIT_COMMIT_MESSAGE]: '',
       [GIT_COMMIT_SHA]: '',
       [GIT_REPOSITORY_URL]: 'https://github.com/datadog/safe-repository.git',
-      [CI_WORKSPACE_PATH]: ''
+      [CI_WORKSPACE_PATH]: '',
     })
   })
 
@@ -159,7 +159,7 @@ describe('git', () => {
       [GIT_COMMIT_HEAD_COMMITTER_DATE]: '2022-02-14T16:23:03-05:00',
       [GIT_COMMIT_HEAD_COMMITTER_EMAIL]: 'git.head.committer@email.com',
       [GIT_COMMIT_HEAD_COMMITTER_NAME]: 'git head committer',
-      [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
+      [CI_WORKSPACE_PATH]: 'ciWorkspacePath',
     })
 
     sinon.assert.calledWith(cachedExecStub, 'git', ['show', '-s', '--format=%B'])
@@ -179,11 +179,11 @@ describe('getCommitsRevList', () => {
       {
         './git-cache': {
           cachedExec: (command, flags, options) =>
-            execSync(`head -c ${Math.floor(GIT_REV_LIST_MAX_BUFFER * 0.9)} /dev/zero`, options)
+            execSync(`head -c ${Math.floor(GIT_REV_LIST_MAX_BUFFER * 0.9)} /dev/zero`, options),
         },
         '../../log': {
-          error: logErrorSpy
-        }
+          error: logErrorSpy,
+        },
       }
     )
     getCommitsRevList([], [])
@@ -197,11 +197,11 @@ describe('getCommitsRevList', () => {
       {
         './git-cache': {
           cachedExec: (command, flags, options) =>
-            execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options)
+            execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options),
         },
         '../../log': {
-          error: logErrorSpy
-        }
+          error: logErrorSpy,
+        },
       }
     )
     getCommitsRevList([], [])
@@ -213,8 +213,8 @@ describe('getCommitsRevList', () => {
       {
         './git-cache': {
           cachedExec: (command, flags, options) =>
-            execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options)
-        }
+            execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options),
+        },
       }
     )
     const commitsToUpload = getCommitsRevList([], [])
@@ -225,8 +225,8 @@ describe('getCommitsRevList', () => {
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
         './git-cache': {
-          cachedExec: () => { throw new Error('error!') }
-        }
+          cachedExec: () => { throw new Error('error!') },
+        },
       }
     )
     const commitsToUpload = getCommitsRevList([], [])
@@ -260,8 +260,8 @@ describe('generatePackFilesForCommits', () => {
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
         './git-cache': {
-          cachedExec: execFileSyncSpy
-        }
+          cachedExec: execFileSyncSpy,
+        },
       }
     )
 
@@ -278,8 +278,8 @@ describe('generatePackFilesForCommits', () => {
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
         './git-cache': {
-          cachedExec: execFileSyncSpy
-        }
+          cachedExec: execFileSyncSpy,
+        },
       }
     )
 
@@ -296,8 +296,8 @@ describe('generatePackFilesForCommits', () => {
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
         './git-cache': {
-          cachedExec: execFileSyncSpy
-        }
+          cachedExec: execFileSyncSpy,
+        },
       }
     )
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
@@ -325,7 +325,7 @@ describe('unshallowRepository', () => {
       '--filter=blob:none',
       '--recurse-submodules=no',
       'origin',
-      'daede5785233abb1a3cb76b9453d4eb5b98290b3'
+      'daede5785233abb1a3cb76b9453d4eb5b98290b3',
     ]
 
     unshallowRepository(false)
@@ -347,7 +347,7 @@ describe('unshallowRepository', () => {
       '--filter=blob:none',
       '--recurse-submodules=no',
       'origin',
-      'daede5785233abb1a3cb76b9453d4eb5b98290b3'
+      'daede5785233abb1a3cb76b9453d4eb5b98290b3',
     ]
 
     unshallowRepository(true)
@@ -371,7 +371,7 @@ describe('unshallowRepository', () => {
       '--filter=blob:none',
       '--recurse-submodules=no',
       'origin',
-      'origin/master'
+      'origin/master',
     ]
 
     unshallowRepository(false)
@@ -395,7 +395,7 @@ describe('unshallowRepository', () => {
       '--update-shallow',
       '--filter=blob:none',
       '--recurse-submodules=no',
-      'origin'
+      'origin',
     ]
 
     unshallowRepository(false)
@@ -473,7 +473,7 @@ describe('getGitDiff', () => {
       '-U0',
       '--word-diff=porcelain',
       'base-commit',
-      'target-commit'
+      'target-commit',
     ])
   })
 
@@ -491,11 +491,11 @@ describe('getGitDiff', () => {
     const { getGitDiff } = proxyquire('../../../src/plugins/util/git',
       {
         './git-cache': {
-          cachedExec: cachedExecStub
+          cachedExec: cachedExecStub,
         },
         '../../log': {
-          error: logErrorSpy
-        }
+          error: logErrorSpy,
+        },
       }
     )
     cachedExecStub.throws(new Error('git command failed'))
@@ -518,8 +518,8 @@ describe('getGitRemoteName', () => {
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
       {
         './git-cache': {
-          cachedExec: cachedExecStub
-        }
+          cachedExec: cachedExecStub,
+        },
       }
     )
 
@@ -537,8 +537,8 @@ describe('getGitRemoteName', () => {
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
       {
         './git-cache': {
-          cachedExec: cachedExecStub
-        }
+          cachedExec: cachedExecStub,
+        },
       }
     )
 
@@ -555,8 +555,8 @@ describe('getGitRemoteName', () => {
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
       {
         './git-cache': {
-          cachedExec: cachedExecStub
-        }
+          cachedExec: cachedExecStub,
+        },
       }
     )
 
@@ -576,8 +576,8 @@ describe('getSourceBranch', () => {
     const { getSourceBranch } = proxyquire('../../../src/plugins/util/git',
       {
         './git-cache': {
-          cachedExec: cachedExecStub
-        }
+          cachedExec: cachedExecStub,
+        },
       }
     )
 
@@ -592,8 +592,8 @@ describe('getSourceBranch', () => {
     const { getSourceBranch } = proxyquire('../../../src/plugins/util/git',
       {
         './git-cache': {
-          cachedExec: cachedExecStub
-        }
+          cachedExec: cachedExecStub,
+        },
       }
     )
 
@@ -610,7 +610,7 @@ describe('checkAndFetchBranch', () => {
   it('does nothing if the branch exists locally', () => {
     cachedExecStub.returns('')
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
-      './git-cache': { cachedExec: cachedExecStub }
+      './git-cache': { cachedExec: cachedExecStub },
     })
     checkAndFetchBranch('my-branch', 'origin')
     sinon.assert.calledWith(cachedExecStub,
@@ -636,7 +636,7 @@ describe('checkAndFetchBranch', () => {
       .onCall(1).returns('something') // remote check passes
       .onCall(2).returns('') // fetch
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
-      './git-cache': { cachedExec: cachedExecStub }
+      './git-cache': { cachedExec: cachedExecStub },
     })
     checkAndFetchBranch('my-branch', 'origin')
     sinon.assert.calledWith(cachedExecStub,
@@ -656,7 +656,7 @@ describe('checkAndFetchBranch', () => {
       .onCall(0).throws() // local check fails
       .onCall(1).returns('') // remote check fails
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
-      './git-cache': { cachedExec: cachedExecStub }
+      './git-cache': { cachedExec: cachedExecStub },
     })
     checkAndFetchBranch('my-branch', 'origin')
     sinon.assert.calledWith(cachedExecStub,
@@ -680,7 +680,7 @@ describe('checkAndFetchBranch', () => {
       .onCall(0).throws() // local check fails
       .onCall(1).throws('') // remote does not exist
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
-      './git-cache': { cachedExec: cachedExecStub }
+      './git-cache': { cachedExec: cachedExecStub },
     })
     checkAndFetchBranch('my-branch', 'origin')
     sinon.assert.calledWith(cachedExecStub,
@@ -704,7 +704,7 @@ describe('checkAndFetchBranch', () => {
     cachedExecStub.throws(new Error('git command failed'))
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
       './git-cache': { cachedExec: cachedExecStub },
-      '../../log': { debug: logDebugSpy }
+      '../../log': { debug: logDebugSpy },
     })
     checkAndFetchBranch('my-branch', 'origin')
     sinon.assert.called(logDebugSpy)
@@ -719,7 +719,7 @@ describe('getLocalBranches', () => {
   it('returns a list of local branches', () => {
     cachedExecStub.returns('branch1\nbranch2\nbranch3')
     const { getLocalBranches } = proxyquire('../../../src/plugins/util/git', {
-      './git-cache': { cachedExec: cachedExecStub }
+      './git-cache': { cachedExec: cachedExecStub },
     })
     const branches = getLocalBranches('my-origin')
     assert.deepStrictEqual(branches, ['branch1', 'branch2', 'branch3'])
@@ -728,7 +728,7 @@ describe('getLocalBranches', () => {
       [
         'for-each-ref',
         '--format=%(refname:short)',
-        'refs/remotes/my-origin'
+        'refs/remotes/my-origin',
       ]
     )
   })
@@ -738,7 +738,7 @@ describe('getLocalBranches', () => {
     cachedExecStub.throws(new Error('git command failed'))
     const { getLocalBranches } = proxyquire('../../../src/plugins/util/git', {
       './git-cache': { cachedExec: cachedExecStub },
-      '../../log': { error: logErrorSpy }
+      '../../log': { error: logErrorSpy },
     })
     const branches = getLocalBranches('origin')
     assert.deepStrictEqual(branches, [])
@@ -754,7 +754,7 @@ describe('getMergeBase', () => {
   it('returns the merge base commit', () => {
     cachedExecStub.returns('abc123')
     const { getMergeBase } = proxyquire('../../../src/plugins/util/git', {
-      './git-cache': { cachedExec: cachedExecStub }
+      './git-cache': { cachedExec: cachedExecStub },
     })
     const mergeBase = getMergeBase('main', 'feature')
     assert.strictEqual(mergeBase, 'abc123')
@@ -766,7 +766,7 @@ describe('getMergeBase', () => {
     cachedExecStub.throws(new Error('git command failed'))
     const { getMergeBase } = proxyquire('../../../src/plugins/util/git', {
       './git-cache': { cachedExec: cachedExecStub },
-      '../../log': { error: logErrorSpy }
+      '../../log': { error: logErrorSpy },
     })
     const mergeBase = getMergeBase('main', 'feature')
     assert.strictEqual(mergeBase, '')
@@ -782,7 +782,7 @@ describe('getCounts', () => {
   it('returns the counts of commits ahead and behind', () => {
     cachedExecStub.returns('38\t3')
     const { getCounts } = proxyquire('../../../src/plugins/util/git', {
-      './git-cache': { cachedExec: cachedExecStub }
+      './git-cache': { cachedExec: cachedExecStub },
     })
     const counts = getCounts('feature', 'main')
     assert.deepStrictEqual(counts, { behind: 38, ahead: 3 })
@@ -794,7 +794,7 @@ describe('getCounts', () => {
     cachedExecStub.throws(new Error('git command failed'))
     const { getCounts } = proxyquire('../../../src/plugins/util/git', {
       './git-cache': { cachedExec: cachedExecStub },
-      '../../log': { error: logErrorSpy }
+      '../../log': { error: logErrorSpy },
     })
     const counts = getCounts('feature', 'main')
     assert.deepStrictEqual(counts, { behind: null, ahead: null })
@@ -806,8 +806,8 @@ describe('getGitInformationDiscrepancy', () => {
   const { getGitInformationDiscrepancy } = proxyquire('../../../src/plugins/util/git',
     {
       './git-cache': {
-        cachedExec: cachedExecStub
-      }
+        cachedExec: cachedExecStub,
+      },
     }
   )
 
@@ -820,7 +820,7 @@ describe('getGitInformationDiscrepancy', () => {
 
     assert.deepStrictEqual(result, {
       gitRepositoryUrl: 'https://github.com/datadog/safe-repository.git',
-      gitCommitSHA: 'abc123'
+      gitCommitSHA: 'abc123',
     })
 
     sinon.assert.calledWith(cachedExecStub, 'git', ['config', '--get', 'remote.origin.url'], { stdio: 'pipe' })
@@ -834,7 +834,7 @@ describe('getGitInformationDiscrepancy', () => {
 
     assert.deepStrictEqual(result, {
       gitRepositoryUrl: '',
-      gitCommitSHA: ''
+      gitCommitSHA: '',
     })
   })
 })
@@ -843,8 +843,8 @@ describe('fetchHeadCommitSha', () => {
   const { fetchHeadCommitSha } = proxyquire('../../../src/plugins/util/git',
     {
       './git-cache': {
-        cachedExec: cachedExecStub
-      }
+        cachedExec: cachedExecStub,
+      },
     }
   )
 
@@ -868,7 +868,7 @@ describe('fetchHeadCommitSha', () => {
         '--recurse-submodules=no',
         '--no-write-fetch-head',
         remoteName,
-        headSha
+        headSha,
       ]
     )
   })

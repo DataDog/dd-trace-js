@@ -35,7 +35,7 @@ function wrapSession (session) {
 
 addHook({
   name: 'express-session',
-  versions: ['>=1.5.0']
+  versions: ['>=1.5.0'],
 }, session => {
   return shimmer.wrapFunction(session, wrapSession)
 })

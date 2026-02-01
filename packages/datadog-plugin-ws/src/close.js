@@ -4,12 +4,12 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 const {
   WEBSOCKET_PTR_KIND,
   SPAN_POINTER_DIRECTION,
-  SPAN_POINTER_DIRECTION_NAME
+  SPAN_POINTER_DIRECTION_NAME,
 } = require('../../dd-trace/src/constants')
 const {
   incrementWebSocketCounter,
   buildWebSocketSpanPointerHash,
-  hasDistributedTracingContext
+  hasDistributedTracingContext,
 } = require('./util')
 
 class WSClosePlugin extends TracingPlugin {
@@ -21,7 +21,7 @@ class WSClosePlugin extends TracingPlugin {
   bindStart (ctx) {
     const {
       traceWebsocketMessagesInheritSampling,
-      traceWebsocketMessagesSeparateTraces
+      traceWebsocketMessagesSeparateTraces,
     } = this.config
 
     const { code, data, socket, isPeerClose } = ctx
@@ -37,9 +37,9 @@ class WSClosePlugin extends TracingPlugin {
         'resource.name': `websocket ${path}`,
         'span.type': 'websocket',
         'span.kind': spanKind,
-        'websocket.close.code': code
+        'websocket.close.code': code,
 
-      }
+      },
     }, ctx)
 
     if (data?.toString().length > 0) {
@@ -111,7 +111,7 @@ class WSClosePlugin extends TracingPlugin {
 
       ctx.span.addLink({
         context: ctx.socket.spanContext,
-        attributes: linkAttributes
+        attributes: linkAttributes,
       })
     }
 

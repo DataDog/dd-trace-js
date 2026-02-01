@@ -140,7 +140,7 @@ function mergeXunitFilesToSingleTestsuite (inputFiles, outputFile) {
     `<testsuite name="Mocha Tests" tests="${totalTests}" failures="${totalFailures}" ` +
     `errors="${totalErrors}" skipped="${totalSkipped}" timestamp="${timestamp}" time="${totalTime}">`,
     testcases.filter(Boolean).join('\n'),
-    '</testsuite>\n'
+    '</testsuite>\n',
   ].join('\n')
 
   fs.writeFileSync(outputFile, merged)
@@ -254,7 +254,7 @@ async function main () {
     stderrCarry: '',
     stdoutInFailure: false,
 
-    stats: /** @type {{passes:number, failures:number, pending:number, tests:number, duration:number}|null} */ (null)
+    stats: /** @type {{passes:number, failures:number, pending:number, tests:number, duration:number}|null} */ (null),
   }))
 
   let activeIndex = 0
@@ -344,10 +344,10 @@ async function main () {
         const reporterOptions = emitJunit
           ? {
               reporterEnabled: ['spec', 'xunit'],
-              xunitReporterOptions: { output: junitShard }
+              xunitReporterOptions: { output: junitShard },
             }
           : {
-              reporterEnabled: ['spec']
+              reporterEnabled: ['spec'],
             }
 
         const options = {
@@ -362,8 +362,13 @@ async function main () {
           options.require = opts.require
         }
 
+        // Enable shared tarball caching for parallel runs to avoid redundant packing
+        const DD_TEST_SANDBOX_TARBALL_PATH = process.env.DD_TEST_SANDBOX_TARBALL_PATH ||
+          (jobs > 1 ? path.join(os.tmpdir(), 'dd-trace-integration-test.tgz') : undefined)
+
         const childEnv = {
           ...process.env,
+          DD_TEST_SANDBOX_TARBALL_PATH,
           MOCHA_RUN_FILE_CONFIG: JSON.stringify(options),
         }
 
@@ -375,7 +380,7 @@ async function main () {
 
         const child = spawn(process.execPath, nodeArgs, {
           stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-          env: childEnv
+          env: childEnv,
         })
 
         if (!child.stdout || !child.stderr) {
@@ -402,7 +407,7 @@ async function main () {
               failures: m.failures || 0,
               pending: m.pending || 0,
               tests: m.tests || 0,
-              duration: m.duration || 0
+              duration: m.duration || 0,
             }
           }
         })

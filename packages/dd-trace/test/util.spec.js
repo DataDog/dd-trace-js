@@ -12,14 +12,14 @@ const TRUES = [
   true,
   'true',
   'TRUE',
-  'tRuE'
+  'tRuE',
 ]
 const FALSES = [
   0,
   false,
   'false',
   'FALSE',
-  'fAlSe'
+  'fAlSe',
 ]
 
 const MATCH_CASES = [
@@ -28,14 +28,14 @@ const MATCH_CASES = [
   { pattern: 'hi*there', subject: 'hithere' },
   { pattern: '*stuff', subject: 'lots of stuff' },
   { pattern: 'test.?', subject: 'test.1' },
-  { pattern: '*a*a*a*a*a*a', subject: 'aaaaaaaarrrrrrraaaraaarararaarararaarararaaa' }
+  { pattern: '*a*a*a*a*a*a', subject: 'aaaaaaaarrrrrrraaaraaarararaarararaarararaaa' },
 ]
 
 const NONMATCH_CASES = [
   { pattern: 'foo.*', subject: 'snafoo.' },
   { pattern: 'test.?', subject: 'test.abc' },
   { pattern: '*stuff', subject: 'stuff to think about' },
-  { pattern: 'test?test', subject: 'test123test' }
+  { pattern: 'test?test', subject: 'test123test' },
 ]
 
 describe('util', () => {

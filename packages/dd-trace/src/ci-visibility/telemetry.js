@@ -16,7 +16,7 @@ const formattedTags = {
   isNew: 'is_new',
   isRum: 'is_rum',
   browserDriver: 'browser_driver',
-  autoInjected: 'auto_injected'
+  autoInjected: 'auto_injected',
 }
 
 // Transform tags dictionary to array of strings.
@@ -164,5 +164,5 @@ module.exports = {
   TELEMETRY_KNOWN_TESTS_MS,
   TELEMETRY_KNOWN_TESTS_ERRORS,
   TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS,
-  TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES
+  TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES,
 }

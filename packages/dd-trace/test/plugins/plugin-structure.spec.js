@@ -10,7 +10,7 @@ require('../setup/core')
 const hooks = require('../../../datadog-instrumentations/src/helpers/hooks')
 
 const abstractPlugins = [
-  'web' // web is an abstract plugin, and will not have an instrumentation file
+  'web', // web is an abstract plugin, and will not have an instrumentation file
 ]
 
 // we have some plugin directories that we don't actually have a tracing plugin for, but exist for special cases
@@ -42,7 +42,7 @@ const missingPlugins = [
 
 // instrumentations that do not have a hook, but are still instrumented
 const missingInstrumentationHooks = [
-  'fetch' // fetch is provided by Node.js, and is automatically instrumented if it exists
+  'fetch', // fetch is provided by Node.js, and is automatically instrumented if it exists
 ]
 
 function extractPluginIds (source, re, index) {
@@ -182,7 +182,7 @@ describe('Plugin Structure Validation', () => {
 
     // Runtime may load internal plugins that are not meant to be configured via the public API.
     const internalPluginIds = new Set([
-      'dd-trace-api'
+      'dd-trace-api',
     ])
 
     for (const pkgName of runtimePluginPackages) {

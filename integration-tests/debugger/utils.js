@@ -103,13 +103,13 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
   const breakpoints = getBreakpointInfo({
     deployedFile: testApp,
     sourceFile: testAppSource,
-    stackIndex: 1 // `1` to disregard the `setup` function
+    stackIndex: 1, // `1` to disregard the `setup` function
   }).map((breakpoint) => /** @type {EnrichedBreakpoint} */ ({
     rcConfig: null,
     triggerBreakpoint: triggerBreakpoint.bind(null, breakpoint.url),
     generateRemoteConfig: generateRemoteConfig.bind(null, breakpoint),
     generateProbeConfig: generateProbeConfig.bind(null, breakpoint),
-    ...breakpoint
+    ...breakpoint,
   }))
 
   /** @type {DebuggerTestEnvironment} */
@@ -146,7 +146,7 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
           resolve(snapshot)
         })
       })
-    }
+    },
   }
 
   /**
@@ -185,7 +185,7 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
     return {
       product: 'LIVE_DEBUGGING',
       id: `logProbe_${overrides.id}`,
-      config: generateProbeConfig(breakpoint, overrides)
+      config: generateProbeConfig(breakpoint, overrides),
     }
   }
 
@@ -212,9 +212,9 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
         DD_TRACE_AGENT_PORT: t.agent.port,
         DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
         DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval,
-        ...env
+        ...env,
       },
-      silent: silent ?? false
+      silent: silent ?? false,
     }, stdioHandler, stderrHandler)
     axios = Axios.create({ baseURL: t.proc.url })
   })
@@ -301,17 +301,21 @@ function testBasicInputWithoutRC (t, probe, done) {
 function setupAssertionListeners (t, done, probe) {
   let traceId, spanId, dd
 
-  t.agent.on('message', ({ payload }) => {
+  const messageListener = ({ payload }) => {
     const span = payload.find((arr) => arr[0].name === 'fastify.request')?.[0]
     if (!span) return
 
     traceId = span.trace_id.toString()
     spanId = span.span_id.toString()
 
-    assertDD()
-  })
+    t.agent.removeListener('message', messageListener)
 
-  t.agent.on('debugger-input', ({ payload }) => {
+    assertDD()
+  }
+
+  t.agent.on('message', messageListener)
+
+  t.agent.once('debugger-input', ({ payload }) => {
     assertBasicInputPayload(t, payload, probe)
 
     payload = payload[0]
@@ -374,18 +378,18 @@ function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
       name: t.breakpoint.deployedFile,
       method: 'fooHandler',
       version,
-      thread_name: 'MainThread'
+      thread_name: 'MainThread',
     },
     debugger: {
       snapshot: {
         probe: {
           id: probe.id,
           version: 0,
-          location: { file: t.breakpoint.deployedFile, lines: [String(t.breakpoint.line)] }
+          location: { file: t.breakpoint.deployedFile, lines: [String(t.breakpoint.line)] },
         },
-        language: 'javascript'
-      }
-    }
+        language: 'javascript',
+      },
+    },
   }
 
   assertObjectContains(data, expected)

@@ -9,7 +9,7 @@ const app = express()
 
 const db = knex({
   client: 'sqlite3',
-  connection: { filename: ':memory:' }
+  connection: { filename: ':memory:' },
 })
 
 app.get('/', (req, res) => {
