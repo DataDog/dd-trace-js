@@ -12,6 +12,7 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
+const { isInServerlessEnvironment } = require('./serverless')
 const {
   setBaggageItem,
   getBaggageItem,
@@ -35,11 +36,11 @@ class LazyModule {
   }
 }
 
-function lazyProxy (obj, property, config, getClass, ...args) {
-  if (config?._isInServerlessEnvironment?.() === false) {
-    defineEagerly(obj, property, getClass, ...args)
+function lazyProxy (...args) {
+  if (isInServerlessEnvironment() === false) {
+    defineEagerly(...args)
   } else {
-    defineLazily(obj, property, getClass, ...args)
+    defineLazily(...args)
   }
 }
 
@@ -113,7 +114,7 @@ class Tracer extends NoopProxy {
 
       if (config.dogstatsd) {
         // Custom Metrics
-        lazyProxy(this, 'dogstatsd', config, () => require('./dogstatsd').CustomMetrics, config)
+        lazyProxy(this, 'dogstatsd', () => require('./dogstatsd').CustomMetrics, config)
       }
 
       if (config.spanLeakDebug > 0) {
@@ -260,17 +261,16 @@ class Tracer extends NoopProxy {
           : undefined
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
-        lazyProxy(this, 'appsec', config, () => require('./appsec/sdk'), this._tracer, config)
-        lazyProxy(this, 'llmobs', config, () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
+        lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
+        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
         if (config.experimental?.aiguard?.enabled) {
-          lazyProxy(this, 'aiguard', config, () => require('./aiguard/sdk'), this._tracer, config)
+          lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
         }
         this._tracingInitialized = true
       }
       if (config.experimental.flaggingProvider.enabled) {
         this._modules.openfeature.enable(config)
-        lazyProxy(this, 'openfeature', config, () =>
-          require('./openfeature/flagging_provider'), this._tracer, config)
+        lazyProxy(this, 'openfeature', () => require('./openfeature/flagging_provider'), this._tracer, config)
       }
       if (config.iast.enabled) {
         this._modules.iast.enable(config, this._tracer)

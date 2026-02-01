@@ -8,6 +8,7 @@ const Scope = require('./scope')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
+const { isInServerlessEnvironment } = require('./serverless')
 const log = require('./log/writer')
 
 const SPAN_TYPE = tags.SPAN_TYPE
@@ -25,7 +26,7 @@ class DatadogTracer extends Tracer {
     setStartupLogConfig(config)
     flushStartupLogs(log)
 
-    if (!config._isInServerlessEnvironment()) {
+    if (!isInServerlessEnvironment()) {
       const storeConfig = require('./tracer_metadata')
       // Keep a reference to the handle, to keep the memfd alive in memory.
       // It is read by the service discovery feature.

@@ -402,10 +402,6 @@ class Config {
     return defaultPropagationStyle
   }
 
-  _isInServerlessEnvironment () {
-    return isInServerlessEnvironment()
-  }
-
   #applyStableConfig (config, obj) {
     this.#applyConfigValues(config, obj, {})
   }

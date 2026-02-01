@@ -8,6 +8,7 @@ const {
 } = require('../constants')
 const { exitTags } = require('../../../datadog-code-origin')
 const { storage } = require('../../../datadog-core')
+const { isInServerlessEnvironment } = require('../serverless')
 const TracingPlugin = require('./tracing')
 
 const COMMON_PEER_SVC_SOURCE_TAGS = [
@@ -95,7 +96,7 @@ class OutboundPlugin extends TracingPlugin {
     const span = ctx?.currentStore?.span || this.activeSpan
     this.tagPeerService(span)
 
-    if (this._tracerConfig?._isInServerlessEnvironment()) {
+    if (isInServerlessEnvironment()) {
       const peerHostname = storage('peerServerless').getStore()?.peerHostname
       if (peerHostname) span.setTag('peer.service', peerHostname)
     }
