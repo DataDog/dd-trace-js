@@ -517,6 +517,7 @@ export default [
       },
     },
     rules: {
+      '@stylistic/comma-dangle': 'off', // Only supported in Node.js 0.10+
       'eslint-rules/eslint-process-env': 'off', // Would require us to load a module outside the guardrails directory
       'n/no-unsupported-features/es-builtins': ['error', {
         // The following are false positives that are supported in Node.js 0.8.0

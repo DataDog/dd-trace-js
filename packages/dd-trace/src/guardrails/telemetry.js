@@ -25,7 +25,7 @@ var metadata = {
   pid: process.pid,
   result: 'unknown',
   result_reason: 'unknown',
-  result_class: 'unknown',
+  result_class: 'unknown'
 }
 
 var seen = {}
@@ -74,8 +74,8 @@ function sendTelemetry (name, tags, resultMetadata) {
     }
   }
 
-  var proc = spawn(process.env.DD_TELEMETRY_FORWARDER_PATH, ['library_entrypoint'], {
-    stdio: 'pipe',
+  var proc = spawn(telemetryForwarderPath, ['library_entrypoint'], {
+    stdio: 'pipe'
   })
   proc.on('error', function () {
     log.error('Failed to spawn telemetry forwarder')

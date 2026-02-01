@@ -81,7 +81,10 @@ describe('integrations', () => {
             { content: MOCK_STRING, role: '' },
           ],
           metrics: {
-            input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER, reasoning_output_tokens: 0,
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
           },
           modelName: 'gpt-3.5-turbo-instruct:20230824-v2',
           modelProvider: 'openai',
