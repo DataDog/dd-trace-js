@@ -7,7 +7,7 @@ const {
   encodeUnicode,
   getFunctionArguments,
   validateKind,
-  spanHasError
+  spanHasError,
 } = require('../../src/llmobs/util')
 
 describe('util', () => {
@@ -152,7 +152,7 @@ describe('util', () => {
     before(() => {
       Span = require('../../src/opentracing/span')
       ps = {
-        sample () {}
+        sample () {},
       }
     })
 

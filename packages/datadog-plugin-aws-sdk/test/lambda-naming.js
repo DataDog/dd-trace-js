@@ -6,26 +6,26 @@ const rawExpectedSchema = {
   invoke: {
     v0: {
       serviceName: () => 'test-aws-lambda',
-      opName: () => 'aws.request'
+      opName: () => 'aws.request',
     },
     v1: {
       serviceName: () => 'test',
-      opName: () => 'aws.lambda.invoke'
-    }
+      opName: () => 'aws.lambda.invoke',
+    },
   },
   client: {
     v0: {
       serviceName: () => 'test-aws-lambda',
-      opName: () => 'aws.request'
+      opName: () => 'aws.request',
     },
     v1: {
       serviceName: () => 'test',
-      opName: () => 'aws.lambda.request'
-    }
-  }
+      opName: () => 'aws.lambda.request',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

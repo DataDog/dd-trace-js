@@ -20,8 +20,8 @@ describe('hsts header missing analyzer', () => {
       function makeRequestWithXFordwardedProtoHeader (done) {
         axios.get(`http://localhost:${config.port}/`, {
           headers: {
-            'X-Forwarded-Proto': 'https'
-          }
+            'X-Forwarded-Proto': 'https',
+          },
         }).catch(done)
       }
 

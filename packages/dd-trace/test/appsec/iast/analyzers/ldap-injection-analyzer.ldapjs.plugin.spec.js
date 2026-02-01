@@ -25,7 +25,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
         vulnerabilityReporter.clearCache()
         const ldapjs = require(`../../../../../../versions/ldapjs@${version}`).get()
         client = ldapjs.createClient({
-          url: 'ldap://localhost:1389'
+          url: 'ldap://localhost:1389',
         })
         return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
           client.bind(`cn=admin,${base}`, 'adminpassword', (err) => {
@@ -179,7 +179,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
         vulnerabilityReporter.clearCache()
         const ldapjs = require(`../../../../../../versions/ldapjs-promise@${promiseVersion}`).get()
         client = ldapjs.createClient({
-          url: 'ldap://localhost:1389'
+          url: 'ldap://localhost:1389',
         })
 
         fs.copyFileSync(srcFilePath, dstFilePath)
@@ -204,7 +204,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
           return ldapMethods.executeSearch(client, base, filter)
         }, 'LDAP_INJECTION', {
           occurrences: 1,
-          location: { path: 'ldap-injection-methods.js' }
+          location: { path: 'ldap-injection-methods.js' },
         })
       })
 

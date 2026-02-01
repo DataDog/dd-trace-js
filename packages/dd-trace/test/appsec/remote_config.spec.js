@@ -27,9 +27,9 @@ describe('AppSec Remote Config', () => {
       appsec: {
         enabled: undefined,
         eventTracking: {
-          mode: 'identification'
-        }
-      }
+          mode: 'identification',
+        },
+      },
     })
 
     rc = {
@@ -39,30 +39,30 @@ describe('AppSec Remote Config', () => {
       setProductHandler: sinon.spy(),
       removeProductHandler: sinon.spy(),
       subscribeProducts: sinon.spy(),
-      unsubscribeProducts: sinon.spy()
+      unsubscribeProducts: sinon.spy(),
     }
 
     UserTracking = {
-      setCollectionMode: sinon.stub()
+      setCollectionMode: sinon.stub(),
     }
 
     log = {
-      error: sinon.stub()
+      error: sinon.stub(),
     }
 
     telemetry = {
-      updateConfig: sinon.stub()
+      updateConfig: sinon.stub(),
     }
 
     appsec = {
       enable: sinon.spy(),
-      disable: sinon.spy()
+      disable: sinon.spy(),
     }
 
     appsecRemoteConfig = proxyquire('../../src/appsec/remote_config', {
       './user_tracking': UserTracking,
       '../log': log,
-      '../telemetry': telemetry
+      '../telemetry': telemetry,
     })
   })
 
@@ -169,7 +169,7 @@ describe('AppSec Remote Config', () => {
           assertObjectContains(telemetry.updateConfig.firstCall.args, [[{
             name: 'appsec.enabled',
             origin: 'remote_config',
-            value: rcConfigAsmEnabling.asm.enabled
+            value: rcConfigAsmEnabling.asm.enabled,
           }]])
         })
 
@@ -180,7 +180,7 @@ describe('AppSec Remote Config', () => {
           assertObjectContains(telemetry.updateConfig.firstCall.args, [[{
             name: 'appsec.enabled',
             origin: 'remote_config',
-            value: rcConfigAsmDisabling.asm.enabled
+            value: rcConfigAsmDisabling.asm.enabled,
           }]])
         })
 
@@ -191,7 +191,7 @@ describe('AppSec Remote Config', () => {
           assertObjectContains(telemetry.updateConfig.firstCall.args, [[{
             name: 'appsec.enabled',
             origin: 'default',
-            value: config.appsec.enabled
+            value: config.appsec.enabled,
           }]])
         })
       })
@@ -283,7 +283,7 @@ describe('AppSec Remote Config', () => {
       RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT,
       RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT,
       RemoteConfigCapabilities.ASM_DD_MULTICONFIG,
-      RemoteConfigCapabilities.ASM_TRACE_TAGGING_RULES
+      RemoteConfigCapabilities.ASM_TRACE_TAGGING_RULES,
     ]
 
     const RASP_CAPABILITIES = [
@@ -291,7 +291,7 @@ describe('AppSec Remote Config', () => {
       RemoteConfigCapabilities.ASM_RASP_SQLI,
       RemoteConfigCapabilities.ASM_RASP_LFI,
       RemoteConfigCapabilities.ASM_RASP_SHI,
-      RemoteConfigCapabilities.ASM_RASP_CMDI
+      RemoteConfigCapabilities.ASM_RASP_CMDI,
     ]
 
     const ALL_ASM_CAPABILITIES = [...CORE_ASM_CAPABILITIES, ...RASP_CAPABILITIES]

@@ -12,7 +12,7 @@ const {
   sandboxCwd,
   useSandbox,
   getCiVisAgentlessConfig,
-  getCiVisEvpProxyConfig
+  getCiVisEvpProxyConfig,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
@@ -71,7 +71,7 @@ const {
   TEST_FRAMEWORK,
   TEST_FRAMEWORK_VERSION,
   CI_APP_ORIGIN,
-  TEST_SKIP_REASON
+  TEST_SKIP_REASON,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { SAMPLING_PRIORITY } = require('../../ext/tags')
 const { AUTO_KEEP } = require('../../ext/priority')
@@ -133,14 +133,14 @@ describe(`cucumber@${version} commonJS`, () => {
         env: {
           ...getCiVisEvpProxyConfig(receiver.port),
           DD_TRACE_AGENT_PORT: String(receiver.port),
-          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true'
-        }
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+        },
       }
     )
 
     await Promise.all([
       once(childProcess, 'exit'),
-      telemetryPromise
+      telemetryPromise,
     ])
   })
 
@@ -154,54 +154,54 @@ describe(`cucumber@${version} commonJS`, () => {
           steps: [
             { name: 'datadog', stepStatus: 'pass' },
             { name: 'run', stepStatus: 'pass' },
-            { name: 'pass', stepStatus: 'pass' }
-          ]
+            { name: 'pass', stepStatus: 'pass' },
+          ],
         },
         'fail scenario': {
           status: 'fail',
           steps: [
             { name: 'datadog', stepStatus: 'pass' },
             { name: 'run', stepStatus: 'pass' },
-            { name: 'fail', stepStatus: 'fail' }
-          ]
+            { name: 'fail', stepStatus: 'fail' },
+          ],
         },
         'skip scenario': {
           status: 'skip',
           steps: [
             { name: 'datadog', stepStatus: 'pass' },
             { name: 'run', stepStatus: 'pass' },
-            { name: 'skip', stepStatus: 'skip' }
-          ]
+            { name: 'skip', stepStatus: 'skip' },
+          ],
         },
         'skip scenario based on tag': {
           status: 'skip',
           steps: [
             { name: 'datadog', stepStatus: 'skip' },
-          ]
+          ],
         },
         'not implemented scenario': {
           status: 'skip',
           steps: [
             { name: 'datadog', stepStatus: 'pass' },
-            { name: 'not-implemented', stepStatus: 'skip' }
-          ]
+            { name: 'not-implemented', stepStatus: 'skip' },
+          ],
         },
         'integration scenario': {
           status: 'pass',
           steps: [
             { name: 'datadog', stepStatus: 'pass' },
             { name: 'integration', stepStatus: 'pass' },
-            { name: 'pass', stepStatus: 'pass' }
-          ]
+            { name: 'pass', stepStatus: 'pass' },
+          ],
         },
         'hooks fail': {
           status: 'fail',
           steps: [
             { name: 'datadog', stepStatus: 'skip' },
             { name: 'run', stepStatus: 'skip' },
-            { name: 'pass', stepStatus: 'skip' }
-          ]
-        }
+            { name: 'pass', stepStatus: 'skip' },
+          ],
+        },
       }
 
       const envVars = getCiVisEvpProxyConfig(receiver.port)
@@ -220,7 +220,7 @@ describe(`cucumber@${version} commonJS`, () => {
             'ci-visibility/cucumber-plugin-tests/features/simple.feature.skip scenario based on tag',
             'ci-visibility/cucumber-plugin-tests/features/simple.feature.not implemented scenario',
             'ci-visibility/cucumber-plugin-tests/features/simple.feature.integration scenario',
-            'ci-visibility/cucumber-plugin-tests/features/simple.feature.hooks fail'
+            'ci-visibility/cucumber-plugin-tests/features/simple.feature.hooks fail',
           ])
 
           testSpans.forEach(testSpan => {
@@ -303,14 +303,14 @@ describe(`cucumber@${version} commonJS`, () => {
           cwd,
           env: {
             ...envVars,
-            DD_SERVICE: 'cucumber-test-service'
+            DD_SERVICE: 'cucumber-test-service',
           },
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        receiverPromise
+        receiverPromise,
       ])
     })
   })
@@ -380,11 +380,11 @@ describe(`cucumber@${version} commonJS`, () => {
 
               assertObjectContains(testSuiteEvents.map(suite => suite.content.resource), [
                 `test_suite.${featuresPath}farewell.feature`,
-                `test_suite.${featuresPath}greetings.feature`
+                `test_suite.${featuresPath}greetings.feature`,
               ])
               assertObjectContains(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
                 'pass',
-                'fail'
+                'fail',
               ])
 
               testSuiteEvents.forEach(({
@@ -393,8 +393,8 @@ describe(`cucumber@${version} commonJS`, () => {
                   metrics,
                   test_suite_id: testSuiteId,
                   test_module_id: testModuleId,
-                  test_session_id: testSessionId
-                }
+                  test_session_id: testSessionId,
+                },
               }) => {
                 assert.ok(meta[TEST_COMMAND])
                 assert.ok(meta[TEST_MODULE])
@@ -429,8 +429,8 @@ describe(`cucumber@${version} commonJS`, () => {
                   metrics,
                   test_suite_id: testSuiteId,
                   test_module_id: testModuleId,
-                  test_session_id: testSessionId
-                }
+                  test_session_id: testSessionId,
+                },
               }) => {
                 assert.ok(meta[TEST_COMMAND])
                 assert.ok(meta[TEST_MODULE])
@@ -469,7 +469,7 @@ describe(`cucumber@${version} commonJS`, () => {
                 ...envVars,
                 DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
                 DD_TEST_SESSION_NAME: 'my-test-session',
-                DD_SERVICE: undefined
+                DD_SERVICE: undefined,
               },
             }
           )
@@ -492,7 +492,7 @@ describe(`cucumber@${version} commonJS`, () => {
           Promise.all([
             searchCommitsRequestPromise,
             packfileRequestPromise,
-            eventsRequestPromise
+            eventsRequestPromise,
           ]).then(([searchCommitRequest, packfileRequest, eventsRequest]) => {
             if (isAgentless) {
               assert.strictEqual(searchCommitRequest.headers['dd-api-key'], '1')
@@ -531,7 +531,7 @@ describe(`cucumber@${version} commonJS`, () => {
           Promise.all([
             libraryConfigRequestPromise,
             codeCovRequestPromise,
-            eventsRequestPromise
+            eventsRequestPromise,
           ]).then(([libraryConfigRequest, codeCovRequest, eventsRequest]) => {
             const [coveragePayload] = codeCovRequest.payload
             if (isAgentless) {
@@ -547,8 +547,8 @@ describe(`cucumber@${version} commonJS`, () => {
               filename: 'coverage1.msgpack',
               type: 'application/msgpack',
               content: {
-                version: 2
-              }
+                version: 2,
+              },
             })
             const allCoverageFiles = codeCovRequest.payload
               .flatMap(coverage => coverage.content.coverages)
@@ -558,7 +558,7 @@ describe(`cucumber@${version} commonJS`, () => {
             assertObjectContains(allCoverageFiles, [
               `${featuresPath}support/steps.${fileExtension}`,
               `${featuresPath}farewell.feature`,
-              `${featuresPath}greetings.feature`
+              `${featuresPath}greetings.feature`,
             ])
             // steps is twice because there are two suites using it
             assert.strictEqual(
@@ -608,7 +608,7 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.setSettings({
             itr_enabled: false,
             code_coverage: false,
-            tests_skipping: false
+            tests_skipping: false,
           })
 
           receiver.assertPayloadReceived(() => {
@@ -644,8 +644,8 @@ describe(`cucumber@${version} commonJS`, () => {
             receiver.setSuitesToSkip([{
               type: 'suite',
               attributes: {
-                suite: `${featuresPath}farewell.feature`
-              }
+                suite: `${featuresPath}farewell.feature`,
+              },
             }])
 
             const skippableRequestPromise = receiver
@@ -656,7 +656,7 @@ describe(`cucumber@${version} commonJS`, () => {
             Promise.all([
               skippableRequestPromise,
               coverageRequestPromise,
-              eventsRequestPromise
+              eventsRequestPromise,
             ]).then(([skippableRequest, coverageRequest, eventsRequest]) => {
               const [coveragePayload] = coverageRequest.payload
               if (isAgentless) {
@@ -716,8 +716,8 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.setSuitesToSkip([{
             type: 'suite',
             attributes: {
-              suite: `${featuresPath}farewell.feature`
-            }
+              suite: `${featuresPath}farewell.feature`,
+            },
           }])
 
           receiver.setGitUploadStatus(404)
@@ -758,14 +758,14 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.setSettings({
             itr_enabled: true,
             code_coverage: true,
-            tests_skipping: false
+            tests_skipping: false,
           })
 
           receiver.setSuitesToSkip([{
             type: 'suite',
             attributes: {
-              suite: `${featuresPath}farewell.feature`
-            }
+              suite: `${featuresPath}farewell.feature`,
+            },
           }])
 
           receiver.assertPayloadReceived(() => {
@@ -796,22 +796,22 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.setSettings({
             itr_enabled: true,
             code_coverage: true,
-            tests_skipping: true
+            tests_skipping: true,
           })
 
           receiver.setSuitesToSkip([
             {
               type: 'suite',
               attributes: {
-                suite: `${featuresPath}farewell.feature`
-              }
+                suite: `${featuresPath}farewell.feature`,
+              },
             },
             {
               type: 'suite',
               attributes: {
-                suite: `${featuresPath}greetings.feature`
-              }
-            }
+                suite: `${featuresPath}greetings.feature`,
+              },
+            },
           ])
 
           const eventsPromise = receiver
@@ -864,16 +864,16 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.setSettings({
             itr_enabled: true,
             code_coverage: true,
-            tests_skipping: true
+            tests_skipping: true,
           })
 
           receiver.setSuitesToSkip([
             {
               type: 'suite',
               attributes: {
-                suite: `${featuresPath}farewell.feature`
-              }
-            }
+                suite: `${featuresPath}farewell.feature`,
+              },
+            },
           ])
 
           const eventsPromise = receiver
@@ -926,8 +926,8 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.setSuitesToSkip([{
             type: 'suite',
             attributes: {
-              suite: `${featuresPath}not-existing.feature`
-            }
+              suite: `${featuresPath}not-existing.feature`,
+            },
           }])
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -990,7 +990,7 @@ describe(`cucumber@${version} commonJS`, () => {
                     `${featuresPath}greetings.feature.Say greetings`,
                     `${featuresPath}greetings.feature.Say yeah`,
                     `${featuresPath}greetings.feature.Say yo`,
-                    `${featuresPath}greetings.feature.Say skip`
+                    `${featuresPath}greetings.feature.Say skip`,
                   ]
                 )
               }, ({ url }) => url === '/v0.4/traces').then(() => done()).catch(done)
@@ -1036,7 +1036,7 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.setSettings({
             itr_enabled: true,
             code_coverage: true,
-            tests_skipping: false
+            tests_skipping: false,
           })
 
           const codeCoveragesPromise = receiver
@@ -1049,7 +1049,7 @@ describe(`cucumber@${version} commonJS`, () => {
 
               assertObjectContains(coveredFiles, [
                 'ci-visibility/subproject/features/support/steps.js',
-                'ci-visibility/subproject/features/greetings.feature'
+                'ci-visibility/subproject/features/greetings.feature',
               ])
             })
 
@@ -1058,7 +1058,7 @@ describe(`cucumber@${version} commonJS`, () => {
             {
               cwd: `${cwd}/ci-visibility/subproject`,
               env: {
-                ...getCiVisAgentlessConfig(receiver.port)
+                ...getCiVisAgentlessConfig(receiver.port),
               },
             }
           )
@@ -1078,18 +1078,18 @@ describe(`cucumber@${version} commonJS`, () => {
             early_flake_detection: {
               enabled: true,
               slow_test_retries: {
-                '5s': NUM_RETRIES_EFD
-              }
+                '5s': NUM_RETRIES_EFD,
+              },
             },
-            known_tests_enabled: true
+            known_tests_enabled: true,
           })
           // cucumber.ci-visibility/features/farewell.feature.Say whatever will be considered new
           receiver.setKnownTests(
             {
               cucumber: {
                 'ci-visibility/features/farewell.feature': ['Say farewell'],
-                'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
-              }
+                'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip'],
+              },
             }
           )
           const eventsPromise = receiver
@@ -1138,10 +1138,10 @@ describe(`cucumber@${version} commonJS`, () => {
             early_flake_detection: {
               enabled: true,
               slow_test_retries: {
-                '5s': NUM_RETRIES_EFD
-              }
+                '5s': NUM_RETRIES_EFD,
+              },
             },
-            known_tests_enabled: true
+            known_tests_enabled: true,
           })
 
           const eventsPromise = receiver
@@ -1165,8 +1165,8 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.setKnownTests({
             cucumber: {
               'ci-visibility/features/farewell.feature': ['Say farewell'],
-              'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
-            }
+              'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip'],
+            },
           })
 
           childProcess = exec(
@@ -1189,14 +1189,14 @@ describe(`cucumber@${version} commonJS`, () => {
             early_flake_detection: {
               enabled: true,
               slow_test_retries: {
-                '5s': NUM_RETRIES_EFD
-              }
+                '5s': NUM_RETRIES_EFD,
+              },
             },
-            known_tests_enabled: true
+            known_tests_enabled: true,
           })
           // Tests in "cucumber.ci-visibility/features-flaky/flaky.feature" will be considered new
           receiver.setKnownTests({
-            cucumber: {}
+            cucumber: {},
           })
 
           const eventsPromise = receiver
@@ -1245,18 +1245,18 @@ describe(`cucumber@${version} commonJS`, () => {
             early_flake_detection: {
               enabled: true,
               slow_test_retries: {
-                '5s': NUM_RETRIES_EFD
-              }
+                '5s': NUM_RETRIES_EFD,
+              },
             },
-            known_tests_enabled: true
+            known_tests_enabled: true,
           })
           // "cucumber.ci-visibility/features/farewell.feature.Say whatever" will be considered new
           // "cucumber.ci-visibility/features/greetings.feature.Say skip" will be considered new
           receiver.setKnownTests({
             cucumber: {
               'ci-visibility/features/farewell.feature': ['Say farewell'],
-              'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo']
-            }
+              'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo'],
+            },
           })
 
           const eventsPromise = receiver
@@ -1294,14 +1294,14 @@ describe(`cucumber@${version} commonJS`, () => {
             early_flake_detection: {
               enabled: true,
               slow_test_retries: {
-                '5s': NUM_RETRIES_EFD
-              }
+                '5s': NUM_RETRIES_EFD,
+              },
             },
-            known_tests_enabled: true
+            known_tests_enabled: true,
           })
           receiver.setKnownTestsResponseCode(500)
           receiver.setKnownTests({
-            cucumber: {}
+            cucumber: {},
           })
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -1336,18 +1336,18 @@ describe(`cucumber@${version} commonJS`, () => {
             early_flake_detection: {
               enabled: true,
               slow_test_retries: {
-                '5s': NUM_RETRIES_EFD
+                '5s': NUM_RETRIES_EFD,
               },
-              faulty_session_threshold: 0
+              faulty_session_threshold: 0,
             },
-            known_tests_enabled: true
+            known_tests_enabled: true,
           })
           // tests in cucumber.ci-visibility/features/farewell.feature will be considered new
           receiver.setKnownTests(
             {
               cucumber: {
-                'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
-              }
+                'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip'],
+              },
             }
           )
           const eventsPromise = receiver
@@ -1388,18 +1388,18 @@ describe(`cucumber@${version} commonJS`, () => {
             early_flake_detection: {
               enabled: true,
               slow_test_retries: {
-                '5s': NUM_RETRIES_EFD
-              }
+                '5s': NUM_RETRIES_EFD,
+              },
             },
-            known_tests_enabled: false
+            known_tests_enabled: false,
           })
           // cucumber.ci-visibility/features/farewell.feature.Say whatever will be considered new
           receiver.setKnownTests(
             {
               cucumber: {
                 'ci-visibility/features/farewell.feature': ['Say farewell'],
-                'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
-              }
+                'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip'],
+              },
             }
           )
           const eventsPromise = receiver
@@ -1441,18 +1441,18 @@ describe(`cucumber@${version} commonJS`, () => {
               early_flake_detection: {
                 enabled: true,
                 slow_test_retries: {
-                  '5s': NUM_RETRIES_EFD
-                }
+                  '5s': NUM_RETRIES_EFD,
+                },
               },
-              known_tests_enabled: true
+              known_tests_enabled: true,
             })
             // cucumber.ci-visibility/features/farewell.feature.Say whatever will be considered new
             receiver.setKnownTests(
               {
                 cucumber: {
                   'ci-visibility/features/farewell.feature': ['Say farewell'],
-                  'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
-                }
+                  'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip'],
+                },
               }
             )
             const eventsPromise = receiver
@@ -1501,14 +1501,14 @@ describe(`cucumber@${version} commonJS`, () => {
               early_flake_detection: {
                 enabled: true,
                 slow_test_retries: {
-                  '5s': NUM_RETRIES_EFD
-                }
+                  '5s': NUM_RETRIES_EFD,
+                },
               },
-              known_tests_enabled: true
+              known_tests_enabled: true,
             })
             // Tests in "cucumber.ci-visibility/features-flaky/flaky.feature" will be considered new
             receiver.setKnownTests({
-              cucumber: {}
+              cucumber: {},
             })
 
             const eventsPromise = receiver
@@ -1562,18 +1562,18 @@ describe(`cucumber@${version} commonJS`, () => {
               early_flake_detection: {
                 enabled: true,
                 slow_test_retries: {
-                  '5s': NUM_RETRIES_EFD
+                  '5s': NUM_RETRIES_EFD,
                 },
-                faulty_session_threshold: 0
+                faulty_session_threshold: 0,
               },
-              known_tests_enabled: true
+              known_tests_enabled: true,
             })
             // tests in cucumber.ci-visibility/features/farewell.feature will be considered new
             receiver.setKnownTests(
               {
                 cucumber: {
-                  'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
-                }
+                  'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip'],
+                },
               }
             )
 
@@ -1616,18 +1616,18 @@ describe(`cucumber@${version} commonJS`, () => {
               early_flake_detection: {
                 enabled: true,
                 slow_test_retries: {
-                  '5s': NUM_RETRIES_EFD
-                }
+                  '5s': NUM_RETRIES_EFD,
+                },
               },
-              known_tests_enabled: true
+              known_tests_enabled: true,
             })
             // "cucumber.ci-visibility/features/farewell.feature.Say whatever" will be considered new
             // "cucumber.ci-visibility/features/greetings.feature.Say skip" will be considered new
             receiver.setKnownTests({
               cucumber: {
                 'ci-visibility/features/farewell.feature': ['Say farewell'],
-                'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo']
-              }
+                'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo'],
+              },
             })
 
             const eventsPromise = receiver
@@ -1666,17 +1666,17 @@ describe(`cucumber@${version} commonJS`, () => {
               early_flake_detection: {
                 enabled: true,
                 slow_test_retries: {
-                  '5s': NUM_RETRIES_EFD
+                  '5s': NUM_RETRIES_EFD,
                 },
-                faulty_session_threshold: 0
+                faulty_session_threshold: 0,
               },
-              known_tests_enabled: true
+              known_tests_enabled: true,
             })
             receiver.setKnownTests(
               {
                 'not-cucumber': {
-                  'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
-                }
+                  'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip'],
+                },
               }
             )
 
@@ -1723,8 +1723,8 @@ describe(`cucumber@${version} commonJS`, () => {
             tests_skipping: false,
             flaky_test_retries_enabled: true,
             early_flake_detection: {
-              enabled: false
-            }
+              enabled: false,
+            },
           })
 
           const eventsPromise = receiver
@@ -1771,8 +1771,8 @@ describe(`cucumber@${version} commonJS`, () => {
             tests_skipping: false,
             flaky_test_retries_enabled: true,
             early_flake_detection: {
-              enabled: false
-            }
+              enabled: false,
+            },
           })
 
           const eventsPromise = receiver
@@ -1795,7 +1795,7 @@ describe(`cucumber@${version} commonJS`, () => {
               cwd,
               env: {
                 ...envVars,
-                DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false'
+                DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
               },
             }
           )
@@ -1814,8 +1814,8 @@ describe(`cucumber@${version} commonJS`, () => {
             tests_skipping: false,
             flaky_test_retries_enabled: true,
             early_flake_detection: {
-              enabled: false
-            }
+              enabled: false,
+            },
           })
 
           const eventsPromise = receiver
@@ -1845,7 +1845,7 @@ describe(`cucumber@${version} commonJS`, () => {
               cwd,
               env: {
                 ...envVars,
-                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
               },
             }
           )
@@ -1862,7 +1862,7 @@ describe(`cucumber@${version} commonJS`, () => {
         onlyLatestIt('does not activate if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
-            di_enabled: true
+            di_enabled: true,
           })
 
           const eventsPromise = receiver
@@ -1897,7 +1897,7 @@ describe(`cucumber@${version} commonJS`, () => {
               cwd,
               env: {
                 ...envVars,
-                DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
+                DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
               },
             }
           )
@@ -1912,7 +1912,7 @@ describe(`cucumber@${version} commonJS`, () => {
         onlyLatestIt('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
-            di_enabled: false
+            di_enabled: false,
           })
 
           const eventsPromise = receiver
@@ -1958,7 +1958,7 @@ describe(`cucumber@${version} commonJS`, () => {
         onlyLatestIt('runs retries with dynamic instrumentation', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
-            di_enabled: true
+            di_enabled: true,
           })
 
           let snapshotIdByTest, snapshotIdByLog
@@ -1996,22 +1996,22 @@ describe(`cucumber@${version} commonJS`, () => {
               const [{ logMessage: [diLog] }] = payloads
               assertObjectContains(diLog, {
                 ddsource: 'dd_debugger',
-                level: 'error'
+                level: 'error',
               })
               assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
               assertObjectContains(diLog.debugger.snapshot.captures.lines['6'].locals, {
                 a: {
                   type: 'number',
-                  value: '11'
+                  value: '11',
                 },
                 b: {
                   type: 'number',
-                  value: '3'
+                  value: '3',
                 },
                 localVariable: {
                   type: 'number',
-                  value: '2'
-                }
+                  value: '2',
+                },
               })
               spanIdByLog = diLog.dd.span_id
               traceIdByLog = diLog.dd.trace_id
@@ -2047,7 +2047,7 @@ describe(`cucumber@${version} commonJS`, () => {
         onlyLatestIt('does not crash if the retry does not hit the breakpoint', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
-            di_enabled: true
+            di_enabled: true,
           })
 
           const eventsPromise = receiver
@@ -2113,7 +2113,7 @@ describe(`cucumber@${version} commonJS`, () => {
       {
         cwd: `${cwd}/ci-visibility/subproject`,
         env: {
-          ...getCiVisAgentlessConfig(receiver.port)
+          ...getCiVisAgentlessConfig(receiver.port),
         },
       }
     )
@@ -2149,9 +2149,9 @@ describe(`cucumber@${version} commonJS`, () => {
           NYC_INCLUDE: JSON.stringify(
             [
               'ci-visibility/features/**',
-              'ci-visibility/features-esm/**'
+              'ci-visibility/features-esm/**',
             ]
-          )
+          ),
         },
       }
     )
@@ -2183,9 +2183,9 @@ describe(`cucumber@${version} commonJS`, () => {
             NYC_INCLUDE: JSON.stringify(
               [
                 'ci-visibility/features/**',
-                'ci-visibility/features-esm/**'
+                'ci-visibility/features-esm/**',
               ]
-            )
+            ),
           },
         }
       )
@@ -2223,17 +2223,17 @@ describe(`cucumber@${version} commonJS`, () => {
     it('detects new tests without retrying them', (done) => {
       receiver.setSettings({
         early_flake_detection: {
-          enabled: false
+          enabled: false,
         },
-        known_tests_enabled: true
+        known_tests_enabled: true,
       })
       // cucumber.ci-visibility/features/farewell.feature.Say whatever will be considered new
       receiver.setKnownTests(
         {
           cucumber: {
             'ci-visibility/features/farewell.feature': ['Say farewell'],
-            'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
-          }
+            'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip'],
+          },
         }
       )
       const eventsPromise = receiver
@@ -2284,7 +2284,7 @@ describe(`cucumber@${version} commonJS`, () => {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
-          DD_SERVICE: 'my-service'
+          DD_SERVICE: 'my-service',
         },
       }
     )
@@ -2306,13 +2306,13 @@ describe(`cucumber@${version} commonJS`, () => {
                 tests: {
                   'Say attempt to fix': {
                     properties: {
-                      attempt_to_fix: true
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      attempt_to_fix: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         })
       })
 
@@ -2321,7 +2321,7 @@ describe(`cucumber@${version} commonJS`, () => {
         isQuarantined,
         isDisabled,
         shouldAlwaysPass,
-        shouldFailSometimes
+        shouldFailSometimes,
       }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -2407,14 +2407,14 @@ describe(`cucumber@${version} commonJS`, () => {
         isDisabled,
         extraEnvVars,
         shouldAlwaysPass,
-        shouldFailSometimes
+        shouldFailSometimes,
       } = {}) => {
         const testAssertions = getTestAssertions({
           isAttemptToFix,
           isQuarantined,
           isDisabled,
           shouldAlwaysPass,
-          shouldFailSometimes
+          shouldFailSometimes,
         })
         let stdout = ''
 
@@ -2426,7 +2426,7 @@ describe(`cucumber@${version} commonJS`, () => {
               ...getCiVisAgentlessConfig(receiver.port),
               ...extraEnvVars,
               ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
-              ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {})
+              ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
             },
           }
         )
@@ -2476,7 +2476,7 @@ describe(`cucumber@${version} commonJS`, () => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
         runTest(done, {
-          extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' }
+          extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' },
         })
       })
 
@@ -2490,18 +2490,18 @@ describe(`cucumber@${version} commonJS`, () => {
                   'Say attempt to fix': {
                     properties: {
                       attempt_to_fix: true,
-                      quarantined: true
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         })
 
         runTest(done, {
           isAttemptToFix: true,
-          isQuarantined: true
+          isQuarantined: true,
         })
       })
 
@@ -2515,18 +2515,18 @@ describe(`cucumber@${version} commonJS`, () => {
                   'Say attempt to fix': {
                     properties: {
                       attempt_to_fix: true,
-                      disabled: true
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      disabled: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         })
 
         runTest(done, {
           isAttemptToFix: true,
-          isDisabled: true
+          isDisabled: true,
         })
       })
     })
@@ -2540,13 +2540,13 @@ describe(`cucumber@${version} commonJS`, () => {
                 tests: {
                   'Say disabled': {
                     properties: {
-                      disabled: true
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      disabled: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         })
       })
 
@@ -2586,7 +2586,7 @@ describe(`cucumber@${version} commonJS`, () => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              ...extraEnvVars
+              ...extraEnvVars,
             },
           }
         )
@@ -2637,13 +2637,13 @@ describe(`cucumber@${version} commonJS`, () => {
                 tests: {
                   'Say quarantine': {
                     properties: {
-                      quarantined: true
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         })
       })
 
@@ -2682,7 +2682,7 @@ describe(`cucumber@${version} commonJS`, () => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              ...extraEnvVars
+              ...extraEnvVars,
             },
           }
         )
@@ -2729,7 +2729,7 @@ describe(`cucumber@${version} commonJS`, () => {
       let testOutput = ''
       receiver.setSettings({
         test_management: { enabled: true },
-        flaky_test_retries_enabled: false
+        flaky_test_retries_enabled: false,
       })
       receiver.setTestManagementTestsResponseCode(500)
 
@@ -2749,7 +2749,7 @@ describe(`cucumber@${version} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            DD_TRACE_DEBUG: '1'
+            DD_TRACE_DEBUG: '1',
           },
         }
       )
@@ -2765,7 +2765,7 @@ describe(`cucumber@${version} commonJS`, () => {
         once(childProcess, 'exit'),
         once(childProcess.stdout, 'end'),
         once(childProcess.stderr, 'end'),
-        eventsPromise
+        eventsPromise,
       ])
       assert.match(testOutput, /Test management tests could not be fetched/)
     })
@@ -2811,7 +2811,7 @@ describe(`cucumber@${version} commonJS`, () => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              DD_TEST_SESSION_NAME: 'my-test-session-name'
+              DD_TEST_SESSION_NAME: 'my-test-session-name',
             },
           }
         )
@@ -2831,8 +2831,8 @@ describe(`cucumber@${version} commonJS`, () => {
       receiver.setKnownTests(
         {
           cucumber: {
-            'ci-visibility/features-impacted-test/impacted-test.feature': ['Say impacted test']
-          }
+            'ci-visibility/features-impacted-test/impacted-test.feature': ['Say impacted test'],
+          },
         }
       )
     })
@@ -2876,7 +2876,7 @@ describe(`cucumber@${version} commonJS`, () => {
           // TODO: This is a duplication of the code below. We should refactor this.
           assertObjectContains(resourceNames,
             [
-              'ci-visibility/features-impacted-test/impacted-test.feature.Say impacted test'
+              'ci-visibility/features-impacted-test/impacted-test.feature.Say impacted test',
             ]
           )
 
@@ -2955,14 +2955,14 @@ describe(`cucumber@${version} commonJS`, () => {
             // we need to trick this process into not reading the event.json contents for GitHub,
             // otherwise we'll take the diff from the base repository, not from the test project in `cwd`
             GITHUB_BASE_REF: '',
-            ...extraEnvVars
+            ...extraEnvVars,
           },
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        testAssertionsPromise
+        testAssertionsPromise,
       ])
     }
 
@@ -2999,7 +2999,7 @@ describe(`cucumber@${version} commonJS`, () => {
     context('test is new', () => {
       it('should be retried and marked both as new and modified', async () => {
         receiver.setKnownTests({
-          cucumber: {}
+          cucumber: {},
         })
 
         receiver.setSettings({
@@ -3007,10 +3007,10 @@ describe(`cucumber@${version} commonJS`, () => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES
-            }
+              '5s': NUM_RETRIES,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
         await runImpactedTest({ isModified: true, isEfd: true, isNew: true })
       })
@@ -3023,7 +3023,7 @@ describe(`cucumber@${version} commonJS`, () => {
 
     it('uploads coverage report when coverage_report_upload_enabled is true', async () => {
       receiver.setSettings({
-        coverage_report_upload_enabled: true
+        coverage_report_upload_enabled: true,
       })
 
       const coverageReportPromise = receiver
@@ -3053,20 +3053,20 @@ describe(`cucumber@${version} commonJS`, () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             DD_GIT_COMMIT_SHA: gitCommitSha,
-            DD_GIT_REPOSITORY_URL: gitRepositoryUrl
-          }
+            DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+          },
         }
       )
 
       await Promise.all([
         coverageReportPromise,
-        once(childProcess, 'exit')
+        once(childProcess, 'exit'),
       ])
     })
 
     it('does not upload coverage report when coverage_report_upload_enabled is false', async () => {
       receiver.setSettings({
-        coverage_report_upload_enabled: false
+        coverage_report_upload_enabled: false,
       })
 
       let coverageReportUploaded = false
@@ -3083,8 +3083,8 @@ describe(`cucumber@${version} commonJS`, () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             DD_GIT_COMMIT_SHA: gitCommitSha,
-            DD_GIT_REPOSITORY_URL: gitRepositoryUrl
-          }
+            DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+          },
         }
       )
 

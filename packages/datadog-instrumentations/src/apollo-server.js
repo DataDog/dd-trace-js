@@ -41,8 +41,8 @@ function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
           status: abortData.statusCode,
           body: {
             kind: 'complete',
-            string: abortData.message
-          }
+            string: abortData.message,
+          },
         })
       }, { once: true })
     })

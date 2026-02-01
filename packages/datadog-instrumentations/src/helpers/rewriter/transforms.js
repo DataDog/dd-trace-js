@@ -61,7 +61,7 @@ function traceFunction (state, node, program) {
     body: node.body,
     async: operator === 'tracePromise',
     expression: false,
-    generator: false
+    generator: false,
   })
 }
 

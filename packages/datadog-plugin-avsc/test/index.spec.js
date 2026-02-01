@@ -13,7 +13,7 @@ const {
   SCHEMA_NAME,
   SCHEMA_OPERATION,
   SCHEMA_WEIGHT,
-  SCHEMA_TYPE
+  SCHEMA_TYPE,
 } = require('../../dd-trace/src/constants')
 const { SchemaBuilder } = require('../../dd-trace/src/datastreams/schemas/schema_builder')
 const { NODE_MAJOR } = require('../../../version')
@@ -108,7 +108,7 @@ describe('Plugin', () => {
               status: 'ACTIVE',
               profile_picture: Buffer.from('binarydata'),
               metadata: Buffer.from('metadata12345678'),
-              address: { street: '123 Main St', city: 'Metropolis', zipcode: '12345' }
+              address: { street: '123 Main St', city: 'Metropolis', zipcode: '12345' },
             })
             fs.writeFileSync(filePath, buf)
 
@@ -158,7 +158,7 @@ describe('Plugin', () => {
             status: 'ACTIVE',
             profile_picture: Buffer.from('binarydata'),
             metadata: Buffer.from('metadata12345678'),
-            address: { street: '123 Main St', city: 'Metropolis', zipcode: '12345' }
+            address: { street: '123 Main St', city: 'Metropolis', zipcode: '12345' },
           })
           fs.writeFileSync(filePath, buf)
 

@@ -6,5 +6,5 @@ module.exports = {
   client_stream: 'client_streaming',
   clientStream: 'client_streaming',
   server_stream: 'server_streaming',
-  serverStream: 'server_streaming'
+  serverStream: 'server_streaming',
 }

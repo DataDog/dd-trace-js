@@ -47,7 +47,7 @@ describe('Plugin', () => {
         before(async () => {
           tracer = require('../../dd-trace')
           await agent.load('google-cloud-pubsub', {
-            dsmEnabled: true
+            dsmEnabled: true,
           })
           tracer.use('google-cloud-pubsub', { dsmEnabled: true })
 
@@ -81,7 +81,7 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           return agent.load('google-cloud-pubsub', {
-            dsmEnabled: true
+            dsmEnabled: true,
           })
         })
 

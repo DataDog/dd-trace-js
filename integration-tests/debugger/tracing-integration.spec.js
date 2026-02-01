@@ -8,7 +8,7 @@ describe('Dynamic Instrumentation', function () {
     const t = setup({
       testApp: 'target-app/basic.js',
       env: { DD_TRACING_ENABLED: 'true', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true },
-      dependencies: ['fastify']
+      dependencies: ['fastify'],
     })
 
     describe('input messages', function () {
@@ -20,7 +20,7 @@ describe('Dynamic Instrumentation', function () {
     const t = setup({
       testApp: 'target-app/basic.js',
       env: { DD_TRACING_ENABLED: 'true', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: false },
-      dependencies: ['fastify']
+      dependencies: ['fastify'],
     })
 
     describe('input messages', function () {
@@ -32,7 +32,7 @@ describe('Dynamic Instrumentation', function () {
     const t = setup({
       testApp: 'target-app/basic.js',
       env: { DD_TRACING_ENABLED: 'false' },
-      dependencies: ['fastify']
+      dependencies: ['fastify'],
     })
 
     describe('input messages', function () {
@@ -47,7 +47,7 @@ describe('Dynamic Instrumentation', function () {
     const t = setup({
       testApp: 'target-app/basic.js',
       env: { DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: 'true' },
-      dependencies: ['fastify']
+      dependencies: ['fastify'],
     })
 
     describe('input messages', function () {
@@ -73,7 +73,7 @@ describe('Dynamic Instrumentation', function () {
     const t = setup({
       testApp: 'target-app/basic.js',
       env: { DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: 'false' },
-      dependencies: ['fastify']
+      dependencies: ['fastify'],
     })
 
     describe('input messages', function () {

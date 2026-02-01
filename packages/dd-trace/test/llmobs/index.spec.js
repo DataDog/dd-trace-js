@@ -29,13 +29,13 @@ describe('module', () => {
 
     LLMObsSpanWriterSpy = sinon.stub().returns({
       destroy: sinon.stub(),
-      setAgentless: sinon.stub()
+      setAgentless: sinon.stub(),
     })
 
     LLMObsEvalMetricsWriterSpy = sinon.stub().returns({
       destroy: sinon.stub(),
       append: sinon.stub(),
-      setAgentless: sinon.stub()
+      setAgentless: sinon.stub(),
     })
 
     fetchAgentInfoStub = sinon.stub()
@@ -48,14 +48,14 @@ describe('module', () => {
         storage: {
           getStore () {
             return store
-          }
-        }
+          },
+        },
       },
       './writers/util': proxyquire('../../../dd-trace/src/llmobs/writers/util', {
         '../../agent/info': {
-          fetchAgentInfo: fetchAgentInfoStub
-        }
-      })
+          fetchAgentInfo: fetchAgentInfoStub,
+        },
+      }),
     })
 
     removeDestroyHandler()
@@ -80,13 +80,13 @@ describe('module', () => {
           return {
             toSpanId () {
               return 'parent-id'
-            }
+            },
           }
-        }
+        },
       }
 
       const carrier = {
-        'x-datadog-tags': ''
+        'x-datadog-tags': '',
       }
       injectCh.publish({ carrier })
 
@@ -97,7 +97,7 @@ describe('module', () => {
       llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
       const carrier = {
-        'x-datadog-tags': ''
+        'x-datadog-tags': '',
       }
       injectCh.publish({ carrier })
       assert.strictEqual(carrier['x-datadog-tags'], ',_dd.p.llmobs_ml_app=test')
@@ -107,7 +107,7 @@ describe('module', () => {
       llmobsModule.enable({ llmobs: { agentlessEnabled: false } })
 
       const carrier = {
-        'x-datadog-tags': ''
+        'x-datadog-tags': '',
       }
       injectCh.publish({ carrier })
       assert.strictEqual(carrier['x-datadog-tags'], '')
@@ -119,13 +119,13 @@ describe('module', () => {
       it('throws an error', () => {
         assert.throws(() => llmobsModule.enable({
           llmobs: {
-            agentlessEnabled: true
-          }
+            agentlessEnabled: true,
+          },
         }),
         {
           message: 'Cannot send LLM Observability data without a running agent ' +
             'or without both a Datadog API key and site.\n' +
-            'Ensure these configurations are set before running your application.'
+            'Ensure these configurations are set before running your application.',
         })
       })
     })
@@ -140,10 +140,10 @@ describe('module', () => {
       it('configures agentless writers', () => {
         llmobsModule.enable({
           llmobs: {
-            agentlessEnabled: true
+            agentlessEnabled: true,
           },
           apiKey: 'test',
-          site: 'datadoghq.com'
+          site: 'datadoghq.com',
         })
 
         sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
@@ -156,8 +156,8 @@ describe('module', () => {
     it('configures agent-proxy writers', () => {
       llmobsModule.enable({
         llmobs: {
-          agentlessEnabled: false
-        }
+          agentlessEnabled: false,
+        },
       })
 
       sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
@@ -194,7 +194,7 @@ describe('module', () => {
           llmobsModule.enable({
             llmobs: {},
             apiKey: 'test',
-            site: 'datadoghq.com'
+            site: 'datadoghq.com',
           })
 
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
@@ -232,7 +232,7 @@ describe('module', () => {
             {
               message: 'Cannot send LLM Observability data without a running agent ' +
                 'or without both a Datadog API key and site.\n' +
-                'Ensure these configurations are set before running your application.'
+                'Ensure these configurations are set before running your application.',
             }
           )
         })

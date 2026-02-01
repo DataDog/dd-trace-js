@@ -21,7 +21,7 @@ describe('Code Origin for Spans', function () {
       cwd,
       env: {
         NODE_OPTIONS: '--enable-source-maps',
-        DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
+        DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
       },
       stdio: 'pipe',
     })
@@ -45,7 +45,7 @@ describe('Code Origin for Spans', function () {
           assert.strictEqual(span.meta['_dd.code_origin.frames.0.method'], '<anonymous>')
           assert.strictEqual(span.meta['_dd.code_origin.frames.0.type'], 'Object')
         }, 2_500),
-        await axios.get('/')
+        await axios.get('/'),
       ])
     })
   })

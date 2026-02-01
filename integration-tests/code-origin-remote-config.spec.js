@@ -29,7 +29,7 @@ describe('Code Origin Remote Config', function () {
 
   const frameworks = [
     { name: 'Express', spanName: 'express.request', appFile: 'express-app.js' },
-    { name: 'Fastify', spanName: 'fastify.request', appFile: 'fastify-app.js' }
+    { name: 'Fastify', spanName: 'fastify.request', appFile: 'fastify-app.js' },
   ]
 
   const setupApp = (framework, envVars) => async () => {
@@ -40,12 +40,12 @@ describe('Code Origin Remote Config', function () {
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: 0.1,
-        ...envVars
-      }
+        ...envVars,
+      },
     })
     axios = Axios.create({
       baseURL: proc.url,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
     })
   }
 
@@ -65,8 +65,8 @@ describe('Code Origin Remote Config', function () {
         id: configId,
         config: {
           service_target: { service: 'node', env: '*' },
-          lib_config: libConfig
-        }
+          lib_config: libConfig,
+        },
       })
     }))
   }
@@ -81,7 +81,7 @@ describe('Code Origin Remote Config', function () {
         assert.ok(requestSpan.meta['_dd.code_origin.frames.0.file'])
         assert.ok(requestSpan.meta['_dd.code_origin.frames.0.line'])
       }, 3000),
-      axios.get(url)
+      axios.get(url),
     ])
   }
 
@@ -94,7 +94,7 @@ describe('Code Origin Remote Config', function () {
         assert.strictEqual(requestSpan.meta['_dd.code_origin.type'], undefined)
         assert.strictEqual(requestSpan.meta['_dd.code_origin.frames.0.file'], undefined)
       }, 3000),
-      axios.get(url)
+      axios.get(url),
     ])
   }
 
@@ -103,7 +103,7 @@ describe('Code Origin Remote Config', function () {
       describe('both CO and RC enabled at boot (runtime disable)', () => {
         beforeEach(setupApp(framework, {
           DD_CODE_ORIGIN_FOR_SPANS_ENABLED: 'true',
-          DD_REMOTE_CONFIG_ENABLED: 'true'
+          DD_REMOTE_CONFIG_ENABLED: 'true',
         }))
 
         it('should disable code origin tags at runtime via remote config', async () => {
@@ -132,7 +132,7 @@ describe('Code Origin Remote Config', function () {
       describe('CO enabled at boot, RC disabled', () => {
         beforeEach(setupApp(framework, {
           DD_CODE_ORIGIN_FOR_SPANS_ENABLED: 'true',
-          DD_REMOTE_CONFIG_ENABLED: 'false'
+          DD_REMOTE_CONFIG_ENABLED: 'false',
         }))
 
         it('should pre-compute and add code origin tags', async () => {
@@ -144,7 +144,7 @@ describe('Code Origin Remote Config', function () {
       describe('RC enabled at boot, CO disabled', () => {
         beforeEach(setupApp(framework, {
           DD_CODE_ORIGIN_FOR_SPANS_ENABLED: 'false',
-          DD_REMOTE_CONFIG_ENABLED: 'true'
+          DD_REMOTE_CONFIG_ENABLED: 'true',
         }))
 
         it('should pre-compute but not add code origin tags, then add them after runtime enable', async () => {

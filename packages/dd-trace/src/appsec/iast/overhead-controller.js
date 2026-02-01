@@ -77,13 +77,13 @@ const OPERATIONS = {
     },
     initContext: function (context) {
       context.tokens[REPORT_VULNERABILITY] = this.initialTokenBucketSize()
-    }
-  }
+    },
+  },
 }
 
 function _getNewContext () {
   const oceContext = {
-    tokens: {}
+    tokens: {},
   }
 
   for (const operation in OPERATIONS) {
@@ -205,5 +205,5 @@ module.exports = {
   releaseRequest,
   configure,
   consolidateVulnerabilities,
-  clearGlobalRouteMap
+  clearGlobalRouteMap,
 }

@@ -41,7 +41,7 @@ class StatsPoint {
       EdgeTags: this.edgeTags,
       EdgeLatency: this.edgeLatency.toProto(),
       PathwayLatency: this.pathwayLatency.toProto(),
-      PayloadSize: this.payloadSize.toProto()
+      PayloadSize: this.payloadSize.toProto(),
     }
   }
 }
@@ -62,7 +62,7 @@ class Backlog {
   encode () {
     return {
       Tags: this.tags,
-      Value: this.offset
+      Value: this.offset,
     }
   }
 }
@@ -133,12 +133,12 @@ class DataStreamsProcessor {
     tags,
     version,
     service,
-    flushInterval
+    flushInterval,
   } = {}) {
     this.writer = new DataStreamsWriter({
       hostname,
       port,
-      url
+      url,
     })
     this.bucketSizeNs = 1e10
     this.buckets = new TimeBuckets()
@@ -169,7 +169,7 @@ class DataStreamsProcessor {
       TracerVersion: pkg.version,
       Version: this.version,
       Lang: 'javascript',
-      Tags: Object.entries(this.tags).map(([key, value]) => `${key}:${value}`)
+      Tags: Object.entries(this.tags).map(([key, value]) => `${key}:${value}`),
     }
     this.writer.flush(payload)
   }
@@ -241,7 +241,7 @@ class DataStreamsProcessor {
       pathwayStartNs,
       previousDirection: direction,
       closestOppositeDirectionHash,
-      closestOppositeDirectionEdgeStart
+      closestOppositeDirectionEdgeStart,
     }
     if (direction === 'direction:out') {
       // Add the header for this now, as the callee doesn't have access to context when producing
@@ -257,7 +257,7 @@ class DataStreamsProcessor {
       edgeTags,
       edgeLatencyNs,
       pathwayLatencyNs,
-      payloadSize
+      payloadSize,
     }
     this.recordCheckpoint(checkpoint, span)
     return dataStreamsContext
@@ -274,7 +274,7 @@ class DataStreamsProcessor {
     const nowNs = Date.now() * 1e6
     const backlogData = {
       ...offsetObj,
-      timestamp: nowNs
+      timestamp: nowNs,
     }
     this.recordOffset(backlogData)
   }
@@ -300,14 +300,14 @@ class DataStreamsProcessor {
         Start: BigInt(timeNs),
         Duration: BigInt(this.bucketSizeNs),
         Stats: points,
-        Backlogs: backlogs
+        Backlogs: backlogs,
       })
     }
 
     this.buckets.clear()
 
     return {
-      Stats: serializedBuckets
+      Stats: serializedBuckets,
     }
   }
 
@@ -352,5 +352,5 @@ module.exports = {
   getHeadersSize,
   getSizeOrZero,
   getAmqpMessageSize,
-  ENTRY_PARENT_HASH
+  ENTRY_PARENT_HASH,
 }

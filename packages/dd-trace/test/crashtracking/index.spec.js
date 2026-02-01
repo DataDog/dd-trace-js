@@ -19,12 +19,12 @@ describe('crashtracking', () => {
   beforeEach(() => {
     crashtracker = {
       start: sinon.stub(),
-      configure: sinon.stub()
+      configure: sinon.stub(),
     }
 
     noop = {
       start: sinon.stub(),
-      configure: sinon.stub()
+      configure: sinon.stub(),
     }
 
     config = {}
@@ -35,7 +35,7 @@ describe('crashtracking', () => {
   describeNotWindows('with a working crashtracker', function () {
     beforeEach(() => {
       crashtracking = proxyquire('../../src/crashtracking', {
-        './crashtracker': crashtracker
+        './crashtracker': crashtracker,
       })
     })
 
@@ -52,7 +52,7 @@ describe('crashtracking', () => {
     beforeEach(() => {
       crashtracking = proxyquire('../../src/crashtracking', {
         './crashtracker': null,
-        './noop': noop
+        './noop': noop,
       })
     })
 
@@ -71,7 +71,7 @@ describe('crashtracking', () => {
     beforeEach(() => {
       crashtracking = proxyquire('../../src/crashtracking', {
         './crashtracker': null,
-        './noop': noop
+        './noop': noop,
       })
 
       worker = new Worker(path.join(__dirname, 'worker.js'))

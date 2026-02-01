@@ -31,7 +31,7 @@ const propagationFns = [
   'trimEndStr',
   'trimProtoStr',
   'trimStartStr',
-  'trimStr'
+  'trimStr',
 ]
 
 const commands = [
@@ -41,7 +41,7 @@ const commands = [
   'ls -la',
   ' ls -la  人 ',
   ' ls -la  𠆢𠆢𠆢 ',
-  ' ls -ls �'
+  ' ls -ls �',
 ]
 
 const propagationFunctionsFile = path.join(__dirname, 'resources/propagationFunctions.js')
@@ -109,9 +109,9 @@ describe('TaintTracking', () => {
           iinfo: {
             parameterName: 'command',
             parameterValue: 'ls -la',
-            type: 'request.type'
+            type: 'request.type',
           },
-          secureMarks: 0
+          secureMarks: 0,
         }])
 
         const resultOrig = propFnOriginal(jsonTainted)
@@ -137,7 +137,7 @@ describe('TaintTracking', () => {
       'concatTaintedStr',
       'insertStr',
       'templateLiteralEndingWithNumberParams',
-      'templateLiteralWithTaintedAtTheEnd'
+      'templateLiteralWithTaintedAtTheEnd',
     ]
     propagationFns.forEach((propFn) => {
       if (filtered.includes(propFn)) return

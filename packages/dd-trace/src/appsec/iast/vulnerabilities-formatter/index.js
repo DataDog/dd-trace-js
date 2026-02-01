@@ -19,7 +19,7 @@ class VulnerabilityFormatter {
       {
         origin: range.iinfo.type,
         name: range.iinfo.parameterName,
-        value: range.iinfo.parameterValue
+        value: range.iinfo.parameterValue,
       }
     ))
   }
@@ -86,7 +86,7 @@ class VulnerabilityFormatter {
       type,
       hash,
       evidence: this.formatEvidence(type, evidence, sourcesIndexes, sources),
-      location
+      location,
     }
 
     return formattedVulnerability
@@ -117,7 +117,7 @@ class VulnerabilityFormatter {
 
     return {
       sources,
-      vulnerabilities
+      vulnerabilities,
     }
   }
 }

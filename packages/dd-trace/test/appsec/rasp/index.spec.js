@@ -15,26 +15,26 @@ describe('RASP', () => {
         stackTrace: {
           enabled: true,
           maxStackTraces: 2,
-          maxDepth: 42
-        }
-      }
+          maxDepth: 42,
+        },
+      },
     }
 
     channels = {
       expressMiddlewareError: {
         subscribe: sinon.stub(),
         unsubscribe: sinon.stub(),
-        hasSubscribers: true
+        hasSubscribers: true,
       },
       fastifyMiddlewareError: {
         subscribe: sinon.stub(),
         unsubscribe: sinon.stub(),
-        hasSubscribers: true
+        hasSubscribers: true,
       },
       routerMiddlewareError: {
         subscribe: sinon.stub(),
         unsubscribe: sinon.stub(),
-        hasSubscribers: true
+        hasSubscribers: true,
       },
     }
 
@@ -43,7 +43,7 @@ describe('RASP', () => {
     blocking = {
       block: sinon.stub().returns(true),
       registerBlockDelegation: sinon.stub().resolves(true),
-      isBlocked: sinon.stub().callsFake(() => blocked)
+      isBlocked: sinon.stub().callsFake(() => blocked),
     }
 
     updateRaspRuleMatchMetricTags = sinon.stub()
@@ -52,8 +52,8 @@ describe('RASP', () => {
       '../blocking': blocking,
       '../channels': channels,
       '../telemetry': {
-        updateRaspRuleMatchMetricTags
-      }
+        updateRaspRuleMatchMetricTags,
+      },
     })
 
     rasp.enable(config)
@@ -113,7 +113,7 @@ describe('RASP', () => {
 
     it('should block DatadogRaspAbortError first time and update metrics', (done) => {
       rasp.blockOnDatadogRaspAbortError({
-        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
+        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true),
       })
 
       sinon.assert.calledOnce(blocking.registerBlockDelegation)
@@ -126,16 +126,16 @@ describe('RASP', () => {
 
     it('should skip calling block if blocked before', (done) => {
       rasp.blockOnDatadogRaspAbortError({
-        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
+        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true),
       })
 
       blocked = true
 
       rasp.blockOnDatadogRaspAbortError({
-        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
+        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true),
       })
       rasp.blockOnDatadogRaspAbortError({
-        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
+        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true),
       })
 
       sinon.assert.calledOnce(blocking.registerBlockDelegation)

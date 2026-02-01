@@ -29,7 +29,7 @@ describe('Plugin', () => {
       afterEach(() => {
         return Promise.all([
           receiver && receiver.detach(),
-          sender && sender.detach()
+          sender && sender.detach(),
         ])
       })
 
@@ -47,15 +47,15 @@ describe('Plugin', () => {
 
           client = new amqp.Client(amqp.Policy.merge({
             senderLink: {
-              callback: callbackPolicy
-            }
+              callback: callbackPolicy,
+            },
           }))
 
           return client.connect('amqp://admin:admin@localhost:5673')
             .then(() => {
               return Promise.all([
                 client.createReceiver('amq.topic'),
-                client.createSender('amq.topic')
+                client.createSender('amq.topic'),
               ])
             })
             .then(handlers => {
@@ -207,7 +207,7 @@ describe('Plugin', () => {
             .then(() => {
               return Promise.all([
                 client.createReceiver('amq.topic'),
-                client.createSender('amq.topic')
+                client.createSender('amq.topic'),
               ])
             })
             .then(handlers => {
@@ -234,12 +234,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'amqp.receive',
-              serviceName: 'test-custom-name'
+              serviceName: 'test-custom-name',
             },
             v1: {
               opName: 'amqp.process',
-              serviceName: 'test-custom-name'
-            }
+              serviceName: 'test-custom-name',
+            },
           }
         )
       })

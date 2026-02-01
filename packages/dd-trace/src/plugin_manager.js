@@ -13,7 +13,7 @@ const TEST_OPTIMIZATION_PLUGINS = new Set([
   'vitest',
   'cucumber',
   'mocha',
-  'playwright'
+  'playwright',
 ])
 
 const loadChannel = channel('dd-trace:instrumentation:load')
@@ -96,13 +96,13 @@ module.exports = class PluginManager {
     }
     const pluginConfig = this._configsByName[name] || {
       enabled: this._tracerConfig.plugins !== false &&
-        (!Plugin.experimental || isTrue(getEnabled(Plugin)))
+        (!Plugin.experimental || isTrue(getEnabled(Plugin))),
     }
 
     // extracts predetermined configuration from tracer and combines it with plugin-specific config
     this._pluginsByName[name].configure({
       ...this._getSharedConfig(name),
-      ...pluginConfig
+      ...pluginConfig,
     })
   }
 
@@ -112,7 +112,7 @@ module.exports = class PluginManager {
 
     this._configsByName[name] = {
       ...pluginConfig,
-      enabled
+      enabled,
     }
 
     this.loadPlugin(name)
@@ -168,7 +168,7 @@ module.exports = class PluginManager {
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
       experimental,
-      resourceRenamingEnabled
+      resourceRenamingEnabled,
     } = this._tracerConfig
 
     const sharedConfig = {
@@ -188,7 +188,7 @@ module.exports = class PluginManager {
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
       experimental,
-      resourceRenamingEnabled
+      resourceRenamingEnabled,
     }
 
     if (logInjection !== undefined) {

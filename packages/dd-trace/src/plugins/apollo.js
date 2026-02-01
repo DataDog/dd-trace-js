@@ -17,7 +17,7 @@ class ApolloBasePlugin extends TracingPlugin {
       service: this.getServiceName(),
       type: this.constructor.type,
       kind: this.constructor.kind,
-      meta: {}
+      meta: {},
     }, false)
 
     ctx.parentStore = store
@@ -40,13 +40,13 @@ class ApolloBasePlugin extends TracingPlugin {
   getServiceName () {
     return this.serviceName({
       id: `${this.constructor.id}.${this.constructor.operation}`,
-      pluginConfig: this.config
+      pluginConfig: this.config,
     })
   }
 
   getOperationName () {
     return this.operationName({
-      id: `${this.constructor.id}.${this.constructor.operation}`
+      id: `${this.constructor.id}.${this.constructor.operation}`,
     })
   }
 }

@@ -18,11 +18,11 @@ const {
   HTTP_STATUS_CODE,
   HTTP_ENDPOINT,
   HTTP_ROUTE,
-  HTTP_METHOD
+  HTTP_METHOD,
 } = require('../../../ext/tags')
 const {
   DEFAULT_SPAN_NAME,
-  DEFAULT_SERVICE_NAME
+  DEFAULT_SERVICE_NAME,
 } = require('../src/encode/tags-processors')
 const processTags = require('../src/process-tags')
 
@@ -36,9 +36,9 @@ const basicSpan = {
   resource: 'resource-name',
   type: 'span-type',
   meta: {
-    [HTTP_STATUS_CODE]: 200
+    [HTTP_STATUS_CODE]: 200,
   },
-  metrics: {}
+  metrics: {},
 }
 
 const topLevelSpan = {
@@ -46,8 +46,8 @@ const topLevelSpan = {
   name: 'top-level-span',
   metrics: {
     ...basicSpan.metrics,
-    [TOP_LEVEL_KEY]: 1
-  }
+    [TOP_LEVEL_KEY]: 1,
+  },
 }
 
 const errorSpan = {
@@ -56,12 +56,12 @@ const errorSpan = {
   error: 1,
   meta: {
     ...basicSpan.meta,
-    [HTTP_STATUS_CODE]: 500
+    [HTTP_STATUS_CODE]: 500,
   },
   metrics: {
     ...basicSpan.metrics,
-    [MEASURED]: 1
-  }
+    [MEASURED]: 1,
+  },
 }
 
 const syntheticSpan = {
@@ -69,12 +69,12 @@ const syntheticSpan = {
   name: 'synthetic-span',
   meta: {
     ...basicSpan.meta,
-    [ORIGIN_KEY]: 'synthetics'
-  }
+    [ORIGIN_KEY]: 'synthetics',
+  },
 }
 
 const exporter = {
-  export: sinon.stub()
+  export: sinon.stub(),
 }
 
 const SpanStatsExporter = sinon.stub().returns(exporter)
@@ -84,11 +84,11 @@ const {
   SpanAggKey,
   SpanBuckets,
   TimeBuckets,
-  SpanStatsProcessor
+  SpanStatsProcessor,
 } = proxyquire('../src/span_stats', {
   './exporters/span-stats': {
-    SpanStatsExporter
-  }
+    SpanStatsExporter,
+  },
 })
 
 describe('SpanAggKey', () => {
@@ -118,8 +118,8 @@ describe('SpanAggKey', () => {
       meta: {
         ...basicSpan.meta,
         [HTTP_METHOD]: 'GET',
-        [HTTP_ROUTE]: '/users/:id'
-      }
+        [HTTP_ROUTE]: '/users/:id',
+      },
     }
     const key = new SpanAggKey(span)
     assert.strictEqual(key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id')
@@ -131,8 +131,8 @@ describe('SpanAggKey', () => {
       meta: {
         ...basicSpan.meta,
         [HTTP_METHOD]: 'POST',
-        [HTTP_ENDPOINT]: '/users/{param:int}'
-      }
+        [HTTP_ENDPOINT]: '/users/{param:int}',
+      },
     }
     const key = new SpanAggKey(span)
     assert.strictEqual(
@@ -146,8 +146,8 @@ describe('SpanAggKey', () => {
         ...basicSpan.meta,
         [HTTP_METHOD]: 'GET',
         [HTTP_ROUTE]: '/users/:id',
-        [HTTP_ENDPOINT]: '/users/{param:int}'
-      }
+        [HTTP_ENDPOINT]: '/users/{param:int}',
+      },
     }
     const key = new SpanAggKey(span)
     assert.strictEqual(key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id')
@@ -178,7 +178,7 @@ describe('SpanAggStats', () => {
       Errors: 0,
       Duration: basicSpan.duration,
       OkSummary: okDistribution.toProto(),
-      ErrorSummary: errorDistribution.toProto()
+      ErrorSummary: errorDistribution.toProto(),
     })
   })
 
@@ -205,7 +205,7 @@ describe('SpanAggStats', () => {
       Errors: 0,
       Duration: topLevelSpan.duration,
       OkSummary: okDistribution.toProto(),
-      ErrorSummary: errorDistribution.toProto()
+      ErrorSummary: errorDistribution.toProto(),
     })
   })
 
@@ -232,7 +232,7 @@ describe('SpanAggStats', () => {
       Errors: 1,
       Duration: errorSpan.duration,
       OkSummary: okDistribution.toProto(),
-      ErrorSummary: errorDistribution.toProto()
+      ErrorSummary: errorDistribution.toProto(),
     })
   })
 })
@@ -283,14 +283,14 @@ describe('SpanStatsProcessor', () => {
   const config = {
     stats: {
       enabled: true,
-      interval: 10
+      interval: 10,
     },
     hostname: '127.0.0.1',
     port: 8126,
     url: new URL('http://127.0.0.1:8126'),
     env: 'test',
     tags: { tag: 'some tag' },
-    version: '1.0.0'
+    version: '1.0.0',
   }
 
   it('should construct', () => {
@@ -301,7 +301,7 @@ describe('SpanStatsProcessor', () => {
       hostname: config.hostname,
       port: config.port,
       url: config.url,
-      tags: config.tags
+      tags: config.tags,
     }))
     assert.strictEqual(processor.interval, config.stats.interval)
     assert.ok(processor.buckets instanceof TimeBuckets)
@@ -355,7 +355,7 @@ describe('SpanStatsProcessor', () => {
       Errors: 0,
       Duration: (topLevelSpan.duration) * n,
       OkSummary: okDistribution.toProto(),
-      ErrorSummary: errorDistribution.toProto()
+      ErrorSummary: errorDistribution.toProto(),
     })
   })
 
@@ -383,14 +383,14 @@ describe('SpanStatsProcessor', () => {
           Errors: 0,
           Duration: (topLevelSpan.duration) * n,
           OkSummary: okDistribution.toProto(),
-          ErrorSummary: errorDistribution.toProto()
-        }]
+          ErrorSummary: errorDistribution.toProto(),
+        }],
       }],
       Lang: 'javascript',
       TracerVersion: pkg.version,
       RuntimeID: processor.tags['runtime-id'],
       Sequence: processor.sequence,
-      ProcessTags: processTags.serialized
+      ProcessTags: processTags.serialized,
     }))
   })
 
@@ -409,7 +409,7 @@ describe('SpanStatsProcessor', () => {
       TracerVersion: pkg.version,
       RuntimeID: processor.tags['runtime-id'],
       Sequence: processor.sequence,
-      ProcessTags: processTags.serialized
+      ProcessTags: processTags.serialized,
     }))
   })
 })

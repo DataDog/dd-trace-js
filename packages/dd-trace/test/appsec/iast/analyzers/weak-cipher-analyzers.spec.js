@@ -47,21 +47,21 @@ describe('weak-cipher-analyzer', () => {
           return {
             toSpanId () {
               return '123'
-            }
+            },
           }
-        }
-      }
+        },
+      },
     }
     const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
       '../iast-context': {
-        getIastContext: () => iastContext
+        getIastContext: () => iastContext,
       },
       '../overhead-controller': { hasQuota: () => true },
-      '../vulnerability-reporter': { addVulnerability }
+      '../vulnerability-reporter': { addVulnerability },
     })
     const proxiedWeakCipherAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/weak-cipher-analyzer',
       {
-        './vulnerability-analyzer': ProxyAnalyzer
+        './vulnerability-analyzer': ProxyAnalyzer,
       })
     proxiedWeakCipherAnalyzer.analyze(VULNERABLE_CIPHER)
     sinon.assert.calledOnce(addVulnerability)

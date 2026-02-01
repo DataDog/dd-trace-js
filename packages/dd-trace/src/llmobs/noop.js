@@ -59,7 +59,7 @@ class NoopLLMObs {
       const original = target[propertyKey]
       Object.defineProperty(target, propertyKey, {
         ...Object.getOwnPropertyDescriptor(target, propertyKey),
-        value: llmobs.wrap({ name: propertyKey, _decorator: true, ...options }, original)
+        value: llmobs.wrap({ name: propertyKey, _decorator: true, ...options }, original),
       })
 
       return target

@@ -11,10 +11,10 @@ const config = {
   projects: [
     {
       name: 'chromium',
-      use: devices['Desktop Chrome']
-    }
+      use: devices['Desktop Chrome'],
+    },
   ],
-  testMatch: '**/*-test.js'
+  testMatch: '**/*-test.js',
 }
 
 module.exports = config

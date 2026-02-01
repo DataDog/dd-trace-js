@@ -15,7 +15,7 @@ describe('profilers/native/wall', () => {
 
   beforeEach(() => {
     profile0 = {
-      encodeAsync: sinon.stub().returns(Promise.resolve('encoded'))
+      encodeAsync: sinon.stub().returns(Promise.resolve('encoded')),
     }
     pprof = {
       time: {
@@ -25,17 +25,17 @@ describe('profilers/native/wall', () => {
         v8ProfilerStuckEventLoopDetected: sinon.stub().returns(false),
         constants: {
           kSampleCount: 0,
-          NON_JS_THREADS_FUNCTION_NAME: 'Non JS threads activity'
+          NON_JS_THREADS_FUNCTION_NAME: 'Non JS threads activity',
         },
         getMetrics: sinon.stub().returns({
           totalAsyncContextCount: 0,
-          usedAsyncContextCount: 0
-        })
-      }
+          usedAsyncContextCount: 0,
+        }),
+      },
     }
 
     NativeWallProfiler = proxyquire('../../../src/profiling/profilers/wall', {
-      '@datadog/pprof': pprof
+      '@datadog/pprof': pprof,
     })
   })
 
@@ -76,7 +76,7 @@ describe('profilers/native/wall', () => {
         lineNumbers: false,
         workaroundV8Bug: false,
         collectCpuTime: false,
-        useCPED: false
+        useCPED: false,
       })
   })
 
@@ -96,7 +96,7 @@ describe('profilers/native/wall', () => {
         lineNumbers: false,
         workaroundV8Bug: false,
         collectCpuTime: false,
-        useCPED: false
+        useCPED: false,
       })
   })
 
@@ -203,7 +203,7 @@ describe('profilers/native/wall', () => {
         lineNumbers: false,
         workaroundV8Bug: false,
         collectCpuTime: false,
-        useCPED: false
+        useCPED: false,
       })
   })
 
@@ -220,7 +220,7 @@ describe('profilers/native/wall', () => {
     assert.deepStrictEqual(profiler._generateLabels({ node: { name: 'Non JS threads activity' } }), {
       'thread name': 'Non-JS threads',
       'thread id': 'NA',
-      'os thread id': 'NA'
+      'os thread id': 'NA',
     })
 
     const shared = require('../../../src/profiling/profilers/shared')
@@ -228,14 +228,14 @@ describe('profilers/native/wall', () => {
     const threadInfo = {
       'thread name': 'Main Event Loop',
       'thread id': '0',
-      'os thread id': nativeThreadId
+      'os thread id': nativeThreadId,
     }
 
     expectLabels(undefined, threadInfo)
 
     const threadInfoWithTimestamp = {
       ...threadInfo,
-      end_timestamp_ns: 1234000n
+      end_timestamp_ns: 1234000n,
     }
 
     expectLabels({ timestamp: 1234n }, threadInfoWithTimestamp)
@@ -244,7 +244,7 @@ describe('profilers/native/wall', () => {
 
     expectLabels({ timestamp: 1234n, asyncId: 1 }, {
       ...threadInfoWithTimestamp,
-      'async id': 1
+      'async id': 1,
     })
 
     expectLabels({ timestamp: 1234n, context: {} }, threadInfoWithTimestamp)
@@ -253,25 +253,25 @@ describe('profilers/native/wall', () => {
 
     expectLabels({ timestamp: 1234n, context: { ref: { spanId: 'foo' } } }, {
       ...threadInfoWithTimestamp,
-      'span id': 'foo'
+      'span id': 'foo',
     })
 
     expectLabels({ timestamp: 1234n, context: { ref: { rootSpanId: 'foo' } } }, {
       ...threadInfoWithTimestamp,
-      'local root span id': 'foo'
+      'local root span id': 'foo',
     })
 
     expectLabels({
       timestamp: 1234n,
-      context: { ref: { webTags: { 'http.method': 'GET', 'http.route': '/foo/bar' } } }
+      context: { ref: { webTags: { 'http.method': 'GET', 'http.route': '/foo/bar' } } },
     }, {
       ...threadInfoWithTimestamp,
-      'trace endpoint': 'GET /foo/bar'
+      'trace endpoint': 'GET /foo/bar',
     })
 
     expectLabels({ timestamp: 1234n, context: { ref: { endpoint: 'GET /foo/bar/2' } } }, {
       ...threadInfoWithTimestamp,
-      'trace endpoint': 'GET /foo/bar/2'
+      'trace endpoint': 'GET /foo/bar/2',
     })
 
     // All at once
@@ -282,15 +282,15 @@ describe('profilers/native/wall', () => {
         ref: {
           spanId: '1234567890',
           rootSpanId: '0987654321',
-          webTags: { 'http.method': 'GET', 'http.route': '/foo/bar' }
-        }
-      }
+          webTags: { 'http.method': 'GET', 'http.route': '/foo/bar' },
+        },
+      },
     }, {
       ...threadInfoWithTimestamp,
       'async id': 2,
       'span id': '1234567890',
       'local root span id': '0987654321',
-      'trace endpoint': 'GET /foo/bar'
+      'trace endpoint': 'GET /foo/bar',
     })
   })
 })

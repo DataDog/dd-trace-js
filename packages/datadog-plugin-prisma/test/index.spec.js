@@ -15,7 +15,7 @@ const { expectedSchema, rawExpectedSchema } = require('./naming')
 const {
   PRISMA_CLIENT_OUTPUT_RELATIVE,
   SCHEMA_FIXTURES,
-  TEST_DATABASE_URL
+  TEST_DATABASE_URL,
 } = require('./prisma-fixtures')
 
 function execPrismaGenerate (config, cwd) {
@@ -29,16 +29,16 @@ function execPrismaGenerate (config, cwd) {
         '--target esnext',
         '--module commonjs',
         '--allowJs true',
-        '--moduleResolution node'
-      ].join(' ')
+        '--moduleResolution node',
+      ].join(' '),
     ].join(' && '), {
       cwd,
-      stdio: 'inherit'
+      stdio: 'inherit',
     })
   } else {
     execSync('./node_modules/.bin/prisma generate', {
       cwd,
-      stdio: 'inherit'
+      stdio: 'inherit',
     })
   }
 }
@@ -91,24 +91,24 @@ describe('Plugin', () => {
     const prismaClients = [{
       schema: `./${SCHEMA_FIXTURES.clientOutputJs}`,
       file: '../../../versions/@prisma/generated/prisma',
-      usesGeneratedClientOutput: true
+      usesGeneratedClientOutput: true,
     },
     {
       schema: `./${SCHEMA_FIXTURES.clientJs}`,
-      file: '../../../versions/@prisma/client@range'
+      file: '../../../versions/@prisma/client@range',
     },
     {
       schema: `./${SCHEMA_FIXTURES.tsCjsV6}`,
       file: '../../../versions/@prisma/dist/client.js',
       usesGeneratedClientOutput: true,
-      ts: true
+      ts: true,
     },
     {
       schema: `./${SCHEMA_FIXTURES.tsCjsV7}`,
       file: '../../../versions/@prisma/v7/dist/client.js',
       usesGeneratedClientOutput: true,
       ts: true,
-      v7: true
+      v7: true,
     }]
 
     prismaClients.forEach(config => {
@@ -152,25 +152,25 @@ describe('Plugin', () => {
                 resource: 'queryRaw',
                 meta: {
                   'prisma.type': 'client',
-                  'prisma.method': 'queryRaw'
+                  'prisma.method': 'queryRaw',
                 },
                 name: expectedSchema.client.opName,
-                service: expectedSchema.client.serviceName
+                service: expectedSchema.client.serviceName,
               },
               {
                 resource: 'SELECT 1',
                 type: 'sql',
                 meta: {
-                  'span.kind': 'client'
+                  'span.kind': 'client',
                 },
                 name: config.v7 ? 'pg.query' : expectedSchema.engine.opName,
-                service: config.v7 ? 'test-postgres' : expectedSchema.engine.serviceName
+                service: config.v7 ? 'test-postgres' : expectedSchema.engine.serviceName,
               }]])
             })
 
             await Promise.all([
               prismaClient.$queryRaw`SELECT 1`,
-              tracingPromise
+              tracingPromise,
             ])
           })
 
@@ -182,7 +182,7 @@ describe('Plugin', () => {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
-                }
+                },
               })
             })
             await Promise.all([
@@ -190,7 +190,7 @@ describe('Plugin', () => {
               prismaClient.User.create({}).catch(e => {
                 error = e
               }),
-              tracingPromise
+              tracingPromise,
             ])
           })
 
@@ -202,13 +202,13 @@ describe('Plugin', () => {
                 'prisma.type': 'client',
                 'prisma.method': 'findMany',
                 'prisma.model': 'users',
-              }
+              },
             })
 
             tracingHelper.runInChildSpan(
               {
                 name: 'operation',
-                attributes: { method: 'findMany', model: 'users' }
+                attributes: { method: 'findMany', model: 'users' },
               },
               () => {
                 return 'Test Function'
@@ -216,7 +216,7 @@ describe('Plugin', () => {
             )
 
             await Promise.all([
-              tracingPromise
+              tracingPromise,
             ])
           })
 
@@ -243,7 +243,7 @@ describe('Plugin', () => {
                 name: 'prisma:engine:query',
                 startTime: [1745340876, 436692000],
                 endTime: [1745340876, 438653250],
-                kind: 'internal'
+                kind: 'internal',
               },
               {
                 id: '2',
@@ -254,13 +254,13 @@ describe('Plugin', () => {
                 kind: 'client',
                 attributes: {
                   'db.system': 'postgresql',
-                  'db.query.text': 'SELECT 1'
-                }
-              }
+                  'db.query.text': 'SELECT 1',
+                },
+              },
             ]
             tracingHelper.dispatchEngineSpans(engineSpans)
             await Promise.all([
-              tracingPromise
+              tracingPromise,
             ])
           })
 
@@ -270,7 +270,7 @@ describe('Plugin', () => {
               user: 'foo',
               host: 'localhost',
               port: '5432',
-              database: 'postgres'
+              database: 'postgres',
             }
             tracingHelper.setDbString(dbConfig)
 
@@ -284,8 +284,8 @@ describe('Plugin', () => {
                   'db.user': 'foo',
                   'out.host': 'localhost',
                   'network.destination.port': '5432',
-                  'db.type': 'postgres'
-                }
+                  'db.type': 'postgres',
+                },
               })
             })
 
@@ -299,13 +299,13 @@ describe('Plugin', () => {
                 kind: 'client',
                 attributes: {
                   'db.system': 'postgresql',
-                  'db.query.text': 'SELECT 1'
-                }
-              }
+                  'db.query.text': 'SELECT 1',
+                },
+              },
             ]
             tracingHelper.dispatchEngineSpans(engineSpans)
             await Promise.all([
-              tracingPromise
+              tracingPromise,
             ])
           })
         })
@@ -322,7 +322,7 @@ describe('Plugin', () => {
               execPrismaGenerate(config, cwd)
 
               const pluginConfig = {
-                service: 'custom'
+                service: 'custom',
               }
               return agent.load(['prisma', 'pg'], pluginConfig)
             })
@@ -336,12 +336,12 @@ describe('Plugin', () => {
 
             it('should be configured with the correct values', async () => {
               const tracingPromise = agent.assertFirstTraceSpan({
-                service: 'custom'
+                service: 'custom',
               })
 
               await Promise.all([
                 prismaClient.$queryRaw`SELECT 1`,
-                tracingPromise
+                tracingPromise,
               ])
             })
           })
@@ -357,7 +357,7 @@ describe('Plugin', () => {
               execPrismaGenerate(config, cwd)
 
               const pluginConfig = {
-                client: false
+                client: false,
               }
               return agent.load(['prisma', 'pg'], pluginConfig)
             })
@@ -377,7 +377,7 @@ describe('Plugin', () => {
 
               await Promise.all([
                 prismaClient.$queryRaw`SELECT 1`,
-                tracingPromise
+                tracingPromise,
               ])
             })
 
@@ -399,7 +399,7 @@ describe('Plugin', () => {
               execPrismaGenerate(config, cwd)
 
               const pluginConfig = {
-                engine: false
+                engine: false,
               }
               return agent.load(['prisma', 'pg'], pluginConfig)
             })
@@ -419,7 +419,7 @@ describe('Plugin', () => {
 
               await Promise.all([
                 prismaClient.$queryRaw`SELECT 1`,
-                tracingPromise
+                tracingPromise,
               ])
             })
 

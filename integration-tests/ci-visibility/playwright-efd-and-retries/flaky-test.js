@@ -13,7 +13,7 @@ test.describe('playwright', () => {
       throw new Error('Hello Warld')
     }
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello World'
+      'Hello World',
     ])
   })
 
@@ -23,7 +23,7 @@ test.describe('playwright', () => {
       throw new Error('Hello Warld')
     }
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello World'
+      'Hello World',
     ])
   })
 })

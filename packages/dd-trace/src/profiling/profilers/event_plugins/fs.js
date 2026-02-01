@@ -15,7 +15,7 @@ const allowedParams = new Set([
   'newPath', 'offset', 'oldPath',
   'operation', 'options', 'path',
   'position', 'prefix', 'src',
-  'target', 'type', 'uid'
+  'target', 'type', 'uid',
 ])
 
 class FilesystemPlugin extends EventPlugin {

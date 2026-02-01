@@ -17,15 +17,15 @@ describe('LLMObsSpanWriter', () => {
   beforeEach(() => {
     logger = {
       warn: sinon.stub(),
-      debug: sinon.stub()
+      debug: sinon.stub(),
     }
     LLMObsSpanWriter = proxyquire('../../../src/llmobs/writers/spans', {
-      '../../log': logger
+      '../../log': logger,
     })
     config = {
       port: 8126,
       hostname: 'localhost',
-      site: 'datadoghq.com'
+      site: 'datadoghq.com',
     }
   })
 
@@ -72,8 +72,8 @@ describe('LLMObsSpanWriter', () => {
       name: 'test',
       meta: {
         input: { value: 'a'.repeat(1024 * 1024) },
-        output: { value: 'a'.repeat(1024 * 1024) }
-      }
+        output: { value: 'a'.repeat(1024 * 1024) },
+      },
     }
 
     writer.append(event)
@@ -83,9 +83,9 @@ describe('LLMObsSpanWriter', () => {
       name: 'test',
       meta: {
         input: { value: "[This value has been dropped because this span's size exceeds the 1MB size limit.]" },
-        output: { value: "[This value has been dropped because this span's size exceeds the 1MB size limit.]" }
+        output: { value: "[This value has been dropped because this span's size exceeds the 1MB size limit.]" },
       },
-      collection_errors: ['dropped_io']
+      collection_errors: ['dropped_io'],
     })
   })
 
@@ -109,7 +109,7 @@ describe('LLMObsSpanWriter', () => {
     writer = new LLMObsSpanWriter(config)
 
     const events = [
-      { name: 'test', value: 1 }
+      { name: 'test', value: 1 },
     ]
 
     const payload = writer.makePayload(events)

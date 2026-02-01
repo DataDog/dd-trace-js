@@ -7,7 +7,7 @@ const log = require('./log')
 const config = module.exports = {
   ...parentConfig,
   parentThreadId,
-  maxTotalPayloadSize: 5 * 1024 * 1024 // 5MB
+  maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
 }
 
 updateUrl(parentConfig)

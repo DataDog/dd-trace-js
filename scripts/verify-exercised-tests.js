@@ -754,7 +754,7 @@ function findDdTraceTestCategories (repoRoot) {
     windowsPathsNoEscape: true,
     ignore: [
       '**/node_modules/**',
-    ]
+    ],
   })
 
   /** @type {Set<string>} */
@@ -783,7 +783,7 @@ function listDdTraceCategorySpecFiles (repoRoot, category) {
     windowsPathsNoEscape: true,
     ignore: [
       '**/node_modules/**',
-    ]
+    ],
   })
   files.sort((a, b) => a.localeCompare(b, 'en'))
   return files

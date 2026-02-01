@@ -193,14 +193,14 @@ class SourceIastPlugin extends IastPlugin {
     this._getAndRegisterSubscription({
       moduleName,
       tag,
-      tagKey: TagKey.SOURCE_TYPE
+      tagKey: TagKey.SOURCE_TYPE,
     })
   }
 
   execSource (sourceHandlerInfo) {
     this._execHandlerAndIncMetric({
       metric: EXECUTED_SOURCE,
-      ...sourceHandlerInfo
+      ...sourceHandlerInfo,
     })
   }
 }
@@ -218,5 +218,5 @@ class SinkIastPlugin extends IastPlugin {
 module.exports = {
   SourceIastPlugin,
   SinkIastPlugin,
-  IastPlugin
+  IastPlugin,
 }

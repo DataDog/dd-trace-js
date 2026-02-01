@@ -17,16 +17,16 @@ describe('span processor', () => {
 
   beforeEach(() => {
     writer = {
-      append: sinon.stub()
+      append: sinon.stub(),
     }
 
     log = {
-      warn: sinon.stub()
+      warn: sinon.stub(),
     }
 
     LLMObsSpanProcessor = proxyquire('../../src/llmobs/span_processor', {
       '../../../../package.json': { version: 'x.y.z' },
-      '../log': log
+      '../log': log,
     })
 
     processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
@@ -57,9 +57,9 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' }, // should not use this
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm',
@@ -69,7 +69,7 @@ describe('span processor', () => {
         '_ml_obs.meta.ml_app': 'myApp',
         '_ml_obs.meta.input.messages': [{ role: 'user', content: 'hello' }],
         '_ml_obs.meta.output.messages': [{ role: 'assistant', content: 'world' }],
-        '_ml_obs.llmobs_parent_id': '1234'
+        '_ml_obs.llmobs_parent_id': '1234',
       })
 
       processor.process(span)
@@ -88,7 +88,7 @@ describe('span processor', () => {
           'ml_app:myApp',
           'ddtrace.version:x.y.z',
           'error:0',
-          'language:javascript'
+          'language:javascript',
         ],
         start_ns: 0,
         duration: 1000000,
@@ -98,18 +98,18 @@ describe('span processor', () => {
           model_name: 'myModel',
           model_provider: 'myprovider', // should be lowercase
           input: {
-            messages: [{ role: 'user', content: 'hello' }]
+            messages: [{ role: 'user', content: 'hello' }],
           },
           output: {
-            messages: [{ role: 'assistant', content: 'world' }]
+            messages: [{ role: 'assistant', content: 'world' }],
           },
-          metadata: { foo: 'bar' }
+          metadata: { foo: 'bar' },
         },
         metrics: {},
         _dd: {
           trace_id: '123',
-          span_id: '456'
-        }
+          span_id: '456',
+        },
       })
 
       sinon.assert.calledOnce(writer.append)
@@ -120,9 +120,9 @@ describe('span processor', () => {
       const metadata = {
         bigint: 1n,
         deep: {
-          foo: 'bar'
+          foo: 'bar',
         },
-        bar: 'baz'
+        bar: 'baz',
       }
       metadata.circular = metadata
       metadata.deep.circular = metadata.deep
@@ -131,14 +131,14 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm',
-        '_ml_obs.meta.metadata': metadata
+        '_ml_obs.meta.metadata': metadata,
       })
 
       processor.process(span)
@@ -148,7 +148,7 @@ describe('span processor', () => {
         bar: 'baz',
         bigint: 'Unserializable value',
         circular: 'Unserializable value',
-        deep: { foo: 'bar', circular: 'Unserializable value' }
+        deep: { foo: 'bar', circular: 'Unserializable value' },
       })
     })
 
@@ -158,14 +158,14 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'retrieval',
-        '_ml_obs.meta.output.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }]
+        '_ml_obs.meta.output.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }],
       })
 
       processor.process(span)
@@ -175,7 +175,7 @@ describe('span processor', () => {
         text: 'hello',
         name: 'myDoc',
         id: '1',
-        score: 0.6
+        score: 0.6,
       }])
     })
 
@@ -185,14 +185,14 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'embedding',
-        '_ml_obs.meta.input.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }]
+        '_ml_obs.meta.input.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }],
       })
 
       processor.process(span)
@@ -202,7 +202,7 @@ describe('span processor', () => {
         text: 'hello',
         name: 'myDoc',
         id: '1',
-        score: 0.6
+        score: 0.6,
       }])
     })
 
@@ -212,14 +212,14 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm',
-        '_ml_obs.meta.model_name': 'myModel'
+        '_ml_obs.meta.model_name': 'myModel',
       })
 
       processor.process(span)
@@ -235,16 +235,16 @@ describe('span processor', () => {
             _tags: {
               'error.message': 'error message',
               'error.type': 'error type',
-              'error.stack': 'error stack'
+              'error.stack': 'error stack',
             },
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
-        '_ml_obs.meta.span.kind': 'llm'
+        '_ml_obs.meta.span.kind': 'llm',
       })
 
       processor.process(span)
@@ -263,16 +263,16 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {
-              error: new Error('error message')
+              error: new Error('error message'),
             },
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
-        '_ml_obs.meta.span.kind': 'llm'
+        '_ml_obs.meta.span.kind': 'llm',
       })
 
       processor.process(span)
@@ -293,14 +293,14 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm',
-        '_ml_obs.name': 'mySpan'
+        '_ml_obs.name': 'mySpan',
       })
 
       processor.process(span)
@@ -315,14 +315,14 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm',
-        '_ml_obs.session_id': '1234'
+        '_ml_obs.session_id': '1234',
       })
 
       processor.process(span)
@@ -338,14 +338,14 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm',
-        '_ml_obs.tags': { hostname: 'localhost', foo: 'bar', source: 'mySource' }
+        '_ml_obs.tags': { hostname: 'localhost', foo: 'bar', source: 'mySource' },
       })
 
       processor.process(span)

@@ -20,7 +20,7 @@ describe('Dynamic Instrumentation', function () {
         },
         async () => {
           await t.axios.get(t.breakpoint.url)
-        }
+        },
       ]
 
       t.agent.on('debugger-diagnostics', ({ payload }) => {

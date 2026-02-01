@@ -9,7 +9,7 @@ const {
   spawnPluginIntegrationTestProcAndExpectExit,
   sandboxCwd,
   useSandbox,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -30,7 +30,7 @@ describe('esm', () => {
           : 'import * as pg from \'pg\';',
         destructure: semver.satisfies(realVersion, '<8.15.0')
           ? 'import { default as pg } from \'pg\';'
-          : 'import { Client } from \'pg\'; const pg = { Client }'
+          : 'import { Client } from \'pg\'; const pg = { Client }',
       })
     })
 

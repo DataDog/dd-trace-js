@@ -6,7 +6,7 @@ const util = require('util')
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const {
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
@@ -31,7 +31,7 @@ function returnSpawnSyncError (error, context) {
     output: null,
     stdout: null,
     stderr: null,
-    pid: 0
+    pid: 0,
   }
 
   return context.result
@@ -54,7 +54,7 @@ names.forEach(name => {
 function normalizeArgs (args, shell) {
   const childProcessInfo = {
     command: args[0],
-    file: args[0]
+    file: args[0],
   }
 
   if (Array.isArray(args[1])) {
@@ -80,7 +80,7 @@ function createContextFromChildProcessInfo (childProcessInfo) {
     command: childProcessInfo.command,
     file: childProcessInfo.file,
     shell: childProcessInfo.shell,
-    abortController: new AbortController()
+    abortController: new AbortController(),
   }
 
   if (childProcessInfo.fileArgs) {
@@ -238,7 +238,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
         util.promisify.custom,
         {
           ...descriptor,
-          value: wrapedChildProcessCustomPromisifyMethod
+          value: wrapedChildProcessCustomPromisifyMethod,
         })
     }
     return wrappedChildProcessMethod

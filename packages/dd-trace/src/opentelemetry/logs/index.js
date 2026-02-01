@@ -40,7 +40,7 @@ function initializeOpenTelemetryLogs (config) {
   const resourceAttributes = {
     'service.name': config.service,
     'service.version': config.version,
-    'deployment.environment': config.env
+    'deployment.environment': config.env,
   }
 
   // Add all tracer tags (includes DD_TAGS, OTEL_RESOURCE_ATTRIBUTES, DD_TRACE_TAGS, etc.)
@@ -83,5 +83,5 @@ function initializeOpenTelemetryLogs (config) {
 
 module.exports = {
   LoggerProvider,
-  initializeOpenTelemetryLogs
+  initializeOpenTelemetryLogs,
 }

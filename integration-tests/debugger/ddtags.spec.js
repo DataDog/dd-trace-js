@@ -14,10 +14,10 @@ describe('Dynamic Instrumentation', function () {
           DD_ENV: 'test-env',
           DD_VERSION: 'test-version',
           DD_GIT_COMMIT_SHA: 'test-commit-sha',
-          DD_GIT_REPOSITORY_URL: 'test-repository-url'
+          DD_GIT_REPOSITORY_URL: 'test-repository-url',
         },
         testApp: 'target-app/basic.js',
-        dependencies: ['fastify']
+        dependencies: ['fastify'],
       })
 
       it('should add the expected ddtags as a query param to /debugger/v1/input', function (done) {

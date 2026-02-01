@@ -33,7 +33,7 @@ describe('pino test', () => {
       proc = await spawnProc(startupTestFile, {
         cwd,
         env: {
-          AGENT_PORT: agent.port
+          AGENT_PORT: agent.port,
         },
         stdio: 'pipe',
       })
@@ -42,12 +42,12 @@ describe('pino test', () => {
       assertObjectContains(stdoutData, {
         dd: {
           trace_id: stdoutData.custom.trace_id,
-          span_id: stdoutData.custom.span_id
+          span_id: stdoutData.custom.span_id,
         },
         custom: {
           trace_id: stdoutData.dd.trace_id,
-          span_id: stdoutData.dd.span_id
-        }
+          span_id: stdoutData.dd.span_id,
+        },
       })
     })
 
@@ -65,8 +65,8 @@ describe('pino test', () => {
       assertObjectContains(stdoutData, {
         dd: {
           trace_id: stdoutData.custom.trace_id,
-          span_id: stdoutData.custom.span_id
-        }
+          span_id: stdoutData.custom.span_id,
+        },
       })
     })
 
@@ -75,7 +75,7 @@ describe('pino test', () => {
         cwd,
         env: {
           AGENT_PORT: agent.port,
-          lOG_INJECTION: 'false'
+          lOG_INJECTION: 'false',
         },
         stdio: 'pipe',
       })

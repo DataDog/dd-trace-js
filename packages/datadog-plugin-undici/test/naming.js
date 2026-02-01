@@ -6,16 +6,16 @@ const rawExpectedSchema = {
   client: {
     v0: {
       serviceName: 'test',
-      opName: 'undici.request'
+      opName: 'undici.request',
     },
     v1: {
       serviceName: 'test',
-      opName: 'undici.request'
-    }
-  }
+      opName: 'undici.request',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

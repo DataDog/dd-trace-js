@@ -9,7 +9,7 @@ const EXCLUDED_PATHS = [
   // Fastify
   getNodeModulesPaths('fastify/lib/reply.js'),
   getNodeModulesPaths('fastify/lib/hooks.js'),
-  getNodeModulesPaths('@fastify/cookie/plugin.js')
+  getNodeModulesPaths('@fastify/cookie/plugin.js'),
 ]
 
 class CookieAnalyzer extends Analyzer {

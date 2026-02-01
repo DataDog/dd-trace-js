@@ -29,11 +29,11 @@ describe('Appsec SDK', () => {
         trackUserLoginFailureEvent,
         trackCustomEvent,
         trackUserLoginSuccessV2,
-        trackUserLoginFailureV2
+        trackUserLoginFailureV2,
       },
       './user_blocking': { checkUserAndSetUser, blockRequest },
       '../blocking': { setTemplates },
-      './set_user': { setUser }
+      './set_user': { setUser },
     })
 
     appsecSdk = new AppsecSdk(tracer, config)

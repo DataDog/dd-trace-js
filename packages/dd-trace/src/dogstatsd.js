@@ -26,7 +26,7 @@ class DogStatsDClient {
     if (options.metricsProxyUrl) {
       this._httpOptions = {
         url: options.metricsProxyUrl.toString(),
-        path: '/dogstatsd/v2/proxy'
+        path: '/dogstatsd/v2/proxy',
       }
     }
 
@@ -176,7 +176,7 @@ class DogStatsDClient {
     const clientConfig = {
       host: config.dogstatsd.hostname,
       port: config.dogstatsd.port,
-      tags
+      tags,
     }
 
     if (config.url || config.port) {
@@ -403,5 +403,5 @@ class CustomMetrics {
 module.exports = {
   DogStatsDClient,
   CustomMetrics,
-  MetricsAggregationClient
+  MetricsAggregationClient,
 }

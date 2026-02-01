@@ -36,5 +36,5 @@ esbuild.build({
   target: 'node22',
   plugins: [ddPlugin],
   format: 'esm',
-  external
+  external,
 })

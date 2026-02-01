@@ -2,7 +2,7 @@
 
 const tracer = require('dd-trace')
 tracer.init({
-  flushInterval: 0
+  flushInterval: 0,
 })
 
 const express = require('express')
@@ -13,7 +13,7 @@ const connectionData = {
   user: 'postgres',
   password: 'postgres',
   database: 'postgres',
-  application_name: 'test'
+  application_name: 'test',
 }
 
 const pool = new pg.Pool(connectionData)

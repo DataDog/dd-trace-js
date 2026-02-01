@@ -63,7 +63,7 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         beforeEach(() => {
           return agent.load('undici', {
-            service: 'test'
+            service: 'test',
           })
             .then(() => {
               express = require('express')
@@ -239,8 +239,8 @@ describe('Plugin', () => {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message || error.code,
                   [ERROR_STACK]: error.stack,
-                  component: 'undici'
-                }
+                  component: 'undici',
+                },
               }]])
             })
             .then(done)
@@ -306,7 +306,7 @@ describe('Plugin', () => {
             const controller = new AbortController()
 
             fetch.fetch(`http://localhost:${port}/user`, {
-              signal: controller.signal
+              signal: controller.signal,
             }).catch(() => {})
 
             controller.abort()
@@ -331,7 +331,7 @@ describe('Plugin', () => {
             const controller = new AbortController()
 
             fetch.fetch(`http://localhost:${port}/user`, {
-              signal: controller.signal
+              signal: controller.signal,
             }).catch(() => {})
 
             controller.abort()
@@ -358,8 +358,8 @@ describe('Plugin', () => {
                     'http.method': 'GET',
                     'http.status_code': '200',
                     component: 'undici',
-                    'out.host': 'localhost'
-                  }
+                    'out.host': 'localhost',
+                  },
                 })
                 .then(done)
                 .catch(done)
@@ -381,8 +381,8 @@ describe('Plugin', () => {
                   resource: 'POST',
                   meta: {
                     'http.method': 'POST',
-                    'http.status_code': '201'
-                  }
+                    'http.status_code': '201',
+                  },
                 })
                 .then(done)
                 .catch(done)
@@ -407,8 +407,8 @@ describe('Plugin', () => {
               agent
                 .assertFirstTraceSpan({
                   meta: {
-                    'http.status_code': '200'
-                  }
+                    'http.status_code': '200',
+                  },
                 })
                 .then(done)
                 .catch(done)
@@ -428,8 +428,8 @@ describe('Plugin', () => {
                   meta: {
                     [ERROR_TYPE]: error.name,
                     [ERROR_STACK]: error.stack,
-                    component: 'undici'
-                  }
+                    component: 'undici',
+                  },
                 })
                 assert.ok(traces[0][0].meta[ERROR_MESSAGE])
               })
@@ -452,7 +452,7 @@ describe('Plugin', () => {
             appListener = server(app, port => {
               agent
                 .assertFirstTraceSpan({
-                  error: 1
+                  error: 1,
                 })
                 .then(done)
                 .catch(done)
@@ -473,7 +473,7 @@ describe('Plugin', () => {
             appListener = server(app, port => {
               agent
                 .assertFirstTraceSpan({
-                  error: 0
+                  error: 0,
                 })
                 .then(done)
                 .catch(done)
@@ -490,7 +490,7 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           config = {
-            service: 'custom'
+            service: 'custom',
           }
 
           return agent.load('undici', config)
@@ -524,7 +524,7 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           config = {
-            headers: ['x-baz', 'x-foo']
+            headers: ['x-baz', 'x-foo'],
           }
 
           return agent.load('undici', config)
@@ -554,8 +554,8 @@ describe('Plugin', () => {
 
             fetch.fetch(`http://localhost:${port}/user`, {
               headers: {
-                'x-baz': 'qux'
-              }
+                'x-baz': 'qux',
+              },
             }).catch(() => {})
           })
         })
@@ -568,8 +568,8 @@ describe('Plugin', () => {
             hooks: {
               request: (span, req, res) => {
                 span.setTag('foo', '/foo')
-              }
-            }
+              },
+            },
           }
 
           return agent.load('undici', config)
@@ -604,7 +604,7 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           config = {
-            propagationBlocklist: [/\/users/]
+            propagationBlocklist: [/\/users/],
           }
 
           return agent.load('undici', config)
@@ -641,7 +641,7 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           config = {
-            blocklist: [/\/user/]
+            blocklist: [/\/user/],
           }
 
           return agent.load('undici', config)
@@ -676,7 +676,7 @@ describe('Plugin', () => {
       describe('with custom dispatcher', () => {
         beforeEach(() => {
           return agent.load('undici', {
-            service: 'test'
+            service: 'test',
           })
             .then(() => {
               express = require('express')
@@ -705,7 +705,7 @@ describe('Plugin', () => {
             // Create a custom Agent with specific settings
             // This is the use case from issue #6439
             const customAgent = new fetch.Agent({
-              connect: { keepAlive: false }
+              connect: { keepAlive: false },
             })
 
             agent
@@ -721,7 +721,7 @@ describe('Plugin', () => {
             // Make request with custom dispatcher
             // For native DC versions, dispatcher is preserved because we don't wrap fetch at all
             fetch.fetch(`http://localhost:${port}/user`, {
-              dispatcher: customAgent
+              dispatcher: customAgent,
             }).then(res => {
               assert.strictEqual(res.status, 200)
               return res.text()

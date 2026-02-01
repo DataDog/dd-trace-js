@@ -2,14 +2,14 @@
 
 const options = {
   appsec: {
-    enabled: true
+    enabled: true,
   },
   experimental: {
     iast: {
       enabled: true,
-      requestSampling: 100
-    }
-  }
+      requestSampling: 100,
+    },
+  },
 }
 
 if (process.env.AGENT_PORT) {

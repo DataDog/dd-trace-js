@@ -46,9 +46,9 @@ function initApp (appName, version, realVersion) {
       cwd,
       env: {
         ...process.env,
-        version
+        version,
       },
-      stdio: ['pipe', 'ignore', 'pipe']
+      stdio: ['pipe', 'ignore', 'pipe'],
     })
 
     if (satisfiesStandalone(realVersion)) {
@@ -65,7 +65,7 @@ function initApp (appName, version, realVersion) {
 
     const files = [
       'package.json',
-      'yarn.lock'
+      'yarn.lock',
     ]
     const filePaths = files.map(file => `${appDir}/${file}`)
     filePaths.forEach(path => {
@@ -74,7 +74,7 @@ function initApp (appName, version, realVersion) {
 
     const dirs = [
       'node_modules',
-      '.next'
+      '.next',
     ]
     const dirPaths = dirs.map(file => `${appDir}/${file}`)
     dirPaths.forEach(path => {
@@ -109,8 +109,8 @@ function startServer (appName, serverPath, version, ddInitFile = 'datadog.js') {
         DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
         DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
         NODE_OPTIONS: `--require ${appDir}/${ddInitFile}`,
-        HOSTNAME: '127.0.0.1'
-      }
+        HOSTNAME: '127.0.0.1',
+      },
     })
 
     server.once('error', done)
@@ -144,5 +144,5 @@ function startServer (appName, serverPath, version, ddInitFile = 'datadog.js') {
 }
 
 module.exports = {
-  initApp, startServer
+  initApp, startServer,
 }

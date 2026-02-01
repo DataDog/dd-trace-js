@@ -34,7 +34,7 @@ function waitForAWS () {
         sns.listTopics({}).promise(),
         route53.listHealthChecks({}).promise(),
         redshift.describeClusters({}).promise(),
-        lambda.listFunctions({}).promise()
+        lambda.listFunctions({}).promise(),
       ]).then(data => {
         resolve()
       }).catch(err => {

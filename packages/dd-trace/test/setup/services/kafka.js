@@ -9,8 +9,8 @@ const kafka = new Kafka({
   connectionTimeout: 10000,
   retry: {
     initialRetryTime: 1000,
-    retries: 120
-  }
+    retries: 120,
+  },
 })
 const admin = kafka.admin()
 const producer = kafka.producer()
@@ -29,8 +29,8 @@ function waitForKafka () {
             topics: [{
               topic,
               numPartitions: 1,
-              replicationFactor: 1
-            }]
+              replicationFactor: 1,
+            }],
           })
         } catch (e) {
           // Ignore since this will fail when the topic already exists.
@@ -51,13 +51,13 @@ function waitForKafka () {
                 reject(e)
               }
             })
-          }
+          },
         })
 
         await producer.connect()
         await producer.send({
           topic,
-          messages
+          messages,
         })
         await producer.disconnect()
       } catch (error) {

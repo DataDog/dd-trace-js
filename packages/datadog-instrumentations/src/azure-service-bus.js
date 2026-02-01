@@ -3,7 +3,7 @@
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const {
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 const producerCh = dc.tracingChannel('apm:azure-service-bus:send')

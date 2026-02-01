@@ -3,7 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 const circularBufferConstructor = Symbol('circularBufferConstructor')
@@ -195,7 +195,7 @@ function patchCircularBuffer (proto, Session) {
           }
         }
       }
-    }
+    },
   })
 }
 

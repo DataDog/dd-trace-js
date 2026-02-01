@@ -47,11 +47,11 @@ describe('Plugin', () => {
               'db.type': 'redis',
               'span.kind': 'client',
               'out.host': 'localhost',
-              'redis.raw_command': 'GET foo'
+              'redis.raw_command': 'GET foo',
             },
             metrics: {
-              'network.destination.port': 6379
-            }
+              'network.destination.port': 6379,
+            },
           })
         })
 
@@ -79,8 +79,8 @@ describe('Plugin', () => {
               [ERROR_TYPE]: error.name,
               [ERROR_MESSAGE]: error.message,
               [ERROR_STACK]: error.stack,
-              component: 'ioredis'
-            }
+              component: 'ioredis',
+            },
           })
         })
 
@@ -100,11 +100,11 @@ describe('Plugin', () => {
               'span.kind': 'client',
               'out.host': 'localhost',
               'redis.raw_command': 'GET foo',
-              component: 'ioredis'
+              component: 'ioredis',
             },
             metrics: {
-              'network.destination.port': 6379
-            }
+              'network.destination.port': 6379,
+            },
           })
         })
 
@@ -118,7 +118,7 @@ describe('Plugin', () => {
         before(() => agent.load('ioredis', {
           service: 'custom',
           splitByInstance: true,
-          allowlist: ['get']
+          allowlist: ['get'],
         }))
 
         after(() => agent.close({ ritmReset: false }))
@@ -127,7 +127,7 @@ describe('Plugin', () => {
           await redis.get('foo')
 
           await agent.assertFirstTraceSpan({
-            service: 'custom-test'
+            service: 'custom-test',
           })
         })
 
@@ -135,7 +135,7 @@ describe('Plugin', () => {
           await redis.get('foo')
 
           await agent.assertFirstTraceSpan({
-            resource: 'get'
+            resource: 'get',
           })
         })
 
@@ -144,19 +144,19 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'redis.command',
-              serviceName: 'custom-test'
+              serviceName: 'custom-test',
             },
             v1: {
               opName: 'redis.command',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })
 
       describe('with legacy configuration', () => {
         before(() => agent.load('ioredis', {
-          whitelist: ['get']
+          whitelist: ['get'],
         }))
 
         after(() => agent.close({ ritmReset: false }))
@@ -165,7 +165,7 @@ describe('Plugin', () => {
           await redis.get('foo')
 
           await agent.assertFirstTraceSpan({
-            resource: 'get'
+            resource: 'get',
           })
         })
       })

@@ -145,5 +145,5 @@ module.exports = {
   when: () => require('../when'),
   winston: () => require('../winston'),
   workerpool: () => require('../mocha'),
-  ws: () => require('../ws')
+  ws: () => require('../ws'),
 }

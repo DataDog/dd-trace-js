@@ -36,10 +36,10 @@ describe('test visibility with dynamic instrumentation', () => {
             locals: {
               a: { type: 'number', value: '1' },
               b: { type: 'number', value: '2' },
-              localVar: { type: 'number', value: '1' }
-            }
-          }
-        }
+              localVar: { type: 'number', value: '1' },
+            },
+          },
+        },
       })
 
       done()

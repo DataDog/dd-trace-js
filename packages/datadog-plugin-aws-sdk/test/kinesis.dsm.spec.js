@@ -30,7 +30,7 @@ describe('Kinesis', function () {
 
       const params = {
         endpoint: 'http://127.0.0.1:4566',
-        region: 'us-east-1'
+        region: 'us-east-1',
       }
 
       if (moduleName === '@aws-sdk/smithy-client') {
@@ -43,7 +43,7 @@ describe('Kinesis', function () {
 
       kinesis.createStream({
         StreamName: streamName,
-        ShardCount: 1
+        ShardCount: 1,
       }, (err, res) => {
         if (err) return cb(err)
 
@@ -87,7 +87,7 @@ describe('Kinesis', function () {
 
       afterEach(done => {
         kinesis.deleteStream({
-          StreamName: streamNameDSM
+          StreamName: streamNameDSM,
         }, (err, res) => {
           if (err) return done(err)
 
@@ -114,7 +114,7 @@ describe('Kinesis', function () {
           }
 
           assertObjectContains(getRecordSpanMeta, {
-            'pathway.hash': expectedConsumerHash
+            'pathway.hash': expectedConsumerHash,
           })
         }, { timeoutMs: 10000 }).then(done, done)
 
@@ -135,7 +135,7 @@ describe('Kinesis', function () {
           }
 
           assertObjectContains(putRecordSpanMeta, {
-            'pathway.hash': expectedProducerHash
+            'pathway.hash': expectedProducerHash,
           })
         }).then(done, done)
 

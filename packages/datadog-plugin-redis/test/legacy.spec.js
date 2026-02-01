@@ -161,7 +161,7 @@ describe('Legacy Plugin', () => {
         before(() => {
           return agent.load('redis', {
             service: 'custom',
-            allowlist: ['get']
+            allowlist: ['get'],
           })
         })
 
@@ -203,12 +203,12 @@ describe('Legacy Plugin', () => {
           {
             v0: {
               opName: 'redis.command',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'redis.command',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })
@@ -216,7 +216,7 @@ describe('Legacy Plugin', () => {
       describe('with legacy configuration', () => {
         before(() => {
           return agent.load('redis', {
-            whitelist: ['get']
+            whitelist: ['get'],
           })
         })
 

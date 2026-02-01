@@ -36,7 +36,7 @@ const {
   ROUTING_API_KEY,
   ROUTING_SITE,
   PROMPT_TRACKING_INSTRUMENTATION_METHOD,
-  INSTRUMENTATION_METHOD_ANNOTATED
+  INSTRUMENTATION_METHOD_ANNOTATED,
 } = require('./constants/tags')
 const { storage } = require('./storage')
 
@@ -68,7 +68,7 @@ class LLMObsTagger {
     kind,
     name,
     integration,
-    _decorator
+    _decorator,
   } = {}) {
     if (!this._config.llmobs.enabled) return
     if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
@@ -519,7 +519,7 @@ class LLMObsTagger {
         content,
         toolCalls,
         toolResults,
-        toolId
+        toolId,
       } = message
       const messageObj = {}
 

@@ -40,5 +40,5 @@ module.exports = {
   startCaseLodash,
   trimEndLodash,
   trimLodash,
-  trimStartLodash
+  trimStartLodash,
 }

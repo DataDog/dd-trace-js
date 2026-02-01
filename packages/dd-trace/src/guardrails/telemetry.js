@@ -74,7 +74,7 @@ function sendTelemetry (name, tags, resultMetadata) {
     }
   }
 
-  var proc = spawn(process.env.DD_TELEMETRY_FORWARDER_PATH, ['library_entrypoint'], {
+  var proc = spawn(telemetryForwarderPath, ['library_entrypoint'], {
     stdio: 'pipe'
   })
   proc.on('error', function () {

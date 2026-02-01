@@ -20,5 +20,5 @@ function iterateObjectStrings (target, fn, levelKeys = [], depth = 20, visited =
 }
 
 module.exports = {
-  iterateObjectStrings
+  iterateObjectStrings,
 }

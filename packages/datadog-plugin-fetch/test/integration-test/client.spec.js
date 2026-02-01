@@ -6,7 +6,7 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  spawnPluginIntegrationTestProcAndExpectExit
+  spawnPluginIntegrationTestProcAndExpectExit,
 } = require('../../../../integration-tests/helpers')
 const describe = globalThis.fetch ? globalThis.describe : globalThis.describe.skip
 

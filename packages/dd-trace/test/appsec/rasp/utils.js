@@ -30,5 +30,5 @@ function checkRaspExecutedAndHasThreat (agent, ruleId, ruleEvalCount = 1) {
 
 module.exports = {
   checkRaspExecutedAndNotThreat,
-  checkRaspExecutedAndHasThreat
+  checkRaspExecutedAndHasThreat,
 }
