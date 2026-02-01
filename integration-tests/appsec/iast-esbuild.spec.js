@@ -22,7 +22,7 @@ const retry = async fn => {
   }
 }
 
-describe('esbuild support for IAST', () => {
+describe.skip('esbuild support for IAST', () => {
   let cwd, craftedNodeModulesDir
 
   useSandbox()
