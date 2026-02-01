@@ -73,6 +73,15 @@ export default {
             }
           }
 
+          // If still not found, allow control-flow guards inside methods, like:
+          // - if (x === null) return; ... typeof x === 'object'
+          // - if (x == null) { throw ... } ... typeof x === 'object'
+          // - if (x == null) { ... } else { typeof x === 'object' }
+          if (!hasNullCheck) {
+            hasNullCheck = isGuardedByIfStatement(node, targetNode, context) ||
+              isGuaranteedNotNullByPriorStatements(node, targetNode, context)
+          }
+
           if (!hasNullCheck) {
             context.report({
               fix (fixer) {
@@ -213,6 +222,11 @@ function isNotNullTest (test, targetNode, context) {
 
   if (!test) return false
 
+  if (test.type === 'LogicalExpression' && test.operator === '&&') {
+    // For `a && b`, the consequent only runs when both are true, so any not-null guard in the chain is sufficient.
+    return isNotNullTest(test.left, targetNode, context) || isNotNullTest(test.right, targetNode, context)
+  }
+
   // x, !!x, Boolean(x)
   if (isNullGuard(test, targetNode, context)) return true
 
@@ -231,10 +245,28 @@ function isNotNullTest (test, targetNode, context) {
   return false
 }
 
+function isUndefinedNode (node) {
+  node = unwrapChainExpression(node)
+  if (!node) return false
+
+  if (node.type === 'Identifier' && node.name === 'undefined') return true
+
+  // `void 0` (and variants) are also undefined.
+  if (node.type === 'UnaryExpression' && node.operator === 'void') return true
+
+  return false
+}
+
 function isNullTest (test, targetNode, context) {
   test = unwrapChainExpression(test)
 
   if (!test) return false
+
+  // (x === undefined || x === null) and friends
+  // If the OR expression is false, it implies x is neither undefined nor null.
+  if (test.type === 'LogicalExpression' && test.operator === '||') {
+    return isNullTest(test.left, targetNode, context) && isNullTest(test.right, targetNode, context)
+  }
 
   // x == null / x === null / null == x / null === x
   if (
@@ -248,6 +280,157 @@ function isNullTest (test, targetNode, context) {
     return true
   }
 
+  // x == undefined / x === undefined / undefined == x / undefined === x
+  if (
+    test.type === 'BinaryExpression' &&
+    (test.operator === '===' || test.operator === '==') &&
+    (
+      (isUndefinedNode(test.right) && isSameReference(test.left, targetNode)) ||
+      (isUndefinedNode(test.left) && isSameReference(test.right, targetNode))
+    )
+  ) {
+    return true
+  }
+
   // !(x != null) and !(x !== null) are also "is-null-ish" tests in practice, but we keep it simple for now.
+  return false
+}
+
+function isFalsyTest (test, targetNode) {
+  test = unwrapChainExpression(test)
+  if (!test) return false
+
+  // !x / !x.y
+  if (test.type === 'UnaryExpression' && test.operator === '!') {
+    return isSameReference(test.argument, targetNode)
+  }
+
+  return false
+}
+
+function isTerminatingStatement (statement) {
+  if (!statement) return false
+
+  if (
+    statement.type === 'ReturnStatement' ||
+    statement.type === 'ThrowStatement' ||
+    statement.type === 'BreakStatement' ||
+    statement.type === 'ContinueStatement'
+  ) {
+    return true
+  }
+
+  if (statement.type === 'BlockStatement') {
+    const last = statement.body.at(-1)
+    return isTerminatingStatement(last)
+  }
+
+  // Intentionally conservative: don't try to reason about try/finally, switches, etc.
+  return false
+}
+
+function isDefinitelyNonNullishValue (node) {
+  node = unwrapChainExpression(node)
+  if (!node) return false
+
+  if (node.type === 'Literal') {
+    // Only `null` is nullish for Literal nodes.
+    return node.value !== null
+  }
+
+  if (isUndefinedNode(node)) return false
+
+  // Objects / arrays / functions / classes / new instances are all non-nullish values.
+  if (
+    node.type === 'ObjectExpression' ||
+    node.type === 'ArrayExpression' ||
+    node.type === 'FunctionExpression' ||
+    node.type === 'ArrowFunctionExpression' ||
+    node.type === 'ClassExpression' ||
+    node.type === 'NewExpression'
+  ) {
+    return true
+  }
+
+  if (node.type === 'TemplateLiteral') return true
+
+  return false
+}
+
+function isNonNullishAssignmentInConsequent (consequent, targetNode) {
+  if (!consequent) return false
+
+  let statement = consequent
+  if (statement.type === 'BlockStatement') {
+    if (statement.body.length !== 1) return false
+    statement = statement.body[0]
+  }
+
+  if (statement.type !== 'ExpressionStatement') return false
+
+  const expr = unwrapChainExpression(statement.expression)
+  if (!expr || expr.type !== 'AssignmentExpression' || expr.operator !== '=') return false
+
+  if (!isSameReference(expr.left, targetNode)) return false
+
+  return isDefinitelyNonNullishValue(expr.right)
+}
+
+function isGuardedByIfStatement (node, targetNode, context) {
+  let child = node
+  let parent = node.parent
+
+  while (parent) {
+    if (parent.type === 'IfStatement') {
+      if (parent.consequent === child) {
+        if (isNotNullTest(parent.test, targetNode, context)) return true
+      } else if (parent.alternate === child) {
+        // Inside the alternate, we know the test is false.
+        // If the test was a null-check, then the alternate implies not-null.
+        if (isNullTest(parent.test, targetNode, context)) return true
+      }
+    }
+
+    child = parent
+    parent = parent.parent
+  }
+
+  return false
+}
+
+function isGuaranteedNotNullByPriorStatements (node, targetNode, context) {
+  // Find the closest statement that contains `node`.
+  let statement = node
+  while (statement && !/Statement$/.test(statement.type)) {
+    statement = statement.parent
+  }
+
+  if (!statement) return false
+
+  const container = statement.parent
+  if (!container || (container.type !== 'BlockStatement' && container.type !== 'Program')) return false
+
+  const body = container.body
+  const idx = body.indexOf(statement)
+  if (idx <= 0) return false
+
+  for (let i = idx - 1; i >= 0; i--) {
+    const prev = body[i]
+    if (prev?.type !== 'IfStatement') continue
+
+    // if (x == null) return;  -> after this, x is not-null (and possibly not-undefined)
+    // if (!x) return;         -> after this, x is truthy
+    const isNullish = isNullTest(prev.test, targetNode, context)
+    const isFalsy = isFalsyTest(prev.test, targetNode)
+    if (!isNullish && !isFalsy) continue
+
+    // Most reliable: an early return/throw/etc.
+    if (isTerminatingStatement(prev.consequent)) return true
+
+    // Also accept nullish "normalization" like:
+    // if (x === undefined || x === null) { x = 1 } ... typeof x === 'object'
+    if (isNullish && isNonNullishAssignmentInConsequent(prev.consequent, targetNode)) return true
+  }
+
   return false
 }
