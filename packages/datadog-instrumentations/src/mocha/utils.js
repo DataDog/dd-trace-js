@@ -421,7 +421,8 @@ function getOnPendingHandler () {
 function getRunTestsWrapper (runTests, config) {
   return function (suite) {
     if (config.isTestManagementTestsEnabled) {
-      for (const test of suite.tests) {
+      // eslint-disable-next-line unicorn/no-array-for-each
+      suite.tests.forEach((test) => {
         const { isAttemptToFix, isDisabled, isQuarantined } = getTestProperties(test, config.testManagementTests)
         if (isAttemptToFix && !test.isPending()) {
           test._ddIsAttemptToFix = true
@@ -440,7 +441,7 @@ function getRunTestsWrapper (runTests, config) {
           testsQuarantined.add(test)
           test._ddIsQuarantined = true
         }
-      }
+      })
     }
 
     if (config.isImpactedTestsEnabled) {

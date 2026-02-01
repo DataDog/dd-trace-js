@@ -355,12 +355,13 @@ addHook({
 
     const runner = run.apply(this, arguments)
 
-    for (const path of this.files) {
+    // eslint-disable-next-line unicorn/no-array-for-each
+    this.files.forEach((path) => {
       const isUnskippable = isMarkedAsUnskippable({ path })
       if (isUnskippable) {
         unskippableSuites.push(path)
       }
-    }
+    })
 
     getExecutionConfiguration(runner, false, frameworkVersion, () => {
       if (config.isKnownTestsEnabled) {
