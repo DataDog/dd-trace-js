@@ -35,8 +35,6 @@ describe('LLMObsEvalMetricsWriter', () => {
 
   it('constructs the writer with the correct agent proxy values', () => {
     writer = new LLMObsEvalMetricsWriter({
-      port: 8126,
-      hostname: 'localhost',
       url: new URL('http://localhost:8126'),
     })
     writer.setAgentless(false)

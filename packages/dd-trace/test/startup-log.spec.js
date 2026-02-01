@@ -40,8 +40,6 @@ describe('startup logging', () => {
       enabled: true,
       scope: 'async_hooks',
       service: 'test',
-      hostname: 'example.com',
-      port: 4321,
       url: new URL('http://example.com:4321/'),
       debug: true,
       sampler: {

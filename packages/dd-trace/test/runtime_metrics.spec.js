@@ -193,8 +193,6 @@ function createGarbage (count = 50) {
 
         config = {
           url: new URL('http://localhost:8126'),
-          hostname: 'localhost',
-          port: '8126',
           dogstatsd: {
             hostname: 'localhost',
             port: 8125,
