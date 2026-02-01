@@ -11,7 +11,7 @@ require('../setup/mocha')
 describe('getDebuggerConfig', function () {
   it('should only contain the allowed properties', function () {
     const tracerConfig = getConfig({
-      url: new URL('http://example.com:1234')
+      url: new URL('http://example.com:1234'),
     })
     const config = getDebuggerConfig(tracerConfig)
     assert.deepStrictEqual(Object.keys(config), [

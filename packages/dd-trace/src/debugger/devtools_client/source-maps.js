@@ -40,7 +40,7 @@ const self = module.exports = {
       null,
       (consumer) => consumer.originalPositionFor({ line, column })
     )
-  }
+  },
 }
 
 function cacheIt (key, value) {

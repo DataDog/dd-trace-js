@@ -7,6 +7,6 @@ module.exports = {
   require: ['packages/dd-trace/test/setup/mocha.js'],
   reporter: 'mocha-multi-reporters',
   reporterOption: [
-    'configFile=.mochamultireporterrc.js'
-  ]
+    'configFile=.mochamultireporterrc.js',
+  ],
 }

@@ -24,8 +24,8 @@ class CassandraDriverPlugin extends DatabasePlugin {
         'db.type': 'cassandra',
         'cassandra.query': query,
         'cassandra.keyspace': keyspace,
-        [CASSANDRA_CONTACT_POINTS_KEY]: contactPoints.join(',') || null
-      }
+        [CASSANDRA_CONTACT_POINTS_KEY]: contactPoints.join(',') || null,
+      },
     }, ctx)
 
     return ctx.currentStore

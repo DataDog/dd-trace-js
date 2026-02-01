@@ -28,12 +28,12 @@ esbuild.build({
     'oracledb',
     'pg-query-stream',
     'tedious',
-    '@yaacovcr/transform'
-  ]
+    '@yaacovcr/transform',
+  ],
 }).then(() => {
   const { status, stdout, stderr } = spawnSync('node', [SCRIPT], {
     env: { ...process.env, DD_TRACE_DEBUG: 'true' },
-    encoding: 'utf8'
+    encoding: 'utf8',
   })
   if (stderr.length) {
     console.error(stderr)

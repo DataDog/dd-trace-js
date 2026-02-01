@@ -23,7 +23,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
     clock = sinon.useFakeTimers()
 
     mockTracer = {
-      _config: { service: 'test-service' }
+      _config: { service: 'test-service' },
     }
 
     mockConfig = {
@@ -33,14 +33,14 @@ describe('FlaggingProvider Initialization Timeout', () => {
       experimental: {
         flaggingProvider: {
           enabled: true,
-          initializationTimeoutMs: 30_000 // Default timeout
-        }
-      }
+          initializationTimeoutMs: 30_000, // Default timeout
+        },
+      },
     }
 
     mockChannel = {
       publish: sinon.spy(),
-      hasSubscribers: false
+      hasSubscribers: false,
     }
 
     channelStub = sinon.stub().returns(mockChannel)
@@ -48,14 +48,14 @@ describe('FlaggingProvider Initialization Timeout', () => {
     log = {
       debug: sinon.spy(),
       error: sinon.spy(),
-      warn: sinon.spy()
+      warn: sinon.spy(),
     }
 
     FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
-        channel: channelStub
+        channel: channelStub,
       },
-      '../log': log
+      '../log': log,
     })
   })
 
@@ -108,10 +108,10 @@ describe('FlaggingProvider Initialization Timeout', () => {
           key: 'test-flag',
           variations: [
             { key: 'on', value: true },
-            { key: 'off', value: false }
-          ]
-        }
-      }
+            { key: 'off', value: false },
+          ],
+        },
+      },
     }
     provider._setConfiguration(ufc)
 
@@ -187,9 +187,9 @@ describe('FlaggingProvider Initialization Timeout', () => {
         experimental: {
           flaggingProvider: {
             enabled: true,
-            initializationTimeoutMs: 5000 // Custom 5-second timeout
-          }
-        }
+            initializationTimeoutMs: 5000, // Custom 5-second timeout
+          },
+        },
       }
 
       const provider = new FlaggingProvider(mockTracer, customConfig)
@@ -226,9 +226,9 @@ describe('FlaggingProvider Initialization Timeout', () => {
         experimental: {
           flaggingProvider: {
             enabled: true,
-            initializationTimeoutMs: 10_000 // Custom 10-second timeout
-          }
-        }
+            initializationTimeoutMs: 10_000, // Custom 10-second timeout
+          },
+        },
       }
 
       const provider = new FlaggingProvider(mockTracer, customConfig)
@@ -263,7 +263,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
       // Save original environment variable
       originalEnv = {
         DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS:
-          process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS
+          process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
       }
     })
 
@@ -321,9 +321,9 @@ describe('FlaggingProvider Initialization Timeout', () => {
         experimental: {
           flaggingProvider: {
             enabled: true,
-            initializationTimeoutMs: 3000 // This should override env var
-          }
-        }
+            initializationTimeoutMs: 3000, // This should override env var
+          },
+        },
       }
 
       const provider = new FlaggingProvider(mockTracer, configWithTimeout)

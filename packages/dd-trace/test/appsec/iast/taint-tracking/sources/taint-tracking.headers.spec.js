@@ -33,9 +33,9 @@ describe('Headers sourcing', () => {
         experimental: {
           iast: {
             enabled: true,
-            requestSampling: 100
-          }
-        }
+            requestSampling: 100,
+          },
+        },
       }))
     })
 
@@ -48,8 +48,8 @@ describe('Headers sourcing', () => {
         `http://localhost:${config.port}/`,
         {
           headers: {
-            'x-iast-test-header': 'value to be tainted'
-          }
+            'x-iast-test-header': 'value to be tainted',
+          },
         })
         .then(() => done())
         .catch(done)

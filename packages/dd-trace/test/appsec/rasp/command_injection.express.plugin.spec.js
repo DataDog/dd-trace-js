@@ -76,14 +76,14 @@ describe('RASP - command_injection', () => {
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
-          rasp: { enabled: true }
-        }
+          rasp: { enabled: true },
+        },
       }))
 
       server = expressApp.listen(0, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({
-          baseURL: `http://localhost:${port}`
+          baseURL: `http://localhost:${port}`,
         })
 
         done()

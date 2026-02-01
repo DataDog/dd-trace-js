@@ -7,7 +7,7 @@ const EXIT_SPAN_STACK_FRAMES_LIMIT = Number(process.env._DD_CODE_ORIGIN_FOR_SPAN
 
 module.exports = {
   entryTags,
-  exitTags
+  exitTags,
 }
 
 /**
@@ -46,7 +46,7 @@ function tag (type, topOfStackFunc, limit) {
   Error.stackTraceLimit = originalLimit
 
   const tags = {
-    '_dd.code_origin.type': type
+    '_dd.code_origin.type': type,
   }
   for (let i = 0; i < frames.length; i++) {
     const frame = frames[i]

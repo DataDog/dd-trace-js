@@ -43,8 +43,8 @@ async function createProfile (periodType) {
         throw err
       },
       warn (err) {
-      }
-    }
+      },
+    },
   })
 
   await wait(50)
@@ -95,47 +95,47 @@ describe('exporters/agent', function () {
         `process_id:${process.pid}`,
         `profiler_version:${version}`,
         'format:pprof',
-        `runtime-id:${RUNTIME_ID}`
+        `runtime-id:${RUNTIME_ID}`,
       ].join(','),
       info: {
         application: {
           env: ENV,
           service: SERVICE,
-          version: APP_VERSION
+          version: APP_VERSION,
         },
         platform: {
           hostname: HOST,
           kernel_name: os.type(),
           kernel_release: os.release(),
-          kernel_version: os.version()
+          kernel_version: os.version(),
         },
         profiler: {
           activation: 'unknown',
           ssi: {
-            mechanism: 'none'
+            mechanism: 'none',
           },
-          version
+          version,
         },
         runtime: {
           // @ts-expect-error - availableParallelism is only available from node 18.14.0 and above
           available_processors: os.availableParallelis?.() ?? os.cpus().length,
           engine: 'nodejs',
-          version: process.version.substring(1)
-        }
+          version: process.version.substring(1),
+        },
       },
-      process_tags: processTags.serialized
+      process_tags: processTags.serialized,
     })
 
     assertObjectContains(req.files, [{
       fieldname: 'wall.pprof',
       originalname: 'wall.pprof',
       mimetype: 'application/octet-stream',
-      size: req.files[1].buffer.length
+      size: req.files[1].buffer.length,
     }, {
       fieldname: 'space.pprof',
       originalname: 'space.pprof',
       mimetype: 'application/octet-stream',
-      size: req.files[2].buffer.length
+      size: req.files[2].buffer.length,
     }])
 
     const wallProfile = Profile.decode(req.files[1].buffer)
@@ -152,14 +152,14 @@ describe('exporters/agent', function () {
     docker = {
       inject (carrier) {
         carrier.test = 'injected'
-      }
+      },
     }
     http = {
-      request: sinon.spy(request)
+      request: sinon.spy(request),
     }
     const agent = proxyquire('../../../src/profiling/exporters/agent', {
       '../../exporters/common/docker': docker,
-      http
+      http,
     })
     AgentExporter = agent.AgentExporter
     computeRetries = agent.computeRetries
@@ -175,7 +175,7 @@ describe('exporters/agent', function () {
       env: ENV,
       service: SERVICE,
       version: APP_VERSION,
-      host: HOST
+      host: HOST,
     })
   }
 
@@ -201,17 +201,17 @@ describe('exporters/agent', function () {
       const start = new Date()
       const end = new Date()
       const tags = {
-        'runtime-id': RUNTIME_ID
+        'runtime-id': RUNTIME_ID,
       }
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
@@ -244,17 +244,17 @@ describe('exporters/agent', function () {
       const start = new Date()
       const end = new Date()
       const tags = {
-        'runtime-id': RUNTIME_ID
+        'runtime-id': RUNTIME_ID,
       }
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       let attempt = 0
@@ -308,7 +308,7 @@ describe('exporters/agent', function () {
         /^Submitting profiler agent report attempt #1 to:/i,
         /^Error from the agent: HTTP Error 500$/,
         /^Submitting profiler agent report attempt #2 to:/i,
-        /^Agent export response: ([0-9a-f]{2}( |$))*/
+        /^Agent export response: ([0-9a-f]{2}( |$))*/,
       ]
 
       let doneLogs
@@ -330,12 +330,12 @@ describe('exporters/agent', function () {
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       let tries = 0
@@ -348,14 +348,14 @@ describe('exporters/agent', function () {
         const data = Buffer.from(json)
         res.writeHead(500, {
           'content-type': 'application/json',
-          'content-length': data.length
+          'content-length': data.length,
         })
         res.end(data)
       })
 
       await Promise.all([
         exporter.export({ profiles, start, end, tags }),
-        waitForResponse
+        waitForResponse,
       ])
     })
 
@@ -367,12 +367,12 @@ describe('exporters/agent', function () {
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       let tries = 0
@@ -382,7 +382,7 @@ describe('exporters/agent', function () {
         const data = Buffer.from(json)
         res.writeHead(400, {
           'content-type': 'application/json',
-          'content-length': data.length
+          'content-length': data.length,
         })
         res.end(data)
       })
@@ -419,17 +419,17 @@ describe('exporters/agent', function () {
       const start = new Date()
       const end = new Date()
       const tags = {
-        'runtime-id': RUNTIME_ID
+        'runtime-id': RUNTIME_ID,
       }
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
@@ -469,17 +469,17 @@ describe('exporters/agent', function () {
       const start = new Date()
       const end = new Date()
       const tags = {
-        'runtime-id': RUNTIME_ID
+        'runtime-id': RUNTIME_ID,
       }
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {

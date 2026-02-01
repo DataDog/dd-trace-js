@@ -19,8 +19,8 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
         'span.kind': 'producer',
         'messaging.system': 'bullmq',
         'messaging.operation': 'publish',
-        ...meta
-      }
+        ...meta,
+      },
     }, ctx)
 
     this.injectTraceContext(span, ctx)
@@ -63,8 +63,8 @@ class QueueAddPlugin extends BaseBullmqProducerPlugin {
     return {
       resource: queueName,
       meta: {
-        'messaging.destination.name': ctx.self?.name
-      }
+        'messaging.destination.name': ctx.self?.name,
+      },
     }
   }
 
@@ -81,7 +81,7 @@ class QueueAddPlugin extends BaseBullmqProducerPlugin {
     return {
       queueName: ctx.self?.name || 'bullmq',
       payloadSize: data ? getMessageSize(data) : 0,
-      injectTarget: data
+      injectTarget: data,
     }
   }
 }
@@ -100,8 +100,8 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
       resource: queueName,
       meta: {
         'messaging.destination.name': ctx.self?.name,
-        'messaging.batch.message_count': Array.isArray(jobs) ? jobs.length : undefined
-      }
+        'messaging.batch.message_count': Array.isArray(jobs) ? jobs.length : undefined,
+      },
     }
   }
 
@@ -123,7 +123,7 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
     return {
       queueName: ctx.self?.name || 'bullmq',
       payloadSize,
-      injectTarget: jobs[0]?.data
+      injectTarget: jobs[0]?.data,
     }
   }
 
@@ -152,8 +152,8 @@ class FlowProducerAddPlugin extends BaseBullmqProducerPlugin {
     return {
       resource: queueName,
       meta: {
-        'messaging.destination.name': flow?.queueName
-      }
+        'messaging.destination.name': flow?.queueName,
+      },
     }
   }
 
@@ -170,7 +170,7 @@ class FlowProducerAddPlugin extends BaseBullmqProducerPlugin {
     return {
       queueName: flow?.queueName || 'bullmq',
       payloadSize: flow?.data ? getMessageSize(flow.data) : 0,
-      injectTarget: flow?.data
+      injectTarget: flow?.data,
     }
   }
 }

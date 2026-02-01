@@ -8,7 +8,7 @@ const {
   useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProcAndExpectExit,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const version = require('../../../../version.js')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')

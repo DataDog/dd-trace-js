@@ -99,7 +99,7 @@ module.exports = class FakeAgent extends EventEmitter {
     const meta = {
       custom: { v: 1 },
       hashes: { sha256: fileHash },
-      length: configStr.length
+      length: configStr.length,
     }
 
     this._rcFiles[config.id] = {
@@ -110,7 +110,7 @@ module.exports = class FakeAgent extends EventEmitter {
       config: configStr,
       path,
       fileHash,
-      meta
+      meta,
     }
     this._rcTargetsVersion++
   }
@@ -126,7 +126,7 @@ module.exports = class FakeAgent extends EventEmitter {
       this._rcFiles[id],
       {
         config,
-        fileHash: createHash('sha256').update(config).digest('hex')
+        fileHash: createHash('sha256').update(config).digest('hex'),
       }
     )
     config.meta.custom.v++
@@ -314,7 +314,7 @@ function buildExpressServer (agent) {
 
   app.get('/info', (req, res) => {
     res.json({
-      endpoints: ['/evp_proxy/v2']
+      endpoints: ['/evp_proxy/v2'],
     })
   })
 
@@ -323,14 +323,14 @@ function buildExpressServer (agent) {
     res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
     agent.emit('message', {
       headers: req.headers,
-      payload: msgpack.decode(req.body, { useBigInt64: true })
+      payload: msgpack.decode(req.body, { useBigInt64: true }),
     })
   })
 
   app.post('/v0.7/config', (req, res) => {
     const {
       client: { products, state },
-      cached_target_files: cachedTargetFiles
+      cached_target_files: cachedTargetFiles,
     } = req.body
 
     // Emit the remote config request payload for testing
@@ -377,8 +377,8 @@ function buildExpressServer (agent) {
       signed: {
         custom: { opaque_backend_state: 'foo' },
         targets: {},
-        version: agent._rcTargetsVersion
-      }
+        version: agent._rcTargetsVersion,
+      },
     }
     const targetFiles = []
     const clientConfigs = []
@@ -403,7 +403,7 @@ function buildExpressServer (agent) {
     res.json({
       targets: clientConfigs.length === 0 ? undefined : base64(targets),
       target_files: targetFiles,
-      client_configs: clientConfigs
+      client_configs: clientConfigs,
     })
   })
 
@@ -412,7 +412,7 @@ function buildExpressServer (agent) {
     agent.emit('debugger-input', {
       headers: req.headers,
       query: req.query,
-      payload: req.body
+      payload: req.body,
     })
   })
 
@@ -420,7 +420,7 @@ function buildExpressServer (agent) {
     res.status(200).send()
     agent.emit('debugger-diagnostics', {
       headers: req.headers,
-      payload: JSON.parse((/** @type {Express.Multer.File[]} */ (req.files))[0].buffer.toString())
+      payload: JSON.parse((/** @type {Express.Multer.File[]} */ (req.files))[0].buffer.toString()),
     })
   })
 
@@ -429,7 +429,7 @@ function buildExpressServer (agent) {
     agent.emit('message', {
       headers: req.headers,
       payload: req.body,
-      files: req.files
+      files: req.files,
     })
   })
 
@@ -437,7 +437,7 @@ function buildExpressServer (agent) {
     res.status(200).send()
     agent.emit('telemetry', {
       headers: req.headers,
-      payload: req.body
+      payload: req.body,
     })
   })
 
@@ -445,7 +445,7 @@ function buildExpressServer (agent) {
     res.status(200).send()
     agent.emit('llmobs', {
       headers: req.headers,
-      payload: req.body
+      payload: req.body,
     })
   })
 
@@ -453,7 +453,7 @@ function buildExpressServer (agent) {
     res.status(200).send()
     agent.emit('exposures', {
       headers: req.headers,
-      payload: req.body
+      payload: req.body,
     })
   })
 

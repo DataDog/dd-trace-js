@@ -127,7 +127,7 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
     for (let i = 0; i < args.length; i += 2) {
       expectedPoints.push({
         name: 'library_entrypoint.' + args[i],
-        tags: args[i + 1].split(',').filter(Boolean)
+        tags: args[i + 1].split(',').filter(Boolean),
       })
     }
     return expectedPoints
@@ -144,7 +144,7 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
       runtime_name: 'nodejs',
       runtime_version: process.versions.node,
       tracer_version: require('../../package.json').version,
-      pid
+      pid,
     }
 
     // Validate basic metadata
@@ -211,7 +211,7 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
       urlValue = value
     },
     enumerable: true,
-    configurable: true
+    configurable: true,
   })
 
   return new Promise((resolve, reject) => {
@@ -453,7 +453,7 @@ async function createSandbox (
 
   execHelper(`${BUN} add ${deps.join(' ')} ${addFlags.join(' ')}`, {
     ...addOptions,
-    timeout: 90_000
+    timeout: 90_000,
   })
 
   for (const path of integrationTestsPaths) {
@@ -503,7 +503,7 @@ async function createSandbox (
       } else {
         return execHelper(`rm -rf ${folder}`)
       }
-    }
+    },
   }
 }
 
@@ -539,7 +539,7 @@ function varySandbox (filename, variants, namedExport, packageName = variants, b
       ? {
           // eslint-disable-next-line @stylistic/max-len
           star: `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.${namedExport}`,
-          destructure: `import { ${namedExport} } from '${packageName}'`
+          destructure: `import { ${namedExport} } from '${packageName}'`,
         }
       : {
           default: `import ${bindingName} from '${packageName}'`,
@@ -548,7 +548,7 @@ function varySandbox (filename, variants, namedExport, packageName = variants, b
             : `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.default`,
           destructure: namedExport
             ? `import { ${namedExport} } from '${packageName}'; const ${bindingName} = { ${namedExport} }`
-            : `import { default as ${bindingName}} from '${packageName}'`
+            : `import { default as ${bindingName}} from '${packageName}'`,
         }
   }
 
@@ -687,7 +687,7 @@ function getCiVisAgentlessConfig (port) {
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
     NODE_OPTIONS: '-r dd-trace/ci/init',
-    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
+    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
   }
 }
 
@@ -704,7 +704,7 @@ function getCiVisEvpProxyConfig (port) {
     DD_TRACE_AGENT_PORT: String(port),
     NODE_OPTIONS: '-r dd-trace/ci/init',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
-    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
+    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
   }
 }
 
@@ -756,11 +756,11 @@ function preparePluginIntegrationTestSpawnOptions (
         NODE_OPTIONS,
         DD_TRACE_AGENT_PORT: String(agentPort),
         DD_TRACE_FLUSH_INTERVAL: '0',
-        ...additionalEnvArgs
+        ...additionalEnvArgs,
       },
-      execArgv
+      execArgv,
     },
-    stdioHandler
+    stdioHandler,
   }
 }
 
@@ -965,5 +965,5 @@ module.exports = {
   setShouldKill,
   sandboxCwd,
   useSandbox,
-  varySandbox
+  varySandbox,
 }

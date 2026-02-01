@@ -42,7 +42,7 @@ describe('Plugin', () => {
           connection = mariadb.createConnection({
             host: 'localhost',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
 
           return new Promise((resolve, reject) => {
@@ -116,8 +116,8 @@ describe('Plugin', () => {
               'db.user': 'root',
               'db.type': 'mariadb',
               component: 'mariadb',
-              '_dd.integration': 'mariadb'
-            }
+              '_dd.integration': 'mariadb',
+            },
           })
             .then(done)
             .catch(done)
@@ -139,8 +139,8 @@ describe('Plugin', () => {
                 'db.name': 'db',
                 'db.user': 'root',
                 'db.type': 'mariadb',
-                component: 'mariadb'
-              }
+                component: 'mariadb',
+              },
             })
               .then(done)
               .catch(done)
@@ -161,8 +161,8 @@ describe('Plugin', () => {
                 'db.name': 'db',
                 'db.user': 'root',
                 'db.type': 'mariadb',
-                component: 'mariadb'
-              }
+                component: 'mariadb',
+              },
             })
               .then(done)
               .catch(done)
@@ -188,7 +188,7 @@ describe('Plugin', () => {
                 [ERROR_TYPE]: error.name,
                 [ERROR_MESSAGE]: error.message,
                 [ERROR_STACK]: error.stack,
-                component: 'mariadb'
+                component: 'mariadb',
               })
             })
             .then(done)
@@ -225,7 +225,7 @@ describe('Plugin', () => {
           connection = mariadb.createConnection({
             host: 'localhost',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
 
           return new Promise((resolve, reject) => {
@@ -255,12 +255,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'mariadb.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'mariadb.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })
@@ -282,7 +282,7 @@ describe('Plugin', () => {
           connection = mariadb.createConnection({
             host: 'localhost',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
 
           return new Promise((resolve, reject) => {
@@ -301,12 +301,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'mariadb.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'mariadb.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
 
@@ -316,7 +316,7 @@ describe('Plugin', () => {
             sinon.assert.calledWith(serviceSpy, sinon.match({
               host: 'localhost',
               user: 'root',
-              database: 'db'
+              database: 'db',
             }))
             done()
           })
@@ -341,7 +341,7 @@ describe('Plugin', () => {
           pool = mariadb.createPool({
             connectionLimit: 1,
             host: 'localhost',
-            user: 'root'
+            user: 'root',
           })
         })
 
@@ -355,8 +355,8 @@ describe('Plugin', () => {
               'span.kind': 'client',
               'db.user': 'root',
               'db.type': 'mariadb',
-              component: 'mariadb'
-            }
+              component: 'mariadb',
+            },
           })
             .then(done)
             .catch(done)
@@ -420,7 +420,7 @@ describe('Plugin', () => {
               database: 'db',
               connectionLimit: 3,
               idleTimeout: 1,
-              minimumIdle: 1
+              minimumIdle: 1,
             })
 
             pool.getConnection((err, conn) => {

@@ -8,7 +8,7 @@ describe('Dynamic Instrumentation', function () {
     describe('Different file extension (TypeScript)', function () {
       const t = setup({
         testApp: 'target-app/source-map-support/typescript.js',
-        testAppSource: 'target-app/source-map-support/typescript.ts'
+        testAppSource: 'target-app/source-map-support/typescript.ts',
       })
 
       beforeEach(() => { t.triggerBreakpoint() })
@@ -17,7 +17,7 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location }, stack } } }] }) => {
           assert.deepStrictEqual(location, {
             file: 'target-app/source-map-support/typescript.ts',
-            lines: ['11']
+            lines: ['11'],
           })
 
           // Verify stack trace also uses original source locations
@@ -37,7 +37,7 @@ describe('Dynamic Instrumentation', function () {
     describe('Column information required (Minified)', function () {
       const t = setup({
         testApp: 'target-app/source-map-support/minify.min.js',
-        testAppSource: 'target-app/source-map-support/minify.js'
+        testAppSource: 'target-app/source-map-support/minify.js',
       })
 
       beforeEach(() => { t.triggerBreakpoint() })
@@ -46,7 +46,7 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location }, stack } } }] }) => {
           assert.deepStrictEqual(location, {
             file: 'target-app/source-map-support/minify.js',
-            lines: ['9']
+            lines: ['9'],
           })
 
           // Verify stack trace also uses original source locations
@@ -69,7 +69,7 @@ describe('Dynamic Instrumentation', function () {
       const t = setup({
         testApp: 'target-app/source-map-support/bundle.js',
         testAppSource: 'target-app/source-map-support/hello/world.ts',
-        dependencies: []
+        dependencies: [],
       })
 
       beforeEach(() => { t.triggerBreakpoint() })
@@ -78,7 +78,7 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location }, stack } } }] }) => {
           assert.deepStrictEqual(location, {
             file: 'target-app/source-map-support/hello/world.ts',
-            lines: ['2']
+            lines: ['2'],
           })
 
           // Verify stack trace also uses original source locations with relative paths

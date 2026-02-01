@@ -14,7 +14,7 @@ describe('iitm.js', () => {
   const iitm = {
     addHook: (fn) => {
       hookFn = fn
-    }
+    },
   }
   let iitmjs
 
@@ -25,7 +25,7 @@ describe('iitm.js', () => {
     before(() => {
       listener = sinon.stub()
       iitmjs = proxyquire('../src/iitm', {
-        'import-in-the-middle': iitm
+        'import-in-the-middle': iitm,
       })
     })
 

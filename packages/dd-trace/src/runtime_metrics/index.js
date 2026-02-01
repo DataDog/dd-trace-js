@@ -10,7 +10,7 @@ const noop = runtimeMetrics = {
   count () {},
   gauge () {},
   increment () {},
-  decrement () {}
+  decrement () {},
 }
 
 module.exports = {
@@ -28,7 +28,7 @@ module.exports = {
     runtimeMetrics.stop()
 
     Object.setPrototypeOf(module.exports, runtimeMetrics = noop)
-  }
+  },
 }
 
 Object.setPrototypeOf(module.exports, noop)

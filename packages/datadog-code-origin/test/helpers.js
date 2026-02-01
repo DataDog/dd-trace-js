@@ -29,5 +29,5 @@ module.exports = {
 
     // The second frame should not be present, because we only collect 1 frame for entry spans
     assert.ok(!('_dd.code_origin.frames.1.file' in tags))
-  }
+  },
 }

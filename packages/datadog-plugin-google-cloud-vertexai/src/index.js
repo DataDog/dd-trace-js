@@ -9,7 +9,7 @@ class GoogleCloudVertexAIPlugin extends CompositePlugin {
   static get plugins () {
     return {
       llmobs: VertexAILLMObsPlugin,
-      tracing: GoogleVertexAITracingPlugin
+      tracing: GoogleVertexAITracingPlugin,
     }
   }
 }

@@ -87,5 +87,5 @@ function traverseAndTaint (node, path, cache, transactionId) {
 
 module.exports = {
   taintObject,
-  taintQueryWithCache
+  taintQueryWithCache,
 }

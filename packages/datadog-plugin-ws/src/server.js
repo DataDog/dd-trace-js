@@ -43,8 +43,8 @@ class WSServerPlugin extends TracingPlugin {
         'http.method': options.method,
         'http.url': uri,
         'resource.name': `${options.method} ${route}`,
-        'span.kind': 'server'
-      }
+        'span.kind': 'server',
+      },
 
     }, ctx)
     ctx.span = span

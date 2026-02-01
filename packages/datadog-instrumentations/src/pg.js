@@ -5,7 +5,7 @@ const { errorMonitor } = require('node:events')
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 const startCh = channel('apm:pg:query:start')
@@ -54,7 +54,7 @@ function wrapQuery (query) {
       Object.defineProperty(textPropObj, 'text', {
         get () {
           return this?.__ddInjectableQuery || originalText
-        }
+        },
       })
     }
     const abortController = new AbortController()
@@ -64,7 +64,7 @@ function wrapQuery (query) {
       originalText,
       processId,
       abortController,
-      stream
+      stream,
     }
     const finish = (error, res) => {
       if (error) {

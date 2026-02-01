@@ -9,7 +9,7 @@ class AnthropicPlugin extends CompositePlugin {
   static get plugins () {
     return {
       llmobs: AnthropicLLMObsPlugin,
-      tracing: AnthropicTracingPlugin
+      tracing: AnthropicTracingPlugin,
     }
   }
 }

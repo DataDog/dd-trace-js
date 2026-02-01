@@ -43,7 +43,7 @@ function normalizeLinkContext (context) {
     traceId: id(context.traceId, 16),
     spanId: id(context.spanId, 16),
     sampling,
-    tracestate
+    tracestate,
   })
 }
 
@@ -70,7 +70,7 @@ class Tracer {
       sampling: parentSpanContext._sampling,
       baggageItems: { ...parentSpanContext._baggageItems },
       trace: parentSpanContext._trace,
-      tracestate: parentSpanContext._tracestate
+      tracestate: parentSpanContext._tracestate,
     })
   }
 
@@ -118,7 +118,7 @@ class Tracer {
     }
 
     const spanContext = new SpanContext({
-      traceId: id(traceId, 16), spanId: id(), tags: meta, parentId: id(spanId, 16)
+      traceId: id(traceId, 16), spanId: id(), tags: meta, parentId: id(spanId, 16),
     })
 
     spanContext._sampling = { priority: samplingPriority }
@@ -151,7 +151,7 @@ class Tracer {
 
         links.push({
           context: ddContext,
-          attributes: sanitizeAttributes(link.attributes)
+          attributes: sanitizeAttributes(link.attributes),
         })
       }
     }

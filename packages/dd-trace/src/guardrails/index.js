@@ -47,11 +47,11 @@ function guard (fn) {
     initBailout = true
     telemetry([
       { name: 'abort', tags: ['reason:incompatible_runtime'] },
-      { name: 'abort.runtime', tags: [] }
+      { name: 'abort.runtime', tags: [] },
     ], undefined, {
       result: 'abort',
       result_class: 'incompatible_runtime',
-      result_reason: 'Incompatible runtime Node.js ' + version + ', supported runtimes: Node.js ' + engines.node
+      result_reason: 'Incompatible runtime Node.js ' + version + ', supported runtimes: Node.js ' + engines.node,
     })
     log.info('Aborting application instrumentation due to incompatible_runtime.')
     log.info('Found incompatible runtime Node.js %s, Supported runtimes: Node.js %s.', version, engines.node)
@@ -66,7 +66,7 @@ function guard (fn) {
     telemetry('complete', ['injection_forced:' + (forced && initBailout ? 'true' : 'false')], {
       result: 'success',
       result_class: 'success',
-      result_reason: 'Successfully configured ddtrace package'
+      result_reason: 'Successfully configured ddtrace package',
     })
     log.info('Application instrumentation bootstrapping complete')
     return result

@@ -37,8 +37,8 @@ describe('AIGuard SDK integration tests', () => {
         DD_AI_GUARD_ENABLED: 'true',
         DD_AI_GUARD_ENDPOINT: `http://localhost:${api.address().port}`,
         DD_API_KEY: 'DD_API_KEY',
-        DD_APP_KEY: 'DD_APP_KEY'
-      }
+        DD_APP_KEY: 'DD_APP_KEY',
+      },
     })
     url = `${proc.url}`
   })
@@ -51,7 +51,7 @@ describe('AIGuard SDK integration tests', () => {
   const testSuite = [
     { endpoint: '/allow', action: 'ALLOW', reason: 'The prompt looks harmless' },
     { endpoint: '/deny', action: 'DENY', reason: 'I am feeling suspicious today' },
-    { endpoint: '/abort', action: 'ABORT', reason: 'The user is trying to destroy me' }
+    { endpoint: '/abort', action: 'ABORT', reason: 'The user is trying to destroy me' },
   ].flatMap(r => [
     { ...r, blocking: true },
     { ...r, blocking: false },

@@ -263,7 +263,7 @@ function assertLlmObsSpanEvent (actual, expected) {
     start_ns: fromBuffer(span.start, true),
     duration: fromBuffer(span.duration, true),
     status: error ? 'error' : 'ok',
-    meta: expectedMeta
+    meta: expectedMeta,
   }
 
   assert.deepStrictEqual(actual, expectedSpanEvent)
@@ -285,7 +285,7 @@ function assertLlmObsEvaluationMetric (actual, expected) {
     mlApp,
     timestamp = MOCK_NUMBER,
     value,
-    tags
+    tags,
   } = expected
 
   const actualTags = actual.tags
@@ -333,7 +333,7 @@ function expectedLLMObsTags ({
   span,
   error,
   tags,
-  sessionId
+  sessionId,
 }) {
   const version = span.meta?.version ?? ''
   const env = span.meta?.env ?? ''
@@ -347,7 +347,7 @@ function expectedLLMObsTags ({
     `ml_app:${tags.ml_app}`,
     `ddtrace.version:${tracerVersion}`,
     `error:${error ? 1 : 0}`,
-    'language:javascript'
+    'language:javascript',
   ]
 
   if (error) spanTags.push(`error_type:${span.meta[ERROR_TYPE]}`)
@@ -380,7 +380,7 @@ function fromBuffer (spanProperty, isNumber = false) {
 function useLlmObs ({
   plugin,
   tracerConfigOptions = {},
-  closeOptions = {}
+  closeOptions = {},
 } = {}) {
   /** @type {Promise<Array<Array<object>>>} */
   let apmTracesPromise
@@ -394,16 +394,16 @@ function useLlmObs ({
   }
 
   useEnv({
-    _DD_LLMOBS_FLUSH_INTERVAL: 0
+    _DD_LLMOBS_FLUSH_INTERVAL: 0,
   })
 
   before(() => {
     return agent.load(plugin, {}, {
       llmobs: {
         mlApp: 'test',
-        agentlessEnabled: false
+        agentlessEnabled: false,
       },
-      ...tracerConfigOptions
+      ...tracerConfigOptions,
     })
   })
 
@@ -439,7 +439,7 @@ function useLlmObs ({
       return evaluationMetricsRequests
         .flatMap(request => request.data.attributes.metrics)
         .sort((a, b) => a.timestamp_ms - b.timestamp_ms)
-    }
+    },
   }
 }
 
@@ -512,5 +512,5 @@ module.exports = {
   MOCK_NOT_NULLISH,
   MOCK_NUMBER,
   MOCK_STRING,
-  MOCK_OBJECT
+  MOCK_OBJECT,
 }

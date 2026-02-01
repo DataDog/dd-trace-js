@@ -22,6 +22,6 @@ module.exports = {
     'tedious',
     '@yaacovcr/transform',
     // required if you use OpenFeature (peer dependency)
-    '@openfeature/server-sdk'
-  ]
+    '@openfeature/server-sdk',
+  ],
 }

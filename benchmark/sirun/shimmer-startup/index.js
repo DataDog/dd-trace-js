@@ -7,7 +7,7 @@ const shimmer = require('../../../packages/datadog-shimmer')
 const {
   ENABLED,
   WRAP_FUNCTION,
-  FUNCTION_NAME
+  FUNCTION_NAME,
 } = process.env
 
 const ITERATIONS = 1e5
@@ -33,7 +33,7 @@ const testedFn = {
   declared,
   arrow,
   asyncDeclared,
-  asyncArrow
+  asyncArrow,
 }[FUNCTION_NAME]
 if (!testedFn) {
   throw new Error(`Function ${FUNCTION_NAME} not found`)
@@ -50,7 +50,7 @@ if (ENABLED === 'true') {
     }
   } else {
     const obj = {
-      testedFn
+      testedFn,
     }
     for (let i = 0; i < ITERATIONS; i++) {
       shimmer.wrap(obj, 'testedFn', (original) => {

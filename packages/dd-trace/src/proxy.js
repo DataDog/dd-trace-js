@@ -17,7 +17,7 @@ const {
   getBaggageItem,
   getAllBaggageItems,
   removeBaggageItem,
-  removeAllBaggageItems
+  removeAllBaggageItems,
 } = require('./baggage')
 
 class LazyModule {
@@ -60,7 +60,7 @@ function defineLazily (obj, property, getClass, ...args) {
       return value
     },
     configurable: true,
-    enumerable: true
+    enumerable: true,
   })
 }
 
@@ -86,7 +86,7 @@ class Tracer extends NoopProxy {
       iast: new LazyModule(() => require('./appsec/iast')),
       llmobs: new LazyModule(() => require('./llmobs')),
       rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter')),
-      openfeature: new LazyModule(() => require('./openfeature'))
+      openfeature: new LazyModule(() => require('./openfeature')),
     }
   }
 

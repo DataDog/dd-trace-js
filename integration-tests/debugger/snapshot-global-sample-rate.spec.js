@@ -6,7 +6,7 @@ const { setup } = require('./utils')
 describe('Dynamic Instrumentation', function () {
   const t = setup({
     testApp: 'target-app/basic.js',
-    dependencies: ['fastify']
+    dependencies: ['fastify'],
   })
 
   describe('input messages', function () {
@@ -31,14 +31,14 @@ describe('Dynamic Instrumentation', function () {
             triggerBreakpointContinuously () {
               t.axios.get(t.breakpoints[0].url).catch(done)
               this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
-            }
+            },
           },
           [rcConfig2.config.id]: {
             triggerBreakpointContinuously () {
               t.axios.get(t.breakpoints[1].url).catch(done)
               this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
-            }
-          }
+            },
+          },
         }
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {

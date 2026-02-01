@@ -78,7 +78,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -123,7 +123,7 @@ describe('Plugin', () => {
 
             server.command(`test.${collection}`, {
               planCacheListPlans: `test.${collection}`,
-              query: {}
+              query: {},
             }, () => {})
           })
 
@@ -143,8 +143,8 @@ describe('Plugin', () => {
             server.command(`test.${collection}`, {
               find: `test.${collection}`,
               query: {
-                _id: Buffer.from('1234')
-              }
+                _id: Buffer.from('1234'),
+              },
             }, () => {})
           })
 
@@ -165,8 +165,8 @@ describe('Plugin', () => {
               server.command(`test.${collection}`, {
                 find: `test.${collection}`,
                 query: {
-                  _id: 9999999999999999999999n
-                }
+                  _id: 9999999999999999999999n,
+                },
               }, () => {})
             } catch (err) {
               // It appears that most versions of MongodDB are happy to use a BigInt instance.
@@ -200,8 +200,8 @@ describe('Plugin', () => {
             server.command(`test.${collection}`, {
               find: `test.${collection}`,
               query: {
-                _id: new BSON.ObjectID(id)
-              }
+                _id: new BSON.ObjectID(id),
+              },
             }, () => {})
           })
 
@@ -222,8 +222,8 @@ describe('Plugin', () => {
               find: `test.${collection}`,
               query: {
                 _id: '1234',
-                foo: () => {}
-              }
+                foo: () => {},
+              },
             }, () => {})
           })
 
@@ -282,7 +282,7 @@ describe('Plugin', () => {
               agent
                 .assertSomeTraces(traces => {
                   assert.strictEqual(traces[0][0].resource, `killCursors test.${collection}`)
-                })
+                }),
             ])
               .then(() => done())
               .catch(done)
@@ -291,7 +291,7 @@ describe('Plugin', () => {
               cursor = server.cursor(`test.${collection}`, {
                 find: `test.${collection}`,
                 query: {},
-                batchSize: 1
+                batchSize: 1,
               }, { batchSize: 1 })
 
               next(cursor, () => next(cursor, () => cursor.kill(() => {})))
@@ -316,9 +316,9 @@ describe('Plugin', () => {
               query: {
                 foo: 1,
                 bar: {
-                  baz: [1, 2, 3]
-                }
-              }
+                  baz: [1, 2, 3],
+                },
+              },
             })
 
             next(cursor)
@@ -327,7 +327,7 @@ describe('Plugin', () => {
           it('should run the callback in the parent context', done => {
             const cursor = server.cursor(`test.${collection}`, {
               find: `test.${collection}`,
-              query: { a: 1 }
+              query: { a: 1 },
             })
 
             next(cursor, () => {
@@ -351,7 +351,7 @@ describe('Plugin', () => {
 
             const cursor = server.cursor(`test.${collection}`, {
               find: `test.${collection}`,
-              query: 'invalid'
+              query: 'invalid',
             })
 
             next(cursor, err => {
@@ -381,7 +381,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -407,12 +407,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'mongodb.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'mongodb.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })
@@ -432,7 +432,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -476,7 +476,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -517,9 +517,9 @@ describe('Plugin', () => {
           server.command(`test.${collection}`, {
             find: `test.${collection}`,
             query: {
-              _id: Buffer.from('1234')
+              _id: Buffer.from('1234'),
             },
-            comment: 'test comment'
+            comment: 'test comment',
           }, () => {})
         })
       })
@@ -539,7 +539,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -601,9 +601,9 @@ describe('Plugin', () => {
           server.command(`test.${collection}`, {
             find: `test.${collection}`,
             query: {
-              _id: Buffer.from('1234')
+              _id: Buffer.from('1234'),
             },
-            comment: 'test comment'
+            comment: 'test comment',
           }, () => {})
         })
 
@@ -622,7 +622,7 @@ describe('Plugin', () => {
                 `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
                 `ddps='${encodeURIComponent(span.meta.service)}',` +
                 `ddpv='${ddpv}',` +
-                `ddprs='${encodeURIComponent(span.meta['peer.service'])}'`
+                `ddprs='${encodeURIComponent(span.meta['peer.service'])}'`,
               ])
             })
             .then(done)
@@ -631,9 +631,9 @@ describe('Plugin', () => {
           server.command(`test.${collection}`, {
             find: `test.${collection}`,
             query: {
-              _id: Buffer.from('1234')
+              _id: Buffer.from('1234'),
             },
-            comment: ['test comment']
+            comment: ['test comment'],
           }, () => {})
         })
       })
@@ -654,7 +654,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -714,7 +714,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())

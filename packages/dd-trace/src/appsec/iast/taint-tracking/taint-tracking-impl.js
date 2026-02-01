@@ -31,7 +31,7 @@ const TaintTrackingNoop = {
   stringCase: noop,
   tplOperator: noop,
   trim: noop,
-  trimEnd: noop
+  trimEnd: noop,
 }
 
 function getTransactionId (iastContext) {
@@ -196,7 +196,7 @@ function csiMethodsOverrides (getContext) {
       }
 
       return res
-    }
+    },
   }
 }
 
@@ -207,7 +207,7 @@ function createImplWith (getContext) {
   // impls could be cached but at the moment there is only one invocation to getTaintTrackingImpl
   return {
     ...csiMethodsDefaults(methodNames, Object.keys(overrides), getContext),
-    ...overrides
+    ...overrides,
   }
 }
 
@@ -230,7 +230,7 @@ const lodashFns = {
   toUpper: TaintedUtils.stringCase,
   trim: TaintedUtils.trim,
   trimEnd: TaintedUtils.trimEnd,
-  trimStart: TaintedUtils.trim
+  trimStart: TaintedUtils.trim,
 
 }
 
@@ -254,5 +254,5 @@ function lodashTaintTrackingHandler (message) {
 module.exports = {
   getTaintTrackingImpl,
   getTaintTrackingNoop,
-  lodashTaintTrackingHandler
+  lodashTaintTrackingHandler,
 }

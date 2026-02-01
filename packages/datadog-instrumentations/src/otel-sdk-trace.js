@@ -14,7 +14,7 @@ if (otelSdkEnabled) {
   addHook({
     name: '@opentelemetry/sdk-trace-node',
     file: 'build/src/NodeTracerProvider.js',
-    versions: ['*']
+    versions: ['*'],
   }, (mod) => {
     shimmer.wrap(mod, 'NodeTracerProvider', () => {
       return tracer.TracerProvider

@@ -147,7 +147,7 @@ describe('express-mongo-sanitize', () => {
           assert.strictEqual(sanitizeFinished.hasSubscribers, false)
 
           const objectToSanitize = {
-            safeKey: 'safeValue'
+            safeKey: 'safeValue',
           }
 
           const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
@@ -160,9 +160,9 @@ describe('express-mongo-sanitize', () => {
 
           const objectToSanitize = {
             unsafeKey: {
-              $ne: 'test'
+              $ne: 'test',
             },
-            safeKey: 'safeValue'
+            safeKey: 'safeValue',
           }
 
           const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
@@ -189,7 +189,7 @@ describe('express-mongo-sanitize', () => {
           assert.strictEqual(sanitizeFinished.hasSubscribers, true)
 
           const objectToSanitize = {
-            safeKey: 'safeValue'
+            safeKey: 'safeValue',
           }
 
           const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
@@ -203,9 +203,9 @@ describe('express-mongo-sanitize', () => {
 
           const objectToSanitize = {
             unsafeKey: {
-              $ne: 'test'
+              $ne: 'test',
             },
-            safeKey: 'safeValue'
+            safeKey: 'safeValue',
           }
 
           const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)

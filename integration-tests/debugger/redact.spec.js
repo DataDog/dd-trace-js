@@ -9,7 +9,7 @@ describe('Dynamic Instrumentation snapshot PII redaction', function () {
   describe('DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS=foo,bar', function () {
     const t = setup({
       env: { DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: 'foo,bar' },
-      dependencies: ['fastify']
+      dependencies: ['fastify'],
     })
 
     it('should respect DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', async function () {
@@ -25,7 +25,7 @@ describe('Dynamic Instrumentation snapshot PII redaction', function () {
       assertObjectContains(locals, {
         foo: { type: 'string', notCapturedReason: 'redactedIdent' },
         bar: { type: 'string', notCapturedReason: 'redactedIdent' },
-        baz: { type: 'string', value: 'c' }
+        baz: { type: 'string', value: 'c' },
       })
 
       // existing redaction should not be impacted
@@ -36,7 +36,7 @@ describe('Dynamic Instrumentation snapshot PII redaction', function () {
   describe('DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS=secret', function () {
     const t = setup({
       env: { DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: 'secret' },
-      dependencies: ['fastify']
+      dependencies: ['fastify'],
     })
 
     it('should respect DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', async function () {
@@ -51,7 +51,7 @@ describe('Dynamic Instrumentation snapshot PII redaction', function () {
 
       assertObjectContains(locals, {
         secret: { type: 'string', value: 'shh!' },
-        password: { type: 'string', notCapturedReason: 'redactedIdent' }
+        password: { type: 'string', notCapturedReason: 'redactedIdent' },
       })
     })
   })

@@ -15,13 +15,13 @@ const stubRequest = sinon.stub()
 const stubZlib = {
   gzip: (payload, _opts, fn) => {
     fn(undefined, payload)
-  }
+  },
 }
 
 const { DataStreamsWriter } = proxyquire(
   '../../src/datastreams/writer', {
     '../exporters/common/request': stubRequest,
-    zlib: stubZlib
+    zlib: stubZlib,
   })
 
 describe('DataStreamWriter unix', () => {
@@ -29,7 +29,7 @@ describe('DataStreamWriter unix', () => {
   const unixConfig = {
     hostname: '',
     url: new URL('unix:///var/run/datadog/apm.socket'),
-    port: ''
+    port: '',
   }
 
   it('should construct unix config', () => {
@@ -51,9 +51,9 @@ describe('DataStreamWriter unix', () => {
         'Datadog-Meta-Lang': 'javascript',
         'Datadog-Meta-Tracer-Version': pkg.version,
         'Content-Type': 'application/msgpack',
-        'Content-Encoding': 'gzip'
+        'Content-Encoding': 'gzip',
       },
-      url: unixConfig.url
+      url: unixConfig.url,
     })
   })
 })

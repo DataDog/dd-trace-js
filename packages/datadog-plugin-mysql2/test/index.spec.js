@@ -40,7 +40,7 @@ describe('Plugin', () => {
           connection = mysql2.createConnection({
             host: '127.0.0.1',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
 
           connection.connect()
@@ -108,8 +108,8 @@ describe('Plugin', () => {
                 'db.name': 'db',
                 'db.user': 'root',
                 'db.type': 'mysql',
-                component: 'mysql2'
-              }
+                component: 'mysql2',
+              },
             })
             .then(done)
             .catch(done)
@@ -131,8 +131,8 @@ describe('Plugin', () => {
                 'db.name': 'db',
                 'db.user': 'root',
                 'db.type': 'mysql',
-                component: 'mysql2'
-              }
+                component: 'mysql2',
+              },
             })
             .then(done)
             .catch(done)
@@ -156,8 +156,8 @@ describe('Plugin', () => {
                 'db.name': 'db',
                 'db.user': 'root',
                 'db.type': 'mysql',
-                component: 'mysql2'
-              }
+                component: 'mysql2',
+              },
             })
             .then(done)
             .catch(done)
@@ -183,8 +183,8 @@ describe('Plugin', () => {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
-                  component: 'mysql2'
-                }
+                  component: 'mysql2',
+                },
               })
             })
             .then(done)
@@ -221,7 +221,7 @@ describe('Plugin', () => {
           connection = mysql2.createConnection({
             host: '127.0.0.1',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
 
           connection.connect()
@@ -234,19 +234,19 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'mysql.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'mysql.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
 
         it('should be configured with the correct values', done => {
           agent
             .assertFirstTraceSpan({
-              service: 'custom'
+              service: 'custom',
             })
             .then(done)
             .catch(done)
@@ -272,7 +272,7 @@ describe('Plugin', () => {
           connection = mysql2.createConnection({
             host: '127.0.0.1',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
 
           connection.connect()
@@ -285,12 +285,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'mysql.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'mysql.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
 
@@ -300,7 +300,7 @@ describe('Plugin', () => {
             sinon.assert.calledWith(serviceSpy, sinon.match({
               host: '127.0.0.1',
               user: 'root',
-              database: 'db'
+              database: 'db',
             }))
             done()
           })
@@ -325,7 +325,7 @@ describe('Plugin', () => {
           pool = mysql2.createPool({
             connectionLimit: 1,
             host: '127.0.0.1',
-            user: 'root'
+            user: 'root',
           })
         })
 
@@ -340,8 +340,8 @@ describe('Plugin', () => {
                 'span.kind': 'client',
                 'db.user': 'root',
                 'db.type': 'mysql',
-                component: 'mysql2'
-              }
+                component: 'mysql2',
+              },
             })
             .then(done)
             .catch(done)
@@ -385,7 +385,7 @@ describe('Plugin', () => {
           connection = mysql2.createConnection({
             host: '127.0.0.1',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
           connection.connect()
         })
@@ -405,7 +405,7 @@ describe('Plugin', () => {
         it('trace query resource should not be changed when propagation is enabled', done => {
           agent
             .assertFirstTraceSpan({
-              resource: 'SELECT 1 + 1 AS solution'
+              resource: 'SELECT 1 + 1 AS solution',
             })
             .then(done)
             .catch(done)
@@ -434,7 +434,7 @@ describe('Plugin', () => {
           connection = mysql2.createConnection({
             host: '127.0.0.1',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
           connection.connect()
         })
@@ -470,7 +470,7 @@ describe('Plugin', () => {
           connection = mysql2.createConnection({
             host: '127.0.0.1',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
           connection.connect()
         })
@@ -537,7 +537,7 @@ describe('Plugin', () => {
             connectionLimit: 1,
             host: '127.0.0.1',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
         })
 
@@ -573,7 +573,7 @@ describe('Plugin', () => {
             connectionLimit: 1,
             host: '127.0.0.1',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
         })
 

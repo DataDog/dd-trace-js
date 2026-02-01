@@ -14,5 +14,5 @@ module.exports = {
   NODE_MAJOR: parseInt(nodeMatches[1]),
   NODE_MINOR: parseInt(nodeMatches[2]),
   NODE_PATCH: parseInt(nodeMatches[3]),
-  NODE_VERSION: nodeMatches[0]
+  NODE_VERSION: nodeMatches[0],
 }

@@ -6,5 +6,5 @@ await client.messages.create({
   model: 'claude-3-7-sonnet-20250219',
   messages: [{ role: 'user', content: 'Hello, world!' }],
   max_tokens: 100,
-  temperature: 0.5
+  temperature: 0.5,
 })

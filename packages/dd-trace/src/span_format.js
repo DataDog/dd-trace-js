@@ -30,7 +30,7 @@ const map = {
   'operation.name': 'name',
   'service.name': 'service',
   'span.type': 'type',
-  'resource.name': 'resource'
+  'resource.name': 'resource',
 }
 
 function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = false) {
@@ -60,7 +60,7 @@ function formatSpan (span) {
     metrics: {},
     start: Math.round(span._startTime * 1e6),
     duration: Math.round(span._duration * 1e6),
-    links: []
+    links: [],
   }
 }
 
@@ -79,7 +79,7 @@ function extractSpanLinks (formattedSpan, span) {
     const { context, attributes } = link
     const formattedLink = {
       trace_id: context.toTraceId(true),
-      span_id: context.toSpanId(true)
+      span_id: context.toSpanId(true),
     }
 
     if (attributes && Object.keys(attributes).length > 0) {
@@ -101,7 +101,7 @@ function extractSpanEvents (formattedSpan, span) {
     return {
       name: event.name,
       time_unix_nano: Math.round(event.startTime * 1e6),
-      attributes: event.attributes && Object.keys(event.attributes).length > 0 ? event.attributes : undefined
+      attributes: event.attributes && Object.keys(event.attributes).length > 0 ? event.attributes : undefined,
     }
   })
   formattedSpan.span_events = events

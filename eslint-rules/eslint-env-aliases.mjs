@@ -24,7 +24,7 @@ function report (context, node, alias) {
     message: `Use canonical environment variable name '${canonical}' instead of alias '${alias}'`,
     fix (fixer) {
       return fixer.replaceText(node, `'${canonical}'`)
-    }
+    },
   })
 }
 
@@ -32,10 +32,10 @@ export default {
   meta: {
     type: 'suggestion',
     docs: {
-      description: 'Disallow usage of environment variable aliases instead of canonical names'
+      description: 'Disallow usage of environment variable aliases instead of canonical names',
     },
     fixable: 'code',
-    schema: []
+    schema: [],
   },
   create (context) {
     return {
@@ -54,7 +54,7 @@ export default {
             report(context, node, value)
           }
         }
-      }
+      },
     }
-  }
+  },
 }

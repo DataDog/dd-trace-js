@@ -12,11 +12,11 @@ test.describe('playwright', () => {
     const testSpan = tracer.scope().active()
 
     testSpan.addTags({
-      'test.custom_tag': 'this is custom'
+      'test.custom_tag': 'this is custom',
     })
 
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello World'
+      'Hello World',
     ])
   })
 })

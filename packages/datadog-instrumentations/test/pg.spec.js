@@ -6,7 +6,7 @@ const dc = require('dc-polyfill')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const clients = {
-  pg: pg => pg.Client
+  pg: pg => pg.Client,
 }
 
 if (process.env.PG_TEST_NATIVE === 'true') {
@@ -45,7 +45,7 @@ describe('pg instrumentation', () => {
               user: 'postgres',
               password: 'postgres',
               database: 'postgres',
-              application_name: 'test'
+              application_name: 'test',
             })
 
             client.connect(err => done(err))
@@ -189,7 +189,7 @@ describe('pg instrumentation', () => {
           user: 'postgres',
           password: 'postgres',
           database: 'postgres',
-          application_name: 'test'
+          application_name: 'test',
         })
       })
 

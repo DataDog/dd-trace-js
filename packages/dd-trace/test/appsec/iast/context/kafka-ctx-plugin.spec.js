@@ -19,7 +19,7 @@ describe('KafkaContextPlugin', () => {
     finishContext = sinon.stub(IastContextPlugin.prototype, 'finishContext')
 
     plugin = proxyquire('../../../../src/appsec/iast/context/kafka-ctx-plugin', {
-      './context-plugin': IastContextPlugin
+      './context-plugin': IastContextPlugin,
     })
 
     plugin.enable()

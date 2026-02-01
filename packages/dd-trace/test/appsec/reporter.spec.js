@@ -28,30 +28,30 @@ describe('reporter', () => {
     extendedHeadersCollection: {
       enabled: false,
       redaction: true,
-      maxHeaders: 50
+      maxHeaders: 50,
     },
     rasp: {
-      bodyCollection: false
-    }
+      bodyCollection: false,
+    },
   }
 
   beforeEach(() => {
     prioritySampler = {
-      setPriority: sinon.stub()
+      setPriority: sinon.stub(),
     }
 
     span = {
       _prioritySampler: prioritySampler,
       context: sinon.stub().returns({
-        _tags: {}
+        _tags: {},
       }),
       addTags: sinon.stub(),
       setTag: sinon.stub(),
-      keep: sinon.stub()
+      keep: sinon.stub(),
     }
 
     web = {
-      root: sinon.stub().returns(span)
+      root: sinon.stub().returns(span),
     }
 
     telemetry = {
@@ -63,12 +63,12 @@ describe('reporter', () => {
       updateRaspRequestsMetricTags: sinon.stub(),
       updateRaspRuleSkippedMetricTags: sinon.stub(),
       updateRateLimitedMetric: sinon.stub(),
-      getRequestMetrics: sinon.stub()
+      getRequestMetrics: sinon.stub(),
     }
 
     Reporter = proxyquire('../../src/appsec/reporter', {
       '../plugins/util/web': web,
-      './telemetry': telemetry
+      './telemetry': telemetry,
     })
   })
 
@@ -90,18 +90,18 @@ describe('reporter', () => {
         host: 'localhost',
         'user-agent': 42,
         secret: 'password',
-        'x-forwarded-for': '10'
+        'x-forwarded-for': '10',
       }, Reporter.mapHeaderAndTags([
         'host',
         'user-agent',
         'x-forwarded-for',
-        'x-client-ip'
+        'x-client-ip',
       ], 'prefix.'))
 
       assert.deepStrictEqual(result, {
         'prefix.host': 'localhost',
         'prefix.user-agent': '42',
-        'prefix.x-forwarded-for': '10'
+        'prefix.x-forwarded-for': '10',
       })
     })
 
@@ -113,18 +113,18 @@ describe('reporter', () => {
         host: 'localhost',
         'user-agent': 42,
         secret: 'password',
-        'x-forwarded-for': '10'
+        'x-forwarded-for': '10',
       }, new Set([
         'host',
         'user-agent',
         'x-forwarded-for',
-        'x-client-ip'
+        'x-client-ip',
       ]), 'prefix.', 3)
 
       assert.deepStrictEqual(result, {
         'prefix.content-digest': 'foo',
         'prefix.content-length': '42',
-        'prefix.content-security-policy': 'script-src self'
+        'prefix.content-security-policy': 'script-src self',
       })
     })
   })
@@ -145,7 +145,7 @@ describe('reporter', () => {
     const diagnosticsRules = {
       loaded: ['1', '3', '4'],
       failed: ['2'],
-      errors: { error: 'error parsing rule 2' }
+      errors: { error: 'error parsing rule 2' },
     }
 
     it('should add some entries to metricsQueue', () => {
@@ -311,14 +311,14 @@ describe('reporter', () => {
         skipped: [],
         errors: {
           'missing key operator': [
-            'blk-001-001'
-          ]
+            'blk-001-001',
+          ],
         },
         warnings: {
           'invalid tag': [
-            'blk-001-001'
-          ]
-        }
+            'blk-001-001',
+          ],
+        },
       },
       processors: {
         loaded: ['http-endpoint-fingerprint'],
@@ -326,10 +326,10 @@ describe('reporter', () => {
         skipped: [],
         errors: {
           'no mappings defined': [
-            'http-endpoint-fingerprint'
-          ]
-        }
-      }
+            'http-endpoint-fingerprint',
+          ],
+        },
+      },
     }
 
     it('should send diagnostics using telemetry logs', () => {
@@ -344,17 +344,17 @@ describe('reporter', () => {
       assert.strictEqual(telemetryLogHandlerAssert.getCall(0).calledWithExactly({
         message: '"missing key operator": ["blk-001-001"]',
         level: 'ERROR',
-        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:rules,rc_config_id:1'
+        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:rules,rc_config_id:1',
       }, 'datadog:telemetry:log'), true)
       assert.strictEqual(telemetryLogHandlerAssert.getCall(1).calledWithExactly({
         message: '"invalid tag": ["blk-001-001"]',
         level: 'WARN',
-        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:rules,rc_config_id:1'
+        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:rules,rc_config_id:1',
       }, 'datadog:telemetry:log'), true)
       assert.strictEqual(telemetryLogHandlerAssert.getCall(2).calledWithExactly({
         message: '"no mappings defined": ["http-endpoint-fingerprint"]',
         level: 'ERROR',
-        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:processors,rc_config_id:1'
+        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:processors,rc_config_id:1',
       }, 'datadog:telemetry:log'), true)
     })
 
@@ -372,12 +372,12 @@ describe('reporter', () => {
     beforeEach(() => {
       req = {
         socket: {
-          remoteAddress: '8.8.8.8'
+          remoteAddress: '8.8.8.8',
         },
         headers: {
           host: 'localhost',
-          'user-agent': 'arachni'
-        }
+          'user-agent': 'arachni',
+        },
       }
       storage('legacy').enterWith({ req })
     })
@@ -393,16 +393,16 @@ describe('reporter', () => {
         events: [
           {
             rule: {},
-            rule_matches: [{}]
-          }
-        ]
+            rule_matches: [{}],
+          },
+        ],
       })
 
       sinon.assert.calledOnceWithExactly(web.root, req)
       sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
-        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}'
+        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
       })
     })
 
@@ -411,9 +411,9 @@ describe('reporter', () => {
         events: [
           {
             rule: {},
-            rule_matches: [{}]
-          }
-        ]
+            rule_matches: [{}],
+          },
+        ],
       })
 
       sinon.assert.calledOnceWithExactly(web.root, req)
@@ -421,7 +421,7 @@ describe('reporter', () => {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
-        'network.client.ip': '8.8.8.8'
+        'network.client.ip': '8.8.8.8',
       })
     })
 
@@ -434,7 +434,7 @@ describe('reporter', () => {
       sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.appsec.json': '{"triggers":[]}',
-        'network.client.ip': '8.8.8.8'
+        'network.client.ip': '8.8.8.8',
       })
     })
 
@@ -444,13 +444,13 @@ describe('reporter', () => {
       Reporter.reportAttack({
         events: [
           {
-            rule: {}
+            rule: {},
           },
           {
             rule: {},
-            rule_matches: [{}]
-          }
-        ]
+            rule_matches: [{}],
+          },
+        ],
       })
 
       sinon.assert.calledOnceWithExactly(web.root, req)
@@ -458,7 +458,7 @@ describe('reporter', () => {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
-        'network.client.ip': '8.8.8.8'
+        'network.client.ip': '8.8.8.8',
       })
     })
 
@@ -468,13 +468,13 @@ describe('reporter', () => {
       Reporter.reportAttack({
         events: [
           {
-            rule: {}
+            rule: {},
           },
           {
             rule: {},
-            rule_matches: [{}]
-          }
-        ]
+            rule_matches: [{}],
+          },
+        ],
       })
 
       sinon.assert.calledOnceWithExactly(web.root, req)
@@ -482,14 +482,14 @@ describe('reporter', () => {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
-        'network.client.ip': '8.8.8.8'
+        'network.client.ip': '8.8.8.8',
       })
     })
 
     describe('extended collection', () => {
       const expectedBody = {
         foo: 42,
-        bar: 'baz'
+        bar: 'baz',
       }
 
       const objectDepth = (o) =>
@@ -509,11 +509,11 @@ describe('reporter', () => {
           extendedHeadersCollection: {
             enabled: false,
             redaction: true,
-            maxHeaders: 50
+            maxHeaders: 50,
           },
           rasp: {
-            bodyCollection: true
-          }
+            bodyCollection: true,
+          },
         })
         Reporter.init(config)
 
@@ -522,12 +522,12 @@ describe('reporter', () => {
             {
               rule: {
                 tags: {
-                  module: 'rasp'
-                }
+                  module: 'rasp',
+                },
               },
-              rule_matches: [{}]
-            }
-          ]
+              rule_matches: [{}],
+            },
+          ],
         })
 
         assert.deepStrictEqual(span.meta_struct['http.request.body'], expectedBody)
@@ -539,11 +539,11 @@ describe('reporter', () => {
           extendedHeadersCollection: {
             enabled: false,
             redaction: true,
-            maxHeaders: 50
+            maxHeaders: 50,
           },
           rasp: {
-            bodyCollection: false
-          }
+            bodyCollection: false,
+          },
         })
         Reporter.init(config)
 
@@ -552,12 +552,12 @@ describe('reporter', () => {
             {
               rule: {
                 tags: {
-                  module: 'rasp'
-                }
+                  module: 'rasp',
+                },
               },
-              rule_matches: [{}]
-            }
-          ]
+              rule_matches: [{}],
+            },
+          ],
         })
 
         assert.strictEqual(span.meta_struct?.['http.request.body'], undefined)
@@ -582,14 +582,14 @@ describe('reporter', () => {
             emptyObject: {},
             objectWithToJSON: {
               toJSON: () => Object.fromEntries([...Array(300).keys()].map(i => [i, i])),
-              foo: 'bar'
+              foo: 'bar',
             },
             objectWithToJSONRaisingException: {
-              toJSON: () => { throw new TypeError('Object not serializable') }
+              toJSON: () => { throw new TypeError('Object not serializable') },
             },
             emptyArray: [],
-            arrayWithToJSON
-          }
+            arrayWithToJSON,
+          },
         }
 
         requestBody.circularRef = requestBody
@@ -620,11 +620,11 @@ describe('reporter', () => {
             extendedHeadersCollection: {
               enabled: false,
               redaction: true,
-              maxHeaders: 50
+              maxHeaders: 50,
             },
             rasp: {
-              bodyCollection: true
-            }
+              bodyCollection: true,
+            },
           })
           Reporter.init(config)
 
@@ -635,12 +635,12 @@ describe('reporter', () => {
               {
                 rule: {
                   tags: {
-                    module: 'rasp'
-                  }
+                    module: 'rasp',
+                  },
                 },
-                rule_matches: [{}]
-              }
-            ]
+                rule_matches: [{}],
+              },
+            ],
           })
 
           sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.request_body_size.exceeded', 'true')
@@ -652,11 +652,11 @@ describe('reporter', () => {
             extendedHeadersCollection: {
               enabled: false,
               redaction: true,
-              maxHeaders: 50
+              maxHeaders: 50,
             },
             rasp: {
-              bodyCollection: true
-            }
+              bodyCollection: true,
+            },
           })
           Reporter.init(config)
 
@@ -667,17 +667,17 @@ describe('reporter', () => {
               {
                 rule: {
                   tags: {
-                    module: 'rasp'
-                  }
+                    module: 'rasp',
+                  },
                 },
-                rule_matches: [{}]
-              }
+                rule_matches: [{}],
+              },
             ],
             actions: {
               extended_data_collection: {
-                max_collected_headers: 10
-              }
-            }
+                max_collected_headers: 10,
+              },
+            },
           })
 
           sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.request_body_size.exceeded', 'true')
@@ -733,7 +733,7 @@ describe('reporter', () => {
         '_dd.appsec.s.req.cookies': schemaValue,
         '_dd.appsec.s.req.body': schemaValue,
         'custom.processor.output': 'custom_attribute',
-        'custom.processor.output_int': 42
+        'custom.processor.output_int': 42,
       }
 
       Reporter.reportAttributes(attributes)
@@ -750,7 +750,7 @@ describe('reporter', () => {
         '_dd.appsec.s.req.cookies': schemaEncoded,
         '_dd.appsec.s.req.body': schemaEncoded,
         'custom.processor.output': 'custom_attribute',
-        'custom.processor.output_int': 42
+        'custom.processor.output_int': 42,
       })
     })
   })
@@ -776,7 +776,7 @@ describe('reporter', () => {
       'content-language',
       'host',
       'accept-encoding',
-      'accept-language'
+      'accept-language',
     ]
     const requestHeadersAndValuesToTrackOnEvent = {}
     const expectedRequestTagsToTrackOnEvent = {}
@@ -787,7 +787,7 @@ describe('reporter', () => {
 
     beforeEach(() => {
       wafContext = {
-        dispose: sinon.stub()
+        dispose: sinon.stub(),
       }
     })
 
@@ -832,8 +832,8 @@ describe('reporter', () => {
           'akamai-user-risk': 'h',
           'content-type': 'i',
           accept: 'j',
-          'user-agent': 'k'
-        }
+          'user-agent': 'k',
+        },
       }
 
       Reporter.finishRequest(req)
@@ -849,27 +849,27 @@ describe('reporter', () => {
         'http.request.headers.akamai-user-risk': 'h',
         'http.request.headers.content-type': 'i',
         'http.request.headers.accept': 'j',
-        'http.request.headers.user-agent': 'k'
+        'http.request.headers.user-agent': 'k',
       })
     })
 
     it('should add http response data inside request span', () => {
       const req = {
         route: {
-          path: '/path/:param'
+          path: '/path/:param',
         },
         headers: {
-          'x-cloud-trace-context': 'd'
-        }
+          'x-cloud-trace-context': 'd',
+        },
       }
 
       const res = {
         getHeaders: () => {
           return {
             'content-type': 'application/json',
-            'content-length': '42'
+            'content-length': '42',
           }
-        }
+        },
       }
 
       span.context()._tags['appsec.event'] = 'true'
@@ -880,7 +880,7 @@ describe('reporter', () => {
       sinon.assert.calledOnceWithExactly(span.addTags, {
         'http.request.headers.x-cloud-trace-context': 'd',
         'http.response.headers.content-type': 'application/json',
-        'http.response.headers.content-length': '42'
+        'http.response.headers.content-length': '42',
       })
     })
 
@@ -890,9 +890,9 @@ describe('reporter', () => {
         getHeaders: () => {
           return {
             'content-type': 'application/json',
-            'content-length': '42'
+            'content-length': '42',
           }
-        }
+        },
       }
 
       span.context()._tags['appsec.event'] = 'true'
@@ -902,7 +902,7 @@ describe('reporter', () => {
 
       sinon.assert.calledWithExactly(span.addTags, {
         'http.response.headers.content-type': 'application/json',
-        'http.response.headers.content-length': '42'
+        'http.response.headers.content-length': '42',
       })
     })
 
@@ -910,13 +910,13 @@ describe('reporter', () => {
       const req = {
         headers: {
           'user-agent': 'arachni',
-          ...requestHeadersAndValuesToTrackOnEvent
-        }
+          ...requestHeadersAndValuesToTrackOnEvent,
+        },
       }
       const res = {
         getHeaders: () => {
           return {}
-        }
+        },
       }
       span.context()._tags['appsec.event'] = 'true'
 
@@ -924,7 +924,7 @@ describe('reporter', () => {
 
       const expectedTags = {
         'http.request.headers.user-agent': 'arachni',
-        ...expectedRequestTagsToTrackOnEvent
+        ...expectedRequestTagsToTrackOnEvent,
       }
 
       sinon.assert.calledWithExactly(span.addTags, expectedTags)
@@ -934,13 +934,13 @@ describe('reporter', () => {
       const req = {
         headers: {
           'user-agent': 'arachni',
-          ...requestHeadersAndValuesToTrackOnEvent
-        }
+          ...requestHeadersAndValuesToTrackOnEvent,
+        },
       }
       const res = {
         getHeaders: () => {
           return {}
-        }
+        },
       }
 
       span.context()
@@ -950,7 +950,7 @@ describe('reporter', () => {
 
       const expectedTags = {
         'http.request.headers.user-agent': 'arachni',
-        ...expectedRequestTagsToTrackOnEvent
+        ...expectedRequestTagsToTrackOnEvent,
       }
 
       sinon.assert.calledWithExactly(span.addTags, expectedTags)
@@ -960,13 +960,13 @@ describe('reporter', () => {
       const req = {
         headers: {
           'user-agent': 'arachni',
-          ...requestHeadersAndValuesToTrackOnEvent
-        }
+          ...requestHeadersAndValuesToTrackOnEvent,
+        },
       }
       const res = {
         getHeaders: () => {
           return {}
-        }
+        },
       }
 
       span.context()
@@ -976,7 +976,7 @@ describe('reporter', () => {
 
       const expectedTags = {
         'http.request.headers.user-agent': 'arachni',
-        ...expectedRequestTagsToTrackOnEvent
+        ...expectedRequestTagsToTrackOnEvent,
       }
 
       sinon.assert.calledWithExactly(span.addTags, expectedTags)
@@ -986,13 +986,13 @@ describe('reporter', () => {
       const req = {
         headers: {
           'user-agent': 'arachni',
-          ...requestHeadersAndValuesToTrackOnEvent
-        }
+          ...requestHeadersAndValuesToTrackOnEvent,
+        },
       }
       const res = {
         getHeaders: () => {
           return {}
-        }
+        },
       }
 
       span.context()
@@ -1002,7 +1002,7 @@ describe('reporter', () => {
 
       const expectedTags = {
         'http.request.headers.user-agent': 'arachni',
-        ...expectedRequestTagsToTrackOnEvent
+        ...expectedRequestTagsToTrackOnEvent,
       }
 
       sinon.assert.calledWithExactly(span.addTags, expectedTags)
@@ -1108,13 +1108,13 @@ describe('reporter', () => {
           headers: {
             'user-agent': 'arachni',
             ...requestHeadersAndValuesToTrackOnEvent,
-            ...extendedRequestHeadersAndValues
-          }
+            ...extendedRequestHeadersAndValues,
+          },
         }
         const res = {
           getHeaders: () => {
             return extendedResponseHeadersAndValues
-          }
+          },
         }
         span.context()._tags['appsec.event'] = 'true'
 
@@ -1123,11 +1123,11 @@ describe('reporter', () => {
           extendedHeadersCollection: {
             enabled: true,
             redaction: false,
-            maxHeaders: 50
+            maxHeaders: 50,
           },
           rasp: {
-            bodyCollection: false
-          }
+            bodyCollection: false,
+          },
         })
         Reporter.init(config)
         Reporter.finishRequest(req, res)
@@ -1136,7 +1136,7 @@ describe('reporter', () => {
           'http.request.headers.user-agent': 'arachni',
           ...expectedRequestTagsToTrackOnEvent,
           ...extendedRequestHeadersTags,
-          ...extendedResponseHeadersTags
+          ...extendedResponseHeadersTags,
         }
 
         sinon.assert.calledWith(span.addTags, expectedTags)
@@ -1147,13 +1147,13 @@ describe('reporter', () => {
           headers: {
             'user-agent': 'arachni',
             ...requestHeadersAndValuesToTrackOnEvent,
-            ...extendedRequestHeadersAndValues
-          }
+            ...extendedRequestHeadersAndValues,
+          },
         }
         const res = {
           getHeaders: () => {
             return extendedResponseHeadersAndValues
-          }
+          },
         }
         span.context()._tags['appsec.event'] = 'true'
 
@@ -1167,11 +1167,11 @@ describe('reporter', () => {
           extendedHeadersCollection: {
             enabled: true,
             redaction: false,
-            maxHeaders
+            maxHeaders,
           },
           rasp: {
-            bodyCollection: false
-          }
+            bodyCollection: false,
+          },
         })
 
         Reporter.init(config)
@@ -1187,7 +1187,7 @@ describe('reporter', () => {
             Object.entries(extendedResponseHeadersTags).slice(0, -discardedResHeadersCount)
           ),
           '_dd.appsec.request.header_collection.discarded': discardedReqHeadersCount,
-          '_dd.appsec.response.header_collection.discarded': discardedResHeadersCount
+          '_dd.appsec.response.header_collection.discarded': discardedResHeadersCount,
         }
 
         sinon.assert.calledWith(span.addTags, expectedTags)
@@ -1198,13 +1198,13 @@ describe('reporter', () => {
           headers: {
             'user-agent': 'arachni',
             ...requestHeadersAndValuesToTrackOnEvent,
-            ...extendedRequestHeadersAndValues
-          }
+            ...extendedRequestHeadersAndValues,
+          },
         }
         const res = {
           getHeaders: () => {
             return extendedResponseHeadersAndValues
-          }
+          },
         }
         span.context()._tags['appsec.event'] = 'true'
 
@@ -1213,11 +1213,11 @@ describe('reporter', () => {
           extendedHeadersCollection: {
             enabled: true,
             redaction: true,
-            maxHeaders: 50
+            maxHeaders: 50,
           },
           rasp: {
-            bodyCollection: false
-          }
+            bodyCollection: false,
+          },
         })
 
         Reporter.init(config)
@@ -1225,7 +1225,7 @@ describe('reporter', () => {
 
         const expectedTags = {
           'http.request.headers.user-agent': 'arachni',
-          ...expectedRequestTagsToTrackOnEvent
+          ...expectedRequestTagsToTrackOnEvent,
         }
 
         sinon.assert.calledWith(span.addTags, expectedTags)

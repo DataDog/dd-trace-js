@@ -30,8 +30,8 @@ describe('Instrumentation', () => {
           client = knex({
             client: 'sqlite3',
             connection: {
-              filename: ':memory:'
-            }
+              filename: ':memory:',
+            },
           })
         })
 

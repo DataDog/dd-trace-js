@@ -19,7 +19,7 @@ const SHOULD_FILTER_DD_TRACE_INSTRUMENTAION = __filename.endsWith(
 
 module.exports = {
   getCallSites,
-  parseUserLandFrames
+  parseUserLandFrames,
 }
 
 // From https://github.com/felixge/node-stack-trace/blob/ba06dcdb50d465cd440d84a563836e293b360427/index.js#L1
@@ -141,7 +141,7 @@ function parseLine (stack, start, end) {
     fileName,
     methodName,
     functionName,
-    typeName
+    typeName,
   }
 }
 
@@ -239,6 +239,6 @@ function parseLocation (stack, start, index) {
     fileName,
     lineNumber,
     columnNumber,
-    index // return the index, so the caller knows how far we got
+    index, // return the index, so the caller knows how far we got
   ]
 }

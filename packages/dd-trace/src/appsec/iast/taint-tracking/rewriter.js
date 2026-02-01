@@ -67,7 +67,7 @@ function getRewriter (telemetryVerbosity) {
         csiMethods,
         telemetryVerbosity: getName(telemetryVerbosity),
         chainSourceMap,
-        orchestrion: orchestrionConfig
+        orchestrion: orchestrionConfig,
       })
     } catch (e) {
       log.error('Unable to initialize Rewriter', e)
@@ -91,7 +91,7 @@ function getPrepareStackTraceAccessor () {
     set (value) {
       actual = getPrepareStackTrace(value)
       originalPrepareStackTrace = value
-    }
+    },
   }
 }
 
@@ -221,8 +221,8 @@ let enableEsmRewriter = function (telemetryVerbosity) {
           telemetryVerbosity,
           chainSourceMap: isFlagPresent('--enable-source-maps'),
           orchestrionConfig,
-          iastEnabled: config?.iast?.enabled
-        }
+          iastEnabled: config?.iast?.enabled,
+        },
       })
     } catch (e) {
       log.error('Error enabling ESM Rewriter', e)
@@ -262,5 +262,5 @@ function enable (configArg) {
 }
 
 module.exports = {
-  enable, disable, getOriginalPathAndLineFromSourceMap, getRewriter
+  enable, disable, getOriginalPathAndLineFromSourceMap, getRewriter,
 }

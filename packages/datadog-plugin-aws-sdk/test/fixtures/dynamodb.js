@@ -6,44 +6,44 @@ ddb.create = {
   AttributeDefinitions: [
     {
       AttributeName: 'CUSTOMER_ID',
-      AttributeType: 'N'
+      AttributeType: 'N',
     },
     {
       AttributeName: 'CUSTOMER_NAME',
-      AttributeType: 'S'
-    }
+      AttributeType: 'S',
+    },
   ],
   KeySchema: [
     {
       AttributeName: 'CUSTOMER_ID',
-      KeyType: 'HASH'
+      KeyType: 'HASH',
     },
     {
       AttributeName: 'CUSTOMER_NAME',
-      KeyType: 'RANGE'
-    }
+      KeyType: 'RANGE',
+    },
   ],
   ProvisionedThroughput: {
     ReadCapacityUnits: 1,
-    WriteCapacityUnits: 1
+    WriteCapacityUnits: 1,
   },
-  TableName: 'CUSTOMER_LIST'
+  TableName: 'CUSTOMER_LIST',
 }
 
 ddb.put = {
   TableName: 'CUSTOMER_LIST',
   Item: {
     CUSTOMER_ID: { N: '001' },
-    CUSTOMER_NAME: { S: 'Richard Roe' }
-  }
+    CUSTOMER_NAME: { S: 'Richard Roe' },
+  },
 }
 
 ddb.get = {
   TableName: 'CUSTOMER_LIST',
   Key: {
     CUSTOMER_ID: { N: '001' },
-    CUSTOMER_NAME: { S: 'Richard Roe' }
-  }
+    CUSTOMER_NAME: { S: 'Richard Roe' },
+  },
 }
 
 ddb.batch = {
@@ -52,12 +52,12 @@ ddb.batch = {
       Keys: [
         {
           CUSTOMER_ID: { N: '001' },
-          CUSTOMER_NAME: { S: 'Richard Roe' }
-        }
+          CUSTOMER_NAME: { S: 'Richard Roe' },
+        },
       ],
-      ConsistentRead: true
-    }
-  }
+      ConsistentRead: true,
+    },
+  },
 }
 
 module.exports = ddb

@@ -20,7 +20,7 @@ const getDsmPathwayHash = (queueName, isProducer, parentHash) => {
 }
 
 createIntegrationTestSuite('bullmq', 'bullmq', {
-  category: 'messaging'
+  category: 'messaging',
 }, (meta) => {
   before(async () => {
     await testSetup.setup(meta.mod)

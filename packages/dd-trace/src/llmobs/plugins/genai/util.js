@@ -5,7 +5,7 @@ const ROLES = {
   MODEL: 'model',
   ASSISTANT: 'assistant',
   USER: 'user',
-  REASONING: 'reasoning'
+  REASONING: 'reasoning',
 }
 
 /**
@@ -36,7 +36,7 @@ function extractTextParts (parts) {
 function groupPartsByRole (parts) {
   const grouped = {
     reasoning: '',
-    assistant: ''
+    assistant: '',
   }
 
   for (const part of parts) {
@@ -144,7 +144,7 @@ function extractMetadata (config) {
     seed: 'seed',
     response_mime_type: 'responseMimeType',
     safety_settings: 'safetySettings',
-    automatic_function_calling: 'automaticFunctionCalling'
+    automatic_function_calling: 'automaticFunctionCalling',
   }
 
   const metadata = {}
@@ -167,7 +167,7 @@ function formatFunctionCallMessage (parts, functionCalls, role) {
     name: part.functionCall.name,
     arguments: part.functionCall.args,
     toolId: part.functionCall.id || '',
-    type: 'function_call'
+    type: 'function_call',
   }))
 
   const textParts = extractTextParts(parts)
@@ -190,12 +190,12 @@ function formatFunctionResponseMessage (functionResponses, role) {
     name: part.functionResponse.name,
     result: JSON.stringify(part.functionResponse.response),
     toolId: part.functionResponse.id,
-    type: 'function_response'
+    type: 'function_response',
   }))
 
   return {
     role,
-    toolResults
+    toolResults,
   }
 }
 
@@ -233,7 +233,7 @@ function formatContentObject (content) {
   if (hasThoughtParts(parts)) {
     return {
       role: ROLES.REASONING,
-      content: extractTextParts(parts).join('\n')
+      content: extractTextParts(parts).join('\n'),
     }
   }
 
@@ -252,7 +252,7 @@ function formatContentObject (content) {
   // Regular text content
   return {
     role,
-    content: extractTextParts(parts).join('\n')
+    content: extractTextParts(parts).join('\n'),
   }
 }
 
@@ -340,8 +340,8 @@ function formatNonStreamingCandidate (candidate) {
       role: ROLES.ASSISTANT,
       content: JSON.stringify({
         language: executableCode.executableCode.language,
-        code: executableCode.executableCode.code
-      })
+        code: executableCode.executableCode.code,
+      }),
     })
     return messages
   }
@@ -353,8 +353,8 @@ function formatNonStreamingCandidate (candidate) {
       role: ROLES.ASSISTANT,
       content: JSON.stringify({
         outcome: codeExecutionResult.codeExecutionResult.outcome,
-        output: codeExecutionResult.codeExecutionResult.output
-      })
+        output: codeExecutionResult.codeExecutionResult.output,
+      }),
     })
     return messages
   }
@@ -365,14 +365,14 @@ function formatNonStreamingCandidate (candidate) {
   if (partsByRole.reasoning) {
     messages.push({
       role: ROLES.REASONING,
-      content: partsByRole.reasoning
+      content: partsByRole.reasoning,
     })
   }
 
   if (partsByRole.assistant) {
     messages.push({
       role: ROLES.ASSISTANT,
-      content: partsByRole.assistant
+      content: partsByRole.assistant,
     })
   }
 
@@ -482,5 +482,5 @@ module.exports = {
   formatInputMessages,
   formatEmbeddingInput,
   formatOutputMessages,
-  formatEmbeddingOutput
+  formatEmbeddingOutput,
 }

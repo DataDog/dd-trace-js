@@ -13,7 +13,7 @@ const options = {
   shard: process.env.TEST_SHARD || undefined,
   setupFilesAfterEnv: process.env.SETUP_FILES_AFTER_ENV ? process.env.SETUP_FILES_AFTER_ENV.split(',') : [],
   testRunner: 'jest-circus/runner',
-  testEnvironment: 'node'
+  testEnvironment: 'node',
 }
 
 if (process.env.RUN_IN_PARALLEL) {

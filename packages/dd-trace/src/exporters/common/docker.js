@@ -44,5 +44,5 @@ module.exports = {
     if (DD_EXTERNAL_ENV) {
       carrier['Datadog-External-Env'] = DD_EXTERNAL_ENV
     }
-  }
+  },
 }

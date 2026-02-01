@@ -33,8 +33,8 @@ describe('ESM Security controls', () => {
             SANITIZER:COMMAND_INJECTION:appsec/esm-security-controls/sanitizer.mjs:sanitize;\
             SANITIZER:COMMAND_INJECTION:appsec/esm-security-controls/sanitizer-default.mjs;\
             INPUT_VALIDATOR:*:appsec/esm-security-controls/validator.mjs:validate',
-            NODE_OPTIONS: nodeOptions
-          }
+            NODE_OPTIONS: nodeOptions,
+          },
         })
 
         axios = Axios.create({ baseURL: proc.url })

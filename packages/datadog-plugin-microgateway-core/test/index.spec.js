@@ -35,11 +35,11 @@ describe('Plugin', () => {
           edgemicro: {
             port: gatewayPort,
             logging: { level: 'info', dir: os.tmpdir() },
-            proxy: 'http://localhost:' + proxyPort
+            proxy: 'http://localhost:' + proxyPort,
           },
           proxies: [
-            { base_path: '/v1', secure: false, url: 'http://localhost:' + apiPort }
-          ]
+            { base_path: '/v1', secure: false, url: 'http://localhost:' + apiPort },
+          ],
         })
 
         gateway.start((err, server) => {
@@ -107,11 +107,11 @@ describe('Plugin', () => {
           }
 
           const first = {
-            init: (config, logging, stats) => ({ onrequest })
+            init: (config, logging, stats) => ({ onrequest }),
           }
 
           const second = {
-            init: (config, logging, stats) => ({ onrequest })
+            init: (config, logging, stats) => ({ onrequest }),
           }
 
           gateway.addPlugin('first', first.init)
@@ -128,8 +128,8 @@ describe('Plugin', () => {
             init: (config, logging, stats) => ({
               onrequest: (req, res, options, cb) => {
                 cb(error)
-              }
-            })
+              },
+            }),
           }
 
           agent
@@ -157,8 +157,8 @@ describe('Plugin', () => {
             init: (config, logging, stats) => ({
               onrequest: (req, res, options, cb) => {
                 throw error
-              }
-            })
+              },
+            }),
           }
 
           agent

@@ -21,7 +21,7 @@ class RestifyPlugin extends RouterPlugin {
   configure (config) {
     return super.configure({
       ...config,
-      middleware: false // not supported
+      middleware: false, // not supported
     })
   }
 }

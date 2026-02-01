@@ -37,8 +37,8 @@ class FsPlugin extends TracingPlugin {
         'file.mode': mode,
         'file.path': path || '',
         'file.src': params.src || params.oldPath || params.existingPath || params.target,
-        'file.uid': uid || ''
-      }
+        'file.uid': uid || '',
+      },
     }, ctx)
 
     return ctx.currentStore

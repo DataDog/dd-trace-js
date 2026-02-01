@@ -17,8 +17,8 @@ class VercelAITracingPlugin extends TracingPlugin {
       meta: {
         'resource.name': attributes['resource.name'] ?? name,
         'ai.request.model': model,
-        'ai.request.model_provider': modelProvider
-      }
+        'ai.request.model_provider': modelProvider,
+      },
     }, ctx)
 
     return ctx.currentStore

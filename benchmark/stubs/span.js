@@ -8,15 +8,15 @@ const tags = {
   'resource.name': '/resource',
   'service.name': 'benchmark',
   'span.type': 'web',
-  error: true
+  error: true,
 }
 
 const span = {
   tracer: () => ({
     scope: () => ({
-      _wipe: () => {}
+      _wipe: () => {},
     }),
-    _service: 'service'
+    _service: 'service',
   }),
   addTags: () => {},
   _addTags: () => {},
@@ -27,20 +27,20 @@ const span = {
     _trace: {
       started: [span, span],
       finished: [span, span],
-      tags
+      tags,
     },
     _tags: tags,
     _sampling: {},
-    _name: 'operation'
+    _name: 'operation',
   }),
   _startTime: 1500000000000.123,
   _duration: 100,
   _spanContext: {
-    _name: 'operation'
+    _name: 'operation',
   },
   setTag (key, value) {
     this._addTags({ [key]: value })
-  }
+  },
 }
 
 module.exports = span

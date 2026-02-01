@@ -5,7 +5,7 @@ const {
   setUncaughtExceptionCaptureCallbackStart,
   expressMiddlewareError,
   fastifyMiddlewareError,
-  routerMiddlewareError
+  routerMiddlewareError,
 } = require('../channels')
 const { block, registerBlockDelegation, isBlocked } = require('../blocking')
 const { updateRaspRuleMatchMetricTags } = require('../telemetry')
@@ -136,5 +136,5 @@ module.exports = {
   enable,
   disable,
   handleUncaughtExceptionMonitor, // exported only for testing purpose
-  blockOnDatadogRaspAbortError // exported only for testing purpose
+  blockOnDatadogRaspAbortError, // exported only for testing purpose
 }

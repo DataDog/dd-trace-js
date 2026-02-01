@@ -7,6 +7,6 @@ module.exports = createLogger({
   exitOnError: false,
   format: format.json(),
   transports: [
-    new transports.Console()
-  ]
+    new transports.Console(),
+  ],
 })

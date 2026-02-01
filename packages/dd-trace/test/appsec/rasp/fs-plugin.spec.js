@@ -39,7 +39,7 @@ describe('AppsecFsPlugin', () => {
       }
 
       fsPlugin = proxyquire('../../../src/appsec/rasp/fs-plugin', {
-        '../../plugins/plugin': PluginClass
+        '../../plugins/plugin': PluginClass,
       })
     })
 
@@ -213,7 +213,7 @@ describe('AppsecFsPlugin', () => {
 
         try {
           const origStore = {
-            fs: { opExcluded: true }
+            fs: { opExcluded: true },
           }
           storage('legacy').enterWith(origStore)
 

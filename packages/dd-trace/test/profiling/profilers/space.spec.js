@@ -15,18 +15,18 @@ describe('profilers/native/space', () => {
 
   beforeEach(() => {
     profile0 = {
-      encodeAsync: sinon.stub().returns(Promise.resolve('encoded'))
+      encodeAsync: sinon.stub().returns(Promise.resolve('encoded')),
     }
     pprof = {
       heap: {
         start: sinon.stub(),
         stop: sinon.stub(),
-        profile: sinon.stub().returns(profile0)
-      }
+        profile: sinon.stub().returns(profile0),
+      },
     }
 
     NativeSpaceProfiler = proxyquire('../../../src/profiling/profilers/space', {
-      '@datadog/pprof': pprof
+      '@datadog/pprof': pprof,
     })
   })
 

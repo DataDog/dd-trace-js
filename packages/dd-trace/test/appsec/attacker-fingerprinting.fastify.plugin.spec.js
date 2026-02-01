@@ -45,8 +45,8 @@ withVersions('fastify', 'fastify', fastifyVersion => {
         {
           appsec: {
             enabled: true,
-            rules: path.join(__dirname, 'attacker-fingerprinting-rules.json')
-          }
+            rules: path.join(__dirname, 'attacker-fingerprinting-rules.json'),
+          },
         }
       ))
     })
@@ -58,14 +58,14 @@ withVersions('fastify', 'fastify', fastifyVersion => {
     it('should report http fingerprints', async () => {
       await axios.post('/?key=testattack',
         {
-          bodyParam: 'bodyValue'
+          bodyParam: 'bodyValue',
         },
         {
           headers: {
             'User-Agent': 'test-user-agent',
             headerName: 'headerValue',
-            'x-real-ip': '255.255.255.255'
-          }
+            'x-real-ip': '255.255.255.255',
+          },
         }
       )
 

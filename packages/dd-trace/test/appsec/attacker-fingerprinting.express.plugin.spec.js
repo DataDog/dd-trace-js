@@ -45,8 +45,8 @@ withVersions('express', 'express', expressVersion => {
         {
           appsec: {
             enabled: true,
-            rules: path.join(__dirname, 'attacker-fingerprinting-rules.json')
-          }
+            rules: path.join(__dirname, 'attacker-fingerprinting-rules.json'),
+          },
         }
       ))
     })
@@ -59,14 +59,14 @@ withVersions('express', 'express', expressVersion => {
       await axios.post(
         `http://localhost:${port}/?key=testattack`,
         {
-          bodyParam: 'bodyValue'
+          bodyParam: 'bodyValue',
         },
         {
           headers: {
             'User-Agent': 'test-user-agent',
             headerName: 'headerValue',
-            'x-real-ip': '255.255.255.255'
-          }
+            'x-real-ip': '255.255.255.255',
+          },
         }
       )
 

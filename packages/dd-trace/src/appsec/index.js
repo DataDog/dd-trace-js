@@ -29,7 +29,7 @@ const {
   responseSetHeader,
   routerParam,
   fastifyResponseChannel,
-  fastifyPathParams
+  fastifyPathParams,
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -130,8 +130,8 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
 
   const results = waf.run({
     persistent: {
-      [addresses.HTTP_INCOMING_BODY]: body
-    }
+      [addresses.HTTP_INCOMING_BODY]: body,
+    },
   }, req)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
@@ -150,8 +150,8 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
 
   const results = waf.run({
     persistent: {
-      [addresses.HTTP_INCOMING_COOKIES]: cookies
-    }
+      [addresses.HTTP_INCOMING_COOKIES]: cookies,
+    },
   }, req)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
@@ -166,7 +166,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
   rootSpan.addTags({
     '_dd.appsec.enabled': 1,
     '_dd.runtime_family': 'nodejs',
-    [HTTP_CLIENT_IP]: clientIp
+    [HTTP_CLIENT_IP]: clientIp,
   })
 
   const requestHeaders = { ...req.headers }
@@ -175,7 +175,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
   const persistent = {
     [addresses.HTTP_INCOMING_URL]: req.url,
     [addresses.HTTP_INCOMING_HEADERS]: requestHeaders,
-    [addresses.HTTP_INCOMING_METHOD]: req.method
+    [addresses.HTTP_INCOMING_METHOD]: req.method,
   }
 
   if (clientIp) {
@@ -283,8 +283,8 @@ function onExpressSession ({ req, res, sessionId, abortController }) {
 
   const results = waf.run({
     persistent: {
-      [addresses.USER_SESSION_ID]: sessionId
-    }
+      [addresses.USER_SESSION_ID]: sessionId,
+    },
   }, req)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
@@ -305,8 +305,8 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
 
   const results = waf.run({
     persistent: {
-      [addresses.HTTP_INCOMING_QUERY]: query
-    }
+      [addresses.HTTP_INCOMING_QUERY]: query,
+    },
   }, req)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
@@ -320,8 +320,8 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
 
   const results = waf.run({
     persistent: {
-      [addresses.HTTP_INCOMING_PARAMS]: params
-    }
+      [addresses.HTTP_INCOMING_PARAMS]: params,
+    },
   }, req)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
@@ -334,8 +334,8 @@ function onResponseBody ({ req, res, body }) {
   // we don't support blocking at this point, so no results needed
   waf.run({
     persistent: {
-      [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
-    }
+      [addresses.HTTP_INCOMING_RESPONSE_BODY]: body,
+    },
   }, req)
 }
 
@@ -369,8 +369,8 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   const results = waf.run({
     persistent: {
       [addresses.HTTP_INCOMING_RESPONSE_CODE]: String(statusCode),
-      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
-    }
+      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders,
+    },
   }, req)
 
   responseAnalyzedSet.add(res)
@@ -445,5 +445,5 @@ module.exports = {
   enable,
   disable,
   incomingHttpStartTranslator,
-  incomingHttpEndTranslator
+  incomingHttpEndTranslator,
 }

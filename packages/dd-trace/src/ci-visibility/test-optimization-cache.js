@@ -57,5 +57,5 @@ function writeSettingsToCache (settings) {
 module.exports = {
   getSettingsCachePath,
   setupSettingsCachePath,
-  writeSettingsToCache
+  writeSettingsToCache,
 }

@@ -27,7 +27,7 @@ describe('Kinesis', function () {
 
       const params = {
         endpoint: 'http://127.0.0.1:4566',
-        region: 'us-east-1'
+        region: 'us-east-1',
       }
 
       if (moduleName === '@aws-sdk/smithy-client') {
@@ -40,7 +40,7 @@ describe('Kinesis', function () {
 
       kinesis.createStream({
         StreamName: streamName,
-        ShardCount: 1
+        ShardCount: 1,
       }, (err, res) => {
         if (err) return cb(err)
 
@@ -57,9 +57,9 @@ describe('Kinesis', function () {
 
       beforeEach(() => {
         return agent.load('aws-sdk', {
-          kinesis: { dsmEnabled: false, batchPropagationEnabled: true }
+          kinesis: { dsmEnabled: false, batchPropagationEnabled: true },
         }, {
-          dsmEnabled: true
+          dsmEnabled: true,
         })
       })
 
@@ -70,7 +70,7 @@ describe('Kinesis', function () {
 
       afterEach(done => {
         kinesis.deleteStream({
-          StreamName: streamName
+          StreamName: streamName,
         }, (err, res) => {
           if (err) return done(err)
 
@@ -80,7 +80,7 @@ describe('Kinesis', function () {
 
       withNamingSchema(
         (done) => kinesis.describeStream({
-          StreamName: streamName
+          StreamName: streamName,
         }, (err) => err && done(err)),
         rawExpectedSchema.outbound
       )
@@ -135,7 +135,7 @@ describe('Kinesis', function () {
 
       it('skips injecting trace context to Kinesis if message is full', done => {
         const dataBuffer = Buffer.from(JSON.stringify({
-          myData: Array(1048576 - 100).join('a')
+          myData: Array(1048576 - 100).join('a'),
         }))
 
         helpers.putTestRecord(kinesis, streamName, dataBuffer, (err, data) => {
@@ -157,7 +157,7 @@ describe('Kinesis', function () {
           assertObjectContains(span.meta, {
             streamname: streamName,
             aws_service: 'Kinesis',
-            region: 'us-east-1'
+            region: 'us-east-1',
           })
           assert.strictEqual(span.resource, `putRecord ${streamName}`)
           assert.strictEqual(span.meta.streamname, streamName)

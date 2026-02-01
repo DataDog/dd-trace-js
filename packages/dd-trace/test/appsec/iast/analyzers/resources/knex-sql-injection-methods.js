@@ -55,5 +55,5 @@ module.exports = {
   executeKnexNestedRawQueryOnRejectedInThen,
   executeKnexNestedRawQueryWitCatch,
   executeKnexNestedRawQueryAsCallback,
-  executeKnexAsyncNestedRawQueryAsAsyncTryCatch
+  executeKnexAsyncNestedRawQueryAsAsyncTryCatch,
 }

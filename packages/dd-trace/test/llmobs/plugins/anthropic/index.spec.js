@@ -10,7 +10,7 @@ const {
   useLlmObs,
   MOCK_STRING,
   MOCK_NUMBER,
-  assertLlmObsSpanEvent
+  assertLlmObsSpanEvent,
 } = require('../../util')
 
 function assertLLMObsSpan (apmSpans, llmobsSpans) {
@@ -31,7 +31,7 @@ function assertLLMObsSpan (apmSpans, llmobsSpans) {
       output_tokens: MOCK_NUMBER,
       total_tokens: MOCK_NUMBER,
       cache_write_input_tokens: MOCK_NUMBER,
-      cache_read_input_tokens: MOCK_NUMBER
+      cache_read_input_tokens: MOCK_NUMBER,
     },
     tags: { ml_app: 'test', integration: 'anthropic' },
   })
@@ -39,7 +39,7 @@ function assertLLMObsSpan (apmSpans, llmobsSpans) {
 
 describe('Plugin', () => {
   useEnv({
-    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '<not-a-real-key>'
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '<not-a-real-key>',
   })
 
   const { getEvents } = useLlmObs({ plugin: 'anthropic' })
@@ -74,7 +74,7 @@ describe('Plugin', () => {
             messages: [{ role: 'user', content: 'Hello, world!' }],
             max_tokens: 100,
             temperature: 0.5,
-            stream: true
+            stream: true,
           })
 
           for await (const chunk of stream) {
@@ -93,7 +93,7 @@ describe('Plugin', () => {
           model: 'claude-3-7-sonnet-20250219',
           messages: [{ role: 'user', content: 'Hello, world!' }],
           max_tokens: 100,
-          temperature: 0.5
+          temperature: 0.5,
         })
 
         for await (const chunk of stream) {
@@ -110,7 +110,7 @@ describe('Plugin', () => {
             model: 'claude-3-7-sonnet-20250219',
             messages: [{ role: 'user', content: 'Hello, world!' }],
             max_tokens: 100,
-            temperature: 0.5
+            temperature: 0.5,
           }).on('text', text => {
             assert.ok(text)
           })
@@ -125,7 +125,7 @@ describe('Plugin', () => {
             messages: [{ role: 'user', content: 'Hello, world!' }],
             max_tokens: 100,
             temperature: 0.5,
-            stream: true
+            stream: true,
           })
 
           const message = await stream.finalMessage()
@@ -161,7 +161,7 @@ describe('Plugin', () => {
             messages: [{ role: 'user', content: 'Hello, world!' }],
             max_tokens: 100,
             temperature: 0.5,
-            stream: true
+            stream: true,
           })
 
           for await (const chunk of stream) {
@@ -185,7 +185,7 @@ describe('Plugin', () => {
           model: 'claude-3-7-sonnet-20250219',
           messages: [{ role: 'user', content: 'Hello, world!' }],
           max_tokens: 100,
-          temperature: 0.5
+          temperature: 0.5,
         })
 
         for await (const chunk of stream) {

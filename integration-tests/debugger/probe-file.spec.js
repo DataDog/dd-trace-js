@@ -12,7 +12,7 @@ describe('Dynamic Instrumentation', function () {
     const t = setup({
       testApp: 'target-app/basic.js',
       env: { DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: probeFile },
-      dependencies: ['fastify']
+      dependencies: ['fastify'],
     })
     const probe = t.generateProbeConfig()
     writeFileSync(probeFile, JSON.stringify([probe]))

@@ -20,8 +20,8 @@ class GenAiTracingPlugin extends TracingPlugin {
       meta: {
         'resource.name': methodName,
         'google_genai.request.model': model,
-        'google_genai.request.provider': 'google'
-      }
+        'google_genai.request.provider': 'google',
+      },
     }, ctx)
 
     return ctx.currentStore

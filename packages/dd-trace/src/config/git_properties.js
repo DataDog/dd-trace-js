@@ -35,7 +35,7 @@ function getGitMetadataFromGitProperties (gitPropertiesString) {
 
   return {
     commitSHA: commitSHAMatch ? commitSHAMatch[1] : undefined,
-    repositoryUrl: removeUserSensitiveInfo(repositoryUrl)
+    repositoryUrl: removeUserSensitiveInfo(repositoryUrl),
   }
 }
 

@@ -6,16 +6,16 @@ const rawExpectedSchema = {
   outbound: {
     v0: {
       opName: 'memcached.command',
-      serviceName: 'test-memcached'
+      serviceName: 'test-memcached',
     },
     v1: {
       opName: 'memcached.command',
-      serviceName: 'test'
-    }
-  }
+      serviceName: 'test',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

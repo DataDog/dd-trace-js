@@ -6,9 +6,9 @@ const options = {
   samplingRules: [
     {
       resource: 'GET /sampled',
-      sampleRate: 1.0
-    }
-  ]
+      sampleRate: 1.0,
+    },
+  ],
 }
 
 if (process.env.AGENT_PORT) {
@@ -32,8 +32,8 @@ const logger = winston.createLogger({
   level: 'info',
   format: winston.format.json(),
   transports: [
-    new winston.transports.Console({ silent: true })
-  ]
+    new winston.transports.Console({ silent: true }),
+  ],
 })
 
 // Route WITH logging (demonstrates the bug)

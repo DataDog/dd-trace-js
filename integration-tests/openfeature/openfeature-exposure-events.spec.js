@@ -58,8 +58,8 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           env: {
             DD_TRACE_AGENT_PORT: agent.port,
             DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
-            DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true'
-          }
+            DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true',
+          },
         })
       })
 
@@ -135,7 +135,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         agent.addRemoteConfig({
           product: RC_PRODUCT,
           id: configId,
-          config: ufcPayloads.testBooleanAndStringFlags
+          config: ufcPayloads.testBooleanAndStringFlags,
         })
 
         function endIfDone () {
@@ -154,8 +154,8 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           env: {
             DD_TRACE_AGENT_PORT: agent.port,
             DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
-            DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true'
-          }
+            DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true',
+          },
         })
       })
 
@@ -218,7 +218,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         agent.addRemoteConfig({
           product: RC_PRODUCT,
           id: configId,
-          config: ufcPayloads.testBooleanAndStringFlags
+          config: ufcPayloads.testBooleanAndStringFlags,
         })
       })
     })
@@ -234,8 +234,8 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
-          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true'
-        }
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true',
+        },
       })
     })
 
@@ -270,7 +270,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       agent.addRemoteConfig({
         product: RC_PRODUCT,
         id: configId,
-        config: ufcPayloads.simpleStringFlagForAck
+        config: ufcPayloads.simpleStringFlagForAck,
       })
 
       // Trigger request to start remote config polling
@@ -295,8 +295,8 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'false'
-        }
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'false',
+        },
       })
     })
 

@@ -11,7 +11,7 @@ const {
   TELEMETRY_ITR_SKIPPABLE_TESTS_ERRORS,
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES,
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS,
-  TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES
+  TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES,
 } = require('../../ci-visibility/telemetry')
 
 function getSkippableSuites ({
@@ -29,16 +29,16 @@ function getSkippableSuites ({
   runtimeName,
   runtimeVersion,
   custom,
-  testLevel = 'suite'
+  testLevel = 'suite',
 }, done) {
   const options = {
     path: '/api/v2/ci/tests/skippable',
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
     timeout: 20_000,
-    url
+    url,
   }
 
   if (isGzipCompatible) {
@@ -68,14 +68,14 @@ function getSkippableSuites ({
           'os.architecture': osArchitecture,
           'runtime.name': runtimeName,
           'runtime.version': runtimeVersion,
-          custom
+          custom,
         },
         service,
         env,
         repository_url: repositoryUrl,
-        sha
-      }
-    }
+        sha,
+      },
+    },
   })
 
   incrementCountMetric(TELEMETRY_ITR_SKIPPABLE_TESTS)

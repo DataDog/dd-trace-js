@@ -5,7 +5,7 @@ const tracingChannel = require('dc-polyfill').tracingChannel
 const shimmer = require('../../datadog-shimmer')
 const satisfies = require('../../../vendor/dist/semifies')
 const {
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 const { createWrapFetch } = require('./helpers/fetch')
 
@@ -17,7 +17,7 @@ const NATIVE_DC_VERSION = '>=4.7.0 <5.0.0 || >=5.1.0'
 
 addHook({
   name: 'undici',
-  versions: ['^4.4.1', '5', '>=6.0.0']
+  versions: ['^4.4.1', '5', '>=6.0.0'],
 }, (undici, version) => {
   // For versions with working native DC, let the plugin subscribe directly
   if (satisfies(version, NATIVE_DC_VERSION)) {

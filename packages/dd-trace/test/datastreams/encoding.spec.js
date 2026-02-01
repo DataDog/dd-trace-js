@@ -23,7 +23,7 @@ describe('encoding', () => {
     it('encoding then decoding should be a no op for bigger than int32 numbers', () => {
       const n = 1679711644352
       const expectedEncoded = new Uint8Array([
-        128, 171, 237, 233, 226, 97
+        128, 171, 237, 233, 226, 97,
       ])
       const encoded = encodeVarint(n)
       assert.strictEqual(encoded.length, expectedEncoded.length)

@@ -27,20 +27,20 @@ describe('config-helper stable config sources', () => {
       this.localEntries = {
         DD_SERVICE: 'local-service',
         DD_ENV: 'local-env',
-        DD_VERSION: 'local-version'
+        DD_VERSION: 'local-version',
       }
       this.fleetEntries = {
         DD_SERVICE: 'fleet-service',
-        DD_ENV: 'fleet-env'
+        DD_ENV: 'fleet-env',
       }
       this.warnings = []
     })
 
     const { getStableConfigSources } = proxyquire('../../src/config/helper', {
       '../serverless': {
-        isInServerlessEnvironment: isInServerlessEnvironmentStub
+        isInServerlessEnvironment: isInServerlessEnvironmentStub,
       },
-      './stable': StableConfigStub
+      './stable': StableConfigStub,
     })
 
     const sources = getStableConfigSources()
@@ -49,11 +49,11 @@ describe('config-helper stable config sources', () => {
     assert.deepStrictEqual(sources.localStableConfig, {
       DD_SERVICE: 'local-service',
       DD_ENV: 'local-env',
-      DD_VERSION: 'local-version'
+      DD_VERSION: 'local-version',
     })
     assert.deepStrictEqual(sources.fleetStableConfig, {
       DD_SERVICE: 'fleet-service',
-      DD_ENV: 'fleet-env'
+      DD_ENV: 'fleet-env',
     })
     assert.deepStrictEqual(sources.stableConfigWarnings, [])
   })
@@ -63,9 +63,9 @@ describe('config-helper stable config sources', () => {
 
     const { getStableConfigSources } = proxyquire('../../src/config/helper', {
       '../serverless': {
-        isInServerlessEnvironment: isInServerlessEnvironmentStub
+        isInServerlessEnvironment: isInServerlessEnvironmentStub,
       },
-      './stable': StableConfigStub
+      './stable': StableConfigStub,
     })
 
     const sources = getStableConfigSources()
@@ -107,8 +107,8 @@ describe('config-helper env resolution', () => {
 
     loadModule({
       '../serverless': {
-        isInServerlessEnvironment: isInServerlessEnvironmentStub
-      }
+        isInServerlessEnvironment: isInServerlessEnvironmentStub,
+      },
     })
   })
 
@@ -190,10 +190,10 @@ describe('config-helper env resolution', () => {
       StableConfigStub.callsFake(function () {
         this.localEntries = {
           DD_SERVICE: 'local-service',
-          DD_ENV: 'local-env'
+          DD_ENV: 'local-env',
         }
         this.fleetEntries = {
-          DD_SERVICE: 'fleet-service'
+          DD_SERVICE: 'fleet-service',
         }
         this.warnings = []
       })
@@ -202,9 +202,9 @@ describe('config-helper env resolution', () => {
 
       const mod = proxyquire('../../src/config/helper', {
         '../serverless': {
-          isInServerlessEnvironment: isInServerlessStub
+          isInServerlessEnvironment: isInServerlessStub,
         },
-        './stable': StableConfigStub
+        './stable': StableConfigStub,
       })
 
       getValueFromEnvSources = mod.getValueFromEnvSources
@@ -220,11 +220,11 @@ describe('config-helper env resolution', () => {
         this.localEntries = {
           DD_TRACE_SAMPLE_RATE: '0.1',
           DD_TRACE_ENABLED: 'false',
-          DD_SERVICE: 'local'
+          DD_SERVICE: 'local',
         }
         this.fleetEntries = {
           DD_TRACE_SAMPLE_RATE: '0.9',
-          DD_SERVICE: 'fleet'
+          DD_SERVICE: 'fleet',
         }
         this.warnings = []
       })
@@ -233,9 +233,9 @@ describe('config-helper env resolution', () => {
 
       const mod = proxyquire('../../src/config/helper', {
         '../serverless': {
-          isInServerlessEnvironment: isInServerlessStub
+          isInServerlessEnvironment: isInServerlessStub,
         },
-        './stable': StableConfigStub
+        './stable': StableConfigStub,
       })
 
       getValueFromEnvSources = mod.getValueFromEnvSources
@@ -249,10 +249,10 @@ describe('config-helper env resolution', () => {
       const StableConfigStub = sinon.stub()
       StableConfigStub.callsFake(function () {
         this.localEntries = {
-          DD_SERVICE: 'local-service'
+          DD_SERVICE: 'local-service',
         }
         this.fleetEntries = {
-          DD_SERVICE: undefined
+          DD_SERVICE: undefined,
         }
         this.warnings = []
       })
@@ -261,9 +261,9 @@ describe('config-helper env resolution', () => {
 
       const mod = proxyquire('../../src/config/helper', {
         '../serverless': {
-          isInServerlessEnvironment: isInServerlessStub
+          isInServerlessEnvironment: isInServerlessStub,
         },
-        './stable': StableConfigStub
+        './stable': StableConfigStub,
       })
 
       getValueFromEnvSources = mod.getValueFromEnvSources

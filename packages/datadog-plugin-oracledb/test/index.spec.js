@@ -16,7 +16,7 @@ const dbInstance = 'xepdb1'
 const config = {
   user: 'test',
   password: 'Oracle18',
-  connectString: `${hostname}:${port}/${dbInstance}`
+  connectString: `${hostname}:${port}/${dbInstance}`,
 }
 
 const dbQuery = 'select current_timestamp from dual'
@@ -74,7 +74,7 @@ describe('Plugin', () => {
                   (ADDRESS=(PROTOCOL=TCP)(HOST=${hostname})(PORT=1521))
                   (CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=xepdb1))
                 )
-              `
+              `,
             })
           })
 
@@ -99,8 +99,8 @@ describe('Plugin', () => {
                 component: 'oracledb',
                 'db.instance': dbInstance,
                 'db.hostname': hostname,
-                'network.destination.port': port
-              }
+                'network.destination.port': port,
+              },
             })
           })
 
@@ -123,8 +123,8 @@ describe('Plugin', () => {
                 component: 'oracledb',
                 'db.instance': dbInstance,
                 'db.hostname': hostname,
-                'network.destination.port': port
-              }
+                'network.destination.port': port,
+              },
             }).then(done, done)
 
             connection.execute(dbQuery, err => err && done(err))
@@ -170,8 +170,8 @@ describe('Plugin', () => {
                 'network.destination.port': port,
                 [ERROR_MESSAGE]: error.message,
                 [ERROR_TYPE]: error.name,
-                [ERROR_STACK]: error.stack
-              }
+                [ERROR_STACK]: error.stack,
+              },
             })
           })
         }
@@ -207,7 +207,7 @@ describe('Plugin', () => {
                   (ADDRESS=(PROTOCOL=TCP)(HOST=${hostname})(PORT=1521))
                   (CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=xepdb1))
                 )
-              `
+              `,
             })
             connection = await pool.getConnection()
           })
@@ -233,10 +233,10 @@ describe('Plugin', () => {
                   component: 'oracledb',
                   'db.instance': dbInstance,
                   'db.hostname': hostname,
-                  'network.destination.port': port
-                }
+                  'network.destination.port': port,
+                },
               }),
-              connection.execute(dbQuery)
+              connection.execute(dbQuery),
             ])
           })
 
@@ -263,8 +263,8 @@ describe('Plugin', () => {
                   'network.destination.port': port,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_TYPE]: error.name,
-                  [ERROR_STACK]: error.stack
-                }
+                  [ERROR_STACK]: error.stack,
+                },
               })
             }
           })
@@ -295,12 +295,12 @@ describe('Plugin', () => {
             {
               v0: {
                 opName: 'oracle.query',
-                serviceName: 'test-oracle'
+                serviceName: 'test-oracle',
               },
               v1: {
                 opName: 'oracle.query',
-                serviceName: 'test'
-              }
+                serviceName: 'test',
+              },
             }
           )
 
@@ -308,9 +308,9 @@ describe('Plugin', () => {
             await Promise.all([
               agent.assertFirstTraceSpan({
                 name: expectedSchema.outbound.opName,
-                service: 'test-oracle'
+                service: 'test-oracle',
               }),
-              connection.execute(dbQuery)
+              connection.execute(dbQuery),
             ])
           })
         })
@@ -338,12 +338,12 @@ describe('Plugin', () => {
             {
               v0: {
                 opName: 'oracle.query',
-                serviceName: 'custom'
+                serviceName: 'custom',
               },
               v1: {
                 opName: 'oracle.query',
-                serviceName: 'custom'
-              }
+                serviceName: 'custom',
+              },
             }
           )
 
@@ -351,9 +351,9 @@ describe('Plugin', () => {
             await Promise.all([
               agent.assertFirstTraceSpan({
                 name: expectedSchema.outbound.opName,
-                service: 'custom'
+                service: 'custom',
               }),
-              connection.execute(dbQuery)
+              connection.execute(dbQuery),
             ])
           })
         })
@@ -364,7 +364,7 @@ describe('Plugin', () => {
               service (connAttrs) {
                 assert.strictEqual(connAttrs.connectString, config.connectString)
                 return connAttrs.connectString
-              }
+              },
             })
             oracledb = require(`../../../versions/oracledb@${version}`).get()
             tracer = require('../../dd-trace')
@@ -391,7 +391,7 @@ describe('Plugin', () => {
               v1: {
                 opName: 'oracle.query',
                 serviceName: config.connectString,
-              }
+              },
             }
           )
 
@@ -399,9 +399,9 @@ describe('Plugin', () => {
             await Promise.all([
               agent.assertFirstTraceSpan({
                 name: expectedSchema.outbound.opName,
-                service: config.connectString
+                service: config.connectString,
               }),
-              connection.execute(dbQuery)
+              connection.execute(dbQuery),
             ])
           })
         })
@@ -409,7 +409,7 @@ describe('Plugin', () => {
         describe('with connectionString fallback', () => {
           before(async () => {
             await agent.load('oracledb', {
-              service: connAttrs => connAttrs.connectString || connAttrs.connectionString
+              service: connAttrs => connAttrs.connectString || connAttrs.connectionString,
             })
             oracledb = require(`../../../versions/oracledb@${version}`).get()
             tracer = require('../../dd-trace')
@@ -423,14 +423,14 @@ describe('Plugin', () => {
             const connection = await oracledb.getConnection({
               user: config.user,
               password: config.password,
-              connectionString: config.connectString // Use valid connection string
+              connectionString: config.connectString, // Use valid connection string
             })
 
             await Promise.all([
               agent.assertFirstTraceSpan({
-                service: config.connectString
+                service: config.connectString,
               }),
-              connection.execute(dbQuery)
+              connection.execute(dbQuery),
             ])
             await connection.close()
           })

@@ -39,8 +39,8 @@ function useScenario ({ scenario, statusCode = 200, stream = false }) {
       return new Response(body, {
         status: statusCode,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       })
     }
   })
@@ -76,7 +76,7 @@ describe('Plugin', () => {
 
         const client = new VertexAI({
           project: 'datadog-sandbox',
-          location: 'us-central1'
+          location: 'us-central1',
         })
 
         model = client.getGenerativeModel({
@@ -84,8 +84,8 @@ describe('Plugin', () => {
           systemInstruction: 'Please provide an answer',
           generationConfig: {
             maxOutputTokens: 50,
-            temperature: 1.0
-          }
+            temperature: 1.0,
+          },
         })
       })
 
@@ -109,7 +109,7 @@ describe('Plugin', () => {
           })
 
           const { response } = await model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: 'Hello, how are you?' }] }]
+            contents: [{ role: 'user', parts: [{ text: 'Hello, how are you?' }] }],
           })
           assert.ok(Object.hasOwn(response, 'candidates'))
 
@@ -196,8 +196,8 @@ describe('Plugin', () => {
             const chat = model.startChat({
               history: [
                 { role: 'user', parts: [{ text: 'Foobar?' }] },
-                { role: 'model', parts: [{ text: 'Foobar!' }] }
-              ]
+                { role: 'model', parts: [{ text: 'Foobar!' }] },
+              ],
             })
             const { response } = await chat.sendMessage([{ text: 'Hello, how are you?' }])
 

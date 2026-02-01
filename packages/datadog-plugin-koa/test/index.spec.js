@@ -43,7 +43,7 @@ describe('Plugin', () => {
             // we can't do that since the tracer cannot be re-configured after it's loaded. So we added it here as the
             // first test in this describe block.
             clientIpEnabled: true,
-            clientIpHeader: 'X-Custom-Client-Ip-Header' // config should be case-insensitive
+            clientIpHeader: 'X-Custom-Client-Ip-Header', // config should be case-insensitive
           })
         )
 
@@ -261,8 +261,8 @@ describe('Plugin', () => {
 
             axios.get(`http://localhost:${port}/user`, {
               headers: {
-                'x-custom-client-ip-header': '8.8.8.8'
-              }
+                'x-custom-client-ip-header': '8.8.8.8',
+              },
             }).catch(done)
           })
         })
@@ -287,8 +287,8 @@ describe('Plugin', () => {
 
             axios.get(`http://localhost:${port}/user`, {
               headers: {
-                'x-other-custom-client-ip-header': '8.8.8.8'
-              }
+                'x-other-custom-client-ip-header': '8.8.8.8',
+              },
             }).catch(done)
           })
         })
@@ -614,7 +614,7 @@ describe('Plugin', () => {
           it('should support a router prefix', done => {
             const app = new Koa()
             const router = new Router({
-              prefix: '/user'
+              prefix: '/user',
             })
 
             router.get('/:id', (ctx, next) => {
@@ -648,7 +648,7 @@ describe('Plugin', () => {
             const error = new Error('boom')
             const app = new Koa()
             const router = new Router({
-              prefix: '/user'
+              prefix: '/user',
             })
 
             router.get('/:id', (ctx, next) => {
@@ -675,7 +675,7 @@ describe('Plugin', () => {
                   assert.match(spans[1].resource, /^(dispatch|bound)/)
                   assertObjectContains(spans[1].meta, {
                     [ERROR_TYPE]: error.name,
-                    component: 'koa'
+                    component: 'koa',
                   })
                   assert.strictEqual(spans[1].error, 1)
                 })
@@ -912,7 +912,7 @@ describe('Plugin', () => {
               const error = new Error('boom')
               const app = new Koa()
               const router = new Router({
-                prefix: '/user'
+                prefix: '/user',
               })
 
               router.get('/:id', (ctx, next) => {

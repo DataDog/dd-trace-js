@@ -5,7 +5,7 @@ import { startVitest } from 'vitest/node'
 // This is normally taken care of by using NODE_OPTIONS, but we can't set
 // flushInterval through an env var
 tracer.init({
-  flushInterval: 0
+  flushInterval: 0,
 })
 
 async function main () {

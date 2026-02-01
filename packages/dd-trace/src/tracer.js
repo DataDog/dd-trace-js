@@ -150,7 +150,7 @@ function addError (span, error) {
     span.addTags({
       [ERROR_TYPE]: error.name,
       [ERROR_MESSAGE]: error.message,
-      [ERROR_STACK]: error.stack
+      [ERROR_STACK]: error.stack,
     })
   }
 }

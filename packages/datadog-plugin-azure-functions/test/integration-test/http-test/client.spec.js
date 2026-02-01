@@ -8,7 +8,7 @@ const {
   hookFile,
   sandboxCwd,
   useSandbox,
-  curlAndAssertMessage
+  curlAndAssertMessage,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 const { NODE_MAJOR } = require('../../../../../version')
@@ -43,7 +43,7 @@ describe('esm', () => {
     // to figure out a way of automating this.
     it('is instrumented', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -59,7 +59,7 @@ describe('esm', () => {
 
     it('propagates context to child http requests', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -74,12 +74,12 @@ describe('esm', () => {
 async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
     NODE_OPTIONS: `--loader=${hookFile} func start`,
-    DD_TRACE_AGENT_PORT: agentPort
+    DD_TRACE_AGENT_PORT: agentPort,
   }
   env = { ...env, ...additionalEnvArgs }
   return spawnProc(command, args, {
     cwd,
-    env
+    env,
   }, stdioHandler)
 }
 

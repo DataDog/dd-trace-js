@@ -5,7 +5,7 @@ const {
   EVP_PAYLOAD_SIZE_LIMIT,
   SPANS_ENDPOINT,
   SPANS_EVENT_TYPE,
-  SPANS_INTAKE
+  SPANS_INTAKE,
 } = require('../constants/writers')
 const { DROPPED_VALUE_TEXT } = require('../constants/text')
 const { DROPPED_IO_COLLECTION_ERROR } = require('../constants/tags')
@@ -20,7 +20,7 @@ class LLMObsSpanWriter extends BaseWriter {
       config,
       eventType: SPANS_EVENT_TYPE,
       intake: SPANS_INTAKE,
-      endpoint: SPANS_ENDPOINT
+      endpoint: SPANS_ENDPOINT,
     })
   }
 
@@ -53,7 +53,7 @@ class LLMObsSpanWriter extends BaseWriter {
       '_dd.stage': 'raw',
       '_dd.tracer_version': tracerVersion,
       event_type: this._eventType,
-      spans: [event]
+      spans: [event],
     }))
   }
 
