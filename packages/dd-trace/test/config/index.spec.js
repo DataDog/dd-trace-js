@@ -3831,14 +3831,14 @@ rules:
       assert.ok(config.url instanceof URL)
     })
 
-    it('should set both url and ciVisibilityAgentlessUrl when DD_CIVISIBILITY_AGENTLESS_URL is set', () => {
+    it('should set ciVisibilityAgentlessUrl independently when DD_CIVISIBILITY_AGENTLESS_URL is set', () => {
       process.env.DD_CIVISIBILITY_AGENTLESS_URL = 'http://ci-agentless:9999'
       config = getConfig({ isCiVisibility: true })
-      // When DD_CIVISIBILITY_AGENTLESS_URL is set, it overrides config.url for backward compatibility
+      // config.url should use defaults (not overridden by DD_CIVISIBILITY_AGENTLESS_URL)
       assert.ok(config.url instanceof URL)
-      assert.strictEqual(config.url.hostname, 'ci-agentless')
-      assert.strictEqual(config.url.port, '9999')
-      // It's also stored in ciVisibilityAgentlessUrl
+      assert.strictEqual(config.url.hostname, '127.0.0.1')
+      assert.strictEqual(config.url.port, '8126')
+      // ciVisibilityAgentlessUrl is set separately for agentless mode
       assert.ok(config.ciVisibilityAgentlessUrl instanceof URL)
       assert.strictEqual(config.ciVisibilityAgentlessUrl.hostname, 'ci-agentless')
       assert.strictEqual(config.ciVisibilityAgentlessUrl.port, '9999')
@@ -3880,15 +3880,15 @@ rules:
       assert.ok(config.url.port) // Just check it's set
     })
 
-    it('should prioritize DD_CIVISIBILITY_AGENTLESS_URL over DD_TRACE_AGENT_URL', () => {
+    it('should keep url and ciVisibilityAgentlessUrl separate when both are set', () => {
       process.env.DD_CIVISIBILITY_AGENTLESS_URL = 'http://ci-vis:1111'
       process.env.DD_TRACE_AGENT_URL = 'http://explicit:2222'
       config = getConfig({ isCiVisibility: true })
-      // DD_CIVISIBILITY_AGENTLESS_URL takes highest priority and overrides config.url
+      // config.url uses DD_TRACE_AGENT_URL (for agent/agent-proxy mode)
       assert.ok(config.url instanceof URL)
-      assert.strictEqual(config.url.hostname, 'ci-vis')
-      assert.strictEqual(config.url.port, '1111')
-      // It's also stored in ciVisibilityAgentlessUrl
+      assert.strictEqual(config.url.hostname, 'explicit')
+      assert.strictEqual(config.url.port, '2222')
+      // ciVisibilityAgentlessUrl uses DD_CIVISIBILITY_AGENTLESS_URL (for agentless mode)
       assert.ok(config.ciVisibilityAgentlessUrl instanceof URL)
       assert.strictEqual(config.ciVisibilityAgentlessUrl.hostname, 'ci-vis')
       assert.strictEqual(config.ciVisibilityAgentlessUrl.port, '1111')

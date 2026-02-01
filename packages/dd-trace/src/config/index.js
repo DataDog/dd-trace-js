@@ -467,6 +467,7 @@ class Config {
       DD_APPSEC_RASP_COLLECT_REQUEST_BODY,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
+      DD_CIVISIBILITY_AGENTLESS_URL,
       DD_CRASHTRACKING_ENABLED,
       DD_CODE_ORIGIN_FOR_SPANS_ENABLED,
       DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED,
@@ -841,6 +842,8 @@ class Config {
     this.#setBoolean(target, 'isAzureFunction', getIsAzureFunction())
     this.#setBoolean(target, 'isGCPFunction', getIsGCPFunction())
     this.#setBoolean(target, 'gcpPubSubPushSubscriptionEnabled', enableGCPPubSubPushSubscription())
+    target.ciVisibilityAgentlessUrl = maybeUrl(DD_CIVISIBILITY_AGENTLESS_URL, 'ciVisibilityAgentlessUrl')
+    unprocessedTarget.ciVisibilityAgentlessUrl = DD_CIVISIBILITY_AGENTLESS_URL
     target['langchain.spanCharLimit'] = maybeInt(DD_LANGCHAIN_SPAN_CHAR_LIMIT)
     target['langchain.spanPromptCompletionSampleRate'] = maybeFloat(DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
     this.#setBoolean(target, 'legacyBaggageEnabled', DD_TRACE_LEGACY_BAGGAGE_ENABLED)
@@ -1261,17 +1264,7 @@ class Config {
   }
 
   #calculateAgentUrl () {
-    // 1. CI Visibility agentless URL takes highest priority for backward compatibility
-    const DD_CIVISIBILITY_AGENTLESS_URL = getEnv('DD_CIVISIBILITY_AGENTLESS_URL')
-    if (DD_CIVISIBILITY_AGENTLESS_URL) {
-      try {
-        return new URL(DD_CIVISIBILITY_AGENTLESS_URL)
-      } catch (e) {
-        log.error('Invalid CI Visibility agentless URL "%s" (using default)', DD_CIVISIBILITY_AGENTLESS_URL, e)
-      }
-    }
-
-    // 2. Check for explicit URL from options or DD_TRACE_AGENT_URL
+    // 1. Check for explicit URL from options or DD_TRACE_AGENT_URL
     const explicitUrl = this.#optionsArg.url ?? getEnv('DD_TRACE_AGENT_URL')
     if (explicitUrl) {
       try {
@@ -1281,7 +1274,7 @@ class Config {
       }
     }
 
-    // 3. Unix socket auto-detection (Linux only, when no explicit host/port)
+    // 2. Unix socket auto-detection (Linux only, when no explicit host/port)
     if (os.type() !== 'Windows_NT') {
       const hasExplicitHostOrPort =
         this.#optionsArg.hostname ||
@@ -1294,7 +1287,7 @@ class Config {
       }
     }
 
-    // 4. Fallback: construct HTTP URL from hostname/port
+    // 3. Fallback: construct HTTP URL from hostname/port
     const hostname = this.#optionsArg.hostname ||
                     getEnv('DD_AGENT_HOST') ||
                     defaults.hostname
@@ -1314,18 +1307,6 @@ class Config {
     const calc = this.#calculated
 
     calc.url = this.#calculateAgentUrl()
-
-    // Set CI Visibility agentless URL separately for use by AgentlessCiVisibilityExporter
-    // This is also already set in calc.url for backward compatibility, but we keep it separate
-    // so the AgentlessCiVisibilityExporter can access it directly
-    const ciVisUrlStr = getEnv('DD_CIVISIBILITY_AGENTLESS_URL')
-    if (ciVisUrlStr) {
-      try {
-        calc.ciVisibilityAgentlessUrl = new URL(ciVisUrlStr)
-      } catch (e) {
-        log.error('Invalid URL for ciVisibilityAgentlessUrl: %s', ciVisUrlStr, e)
-      }
-    }
 
     if (this.#isCiVisibility()) {
       this.#setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
@@ -1660,6 +1641,15 @@ function maybeInt (number) {
 function maybeFloat (number) {
   const parsed = Number.parseFloat(number)
   return Number.isNaN(parsed) ? undefined : parsed
+}
+
+function maybeUrl (urlString, description = 'URL') {
+  if (!urlString) return
+  try {
+    return new URL(urlString)
+  } catch (e) {
+    log.error('Invalid URL for %s: "%s" (ignoring)', description, urlString, e)
+  }
 }
 
 function nonNegInt (value, envVarName, allowZero = true) {
