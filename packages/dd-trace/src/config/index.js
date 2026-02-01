@@ -15,7 +15,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { updateConfig } = require('../telemetry')
 const telemetryMetrics = require('../telemetry/metrics')
 const {
-  isInServerlessEnvironment,
+  IS_SERVERLESS,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
@@ -275,7 +275,7 @@ class Config {
   }
 
   constructor (options = {}) {
-    if (!isInServerlessEnvironment()) {
+    if (!IS_SERVERLESS) {
       const configEnvSources = getStableConfigSources()
       this.stableConfig = {
         fleetEntries: configEnvSources.fleetStableConfig,
@@ -402,10 +402,6 @@ class Config {
     return defaultPropagationStyle
   }
 
-  _isInServerlessEnvironment () {
-    return isInServerlessEnvironment()
-  }
-
   #applyStableConfig (config, obj) {
     this.#applyConfigValues(config, obj, {})
   }
@@ -414,7 +410,7 @@ class Config {
   #applyDefaults () {
     const defaults = this.#defaults
 
-    if (isInServerlessEnvironment()) {
+    if (IS_SERVERLESS) {
       this.#setBoolean(defaults, 'crashtracking.enabled', false)
       this.#setString(defaults, 'profiling.enabled', 'false')
       this.#setBoolean(defaults, 'telemetry.enabled', false)
