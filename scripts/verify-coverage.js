@@ -8,9 +8,9 @@ const { parseArgs, format } = require('node:util')
 const { values } = parseArgs({
   args: process.argv.slice(2),
   options: {
-    flags: { type: 'string', default: '' }
+    flags: { type: 'string', default: '' },
   },
-  allowPositionals: true
+  allowPositionals: true,
 })
 
 const cwd = process.cwd()

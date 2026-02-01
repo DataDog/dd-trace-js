@@ -15,7 +15,7 @@ const label = `-${event.replaceAll(/[^a-zA-Z0-9._-]+/g, '-')}`
 module.exports = {
   reporter: [
     'text',
-    'lcov'
+    'lcov',
   ],
   include: [
     '**/ext/**/*.{js,mjs}',
@@ -47,5 +47,5 @@ module.exports = {
   // Baseline coverage is disabled because some of our CI suites only run
   // coverage on a small subset of the codebase. The only value we may trust is
   // the combined coverage of all suites.
-  'check-coverage': false
+  'check-coverage': false,
 }
