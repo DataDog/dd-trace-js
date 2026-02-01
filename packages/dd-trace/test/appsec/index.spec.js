@@ -1412,65 +1412,18 @@ describe('AppSec Index', function () {
 describe('AppSec Index (Serverless)', () => {
   let AppSec
   let log
-  let web
-  let blocking
-  let UserTracking
-  let appsecTelemetry
-  let graphql
-  let apiSecuritySampler
-  let rasp
-  let config
   let RuleManager
-  let Reporter
   let incomingHttpRequestStart
   let incomingHttpRequestEnd
+  let config
 
   beforeEach(() => {
     log = {
-      debug: sinon.stub(),
-      warn: sinon.stub(),
       error: sinon.stub(),
-    }
-
-    web = {
-      root: sinon.stub(),
-    }
-
-    blocking = {
-      setTemplates: sinon.stub(),
-    }
-
-    UserTracking = {
-      setCollectionMode: sinon.stub(),
-    }
-
-    appsecTelemetry = {
-      enable: sinon.stub(),
-    }
-
-    graphql = {
-      enable: sinon.stub(),
-    }
-
-    apiSecuritySampler = {
-      sampleRequest: sinon.stub(),
-    }
-
-    rasp = {
-      enable: sinon.stub(),
-    }
-
-    // Mock with IS_SERVERLESS: true
-    const serverless = {
-      IS_SERVERLESS: true,
     }
 
     RuleManager = {
       loadRules: sinon.stub(),
-    }
-
-    Reporter = {
-      init: sinon.stub(),
     }
 
     incomingHttpRequestStart = {
@@ -1483,16 +1436,16 @@ describe('AppSec Index (Serverless)', () => {
 
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
-      '../plugins/util/web': web,
-      './blocking': blocking,
-      './user_tracking': UserTracking,
-      './telemetry': appsecTelemetry,
-      './graphql': graphql,
-      './api_security_sampler': apiSecuritySampler,
-      './rasp': rasp,
-      '../serverless': serverless,
+      '../plugins/util/web': {},
+      './blocking': {},
+      './user_tracking': {},
+      './telemetry': {},
+      './graphql': {},
+      './api_security_sampler': {},
+      './rasp': {},
+      '../serverless': { IS_SERVERLESS: true },
       './rule_manager': RuleManager,
-      './reporter': Reporter,
+      './reporter': {},
       './channels': {
         incomingHttpRequestStart,
         incomingHttpRequestEnd,
