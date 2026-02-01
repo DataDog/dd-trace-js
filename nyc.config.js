@@ -18,14 +18,24 @@ module.exports = {
     'lcov'
   ],
   include: [
-    '**/packages/**/src/**/*.js'
+    '**/ext/**/*.{js,mjs}',
+    '**/packages/**/src/**/*.{js,mjs}',
+    '**/packages/*/*.{js,mjs}',
+    'index.js',
+    'init.js',
+    'initialize.mjs',
+    'loader-hook.mjs',
+    'register.js',
+    'version.js',
   ],
   exclude: [
-    '**/test/**',
-    '**/integration-tests/**',
     '**/.bun/**',
-    '**/vendor/**',
     '**/*.spec.*',
+    '**/fixtures/**',
+    '**/integration-tests/**',
+    '**/resources/**',
+    '**/test/**',
+    '**/vendor/**',
   ],
   // Avoid collisions when a single CI job runs coverage sequentially across multiple Node.js versions.
   tempDir: `.nyc_output-node-${process.version}${label}`,
