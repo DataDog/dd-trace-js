@@ -67,13 +67,13 @@ describe('scrub cmds', () => {
       '?',
       '?',
       ';',
-      'done'
+      'done',
     ])
   })
 
   it('should scrub shell expressions', () => {
     assert.deepStrictEqual(scrubCmdParams('md5 -s secret ; mysqladmin -u root password 1234 | test api_key 4321'), [
-      'md5', '?', '?', ';', 'mysqladmin', '-u', 'root', 'password', '?', '|', 'test', 'api_key', '?'
+      'md5', '?', '?', ';', 'mysqladmin', '-u', 'root', 'password', '?', '|', 'test', 'api_key', '?',
     ])
   })
 

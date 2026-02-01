@@ -11,16 +11,16 @@ describe('RASP - sql_injection', () => {
 
   beforeEach(() => {
     legacyStorage = {
-      getStore: sinon.stub()
+      getStore: sinon.stub(),
     }
 
     waf = {
-      run: sinon.stub()
+      run: sinon.stub(),
     }
 
     sqli = proxyquire('../../../src/appsec/rasp/sql_injection', {
       '../../../../datadog-core': { storage: () => legacyStorage },
-      '../waf': waf
+      '../waf': waf,
     })
 
     const config = {
@@ -28,9 +28,9 @@ describe('RASP - sql_injection', () => {
         stackTrace: {
           enabled: true,
           maxStackTraces: 2,
-          maxDepth: 42
-        }
-      }
+          maxDepth: 42,
+        },
+      },
     }
 
     sqli.enable(config)
@@ -45,8 +45,8 @@ describe('RASP - sql_injection', () => {
     it('should analyze sql injection', () => {
       const ctx = {
         query: {
-          text: 'SELECT 1'
-        }
+          text: 'SELECT 1',
+        },
       }
       const req = {}
       legacyStorage.getStore.returns({ req })
@@ -55,7 +55,7 @@ describe('RASP - sql_injection', () => {
 
       const ephemeral = {
         [addresses.DB_STATEMENT]: 'SELECT 1',
-        [addresses.DB_SYSTEM]: 'postgresql'
+        [addresses.DB_SYSTEM]: 'postgresql',
       }
       sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req, { type: 'sql_injection' })
     })
@@ -65,8 +65,8 @@ describe('RASP - sql_injection', () => {
 
       const ctx = {
         query: {
-          text: 'SELECT 1'
-        }
+          text: 'SELECT 1',
+        },
       }
       const req = {}
       legacyStorage.getStore.returns({ req })
@@ -79,8 +79,8 @@ describe('RASP - sql_injection', () => {
     it('should not analyze sql injection if no store', () => {
       const ctx = {
         query: {
-          text: 'SELECT 1'
-        }
+          text: 'SELECT 1',
+        },
       }
       legacyStorage.getStore.returns(undefined)
 
@@ -92,8 +92,8 @@ describe('RASP - sql_injection', () => {
     it('should not analyze sql injection if no req', () => {
       const ctx = {
         query: {
-          text: 'SELECT 1'
-        }
+          text: 'SELECT 1',
+        },
       }
       legacyStorage.getStore.returns({})
 
@@ -104,7 +104,7 @@ describe('RASP - sql_injection', () => {
 
     it('should not analyze sql injection if no query', () => {
       const ctx = {
-        query: {}
+        query: {},
       }
       legacyStorage.getStore.returns({})
 
@@ -117,7 +117,7 @@ describe('RASP - sql_injection', () => {
   describe('analyzeMysql2SqlInjection', () => {
     it('should analyze sql injection', () => {
       const ctx = {
-        sql: 'SELECT 1'
+        sql: 'SELECT 1',
       }
       const req = {}
       legacyStorage.getStore.returns({ req })
@@ -126,7 +126,7 @@ describe('RASP - sql_injection', () => {
 
       const ephemeral = {
         [addresses.DB_STATEMENT]: 'SELECT 1',
-        [addresses.DB_SYSTEM]: 'mysql'
+        [addresses.DB_SYSTEM]: 'mysql',
       }
       sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req, { type: 'sql_injection' })
     })
@@ -135,7 +135,7 @@ describe('RASP - sql_injection', () => {
       sqli.disable()
 
       const ctx = {
-        sql: 'SELECT 1'
+        sql: 'SELECT 1',
       }
       const req = {}
       legacyStorage.getStore.returns({ req })
@@ -147,7 +147,7 @@ describe('RASP - sql_injection', () => {
 
     it('should not analyze sql injection if no store', () => {
       const ctx = {
-        sql: 'SELECT 1'
+        sql: 'SELECT 1',
       }
       legacyStorage.getStore.returns(undefined)
 
@@ -158,7 +158,7 @@ describe('RASP - sql_injection', () => {
 
     it('should not analyze sql injection if no req', () => {
       const ctx = {
-        sql: 'SELECT 1'
+        sql: 'SELECT 1',
       }
       legacyStorage.getStore.returns({})
 
@@ -169,7 +169,7 @@ describe('RASP - sql_injection', () => {
 
     it('should not analyze sql injection if no query', () => {
       const ctx = {
-        sql: 'SELECT 1'
+        sql: 'SELECT 1',
       }
       legacyStorage.getStore.returns({})
 

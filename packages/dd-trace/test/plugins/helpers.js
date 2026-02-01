@@ -10,7 +10,7 @@ function resolveNaming (namingSchema) {
   return new Proxy(namingSchema, {
     get (target, prop, receiver) {
       return target[prop][Nomenclature.version]
-    }
+    },
   })
 }
 
@@ -103,5 +103,5 @@ module.exports = {
   getNextLineNumber,
   resolveNaming,
   unbreakThen,
-  withDefaults
+  withDefaults,
 }

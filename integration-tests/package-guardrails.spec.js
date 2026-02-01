@@ -7,7 +7,7 @@ const {
   runAndCheckWithTelemetry: testFile,
   useEnv,
   useSandbox,
-  sandboxCwd
+  sandboxCwd,
 } = require('./helpers')
 
 const NODE_OPTIONS = '--require dd-trace/init.js'
@@ -34,7 +34,7 @@ describe('package guardrails', () => {
       it('should not instrument the package, and send telemetry', () =>
         runTest('false\n',
           ['complete', 'injection_forced:false',
-            'abort.integration', 'integration:bluebird,integration_version:1.0.0'
+            'abort.integration', 'integration:bluebird,integration_version:1.0.0',
           ]
         ))
     })

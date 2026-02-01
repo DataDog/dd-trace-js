@@ -21,7 +21,7 @@ function addMetricsToSpan (rootSpan, metrics, tagPrefix) {
   for (const [key, value] of flattenMap) {
     const tagName = `${tagPrefix}.${key}`
     rootSpan.addTags({
-      [tagName]: value
+      [tagName]: value,
     })
   }
 }
@@ -50,5 +50,5 @@ function processTagValue (tags) {
 
 module.exports = {
   addMetricsToSpan,
-  filterTags
+  filterTags,
 }

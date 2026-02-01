@@ -10,7 +10,7 @@ let cachedTimestamp = 0
 
 module.exports = {
   fetchAgentInfo,
-  clearCache // For testing purposes only
+  clearCache, // For testing purposes only
 }
 
 /**
@@ -31,7 +31,7 @@ function fetchAgentInfo (url, callback) {
 
   request('', {
     path: '/info',
-    url
+    url,
   }, (err, res) => {
     if (err) {
       return callback(err)

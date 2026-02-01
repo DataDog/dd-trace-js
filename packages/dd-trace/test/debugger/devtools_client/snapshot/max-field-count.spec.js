@@ -47,7 +47,7 @@ function generateTestCases (config) {
         type: 'Object',
         fields: expectedFields,
         notCapturedReason: 'fieldCount',
-        size: 40
+        size: 40,
       })
     })
   }

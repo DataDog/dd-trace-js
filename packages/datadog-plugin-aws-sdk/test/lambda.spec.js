@@ -53,7 +53,7 @@ describe('Plugin', () => {
             Code: { ZipFile },
             Handler: 'handler.handle',
             Role: 'arn:aws:iam::123456:role/test',
-            Runtime: 'nodejs18.x'
+            Runtime: 'nodejs18.x',
           }, (err, res) => {
             if (err) return done(err)
 
@@ -72,11 +72,11 @@ describe('Plugin', () => {
           (done) => lambda.invoke({
             FunctionName: 'ironmaiden',
             Payload: '{}',
-            ClientContext: createClientContext({ custom: { megadeth: 'tornado of souls' } })
+            ClientContext: createClientContext({ custom: { megadeth: 'tornado of souls' } }),
           }, (err) => err && done(err)),
           rawExpectedSchema.invoke,
           {
-            desc: 'invoke'
+            desc: 'invoke',
           }
         )
 
@@ -84,7 +84,7 @@ describe('Plugin', () => {
           (done) => lambda.listFunctions({}, (err) => err && done(err)),
           rawExpectedSchema.client,
           {
-            desc: 'client'
+            desc: 'client',
           }
         )
 
@@ -101,7 +101,7 @@ describe('Plugin', () => {
             assertObjectContains(span.meta, {
               functionname: 'ironmaiden',
               aws_service: 'Lambda',
-              region: 'us-east-1'
+              region: 'us-east-1',
             })
             const parentId = span.span_id.toString()
             const traceId = span.trace_id.toString()
@@ -112,7 +112,7 @@ describe('Plugin', () => {
           lambda.invoke({
             FunctionName: 'ironmaiden',
             Payload: '{}',
-            ClientContext: createClientContext({ custom: { megadeth: 'tornado of souls' } })
+            ClientContext: createClientContext({ custom: { megadeth: 'tornado of souls' } }),
           }, (e, data) => {
             receivedContext = parsePayload(data.Payload).client_context
             e && done(e)
@@ -139,7 +139,7 @@ describe('Plugin', () => {
           lambda.invoke({
             FunctionName: 'ironmaiden',
             Payload: '{}',
-            ClientContext: createClientContext({ megadeth: 'tornado of souls' })
+            ClientContext: createClientContext({ megadeth: 'tornado of souls' }),
           }, (e, data) => {
             receivedContext = parsePayload(data.Payload).client_context
             e && done(e)
@@ -165,7 +165,7 @@ describe('Plugin', () => {
 
           lambda.invoke({
             FunctionName: 'ironmaiden',
-            Payload: '{}'
+            Payload: '{}',
           }, (e, data) => {
             receivedContext = parsePayload(data.Payload).client_context
             e && done(e)

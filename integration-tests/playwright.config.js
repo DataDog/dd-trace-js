@@ -7,9 +7,9 @@ const projects = [
   {
     name: 'chromium',
     use: {
-      ...devices['Desktop Chrome']
-    }
-  }
+      ...devices['Desktop Chrome'],
+    },
+  },
 ]
 
 if (process.env.ADD_EXTRA_PLAYWRIGHT_PROJECT) {
@@ -19,7 +19,7 @@ if (process.env.ADD_EXTRA_PLAYWRIGHT_PROJECT) {
       ...devices['Desktop Chrome'],
     },
     dependencies: ['chromium'],
-    testMatch: 'did-not-run.js'
+    testMatch: 'did-not-run.js',
   })
 }
 
@@ -32,7 +32,7 @@ const config = {
   reporter: 'line',
   /* Configure projects for major browsers */
   projects,
-  testMatch: '**/*-test.js'
+  testMatch: '**/*-test.js',
 }
 
 if (process.env.MAX_FAILURES) {

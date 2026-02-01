@@ -12,7 +12,7 @@ class Lambda extends BaseAwsSdkPlugin {
     return {
       'resource.name': `${operation} ${params.FunctionName}`,
       functionname: params.FunctionName,
-      'aws.lambda': params.FunctionName
+      'aws.lambda': params.FunctionName,
     }
   }
 
@@ -51,7 +51,7 @@ class Lambda extends BaseAwsSdkPlugin {
     if (request.operation === 'invoke') {
       return this.operationName({
         type: 'web',
-        kind: 'client'
+        kind: 'client',
       })
     }
 
@@ -59,7 +59,7 @@ class Lambda extends BaseAwsSdkPlugin {
       id: 'aws',
       type: 'web',
       kind: 'client',
-      awsService: 'lambda'
+      awsService: 'lambda',
     })
   }
 }

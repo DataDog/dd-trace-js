@@ -38,7 +38,7 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
       llm: new LlmHandler(this._tagger),
       embedding: new EmbeddingHandler(this._tagger),
       tool: new ToolHandler(this._tagger),
-      similarity_search: new VectorStoreHandler(this._tagger)
+      similarity_search: new VectorStoreHandler(this._tagger),
     }
   }
 
@@ -58,7 +58,7 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
       modelProvider,
       modelName,
       kind,
-      name
+      name,
     }
   }
 
@@ -210,5 +210,5 @@ module.exports = [
   EmbeddingsEmbedDocumentsPlugin,
   ToolInvokePlugin,
   VectorStoreSimilaritySearchPlugin,
-  VectorStoreSimilaritySearchWithScorePlugin
+  VectorStoreSimilaritySearchWithScorePlugin,
 ]

@@ -50,8 +50,8 @@ class GraphQLResolvePlugin extends TracingPlugin {
         'graphql.field.name': info.fieldName,
         'graphql.field.path': computedPathString,
         'graphql.field.type': info.returnType.name,
-        'graphql.source': source
-      }
+        'graphql.source': source,
+      },
     }, fieldCtx)
 
     if (fieldNode && this.config.variables && fieldNode.arguments) {

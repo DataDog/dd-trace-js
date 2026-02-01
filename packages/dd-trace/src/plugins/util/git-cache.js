@@ -115,7 +115,7 @@ function cachedExec (cmd, flags, options) {
         code: err.code,
         status: err.status,
         errno: err.errno,
-        message: err.message
+        message: err.message,
       })
     setCache(cacheKey, cacheValue)
     throw err
@@ -125,5 +125,5 @@ function cachedExec (cmd, flags, options) {
 module.exports = {
   getCacheKey,
   getCacheFilePath,
-  cachedExec
+  cachedExec,
 }

@@ -121,7 +121,7 @@ function mismatching (yamlVersions, instVersions) {
   const opts = { colors: true }
   return [
     `Versions only in YAML: ${util.inspect(onlyInYaml, opts)}`,
-    `Versions only in INST: ${util.inspect(onlyInInst, opts)}`
+    `Versions only in INST: ${util.inspect(onlyInInst, opts)}`,
   ].join('\n')
 }
 
@@ -174,19 +174,19 @@ const IGNORED_WORKFLOWS = {
     'release-latest.yml',
     'release-proposal.yml',
     'release-validate.yml',
-    'retry.yml'
+    'retry.yml',
   ],
   trigger_pull_request: [
     'eslint-rules.yml',
-    'stale.yml'
+    'stale.yml',
   ],
   trigger_push: [
-    'stale.yml'
+    'stale.yml',
   ],
   trigger_schedule: [
     'eslint-rules.yml',
-    'project.yml'
-  ]
+    'project.yml',
+  ],
 }
 
 const workflows = fs.readdirSync(path.join(__dirname, '..', '.github', 'workflows'))

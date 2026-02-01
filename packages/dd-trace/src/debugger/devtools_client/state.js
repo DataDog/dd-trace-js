@@ -165,7 +165,7 @@ module.exports = {
         fileName,
         function: frame.functionName,
         lineNumber,
-        columnNumber
+        columnNumber,
       }
     }))
   },
@@ -177,7 +177,7 @@ module.exports = {
     loadedScripts.length = 0
     scriptUrls.clear()
     scriptSourceMaps.clear()
-  }
+  },
 }
 
 // Known params.url protocols:
@@ -193,7 +193,7 @@ session.on('Debugger.scriptParsed', ({ params }) => {
     if (params.sourceMapURL) {
       scriptSourceMaps.set(params.scriptId, {
         url: params.url,
-        sourceMapURL: params.sourceMapURL
+        sourceMapURL: params.sourceMapURL,
       })
       const dir = dirname(new URL(params.url).pathname)
       let sources
@@ -220,7 +220,7 @@ session.on('Debugger.scriptParsed', ({ params }) => {
           // the `source-map` dependency will not be able to find the generated position. Below we use the same
           // internal `normalize` function, to ensure compatibility.
           // TODO: Consider swapping out the `source-map` dependency for something better so we don't have to do this.
-          source: normalize(source)
+          source: normalize(source),
         })
       }
     } else {

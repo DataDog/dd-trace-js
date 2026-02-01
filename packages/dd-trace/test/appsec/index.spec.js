@@ -27,7 +27,7 @@ const {
   routerParam,
   responseBody,
   responseWriteHead,
-  responseSetHeader
+  responseSetHeader,
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
@@ -42,9 +42,9 @@ const resultActions = {
     block_request: {
       status_code: 401,
       type: 'auto',
-      grpc_status_code: 10
-    }
-  }
+      grpc_status_code: 10,
+    },
+  },
 }
 
 describe('AppSec Index', function () {
@@ -76,71 +76,71 @@ describe('AppSec Index', function () {
         blockedTemplateHtml: blockedTemplate.html,
         blockedTemplateJson: blockedTemplate.json,
         eventTracking: {
-          mode: 'anon'
+          mode: 'anon',
         },
         apiSecurity: {
           enabled: false,
-          sampleDelay: 10
+          sampleDelay: 10,
         },
         rasp: {
           enabled: true,
-          bodyCollection: true
+          bodyCollection: true,
         },
         extendedHeadersCollection: {
           enabled: true,
           redaction: false,
-          maxHeaders: 42
-        }
-      }
+          maxHeaders: 42,
+        },
+      },
     }
 
     web = {
       root: sinon.stub(),
       getContext: sinon.stub(),
       _prioritySampler: {
-        isSampled: sinon.stub()
-      }
+        isSampled: sinon.stub(),
+      },
     }
 
     blocking = {
       setTemplates: sinon.stub(),
-      callBlockDelegation: sinon.stub()
+      callBlockDelegation: sinon.stub(),
     }
 
     UserTracking = {
       setCollectionMode: sinon.stub(),
       trackLogin: sinon.stub(),
-      trackUser: sinon.stub()
+      trackUser: sinon.stub(),
     }
 
     log = {
       debug: sinon.stub(),
       warn: sinon.stub(),
-      error: sinon.stub()
+      error: sinon.stub(),
     }
 
     appsecTelemetry = {
       enable: sinon.stub(),
-      disable: sinon.stub()
+      disable: sinon.stub(),
     }
 
     graphql = {
       enable: sinon.stub(),
-      disable: sinon.stub()
+      disable: sinon.stub(),
     }
 
     apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
-      '../plugins/util/web': web
+      '../plugins/util/web': web,
     })
     sinon.spy(apiSecuritySampler, 'sampleRequest')
 
     rasp = {
       enable: sinon.stub(),
-      disable: sinon.stub()
+      disable: sinon.stub(),
     }
 
     serverless = {
-      isInServerlessEnvironment: sinon.stub()
+      isInServerlessEnvironment: sinon.stub(),
     }
     serverless.isInServerlessEnvironment.returns(false)
 
@@ -153,7 +153,7 @@ describe('AppSec Index', function () {
       './graphql': graphql,
       './api_security_sampler': apiSecuritySampler,
       './rasp': rasp,
-      '../serverless': serverless
+      '../serverless': serverless,
     })
 
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))
@@ -252,7 +252,7 @@ describe('AppSec Index', function () {
     it('should call appsec telemetry enable', () => {
       config.telemetry = {
         enabled: true,
-        metrics: true
+        metrics: true,
       }
       AppSec.enable(config)
 
@@ -341,7 +341,7 @@ describe('AppSec Index', function () {
 
     it('should propagate incoming http start data', () => {
       const rootSpan = {
-        addTags: sinon.stub()
+        addTags: sinon.stub(),
       }
 
       web.root.returns(rootSpan)
@@ -351,13 +351,13 @@ describe('AppSec Index', function () {
         headers: {
           'user-agent': 'Arachni',
           host: 'localhost',
-          cookie: 'a=1;b=2'
+          cookie: 'a=1;b=2',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
-        }
+          remotePort: 8080,
+        },
       }
       const res = {}
 
@@ -366,15 +366,15 @@ describe('AppSec Index', function () {
       sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
         '_dd.appsec.enabled': 1,
         '_dd.runtime_family': 'nodejs',
-        'http.client_ip': '127.0.0.1'
+        'http.client_ip': '127.0.0.1',
       })
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           'server.request.uri.raw': '/path',
           'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
           'server.request.method': 'POST',
-          'http.client_ip': '127.0.0.1'
-        }
+          'http.client_ip': '127.0.0.1',
+        },
       }, req)
     })
   })
@@ -386,7 +386,7 @@ describe('AppSec Index', function () {
       sinon.stub(waf, 'run')
 
       const rootSpan = {
-        addTags: sinon.stub()
+        addTags: sinon.stub(),
       }
 
       web.root.returns(rootSpan)
@@ -398,20 +398,20 @@ describe('AppSec Index', function () {
         headers: {
           'user-agent': 'Arachni',
           host: 'localhost',
-          cookie: 'a=1;b=2'
+          cookie: 'a=1;b=2',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
-        }
+          remotePort: 8080,
+        },
       }
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-length': 42
+          'content-length': 42,
         }),
-        statusCode: 201
+        statusCode: 201,
       }
 
       web.patch(req)
@@ -431,25 +431,25 @@ describe('AppSec Index', function () {
         headers: {
           'user-agent': 'Arachni',
           host: 'localhost',
-          cookie: 'a=1;b=2'
+          cookie: 'a=1;b=2',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
+          remotePort: 8080,
         },
         body: null,
         query: 'string',
         route: {},
         params: 'string',
-        cookies: 'string'
+        cookies: 'string',
       }
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-length': 42
+          'content-length': 42,
         }),
-        statusCode: 201
+        statusCode: 201,
       }
 
       web.patch(req)
@@ -472,22 +472,22 @@ describe('AppSec Index', function () {
         headers: {
           'user-agent': 'Arachni',
           host: 'localhost',
-          cookie: 'a=1;b=2'
+          cookie: 'a=1;b=2',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
+          remotePort: 8080,
         },
         body,
-        cookies
+        cookies,
       }
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-length': 42
+          'content-length': 42,
         }),
-        statusCode: 201
+        statusCode: 201,
       }
 
       bodyParser.publish({ req, res, body })
@@ -512,25 +512,25 @@ describe('AppSec Index', function () {
         headers: {
           'user-agent': 'Arachni',
           host: 'localhost',
-          cookie: 'a=1;b=2'
+          cookie: 'a=1;b=2',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
+          remotePort: 8080,
         },
         body: {},
         query: {},
         route: {},
         params: {},
-        cookies: {}
+        cookies: {},
       }
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-length': 42
+          'content-length': 42,
         }),
-        statusCode: 201
+        statusCode: 201,
       }
 
       web.patch(req)
@@ -550,33 +550,33 @@ describe('AppSec Index', function () {
         headers: {
           'user-agent': 'Arachni',
           host: 'localhost',
-          cookie: 'a=1;b=2'
+          cookie: 'a=1;b=2',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
+          remotePort: 8080,
         },
         body: {
-          a: '1'
+          a: '1',
         },
         query: {
-          b: '2'
+          b: '2',
         },
         route: {
-          path: '/path/:c'
+          path: '/path/:c',
         },
         cookies: {
           d: '4',
-          e: '5'
-        }
+          e: '5',
+        },
       }
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-length': 42
+          'content-length': 42,
         }),
-        statusCode: 201
+        statusCode: 201,
       }
 
       web.patch(req)
@@ -588,8 +588,8 @@ describe('AppSec Index', function () {
         persistent: {
           'server.request.body': { a: '1' },
           'server.request.cookies': { d: '4', e: '5' },
-          'server.request.query': { b: '2' }
-        }
+          'server.request.query': { b: '2' },
+        },
       }, req)
       sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, req.body)
     })
@@ -599,26 +599,26 @@ describe('AppSec Index', function () {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          host: 'localhost'
+          host: 'localhost',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
-        }
+          remotePort: 8080,
+        },
       }
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-length': 42
+          'content-length': 42,
         }),
-        statusCode: 200
+        statusCode: 200,
       }
 
       const storedHeaders = {
         'content-type': 'text/plain',
         'content-language': 'en-US',
-        'content-length': '15'
+        'content-length': '15',
       }
 
       web.patch(req)
@@ -631,7 +631,7 @@ describe('AppSec Index', function () {
         res,
         abortController: { abort: sinon.stub() },
         statusCode: 200,
-        responseHeaders: storedHeaders
+        responseHeaders: storedHeaders,
       })
 
       AppSec.incomingHttpEndTranslator({ req, res })
@@ -645,7 +645,7 @@ describe('AppSec Index', function () {
       sinon.stub(waf, 'run')
 
       const rootSpan = {
-        addTags: sinon.stub()
+        addTags: sinon.stub(),
       }
 
       web.root.returns(rootSpan)
@@ -655,7 +655,7 @@ describe('AppSec Index', function () {
     it('should not trigger schema extraction with feature disabled', () => {
       config.appsec.apiSecurity = {
         enabled: false,
-        sampleDelay: 1
+        sampleDelay: 1,
       }
 
       AppSec.enable(config)
@@ -665,29 +665,29 @@ describe('AppSec Index', function () {
         headers: {
           'user-agent': 'Arachni',
           host: 'localhost',
-          cookie: 'a=1;b=2'
+          cookie: 'a=1;b=2',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
+          remotePort: 8080,
         },
         body: {
-          a: '1'
+          a: '1',
         },
         query: {
-          b: '2'
+          b: '2',
         },
         route: {
-          path: '/path/:c'
-        }
+          path: '/path/:c',
+        },
       }
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-length': 42
+          'content-length': 42,
         }),
-        statusCode: 201
+        statusCode: 201,
       }
 
       web.patch(req)
@@ -698,50 +698,50 @@ describe('AppSec Index', function () {
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           'server.request.body': { a: '1' },
-          'server.request.query': { b: '2' }
-        }
+          'server.request.query': { b: '2' },
+        },
       }, req)
     })
 
     it('should trigger schema extraction with sampling enabled', () => {
       config.appsec.apiSecurity = {
         enabled: true,
-        sampleDelay: 1
+        sampleDelay: 1,
       }
 
       AppSec.enable(config)
 
       const req = {
         route: {
-          path: '/path'
+          path: '/path',
         },
         headers: {
           'user-agent': 'Arachni',
-          host: 'localhost'
+          host: 'localhost',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
+          remotePort: 8080,
         },
         body: {
-          a: '1'
-        }
+          a: '1',
+        },
       }
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-length': 42
+          'content-length': 42,
         }),
-        statusCode: 201
+        statusCode: 201,
       }
 
       const span = {
         context: sinon.stub().returns({
           _sampling: {
-            priority: 1
-          }
-        })
+            priority: 1,
+          },
+        }),
       }
 
       web.root.returns(span)
@@ -752,8 +752,8 @@ describe('AppSec Index', function () {
       sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           'server.request.body': { a: '1' },
-          'waf.context.processor': { 'extract-schema': true }
-        }
+          'waf.context.processor': { 'extract-schema': true },
+        },
       }, req)
     })
 
@@ -761,7 +761,7 @@ describe('AppSec Index', function () {
       beforeEach(() => {
         config.appsec.apiSecurity = {
           enabled: true,
-          sampleDelay: 1
+          sampleDelay: 1,
         }
 
         AppSec.enable(config)
@@ -801,8 +801,8 @@ describe('AppSec Index', function () {
         sinon.assert.calledOnceWithMatch(apiSecuritySampler.sampleRequest, req, res)
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
-            [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
-          }
+            [addresses.HTTP_INCOMING_RESPONSE_BODY]: body,
+          },
         }, req)
       })
     })
@@ -817,7 +817,7 @@ describe('AppSec Index', function () {
       rootSpan = {
         setTag: sinon.stub(),
         _tags: {},
-        context: () => ({ _tags: rootSpan._tags })
+        context: () => ({ _tags: rootSpan._tags }),
       }
       web.root.returns(rootSpan)
 
@@ -826,29 +826,29 @@ describe('AppSec Index', function () {
       res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-length': 42
+          'content-length': 42,
         }),
         writeHead: sinon.stub(),
         getHeaderNames: sinon.stub().returns([]),
         constructor: {
           prototype: {
-            end: sinon.stub()
-          }
-        }
+            end: sinon.stub(),
+          },
+        },
       }
 
       req = {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          host: 'localhost'
+          host: 'localhost',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
+          remotePort: 8080,
         },
-        res
+        res,
       }
 
       AppSec.enable(config)
@@ -879,8 +879,8 @@ describe('AppSec Index', function () {
 
         sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
-            'server.request.body': { key: 'value' }
-          }
+            'server.request.body': { key: 'value' },
+          },
         })
         sinon.assert.notCalled(abortController.abort)
         sinon.assert.notCalled(res.constructor.prototype.end)
@@ -895,8 +895,8 @@ describe('AppSec Index', function () {
 
         sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
-            'server.request.body': 'value'
-          }
+            'server.request.body': 'value',
+          },
         })
         sinon.assert.called(abortController.abort)
         sinon.assert.called(res.constructor.prototype.end)
@@ -911,8 +911,8 @@ describe('AppSec Index', function () {
 
         sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
-            'server.request.body': { key: 'value' }
-          }
+            'server.request.body': { key: 'value' },
+          },
         })
         sinon.assert.called(abortController.abort)
         sinon.assert.called(res.constructor.prototype.end)
@@ -943,8 +943,8 @@ describe('AppSec Index', function () {
 
         sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
-            'server.request.cookies': { key: 'value' }
-          }
+            'server.request.cookies': { key: 'value' },
+          },
         })
         sinon.assert.notCalled(abortController.abort)
         sinon.assert.notCalled(res.constructor.prototype.end)
@@ -958,8 +958,8 @@ describe('AppSec Index', function () {
 
         sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
-            'server.request.cookies': { key: 'value' }
-          }
+            'server.request.cookies': { key: 'value' },
+          },
         })
         sinon.assert.called(abortController.abort)
         sinon.assert.called(res.constructor.prototype.end)
@@ -991,8 +991,8 @@ describe('AppSec Index', function () {
 
         sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
-            'server.request.query': { key: 'value' }
-          }
+            'server.request.query': { key: 'value' },
+          },
         })
         sinon.assert.notCalled(abortController.abort)
         sinon.assert.notCalled(res.constructor.prototype.end)
@@ -1007,8 +1007,8 @@ describe('AppSec Index', function () {
 
         sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
-            'server.request.query': { key: 'value' }
-          }
+            'server.request.query': { key: 'value' },
+          },
         })
         sinon.assert.called(abortController.abort)
         sinon.assert.called(res.constructor.prototype.end)
@@ -1029,7 +1029,7 @@ describe('AppSec Index', function () {
           login: 'test',
           user: { _id: 1, username: 'test', password: '1234' },
           success: true,
-          abortController
+          abortController,
         }
 
         passportVerify.publish(payload)
@@ -1056,7 +1056,7 @@ describe('AppSec Index', function () {
           login: 'test',
           user: { _id: 1, username: 'test', password: '1234' },
           success: true,
-          abortController
+          abortController,
         }
 
         passportVerify.publish(payload)
@@ -1083,7 +1083,7 @@ describe('AppSec Index', function () {
           login: 'test',
           user: { _id: 1, username: 'test', password: '1234' },
           success: true,
-          abortController
+          abortController,
         }
 
         passportVerify.publish(payload)
@@ -1107,7 +1107,7 @@ describe('AppSec Index', function () {
         const abortController = new AbortController()
         const payload = {
           user: { _id: 1, username: 'test', password: '1234' },
-          abortController
+          abortController,
         }
 
         passportUser.publish(payload)
@@ -1128,7 +1128,7 @@ describe('AppSec Index', function () {
         const abortController = new AbortController()
         const payload = {
           user: { _id: 1, username: 'test', password: '1234' },
-          abortController
+          abortController,
         }
 
         passportUser.publish(payload)
@@ -1149,7 +1149,7 @@ describe('AppSec Index', function () {
         const abortController = new AbortController()
         const payload = {
           user: { _id: 1, username: 'test', password: '1234' },
-          abortController
+          abortController,
         }
 
         passportUser.publish(payload)
@@ -1194,8 +1194,8 @@ describe('AppSec Index', function () {
         sinon.assert.notCalled(log.warn)
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
-            'usr.session_id': '1234'
-          }
+            'usr.session_id': '1234',
+          },
         }, req)
         sinon.assert.notCalled(abortController.abort)
         sinon.assert.notCalled(res.constructor.prototype.end)
@@ -1210,8 +1210,8 @@ describe('AppSec Index', function () {
         sinon.assert.notCalled(log.warn)
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
-            'usr.session_id': '1234'
-          }
+            'usr.session_id': '1234',
+          },
         }, req)
         sinon.assert.called(abortController.abort)
         sinon.assert.called(res.constructor.prototype.end)
@@ -1225,7 +1225,7 @@ describe('AppSec Index', function () {
         const responseHeaders = {
           'content-type': 'application/json',
           'content-length': 42,
-          'set-cookie': 'a=1;b=2'
+          'set-cookie': 'a=1;b=2',
         }
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
@@ -1235,9 +1235,9 @@ describe('AppSec Index', function () {
             'server.response.status': '404',
             'server.response.headers.no_cookies': {
               'content-type': 'application/json',
-              'content-length': 42
-            }
-          }
+              'content-length': 42,
+            },
+          },
         }, req)
         sinon.assert.calledOnce(abortController.abort)
         sinon.assert.calledOnce(res.constructor.prototype.end)
@@ -1269,7 +1269,7 @@ describe('AppSec Index', function () {
         const responseHeaders = {
           'content-type': 'application/json',
           'content-length': 42,
-          'set-cookie': 'a=1;b=2'
+          'set-cookie': 'a=1;b=2',
         }
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
@@ -1279,9 +1279,9 @@ describe('AppSec Index', function () {
             'server.response.status': '404',
             'server.response.headers.no_cookies': {
               'content-type': 'application/json',
-              'content-length': 42
-            }
-          }
+              'content-length': 42,
+            },
+          },
         }, req)
         sinon.assert.notCalled(abortController.abort)
         sinon.assert.notCalled(res.constructor.prototype.end)
@@ -1300,7 +1300,7 @@ describe('AppSec Index', function () {
         const responseHeaders = {
           'content-type': 'application/json',
           'content-length': 42,
-          'set-cookie': 'a=1;b=2'
+          'set-cookie': 'a=1;b=2',
         }
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
@@ -1316,7 +1316,7 @@ describe('AppSec Index', function () {
         const responseHeaders = {
           'content-type': 'application/json',
           'content-length': 42,
-          'set-cookie': 'a=1;b=2'
+          'set-cookie': 'a=1;b=2',
         }
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
@@ -1326,9 +1326,9 @@ describe('AppSec Index', function () {
             'server.response.status': '404',
             'server.response.headers.no_cookies': {
               'content-type': 'application/json',
-              'content-length': 42
-            }
-          }
+              'content-length': 42,
+            },
+          },
         }, req)
         sinon.assert.calledOnce(abortController.abort)
         sinon.assert.calledOnce(res.constructor.prototype.end)
@@ -1343,7 +1343,7 @@ describe('AppSec Index', function () {
         const responseHeaders = {
           'content-type': 'application/json',
           'content-length': 42,
-          'set-cookie': 'a=1;b=2'
+          'set-cookie': 'a=1;b=2',
         }
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
@@ -1375,8 +1375,8 @@ describe('AppSec Index', function () {
 
       config = getConfigFresh({
         appsec: {
-          enabled: true
-        }
+          enabled: true,
+        },
       })
     })
 
@@ -1432,18 +1432,18 @@ describe('IP blocking', function () {
   const ruleData = {
     rules_data: [{
       data: [
-        { value: invalidIp }
+        { value: invalidIp },
       ],
       id: 'blocked_ips',
-      type: 'data_with_expiration'
-    }]
+      type: 'data_with_expiration',
+    }],
   }
 
   const toModify = [{
     product: 'ASM_DATA',
     id: '1',
     path: 'datadog/00/ASM_DATA/test/IP blocking',
-    file: ruleData
+    file: ruleData,
   }]
   const htmlDefaultContent = blockedTemplate.html
   const jsonDefaultContent = JSON.parse(blockedTemplate.json)
@@ -1454,7 +1454,7 @@ describe('IP blocking', function () {
     return {
       ...changes,
       ack: sinon.spy(),
-      error: sinon.spy()
+      error: sinon.spy(),
     }
   }
 
@@ -1482,9 +1482,9 @@ describe('IP blocking', function () {
       appsec: {
         enabled: true,
         rasp: {
-          enabled: false // disable rasp to not trigger lfi
-        }
-      }
+          enabled: false, // disable rasp to not trigger lfi
+        },
+      },
     }))
 
     RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply: [], toModify }))
@@ -1515,15 +1515,15 @@ describe('IP blocking', function () {
     'forwarded-for',
     'forwarded',
     'via',
-    'true-client-ip'
+    'true-client-ip',
   ]
   ipHeaderList.forEach(ipHeader => {
     describe(`not block - ip in header ${ipHeader}`, () => {
       it('should not block the request with valid X-Forwarded-For ip', async () => {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
-            [ipHeader]: validIp
-          }
+            [ipHeader]: validIp,
+          },
         }).then((res) => {
           assert.strictEqual(res.status, 200)
         })
@@ -1534,8 +1534,8 @@ describe('IP blocking', function () {
       it('should block the request with JSON content if no headers', async () => {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
-            [ipHeader]: invalidIp
-          }
+            [ipHeader]: invalidIp,
+          },
         }).catch((err) => {
           assert.strictEqual(err.response.status, 403)
           assert.deepStrictEqual(err.response.data, jsonDefaultContent)
@@ -1546,8 +1546,8 @@ describe('IP blocking', function () {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
-            Accept: '*/*'
-          }
+            Accept: '*/*',
+          },
         }).catch((err) => {
           assert.strictEqual(err.response.status, 403)
           assert.deepStrictEqual(err.response.data, jsonDefaultContent)
@@ -1558,8 +1558,8 @@ describe('IP blocking', function () {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
-            Accept: 'text/html'
-          }
+            Accept: 'text/html',
+          },
         }).catch((err) => {
           assert.strictEqual(err.response.status, 403)
           assert.strictEqual(err.response.data, htmlDefaultContent)
@@ -1581,18 +1581,18 @@ describe('IP blocking', function () {
               type: 'block_request',
               parameters: {
                 status_code: 500,
-                type: 'auto'
-              }
-            }
-          ]
-        }
+                type: 'auto',
+              },
+            },
+          ],
+        },
       }]
 
       beforeEach(() => {
         RuleManager.updateWafFromRC(createTransaction({
           toUnapply: [],
           toApply: [],
-          toModify: [...toModify, ...toModifyCustomActions]
+          toModify: [...toModify, ...toModifyCustomActions],
         }))
       })
 
@@ -1603,8 +1603,8 @@ describe('IP blocking', function () {
       it('Should block with custom status code and JSON content', () => {
         return axios.get(`http://localhost:${port}/`, {
           headers: {
-            'x-forwarded-for': invalidIp
-          }
+            'x-forwarded-for': invalidIp,
+          },
         }).then(() => {
           throw new Error('Not expected')
         }).catch((err) => {
@@ -1618,8 +1618,8 @@ describe('IP blocking', function () {
         return axios.get(`http://localhost:${port}/`, {
           headers: {
             'x-forwarded-for': invalidIp,
-            Accept: 'text/html'
-          }
+            Accept: 'text/html',
+          },
         }).then(() => {
           throw new Error('Not expected')
         }).catch((err) => {
@@ -1642,18 +1642,18 @@ describe('IP blocking', function () {
               type: 'redirect_request',
               parameters: {
                 status_code: 301,
-                location: '/error'
-              }
-            }
-          ]
-        }
+                location: '/error',
+              },
+            },
+          ],
+        },
       }]
 
       beforeEach(() => {
         RuleManager.updateWafFromRC(createTransaction({
           toUnapply: [],
           toApply: [],
-          toModify: [...toModify, ...toModifyCustomActions]
+          toModify: [...toModify, ...toModifyCustomActions],
         }))
       })
 
@@ -1664,9 +1664,9 @@ describe('IP blocking', function () {
       it('Should block with redirect', () => {
         return axios.get(`http://localhost:${port}/`, {
           headers: {
-            'x-forwarded-for': invalidIp
+            'x-forwarded-for': invalidIp,
           },
-          maxRedirects: 0
+          maxRedirects: 0,
         }).then(() => {
           throw new Error('Not resolve expected')
         }).catch((err) => {

@@ -10,7 +10,7 @@ const {
   HTTP_REQUEST_HEADER_VALUE,
   HTTP_REQUEST_PARAMETER,
   HTTP_REQUEST_PATH_PARAM,
-  HTTP_REQUEST_URI
+  HTTP_REQUEST_URI,
 } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
 describe('unvalidated-redirect-analyzer', () => {
@@ -26,32 +26,32 @@ describe('unvalidated-redirect-analyzer', () => {
   const REFERER_RANGE = {
     iinfo: {
       type: HTTP_REQUEST_HEADER_VALUE,
-      parameterName: 'Referer'
-    }
+      parameterName: 'Referer',
+    },
   }
   const PARAMETER1_RANGE = {
     iinfo: {
       type: HTTP_REQUEST_PARAMETER,
-      parameterName: 'param1'
-    }
+      parameterName: 'param1',
+    },
   }
   const PARAMETER2_RANGE = {
     iinfo: {
       type: HTTP_REQUEST_PARAMETER,
-      parameterName: 'param2'
-    }
+      parameterName: 'param2',
+    },
   }
   const PATH_PARAM_RANGE = {
     iinfo: {
       type: HTTP_REQUEST_PATH_PARAM,
-      parameterName: 'path_param'
-    }
+      parameterName: 'path_param',
+    },
   }
   const URL_RANGE = {
     iinfo: {
       type: HTTP_REQUEST_URI,
-      parameterName: 'path'
-    }
+      parameterName: 'path',
+    },
   }
 
   const TaintTrackingMock = {
@@ -76,7 +76,7 @@ describe('unvalidated-redirect-analyzer', () => {
         default:
           return [PARAMETER1_RANGE, PARAMETER2_RANGE]
       }
-    }
+    },
   }
 
   let report
@@ -89,12 +89,12 @@ describe('unvalidated-redirect-analyzer', () => {
   afterEach(sinon.restore)
 
   const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
-    '../taint-tracking/operations': TaintTrackingMock
+    '../taint-tracking/operations': TaintTrackingMock,
   })
   const unvalidatedRedirectAnalyzer =
     proxyquire('../../../../src/appsec/iast/analyzers/unvalidated-redirect-analyzer', {
       './injection-analyzer': InjectionAnalyzer,
-      '../taint-tracking/operations': TaintTrackingMock
+      '../taint-tracking/operations': TaintTrackingMock,
     })
 
   unvalidatedRedirectAnalyzer.configure(true)

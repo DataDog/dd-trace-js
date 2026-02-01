@@ -33,7 +33,7 @@ describe('Plugin', () => {
             client.get('bar'),
             connectPromise,
           ]), {
-            message: /queue/
+            message: /queue/,
           })
           await passingPromise
           await client.quit()
@@ -149,7 +149,7 @@ describe('Plugin', () => {
         before(() => {
           return agent.load('redis', {
             service: 'custom',
-            allowlist: ['GET']
+            allowlist: ['GET'],
           })
         })
 
@@ -199,12 +199,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'redis.command',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'redis.command',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })
@@ -214,8 +214,8 @@ describe('Plugin', () => {
           return agent.load('redis', {
             blocklist: [
               'Set', // this should block set and SET commands
-              'FOO'
-            ]
+              'FOO',
+            ],
           })
         })
 

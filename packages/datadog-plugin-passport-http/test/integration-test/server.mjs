@@ -14,7 +14,7 @@ passportVerifyChannel.subscribe(() => {
 const app = express()
 
 const users = [
-  { id: 1, username: 'test', password: '1234' }
+  { id: 1, username: 'test', password: '1234' },
 ]
 
 const AUTH_HEADER = `Basic ${Buffer.from('test:1234').toString('base64')}`
@@ -29,7 +29,7 @@ app.use((req, res, next) => {
 passport.use('basic', new BasicStrategy({
   usernameField: 'username',
   passwordField: 'password',
-  passReqToCallback: false
+  passReqToCallback: false,
 }, (username, password, done) => {
   const user = users.find(u => u.username === username && u.password === password)
   if (!user) {

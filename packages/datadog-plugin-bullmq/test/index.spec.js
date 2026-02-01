@@ -8,7 +8,7 @@ const TestSetup = require('./test-setup')
 const testSetup = new TestSetup()
 
 createIntegrationTestSuite('bullmq', 'bullmq', {
-  category: 'messaging'
+  category: 'messaging',
 }, (meta) => {
   const { agent } = meta
 
@@ -30,8 +30,8 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
           'messaging.system': 'bullmq',
           'messaging.destination.name': 'test-queue',
           'messaging.operation': 'publish',
-          component: 'bullmq'
-        }
+          component: 'bullmq',
+        },
       })
 
       await testSetup.queueAdd()
@@ -48,8 +48,8 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
           'messaging.system': 'bullmq',
           'error.type': 'Error',
           'error.message': 'Validation error, cannot resolve alias "inv"',
-          'error.stack': ANY_STRING
-        }
+          'error.stack': ANY_STRING,
+        },
       })
 
       try {
@@ -72,11 +72,11 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
           'messaging.system': 'bullmq',
           'messaging.destination.name': 'test-queue',
           'messaging.operation': 'publish',
-          component: 'bullmq'
+          component: 'bullmq',
         },
         metrics: {
-          'messaging.batch.message_count': 3
-        }
+          'messaging.batch.message_count': 3,
+        },
       })
 
       await testSetup.queueAddBulk()
@@ -93,8 +93,8 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
           'messaging.system': 'bullmq',
           'error.type': 'ReplyError',
           'error.message': ANY_STRING, // this bullmq error message includes a hash that may change, use ANY_STRING
-          'error.stack': ANY_STRING
-        }
+          'error.stack': ANY_STRING,
+        },
       })
 
       try {
@@ -116,8 +116,8 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
           'span.kind': 'consumer',
           'messaging.system': 'bullmq',
           'messaging.operation': 'process',
-          component: 'bullmq'
-        }
+          component: 'bullmq',
+        },
       })
 
       await testSetup.workerProcessJob()
@@ -135,8 +135,8 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
           'messaging.system': 'bullmq',
           'error.type': 'Error',
           'error.message': 'Intentional job failure for testing',
-          'error.stack': ANY_STRING
-        }
+          'error.stack': ANY_STRING,
+        },
       })
 
       await testSetup.workerProcessJobError()
@@ -153,8 +153,8 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
           'span.kind': 'producer',
           'messaging.system': 'bullmq',
           'messaging.operation': 'publish',
-          component: 'bullmq'
-        }
+          component: 'bullmq',
+        },
       })
 
       await testSetup.flowProducerAdd()
@@ -173,8 +173,8 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
           'error.type': 'TypeError',
           'error.message': 'Converting circular structure to JSON\n    --> ' +
            "starting at object with constructor 'Object'\n    --- property 'self' closes the circle",
-          'error.stack': ANY_STRING
-        }
+          'error.stack': ANY_STRING,
+        },
       })
 
       try {

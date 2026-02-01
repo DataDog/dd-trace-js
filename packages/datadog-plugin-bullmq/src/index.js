@@ -11,7 +11,7 @@ class BullmqPlugin extends CompositePlugin {
     queueAdd: BullmqProducerPlugins[0],
     queueAddBulk: BullmqProducerPlugins[1],
     flowProducerAdd: BullmqProducerPlugins[2],
-    consumer: BullmqConsumerPlugin
+    consumer: BullmqConsumerPlugin,
   }
 }
 

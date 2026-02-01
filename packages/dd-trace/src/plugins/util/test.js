@@ -14,7 +14,7 @@ const id = require('../../id')
 const {
   incrementCountMetric,
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
-  TELEMETRY_GIT_SHA_MATCH
+  TELEMETRY_GIT_SHA_MATCH,
 } = require('../../ci-visibility/telemetry')
 
 const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../ext/tags')
@@ -32,7 +32,7 @@ const {
   CI_WORKSPACE_PATH,
   CI_PIPELINE_URL,
   CI_JOB_NAME,
-  GIT_COMMIT_HEAD_SHA
+  GIT_COMMIT_HEAD_SHA,
 } = require('./tags')
 const { getRuntimeAndOSMetadata } = require('./env')
 const { getCIMetadata } = require('./ci')
@@ -46,7 +46,7 @@ const {
   checkAndFetchBranch,
   getLocalBranches,
   getMergeBase,
-  getCounts
+  getCounts,
 } = require('./git')
 
 /**
@@ -146,22 +146,22 @@ const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test
 const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
 const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = new Set(['cucumber', 'mocha'])
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
-  playwright: '>=1.38.0'
+  playwright: '>=1.38.0',
 }
 const MINIMUM_FRAMEWORK_VERSION_FOR_IMPACTED_TESTS = {
-  playwright: '>=1.38.0'
+  playwright: '>=1.38.0',
 }
 const MINIMUM_FRAMEWORK_VERSION_FOR_QUARANTINE = {
-  playwright: '>=1.38.0'
+  playwright: '>=1.38.0',
 }
 const MINIMUM_FRAMEWORK_VERSION_FOR_DISABLE = {
-  playwright: '>=1.38.0'
+  playwright: '>=1.38.0',
 }
 const MINIMUM_FRAMEWORK_VERSION_FOR_ATTEMPT_TO_FIX = {
-  playwright: '>=1.38.0'
+  playwright: '>=1.38.0',
 }
 const MINIMUM_FRAMEWORK_VERSION_FOR_FAILED_TEST_REPLAY = {
-  playwright: '>=1.38.0'
+  playwright: '>=1.38.0',
 }
 
 const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = new Set(['mocha'])
@@ -171,13 +171,13 @@ const TEST_LEVEL_EVENT_TYPES = [
   'test',
   'test_suite_end',
   'test_module_end',
-  'test_session_end'
+  'test_session_end',
 ]
 const TEST_RETRY_REASON_TYPES = {
   efd: 'early_flake_detection',
   atr: 'auto_test_retry',
   atf: 'attempt_to_fix',
-  ext: 'external'
+  ext: 'external',
 }
 
 const DD_TEST_IS_USER_PROVIDED_SERVICE = '_dd.test.is_user_provided_service'
@@ -311,7 +311,7 @@ module.exports = {
   isModifiedTest,
   POSSIBLE_BASE_BRANCHES,
   GIT_COMMIT_SHA,
-  GIT_REPOSITORY_URL
+  GIT_REPOSITORY_URL,
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -357,11 +357,11 @@ function removeInvalidMetadata (metadata) {
 function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
   const {
     [GIT_COMMIT_SHA]: ciCommitSHA,
-    [GIT_REPOSITORY_URL]: ciRepositoryUrl
+    [GIT_REPOSITORY_URL]: ciRepositoryUrl,
   } = ciMetadata
   const {
     [GIT_COMMIT_SHA]: userProvidedCommitSHA,
-    [GIT_REPOSITORY_URL]: userProvidedRepositoryUrl
+    [GIT_REPOSITORY_URL]: userProvidedRepositoryUrl,
   } = userProvidedGitMetadata
   const { gitRepositoryUrl, gitCommitSHA } = getGitInformationDiscrepancy()
 
@@ -378,7 +378,7 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
         {
           type: discrepancyType,
           expected_provider: expectedProvider,
-          discrepant_provider: discrepantProvider
+          discrepant_provider: discrepantProvider,
         }
       )
       return true
@@ -393,14 +393,14 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
       v2: gitRepositoryUrl,
       type: 'repository_discrepancy',
       expected: 'user_supplied',
-      discrepant: 'git_client'
+      discrepant: 'git_client',
     },
     {
       v1: userProvidedCommitSHA,
       v2: gitCommitSHA,
       type: 'commit_discrepancy',
       expected: 'user_supplied',
-      discrepant: 'git_client'
+      discrepant: 'git_client',
     },
     // User provided vs CI metadata
     {
@@ -408,14 +408,14 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
       v2: ciRepositoryUrl,
       type: 'repository_discrepancy',
       expected: 'user_supplied',
-      discrepant: 'ci_provider'
+      discrepant: 'ci_provider',
     },
     {
       v1: userProvidedCommitSHA,
       v2: ciCommitSHA,
       type: 'commit_discrepancy',
       expected: 'user_supplied',
-      discrepant: 'ci_provider'
+      discrepant: 'ci_provider',
     },
     // CI metadata vs Git metadata
     {
@@ -423,15 +423,15 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
       v2: gitRepositoryUrl,
       type: 'repository_discrepancy',
       expected: 'ci_provider',
-      discrepant: 'git_client'
+      discrepant: 'git_client',
     },
     {
       v1: ciCommitSHA,
       v2: gitCommitSHA,
       type: 'commit_discrepancy',
       expected: 'ci_provider',
-      discrepant: 'git_client'
-    }
+      discrepant: 'git_client',
+    },
   ]
 
   let gitCommitShaMatch = true
@@ -476,7 +476,7 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
       [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
       [GIT_COMMIT_MESSAGE]: commitMessage,
       [CI_WORKSPACE_PATH]: ciWorkspacePath,
-      [GIT_COMMIT_HEAD_SHA]: headCommitSha
+      [GIT_COMMIT_HEAD_SHA]: headCommitSha,
     } = ciMetadata
     gitMetadata = getGitMetadata({
       commitSHA,
@@ -487,7 +487,7 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
       authorEmail,
       commitMessage,
       ciWorkspacePath,
-      headCommitSha
+      headCommitSha,
     })
   }
 
@@ -500,7 +500,7 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
     ...gitMetadata,
     ...ciMetadata,
     ...userProvidedGitMetadata,
-    ...runtimeAndOSMetadata
+    ...runtimeAndOSMetadata,
   }
   if (config && config.service) {
     metadata['service.name'] = config.service
@@ -541,7 +541,7 @@ function finishAllTraceSpans (span) {
 function getTestParentSpan (tracer) {
   return tracer.extract('text_map', {
     'x-datadog-trace-id': id().toString(10),
-    'x-datadog-parent-id': '0000000000000000'
+    'x-datadog-parent-id': '0000000000000000',
   })
 }
 
@@ -555,7 +555,7 @@ function getTestCommonTags (name, suite, version, testFramework) {
     [TEST_SUITE]: suite,
     [RESOURCE_NAME]: `${suite}.${name}`,
     [TEST_FRAMEWORK_VERSION]: version,
-    [LIBRARY_VERSION]: ddTraceVersion
+    [LIBRARY_VERSION]: ddTraceVersion,
   }
 }
 
@@ -578,7 +578,7 @@ const POSSIBLE_CODEOWNERS_LOCATIONS = [
   'CODEOWNERS',
   '.github/CODEOWNERS',
   'docs/CODEOWNERS',
-  '.gitlab/CODEOWNERS'
+  '.gitlab/CODEOWNERS',
 ]
 
 function readCodeOwners (rootDir) {
@@ -660,7 +660,7 @@ function getTestLevelCommonTags (command, testFrameworkVersion, testFramework) {
     [TEST_FRAMEWORK_VERSION]: testFrameworkVersion,
     [LIBRARY_VERSION]: ddTraceVersion,
     [TEST_COMMAND]: command,
-    [TEST_TYPE]: getTestTypeFromFramework(testFramework)
+    [TEST_TYPE]: getTestTypeFromFramework(testFramework),
   }
 }
 
@@ -670,7 +670,7 @@ function getTestSessionCommonTags (command, testFrameworkVersion, testFramework)
     [RESOURCE_NAME]: `test_session.${command}`,
     [TEST_MODULE]: testFramework,
     [TEST_TOOLCHAIN]: getPkgManager(),
-    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework)
+    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework),
   }
 }
 
@@ -679,7 +679,7 @@ function getTestModuleCommonTags (command, testFrameworkVersion, testFramework) 
     [SPAN_TYPE]: 'test_module_end',
     [RESOURCE_NAME]: `test_module.${command}`,
     [TEST_MODULE]: testFramework,
-    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework)
+    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework),
   }
 }
 
@@ -689,7 +689,7 @@ function getTestSuiteCommonTags (command, testFrameworkVersion, testSuite, testF
     [RESOURCE_NAME]: `test_suite.${testSuite}`,
     [TEST_MODULE]: testFramework,
     [TEST_SUITE]: testSuite,
-    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework)
+    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework),
   }
 }
 
@@ -704,7 +704,7 @@ function addIntelligentTestRunnerSpanTags (
     skippingCount,
     skippingType = 'suite',
     hasUnskippableSuites,
-    hasForcedToRunSuites
+    hasForcedToRunSuites,
   }
 ) {
   testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
@@ -891,7 +891,7 @@ const DEPENDENCY_FOLDERS = [
   'node:',
   '.pnpm',
   '.yarn',
-  '.pnp'
+  '.pnp',
 ]
 
 function getFileAndLineNumberFromError (error, repositoryRoot) {
@@ -1000,7 +1000,7 @@ function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion
         : undefined,
     [DD_CAPABILITIES_FAILED_TEST_REPLAY]: isFailedTestReplaySupported(testFramework, frameworkVersion)
       ? '1'
-      : undefined
+      : undefined,
   }
 }
 
@@ -1050,7 +1050,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
     metrics[candidate] = {
       behind,
       ahead,
-      baseSha
+      baseSha,
     }
   }
 

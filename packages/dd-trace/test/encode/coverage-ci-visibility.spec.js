@@ -25,28 +25,28 @@ describe('coverage-ci-visibility', () => {
 
   beforeEach(() => {
     logger = {
-      debug: sinon.stub()
+      debug: sinon.stub(),
     }
     const { CoverageCIVisibilityEncoder } = proxyquire('../../src/encode/coverage-ci-visibility', {
-      '../log': logger
+      '../log': logger,
     })
     encoder = new CoverageCIVisibilityEncoder()
 
     formattedCoverage = {
       sessionId: id('1'),
       suiteId: id('2'),
-      files: ['file.js']
+      files: ['file.js'],
     }
     formattedCoverage2 = {
       sessionId: id('3'),
       suiteId: id('4'),
-      files: ['file2.js']
+      files: ['file2.js'],
     }
     formattedCoverageTest = {
       sessionId: id('5'),
       suiteId: id('6'),
       testId: id('7'),
-      files: ['file3.js']
+      files: ['file3.js'],
     }
   })
 
@@ -62,7 +62,7 @@ describe('coverage-ci-visibility', () => {
       [
         'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"\r\n',
         // TODO: The double line breaks seem to be a mistake
-        'Content-Type: application/msgpack\r\n\r\n'
+        'Content-Type: application/msgpack\r\n\r\n',
       ]
     )
     const decodedCoverages = /** @type {CoverageObject} */ (msgpack.decode(form._data[3]))
@@ -122,7 +122,7 @@ describe('coverage-ci-visibility', () => {
       form._data,
       [
         'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"\r\n',
-        'Content-Type: application/msgpack\r\n\r\n'
+        'Content-Type: application/msgpack\r\n\r\n',
       ]
     )
 

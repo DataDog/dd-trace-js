@@ -65,7 +65,7 @@ describe('Plugin', () => {
         const spanProducerFn = (done) => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }
@@ -99,7 +99,7 @@ describe('Plugin', () => {
         it('should do automatic instrumentation', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }
@@ -136,7 +136,7 @@ describe('Plugin', () => {
         it('should support request configuration without a path and method', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }
@@ -164,7 +164,7 @@ describe('Plugin', () => {
         it('should support connect configuration with a URL object', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }
@@ -180,7 +180,7 @@ describe('Plugin', () => {
             const uri = {
               protocol: `${protocol}:`,
               hostname: 'localhost',
-              port
+              port,
             }
 
             const client = http2
@@ -197,7 +197,7 @@ describe('Plugin', () => {
         it('should remove the query string from the URL', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }
@@ -225,7 +225,7 @@ describe('Plugin', () => {
         it.skip('should support a URL object and an options object, with the string URL taking precedence', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }
@@ -241,13 +241,13 @@ describe('Plugin', () => {
             const correctConfig = {
               protocol: `${protocol}:`,
               host: 'localhost',
-              port
+              port,
             }
 
             const incorrectConfig = {
               protocol: `${protocol}:`,
               host: 'remotehost',
-              port: 1337
+              port: 1337,
             }
 
             let client
@@ -270,7 +270,7 @@ describe('Plugin', () => {
         it.skip('should support a string URL and an options object, with the string URL taking precedence', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }
@@ -286,13 +286,13 @@ describe('Plugin', () => {
             const correctConfig = {
               protocol: `${protocol}:`,
               host: 'localhost',
-              port
+              port,
             }
 
             const incorrectConfig = {
               protocol: `${protocol}:`,
               host: 'remotehost',
-              port: 1337
+              port: 1337,
             }
 
             let client
@@ -314,7 +314,7 @@ describe('Plugin', () => {
         it('should use the correct defaults when not specified', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }
@@ -329,7 +329,7 @@ describe('Plugin', () => {
 
             const uri = {
               protocol: `${protocol}:`,
-              port
+              port,
             }
 
             const client = http2
@@ -349,7 +349,7 @@ describe('Plugin', () => {
             assert.strictEqual(typeof headers['x-datadog-parent-id'], 'string')
 
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }
@@ -380,7 +380,7 @@ describe('Plugin', () => {
               assert.strictEqual(headers['x-datadog-parent-id'], undefined)
 
               stream.respond({
-                ':status': 200
+                ':status': 200,
               })
               stream.end()
 
@@ -392,7 +392,7 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             const headers = {
-              Authorization: 'AWS4-HMAC-SHA256 ...'
+              Authorization: 'AWS4-HMAC-SHA256 ...',
             }
             const client = http2
               .connect(`${protocol}://localhost:${port}`)
@@ -412,7 +412,7 @@ describe('Plugin', () => {
               assert.strictEqual(headers['x-datadog-parent-id'], undefined)
 
               stream.respond({
-                ':status': 200
+                ':status': 200,
               })
               stream.end()
 
@@ -424,7 +424,7 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             const headers = {
-              Authorization: ['AWS4-HMAC-SHA256 ...']
+              Authorization: ['AWS4-HMAC-SHA256 ...'],
             }
             const client = http2
               .connect(`${protocol}://localhost:${port}`)
@@ -444,7 +444,7 @@ describe('Plugin', () => {
               assert.strictEqual(headers['x-datadog-parent-id'], undefined)
 
               stream.respond({
-                ':status': 200
+                ':status': 200,
               })
               stream.end()
 
@@ -456,7 +456,7 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             const headers = {
-              'X-Amz-Signature': 'abc123'
+              'X-Amz-Signature': 'abc123',
             }
             const client = http2
               .connect(`${protocol}://localhost:${port}`)
@@ -476,7 +476,7 @@ describe('Plugin', () => {
               assert.strictEqual(headers['x-datadog-parent-id'], undefined)
 
               stream.respond({
-                ':status': 200
+                ':status': 200,
               })
               stream.end()
 
@@ -501,7 +501,7 @@ describe('Plugin', () => {
         it('should run the callback in the parent context', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }
@@ -553,7 +553,7 @@ describe('Plugin', () => {
         it('should not record HTTP 5XX responses as errors by default', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 500
+              ':status': 500,
             })
             stream.end()
           }
@@ -580,7 +580,7 @@ describe('Plugin', () => {
         it('should record HTTP 4XX responses as errors by default', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 400
+              ':status': 400,
             })
             stream.end()
           }
@@ -608,7 +608,7 @@ describe('Plugin', () => {
           require(loadPlugin)
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }
@@ -650,8 +650,8 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              service: 'custom'
-            }
+              service: 'custom',
+            },
           }
 
           return agent.load('http2', config)
@@ -663,7 +663,7 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }
@@ -709,7 +709,7 @@ describe('Plugin', () => {
         it('should not crash', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }
@@ -741,8 +741,8 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              validateStatus: status => status < 500
-            }
+              validateStatus: status => status < 500,
+            },
           }
 
           return agent.load('http2', config)
@@ -754,7 +754,7 @@ describe('Plugin', () => {
         it('should use the supplied function to decide if a response is an error', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 500
+              ':status': 500,
             })
             stream.end()
           }
@@ -787,8 +787,8 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              splitByDomain: true
-            }
+              splitByDomain: true,
+            },
           }
 
           return agent.load('http2', config)
@@ -801,7 +801,7 @@ describe('Plugin', () => {
           (done) => {
             const app = (stream, headers) => {
               stream.respond({
-                ':status': 200
+                ':status': 200,
               })
               stream.end()
             }
@@ -821,19 +821,19 @@ describe('Plugin', () => {
           {
             v0: {
               serviceName: () => `localhost:${serverPort}`,
-              opName: 'http.request'
+              opName: 'http.request',
             },
             v1: {
               serviceName: () => `localhost:${serverPort}`,
-              opName: 'http.client.request'
-            }
+              opName: 'http.client.request',
+            },
           }
         )
 
         it('should use the remote endpoint as the service name', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }
@@ -863,8 +863,8 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              headers: [':path', 'x-foo']
-            }
+              headers: [':path', 'x-foo'],
+            },
           }
 
           return agent.load('http2', config)
@@ -877,7 +877,7 @@ describe('Plugin', () => {
           const app = (stream, headers) => {
             stream.respond({
               'x-foo': 'bar',
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }
@@ -910,8 +910,8 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              blocklist: [/\/user/]
-            }
+              blocklist: [/\/user/],
+            },
           }
 
           return agent.load('http2', config)
@@ -923,7 +923,7 @@ describe('Plugin', () => {
         it('should skip recording if the url matches an item in the blocklist', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }

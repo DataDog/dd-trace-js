@@ -130,8 +130,8 @@ describe('Plugin', () => {
           const server = restify.createServer({
             log: {
               trace: () => {},
-              warn: warningSpy
-            }
+              warn: warningSpy,
+            },
           })
 
           server.get(
@@ -260,8 +260,8 @@ describe('Plugin', () => {
             handleUncaughtExceptions: true,
             log: {
               trace: function () {},
-              warn: function () {}
-            }
+              warn: function () {},
+            },
           })
           server.on('uncaughtException', function (req, res, route, err) {
             res.send(599)
@@ -287,7 +287,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/error`, {
-                validateStatus: status => status === 599
+                validateStatus: status => status === 599,
               })
               .catch(done)
           })

@@ -29,5 +29,5 @@ global.assert = {
     if (a !== b) {
       throw new Error(`${a} is not equal to ${b}`)
     }
-  }
+  },
 }

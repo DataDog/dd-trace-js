@@ -18,8 +18,8 @@ const getQueueParams = (queueName) => {
   return {
     QueueName: queueName,
     Attributes: {
-      MessageRetentionPeriod: '86400'
-    }
+      MessageRetentionPeriod: '86400',
+    },
   }
 }
 
@@ -65,8 +65,8 @@ describe('Plugin', () => {
         before(async () => {
           return agent.load('aws-sdk', {
             sqs: {
-              dsmEnabled: true
-            }
+              dsmEnabled: true,
+            },
           },
           { dsmEnabled: true })
         })
@@ -125,7 +125,7 @@ describe('Plugin', () => {
         it('Should set pathway hash tag on a span when producing', (done) => {
           sqs.sendMessage({
             MessageBody: 'test DSM',
-            QueueUrl: QueueUrlDsm
+            QueueUrl: QueueUrlDsm,
           }, (err) => {
             if (err) return done(err)
 
@@ -138,7 +138,7 @@ describe('Plugin', () => {
               }
 
               assertObjectContains(produceSpanMeta, {
-                'pathway.hash': expectedProducerHash
+                'pathway.hash': expectedProducerHash,
               })
             }).then(done, done)
           })
@@ -147,13 +147,13 @@ describe('Plugin', () => {
         it('Should set pathway hash tag on a span when consuming', (done) => {
           sqs.sendMessage({
             MessageBody: 'test DSM',
-            QueueUrl: QueueUrlDsm
+            QueueUrl: QueueUrlDsm,
           }, (err) => {
             if (err) return done(err)
 
             sqs.receiveMessage({
               QueueUrl: QueueUrlDsm,
-              MessageAttributeNames: ['.*']
+              MessageAttributeNames: ['.*'],
             }, (err) => {
               if (err) return done(err)
 
@@ -166,7 +166,7 @@ describe('Plugin', () => {
                 }
 
                 assertObjectContains(consumeSpanMeta, {
-                  'pathway.hash': expectedConsumerHash
+                  'pathway.hash': expectedConsumerHash,
                 })
               }).then(done, done)
             })
@@ -185,7 +185,7 @@ describe('Plugin', () => {
                 }
 
                 assertObjectContains(consumeSpanMeta, {
-                  'pathway.hash': expectedConsumerHash
+                  'pathway.hash': expectedConsumerHash,
                 })
               })
 
@@ -285,18 +285,18 @@ describe('Plugin', () => {
               Entries: [
                 {
                   Id: '1',
-                  MessageBody: 'test DSM 1'
+                  MessageBody: 'test DSM 1',
                 },
                 {
                   Id: '2',
-                  MessageBody: 'test DSM 2'
+                  MessageBody: 'test DSM 2',
                 },
                 {
                   Id: '3',
-                  MessageBody: 'test DSM 3'
-                }
+                  MessageBody: 'test DSM 3',
+                },
               ],
-              QueueUrl: QueueUrlDsm
+              QueueUrl: QueueUrlDsm,
             }, () => {
               nowStub.restore()
             })

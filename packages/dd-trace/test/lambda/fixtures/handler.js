@@ -8,11 +8,11 @@ const sampleResponse = {
   statusCode: 200,
   body: JSON.stringify(
     {
-      message: 'hello!'
+      message: 'hello!',
     },
     null,
     2
-  )
+  ),
 }
 
 const handler = async (_event, _context) => {
@@ -71,5 +71,5 @@ module.exports = {
   swappedArgsHandler,
   timeoutHandler,
   errorHandler,
-  callbackHandler
+  callbackHandler,
 }

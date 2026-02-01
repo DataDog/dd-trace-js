@@ -11,12 +11,12 @@ const sender1 = client.createSender(queueName)
 const sender2 = client.createSender(topicName)
 
 const message = {
-  body: 'Hello Datadog!'
+  body: 'Hello Datadog!',
 }
 
 const messages = [
   { body: 'Hello Datadog!' },
-  { body: 'Hello Azure!' }
+  { body: 'Hello Azure!' },
 ]
 
 const amqpMessages = [
@@ -24,16 +24,16 @@ const amqpMessages = [
     body: 'Hello from an amqp message',
     annotations: {
       'x-opt-custom-annotation-key': 'custom-value', // Custom annotation
-      'x-opt-partition-key': 'myPartitionKey' // Example of a common annotation
+      'x-opt-partition-key': 'myPartitionKey', // Example of a common annotation
     },
   },
   {
     body: 'Hello from an amqp message 2 ',
     annotations: {
       'x-opt-custom-annotation-key': 'custom-value-2', // Custom annotation
-      'x-opt-partition-key': 'myPartitionKey-2' // Example of a common annotation
-    }
-  }
+      'x-opt-partition-key': 'myPartitionKey-2', // Example of a common annotation
+    },
+  },
 ]
 
 // queue

@@ -16,7 +16,7 @@ app.get('/config', (req, res) => {
   const config = tracer._tracer._config
   res.json({
     codeOriginEnabled: config.codeOriginForSpans.enabled,
-    remoteConfigEnabled: config.remoteConfig.enabled
+    remoteConfigEnabled: config.remoteConfig.enabled,
   })
 })
 

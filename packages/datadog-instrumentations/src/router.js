@@ -15,7 +15,7 @@ const {
   extractMountPaths,
   getRouteFullPaths,
   wrapRouteMethodsAndPublish,
-  collectRoutesFromRouter
+  collectRoutesFromRouter,
 } = require('./helpers/router-helper')
 
 function isFastStar (layer, matchers) {
@@ -131,7 +131,7 @@ function createWrapRouterMethod (name) {
         return !isFastStar(layer, matchers) &&
           !isFastSlash(layer, matchers) &&
           cachedPathToRegExp(pattern).test(layer.path)
-      }
+      },
     }))
   }
 
@@ -272,7 +272,7 @@ function wrapHandleRequest (original) {
         req,
         res,
         params: req?.params,
-        abortController
+        abortController,
       })
 
       if (abortController.signal.aborted) return
@@ -283,7 +283,7 @@ function wrapHandleRequest (original) {
 }
 
 addHook({
-  name: 'router', file: 'lib/layer.js', versions: ['>=2']
+  name: 'router', file: 'lib/layer.js', versions: ['>=2'],
 }, Layer => {
   shimmer.wrap(Layer.prototype, 'handleRequest', wrapHandleRequest)
   return Layer
@@ -302,7 +302,7 @@ function wrapParam (original) {
             req,
             res,
             params: req?.params,
-            abortController
+            abortController,
           })
 
           if (abortController.signal.aborted) return
@@ -317,7 +317,7 @@ function wrapParam (original) {
 }
 
 addHook({
-  name: 'router', versions: ['>=2']
+  name: 'router', versions: ['>=2'],
 }, router => {
   shimmer.wrap(router.prototype, 'param', wrapParam)
   return router

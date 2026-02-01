@@ -67,8 +67,8 @@ describe('Plugin', () => {
                     'http.method': 'GET',
                     'http.status_code': '200',
                     component: 'connect',
-                    '_dd.integration': 'connect'
-                  }
+                    '_dd.integration': 'connect',
+                  },
                 })
               })
               .then(done)
@@ -361,8 +361,8 @@ describe('Plugin', () => {
                 headers: {
                   'x-datadog-trace-id': '1234',
                   'x-datadog-parent-id': '5678',
-                  'ot-baggage-foo': 'bar'
-                }
+                  'ot-baggage-foo': 'bar',
+                },
               })
               .catch(done)
           })
@@ -392,8 +392,8 @@ describe('Plugin', () => {
                   resource: 'GET /user',
                   meta: {
                     'http.status_code': '500',
-                    component: 'connect'
-                  }
+                    component: 'connect',
+                  },
                 })
               })
               .then(done)
@@ -401,7 +401,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -431,8 +431,8 @@ describe('Plugin', () => {
                   resource: 'GET /user',
                   meta: {
                     'http.status_code': '400',
-                    component: 'connect'
-                  }
+                    component: 'connect',
+                  },
                 })
               })
               .then(done)
@@ -440,7 +440,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 400
+                validateStatus: status => status === 400,
               })
               .catch(done)
           })
@@ -466,8 +466,8 @@ describe('Plugin', () => {
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
                     'http.status_code': '500',
-                    component: 'connect'
-                  }
+                    component: 'connect',
+                  },
                 })
               })
               .then(done)
@@ -475,7 +475,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -533,8 +533,8 @@ describe('Plugin', () => {
                     [ERROR_TYPE]: error.name,
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
-                    component: 'connect'
-                  }
+                    component: 'connect',
+                  },
                 })
                 assertObjectContains(spans[1], {
                   error: 1,
@@ -542,8 +542,8 @@ describe('Plugin', () => {
                     [ERROR_TYPE]: error.name,
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
-                    component: 'connect'
-                  }
+                    component: 'connect',
+                  },
                 })
               })
               .then(done)
@@ -551,7 +551,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -563,7 +563,7 @@ describe('Plugin', () => {
           return agent.load(['connect', 'http'], [{
             service: 'custom',
             validateStatus: code => code < 400,
-            headers: ['User-Agent']
+            headers: ['User-Agent'],
           }, { client: false }])
         })
 
@@ -622,7 +622,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 400
+                validateStatus: status => status === 400,
               })
               .catch(done)
           })
@@ -649,7 +649,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                headers: { 'User-Agent': 'test' }
+                headers: { 'User-Agent': 'test' },
               })
               .catch(done)
           })
@@ -679,8 +679,8 @@ describe('Plugin', () => {
                     'http.url': `http://localhost:${port}/user`,
                     'http.method': 'GET',
                     'http.status_code': '200',
-                    component: 'connect'
-                  }
+                    component: 'connect',
+                  },
                 })
               })
               .then(done)
@@ -715,8 +715,8 @@ describe('Plugin', () => {
                     [ERROR_TYPE]: error.name,
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
-                    component: 'connect'
-                  }
+                    component: 'connect',
+                  },
                 })
                 assertObjectContains(spans[1], {
                   error: 1,
@@ -724,8 +724,8 @@ describe('Plugin', () => {
                     [ERROR_TYPE]: error.name,
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
-                    component: 'connect'
-                  }
+                    component: 'connect',
+                  },
                 })
               })
               .then(done)
@@ -733,7 +733,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -759,8 +759,8 @@ describe('Plugin', () => {
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
                     'http.status_code': '500',
-                    component: 'connect'
-                  }
+                    component: 'connect',
+                  },
                 })
               })
               .then(done)
@@ -768,7 +768,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -778,7 +778,7 @@ describe('Plugin', () => {
       describe('with middleware disabled', () => {
         before(() => {
           return agent.load(['connect', 'http'], [{
-            middleware: false
+            middleware: false,
           }, { client: false }])
         })
 
@@ -871,8 +871,8 @@ describe('Plugin', () => {
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
                     'http.status_code': '500',
-                    component: 'connect'
-                  }
+                    component: 'connect',
+                  },
                 })
               })
               .then(done)
@@ -880,7 +880,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -906,8 +906,8 @@ describe('Plugin', () => {
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
                     'http.status_code': '500',
-                    component: 'connect'
-                  }
+                    component: 'connect',
+                  },
                 })
               })
               .then(done)
@@ -915,7 +915,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })

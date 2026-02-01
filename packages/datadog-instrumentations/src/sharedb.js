@@ -3,7 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 /**
@@ -27,7 +27,7 @@ const READABLE_ACTION_NAMES = {
   p: 'presence-broadcast',
   pr: 'presence-request',
   ps: 'presence-subscribe',
-  pu: 'presence-unsubscribe'
+  pu: 'presence-unsubscribe',
 }
 
 addHook({ name: 'sharedb', versions: ['>=1'], file: 'lib/agent.js' }, Agent => {

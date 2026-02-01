@@ -3,7 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 function wrapPino (symbol, wrapper, pino) {
@@ -14,7 +14,7 @@ function wrapPino (symbol, wrapper, pino) {
       configurable: true,
       enumerable: true,
       writable: true,
-      value: wrapper(instance[symbol])
+      value: wrapper(instance[symbol]),
     })
 
     return instance

@@ -89,13 +89,13 @@ function getOptions (args) {
     case 'string':
       if (Number.isNaN(Number.parseFloat(args[0]))) {
         return {
-          path: args[0]
+          path: args[0],
         }
       }
     case 'number': // eslint-disable-line no-fallthrough
       return {
         port: args[0],
-        host: typeof args[1] === 'string' ? args[1] : 'localhost'
+        host: typeof args[1] === 'string' ? args[1] : 'localhost',
       }
   }
 }

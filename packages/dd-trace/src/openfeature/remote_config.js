@@ -27,5 +27,5 @@ function enable (rc, config, getOpenfeatureProxy) {
 }
 
 module.exports = {
-  enable
+  enable,
 }

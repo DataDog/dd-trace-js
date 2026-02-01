@@ -26,7 +26,7 @@ function analyzeSsrf (ctx) {
   if (!req || !outgoingUrl) return
 
   const ephemeral = {
-    [addresses.HTTP_OUTGOING_URL]: outgoingUrl
+    [addresses.HTTP_OUTGOING_URL]: outgoingUrl,
   }
 
   const raspRule = { type: RULE_TYPES.SSRF }

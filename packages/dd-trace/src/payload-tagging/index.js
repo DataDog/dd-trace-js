@@ -4,7 +4,7 @@ const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: fa
 
 const {
   PAYLOAD_TAG_REQUEST_PREFIX,
-  PAYLOAD_TAG_RESPONSE_PREFIX
+  PAYLOAD_TAG_RESPONSE_PREFIX,
 } = require('../constants')
 
 const jsonpath = require('../../../../vendor/dist/jsonpath-plus').JSONPath

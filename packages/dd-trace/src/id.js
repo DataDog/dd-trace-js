@@ -204,7 +204,7 @@ function pseudoRandom () {
     data[offset + 4],
     data[offset + 5],
     data[offset + 6],
-    data[offset + 7]
+    data[offset + 7],
   ]
 }
 

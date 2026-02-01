@@ -34,7 +34,7 @@ function startupLog (agentError) {
     warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
     errors.agentError = {
       code: agentError.status,
-      message: `Agent Error: ${agentError.message}`
+      message: `Agent Error: ${agentError.message}`,
     }
   }
 }
@@ -107,5 +107,5 @@ module.exports = {
   setStartupLogPluginManager,
   setSamplingRules,
   tracerInfo,
-  errors
+  errors,
 }

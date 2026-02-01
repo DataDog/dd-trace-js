@@ -9,7 +9,7 @@ const ITERABLE_SUBTYPES = new Set(['map', 'set', 'weakmap', 'weakset'])
 const SIZE_IN_DESCRIPTION_SUBTYPES = new Set(['array', 'typedarray', 'arraybuffer', 'dataview', 'map', 'set'])
 
 module.exports = {
-  collectObjectProperties
+  collectObjectProperties,
 }
 
 /**
@@ -39,7 +39,7 @@ module.exports = {
 async function collectObjectProperties (objectId, opts, depth = 0, collection = false) {
   const { result, privateProperties } = await session.post('Runtime.getProperties', {
     objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   if (collection) {
@@ -95,14 +95,14 @@ async function traverseGetPropertiesResult (props, opts, depth) {
         prop.value,
         () => collectPropertiesBySubtype(subtype, objectId, opts, depth).then((properties) => {
           prop.value.properties = properties
-        })
+        }),
       ])
     } else if (type === 'function') {
       work.push([
         prop.value,
         () => getFunctionProperties(objectId, opts, depth + 1).then((properties) => {
           prop.value.properties = properties
-        })
+        }),
       ])
     }
   }
@@ -122,7 +122,7 @@ async function traverseGetPropertiesResult (props, opts, depth) {
       // eslint-disable-next-line no-await-in-loop
       await Promise.all([
         work[i][1](),
-        work[i + 1]?.[1]()
+        work[i + 1]?.[1](),
       ])
     }
   }
@@ -149,7 +149,7 @@ function collectPropertiesBySubtype (subtype, objectId, opts, depth) {
 async function getFunctionProperties (objectId, opts, depth) {
   let { result } = await session.post('Runtime.getProperties', {
     objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   // For legacy reasons (I assume) functions has a `prototype` property besides the internal `[[Prototype]]`
@@ -163,7 +163,7 @@ async function getIterable (objectId, opts, depth) {
   // exist in the return value below in the `result` property. We currently do not collect these.
   const { internalProperties } = await session.post('Runtime.getProperties', {
     objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   let entry = internalProperties[1]
@@ -175,7 +175,7 @@ async function getIterable (objectId, opts, depth) {
   // Skip the `[[Entries]]` level and go directly to the content of the iterable
   const { result } = await session.post('Runtime.getProperties', {
     objectId: entry.value.objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   removeNonEnumerableProperties(result) // remove the `length` property
@@ -191,7 +191,7 @@ async function getIterable (objectId, opts, depth) {
 async function getInternalProperties (objectId, opts, depth) {
   const { internalProperties } = await session.post('Runtime.getProperties', {
     objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   // We want all internal properties except the prototype
@@ -203,7 +203,7 @@ async function getInternalProperties (objectId, opts, depth) {
 async function getProxy (objectId, opts, depth) {
   const { internalProperties } = await session.post('Runtime.getProperties', {
     objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   // TODO: If we do not skip the proxy wrapper, we can add a `revoked` boolean
@@ -216,7 +216,7 @@ async function getProxy (objectId, opts, depth) {
   // Skip the `[[Target]]` level and go directly to the target of the Proxy
   const { result } = await session.post('Runtime.getProperties', {
     objectId: entry.value.objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   return traverseGetPropertiesResult(result, opts, depth)
@@ -229,7 +229,7 @@ async function getProxy (objectId, opts, depth) {
 async function getArrayBuffer (objectId, opts, depth) {
   const { internalProperties } = await session.post('Runtime.getProperties', {
     objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   // Use Uint8 to make it easy to convert to a string later.
@@ -238,7 +238,7 @@ async function getArrayBuffer (objectId, opts, depth) {
   // Skip the `[[Uint8Array]]` level and go directly to the content of the ArrayBuffer
   const { result } = await session.post('Runtime.getProperties', {
     objectId: entry.value.objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   return traverseGetPropertiesResult(result, opts, depth)

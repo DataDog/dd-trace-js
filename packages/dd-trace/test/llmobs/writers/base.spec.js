@@ -23,18 +23,18 @@ describe('BaseLLMObsWriter', () => {
     logger = {
       debug: sinon.stub(),
       warn: sinon.stub(),
-      error: sinon.stub()
+      error: sinon.stub(),
     }
     BaseLLMObsWriter = proxyquire('../../../src/llmobs/writers/base', {
       '../../exporters/common/request': request,
       '../../log': logger,
       './util': proxyquire('../../../src/llmobs/writers/util', {
-        '../../log': logger
-      })
+        '../../log': logger,
+      }),
     })
 
     clock = sinon.useFakeTimers({
-      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
 
     options = {
@@ -44,8 +44,8 @@ describe('BaseLLMObsWriter', () => {
         site: 'site.com',
         hostname: 'localhost',
         port: 8126,
-        apiKey: 'test'
-      }
+        apiKey: 'test',
+      },
     }
   })
 
@@ -72,7 +72,7 @@ describe('BaseLLMObsWriter', () => {
 
   describe('with override origin', () => {
     useEnv({
-      _DD_LLMOBS_OVERRIDE_ORIGIN: 'http://override-origin:12345'
+      _DD_LLMOBS_OVERRIDE_ORIGIN: 'http://override-origin:12345',
     })
 
     it('constructs a writer with the correct url', () => {

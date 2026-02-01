@@ -19,17 +19,17 @@ describe('sequelize', () => {
 
       sequelize = new Sequelize('db', 'root', '', {
         host: '127.0.0.1',
-        dialect: 'mysql'
+        dialect: 'mysql',
       })
       User = sequelize.define('User', {
         username: DataTypes.STRING,
-        birthday: DataTypes.DATE
+        birthday: DataTypes.DATE,
       })
 
       await sequelize.sync({ force: true })
       await User.create({
         username: 'janedoe',
-        birthday: new Date(1980, 6, 20)
+        birthday: new Date(1980, 6, 20),
       })
     })
 
@@ -51,9 +51,9 @@ describe('sequelize', () => {
               rules: path.join(__dirname, 'rules-example.json'),
               apiSecurity: {
                 enabled: true,
-                sampleDelay: 10
-              }
-            }
+                sampleDelay: 10,
+              },
+            },
           }))
         })
 

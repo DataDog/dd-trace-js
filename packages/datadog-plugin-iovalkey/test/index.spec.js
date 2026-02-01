@@ -52,7 +52,7 @@ describe('Plugin', () => {
 
           await Promise.all([
             valkey.get('foo'),
-            promise
+            promise,
           ])
         })
 
@@ -119,7 +119,7 @@ describe('Plugin', () => {
         before(() => agent.load('iovalkey', {
           service: 'custom',
           splitByInstance: true,
-          allowlist: ['get']
+          allowlist: ['get'],
         }))
 
         after(() => agent.close({ ritmReset: false }))
@@ -152,19 +152,19 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'valkey.command',
-              serviceName: 'custom-test'
+              serviceName: 'custom-test',
             },
             v1: {
               opName: 'valkey.command',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })
 
       describe('with legacy configuration', () => {
         before(() => agent.load('iovalkey', {
-          whitelist: ['get']
+          whitelist: ['get'],
         }))
 
         after(() => agent.close({ ritmReset: false }))

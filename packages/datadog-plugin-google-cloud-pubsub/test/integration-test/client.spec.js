@@ -8,7 +8,7 @@ const {
   useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProcAndExpectExit,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -43,7 +43,7 @@ describe('esm', () => {
         })
 
         proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
-          PUBSUB_EMULATOR_HOST: 'localhost:8081'
+          PUBSUB_EMULATOR_HOST: 'localhost:8081',
         })
 
         await res

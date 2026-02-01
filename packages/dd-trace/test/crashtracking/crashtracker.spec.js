@@ -24,12 +24,12 @@ describeNotWindows('crashtracker', () => {
     config = {
       port: 7357,
       tags: {
-        foo: 'bar'
-      }
+        foo: 'bar',
+      },
     }
 
     log = {
-      error: sinon.stub()
+      error: sinon.stub(),
     }
 
     sinon.spy(binding, 'init')
@@ -37,7 +37,7 @@ describeNotWindows('crashtracker', () => {
     sinon.spy(binding, 'updateMetadata')
 
     crashtracker = proxyquire('../../src/crashtracking/crashtracker', {
-      '../log': log
+      '../log': log,
     })
   })
 

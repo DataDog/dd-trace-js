@@ -13,11 +13,11 @@ const SCHEMA_FIXTURES = {
   tsCjsV7: 'provider-prisma-client-ts/cjs/v7/schema.prisma',
   tsEsmV6: 'provider-prisma-client-ts/esm/v6/schema.prisma',
   tsEsmV7: 'provider-prisma-client-ts/esm/v7/schema.prisma',
-  tsEsmV7Config: 'provider-prisma-client-ts/esm/v7/prisma.config.ts'
+  tsEsmV7Config: 'provider-prisma-client-ts/esm/v7/prisma.config.ts',
 }
 
 module.exports = {
   PRISMA_CLIENT_OUTPUT_RELATIVE,
   SCHEMA_FIXTURES,
-  TEST_DATABASE_URL
+  TEST_DATABASE_URL,
 }

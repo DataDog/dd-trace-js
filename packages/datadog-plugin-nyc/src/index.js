@@ -87,7 +87,7 @@ class NycPlugin extends CiPlugin {
     this.uploadCoverageReports({
       rootDir,
       testEnvironmentMetadata: this.testEnvironmentMetadata,
-      onDone: done
+      onDone: done,
     })
   }
 }

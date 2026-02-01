@@ -132,8 +132,8 @@ describe('Plugin', () => {
                     'http.url': `http://localhost:${port}/user`,
                     'http.method': 'GET',
                     'http.status_code': '200',
-                    'http.route': '/user'
-                  }
+                    'http.route': '/user',
+                  },
                 })
               })
               .then(done)
@@ -172,8 +172,8 @@ describe('Plugin', () => {
                     'span.kind': 'server',
                     'http.url': `http://localhost:${port}/app/user/1`,
                     'http.method': 'GET',
-                    'http.status_code': '200'
-                  }
+                    'http.status_code': '200',
+                  },
                 })
               })
               .then(done)
@@ -213,8 +213,8 @@ describe('Plugin', () => {
                     'span.kind': 'server',
                     'http.url': `http://localhost:${port}/app/user/1`,
                     'http.method': 'GET',
-                    'http.status_code': '200'
-                  }
+                    'http.status_code': '200',
+                  },
                 })
               })
               .then(done)
@@ -252,8 +252,8 @@ describe('Plugin', () => {
                   resource: 'GET /app/user/:id',
                   name: 'express.request',
                   meta: {
-                    component: 'express'
-                  }
+                    component: 'express',
+                  },
                 })
 
                 if (isExpress4) {
@@ -261,8 +261,8 @@ describe('Plugin', () => {
                     resource: 'query',
                     name: 'express.middleware',
                     meta: {
-                      component: 'express'
-                    }
+                      component: 'express',
+                    },
                   })
                   assert.strictEqual(spans[index].parent_id.toString(), rootSpan.span_id.toString())
                   index++
@@ -271,8 +271,8 @@ describe('Plugin', () => {
                     resource: 'expressInit',
                     name: 'express.middleware',
                     meta: {
-                      component: 'express'
-                    }
+                      component: 'express',
+                    },
                   })
                   assert.strictEqual(spans[index].parent_id.toString(), rootSpan.span_id.toString())
                   index++
@@ -282,8 +282,8 @@ describe('Plugin', () => {
                   resource: 'named',
                   name: `${whichMiddleware}.middleware`,
                   meta: {
-                    component: whichMiddleware
-                  }
+                    component: whichMiddleware,
+                  },
                 })
                 assert.strictEqual(spans[index].parent_id.toString(), rootSpan.span_id.toString())
                 index++
@@ -292,8 +292,8 @@ describe('Plugin', () => {
                   resource: 'router',
                   name: `${whichMiddleware}.middleware`,
                   meta: {
-                    component: whichMiddleware
-                  }
+                    component: whichMiddleware,
+                  },
                 })
                 assert.strictEqual(spans[index].parent_id.toString(), rootSpan.span_id.toString())
                 index++
@@ -306,8 +306,8 @@ describe('Plugin', () => {
                 assertObjectContains(spans[index], {
                   name: `${whichMiddleware}.middleware`,
                   meta: {
-                    component: whichMiddleware
-                  }
+                    component: whichMiddleware,
+                  },
                 })
                 assert.strictEqual(spans[index].parent_id.toString(), spans[index - 1].span_id.toString())
                 index++
@@ -316,8 +316,8 @@ describe('Plugin', () => {
                   resource: '<anonymous>',
                   name: `${whichMiddleware}.middleware`,
                   meta: {
-                    component: whichMiddleware
-                  }
+                    component: whichMiddleware,
+                  },
                 })
                 assert.strictEqual(spans[index].parent_id.toString(), spans[index - 1].span_id.toString())
 
@@ -366,15 +366,15 @@ describe('Plugin', () => {
                   resource: 'GET /user/:id',
                   name: 'express.request',
                   meta: {
-                    component: 'express'
-                  }
+                    component: 'express',
+                  },
                 })
                 assertObjectContains(spans[breakingSpanIndex], {
                   resource: 'breaking',
                   name: `${whichMiddleware}.middleware`,
                   meta: {
-                    component: whichMiddleware
-                  }
+                    component: whichMiddleware,
+                  },
                 })
               })
               .then(done)
@@ -421,15 +421,15 @@ describe('Plugin', () => {
                 assertObjectContains(spans[0], {
                   name: 'express.request',
                   meta: {
-                    component: 'express'
-                  }
+                    component: 'express',
+                  },
                 })
                 assertObjectContains(spans[errorSpanIndex], {
                   name: `${whichMiddleware}.middleware`,
                   meta: {
                     [ERROR_TYPE]: error.name,
-                    component: whichMiddleware
-                  }
+                    component: whichMiddleware,
+                  },
                 })
               })
               .then(done)
@@ -609,8 +609,8 @@ describe('Plugin', () => {
                 assertObjectContains(spans[0], {
                   resource: 'GET /parent/child',
                   meta: {
-                    component: 'express'
-                  }
+                    component: 'express',
+                  },
                 })
               })
               .then(done)
@@ -1131,8 +1131,8 @@ describe('Plugin', () => {
                 headers: {
                   'x-datadog-trace-id': '1234',
                   'x-datadog-parent-id': '5678',
-                  'ot-baggage-foo': 'bar'
-                }
+                  'ot-baggage-foo': 'bar',
+                },
               })
               .catch(done)
           })
@@ -1160,8 +1160,8 @@ describe('Plugin', () => {
                 resource: 'GET /user',
                 meta: {
                   'http.status_code': '500',
-                  component: 'express'
-                }
+                  component: 'express',
+                },
               })
 
               done()
@@ -1169,7 +1169,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -1198,8 +1198,8 @@ describe('Plugin', () => {
                 resource: 'GET /user',
                 meta: {
                   'http.status_code': '400',
-                  component: 'express'
-                }
+                  component: 'express',
+                },
               })
 
               done()
@@ -1207,7 +1207,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 400
+                validateStatus: status => status === 400,
               })
               .catch(done)
           })
@@ -1233,8 +1233,8 @@ describe('Plugin', () => {
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
                     'http.status_code': '500',
-                    component: 'express'
-                  }
+                    component: 'express',
+                  },
                 })
               })
               .then(done)
@@ -1242,7 +1242,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -1272,8 +1272,8 @@ describe('Plugin', () => {
                     [ERROR_TYPE]: error.name,
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
-                    component: 'express'
-                  }
+                    component: 'express',
+                  },
                 })
                 assertObjectContains(spans[secondErrorIndex], {
                   error: 1,
@@ -1281,8 +1281,8 @@ describe('Plugin', () => {
                     [ERROR_TYPE]: error.name,
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
-                    component: whichMiddleware
-                  }
+                    component: whichMiddleware,
+                  },
                 })
               })
               .then(done)
@@ -1290,7 +1290,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -1317,19 +1317,19 @@ describe('Plugin', () => {
                     [ERROR_TYPE]: error.name,
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
-                    component: 'express'
-                  }
+                    component: 'express',
+                  },
                 })
                 assertObjectContains(spans[secondErrorIndex], {
                   error: 1,
                   meta: {
                     [ERROR_TYPE]: error.name,
                     [ERROR_MESSAGE]: error.message,
-                    [ERROR_STACK]: error.stack
-                  }
+                    [ERROR_STACK]: error.stack,
+                  },
                 })
                 assertObjectContains(spans[0].meta, {
-                  component: 'express'
+                  component: 'express',
                 })
               })
               .then(done)
@@ -1337,7 +1337,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -1365,8 +1365,8 @@ describe('Plugin', () => {
                 assertObjectContains(spans[0], {
                   resource: 'GET /:path(*)',
                   meta: {
-                    'http.url': `http://localhost:${port}/user`
-                  }
+                    'http.url': `http://localhost:${port}/user`,
+                  },
                 })
               })
               .then(done)
@@ -1395,8 +1395,8 @@ describe('Plugin', () => {
                 assertObjectContains(spans[0], {
                   resource: 'GET /*user',
                   meta: {
-                    'http.url': `http://localhost:${port}/user`
-                  }
+                    'http.url': `http://localhost:${port}/user`,
+                  },
                 })
               })
               .then(done)
@@ -1479,15 +1479,15 @@ describe('Plugin', () => {
                 resource: 'GET',
                 meta: {
                   'http.status_code': '404',
-                  component: 'express'
-                }
+                  component: 'express',
+                },
               })
               assert.ok(!('http.route' in spans[0].meta))
             }).then(done).catch(done)
 
             axios
               .get(`http://localhost:${port}/does-not-exist`, {
-                validateStatus: status => status === 404
+                validateStatus: status => status === 404,
               })
               .catch(done)
           })
@@ -1525,8 +1525,8 @@ describe('Plugin', () => {
                       'http.url': `http://localhost:${port}/dd`,
                       'http.method': 'GET',
                       'http.status_code': '200',
-                      component: 'express'
-                    }
+                      component: 'express',
+                    },
                   })
                 })
                 .then(done)
@@ -1575,7 +1575,7 @@ describe('Plugin', () => {
             service: 'custom',
             validateStatus: code => code < 400,
             headers: ['User-Agent'],
-            blocklist: ['/health']
+            blocklist: ['/health'],
           }, { client: false }, {}])
         })
 
@@ -1633,7 +1633,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 400
+                validateStatus: status => status === 400,
               })
               .catch(done)
           })
@@ -1660,7 +1660,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                headers: { 'User-Agent': 'test' }
+                headers: { 'User-Agent': 'test' },
               })
               .catch(done)
           })
@@ -1700,7 +1700,7 @@ describe('Plugin', () => {
       describe('with configuration for middleware disabled', () => {
         before(() => {
           return agent.load(['express', 'http', 'router'], [{
-            middleware: false
+            middleware: false,
           }, { client: false }, { middleware: false }])
         })
 
@@ -1793,8 +1793,8 @@ describe('Plugin', () => {
                 resource: 'GET /user',
                 meta: {
                   'http.status_code': '500',
-                  component: 'express'
-                }
+                  component: 'express',
+                },
               })
 
               done()
@@ -1802,7 +1802,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -1832,8 +1832,8 @@ describe('Plugin', () => {
                   resource: 'GET /user',
                   meta: {
                     'http.status_code': '400',
-                    component: 'express'
-                  }
+                    component: 'express',
+                  },
                 })
               })
               .then(done)
@@ -1841,7 +1841,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 400
+                validateStatus: status => status === 400,
               })
               .catch(done)
           })
@@ -1867,8 +1867,8 @@ describe('Plugin', () => {
                     [ERROR_TYPE]: error.name,
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
-                    component: 'express'
-                  }
+                    component: 'express',
+                  },
                 })
               })
               .then(done)
@@ -1876,7 +1876,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -1902,8 +1902,8 @@ describe('Plugin', () => {
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
                     'http.status_code': '500',
-                    component: 'express'
-                  }
+                    component: 'express',
+                  },
                 })
               })
               .then(done)
@@ -1911,7 +1911,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })

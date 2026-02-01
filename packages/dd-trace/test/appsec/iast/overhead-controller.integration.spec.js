@@ -39,8 +39,8 @@ describe('IAST - overhead-controller - integration', () => {
           DD_IAST_ENABLED: 'true',
           DD_IAST_REQUEST_SAMPLING: '100',
           DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-          NODE_OPTIONS: '--require ./resources/init.js'
-        }
+          NODE_OPTIONS: '--require ./resources/init.js',
+        },
       })
       axios = Axios.create({ baseURL: proc.url })
     })

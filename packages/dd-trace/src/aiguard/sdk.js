@@ -15,7 +15,7 @@ const {
   AI_GUARD_META_STRUCT_KEY,
   AI_GUARD_TOOL_NAME_TAG_KEY,
   AI_GUARD_TELEMETRY_REQUESTS,
-  AI_GUARD_TELEMETRY_TRUNCATED
+  AI_GUARD_TELEMETRY_TRUNCATED,
 } = require('./tags')
 
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
@@ -68,7 +68,7 @@ class AIGuard extends NoopAIGuard {
       'DD-APPLICATION-KEY': config.appKey,
       'DD-AI-GUARD-VERSION': tracerVersion,
       'DD-AI-GUARD-SOURCE': 'SDK',
-      'DD-AI-GUARD-LANGUAGE': 'nodejs'
+      'DD-AI-GUARD-LANGUAGE': 'nodejs',
     }
     const endpoint = config.experimental.aiguard.endpoint || `https://app.${config.site}/api/v2/ai-guard`
     this.#evaluateUrl = `${endpoint}/evaluate`
@@ -147,10 +147,10 @@ class AIGuard extends NoopAIGuard {
         }
       }
       const metaStruct = {
-        messages: this.#buildMessagesForMetaStruct(messages)
+        messages: this.#buildMessagesForMetaStruct(messages),
       }
       span.meta_struct = {
-        [AI_GUARD_META_STRUCT_KEY]: metaStruct
+        [AI_GUARD_META_STRUCT_KEY]: metaStruct,
       }
       let response
       try {
@@ -159,8 +159,8 @@ class AIGuard extends NoopAIGuard {
             attributes: {
               messages,
               meta: this.#meta,
-            }
-          }
+            },
+          },
         }
         response = await executeRequest(
           payload,

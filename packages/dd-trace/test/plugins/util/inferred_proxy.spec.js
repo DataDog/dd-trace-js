@@ -13,7 +13,7 @@ const { assertObjectContains } = require('../../../../../integration-tests/helpe
 // Create axios instance with no connection pooling
 const httpClient = axios.create({
   httpAgent: new Agent({ keepAlive: false }),
-  timeout: 5000
+  timeout: 5000,
 })
 
 describe('Inferred Proxy Spans', function () {
@@ -27,7 +27,7 @@ describe('Inferred Proxy Spans', function () {
   const loadTest = async function ({ inferredProxyServicesEnabled = true } = {}) {
     const options = {
       inferredProxyServicesEnabled,
-      service: 'aws-server'
+      service: 'aws-server',
     }
 
     await agent.load(
@@ -103,7 +103,7 @@ describe('Inferred Proxy Spans', function () {
     'x-dd-proxy-path': '/test',
     'x-dd-proxy-httpmethod': 'GET',
     'x-dd-proxy-domain-name': 'example.com',
-    'x-dd-proxy-stage': 'dev'
+    'x-dd-proxy-stage': 'dev',
   }
 
   afterEach(async () => {
@@ -115,7 +115,7 @@ describe('Inferred Proxy Spans', function () {
       await loadTest({})
 
       await httpClient.get(`http://127.0.0.1:${port}/`, {
-        headers: inferredHeaders
+        headers: inferredHeaders,
       })
 
       await agent.assertSomeTraces(traces => {
@@ -133,11 +133,11 @@ describe('Inferred Proxy Spans', function () {
             'http.method': 'GET',
             'http.status_code': '200',
             component: 'aws-apigateway',
-            '_dd.integration': 'aws-apigateway'
+            '_dd.integration': 'aws-apigateway',
           },
           metrics: {
-            '_dd.inferred_span': 1
-          }
+            '_dd.inferred_span': 1,
+          },
         })
         assert.strictEqual(spans[0].start.toString(), '1729780025472999936')
 
@@ -153,8 +153,8 @@ describe('Inferred Proxy Spans', function () {
             'span.kind': 'server',
             'http.url': `http://127.0.0.1:${port}/`,
             'http.method': 'GET',
-            'http.status_code': '200'
-          }
+            'http.status_code': '200',
+          },
         })
       })
     })
@@ -166,7 +166,7 @@ describe('Inferred Proxy Spans', function () {
         headers: inferredHeaders,
         validateStatus: function (status) {
           return status === 500
-        }
+        },
       })
 
       await agent.assertSomeTraces(traces => {
@@ -182,8 +182,8 @@ describe('Inferred Proxy Spans', function () {
             'http.url': 'example.com/test',
             'http.method': 'GET',
             'http.status_code': '500',
-            component: 'aws-apigateway'
-          }
+            component: 'aws-apigateway',
+          },
         })
 
         assert.strictEqual(spans[0].error, 1)
@@ -200,8 +200,8 @@ describe('Inferred Proxy Spans', function () {
             'span.kind': 'server',
             'http.url': `http://127.0.0.1:${port}/error`,
             'http.method': 'GET',
-            'http.status_code': '500'
-          }
+            'http.status_code': '500',
+          },
         })
 
         assert.strictEqual(spans[1].error, 1)
@@ -212,7 +212,7 @@ describe('Inferred Proxy Spans', function () {
       await loadTest({})
 
       await httpClient.get(`http://127.0.0.1:${port}/no-aws-headers`, {
-        headers: {}
+        headers: {},
       })
 
       await agent.assertSomeTraces(traces => {
@@ -229,8 +229,8 @@ describe('Inferred Proxy Spans', function () {
             'span.kind': 'server',
             'http.url': `http://127.0.0.1:${port}/no-aws-headers`,
             'http.method': 'GET',
-            'http.status_code': '200'
-          }
+            'http.status_code': '200',
+          },
         })
 
         assert.strictEqual(spans[0].error, 0)
@@ -244,7 +244,7 @@ describe('Inferred Proxy Spans', function () {
       const { 'x-dd-proxy': _, ...newHeaders } = inferredHeaders
 
       await httpClient.get(`http://127.0.0.1:${port}/a-few-aws-headers`, {
-        headers: newHeaders
+        headers: newHeaders,
       })
 
       await agent.assertSomeTraces(traces => {
@@ -261,8 +261,8 @@ describe('Inferred Proxy Spans', function () {
             'span.kind': 'server',
             'http.url': `http://127.0.0.1:${port}/a-few-aws-headers`,
             'http.method': 'GET',
-            'http.status_code': '200'
-          }
+            'http.status_code': '200',
+          },
         })
 
         assert.strictEqual(spans[0].error, 0)
@@ -275,7 +275,7 @@ describe('Inferred Proxy Spans', function () {
       await loadTest({ inferredProxyServicesEnabled: false })
 
       await httpClient.get(`http://127.0.0.1:${port}/configured-off`, {
-        headers: inferredHeaders
+        headers: inferredHeaders,
       })
 
       await agent.assertSomeTraces(traces => {
@@ -293,8 +293,8 @@ describe('Inferred Proxy Spans', function () {
             'span.kind': 'server',
             'http.url': `http://127.0.0.1:${port}/configured-off`,
             'http.method': 'GET',
-            'http.status_code': '200'
-          }
+            'http.status_code': '200',
+          },
         })
       })
     })

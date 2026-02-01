@@ -4,14 +4,14 @@ import { app } from '@azure/functions'
 async function handlerFunction (request, context) {
   return {
     status: 200,
-    body: 'Hello Datadog!'
+    body: 'Hello Datadog!',
   }
 }
 
 app.http('httptest', {
   methods: ['GET'],
   authLevel: 'anonymous',
-  handler: handlerFunction
+  handler: handlerFunction,
 })
 
 app.http('httptest2', {
@@ -21,7 +21,7 @@ app.http('httptest2', {
     await fetch('http://127.0.0.1:7071/api/httptest')
     return {
       status: 200,
-      body: 'Hello Datadog 2!'
+      body: 'Hello Datadog 2!',
     }
-  }
+  },
 })

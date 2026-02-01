@@ -51,7 +51,7 @@ function withNamingSchema (
           Nomenclature.configure({
             spanAttributeSchema: versionName,
             spanRemoveIntegrationFromService: false,
-            service: fullConfig.service // Hack: only way to retrieve the test agent configuration
+            service: fullConfig.service, // Hack: only way to retrieve the test agent configuration
           })
         })
 
@@ -96,7 +96,7 @@ function withNamingSchema (
         Nomenclature.configure({
           spanAttributeSchema: 'v0',
           service: fullConfig.service,
-          spanRemoveIntegrationFromService: true
+          spanRemoveIntegrationFromService: true,
         })
       })
 
@@ -170,7 +170,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
           assert.strictEqual(span.meta['peer.service'], typeof service === 'function' ? service() : service)
           assert.strictEqual(span.meta['_dd.peer.service.source'], serviceSource)
         }),
-        spanGenerationPromise
+        spanGenerationPromise,
       ])
     })
   })
@@ -362,5 +362,5 @@ exports.mochaHooks = {
     storage('legacy').enterWith(undefined)
     storage('baggage').enterWith(undefined)
     extraServices.clear()
-  }
+  },
 }

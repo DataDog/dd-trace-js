@@ -10,7 +10,7 @@ const {
   sandboxCwd,
   useSandbox,
   FakeAgent,
-  spawnProc
+  spawnProc,
 } = require('../helpers')
 
 describe('multer', () => {
@@ -30,7 +30,7 @@ describe('multer', () => {
 
         env = {
           AGENT_PORT: agent.port,
-          DD_APPSEC_RULES: path.join(cwd, 'appsec', 'multer', 'body-parser-rules.json')
+          DD_APPSEC_RULES: path.join(cwd, 'appsec', 'multer', 'body-parser-rules.json'),
         }
 
         const execArgv = []

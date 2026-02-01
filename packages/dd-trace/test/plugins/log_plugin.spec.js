@@ -20,21 +20,21 @@ class TestLog extends LogPlugin {
 const config = {
   env: 'my-env',
   service: 'my-service',
-  version: '1.2.3'
+  version: '1.2.3',
 }
 
 const tracer = new Tracer(getConfig({
   logInjection: true,
   enabled: true,
-  ...config
+  ...config,
 }))
 
 const plugin = new TestLog({
-  _tracer: tracer
+  _tracer: tracer,
 })
 plugin.configure({
   logInjection: true,
-  enabled: true
+  enabled: true,
 })
 
 describe('LogPlugin', () => {

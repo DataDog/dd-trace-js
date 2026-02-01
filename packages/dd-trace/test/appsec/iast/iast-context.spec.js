@@ -11,7 +11,7 @@ describe('IAST context', () => {
   describe('getIastContext', () => {
     it('should obtain iast context from provided store', () => {
       const store = {
-        [iastContextHandler.IAST_CONTEXT_KEY]: iastContext
+        [iastContextHandler.IAST_CONTEXT_KEY]: iastContext,
       }
       const returnedIastContext = iastContextHandler.getIastContext(store)
       assert.notStrictEqual(returnedIastContext, null)
@@ -25,7 +25,7 @@ describe('IAST context', () => {
     it('should obtain iast context from topContext if store does not provide one', () => {
       const store = {}
       const topContext = {
-        [iastContextHandler.IAST_CONTEXT_KEY]: iastContext
+        [iastContextHandler.IAST_CONTEXT_KEY]: iastContext,
       }
       assert.strictEqual(iastContextHandler.getIastContext(store, topContext), iastContext)
     })
@@ -77,10 +77,10 @@ describe('IAST context', () => {
   describe('cleanIastContext', () => {
     it('should null iast context in both store and top context', () => {
       const store = {
-        [iastContextHandler.IAST_CONTEXT_KEY]: iastContext
+        [iastContextHandler.IAST_CONTEXT_KEY]: iastContext,
       }
       const topContext = {
-        [iastContextHandler.IAST_CONTEXT_KEY]: iastContext
+        [iastContextHandler.IAST_CONTEXT_KEY]: iastContext,
       }
       iastContextHandler.cleanIastContext(store, topContext, iastContext)
       assert.strictEqual(store[iastContextHandler.IAST_CONTEXT_KEY], null)
@@ -89,7 +89,7 @@ describe('IAST context', () => {
 
     it('should return true if context exist in store', () => {
       const store = {
-        [iastContextHandler.IAST_CONTEXT_KEY]: iastContext
+        [iastContextHandler.IAST_CONTEXT_KEY]: iastContext,
       }
       const topContext = {}
       const result = iastContextHandler.cleanIastContext(store, topContext)
@@ -99,7 +99,7 @@ describe('IAST context', () => {
     it('should return true if context exist in top context', () => {
       const store = {}
       const topContext = {
-        [iastContextHandler.IAST_CONTEXT_KEY]: iastContext
+        [iastContextHandler.IAST_CONTEXT_KEY]: iastContext,
       }
       const result = iastContextHandler.cleanIastContext(store, topContext)
       assert.strictEqual(result, true)

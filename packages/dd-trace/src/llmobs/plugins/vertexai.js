@@ -2,7 +2,7 @@
 
 const {
   extractModel,
-  extractSystemInstructions
+  extractSystemInstructions,
 } = require('../../../../datadog-plugin-google-cloud-vertexai/src/utils')
 const LLMObsPlugin = require('./base')
 
@@ -19,7 +19,7 @@ class VertexAILLMObsPlugin extends LLMObsPlugin {
       kind: 'llm',
       modelName: extractModel(ctx.instance),
       modelProvider: 'google',
-      name: ctx.resource
+      name: ctx.resource,
     }
   }
 
@@ -53,7 +53,7 @@ function getMetadata (instance) {
     ['maxOutputTokens', 'max_output_tokens'],
     ['candidateCount', 'candidate_count'],
     ['topP', 'top_p'],
-    ['topK', 'top_k']
+    ['topK', 'top_k'],
   ]) {
     if (modelConfig[parameter]) {
       metadata[parameterKey] = modelConfig[parameter]
@@ -90,7 +90,7 @@ function extractInputMessages (request, history, systemInstructions) {
   if (!Array.isArray(contents)) {
     messages.push({
       content: '[Non-array content object: ' +
-      `${(typeof contents.toString === 'function' ? contents.toString() : String(contents))}]`
+      `${(typeof contents.toString === 'function' ? contents.toString() : String(contents))}]`,
     })
     return messages
   }
@@ -136,7 +136,7 @@ function extractMessagesFromContent (content) {
   if (parts == null || parts.length === 0 || !Array.isArray(parts)) {
     const message = {
       content:
-      `[Non-text content object: ${(typeof content.toString === 'function' ? content.toString() : String(content))}]`
+      `[Non-text content object: ${(typeof content.toString === 'function' ? content.toString() : String(content))}]`,
     }
     if (role) message.role = role
     messages.push(message)
@@ -161,7 +161,7 @@ function extractMessageFromPart (part, role) {
   if (functionCall) {
     message.toolCalls = [{
       name: functionCall.name,
-      arguments: functionCall.args
+      arguments: functionCall.args,
     }]
   }
   if (functionResponse) {

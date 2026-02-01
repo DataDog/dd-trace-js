@@ -38,7 +38,7 @@ describe('esbuild support for IAST', () => {
     await exec('npm init -y', { cwd: craftedNodeModulesDir })
     await retry(() => exec('npm install @datadog/wasm-js-rewriter @datadog/native-iast-taint-tracking', {
       cwd: craftedNodeModulesDir,
-      timeout: 3e3
+      timeout: 3e3,
     }))
   })
 
@@ -76,13 +76,13 @@ describe('esbuild support for IAST', () => {
     // Install app deps
     await retry(() => exec('npm install', {
       cwd: applicationDir,
-      timeout: 6e3
+      timeout: 6e3,
     }))
 
     // Bundle the application
     await exec('npm run build', {
       cwd: applicationDir,
-      timeout: 10e3
+      timeout: 10e3,
     })
 
     const bundledApplicationDir = path.join(applicationDir, 'build')
@@ -103,7 +103,7 @@ describe('esbuild support for IAST', () => {
             DD_TRACE_AGENT_PORT: contextVars.agent.port,
             DD_IAST_ENABLED: String(iastEnabled),
             DD_IAST_REQUEST_SAMPLING: '100',
-          }
+          },
         })
         contextVars.axios = Axios.create({ baseURL: contextVars.proc.url })
       })

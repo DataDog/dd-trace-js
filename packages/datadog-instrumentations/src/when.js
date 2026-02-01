@@ -7,7 +7,7 @@ const { wrapThen } = require('./helpers/promise')
 addHook({
   name: 'when',
   file: 'lib/Promise.js',
-  versions: ['>=3']
+  versions: ['>=3'],
 }, Promise => {
   shimmer.wrap(Promise.prototype, 'then', wrapThen)
   return Promise

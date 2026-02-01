@@ -14,7 +14,7 @@ const {
   disableTaintTracking,
   createTransaction,
   removeTransaction,
-  taintTrackingPlugin
+  taintTrackingPlugin,
 } = require('./taint-tracking')
 const { IAST_ENABLED_TAG_KEY } = require('./tags')
 const iastTelemetry = require('./telemetry')
@@ -78,7 +78,7 @@ function onIncomingHttpRequestStart (data) {
         }
         if (rootSpan.addTags) {
           rootSpan.addTags({
-            [IAST_ENABLED_TAG_KEY]: isRequestAcquired ? 1 : 0
+            [IAST_ENABLED_TAG_KEY]: isRequestAcquired ? 1 : 0,
           })
         }
       }

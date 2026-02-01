@@ -9,7 +9,7 @@ const {
   Profile,
   Sample,
   StringTable,
-  ValueType
+  ValueType,
 } = require('../../../../../vendor/dist/pprof-format')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../libuv-size')
 const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL, encodeProfileAsync } = require('./shared')
@@ -201,7 +201,7 @@ const decoratorTypes = {
   fs: FilesystemDecorator,
   dns: DNSDecorator,
   gc: GCDecorator,
-  net: NetDecorator
+  net: NetDecorator,
 }
 
 // Translates performance entries into pprof samples.
@@ -274,7 +274,7 @@ class EventSerializer {
     const endTime = startTime + duration
     const label = [
       decorator.eventTypeLabel,
-      new Label({ key: this.timestampLabelKey, num: dateOffset + BigInt(Math.round(endTime * MS_TO_NS)) })
+      new Label({ key: this.timestampLabelKey, num: dateOffset + BigInt(Math.round(endTime * MS_TO_NS)) }),
     ]
     if (_ddSpanId) {
       label.push(
@@ -287,7 +287,7 @@ class EventSerializer {
     const sampleInput = {
       value: [Math.round(duration * MS_TO_NS)],
       locationId: this.locationId,
-      label
+      label,
     }
     decorator.decorateSample(sampleInput, item)
     return new Sample(sampleInput)
@@ -296,7 +296,7 @@ class EventSerializer {
   createProfile (startDate, endDate) {
     const timeValueType = new ValueType({
       type: this.stringTable.dedup(pprofValueType),
-      unit: this.stringTable.dedup(pprofValueUnit)
+      unit: this.stringTable.dedup(pprofValueUnit),
     })
 
     return new Profile({
@@ -308,7 +308,7 @@ class EventSerializer {
       sample: this.samples,
       location: this.locations,
       function: this.functions,
-      stringTable: this.stringTable
+      stringTable: this.stringTable,
     })
   }
 }
@@ -354,7 +354,7 @@ class DatadogInstrumentationEventSource {
       require('./event_plugins/dns_resolve'),
       require('./event_plugins/dns_reverse'),
       require('./event_plugins/fs'),
-      require('./event_plugins/net')
+      require('./event_plugins/net'),
     ]
     this.plugins = plugins.map((Plugin) => {
       return new Plugin(eventHandler, eventFilter)
@@ -382,7 +382,7 @@ function createPoissonProcessSamplingFilter (samplingIntervalMillis) {
   const poissonFilter = new PoissonProcessSamplingFilter({
     samplingInterval: samplingIntervalMillis,
     resetInterval: samplingIntervalMillis * POISSON_RESET_FACTOR,
-    now: performance.now.bind(performance)
+    now: performance.now.bind(performance),
   })
   return poissonFilter.filter.bind(poissonFilter)
 }
@@ -423,7 +423,7 @@ class EventsProfiler {
         ]
       // Use Node API instrumentation to collect events without span IDs
       : [
-          new NodeApiEventSource(filteringEventHandler)
+          new NodeApiEventSource(filteringEventHandler),
         ]
   }
 
@@ -446,7 +446,7 @@ class EventsProfiler {
 
   getInfo () {
     return {
-      maxSamples: this.#maxSamples
+      maxSamples: this.#maxSamples,
     }
   }
 

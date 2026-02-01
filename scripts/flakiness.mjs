@@ -12,7 +12,7 @@ const {
   GITHUB_RUN_ID,
   MERGE = 'true',
   OCCURRENCES = '1',
-  UNTIL
+  UNTIL,
 } = process.env
 
 const ONE_DAY = 24 * 60 * 60 * 1000
@@ -29,7 +29,7 @@ const workflows = [
   '.github/workflows/project.yml',
   '.github/workflows/serverless.yml',
   '.github/workflows/system-tests.yml',
-  '.github/workflows/test-optimization.yml'
+  '.github/workflows/test-optimization.yml',
 ]
 
 const flaky = {}
@@ -51,7 +51,7 @@ async function checkWorkflowRuns (id, page = 1) {
     status: 'success',
     created: `${startDate}..${endDate}`,
     branch: BRANCH,
-    workflow_id: id
+    workflow_id: id,
   })
 
   const runs = response.data.workflow_runs
@@ -94,7 +94,7 @@ async function checkWorkflowJobs (id, attempt, page = 1) {
     repo: 'dd-trace-js',
     run_id: id,
     page,
-    per_page: 100 // max is 100
+    per_page: 100, // max is 100
   })
 
   const { jobs } = response.data

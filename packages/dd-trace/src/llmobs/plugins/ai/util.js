@@ -7,7 +7,7 @@ const MODEL_METADATA_KEYS = new Set([
   'temperature',
   'top_p',
   'top_k',
-  'stop_sequences'
+  'stop_sequences',
 ])
 
 /**
@@ -214,5 +214,5 @@ module.exports = {
   getGenerationMetadata,
   getToolNameFromTags,
   getToolCallResultContent,
-  getLlmObsSpanName
+  getLlmObsSpanName,
 }

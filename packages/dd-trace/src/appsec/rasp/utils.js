@@ -16,12 +16,12 @@ const RULE_TYPES = {
   COMMAND_INJECTION: 'command_injection',
   LFI: 'lfi',
   SQL_INJECTION: 'sql_injection',
-  SSRF: 'ssrf'
+  SSRF: 'ssrf',
 }
 
 const ALLOWED_ROOTSPAN_NAMES = new Set([
   'express.request',
-  'fastify.request'
+  'fastify.request',
 ])
 
 class DatadogRaspAbortError extends Error {
@@ -37,7 +37,7 @@ class DatadogRaspAbortError extends Error {
     // hide these props to not pollute app logs
     Object.defineProperties(this, {
       req: { enumerable: false },
-      res: { enumerable: false }
+      res: { enumerable: false },
     })
   }
 }
@@ -81,5 +81,5 @@ function handleResult (result, req, res, abortController, config, raspRule) {
 module.exports = {
   handleResult,
   RULE_TYPES,
-  DatadogRaspAbortError
+  DatadogRaspAbortError,
 }

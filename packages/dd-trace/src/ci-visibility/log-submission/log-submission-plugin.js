@@ -12,8 +12,8 @@ function getWinstonLogSubmissionParameters (config) {
     path: `/api/v2/logs?ddsource=winston&service=${service}`,
     ssl: true,
     headers: {
-      'DD-API-KEY': getValueFromEnvSources('DD_API_KEY')
-    }
+      'DD-API-KEY': getValueFromEnvSources('DD_API_KEY'),
+    },
   }
 
   if (!getValueFromEnvSources('DD_AGENTLESS_LOG_SUBMISSION_URL')) {
@@ -27,7 +27,7 @@ function getWinstonLogSubmissionParameters (config) {
       port: url.port,
       ssl: url.protocol === 'https:',
       path: defaultParameters.path,
-      headers: defaultParameters.headers
+      headers: defaultParameters.headers,
     }
   } catch {
     log.error('Could not parse DD_AGENTLESS_LOG_SUBMISSION_URL')

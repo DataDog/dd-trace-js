@@ -52,7 +52,7 @@ describe('Plugin', () => {
                   const tagNames = Object.keys(spans[0].meta)
                   assert.doesNotMatch(tagNames.join(','), /code_origin/)
                 }),
-                axios.get(`http://localhost:${app.server.address().port}/user`)
+                axios.get(`http://localhost:${app.server.address().port}/user`),
               ])
             })
           })
@@ -138,7 +138,7 @@ describe('Plugin', () => {
       agent.assertSomeTraces(traces => {
         assertCodeOriginFromTraces(traces, { file: __filename, ...frame })
       }),
-      axios.get(`http://localhost:${app.server.address().port}${path}`)
+      axios.get(`http://localhost:${app.server.address().port}${path}`),
     ])
   }
 })

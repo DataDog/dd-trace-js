@@ -16,8 +16,8 @@ class DNSLookupPlugin extends ClientPlugin {
       meta: {
         'dns.hostname': hostname,
         'dns.address': '',
-        'dns.addresses': ''
-      }
+        'dns.addresses': '',
+      },
     }, ctx)
 
     return ctx.currentStore

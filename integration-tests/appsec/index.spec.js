@@ -36,8 +36,8 @@ describe('RASP', () => {
           DD_APPSEC_ENABLED: 'true',
           DD_APPSEC_RASP_ENABLED: 'true',
           DD_APPSEC_RULES: path.join(cwd, 'appsec/rasp/rasp_rules.json'),
-          DD_APPSEC_RASP_COLLECT_REQUEST_BODY: String(collectRequestBody)
-        }
+          DD_APPSEC_RASP_COLLECT_REQUEST_BODY: String(collectRequestBody),
+        },
       }, stdOutputHandler, stdOutputHandler)
       axios = Axios.create({ baseURL: proc.url })
     })
@@ -367,7 +367,7 @@ describe('RASP', () => {
         const requestBody = {
           host: 'localhost/ifconfig.pro',
           objectWithLotsOfNodes: Object.fromEntries([...Array(300).keys()].map(i => [i, i])),
-          arr: Array(300).fill('foo')
+          arr: Array(300).fill('foo'),
         }
         try {
           await axios.post('/ssrf', requestBody)
@@ -379,7 +379,7 @@ describe('RASP', () => {
           const expectedReportedBody = {
             host: 'localhost/ifconfig.pro',
             objectWithLotsOfNodes: Object.fromEntries([...Array(256).keys()].map(i => [i, i])),
-            arr: Array(256).fill('foo')
+            arr: Array(256).fill('foo'),
           }
 
           await assertBodyReported(expectedReportedBody, true)

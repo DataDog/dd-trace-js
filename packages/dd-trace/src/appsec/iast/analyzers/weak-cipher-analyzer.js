@@ -8,7 +8,7 @@ const INSECURE_CIPHERS = new Set([
   'des-ede3-ecb', 'des-ede3-ofb', 'des-ofb', 'des3', 'des3-wrap',
   'rc2', 'rc2-128', 'rc2-40', 'rc2-40-cbc', 'rc2-64', 'rc2-64-cbc', 'rc2-cbc', 'rc2-cfb', 'rc2-ecb', 'rc2-ofb',
   'blowfish',
-  'rc4', 'rc4-40', 'rc4-hmac-md5'
+  'rc4', 'rc4-40', 'rc4-hmac-md5',
 ].map(algorithm => algorithm.toLowerCase()))
 
 class WeakCipherAnalyzer extends Analyzer {

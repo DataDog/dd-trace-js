@@ -4,7 +4,7 @@ const {
   DEFAULT_MAX_REFERENCE_DEPTH,
   DEFAULT_MAX_COLLECTION_SIZE,
   DEFAULT_MAX_FIELD_COUNT,
-  DEFAULT_MAX_LENGTH
+  DEFAULT_MAX_LENGTH,
 } = require('./constants')
 const { collectObjectProperties } = require('./collector')
 const { processRawState } = require('./processor')
@@ -12,7 +12,7 @@ const { processRawState } = require('./processor')
 const BIGINT_MAX = (1n << 256n) - 1n
 
 module.exports = {
-  getLocalStateForCallFrame
+  getLocalStateForCallFrame,
 }
 
 /**
@@ -43,7 +43,7 @@ async function getLocalStateForCallFrame (
     maxCollectionSize = DEFAULT_MAX_COLLECTION_SIZE,
     maxFieldCount = DEFAULT_MAX_FIELD_COUNT,
     maxLength = DEFAULT_MAX_LENGTH,
-    deadlineNs = BIGINT_MAX
+    deadlineNs = BIGINT_MAX,
   } = {}
 ) {
   /** @type {{ deadlineReached: boolean, captureErrors: Error[] }} */
@@ -78,6 +78,6 @@ async function getLocalStateForCallFrame (
       processedState = processedState ?? processRawState(rawState, maxLength)
       return processedState
     },
-    captureErrors: ctx.captureErrors
+    captureErrors: ctx.captureErrors,
   }
 }

@@ -24,7 +24,7 @@ describe('sql-injection-analyzer with mysql2', () => {
         connection = mysql2.createConnection({
           host: 'localhost',
           user: 'root',
-          database: 'db'
+          database: 'db',
         })
         connection.connect()
       })

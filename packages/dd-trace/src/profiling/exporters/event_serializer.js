@@ -38,7 +38,7 @@ class EventSerializer {
         `process_id:${process.pid}`,
         `profiler_version:${version}`,
         'format:pprof',
-        ...Object.entries(tags).map(([key, value]) => `${key}:${value}`)
+        ...Object.entries(tags).map(([key, value]) => `${key}:${value}`),
       ].join(','),
       endpoint_counts: endpointCounts,
       info: {
@@ -46,21 +46,21 @@ class EventSerializer {
           env: this._env,
           service: this._service,
           start_time: new Date(perf.nodeTiming.nodeStart + perf.timeOrigin).toISOString(),
-          version: this._appVersion
+          version: this._appVersion,
         },
         platform: {
           hostname: this._host,
           kernel_name: os.type(),
           kernel_release: os.release(),
-          kernel_version: os.version()
+          kernel_version: os.version(),
         },
         profiler: {
           activation: this._activation,
           ssi: {
-            mechanism: this._libraryInjected ? 'injected_agent' : 'none'
+            mechanism: this._libraryInjected ? 'injected_agent' : 'none',
           },
           version,
-          ...infos
+          ...infos,
         },
         runtime: {
           available_processors: availableParallelism(),
@@ -75,9 +75,9 @@ class EventSerializer {
           // We'll keep it like this as we want cross-engine consistency. We
           // also aren't changing the format of the existing tag as we don't want
           // to break it.
-          version: process.version.slice(1)
-        }
-      }
+          version: process.version.slice(1),
+        },
+      },
     }
 
     if (processTags.serialized) {
