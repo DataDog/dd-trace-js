@@ -6,7 +6,7 @@ const satisfies = require('../../../../vendor/dist/semifies')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
-const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
+const { IS_SERVERLESS } = require('../../../dd-trace/src/serverless')
 const { getValueFromEnvSources } = require('../../../dd-trace/src/config/helper')
 const checkRequireCache = require('./check-require-cache')
 const Hook = require('./hook')
@@ -24,8 +24,6 @@ const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const disabledInstrumentations = new Set(
   DD_TRACE_DISABLED_INSTRUMENTATIONS?.split(',')
 )
-
-const IS_SERVERLESS = isInServerlessEnvironment()
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 

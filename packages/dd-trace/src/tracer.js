@@ -8,10 +8,8 @@ const Scope = require('./scope')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
-const { isInServerlessEnvironment } = require('./serverless')
+const { IS_SERVERLESS } = require('./serverless')
 const log = require('./log/writer')
-
-const IS_SERVERLESS = isInServerlessEnvironment()
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME

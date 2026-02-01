@@ -140,9 +140,8 @@ describe('AppSec Index', function () {
     }
 
     serverless = {
-      isInServerlessEnvironment: sinon.stub(),
+      IS_SERVERLESS: false,
     }
-    serverless.isInServerlessEnvironment.returns(false)
 
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
@@ -192,20 +191,6 @@ describe('AppSec Index', function () {
       AppSec.enable(config)
 
       sinon.assert.calledOnceWithExactly(log.error, '[ASM] Unable to start AppSec', err)
-      sinon.assert.notCalled(incomingHttpRequestStart.subscribe)
-      sinon.assert.notCalled(incomingHttpRequestEnd.subscribe)
-    })
-
-    it('should not log when enable fails in serverless', () => {
-      RuleManager.loadRules.restore()
-
-      const err = new Error('Invalid Rules')
-      sinon.stub(RuleManager, 'loadRules').throws(err)
-      serverless.isInServerlessEnvironment.returns(true)
-
-      AppSec.enable(config)
-
-      sinon.assert.notCalled(log.error)
       sinon.assert.notCalled(incomingHttpRequestStart.subscribe)
       sinon.assert.notCalled(incomingHttpRequestEnd.subscribe)
     })
@@ -1420,6 +1405,121 @@ describe('AppSec Index', function () {
       const metrics = appsecNamespace.metrics.toJSON()
 
       assert.strictEqual(metrics, undefined)
+    })
+  })
+})
+
+describe('AppSec Index (Serverless)', () => {
+  let AppSec
+  let log
+  let web
+  let blocking
+  let UserTracking
+  let appsecTelemetry
+  let graphql
+  let apiSecuritySampler
+  let rasp
+  let config
+  let RuleManager
+  let Reporter
+  let incomingHttpRequestStart
+  let incomingHttpRequestEnd
+
+  beforeEach(() => {
+    log = {
+      debug: sinon.stub(),
+      warn: sinon.stub(),
+      error: sinon.stub(),
+    }
+
+    web = {
+      root: sinon.stub(),
+    }
+
+    blocking = {
+      setTemplates: sinon.stub(),
+    }
+
+    UserTracking = {
+      setCollectionMode: sinon.stub(),
+    }
+
+    appsecTelemetry = {
+      enable: sinon.stub(),
+    }
+
+    graphql = {
+      enable: sinon.stub(),
+    }
+
+    apiSecuritySampler = {
+      sampleRequest: sinon.stub(),
+    }
+
+    rasp = {
+      enable: sinon.stub(),
+    }
+
+    // Mock with IS_SERVERLESS: true
+    const serverless = {
+      IS_SERVERLESS: true,
+    }
+
+    RuleManager = {
+      loadRules: sinon.stub(),
+    }
+
+    Reporter = {
+      init: sinon.stub(),
+    }
+
+    incomingHttpRequestStart = {
+      subscribe: sinon.stub(),
+    }
+
+    incomingHttpRequestEnd = {
+      subscribe: sinon.stub(),
+    }
+
+    AppSec = proxyquire('../../src/appsec', {
+      '../log': log,
+      '../plugins/util/web': web,
+      './blocking': blocking,
+      './user_tracking': UserTracking,
+      './telemetry': appsecTelemetry,
+      './graphql': graphql,
+      './api_security_sampler': apiSecuritySampler,
+      './rasp': rasp,
+      '../serverless': serverless,
+      './rule_manager': RuleManager,
+      './reporter': Reporter,
+      './channels': {
+        incomingHttpRequestStart,
+        incomingHttpRequestEnd,
+      },
+    })
+
+    config = {
+      appsec: {
+        enabled: true,
+      },
+    }
+  })
+
+  afterEach(() => {
+    sinon.restore()
+  })
+
+  describe('enable', () => {
+    it('should not log error when enable fails in serverless environment', () => {
+      const err = new Error('Invalid Rules')
+      RuleManager.loadRules.throws(err)
+
+      AppSec.enable(config)
+
+      sinon.assert.notCalled(log.error)
+      sinon.assert.notCalled(incomingHttpRequestStart.subscribe)
+      sinon.assert.notCalled(incomingHttpRequestEnd.subscribe)
     })
   })
 })

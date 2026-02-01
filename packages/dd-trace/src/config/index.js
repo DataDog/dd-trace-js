@@ -15,7 +15,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { updateConfig } = require('../telemetry')
 const telemetryMetrics = require('../telemetry/metrics')
 const {
-  isInServerlessEnvironment,
+  IS_SERVERLESS,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
@@ -26,8 +26,6 @@ const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOrigi
   require('./git_properties')
 const { getEnvironmentVariable: getEnv, getEnvironmentVariables, getStableConfigSources } = require('./helper')
 const defaults = require('./defaults')
-
-const IS_SERVERLESS = isInServerlessEnvironment()
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 

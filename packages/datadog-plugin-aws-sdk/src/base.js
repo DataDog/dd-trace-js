@@ -6,9 +6,7 @@ const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
-const { isInServerlessEnvironment } = require('../../dd-trace/src/serverless')
-
-const IS_SERVERLESS = isInServerlessEnvironment()
+const { IS_SERVERLESS } = require('../../dd-trace/src/serverless')
 
 class BaseAwsSdkPlugin extends ClientPlugin {
   static id = 'aws'

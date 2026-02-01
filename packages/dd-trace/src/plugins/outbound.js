@@ -8,10 +8,8 @@ const {
 } = require('../constants')
 const { exitTags } = require('../../../datadog-code-origin')
 const { storage } = require('../../../datadog-core')
-const { isInServerlessEnvironment } = require('../serverless')
+const { IS_SERVERLESS } = require('../serverless')
 const TracingPlugin = require('./tracing')
-
-const IS_SERVERLESS = isInServerlessEnvironment()
 
 const COMMON_PEER_SVC_SOURCE_TAGS = [
   'net.peer.name',

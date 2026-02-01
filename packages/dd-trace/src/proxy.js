@@ -12,7 +12,7 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
-const { isInServerlessEnvironment } = require('./serverless')
+const { IS_SERVERLESS } = require('./serverless')
 const {
   setBaggageItem,
   getBaggageItem,
@@ -20,8 +20,6 @@ const {
   removeBaggageItem,
   removeAllBaggageItems,
 } = require('./baggage')
-
-const IS_SERVERLESS = isInServerlessEnvironment()
 
 class LazyModule {
   constructor (provider) {
