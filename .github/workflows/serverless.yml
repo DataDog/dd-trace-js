@@ -221,6 +221,9 @@ jobs:
       - run: npm install -g azure-functions-core-tools@4.3.0
       - run: echo "$(dirname $(which func))" >> $GITHUB_PATH
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/coverage
+        with:
+          flags: serverless-azure-functions-${{ matrix.spec }}
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:

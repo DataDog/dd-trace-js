@@ -1021,7 +1021,7 @@ jobs:
           sudo ldconfig
       - run: yarn config set ignore-engines true
       - run: yarn services --ignore-engines
-      - run: yarn test:plugins --ignore-engines
+      - run: yarn test:plugins:ci --ignore-engines
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-oracledb
