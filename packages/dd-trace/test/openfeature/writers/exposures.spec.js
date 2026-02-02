@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { format } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -375,7 +376,7 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.destroy()
 
-      sinon.assert.calledWith(log.warn, sinon.match(/dropped 5 events/))
+      assert(log.warn.getCalls().some(call => /dropped 5 events/.test(format(...call.args))))
     })
 
     it('should prevent multiple destruction', () => {
