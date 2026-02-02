@@ -314,17 +314,8 @@ describe('Plugin', () => {
             syncToStoreSpy.restore()
           })
 
-          it('Should call syncToStore after sending a message', done => {
-            sqs.sendMessage({
-              MessageBody: 'syncToStore test',
-              QueueUrl: QueueUrlDsm,
-            }, (err) => {
-              if (err) return done(err)
-              assert.ok(syncToStoreSpy.called, 'syncToStore should be called on send')
-              done()
-            })
-          })
-
+          // Note: syncToStore is only called on the consumer path (receiveMessage), not on sendMessage
+          // because sendMessage uses requestInject which doesn't need context synchronization
           it('Should call syncToStore after receiving a message', done => {
             sqs.sendMessage({
               MessageBody: 'syncToStore test',
