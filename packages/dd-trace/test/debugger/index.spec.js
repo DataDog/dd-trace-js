@@ -31,6 +31,11 @@ describe('debugger/index', () => {
       fs: {
         readFile: readFileStub,
       },
+      '../agent/info': {
+        fetchAgentInfo: sinon.stub().callsFake((url, callback) => {
+          callback(null, { endpoints: ['/debugger/v2/input'] })
+        }),
+      },
       worker_threads: {
         Worker,
         MessageChannel: class MessageChannel {
@@ -221,6 +226,7 @@ describe('debugger/index', () => {
           enabled: true,
         },
         hostname: 'test-host',
+        inputPath: '/debugger/v2/input',
         logLevel: 'info',
         port: 8126,
         propagateProcessTags: undefined,

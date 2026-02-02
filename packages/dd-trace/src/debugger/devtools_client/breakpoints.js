@@ -14,6 +14,10 @@ const {
 } = require('./state')
 const log = require('./log')
 
+/**
+ * @typedef {import('inspector').Debugger.SetBreakpointReturnType} SetBreakpointResponse
+ */
+
 let sessionStarted = false
 const probes = new Map()
 let scriptLoadingStabilizedResolve
@@ -50,7 +54,7 @@ async function addBreakpoint (probe) {
   let lineNumber = Number(probe.where.lines[0]) // Tracer doesn't support multiple-line breakpoints
   let columnNumber = 0 // Probes do not contain/support column information
 
-  // Optimize for sending data to /debugger/v1/input endpoint
+  // Optimize for sending data to debugger input endpoint
   probe.location = { file, lines: [String(lineNumber)] }
 
   // Optimize for fast calculations when probe is hit
@@ -123,10 +127,10 @@ async function addBreakpoint (probe) {
     }
     let result
     try {
-      result = await session.post('Debugger.setBreakpoint', {
+      result = /** @type {SetBreakpointResponse} */ (await session.post('Debugger.setBreakpoint', {
         location,
         condition: probe.condition,
-      })
+      }))
     } catch (err) {
       throw new Error(`Error setting breakpoint for probe ${probe.id} (version: ${probe.version})`, { cause: err })
     }
@@ -200,10 +204,10 @@ async function updateBreakpointInternal (breakpoint, probe) {
     breakpointToProbes.delete(breakpoint.id)
     let result
     try {
-      result = await session.post('Debugger.setBreakpoint', {
+      result = /** @type {SetBreakpointResponse} */ (await session.post('Debugger.setBreakpoint', {
         location: breakpoint.location,
         condition,
-      })
+      }))
     } catch (err) {
       throw new Error(`Error setting breakpoint for probe ${probe.id} (version: ${probe.version})`, { cause: err })
     }
