@@ -504,7 +504,7 @@ export default [
     },
   },
   {
-    name: 'dd-trace/scripts/src-like-except-process-env',
+    name: 'dd-trace/scripts',
     files: [
       'scripts/**/*.js',
       'scripts/**/*.mjs',
