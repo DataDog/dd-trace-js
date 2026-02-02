@@ -3,7 +3,7 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
-const { syncToStore } = require('../../../dd-trace/src/datastreams/context')
+const DataStreamsContext = require('../../../dd-trace/src/datastreams/context')
 const { extractQueueMetadata } = require('../util')
 
 class Sqs extends BaseAwsSdkPlugin {
@@ -47,7 +47,7 @@ class Sqs extends BaseAwsSdkPlugin {
 
       if (this.config.dsmEnabled) {
         const storeCtx = { currentStore: store }
-        syncToStore(storeCtx)
+        DataStreamsContext.syncToStore(storeCtx)
         store = storeCtx.currentStore
       }
 

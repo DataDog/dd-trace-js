@@ -2,7 +2,7 @@
 
 const dc = require('dc-polyfill')
 const { getMessageSize } = require('../../dd-trace/src/datastreams')
-const { syncToStore } = require('../../dd-trace/src/datastreams/context')
+const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { convertToTextMap } = require('./utils')
 const afterStartCh = dc.channel('dd-trace:kafkajs:consumer:afterStart')
@@ -98,7 +98,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
         edgeTags.push(`kafka_cluster_id:${clusterId}`)
       }
       this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-      syncToStore(ctx)
+      DataStreamsContext.syncToStore(ctx)
     }
 
     if (afterStartCh.hasSubscribers) {

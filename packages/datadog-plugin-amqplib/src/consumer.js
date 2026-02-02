@@ -3,7 +3,7 @@
 const { TEXT_MAP } = require('../../../ext/formats')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
-const { syncToStore } = require('../../dd-trace/src/datastreams/context')
+const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { getResourceName } = require('./util')
 
 class AmqplibConsumerPlugin extends ConsumerPlugin {
@@ -39,7 +39,7 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
       this.tracer.decodeDataStreamsContext(message.properties.headers)
       this.tracer
         .setCheckpoint(['direction:in', `topic:${queueName}`, 'type:rabbitmq'], span, payloadSize)
-      syncToStore(ctx)
+      DataStreamsContext.syncToStore(ctx)
     }
 
     return ctx.currentStore
