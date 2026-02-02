@@ -55,6 +55,8 @@ const DEFAULT_NAMING_VERSION = 'v0'
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 const changeTracker = {}
 
+let configInstance = null
+
 module.exports = getConfig
 
 class Config {
@@ -1634,7 +1636,6 @@ function getAgentUrl (url, options) {
   }
 }
 
-let configInstance = null
 function getConfig (options) {
   if (!configInstance) {
     configInstance = new Config(options)
