@@ -677,9 +677,7 @@ function getTestEnvironment (pkg, jestVersion) {
 function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
   const jestSuitesToRun = getJestSuitesToRun(skippableSuites, originalTests, rootDir || process.cwd())
   hasFilteredSkippableSuites = true
-  log.debug(
-    () => `${jestSuitesToRun.suitesToRun.length} out of ${originalTests.length} suites are going to run.`
-  )
+  log.debug('%d out of %d suites are going to run.', jestSuitesToRun.suitesToRun.length, originalTests.length)
   hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
   hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
 

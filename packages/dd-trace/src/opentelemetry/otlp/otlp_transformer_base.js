@@ -28,8 +28,11 @@ class OtlpTransformerBase {
   constructor (resourceAttributes, protocol, signalType) {
     this.#resourceAttributes = this.transformAttributes(resourceAttributes)
     if (protocol === 'grpc') {
-      log.warn(`OTLP gRPC protocol is not supported for ${signalType}. ` +
-        'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.')
+      log.warn(
+        // eslint-disable-next-line @stylistic/max-len
+        'OTLP gRPC protocol is not supported for %s. Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.',
+        signalType
+      )
       protocol = 'http/protobuf'
     }
     this.protocol = protocol
