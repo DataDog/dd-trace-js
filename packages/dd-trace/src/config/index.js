@@ -1219,7 +1219,7 @@ class Config {
     const DD_CIVISIBILITY_AGENTLESS_URL = getEnv('DD_CIVISIBILITY_AGENTLESS_URL')
     const url = DD_CIVISIBILITY_AGENTLESS_URL
       ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
-      : getAgentUrl(this._getTraceAgentUrl(), this.#optionsArg)
+      : getAgentUrl(this.#getTraceAgentUrl(), this.#optionsArg)
     const DD_AGENT_HOST = this.#optionsArg.hostname ??
       getEnv('DD_AGENT_HOST') ??
       defaults.hostname
@@ -1261,7 +1261,7 @@ class Config {
     )
   }
 
-  _getTraceAgentUrl () {
+  #getTraceAgentUrl () {
     return this.#optionsArg.url ??
       getEnv('DD_TRACE_AGENT_URL') ??
       null
@@ -1275,7 +1275,7 @@ class Config {
 
     calc.url = DD_CIVISIBILITY_AGENTLESS_URL
       ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
-      : getAgentUrl(this._getTraceAgentUrl(), this.#optionsArg)
+      : getAgentUrl(this.#getTraceAgentUrl(), this.#optionsArg)
 
     if (this.#isCiVisibility()) {
       setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
