@@ -1,6 +1,8 @@
 'use strict'
 
-const assert = require('assert')
+const assert = require('node:assert')
+const { once } = require('node:events')
+
 const { assertObjectContains } = require('../helpers')
 const { setup } = require('./utils')
 
@@ -15,11 +17,7 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
     })
 
     it('should use diagnostics endpoint when agent does not advertise v2 support', async function () {
-      const diagnosticsPromise = new Promise((resolve) => {
-        t.agent.once('debugger-diagnostics-input', ({ payload }) => {
-          resolve(payload[0])
-        })
-      })
+      const diagnosticsInput = once(t.agent, 'debugger-diagnostics-input')
 
       t.agent.once('debugger-input-v2', () => {
         assert.fail('v2 endpoint should not be called')
@@ -30,7 +28,8 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       assert.strictEqual(response.status, 200)
       assert.deepStrictEqual(response.data, { hello: 'bar' })
 
-      assertObjectContains(await diagnosticsPromise, {
+      const [{ payload }] = await diagnosticsInput
+      assertObjectContains(payload[0], {
         ddsource: 'dd_debugger',
         service: 'node',
         debugger: { snapshot: {} },
@@ -41,7 +40,7 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       const expectedSnapshots = 2
       let snapshotsReceived = 0
 
-      const diagnosticsPromise = new Promise(/** @type {() => void} */ (resolve) => {
+      const allSnapshotsReceived = new Promise(/** @type {() => void} */ (resolve) => {
         t.agent.on('debugger-diagnostics-input', ({ payload }) => {
           // The payload is an array of snapshots, count them all
           snapshotsReceived += payload.length
@@ -58,7 +57,7 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
         })
       })
 
-      t.agent.on('debugger-input-v2', () => {
+      t.agent.once('debugger-input-v2', () => {
         assert.fail('v2 endpoint should not be called')
       })
 
@@ -71,7 +70,7 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       assert.strictEqual(response2.status, 200)
       assert.deepStrictEqual(response2.data, { hello: 'bar' })
 
-      await diagnosticsPromise
+      await allSnapshotsReceived
     })
   })
 
@@ -79,18 +78,9 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
     const t = setup({ dependencies: ['fastify'], testApp: 'target-app/basic.js' })
 
     it('should successfully use v2 endpoint when agent supports it', async function () {
-      const v2InputPromise = new Promise(/** @type {() => void} */ (resolve) => {
-        t.agent.once('debugger-input-v2', ({ payload }) => {
-          assertObjectContains(payload[0], {
-            ddsource: 'dd_debugger',
-            service: 'node',
-            debugger: { snapshot: {} },
-          })
-          resolve()
-        })
-      })
+      const v2Input = once(t.agent, 'debugger-input-v2')
 
-      t.agent.on('debugger-diagnostics-input', () => {
+      t.agent.once('debugger-diagnostics-input', () => {
         assert.fail('Snapshots should not be sent to diagnostics endpoint when using v2')
       })
 
@@ -99,7 +89,12 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       assert.strictEqual(response.status, 200)
       assert.deepStrictEqual(response.data, { hello: 'bar' })
 
-      await v2InputPromise
+      const [{ payload }] = await v2Input
+      assertObjectContains(payload[0], {
+        ddsource: 'dd_debugger',
+        service: 'node',
+        debugger: { snapshot: {} },
+      })
     })
   })
 
@@ -116,38 +111,29 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
     })
 
     it('should fallback to diagnostics endpoint when v2 returns 404 at runtime', async function () {
-      const v2404Promise = new Promise(/** @type {() => void} */ (resolve) => {
-        t.agent.once('debugger-input-v2-404', () => resolve())
-      })
-
-      const diagnosticsPromise = new Promise(/** @type {() => void} */ (resolve) => {
-        t.agent.once('debugger-diagnostics-input', ({ payload }) => {
-          assertObjectContains(payload[0], {
-            ddsource: 'dd_debugger',
-            service: 'node',
-            debugger: { snapshot: {} },
-          })
-          resolve()
-        })
-      })
+      const v2404Event = once(t.agent, 'debugger-input-v2-404')
+      const diagnosticsInput = once(t.agent, 'debugger-diagnostics-input')
 
       t.agent.addRemoteConfig(t.rcConfig)
       const response = await t.triggerBreakpoint()
       assert.strictEqual(response.status, 200)
       assert.deepStrictEqual(response.data, { hello: 'bar' })
 
-      await Promise.all([v2404Promise, diagnosticsPromise])
+      const [, [{ payload }]] = await Promise.all([v2404Event, diagnosticsInput])
+      assertObjectContains(payload[0], {
+        ddsource: 'dd_debugger',
+        service: 'node',
+        debugger: { snapshot: {} },
+      })
     })
 
     it('should continue using diagnostics endpoint after runtime fallback', async function () {
       const expectedSnapshots = 2
       let snapshotsReceived = 0
 
-      const v2404Promise = new Promise(/** @type {() => void} */ (resolve) => {
-        t.agent.once('debugger-input-v2-404', () => resolve())
-      })
+      const v2404Event = once(t.agent, 'debugger-input-v2-404')
 
-      const diagnosticsPromise = new Promise(/** @type {() => void} */ (resolve) => {
+      const allSnapshotsReceived = new Promise(/** @type {() => void} */ (resolve) => {
         t.agent.on('debugger-diagnostics-input', ({ payload }) => {
           // The payload is an array of snapshots, count them all
           snapshotsReceived += payload.length
@@ -173,7 +159,7 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       assert.strictEqual(response2.status, 200)
       assert.deepStrictEqual(response2.data, { hello: 'bar' })
 
-      await Promise.all([v2404Promise, diagnosticsPromise])
+      await Promise.all([v2404Event, allSnapshotsReceived])
     })
   })
 })
