@@ -262,18 +262,6 @@ class Config {
   #fleetStableConfig = {}
   #calculated = {}
 
-  #getSourcesInOrder () {
-    return [
-      { container: this.#remote, origin: 'remote_config', unprocessed: this.#remoteUnprocessed },
-      { container: this.#options, origin: 'code', unprocessed: this.#optsUnprocessed },
-      { container: this.#fleetStableConfig, origin: 'fleet_stable_config' },
-      { container: this.#env, origin: 'env_var', unprocessed: this.#envUnprocessed },
-      { container: this.#localStableConfig, origin: 'local_stable_config' },
-      { container: this.#calculated, origin: 'calculated' },
-      { container: this.#defaults, origin: 'default' },
-    ]
-  }
-
   constructor (options = {}) {
     if (!IS_SERVERLESS) {
       const configEnvSources = getStableConfigSources()
@@ -389,6 +377,27 @@ class Config {
     this.#applyOptions(options)
     this.#applyCalculated()
     this.#merge()
+  }
+
+  getOrigin (name) {
+    for (const { container, origin } of this.#getSourcesInOrder()) {
+      const value = container[name]
+      if (value != null || container === this.#defaults) {
+        return origin
+      }
+    }
+  }
+
+  #getSourcesInOrder () {
+    return [
+      { container: this.#remote, origin: 'remote_config', unprocessed: this.#remoteUnprocessed },
+      { container: this.#options, origin: 'code', unprocessed: this.#optsUnprocessed },
+      { container: this.#fleetStableConfig, origin: 'fleet_stable_config' },
+      { container: this.#env, origin: 'env_var', unprocessed: this.#envUnprocessed },
+      { container: this.#localStableConfig, origin: 'local_stable_config' },
+      { container: this.#calculated, origin: 'calculated' },
+      { container: this.#defaults, origin: 'default' },
+    ]
   }
 
   #applyStableConfig (config, obj) {
@@ -1397,15 +1406,6 @@ class Config {
     }
     this.sampler.sampleRate = this.sampleRate
     updateConfig(changes, this)
-  }
-
-  getOrigin (name) {
-    for (const { container, origin } of this.#getSourcesInOrder()) {
-      const value = container[name]
-      if (value != null || container === this.#defaults) {
-        return origin
-      }
-    }
   }
 
   #loadGitMetadata () {
