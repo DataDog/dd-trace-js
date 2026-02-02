@@ -45,13 +45,13 @@ describe('DSM Context Propagation', () => {
        * ctx.currentStore so it's properly bound for async continuations.
        */
       const ctx = {
-        currentStore: { span: { name: 'test-span' } }
+        currentStore: { span: { name: 'test-span' } },
       }
 
       const dsmContext = {
         hash: Buffer.from('testhash'),
         pathwayStartNs: 1000,
-        edgeStartNs: 1000
+        edgeStartNs: 1000,
       }
 
       startCh.runStores(ctx, () => {
@@ -84,7 +84,7 @@ describe('DSM Context Propagation', () => {
       const simulateHandler = (id, dsmContext, delayMs) => {
         return new Promise(resolve => {
           const ctx = {
-            currentStore: { span: { name: `handler-${id}` } }
+            currentStore: { span: { name: `handler-${id}` } },
           }
 
           startCh.runStores(ctx, () => {
@@ -102,7 +102,7 @@ describe('DSM Context Propagation', () => {
               resolve({
                 id,
                 expectedContext: dsmContext,
-                retrievedContext: store?.dataStreamsContext
+                retrievedContext: store?.dataStreamsContext,
               })
             }, delayMs)
           })
@@ -140,20 +140,20 @@ describe('DSM Context Propagation', () => {
         { hash: Buffer.from('ctx1'), pathwayStartNs: 1000, edgeStartNs: 1000 },
         { hash: Buffer.from('ctx2'), pathwayStartNs: 2000, edgeStartNs: 2000 },
         { hash: Buffer.from('ctx3'), pathwayStartNs: 3000, edgeStartNs: 3000 },
-        { hash: Buffer.from('ctx4'), pathwayStartNs: 4000, edgeStartNs: 4000 }
+        { hash: Buffer.from('ctx4'), pathwayStartNs: 4000, edgeStartNs: 4000 },
       ]
 
       const simulateMultiStepHandler = (id, dsmContext) => {
         return new Promise(resolve => {
           const ctx = {
-            currentStore: { span: { name: `handler-${id}` } }
+            currentStore: { span: { name: `handler-${id}` } },
           }
 
           const observations = {
             atStart: null,
             afterFirstAwait: null,
             afterSecondAwait: null,
-            atEnd: null
+            atEnd: null,
           }
 
           startCh.runStores(ctx, () => {
@@ -204,13 +204,13 @@ describe('DSM Context Propagation', () => {
        * but ctx.currentStore remains unchanged.
        */
       const ctx = {
-        currentStore: { span: { name: 'test-span' } }
+        currentStore: { span: { name: 'test-span' } },
       }
 
       const dsmContext = {
         hash: Buffer.from('testhash'),
         pathwayStartNs: 1000,
-        edgeStartNs: 1000
+        edgeStartNs: 1000,
       }
 
       startCh.runStores(ctx, () => {
