@@ -43,6 +43,7 @@ class Writer extends BaseWriter {
       options.headers['X-Datadog-EVP-Subdomain'] = 'citestcycle-intake'
     }
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
 
     const startRequestTime = Date.now()

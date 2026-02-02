@@ -50,6 +50,7 @@ class AgentEncoder {
     const end = bytes.length
 
     if (this._debugEncoding) {
+      // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.debug(() => {
         const hex = bytes.buffer.subarray(start, end).toString('hex').match(/../g).join(' ')
 

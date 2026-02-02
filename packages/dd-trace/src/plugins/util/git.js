@@ -160,7 +160,8 @@ function unshallowRepository (parentOnly = false) {
     cachedExec('git', flags)
   } catch (err) {
     // If the local HEAD is a commit that has not been pushed to the remote, the above command will fail.
-    log.warn(`Git unshallow failed: ${flags.join(' ')}`)
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+    log.warn(() => `Git unshallow failed: ${flags.join(' ')}`)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
@@ -177,7 +178,8 @@ function unshallowRepository (parentOnly = false) {
       cachedExec('git', flags)
     } catch (err) {
       // If the CI is working on a detached HEAD or branch tracking hasn't been set up, the above command will fail.
-      log.warn(`Git unshallow failed again: ${flags.join(' ')}`)
+      // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+      log.warn(() => `Git unshallow failed again: ${flags.join(' ')}`)
       incrementCountMetric(
         TELEMETRY_GIT_COMMAND_ERRORS,
         { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }

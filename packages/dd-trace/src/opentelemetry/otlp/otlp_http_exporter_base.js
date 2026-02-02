@@ -101,7 +101,7 @@ class OtlpHttpExporterBase {
     })
 
     req.on('error', (error) => {
-      log.error(`Error sending OTLP ${this.signalType}:`, error)
+      log.error('Error sending OTLP %s:', this.signalType, error)
       resultCallback({ code: 1, error })
     })
 

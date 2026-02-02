@@ -330,7 +330,7 @@ module.exports = class CiPlugin extends Plugin {
             const testSuite = span.meta[TEST_SUITE]
             const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuite)
             if (!testSuiteSpan) {
-              log.warn(`Test suite span not found for test span with test suite ${testSuite}`)
+              log.warn('Test suite span not found for test span with test suite %s', testSuite)
               continue
             }
 

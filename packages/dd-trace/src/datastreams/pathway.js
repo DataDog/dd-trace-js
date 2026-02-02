@@ -123,6 +123,7 @@ const DsmPathwayCodec = {
     }
     carrier[CONTEXT_PROPAGATION_KEY_BASE64] = encodePathwayContextBase64(dataStreamsContext)
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Injected into DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
   },
 
@@ -131,6 +132,7 @@ const DsmPathwayCodec = {
    * @returns {ReturnType<typeof decodePathwayContext>|undefined}
    */
   decode (carrier) {
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Attempting extract from DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
 
     if (carrier == null) return

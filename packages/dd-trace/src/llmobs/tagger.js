@@ -557,7 +557,7 @@ class LLMObsTagger {
         if (role === 'tool') {
           condition = this.#tagConditionalString(toolId, 'Tool ID', messageObj, 'tool_id') && condition
         } else {
-          log.warn(`Tool ID for tool message not associated with a "tool" role, instead got "${role}"`)
+          log.warn('Tool ID for tool message not associated with a "tool" role, instead got "%s"', role)
         }
       }
 

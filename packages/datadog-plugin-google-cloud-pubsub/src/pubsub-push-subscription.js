@@ -53,8 +53,8 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     }
 
     log.warn(
-      '[PubSub] No x-goog-pubsub-* headers detected. pubsub.push.receive spans will not be created. ' +
-      'Add --push-no-wrapper-write-metadata to your subscription.'
+      // eslint-disable-next-line @stylistic/max-len
+      '[PubSub] No x-goog-pubsub-* headers detected. pubsub.push.receive spans will not be created. Add --push-no-wrapper-write-metadata to your subscription.'
     )
     return false
   }

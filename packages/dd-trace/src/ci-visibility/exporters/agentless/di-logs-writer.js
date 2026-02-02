@@ -38,6 +38,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
       options.path = DEBUGGER_INPUT_V1
     }
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Request to the logs intake: ${safeJSONStringify(options)}`)
 
     request(data, options, (err, res) => {
