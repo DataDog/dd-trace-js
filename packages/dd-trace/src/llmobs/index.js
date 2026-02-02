@@ -1,7 +1,5 @@
 'use strict'
 
-const util = require('node:util')
-
 const { channel } = require('dc-polyfill')
 
 const log = require('../log')
@@ -78,7 +76,7 @@ function enable (config) {
     spanWriter?.setAgentless(useAgentless)
 
     telemetry.recordLLMObsEnabled(startTime, config)
-    log.debug(`[LLMObs] Enabled LLM Observability with configuration: ${util.inspect(config.llmobs)}`)
+    log.debug('[LLMObs] Enabled LLM Observability with configuration: %o', config.llmobs)
   })
 }
 

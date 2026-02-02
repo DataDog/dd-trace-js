@@ -83,6 +83,7 @@ class TextMapPropagator {
       injectCh.publish({ spanContext, carrier })
     }
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Inject into carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
   }
 
@@ -95,6 +96,7 @@ class TextMapPropagator {
       extractCh.publish({ spanContext, carrier })
     }
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => {
       const keys = JSON.stringify(pick(carrier, logKeys))
       const styles = this._config.tracePropagationStyle.extract.join(', ')

@@ -234,9 +234,10 @@ function instrumentKafkaJS (kafkaJS) {
                             // This approach is implemented by other tracers as well.
                             if (err.name === 'KafkaJSError' && err.type === 'ERR_UNKNOWN') {
                               disabledHeaderWeakSet.add(producer)
-                              log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). ' +
-                                'Please look at broker logs for more information. ' +
-                                'Tracer message header injection for Kafka is disabled.')
+                              log.error(
+                                // eslint-disable-next-line @stylistic/max-len
+                                'Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.'
+                              )
                             }
                             ctx.error = err
                             channels.producerError.publish(ctx)
