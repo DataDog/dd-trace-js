@@ -5,52 +5,52 @@ module.exports = [
     module: {
       name: '@langchain/langgraph',
       versionRange: '>=1.1.2',
-      filePath: 'dist/pregel/index.js'
+      filePath: 'dist/pregel/index.js',
     },
     functionQuery: {
       methodName: 'invoke',
       className: 'Pregel',
-      kind: 'Async'
+      kind: 'Async',
     },
-    channelName: 'Pregel_invoke'
+    channelName: 'Pregel_invoke',
   },
   {
     module: {
       name: '@langchain/langgraph',
       versionRange: '>=1.1.2',
-      filePath: 'dist/pregel/index.cjs'
+      filePath: 'dist/pregel/index.cjs',
     },
     functionQuery: {
       methodName: 'invoke',
       className: 'Pregel',
-      kind: 'Async'
+      kind: 'Async',
     },
-    channelName: 'Pregel_invoke'
+    channelName: 'Pregel_invoke',
   },
   {
     module: {
       name: '@langchain/langgraph',
       versionRange: '>=1.1.2',
-      filePath: 'dist/pregel/index.js'
+      filePath: 'dist/pregel/index.js',
     },
     functionQuery: {
       methodName: 'stream',
       className: 'Pregel',
-      kind: 'Async'
+      kind: 'Async',
     },
-    channelName: 'Pregel_stream'
+    channelName: 'Pregel_stream',
   },
   {
     module: {
       name: '@langchain/langgraph',
       versionRange: '>=1.1.2',
-      filePath: 'dist/pregel/index.cjs'
+      filePath: 'dist/pregel/index.cjs',
     },
     functionQuery: {
       methodName: 'stream',
       className: 'Pregel',
-      kind: 'Async'
+      kind: 'Async',
     },
-    channelName: 'Pregel_stream'
-  }
+    channelName: 'Pregel_stream',
+  },
 ]
