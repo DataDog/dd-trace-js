@@ -117,10 +117,10 @@ session.on('Debugger.paused', async ({ params }) => {
         }
 
         snapshotProbeIndex[numberOfProbesWithSnapshots++] = probes.length
-        maxReferenceDepth = highestOrUndefined(probe.capture.maxReferenceDepth, maxReferenceDepth)
-        maxCollectionSize = highestOrUndefined(probe.capture.maxCollectionSize, maxCollectionSize)
-        maxFieldCount = highestOrUndefined(probe.capture.maxFieldCount, maxFieldCount)
-        maxLength = highestOrUndefined(probe.capture.maxLength, maxLength)
+        maxReferenceDepth = highestOrUndefined(probe.capture?.maxReferenceDepth, maxReferenceDepth)
+        maxCollectionSize = highestOrUndefined(probe.capture?.maxCollectionSize, maxCollectionSize)
+        maxFieldCount = highestOrUndefined(probe.capture?.maxFieldCount, maxFieldCount)
+        maxLength = highestOrUndefined(probe.capture?.maxLength, maxLength)
       }
 
       if (probe.condition !== undefined) {
@@ -190,6 +190,7 @@ session.on('Debugger.paused', async ({ params }) => {
 
   // This doesn't measure the overhead of the CDP protocol. The actual pause time is slightly larger.
   // On my machine I'm seeing around 1.7ms of overhead.
+  // eslint-disable-next-line eslint-rules/eslint-log-printf-style
   log.debug(() => `[debugger:devtools_client] Finished processing breakpoints - main thread paused for: ~${
     Number(diff) / 1_000_000
   } ms`)

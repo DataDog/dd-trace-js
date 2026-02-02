@@ -5,7 +5,7 @@ const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { storage } = require('../../../datadog-core')
-const { isInServerlessEnvironment } = require('../serverless')
+const { IS_SERVERLESS } = require('../serverless')
 const RuleManager = require('./rule_manager')
 const appsecRemoteConfig = require('./remote_config')
 const {
@@ -96,7 +96,7 @@ function enable (_config) {
     isEnabled = true
     config = _config
   } catch (err) {
-    if (!isInServerlessEnvironment()) {
+    if (!IS_SERVERLESS) {
       log.error('[ASM] Unable to start AppSec', err)
     }
 

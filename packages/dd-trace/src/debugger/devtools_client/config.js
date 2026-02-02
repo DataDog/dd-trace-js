@@ -10,15 +10,14 @@ const config = module.exports = {
   maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
 }
 
-updateUrl(parentConfig)
+updateConfig(parentConfig)
 
-configPort.on('message', updateUrl)
+configPort.on('message', updateConfig)
 configPort.on('messageerror', (err) =>
   log.error('[debugger:devtools_client] received "messageerror" on config port', err)
 )
 
-function updateUrl (updates) {
+function updateConfig (updates) {
   config.url = getAgentUrl(updates)
-
   config.dynamicInstrumentation.captureTimeoutNs = BigInt(updates.dynamicInstrumentation.captureTimeoutMs) * 1_000_000n
 }
