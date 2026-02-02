@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -235,6 +236,38 @@ describe('Kinesis', function () {
 
         helpers.putTestRecords(kinesis, streamNameDSM, (err, data) => {
           // Swallow the error as it doesn't matter for this test.
+        })
+      })
+
+      describe('syncToStore', () => {
+        let syncToStoreSpy
+
+        beforeEach(() => {
+          syncToStoreSpy = sinon.spy(DataStreamsContext, 'syncToStore')
+        })
+
+        afterEach(() => {
+          syncToStoreSpy.restore()
+        })
+
+        it('Should call syncToStore after putRecord', done => {
+          helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err) => {
+            if (err) return done(err)
+            assert.ok(syncToStoreSpy.called, 'syncToStore should be called on putRecord')
+            done()
+          })
+        })
+
+        it('Should call syncToStore after getRecord', done => {
+          helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
+            if (err) return done(err)
+
+            helpers.getTestData(kinesis, streamNameDSM, data, (err) => {
+              if (err) return done(err)
+              assert.ok(syncToStoreSpy.called, 'syncToStore should be called on getRecord')
+              done()
+            })
+          })
         })
       })
     })
