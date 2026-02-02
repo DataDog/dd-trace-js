@@ -28,14 +28,11 @@ const { getEnvironmentVariable: getEnv, getEnvironmentVariables, getStableConfig
 const defaults = require('./defaults')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
-
 const changeTracker = {}
-
 const telemetryCounters = {
   'otel.env.hiding': {},
   'otel.env.invalid': {},
 }
-
 const otelDdEnvMapping = {
   OTEL_LOG_LEVEL: 'DD_TRACE_LOG_LEVEL',
   OTEL_PROPAGATORS: 'DD_TRACE_PROPAGATION_STYLE',
@@ -48,17 +45,11 @@ const otelDdEnvMapping = {
   OTEL_SDK_DISABLED: 'DD_TRACE_OTEL_ENABLED',
   OTEL_LOGS_EXPORTER: undefined,
 }
-
 const VALID_PROPAGATION_STYLES = new Set(['datadog', 'tracecontext', 'b3', 'b3 single header', 'none'])
-
 const VALID_PROPAGATION_BEHAVIOR_EXTRACT = new Set(['continue', 'restart', 'ignore'])
-
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
-
 const DEFAULT_OTLP_PORT = 4318
-
 const runtimeId = uuid()
-
 const namingVersions = new Set(['v0', 'v1'])
 const defaultNamingVersion = 'v0'
 
