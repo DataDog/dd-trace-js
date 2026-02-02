@@ -2061,15 +2061,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
-  it('sets final_status tag on regular tests without retry features', async () => {
+  it('sets final_status tag to test status on regular tests without retry features', async () => {
     receiver.setSettings({
       itr_enabled: false,
       code_coverage: false,
       tests_skipping: false,
       flaky_test_retries_enabled: false,
       early_flake_detection: {
-        enabled: false
-      }
+        enabled: false,
+      },
     })
 
     const eventsPromise = receiver
@@ -2100,15 +2100,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
-          TESTS_TO_RUN: 'test/ci-visibility-test'
+          TESTS_TO_RUN: 'test/ci-visibility-test',
         },
-        stdio: 'inherit'
+        stdio: 'inherit',
       }
     )
 
     await Promise.all([
       once(childProcess, 'exit'),
-      eventsPromise
+      eventsPromise,
     ])
   })
 
@@ -2155,25 +2155,25 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       ])
     })
 
-    it('sets final_status tag on last retry', async () => {
+    it('sets final_status tag to test status reported to test framework on last retry', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       const knownTestFile = 'ci-visibility/test/ci-visibility-test.js'
       receiver.setKnownTests({
         jest: {
-          [knownTestFile]: ['ci visibility can report tests']
-        }
+          [knownTestFile]: ['ci visibility can report tests'],
+        },
       })
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
-            '5s': NUM_RETRIES_EFD
+            '5s': NUM_RETRIES_EFD,
           },
-          faulty_session_threshold: 100
+          faulty_session_threshold: 100,
         },
-        known_tests_enabled: true
+        known_tests_enabled: true,
       })
 
       const eventsPromise = receiver
@@ -2209,15 +2209,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
             TESTS_TO_RUN: 'test/ci-visibility-test',
-            DD_TRACE_DEBUG: '1'
+            DD_TRACE_DEBUG: '1',
           },
-          stdio: 'inherit'
+          stdio: 'inherit',
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        eventsPromise
+        eventsPromise,
       ])
     })
     it('retries new tests', (done) => {
@@ -3433,15 +3433,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('flaky test retries', () => {
-    it('sets final_status tag on last retry', async () => {
+    it('sets final_status tag to test status reported to test framework on last retry', async () => {
       receiver.setSettings({
         itr_enabled: false,
         code_coverage: false,
         tests_skipping: false,
         flaky_test_retries_enabled: true,
         early_flake_detection: {
-          enabled: false
-        }
+          enabled: false,
+        },
       })
 
       const eventsPromise = receiver
@@ -3489,15 +3489,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
-            TESTS_TO_RUN: 'jest-flaky/flaky-'
+            TESTS_TO_RUN: 'jest-flaky/flaky-',
           },
-          stdio: 'inherit'
+          stdio: 'inherit',
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        eventsPromise
+        eventsPromise,
       ])
     })
 
@@ -4996,7 +4996,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         )
       })
 
-      it('sets final_status to skip for disabled tests', async () => {
+      it('sets final_status tag to skip for disabled tests', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
 
         const eventsPromise = receiver
@@ -5019,15 +5019,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              TESTS_TO_RUN: 'test-management/test-disabled-1'
+              TESTS_TO_RUN: 'test-management/test-disabled-1',
             },
-            stdio: 'inherit'
+            stdio: 'inherit',
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          eventsPromise
+          eventsPromise,
         ])
       })
     })
@@ -5231,7 +5231,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(exitCode, 1)
       })
 
-      it('sets final_status for quarantined tests', async () => {
+      it('sets final_status tag to skip for quarantined tests', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
 
         const eventsPromise = receiver
@@ -5260,15 +5260,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              TESTS_TO_RUN: 'test-management/test-quarantine-1'
+              TESTS_TO_RUN: 'test-management/test-quarantine-1',
             },
-            stdio: 'inherit'
+            stdio: 'inherit',
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          eventsPromise
+          eventsPromise,
         ])
       })
     })
