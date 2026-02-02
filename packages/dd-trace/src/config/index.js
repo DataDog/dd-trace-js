@@ -1,9 +1,9 @@
 'use strict'
 
-const fs = require('fs')
-const os = require('os')
-const { URL } = require('url')
-const path = require('path')
+const fs = require('node:fs')
+const os = require('node:os')
+const { URL } = require('node:url')
+const path = require('node:path')
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 
 const set = require('../../../datadog-core/src/utils/src/set')
