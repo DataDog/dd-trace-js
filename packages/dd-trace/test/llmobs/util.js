@@ -177,7 +177,7 @@ function assertLlmObsSpanEvent (actual, expected) {
     assert.equal(spanKind, 'llm', 'Span kind should be llm when outputMessages is provided')
   } else if (outputDocuments) {
     assert.equal(spanKind, 'retrieval', 'Span kind should be retrieval when outputDocuments is provided')
-  } else if (outputValue !== undefined) {
+  } else if (outputValue) {
     assert.notEqual(spanKind, 'llm', 'Span kind should not be llm when outputValue is provided')
     assert.notEqual(spanKind, 'retrieval', 'Span kind should not be retrieval when outputValue is provided')
   } else {
@@ -216,11 +216,7 @@ function assertLlmObsSpanEvent (actual, expected) {
   assertWithMockValues(actualMetadata, metadata, 'metadata')
 
   // 1a. sort tags since they might be unordered
-  // Check if error was actually captured in the span (actualTags contains 'error:1' or 'error:0')
-  // This handles cases where error occurs after span closes (e.g., streaming iteration errors)
-  const actualHasError = actualTags.some(tag => tag === 'error:1')
-  const effectiveError = error && actualHasError
-  const expectedTags = expectedLLMObsTags({ span, tags, error: effectiveError, sessionId })
+  const expectedTags = expectedLLMObsTags({ span, tags, error, sessionId })
   const sortedExpectedTags = [...expectedTags.sort()]
   const sortedActualTags = [...actualTags.sort()]
   if (sortedExpectedTags.length !== sortedActualTags.length) {
@@ -244,60 +240,28 @@ function assertLlmObsSpanEvent (actual, expected) {
     assertWithMockValues(actualOutputValue, outputValue, 'outputValue')
   }
 
-  // Assert inputValue with mock values support (same pattern as outputValue)
-  const actualInputMessages = actual.meta.input?.messages
-  const actualInputValue = actual.meta.input?.value
-  const actualInputDocuments = actual.meta.input?.documents
-
-  if (inputMessages) {
-    assertWithMockValues(actualInputMessages, inputMessages, 'inputMessages')
-  } else if (inputDocuments) {
-    assertWithMockValues(actualInputDocuments, inputDocuments, 'inputDocuments')
-  } else if (inputValue) {
-    assertWithMockValues(actualInputValue, inputValue, 'inputValue')
-  }
-
-  // Remove input from actual since we've already validated it
-  delete actual.meta.input
-
   // 2. assert deepEqual on everything else
   const expectedMeta = { 'span.kind': spanKind }
 
   if (modelName) expectedMeta.model_name = modelName
   if (modelProvider) expectedMeta.model_provider = modelProvider
 
-  if (effectiveError) {
-    // Extract and validate error fields from actual span (not APM span, which may be wrong span)
-    const actualErrorMessage = actual.meta[ERROR_MESSAGE]
-    const actualErrorType = actual.meta[ERROR_TYPE]
-    const actualErrorStack = actual.meta[ERROR_STACK]
-
-    // Validate error fields exist and are the right type
-    assert.ok(actualErrorMessage, 'error.message should exist when error is expected')
-    assert.ok(actualErrorType, 'error.type should exist when error is expected')
-    assert.ok(actualErrorStack, 'error.stack should exist when error is expected')
-
-    // Use actual values as expected (they're already validated)
-    expectedMeta[ERROR_MESSAGE] = actualErrorMessage
-    expectedMeta[ERROR_TYPE] = actualErrorType
-    expectedMeta[ERROR_STACK] = actualErrorStack
+  if (error) {
+    expectedMeta[ERROR_MESSAGE] = span.meta[ERROR_MESSAGE]
+    expectedMeta[ERROR_TYPE] = span.meta[ERROR_TYPE]
+    expectedMeta[ERROR_STACK] = span.meta[ERROR_STACK]
   }
 
-  // Extract and validate timing fields separately (they are non-deterministic)
-  const actualSpanId = actual.span_id
-  const actualStartNs = actual.start_ns
-  const actualDuration = actual.duration
-
-  delete actual.span_id
-  delete actual.start_ns
-  delete actual.duration
-
-  // Validate timing fields exist and are the right type
-  assertWithMockValues(actualSpanId, MOCK_STRING, 'span_id')
-  assertWithMockValues(actualStartNs, MOCK_NUMBER, 'start_ns')
-  assertWithMockValues(actualDuration, MOCK_NUMBER, 'duration')
+  if (inputMessages) {
+    expectedMeta.input = { messages: inputMessages }
+  } else if (inputDocuments) {
+    expectedMeta.input = { documents: inputDocuments }
+  } else if (inputValue) {
+    expectedMeta.input = { value: inputValue }
+  }
 
   const expectedSpanEvent = {
+    span_id: fromBuffer(span.span_id),
     parent_id: parentId ? fromBuffer(parentId) : 'undefined',
     name,
     start_ns: fromBuffer(span.start, true),
@@ -398,11 +362,7 @@ function expectedLLMObsTags ({
     'language:javascript',
   ]
 
-  if (error) {
-    // Use ERROR_TYPE from span if available, otherwise default to 'Error'
-    const errorType = span.meta?.[ERROR_TYPE] || 'Error'
-    spanTags.push(`error_type:${errorType}`)
-  }
+  if (error) spanTags.push(`error_type:${span.meta[ERROR_TYPE]}`)
   if (sessionId) spanTags.push(`session_id:${sessionId}`)
 
   for (const [key, value] of Object.entries(tags)) {
