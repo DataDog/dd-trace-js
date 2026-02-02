@@ -36,27 +36,6 @@ const telemetryCounters = {
   'otel.env.invalid': {},
 }
 
-function getCounter (event, ddVar, otelVar) {
-  const counters = telemetryCounters[event]
-  const tags = []
-  const ddVarPrefix = 'config_datadog:'
-  const otelVarPrefix = 'config_opentelemetry:'
-  if (ddVar) {
-    ddVar = ddVarPrefix + ddVar.toLowerCase()
-    tags.push(ddVar)
-  }
-  if (otelVar) {
-    otelVar = otelVarPrefix + otelVar.toLowerCase()
-    tags.push(otelVar)
-  }
-
-  if (!(otelVar in counters)) counters[otelVar] = {}
-
-  const counter = tracerMetrics.count(event, tags)
-  counters[otelVar][ddVar] = counter
-  return counter
-}
-
 const otelDdEnvMapping = {
   OTEL_LOG_LEVEL: 'DD_TRACE_LOG_LEVEL',
   OTEL_PROPAGATORS: 'DD_TRACE_PROPAGATION_STYLE',
@@ -78,170 +57,12 @@ const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
 
 const DEFAULT_OTLP_PORT = 4318
 
-function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
-  const OTEL_TRACES_SAMPLER_MAPPING = {
-    always_on: '1.0',
-    always_off: '0.0',
-    traceidratio: otelTracesSamplerArg,
-    parentbased_always_on: '1.0',
-    parentbased_always_off: '0.0',
-    parentbased_traceidratio: otelTracesSamplerArg,
-  }
-  return OTEL_TRACES_SAMPLER_MAPPING[otelTracesSampler]
-}
-
-/**
- * Validate the type of an environment variable
- * @param {string} envVar - The name of the environment variable
- * @param {string} [value] - The value of the environment variable
- * @returns {boolean} - True if the value is valid, false otherwise
- */
-function isInvalidOtelEnvironmentVariable (envVar, value) {
-  // Skip validation if the value is undefined (it was not set as environment variable)
-  if (value === undefined) return false
-
-  switch (envVar) {
-    case 'OTEL_LOG_LEVEL':
-      return !VALID_LOG_LEVELS.has(value)
-    case 'OTEL_PROPAGATORS':
-    case 'OTEL_RESOURCE_ATTRIBUTES':
-    case 'OTEL_SERVICE_NAME':
-      return typeof value !== 'string'
-    case 'OTEL_TRACES_SAMPLER':
-      return getFromOtelSamplerMap(value, getEnv('OTEL_TRACES_SAMPLER_ARG')) === undefined
-    case 'OTEL_TRACES_SAMPLER_ARG':
-      return Number.isNaN(Number.parseFloat(value))
-    case 'OTEL_SDK_DISABLED':
-      return value.toLowerCase() !== 'true' && value.toLowerCase() !== 'false'
-    case 'OTEL_TRACES_EXPORTER':
-    case 'OTEL_METRICS_EXPORTER':
-    case 'OTEL_LOGS_EXPORTER':
-      return value.toLowerCase() !== 'none'
-    default:
-      return true
-  }
-}
-
-function checkIfBothOtelAndDdEnvVarSet () {
-  for (const [otelEnvVar, ddEnvVar] of Object.entries(otelDdEnvMapping)) {
-    const otelValue = getEnv(otelEnvVar)
-
-    if (ddEnvVar && getEnv(ddEnvVar) && otelValue) {
-      log.warn('both %s and %s environment variables are set', ddEnvVar, otelEnvVar)
-      getCounter('otel.env.hiding', ddEnvVar, otelEnvVar).inc()
-    }
-
-    if (isInvalidOtelEnvironmentVariable(otelEnvVar, otelValue)) {
-      log.warn('unexpected value %s for %s environment variable', otelValue, otelEnvVar)
-      getCounter('otel.env.invalid', ddEnvVar, otelEnvVar).inc()
-    }
-  }
-}
-
 const runtimeId = uuid()
-
-function maybeFile (filepath) {
-  if (!filepath) return
-  try {
-    return fs.readFileSync(filepath, 'utf8')
-  } catch (e) {
-    log.error('Error reading file %s', filepath, e)
-  }
-}
-
-function maybeJsonFile (filepath) {
-  const file = maybeFile(filepath)
-  if (!file) return
-  try {
-    return JSON.parse(file)
-  } catch (e) {
-    log.error('Error parsing JSON file %s', filepath, e)
-  }
-}
-
-function safeJsonParse (input) {
-  try {
-    return JSON.parse(input)
-  } catch {}
-}
 
 const namingVersions = new Set(['v0', 'v1'])
 const defaultNamingVersion = 'v0'
 
-function validateNamingVersion (versionString) {
-  if (!versionString) {
-    return defaultNamingVersion
-  }
-  if (!namingVersions.has(versionString)) {
-    log.warn('Unexpected input for config.spanAttributeSchema, picked default', defaultNamingVersion)
-    return defaultNamingVersion
-  }
-  return versionString
-}
-
-/**
- * Given a string of comma-separated paths, return the array of paths.
- * If a blank path is provided a null is returned to signal that the feature is disabled.
- * An empty array means the feature is enabled but that no rules need to be applied.
- *
- * @param {string | string[]} input
- */
-function splitJSONPathRules (input) {
-  if (!input || input === '$') return
-  if (Array.isArray(input)) return input
-  if (input === 'all') return []
-  return input.split(',')
-}
-
-// Shallow clone with property name remapping
-function remapify (input, mappings) {
-  if (!input) return
-  const output = {}
-  for (const [key, value] of Object.entries(input)) {
-    output[key in mappings ? mappings[key] : key] = value
-  }
-  return output
-}
-
-/**
- * Normalizes propagation style values to a lowercase array.
- * Handles both string (comma-separated) and array inputs.
- */
-function normalizePropagationStyle (value) {
-  if (Array.isArray(value)) {
-    return value.map(v => v.toLowerCase())
-  }
-  if (typeof value === 'string') {
-    return value.split(',')
-      .filter(v => v !== '')
-      .map(v => v.trim().toLowerCase())
-  }
-  if (value !== undefined) {
-    log.warn('Unexpected input for config.tracePropagationStyle')
-  }
-}
-
-/**
- * Warns if both DD_TRACE_PROPAGATION_STYLE and specific inject/extract vars are set.
- */
-function warnIfPropagationStyleConflict (general, inject, extract) {
-  if (general && (inject || extract)) {
-    log.warn(
-      // eslint-disable-next-line @stylistic/max-len
-      'Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables'
-    )
-  }
-}
-
-function reformatSpanSamplingRules (rules) {
-  if (!rules) return rules
-  return rules.map(rule => {
-    return remapify(rule, {
-      sample_rate: 'sampleRate',
-      max_per_second: 'maxPerSecond',
-    })
-  })
-}
+module.exports = getConfig
 
 class Config {
   /**
@@ -1463,6 +1284,187 @@ class Config {
   }
 }
 
+function getCounter (event, ddVar, otelVar) {
+  const counters = telemetryCounters[event]
+  const tags = []
+  const ddVarPrefix = 'config_datadog:'
+  const otelVarPrefix = 'config_opentelemetry:'
+  if (ddVar) {
+    ddVar = ddVarPrefix + ddVar.toLowerCase()
+    tags.push(ddVar)
+  }
+  if (otelVar) {
+    otelVar = otelVarPrefix + otelVar.toLowerCase()
+    tags.push(otelVar)
+  }
+
+  if (!(otelVar in counters)) counters[otelVar] = {}
+
+  const counter = tracerMetrics.count(event, tags)
+  counters[otelVar][ddVar] = counter
+  return counter
+}
+
+function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
+  const OTEL_TRACES_SAMPLER_MAPPING = {
+    always_on: '1.0',
+    always_off: '0.0',
+    traceidratio: otelTracesSamplerArg,
+    parentbased_always_on: '1.0',
+    parentbased_always_off: '0.0',
+    parentbased_traceidratio: otelTracesSamplerArg,
+  }
+  return OTEL_TRACES_SAMPLER_MAPPING[otelTracesSampler]
+}
+
+/**
+ * Validate the type of an environment variable
+ * @param {string} envVar - The name of the environment variable
+ * @param {string} [value] - The value of the environment variable
+ * @returns {boolean} - True if the value is valid, false otherwise
+ */
+function isInvalidOtelEnvironmentVariable (envVar, value) {
+  // Skip validation if the value is undefined (it was not set as environment variable)
+  if (value === undefined) return false
+
+  switch (envVar) {
+    case 'OTEL_LOG_LEVEL':
+      return !VALID_LOG_LEVELS.has(value)
+    case 'OTEL_PROPAGATORS':
+    case 'OTEL_RESOURCE_ATTRIBUTES':
+    case 'OTEL_SERVICE_NAME':
+      return typeof value !== 'string'
+    case 'OTEL_TRACES_SAMPLER':
+      return getFromOtelSamplerMap(value, getEnv('OTEL_TRACES_SAMPLER_ARG')) === undefined
+    case 'OTEL_TRACES_SAMPLER_ARG':
+      return Number.isNaN(Number.parseFloat(value))
+    case 'OTEL_SDK_DISABLED':
+      return value.toLowerCase() !== 'true' && value.toLowerCase() !== 'false'
+    case 'OTEL_TRACES_EXPORTER':
+    case 'OTEL_METRICS_EXPORTER':
+    case 'OTEL_LOGS_EXPORTER':
+      return value.toLowerCase() !== 'none'
+    default:
+      return true
+  }
+}
+
+function checkIfBothOtelAndDdEnvVarSet () {
+  for (const [otelEnvVar, ddEnvVar] of Object.entries(otelDdEnvMapping)) {
+    const otelValue = getEnv(otelEnvVar)
+
+    if (ddEnvVar && getEnv(ddEnvVar) && otelValue) {
+      log.warn('both %s and %s environment variables are set', ddEnvVar, otelEnvVar)
+      getCounter('otel.env.hiding', ddEnvVar, otelEnvVar).inc()
+    }
+
+    if (isInvalidOtelEnvironmentVariable(otelEnvVar, otelValue)) {
+      log.warn('unexpected value %s for %s environment variable', otelValue, otelEnvVar)
+      getCounter('otel.env.invalid', ddEnvVar, otelEnvVar).inc()
+    }
+  }
+}
+
+function maybeFile (filepath) {
+  if (!filepath) return
+  try {
+    return fs.readFileSync(filepath, 'utf8')
+  } catch (e) {
+    log.error('Error reading file %s', filepath, e)
+  }
+}
+
+function maybeJsonFile (filepath) {
+  const file = maybeFile(filepath)
+  if (!file) return
+  try {
+    return JSON.parse(file)
+  } catch (e) {
+    log.error('Error parsing JSON file %s', filepath, e)
+  }
+}
+
+function safeJsonParse (input) {
+  try {
+    return JSON.parse(input)
+  } catch {}
+}
+
+function validateNamingVersion (versionString) {
+  if (!versionString) {
+    return defaultNamingVersion
+  }
+  if (!namingVersions.has(versionString)) {
+    log.warn('Unexpected input for config.spanAttributeSchema, picked default', defaultNamingVersion)
+    return defaultNamingVersion
+  }
+  return versionString
+}
+
+/**
+ * Given a string of comma-separated paths, return the array of paths.
+ * If a blank path is provided a null is returned to signal that the feature is disabled.
+ * An empty array means the feature is enabled but that no rules need to be applied.
+ *
+ * @param {string | string[]} input
+ */
+function splitJSONPathRules (input) {
+  if (!input || input === '$') return
+  if (Array.isArray(input)) return input
+  if (input === 'all') return []
+  return input.split(',')
+}
+
+// Shallow clone with property name remapping
+function remapify (input, mappings) {
+  if (!input) return
+  const output = {}
+  for (const [key, value] of Object.entries(input)) {
+    output[key in mappings ? mappings[key] : key] = value
+  }
+  return output
+}
+
+/**
+ * Normalizes propagation style values to a lowercase array.
+ * Handles both string (comma-separated) and array inputs.
+ */
+function normalizePropagationStyle (value) {
+  if (Array.isArray(value)) {
+    return value.map(v => v.toLowerCase())
+  }
+  if (typeof value === 'string') {
+    return value.split(',')
+      .filter(v => v !== '')
+      .map(v => v.trim().toLowerCase())
+  }
+  if (value !== undefined) {
+    log.warn('Unexpected input for config.tracePropagationStyle')
+  }
+}
+
+/**
+ * Warns if both DD_TRACE_PROPAGATION_STYLE and specific inject/extract vars are set.
+ */
+function warnIfPropagationStyleConflict (general, inject, extract) {
+  if (general && (inject || extract)) {
+    log.warn(
+      // eslint-disable-next-line @stylistic/max-len
+      'Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables'
+    )
+  }
+}
+
+function reformatSpanSamplingRules (rules) {
+  if (!rules) return rules
+  return rules.map(rule => {
+    return remapify(rule, {
+      sample_rate: 'sampleRate',
+      max_per_second: 'maxPerSecond',
+    })
+  })
+}
+
 function getDefaultPropagationStyle (options) {
   // TODO: Remove the experimental env vars as a major?
   const DD_TRACE_B3_ENABLED = options.experimental?.b3 ??
@@ -1646,5 +1648,3 @@ function getConfig (options) {
   }
   return configInstance
 }
-
-module.exports = getConfig
