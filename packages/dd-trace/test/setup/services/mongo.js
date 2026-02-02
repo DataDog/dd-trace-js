@@ -11,7 +11,7 @@ function waitForMongo () {
       const server = new mongo.Server({
         host: '127.0.0.1',
         port: 27017,
-        reconnect: false
+        reconnect: false,
       })
 
       server.on('connect', server => {

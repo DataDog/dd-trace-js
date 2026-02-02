@@ -5,11 +5,11 @@ const { arch } = require('os')
 const { join } = require('path')
 const { createHash } = require('crypto')
 const semver = require('semver')
-const exec = require('./helpers/exec')
 const externals = require('../packages/dd-trace/test/plugins/externals.json')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
-
+const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
+const exec = require('./helpers/exec')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
@@ -93,7 +93,7 @@ async function assertModules (name, version, external) {
   if (range && !semver.subset(version, range)) return
   await Promise.all([
     assertPackage(name, null, version, external),
-    assertPackage(name, version, version, external)
+    assertPackage(name, version, version, external),
   ])
 }
 
@@ -112,25 +112,27 @@ async function assertFolder (name, version) {
  * @param {boolean} external
  */
 async function assertPackage (name, version, dependencyVersionRange, external) {
+  // Early return to prevent filePaths from being installed, their non path counterpars should suffice
+  if (isRelativeRequire(name)) return
   const dependencies = {
-    [name]: getCappedRange(name, dependencyVersionRange)
+    [name]: getCappedRange(name, dependencyVersionRange),
   }
   const pkg = {
     name: [name, sha1(name).slice(0, 8), sha1(version)].filter(val => val).join('-'),
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,
-    dependencies
+    dependencies,
   }
 
   if (!external) {
     if (name === 'aerospike') {
       pkg.installConfig = {
-        hoistingLimits: 'workspaces'
+        hoistingLimits: 'workspaces',
       }
     } else {
       pkg.workspaces = {
-        nohoist: ['**/**']
+        nohoist: ['**/**'],
       }
     }
   }
@@ -139,7 +141,7 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
   await assertFolder(name, version)
   await Promise.all([
     writeFile(filename(name, version, 'package.json'), JSON.stringify(pkg, null, 2) + '\n'),
-    assertIndex(name, version)
+    assertIndex(name, version),
   ])
 }
 
@@ -167,7 +169,8 @@ async function assertPeerDependencies (rootFolder, parent = '') {
     const versionPkgJsonPath = join(folder, 'package.json')
     const versionPkgJson = require(versionPkgJsonPath)
 
-    for (const { dep, name } of externalDeps.get(externalName)) {
+    for (const { dep, name, node } of externalDeps.get(externalName)) {
+      if (node && !semver.satisfies(process.versions.node, node)) continue
       const pkgJsonPath = require(folder).pkgJsonPath()
       const pkgJson = require(pkgJsonPath)
 
@@ -242,8 +245,8 @@ async function assertWorkspaces () {
     license: 'BSD-3-Clause',
     private: true,
     workspaces: {
-      packages: Array.from(workspaces)
-    }
+      packages: Array.from(workspaces),
+    },
   }, null, 2) + '\n')
 }
 

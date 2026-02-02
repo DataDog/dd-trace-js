@@ -201,14 +201,14 @@ function getOnTestHandler (isMain) {
       _ddIsAttemptToFix: isAttemptToFix,
       _ddIsDisabled: isDisabled,
       _ddIsQuarantined: isQuarantined,
-      _ddIsModified: isModified
+      _ddIsModified: isModified,
     } = test
 
     const testInfo = {
       testName: test.fullTitle(),
       testSuiteAbsolutePath,
       title,
-      testStartLine
+      testStartLine,
     }
 
     if (!isMain) {
@@ -298,7 +298,7 @@ function getOnTestEndHandler (config) {
         attemptToFixFailed,
         isAttemptToFixRetry,
         isAtrRetry,
-        ...ctx.currentStore
+        ...ctx.currentStore,
       })
     }
   }
@@ -318,7 +318,7 @@ function getOnHookEndHandler () {
             status,
             hasBeenRetried: isMochaRetry(test),
             isLastRetry: getIsLastRetry(test),
-            ...ctx.currentStore
+            ...ctx.currentStore,
           })
         }
       }
@@ -389,14 +389,14 @@ function getOnPendingHandler () {
     const testStartLine = testToStartLine.get(test)
     const {
       file: testSuiteAbsolutePath,
-      title
+      title,
     } = test
 
     const testInfo = {
       testName: test.fullTitle(),
       testSuiteAbsolutePath,
       title,
-      testStartLine
+      testStartLine,
     }
 
     const ctx = getTestContext(test)
@@ -458,7 +458,7 @@ function getRunTestsWrapper (runTests, config) {
                 )
               }
             }
-          }
+          },
         })
       })
     }
@@ -506,5 +506,5 @@ module.exports = {
   newTests,
   testsQuarantined,
   testsAttemptToFix,
-  testsStatuses
+  testsStatuses,
 }

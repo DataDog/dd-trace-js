@@ -1,15 +1,16 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
-const { withExports, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
-const { assertCodeOriginFromTraces } = require('../../datadog-code-origin/test/helpers')
-const { getNextLineNumber } = require('../../dd-trace/test/plugins/helpers')
 const { NODE_MAJOR } = require('../../../version')
+const { assertCodeOriginFromTraces } = require('../../datadog-code-origin/test/helpers')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { getNextLineNumber } = require('../../dd-trace/test/plugins/helpers')
+const { withExports, withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   let fastify, app
@@ -49,9 +50,9 @@ describe('Plugin', () => {
                 agent.assertSomeTraces(traces => {
                   const spans = traces[0]
                   const tagNames = Object.keys(spans[0].meta)
-                  expect(tagNames).to.all.not.match(/code_origin/)
+                  assert.doesNotMatch(tagNames.join(','), /code_origin/)
                 }),
-                axios.get(`http://localhost:${app.server.address().port}/user`)
+                axios.get(`http://localhost:${app.server.address().port}/user`),
               ])
             })
           })
@@ -137,7 +138,7 @@ describe('Plugin', () => {
       agent.assertSomeTraces(traces => {
         assertCodeOriginFromTraces(traces, { file: __filename, ...frame })
       }),
-      axios.get(`http://localhost:${app.server.address().port}${path}`)
+      axios.get(`http://localhost:${app.server.address().port}${path}`),
     ])
   }
 })

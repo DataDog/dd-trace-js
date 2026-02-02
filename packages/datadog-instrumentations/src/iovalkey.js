@@ -1,10 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('apm:iovalkey:command:start')
 const finishCh = channel('apm:iovalkey:command:finish')

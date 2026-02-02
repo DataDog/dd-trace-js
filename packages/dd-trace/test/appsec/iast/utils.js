@@ -1,20 +1,23 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+
 const msgpack = require('@msgpack/msgpack')
 const axios = require('axios')
-const { assert, expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 
-const agent = require('../../plugins/agent')
-const rewriter = require('../../../src/appsec/iast/taint-tracking/rewriter')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+
 const iast = require('../../../src/appsec/iast')
-const { getConfigFresh } = require('../../helpers/config')
-const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
 const overheadController = require('../../../src/appsec/iast/overhead-controller')
+const rewriter = require('../../../src/appsec/iast/taint-tracking/rewriter')
+const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
+const { getConfigFresh } = require('../../helpers/config')
+const agent = require('../../plugins/agent')
 const { getWebSpan } = require('../utils')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 function testInRequest (app, tests) {
   let http
@@ -78,9 +81,9 @@ function testOutsideRequestHasVulnerability (fnToTest, vulnerability, plugins, t
       experimental: {
         iast: {
           enabled: true,
-          requestSampling: 100
-        }
-      }
+          requestSampling: 100,
+        },
+      },
     })
     iast.enable(config, tracer)
     rewriter.enable(config)
@@ -91,13 +94,16 @@ function testOutsideRequestHasVulnerability (fnToTest, vulnerability, plugins, t
     rewriter.disable()
   })
   it(`should detect ${vulnerability} vulnerability out of request`, function (done) {
-    if (timeout) {
-      this.timeout(timeout)
-    }
+    this.timeout(timeout || 10000)
     agent
       .assertSomeTraces(traces => {
-        expect(traces[0][0].meta['_dd.iast.json']).to.include(`"${vulnerability}"`)
-        expect(traces[0][0].metrics['_dd.iast.enabled']).to.be.equal(1)
+        assert.ok(traces[0][0].meta['_dd.iast.json'])
+        require('util').inspect.defaultOptions.depth = null
+        assertObjectContains(
+          JSON.parse(traces[0][0].meta['_dd.iast.json']),
+          { vulnerabilities: [{ type: vulnerability }] }
+        )
+        assert.strictEqual(traces[0][0].metrics['_dd.iast.enabled'], 1)
       }, { timeoutMs: 10000 })
       .then(done)
       .catch(done)
@@ -119,14 +125,14 @@ function beforeEachIastTest (iastConfig) {
     enabled: true,
     requestSampling: 100,
     maxConcurrentRequests: 100,
-    maxContextOperations: 100
+    maxContextOperations: 100,
   }
 
   beforeEach(() => {
     overheadController.clearGlobalRouteMap()
     vulnerabilityReporter.clearCache()
     const config = getConfigFresh({
-      iast: iastConfig
+      iast: iastConfig,
     })
     iast.enable(config)
     rewriter.enable(config)
@@ -157,7 +163,7 @@ function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest
       if (traces[0][0].type !== 'web') throw new Error('Not a web span')
       // iastJson == undefiend is valid
       const iastJson = traces[0][0].meta['_dd.iast.json'] || ''
-      expect(iastJson).to.not.include(`"${vulnerability}"`)
+      assert.ok(!(iastJson).includes(`"${vulnerability}"`))
     })
     .then(done)
     .catch(done)
@@ -185,23 +191,23 @@ function checkVulnerabilityInRequest (
   }
   agent
     .assertSomeTraces(traces => {
-      expect(traces[0][0].metrics['_dd.iast.enabled']).to.be.equal(1)
-      expect(traces[0][0].meta).to.have.property('_dd.iast.json')
+      assert.strictEqual(traces[0][0].metrics['_dd.iast.enabled'], 1)
+      assert.ok('_dd.iast.json' in traces[0][0].meta)
 
       const span = getWebSpan(traces)
-      assert.property(span.meta_struct, '_dd.stack')
+      assert.ok(Object.hasOwn(span.meta_struct, '_dd.stack'))
 
       const vulnerabilitiesTrace = JSON.parse(traces[0][0].meta['_dd.iast.json'])
-      expect(vulnerabilitiesTrace).to.not.be.null
+      assert.notStrictEqual(vulnerabilitiesTrace, null)
       const vulnerabilitiesCount = new Map()
       vulnerabilitiesTrace.vulnerabilities.forEach(v => {
         let count = vulnerabilitiesCount.get(v.type) || 0
         vulnerabilitiesCount.set(v.type, ++count)
       })
 
-      expect(vulnerabilitiesCount.get(vulnerability)).to.be.greaterThan(0)
+      assert.ok(((vulnerabilitiesCount.get(vulnerability)) > (0)))
       if (occurrences) {
-        expect(vulnerabilitiesCount.get(vulnerability)).to.equal(occurrences)
+        assert.strictEqual(vulnerabilitiesCount.get(vulnerability), occurrences)
       }
 
       if (location) {
@@ -226,7 +232,7 @@ function checkVulnerabilityInRequest (
       if (matchLocation) {
         const matchFound = locationHasMatchingFrame(span, vulnerability, vulnerabilitiesTrace.vulnerabilities)
 
-        assert.isTrue(matchFound)
+        assert.strictEqual(matchFound, true)
       }
 
       if (cb) {
@@ -557,5 +563,5 @@ module.exports = {
   copyFileToTmp,
   prepareTestServerForIast,
   prepareTestServerForIastInExpress,
-  prepareTestServerForIastInFastify
+  prepareTestServerForIastInFastify,
 }

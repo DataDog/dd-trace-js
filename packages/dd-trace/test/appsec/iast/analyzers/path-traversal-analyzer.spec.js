@@ -1,17 +1,19 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const os = require('os')
 const path = require('path')
-const { storage } = require('../../../../../datadog-core')
-const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
-const expect = require('chai').expect
+
+const fs = require('fs')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { storage } = require('../../../../../datadog-core')
+const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
+
 const pathTraversalAnalyzer = require('../../../../src/appsec/iast/analyzers/path-traversal-analyzer')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 
 const { prepareTestServerForIast } = require('../utils')
-const fs = require('fs')
 const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
 const iastContext = {
@@ -20,10 +22,10 @@ const iastContext = {
       return {
         toSpanId () {
           return '123'
-        }
+        },
       }
-    }
-  }
+    },
+  },
 }
 
 const getRanges = (ctx, val) => {
@@ -34,9 +36,9 @@ const getRanges = (ctx, val) => {
       iinfo: {
         parameterName: 'param',
         parameterValue: val,
-        type: HTTP_REQUEST_PARAMETER
-      }
-    }
+        type: HTTP_REQUEST_PARAMETER,
+      },
+    },
   ]
 }
 
@@ -54,7 +56,7 @@ describe('path-traversal-analyzer', () => {
   beforeEach(() => {
     TaintTrackingMock = {
       isTainted: sinon.stub(),
-      getRanges: sinon.stub()
+      getRanges: sinon.stub(),
     }
 
     getIastContext = sinon.stub()
@@ -64,61 +66,63 @@ describe('path-traversal-analyzer', () => {
     ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
       '../iast-context': { getIastContext },
       '../overhead-controller': { hasQuota },
-      '../vulnerability-reporter': { addVulnerability }
+      '../vulnerability-reporter': { addVulnerability },
     })
 
     InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
       './vulnerability-analyzer': ProxyAnalyzer,
-      '../taint-tracking/operations': TaintTrackingMock
+      '../taint-tracking/operations': TaintTrackingMock,
     })
   })
 
   it('Analyzer should be subscribed to proper channel', () => {
-    expect(pathTraversalAnalyzer._subscriptions).to.have.lengthOf(2)
-    expect(pathTraversalAnalyzer._subscriptions[0]._channel.name).to.equals('apm:fs:operation:start')
-    expect(pathTraversalAnalyzer._subscriptions[1]._channel.name)
-      .to.equals('tracing:datadog:express:response:render:start')
+    assert.strictEqual(pathTraversalAnalyzer._subscriptions.length, 2)
+    assert.strictEqual(pathTraversalAnalyzer._subscriptions[0]._channel.name, 'apm:fs:operation:start')
+    assert.strictEqual(
+      pathTraversalAnalyzer._subscriptions[1]._channel.name,
+      'tracing:datadog:express:response:render:start'
+    )
   })
 
   it('If no context it should not report vulnerability', () => {
     const iastContext = null
     const isVulnerable = pathTraversalAnalyzer._isVulnerable('test', iastContext)
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('If no context it should return evidence with an undefined ranges array', () => {
     const evidence = pathTraversalAnalyzer._getEvidence('', null)
-    expect(evidence.value).to.be.equal('')
-    expect(evidence.ranges).to.be.instanceof(Array)
-    expect(evidence.ranges).to.have.length(0)
+    assert.strictEqual(evidence.value, '')
+    assert.ok(Array.isArray(evidence.ranges))
+    assert.strictEqual(evidence.ranges.length, 0)
   })
 
   it('if context exists but value is not a string it should not call isTainted', () => {
     const getRanges = sinon.stub()
     const iastContext = {}
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
-      '../taint-tracking': { getRanges }
+      '../taint-tracking': { getRanges },
     })
 
     proxyPathAnalyzer._isVulnerable(undefined, iastContext)
-    expect(getRanges).not.to.have.been.called
+    sinon.assert.notCalled(getRanges)
   })
 
   it('if context and value are valid it should call isTainted', () => {
     const iastContext = {}
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
-      './injection-analyzer': InjectionAnalyzer
+      './injection-analyzer': InjectionAnalyzer,
     })
     TaintTrackingMock.getRanges.returns([])
     const result = proxyPathAnalyzer._isVulnerable('test', iastContext)
-    expect(result).to.be.false
-    expect(TaintTrackingMock.getRanges).to.have.been.calledOnce
+    assert.strictEqual(result, false)
+    sinon.assert.calledOnce(TaintTrackingMock.getRanges)
   })
 
   it('Should report proper vulnerability type', () => {
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
       './injection-analyzer': InjectionAnalyzer,
-      '../iast-context': { getIastContext: () => iastContext }
+      '../iast-context': { getIastContext: () => iastContext },
     })
 
     getIastContext.returns(iastContext)
@@ -126,15 +130,15 @@ describe('path-traversal-analyzer', () => {
     TaintTrackingMock.getRanges.callsFake(getRanges)
 
     proxyPathAnalyzer.analyze(['test'])
-    expect(addVulnerability).to.have.been.calledOnce
-    expect(addVulnerability).to.have.been.calledWithMatch(iastContext, { type: 'PATH_TRAVERSAL' })
+    sinon.assert.calledOnce(addVulnerability)
+    sinon.assert.calledWithMatch(addVulnerability, iastContext, { type: 'PATH_TRAVERSAL' })
   })
 
   it('Should report 1st argument', () => {
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer',
       {
         './injection-analyzer': InjectionAnalyzer,
-        '../iast-context': { getIastContext: () => iastContext }
+        '../iast-context': { getIastContext: () => iastContext },
       })
 
     getIastContext.returns(iastContext)
@@ -142,14 +146,14 @@ describe('path-traversal-analyzer', () => {
     hasQuota.returns(true)
 
     proxyPathAnalyzer.analyze(['taintedArg1', 'taintedArg2'])
-    expect(addVulnerability).to.have.been.calledOnce
-    expect(addVulnerability).to.have.been.calledWithMatch(iastContext, { evidence: { value: 'taintedArg1' } })
+    sinon.assert.calledOnce(addVulnerability)
+    sinon.assert.calledWithMatch(addVulnerability, iastContext, { evidence: { value: 'taintedArg1' } })
   })
 
   it('Should report 2nd argument', () => {
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
       './injection-analyzer': InjectionAnalyzer,
-      '../iast-context': { getIastContext: () => iastContext }
+      '../iast-context': { getIastContext: () => iastContext },
     })
 
     getIastContext.returns(iastContext)
@@ -159,15 +163,15 @@ describe('path-traversal-analyzer', () => {
     hasQuota.returns(true)
 
     proxyPathAnalyzer.analyze(['arg1', 'taintedArg2'])
-    expect(addVulnerability).to.have.been.calledOnce
-    expect(addVulnerability).to.have.been.calledWithMatch(iastContext, { evidence: { value: 'taintedArg2' } })
+    sinon.assert.calledOnce(addVulnerability)
+    sinon.assert.calledWithMatch(addVulnerability, iastContext, { evidence: { value: 'taintedArg2' } })
   })
 
   it('Should not report the vulnerability if it comes from send module', () => {
     const mockPath = path.join('node_modules', 'send', 'send.js')
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
       './injection-analyzer': InjectionAnalyzer,
-      '../iast-context': { getIastContext: () => iastContext }
+      '../iast-context': { getIastContext: () => iastContext },
     })
 
     proxyPathAnalyzer._getLocation = function () {
@@ -179,7 +183,7 @@ describe('path-traversal-analyzer', () => {
     hasQuota.returns(true)
 
     proxyPathAnalyzer.analyze(['arg1'])
-    expect(addVulnerability).not.have.been.called
+    sinon.assert.notCalled(addVulnerability)
   })
 })
 
@@ -289,23 +293,21 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     runFsMethodTestThreeWay('copyFile', 1, null, src, dest)
   })
 
-  if (fs.cp) {
-    describe('test cp', () => {
-      const src = path.join(os.tmpdir(), 'test-cp-src')
-      const dest = path.join(os.tmpdir(), 'test-cp-dst')
+  describe('test cp', () => {
+    const src = path.join(os.tmpdir(), 'test-cp-src')
+    const dest = path.join(os.tmpdir(), 'test-cp-dst')
 
-      beforeEach(() => {
-        fs.writeFileSync(src, '')
-      })
-
-      afterEach(() => {
-        fs.unlinkSync(src)
-        fs.unlinkSync(dest)
-      })
-      runFsMethodTestThreeWay('cp', 0, null, src, dest)
-      runFsMethodTestThreeWay('cp', 1, null, src, dest)
+    beforeEach(() => {
+      fs.writeFileSync(src, '')
     })
-  }
+
+    afterEach(() => {
+      fs.unlinkSync(src)
+      fs.unlinkSync(dest)
+    })
+    runFsMethodTestThreeWay('cp', 0, null, src, dest)
+    runFsMethodTestThreeWay('cp', 1, null, src, dest)
+  })
 
   describe('test createReadStream', () => {
     runFsMethodTest('test fs.createReadStream method', 0, (args) => {
@@ -466,17 +468,16 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
     runFsMethodTestThreeWay('rmdir', 0, null, dirname)
   })
-  if (fs.rm) {
-    describe('test rm', () => {
-      const filename = path.join(os.tmpdir(), 'test-rmdir')
 
-      beforeEach(() => {
-        fs.writeFileSync(filename, '')
-      })
+  describe('test rm', () => {
+    const filename = path.join(os.tmpdir(), 'test-rmdir')
 
-      runFsMethodTestThreeWay('rm', 0, null, filename)
+    beforeEach(() => {
+      fs.writeFileSync(filename, '')
     })
-  }
+
+    runFsMethodTestThreeWay('rm', 0, null, filename)
+  })
 
   describe('test stat', () => {
     runFsMethodTestThreeWay('stat', 0, null, __filename)

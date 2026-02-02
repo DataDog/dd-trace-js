@@ -1,12 +1,12 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   const t = setup({
     testApp: 'target-app/basic.js',
-    dependencies: ['fastify']
+    dependencies: ['fastify'],
   })
 
   describe('input messages', function () {
@@ -28,24 +28,24 @@ describe('Dynamic Instrumentation', function () {
         // Two breakpoints, each triggering a request every 10ms, so we should get 200 requests per second
         const state = {
           [rcConfig1.config.id]: {
-            tiggerBreakpointContinuously () {
+            triggerBreakpointContinuously () {
               t.axios.get(t.breakpoints[0].url).catch(done)
-              this.timer = setTimeout(this.tiggerBreakpointContinuously.bind(this), 10)
-            }
+              this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
+            },
           },
           [rcConfig2.config.id]: {
-            tiggerBreakpointContinuously () {
+            triggerBreakpointContinuously () {
               t.axios.get(t.breakpoints[1].url).catch(done)
-              this.timer = setTimeout(this.tiggerBreakpointContinuously.bind(this), 10)
-            }
-          }
+              this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
+            },
+          },
         }
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {
           payload.forEach((event) => {
             const { probeId, status } = event.debugger.diagnostics
             if (status === 'INSTALLED') {
-              state[probeId].tiggerBreakpointContinuously()
+              state[probeId].triggerBreakpointContinuously()
             }
           })
         })
@@ -61,14 +61,14 @@ describe('Dynamic Instrumentation', function () {
               const timeSincePrevTimestamp = timestamp - prevTimestamp
 
               // Allow for a time variance (time will tell if this is enough). Timeouts can vary.
-              assert.isAtLeast(duration, 925)
-              assert.isBelow(duration, 1050)
+              assert.ok(duration >= 925)
+              assert.ok(duration < 1050)
 
               // A sanity check to make sure we're not saturating the event loop. We expect a lot of snapshots to be
               // sampled in the beginning of the sample window and then once the threshold is hit, we expect a "quiet"
               // period until the end of the window. If there's no "quiet" period, then we're saturating the event loop
               // and this test isn't really testing anything.
-              assert.isAtLeast(timeSincePrevTimestamp, 250)
+              assert.ok(timeSincePrevTimestamp >= 250)
 
               clearTimeout(state[rcConfig1.config.id].timer)
               clearTimeout(state[rcConfig2.config.id].timer)

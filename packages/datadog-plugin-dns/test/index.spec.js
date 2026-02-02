@@ -1,13 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-
+const assert = require('node:assert/strict')
 const { promisify } = require('node:util')
 
-const agent = require('../../dd-trace/test/plugins/agent')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+
 const { storage } = require('../../datadog-core')
 const { ERROR_TYPE, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const PLUGINS = ['dns', 'node:dns']
 
@@ -31,16 +32,16 @@ describe('Plugin', () => {
       it('should instrument lookup', done => {
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.deep.include({
+            assertObjectContains(traces[0][0], {
               name: 'dns.lookup',
               service: 'test',
-              resource: 'localhost'
+              resource: 'localhost',
             })
-            expect(traces[0][0].meta).to.deep.include({
+            assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
               'dns.hostname': 'localhost',
-              'dns.address': '127.0.0.1'
+              'dns.address': '127.0.0.1',
             })
           })
           .then(done)
@@ -52,17 +53,17 @@ describe('Plugin', () => {
       it('should instrument lookup with all addresses', done => {
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.deep.include({
+            assertObjectContains(traces[0][0], {
               name: 'dns.lookup',
               service: 'test',
-              resource: 'localhost'
+              resource: 'localhost',
             })
-            expect(traces[0][0].meta).to.deep.include({
+            assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
               'dns.hostname': 'localhost',
               'dns.address': '127.0.0.1',
-              'dns.addresses': '127.0.0.1,::1'
+              'dns.addresses': '127.0.0.1,::1',
             })
           })
           .then(done)
@@ -74,43 +75,43 @@ describe('Plugin', () => {
       it('should instrument errors correctly', done => {
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.deep.include({
+            assertObjectContains(traces[0][0], {
               name: 'dns.lookup',
               service: 'test',
               resource: 'fakedomain.faketld',
-              error: 1
+              error: 1,
             })
-            expect(traces[0][0].meta).to.deep.include({
+            assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
               'dns.hostname': 'fakedomain.faketld',
               [ERROR_TYPE]: 'Error',
-              [ERROR_MESSAGE]: 'getaddrinfo ENOTFOUND fakedomain.faketld'
+              [ERROR_MESSAGE]: 'getaddrinfo ENOTFOUND fakedomain.faketld',
             })
           })
           .then(done)
           .catch(done)
 
         dns.lookup('fakedomain.faketld', 4, (err, address, family) => {
-          expect(err).to.not.be.null
+          assert.notStrictEqual(err, null)
         })
       })
 
       it('should instrument lookupService', done => {
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.deep.include({
+            assertObjectContains(traces[0][0], {
               name: 'dns.lookup_service',
               service: 'test',
-              resource: '127.0.0.1:22'
+              resource: '127.0.0.1:22',
             })
-            expect(traces[0][0].meta).to.deep.include({
+            assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
-              'dns.address': '127.0.0.1'
+              'dns.address': '127.0.0.1',
             })
-            expect(traces[0][0].metrics).to.deep.include({
-              'dns.port': 22
+            assertObjectContains(traces[0][0].metrics, {
+              'dns.port': 22,
             })
           })
           .then(done)
@@ -122,16 +123,16 @@ describe('Plugin', () => {
       it('should instrument resolve', done => {
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.deep.include({
+            assertObjectContains(traces[0][0], {
               name: 'dns.resolve',
               service: 'test',
-              resource: 'A lvh.me'
+              resource: 'A lvh.me',
             })
-            expect(traces[0][0].meta).to.deep.include({
+            assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
               'dns.hostname': 'lvh.me',
-              'dns.rrtype': 'A'
+              'dns.rrtype': 'A',
             })
           })
           .then(done)
@@ -143,16 +144,16 @@ describe('Plugin', () => {
       it('should instrument resolve shorthands', done => {
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.deep.include({
+            assertObjectContains(traces[0][0], {
               name: 'dns.resolve',
               service: 'test',
-              resource: 'ANY localhost'
+              resource: 'ANY localhost',
             })
-            expect(traces[0][0].meta).to.deep.include({
+            assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
               'dns.hostname': 'localhost',
-              'dns.rrtype': 'ANY'
+              'dns.rrtype': 'ANY',
             })
           })
           .then(done)
@@ -164,15 +165,15 @@ describe('Plugin', () => {
       it('should instrument reverse', done => {
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.deep.include({
+            assertObjectContains(traces[0][0], {
               name: 'dns.reverse',
               service: 'test',
-              resource: '127.0.0.1'
+              resource: '127.0.0.1',
             })
-            expect(traces[0][0].meta).to.deep.include({
+            assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
-              'dns.ip': '127.0.0.1'
+              'dns.ip': '127.0.0.1',
             })
           })
           .then(done)
@@ -188,7 +189,7 @@ describe('Plugin', () => {
           dns.lookup('localhost', 4, (err) => {
             if (err) return done(err)
 
-            expect(tracer.scope().active()).to.equal(span)
+            assert.strictEqual(tracer.scope().active(), span)
 
             done()
           })
@@ -199,8 +200,8 @@ describe('Plugin', () => {
         const lookup = promisify(dns.lookup)
 
         return lookup('localhost', 4).then(({ address, family }) => {
-          expect(address).to.equal('127.0.0.1')
-          expect(family).to.equal(4)
+          assert.strictEqual(address, '127.0.0.1')
+          assert.strictEqual(family, 4)
         })
       })
 
@@ -209,15 +210,15 @@ describe('Plugin', () => {
 
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.deep.include({
+            assertObjectContains(traces[0][0], {
               name: 'dns.resolve',
               service: 'test',
-              resource: 'A lvh.me'
+              resource: 'A lvh.me',
             })
-            expect(traces[0][0].meta).to.deep.include({
+            assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'dns.hostname': 'lvh.me',
-              'dns.rrtype': 'A'
+              'dns.rrtype': 'A',
             })
           })
           .then(done)

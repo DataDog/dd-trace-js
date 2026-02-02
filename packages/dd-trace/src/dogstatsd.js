@@ -1,13 +1,14 @@
 'use strict'
 
 const lookup = require('dns').lookup // cache to avoid instrumentation
-const request = require('./exporters/common/request')
 const dgram = require('dgram')
 const isIP = require('net').isIP
+
+const request = require('./exporters/common/request')
 const log = require('./log')
-const { URL, format } = require('url')
 const Histogram = require('./histogram')
-const defaults = require('./config_defaults')
+const defaults = require('./config/defaults')
+const { getAgentUrl } = require('./agent/url')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
 
@@ -25,7 +26,7 @@ class DogStatsDClient {
     if (options.metricsProxyUrl) {
       this._httpOptions = {
         url: options.metricsProxyUrl.toString(),
-        path: '/dogstatsd/v2/proxy'
+        path: '/dogstatsd/v2/proxy',
       }
     }
 
@@ -175,17 +176,11 @@ class DogStatsDClient {
     const clientConfig = {
       host: config.dogstatsd.hostname,
       port: config.dogstatsd.port,
-      tags
+      tags,
     }
 
-    if (config.url) {
-      clientConfig.metricsProxyUrl = config.url
-    } else if (config.port) {
-      clientConfig.metricsProxyUrl = new URL(format({
-        protocol: 'http:',
-        hostname: config.hostname || defaults.hostname,
-        port: config.port
-      }))
+    if (config.url || config.port) {
+      clientConfig.metricsProxyUrl = getAgentUrl(config)
     }
 
     return clientConfig
@@ -359,7 +354,7 @@ class CustomMetrics {
     // TODO(bengl) this magic number should be configurable
     setInterval(flush, 10 * 1000).unref()
 
-    process.once('beforeExit', flush)
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(flush)
   }
 
   increment (stat, value = 1, tags) {
@@ -408,5 +403,5 @@ class CustomMetrics {
 module.exports = {
   DogStatsDClient,
   CustomMetrics,
-  MetricsAggregationClient
+  MetricsAggregationClient,
 }

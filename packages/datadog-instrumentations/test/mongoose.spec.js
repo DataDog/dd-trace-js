@@ -1,18 +1,20 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { channel } = require('../src/helpers/instrument')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const semver = require('semver')
+const { channel } = require('../src/helpers/instrument')
 
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
 
 const sanitizeFilterFinishCh = channel('datadog:mongoose:sanitize-filter:finish')
+
 describe('mongoose instrumentations', () => {
   // hack to be able to exclude cb test executions in >=7
   const iterationRanges = ['>4.0.0 <=6', '>=7']
@@ -24,10 +26,16 @@ describe('mongoose instrumentations', () => {
         let Test, dbName, id, mongoose
 
         function connect () {
-          mongoose.connect(`mongodb://localhost:27017/${dbName}`, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true
-          })
+          const connectOptions = {}
+
+          // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 6
+          if (semver.lt(specificVersion, '6.0.0')) {
+            connectOptions.useNewUrlParser = true
+            connectOptions.useUnifiedTopology = true
+            connectOptions.useMongoClient = true
+          }
+
+          mongoose.connect(`mongodb://localhost:27017/${dbName}`, connectOptions)
         }
 
         before(() => {
@@ -50,23 +58,23 @@ describe('mongoose instrumentations', () => {
             {
               name: 'test1',
               other: 'other1',
-              type: 'test'
+              type: 'test',
             },
             {
               name: 'test2',
               other: 'other2',
-              type: 'test'
+              type: 'test',
             },
             {
               name: 'test3',
               other: 'other3',
-              type: 'test'
+              type: 'test',
             }]).then(() => done())
         })
 
         afterEach((done) => {
           const deleteFilter = {
-            type: 'test'
+            type: 'test',
           }
 
           // some versions have deleteMany methods and others just delete
@@ -97,29 +105,27 @@ describe('mongoose instrumentations', () => {
                 startCh.unsubscribe(start)
                 finishCh.unsubscribe(finish)
 
-                expect(start).to.have.been.calledOnceWith({ filters, methodName })
-                expect(finish).to.have.been.calledOnce
+                sinon.assert.calledOnceWithMatch(start, { filters, methodName })
+                sinon.assert.calledOnce(finish)
 
                 done()
               })
             })
           }
 
-          it('channel events published with then', (done) => {
+          it('channel events published with then', async () => {
             const start = sinon.stub()
             const finish = sinon.stub()
             startCh.subscribe(start)
             finishCh.subscribe(finish)
 
-            Test[methodName](...filters, ...args).then(() => {
-              startCh.unsubscribe(start)
-              finishCh.unsubscribe(finish)
+            await Test[methodName](...filters, ...args)
 
-              expect(start).to.have.been.calledOnceWith({ filters, methodName })
-              expect(finish).to.have.been.calledOnce
+            startCh.unsubscribe(start)
+            finishCh.unsubscribe(finish)
 
-              done()
-            })
+            sinon.assert.calledOnceWithMatch(start, { filters, methodName })
+            sinon.assert.calledOnce(finish)
           })
         }
 
@@ -128,8 +134,8 @@ describe('mongoose instrumentations', () => {
             if (range !== '>=7') {
               it('continue working as expected with cb', (done) => {
                 Test.count({ type: 'test' }, (err, res) => {
-                  expect(err).to.be.null
-                  expect(res).to.be.equal(3)
+                  assert.strictEqual(err, null)
+                  assert.strictEqual(res, 3)
 
                   done()
                 })
@@ -140,7 +146,7 @@ describe('mongoose instrumentations', () => {
               // Model.count method removed from mongoose 8.0.0
               it('continue working as expected with promise', (done) => {
                 Test.count({ type: 'test' }).then((res) => {
-                  expect(res).to.be.equal(3)
+                  assert.strictEqual(res, 3)
 
                   done()
                 })
@@ -154,8 +160,8 @@ describe('mongoose instrumentations', () => {
               if (range !== '>=7') {
                 it('continue working as expected with cb', (done) => {
                   Test.countDocuments({ type: 'test' }, (err, res) => {
-                    expect(err).to.be.null
-                    expect(res).to.be.equal(3)
+                    assert.strictEqual(err, null)
+                    assert.strictEqual(res, 3)
 
                     done()
                   })
@@ -164,7 +170,7 @@ describe('mongoose instrumentations', () => {
 
               it('continue working as expected with then', (done) => {
                 Test.countDocuments({ type: 'test' }).then((res) => {
-                  expect(res).to.be.equal(3)
+                  assert.strictEqual(res, 3)
 
                   done()
                 })
@@ -179,10 +185,10 @@ describe('mongoose instrumentations', () => {
               if (range !== '>=7') {
                 it('continue working as expected with cb', (done) => {
                   Test.deleteOne({ type: 'test' }, (err) => {
-                    expect(err).to.be.null
+                    assert.strictEqual(err, null)
 
                     Test.count({ type: 'test' }, (err, res) => {
-                      expect(res).to.be.equal(2) // 3 -> delete 1 -> 2
+                      assert.strictEqual(res, 2) // 3 -> delete 1 -> 2
 
                       done()
                     })
@@ -193,7 +199,7 @@ describe('mongoose instrumentations', () => {
               it('continue working as expected with then', (done) => {
                 Test.deleteOne({ type: 'test' }).then(() => {
                   Test.count({ type: 'test' }).then((res) => {
-                    expect(res).to.be.equal(2) // 3 -> delete 1 -> 2
+                    assert.strictEqual(res, 2) // 3 -> delete 1 -> 2
 
                     done()
                   })
@@ -208,8 +214,8 @@ describe('mongoose instrumentations', () => {
             if (range !== '>=7') {
               it('continue working as expected with cb', (done) => {
                 Test.find({ type: 'test' }, (err, items) => {
-                  expect(err).to.be.null
-                  expect(items.length).to.be.equal(3)
+                  assert.strictEqual(err, null)
+                  assert.strictEqual(items.length, 3)
 
                   done()
                 })
@@ -218,7 +224,7 @@ describe('mongoose instrumentations', () => {
 
             it('continue working as expected with then', (done) => {
               Test.find({ type: 'test' }).then((items) => {
-                expect(items.length).to.be.equal(3)
+                assert.strictEqual(items.length, 3)
 
                 done()
               })
@@ -231,9 +237,9 @@ describe('mongoose instrumentations', () => {
             if (range !== '>=7') {
               it('continue working as expected with cb', (done) => {
                 Test.findOne({ type: 'test' }, (err, item) => {
-                  expect(err).to.be.null
-                  expect(item).not.to.be.null
-                  expect(item.name).to.be.equal('test1')
+                  assert.strictEqual(err, null)
+                  assert.notStrictEqual(item, null)
+                  assert.strictEqual(item.name, 'test1')
 
                   done()
                 })
@@ -242,8 +248,8 @@ describe('mongoose instrumentations', () => {
 
             it('continue working as expected with then', (done) => {
               Test.findOne({ type: 'test' }).then((item) => {
-                expect(item).not.to.be.null
-                expect(item.name).to.be.equal('test1')
+                assert.notStrictEqual(item, null)
+                assert.strictEqual(item.name, 'test1')
 
                 done()
               })
@@ -257,12 +263,12 @@ describe('mongoose instrumentations', () => {
               if (range !== '>=7') {
                 it('continue working as expected with cb', (done) => {
                   Test.findOneAndDelete({ type: 'test' }, (err, item) => {
-                    expect(err).to.be.null
-                    expect(item).not.to.be.null
-                    expect(item.name).to.be.equal('test1')
+                    assert.strictEqual(err, null)
+                    assert.notStrictEqual(item, null)
+                    assert.strictEqual(item.name, 'test1')
 
                     Test.count({ type: 'test' }, (err, res) => {
-                      expect(res).to.be.equal(2) // 3 -> delete 1 -> 2
+                      assert.strictEqual(res, 2) // 3 -> delete 1 -> 2
 
                       done()
                     })
@@ -272,11 +278,11 @@ describe('mongoose instrumentations', () => {
 
               it('continue working as expected with then', (done) => {
                 Test.findOneAndDelete({ type: 'test' }).then((item) => {
-                  expect(item).not.to.be.null
-                  expect(item.name).to.be.equal('test1')
+                  assert.notStrictEqual(item, null)
+                  assert.strictEqual(item.name, 'test1')
 
                   Test.count({ type: 'test' }).then((res) => {
-                    expect(res).to.be.equal(2) // 3 -> delete 1 -> 2
+                    assert.strictEqual(res, 2) // 3 -> delete 1 -> 2
 
                     done()
                   })
@@ -293,13 +299,13 @@ describe('mongoose instrumentations', () => {
                 it('continue working as expected with cb', (done) => {
                   Test.findOneAndReplace({ name: 'test1' }, {
                     name: 'test1-modified',
-                    type: 'test'
+                    type: 'test',
                   }, (err) => {
-                    expect(err).to.be.null
+                    assert.strictEqual(err, null)
 
                     Test.find({ name: 'test1-modified' }, (err, item) => {
-                      expect(err).to.be.null
-                      expect(item).not.to.be.null
+                      assert.strictEqual(err, null)
+                      assert.notStrictEqual(item, null)
 
                       done()
                     })
@@ -310,10 +316,10 @@ describe('mongoose instrumentations', () => {
               it('continue working as expected with then', (done) => {
                 Test.findOneAndReplace({ name: 'test1' }, {
                   name: 'test1-modified',
-                  type: 'test'
+                  type: 'test',
                 }).then(() => {
                   Test.find({ name: 'test1-modified' }).then((item) => {
-                    expect(item).not.to.be.null
+                    assert.notStrictEqual(item, null)
 
                     done()
                   })
@@ -322,7 +328,7 @@ describe('mongoose instrumentations', () => {
 
               testCallbacksCalled('findOneAndDelete', [{ type: 'test' }], {
                 name: 'test1-modified',
-                type: 'test'
+                type: 'test',
               })
             })
           }
@@ -333,13 +339,13 @@ describe('mongoose instrumentations', () => {
                 it('continue working as expected with cb', (done) => {
                   Test.replaceOne({ name: 'test1' }, {
                     name: 'test1-modified',
-                    type: 'test'
+                    type: 'test',
                   }, (err) => {
-                    expect(err).to.be.null
+                    assert.strictEqual(err, null)
 
                     Test.find({ name: 'test1-modified' }, (err, item) => {
-                      expect(err).to.be.null
-                      expect(item).not.to.be.null
+                      assert.strictEqual(err, null)
+                      assert.notStrictEqual(item, null)
 
                       done()
                     })
@@ -350,10 +356,10 @@ describe('mongoose instrumentations', () => {
               it('continue working as expected with then', (done) => {
                 Test.replaceOne({ name: 'test1' }, {
                   name: 'test1-modified',
-                  type: 'test'
+                  type: 'test',
                 }).then(() => {
                   Test.find({ name: 'test1-modified' }).then((item) => {
-                    expect(item).not.to.be.null
+                    assert.notStrictEqual(item, null)
 
                     done()
                   })
@@ -362,7 +368,7 @@ describe('mongoose instrumentations', () => {
 
               testCallbacksCalled('replaceOne', [{ type: 'test' }], {
                 name: 'test1-modified',
-                type: 'test'
+                type: 'test',
               })
             })
           }
@@ -371,11 +377,11 @@ describe('mongoose instrumentations', () => {
             if (range !== '>=7') {
               it('continue working as expected with cb', (done) => {
                 Test.findOneAndUpdate({ name: 'test1' }, { $set: { name: 'test1-modified' } }, (err) => {
-                  expect(err).to.be.null
+                  assert.strictEqual(err, null)
 
                   Test.findOne({ name: 'test1-modified' }, (err, item) => {
-                    expect(err).to.be.null
-                    expect(item).not.to.be.null
+                    assert.strictEqual(err, null)
+                    assert.notStrictEqual(item, null)
 
                     done()
                   })
@@ -386,7 +392,7 @@ describe('mongoose instrumentations', () => {
             it('continue working as expected with then', (done) => {
               Test.findOneAndUpdate({ name: 'test1' }, { $set: { name: 'test1-modified' } }).then((res) => {
                 Test.findOne({ name: 'test1-modified' }).then((item) => {
-                  expect(item).not.to.be.null
+                  assert.notStrictEqual(item, null)
 
                   done()
                 })
@@ -402,17 +408,17 @@ describe('mongoose instrumentations', () => {
                 it('continue working as expected with cb', (done) => {
                   Test.updateMany({ type: 'test' }, {
                     $set: {
-                      other: 'modified-other'
-                    }
+                      other: 'modified-other',
+                    },
                   }, (err) => {
-                    expect(err).to.be.null
+                    assert.strictEqual(err, null)
 
                     Test.find({ type: 'test' }, (err, items) => {
-                      expect(err).to.be.null
-                      expect(items.length).to.be.equal(3)
+                      assert.strictEqual(err, null)
+                      assert.strictEqual(items.length, 3)
 
                       items.forEach(item => {
-                        expect(item.other).to.be.equal('modified-other')
+                        assert.strictEqual(item.other, 'modified-other')
                       })
 
                       done()
@@ -424,14 +430,14 @@ describe('mongoose instrumentations', () => {
               it('continue working as expected with then', (done) => {
                 Test.updateMany({ type: 'test' }, {
                   $set: {
-                    other: 'modified-other'
-                  }
+                    other: 'modified-other',
+                  },
                 }).then((err) => {
                   Test.find({ type: 'test' }).then((items) => {
-                    expect(items.length).to.be.equal(3)
+                    assert.strictEqual(items.length, 3)
 
                     items.forEach(item => {
-                      expect(item.other).to.be.equal('modified-other')
+                      assert.strictEqual(item.other, 'modified-other')
                     })
 
                     done()
@@ -449,14 +455,14 @@ describe('mongoose instrumentations', () => {
                 it('continue working as expected with cb', (done) => {
                   Test.updateOne({ name: 'test1' }, {
                     $set: {
-                      other: 'modified-other'
-                    }
+                      other: 'modified-other',
+                    },
                   }, (err) => {
-                    expect(err).to.be.null
+                    assert.strictEqual(err, null)
 
                     Test.findOne({ name: 'test1' }, (err, item) => {
-                      expect(err).to.be.null
-                      expect(item.other).to.be.equal('modified-other')
+                      assert.strictEqual(err, null)
+                      assert.strictEqual(item.other, 'modified-other')
 
                       done()
                     })
@@ -467,11 +473,11 @@ describe('mongoose instrumentations', () => {
               it('continue working as expected with then', (done) => {
                 Test.updateOne({ name: 'test1' }, {
                   $set: {
-                    other: 'modified-other'
-                  }
+                    other: 'modified-other',
+                  },
                 }).then(() => {
                   Test.findOne({ name: 'test1' }).then((item) => {
-                    expect(item.other).to.be.equal('modified-other')
+                    assert.strictEqual(item.other, 'modified-other')
 
                     done()
                   })
@@ -491,7 +497,7 @@ describe('mongoose instrumentations', () => {
 
               const sanitizedObject = mongoose.sanitizeFilter(source)
 
-              expect(sanitizedObject).to.be.deep.equal(expected)
+              assert.deepStrictEqual(sanitizedObject, expected)
             })
 
             it('continues working as expected without sanitization', () => {
@@ -500,7 +506,7 @@ describe('mongoose instrumentations', () => {
 
               const sanitizedObject = mongoose.sanitizeFilter(source)
 
-              expect(sanitizedObject).to.be.deep.equal(expected)
+              assert.deepStrictEqual(sanitizedObject, expected)
             })
 
             it('channel is published with the result object', () => {
@@ -512,7 +518,7 @@ describe('mongoose instrumentations', () => {
 
               sanitizeFilterFinishCh.unsubscribe(listener)
 
-              expect(listener).to.have.been.calledOnceWith({ sanitizedObject })
+              sinon.assert.calledOnceWithMatch(listener, { sanitizedObject })
             })
           })
         }

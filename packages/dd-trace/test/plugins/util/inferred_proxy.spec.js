@@ -1,18 +1,19 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, afterEach } = require('tap').mocha
-const axios = require('axios')
+const assert = require('node:assert/strict')
 const { Agent } = require('node:http')
 
-require('../../setup/core')
+const { describe, it, afterEach } = require('mocha')
+const axios = require('axios')
 
+require('../../setup/core')
 const agent = require('../agent')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 // Create axios instance with no connection pooling
 const httpClient = axios.create({
   httpAgent: new Agent({ keepAlive: false }),
-  timeout: 5000
+  timeout: 5000,
 })
 
 describe('Inferred Proxy Spans', function () {
@@ -21,12 +22,12 @@ describe('Inferred Proxy Spans', function () {
   let controller
   let port
 
-  // tap was throwing timeout errors when trying to use hooks like `before`, so instead we just use this function
+  // Timeout errors occurred when trying to use hooks like `before`, so instead we just use this function
   // and call before the test starts
   const loadTest = async function ({ inferredProxyServicesEnabled = true } = {}) {
     const options = {
       inferredProxyServicesEnabled,
-      service: 'aws-server'
+      service: 'aws-server',
     }
 
     await agent.load(
@@ -61,7 +62,7 @@ describe('Inferred Proxy Spans', function () {
       })
     })
 
-    return new Promise((resolve, reject) => {
+    return new Promise(/** @type {() => void} */ (resolve, reject) => {
       appListener = server.listen(0, '127.0.0.1', () => {
         port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         appListener._connections = connections
@@ -81,7 +82,7 @@ describe('Inferred Proxy Spans', function () {
         }
       }
 
-      await new Promise((resolve, reject) => {
+      await new Promise(/** @type {() => void} */ (resolve, reject) => {
         appListener.close((err) => {
           if (err) {
             reject(err)
@@ -102,7 +103,7 @@ describe('Inferred Proxy Spans', function () {
     'x-dd-proxy-path': '/test',
     'x-dd-proxy-httpmethod': 'GET',
     'x-dd-proxy-domain-name': 'example.com',
-    'x-dd-proxy-stage': 'dev'
+    'x-dd-proxy-stage': 'dev',
   }
 
   afterEach(async () => {
@@ -114,38 +115,47 @@ describe('Inferred Proxy Spans', function () {
       await loadTest({})
 
       await httpClient.get(`http://127.0.0.1:${port}/`, {
-        headers: inferredHeaders
+        headers: inferredHeaders,
       })
 
       await agent.assertSomeTraces(traces => {
         const spans = traces[0]
 
-        expect(spans.length).to.be.equal(2)
+        assert.strictEqual(spans.length, 2)
 
-        expect(spans[0]).to.have.property('name', 'aws.apigateway')
-        expect(spans[0]).to.have.property('service', 'example.com')
-        expect(spans[0]).to.have.property('resource', 'GET /test')
-        expect(spans[0]).to.have.property('type', 'web')
-        expect(spans[0].meta).to.have.property('http.url', 'example.com/test')
-        expect(spans[0].meta).to.have.property('http.method', 'GET')
-        expect(spans[0].meta).to.have.property('http.status_code', '200')
-        expect(spans[0].meta).to.have.property('component', 'aws-apigateway')
-        expect(spans[0].meta).to.have.property('_dd.integration', 'aws-apigateway')
-        expect(spans[0].metrics).to.have.property('_dd.inferred_span', 1)
-        expect(spans[0].start.toString()).to.be.equal('1729780025472999936')
+        assert.strictEqual(spans[0].name, 'aws.apigateway')
+        assert.strictEqual(spans[0].service, 'example.com')
+        assert.strictEqual(spans[0].resource, 'GET /test')
+        assert.strictEqual(spans[0].type, 'web')
+        assertObjectContains(spans[0], {
+          meta: {
+            'http.url': 'example.com/test',
+            'http.method': 'GET',
+            'http.status_code': '200',
+            component: 'aws-apigateway',
+            '_dd.integration': 'aws-apigateway',
+          },
+          metrics: {
+            '_dd.inferred_span': 1,
+          },
+        })
+        assert.strictEqual(spans[0].start.toString(), '1729780025472999936')
 
-        expect(spans[0].span_id.toString()).to.be.equal(spans[1].parent_id.toString())
+        assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
 
-        expect(spans[1]).to.have.property('name', 'web.request')
-        expect(spans[1]).to.have.property('service', 'aws-server')
-        expect(spans[1]).to.have.property('type', 'web')
-        expect(spans[1]).to.have.property('resource', 'GET')
-        expect(spans[1].meta).to.have.property('component', 'http')
-        expect(spans[1].meta).to.have.property('span.kind', 'server')
-        expect(spans[1].meta).to.have.property('http.url', `http://127.0.0.1:${port}/`)
-        expect(spans[1].meta).to.have.property('http.method', 'GET')
-        expect(spans[1].meta).to.have.property('http.status_code', '200')
-        expect(spans[1].meta).to.have.property('span.kind', 'server')
+        assertObjectContains(spans[1], {
+          name: 'web.request',
+          service: 'aws-server',
+          type: 'web',
+          resource: 'GET',
+          meta: {
+            component: 'http',
+            'span.kind': 'server',
+            'http.url': `http://127.0.0.1:${port}/`,
+            'http.method': 'GET',
+            'http.status_code': '200',
+          },
+        })
       })
     })
 
@@ -156,36 +166,45 @@ describe('Inferred Proxy Spans', function () {
         headers: inferredHeaders,
         validateStatus: function (status) {
           return status === 500
-        }
+        },
       })
 
       await agent.assertSomeTraces(traces => {
         const spans = traces[0]
-        expect(spans.length).to.be.equal(2)
+        assert.strictEqual(spans.length, 2)
 
-        expect(spans[0]).to.have.property('name', 'aws.apigateway')
-        expect(spans[0]).to.have.property('service', 'example.com')
-        expect(spans[0]).to.have.property('resource', 'GET /test')
-        expect(spans[0]).to.have.property('type', 'web')
-        expect(spans[0].meta).to.have.property('http.url', 'example.com/test')
-        expect(spans[0].meta).to.have.property('http.method', 'GET')
-        expect(spans[0].meta).to.have.property('http.status_code', '500')
-        expect(spans[0].meta).to.have.property('component', 'aws-apigateway')
-        expect(spans[0].error).to.be.equal(1)
-        expect(spans[0].start.toString()).to.be.equal('1729780025472999936')
-        expect(spans[0].span_id.toString()).to.be.equal(spans[1].parent_id.toString())
+        assertObjectContains(spans[0], {
+          name: 'aws.apigateway',
+          service: 'example.com',
+          resource: 'GET /test',
+          type: 'web',
+          meta: {
+            'http.url': 'example.com/test',
+            'http.method': 'GET',
+            'http.status_code': '500',
+            component: 'aws-apigateway',
+          },
+        })
 
-        expect(spans[1]).to.have.property('name', 'web.request')
-        expect(spans[1]).to.have.property('service', 'aws-server')
-        expect(spans[1]).to.have.property('type', 'web')
-        expect(spans[1]).to.have.property('resource', 'GET')
-        expect(spans[1].meta).to.have.property('component', 'http')
-        expect(spans[1].meta).to.have.property('span.kind', 'server')
-        expect(spans[1].meta).to.have.property('http.url', `http://127.0.0.1:${port}/error`)
-        expect(spans[1].meta).to.have.property('http.method', 'GET')
-        expect(spans[1].meta).to.have.property('http.status_code', '500')
-        expect(spans[1].meta).to.have.property('span.kind', 'server')
-        expect(spans[1].error).to.be.equal(1)
+        assert.strictEqual(spans[0].error, 1)
+        assert.strictEqual(spans[0].start.toString(), '1729780025472999936')
+        assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
+
+        assertObjectContains(spans[1], {
+          name: 'web.request',
+          service: 'aws-server',
+          type: 'web',
+          resource: 'GET',
+          meta: {
+            component: 'http',
+            'span.kind': 'server',
+            'http.url': `http://127.0.0.1:${port}/error`,
+            'http.method': 'GET',
+            'http.status_code': '500',
+          },
+        })
+
+        assert.strictEqual(spans[1].error, 1)
       })
     })
 
@@ -193,24 +212,28 @@ describe('Inferred Proxy Spans', function () {
       await loadTest({})
 
       await httpClient.get(`http://127.0.0.1:${port}/no-aws-headers`, {
-        headers: {}
+        headers: {},
       })
 
       await agent.assertSomeTraces(traces => {
         const spans = traces[0]
-        expect(spans.length).to.be.equal(1)
+        assert.strictEqual(spans.length, 1)
 
-        expect(spans[0]).to.have.property('name', 'web.request')
-        expect(spans[0]).to.have.property('service', 'aws-server')
-        expect(spans[0]).to.have.property('type', 'web')
-        expect(spans[0]).to.have.property('resource', 'GET')
-        expect(spans[0].meta).to.have.property('component', 'http')
-        expect(spans[0].meta).to.have.property('span.kind', 'server')
-        expect(spans[0].meta).to.have.property('http.url', `http://127.0.0.1:${port}/no-aws-headers`)
-        expect(spans[0].meta).to.have.property('http.method', 'GET')
-        expect(spans[0].meta).to.have.property('http.status_code', '200')
-        expect(spans[0].meta).to.have.property('span.kind', 'server')
-        expect(spans[0].error).to.be.equal(0)
+        assertObjectContains(spans[0], {
+          name: 'web.request',
+          service: 'aws-server',
+          type: 'web',
+          resource: 'GET',
+          meta: {
+            component: 'http',
+            'span.kind': 'server',
+            'http.url': `http://127.0.0.1:${port}/no-aws-headers`,
+            'http.method': 'GET',
+            'http.status_code': '200',
+          },
+        })
+
+        assert.strictEqual(spans[0].error, 0)
       })
     })
 
@@ -221,24 +244,28 @@ describe('Inferred Proxy Spans', function () {
       const { 'x-dd-proxy': _, ...newHeaders } = inferredHeaders
 
       await httpClient.get(`http://127.0.0.1:${port}/a-few-aws-headers`, {
-        headers: newHeaders
+        headers: newHeaders,
       })
 
       await agent.assertSomeTraces(traces => {
         const spans = traces[0]
-        expect(spans.length).to.be.equal(1)
+        assert.strictEqual(spans.length, 1)
 
-        expect(spans[0]).to.have.property('name', 'web.request')
-        expect(spans[0]).to.have.property('service', 'aws-server')
-        expect(spans[0]).to.have.property('type', 'web')
-        expect(spans[0]).to.have.property('resource', 'GET')
-        expect(spans[0].meta).to.have.property('component', 'http')
-        expect(spans[0].meta).to.have.property('span.kind', 'server')
-        expect(spans[0].meta).to.have.property('http.url', `http://127.0.0.1:${port}/a-few-aws-headers`)
-        expect(spans[0].meta).to.have.property('http.method', 'GET')
-        expect(spans[0].meta).to.have.property('http.status_code', '200')
-        expect(spans[0].meta).to.have.property('span.kind', 'server')
-        expect(spans[0].error).to.be.equal(0)
+        assertObjectContains(spans[0], {
+          name: 'web.request',
+          service: 'aws-server',
+          type: 'web',
+          resource: 'GET',
+          meta: {
+            component: 'http',
+            'span.kind': 'server',
+            'http.url': `http://127.0.0.1:${port}/a-few-aws-headers`,
+            'http.method': 'GET',
+            'http.status_code': '200',
+          },
+        })
+
+        assert.strictEqual(spans[0].error, 0)
       })
     })
   })
@@ -248,24 +275,27 @@ describe('Inferred Proxy Spans', function () {
       await loadTest({ inferredProxyServicesEnabled: false })
 
       await httpClient.get(`http://127.0.0.1:${port}/configured-off`, {
-        headers: inferredHeaders
+        headers: inferredHeaders,
       })
 
       await agent.assertSomeTraces(traces => {
         const spans = traces[0]
 
-        expect(spans.length).to.be.equal(1)
+        assert.strictEqual(spans.length, 1)
 
-        expect(spans[0]).to.have.property('name', 'web.request')
-        expect(spans[0]).to.have.property('service', 'aws-server')
-        expect(spans[0]).to.have.property('type', 'web')
-        expect(spans[0]).to.have.property('resource', 'GET')
-        expect(spans[0].meta).to.have.property('component', 'http')
-        expect(spans[0].meta).to.have.property('span.kind', 'server')
-        expect(spans[0].meta).to.have.property('http.url', `http://127.0.0.1:${port}/configured-off`)
-        expect(spans[0].meta).to.have.property('http.method', 'GET')
-        expect(spans[0].meta).to.have.property('http.status_code', '200')
-        expect(spans[0].meta).to.have.property('span.kind', 'server')
+        assertObjectContains(spans[0], {
+          name: 'web.request',
+          service: 'aws-server',
+          type: 'web',
+          resource: 'GET',
+          meta: {
+            component: 'http',
+            'span.kind': 'server',
+            'http.url': `http://127.0.0.1:${port}/configured-off`,
+            'http.method': 'GET',
+            'http.status_code': '200',
+          },
+        })
       })
     })
   })

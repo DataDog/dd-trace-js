@@ -69,6 +69,12 @@
       "versions": [">=3.422.0"]
     }
   ],
+  "bullmq": [
+    {
+      "name": "redis",
+      "versions": [">=4"]
+    }
+  ],
   "body-parser": [
     {
       "name": "express",
@@ -182,7 +188,7 @@
     },
     {
       "name": "@fastify/multipart",
-      "versions": [">=6"]
+      "versions": [">=6", "9.3.0"]
     },
     {
       "name": "pg",
@@ -199,6 +205,12 @@
     {
       "name": "google-gax",
       "versions": ["3.5.7"]
+    }
+  ],
+  "genai": [
+    {
+      "name": "@google/genai",
+      "versions": [">=1.19.0"]
     }
   ],
   "graphql": [
@@ -476,6 +488,17 @@
     {
       "name": "prisma",
       "dep": "@prisma/client"
+    },
+    {
+      "name": "typescript",
+      "dep": true,
+      "versions": [">=5.4.0"]
+    },
+    {
+      "name": "@prisma/adapter-pg",
+      "dep": "@prisma/adapter-pg",
+      "versions": [">=7.0.0"],
+      "node": ">=20"
     }
   ],
   "q": [

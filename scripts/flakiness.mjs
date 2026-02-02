@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
 
 import { writeFileSync } from 'fs'
+import { inspect } from 'util'
 import { Octokit } from 'octokit'
 
 const {
@@ -11,7 +12,7 @@ const {
   GITHUB_RUN_ID,
   MERGE = 'true',
   OCCURRENCES = '1',
-  UNTIL
+  UNTIL,
 } = process.env
 
 const ONE_DAY = 24 * 60 * 60 * 1000
@@ -28,14 +29,14 @@ const workflows = [
   '.github/workflows/project.yml',
   '.github/workflows/serverless.yml',
   '.github/workflows/system-tests.yml',
-  '.github/workflows/test-optimization.yml'
+  '.github/workflows/test-optimization.yml',
 ]
 
 const flaky = {}
 const reported = new Set()
 const untilMatch = UNTIL?.match(/^\d{4}-\d{2}-\d{2}$/)?.[0]
 const endDate = untilMatch ?? new Date().toISOString().slice(0, 10)
-const startDate = new Date(new Date(endDate).getTime() - (DAYS - 1) * ONE_DAY).toISOString().slice(0, 10)
+const startDate = new Date(new Date(endDate).getTime() - (Number(DAYS) - 1) * ONE_DAY).toISOString().slice(0, 10)
 
 let totalCount = 0
 let flakeCount = 0
@@ -50,7 +51,7 @@ async function checkWorkflowRuns (id, page = 1) {
     status: 'success',
     created: `${startDate}..${endDate}`,
     branch: BRANCH,
-    workflow_id: id
+    workflow_id: id,
   })
 
   const runs = response.data.workflow_runs
@@ -63,6 +64,11 @@ async function checkWorkflowRuns (id, page = 1) {
 
   for (const run of runs) {
     totalCount++
+
+    if (run.run_attempt === undefined) {
+      console.warn(`Unexpected run attempt shape (${inspect(run, { depth: Infinity })})`)
+      continue
+    }
 
     // Filter out first attempts to get only reruns. The idea is that if a rerun
     // is successful it means any failed jobs in the previous run were flaky
@@ -88,10 +94,15 @@ async function checkWorkflowJobs (id, attempt, page = 1) {
     repo: 'dd-trace-js',
     run_id: id,
     page,
-    per_page: 100 // max is 100
+    per_page: 100, // max is 100
   })
 
   const { jobs } = response.data
+
+  // Octokit v5 format: response.data.jobs is an array.
+  if (!Array.isArray(jobs)) {
+    throw new TypeError(`Unexpected jobs response shape (${inspect(response, { depth: Infinity })})`)
+  }
 
   for (const job of jobs) {
     if (job.conclusion !== 'failure') continue

@@ -1,6 +1,5 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it, before, after } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -15,7 +14,7 @@ describe('Telemetry logs', () => {
 
   before(() => {
     clock = sinon.useFakeTimers({
-      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
   })
 
@@ -32,12 +31,12 @@ describe('Telemetry logs', () => {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
-        }
+        },
       },
       './logs': {
         start,
-        send
-      }
+        send,
+      },
     })
 
     const config = {
@@ -47,19 +46,19 @@ describe('Telemetry logs', () => {
       profiling: { enabled: false },
       env: 'preprod',
       tags: {
-        'runtime-id': '1a2b3c'
-      }
+        'runtime-id': '1a2b3c',
+      },
     }
 
     telemetry.start(config, {
-      _pluginsByName: {}
+      _pluginsByName: {},
     })
 
     telemetryLog.publish({ message: 'This is an Error', level: 'ERROR' })
 
     clock.tick(3000)
 
-    expect(start).to.be.calledOnceWith(config)
-    expect(send).to.be.calledOnceWith(config)
+    sinon.assert.calledOnceWithExactly(start, config)
+    sinon.assert.calledOnceWithMatch(send, config)
   })
 })

@@ -125,7 +125,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
             return {
               ...range,
               start: range.start + offset,
-              end: range.end + offset
+              end: range.end + offset,
             }
           })
 
@@ -136,7 +136,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
 
           sensitiveRanges.push({
             start: offset,
-            end: offset + Number.parseInt(regexRes[3])
+            end: offset + Number.parseInt(regexRes[3]),
           })
 
           value = value.replace(sensitiveId, '')
@@ -147,7 +147,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
 
           sensitiveRanges.push({
             start: regexRes.index,
-            end: regexRes.index + originalValue.length
+            end: regexRes.index + originalValue.length,
           })
 
           value = value.replace(sensitiveId, originalValue)

@@ -2,13 +2,18 @@
 
 /* eslint-disable no-console */
 
+const { execSync } = require('child_process')
+const fs = require('fs')
+const RAW_BUILTINS = require('module').builtinModules
+const path = require('path')
+const { pathToFileURL, fileURLToPath } = require('url')
+
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
-const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
+
 const extractPackageAndModulePath = require(
   '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
 )
-
-const { pathToFileURL, fileURLToPath } = require('url')
+const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
 const { processModule, isESMFile } = require('./src/utils.js')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
@@ -36,11 +41,7 @@ for (const instrumentation of Object.values(instrumentations)) {
   }
 }
 
-const RAW_BUILTINS = require('module').builtinModules
 const CHANNEL = 'dd-trace:bundler:load'
-const path = require('path')
-const fs = require('fs')
-const { execSync } = require('child_process')
 
 const builtins = new Set()
 
@@ -65,14 +66,14 @@ function isESMBuild (build) {
 function getGitMetadata () {
   const gitMetadata = {
     repositoryURL: null,
-    commitSHA: null
+    commitSHA: null,
   }
 
   try {
     gitMetadata.repositoryURL = execSync('git config --get remote.origin.url', {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'ignore'],
-      cwd: process.cwd()
+      cwd: process.cwd(),
     }).trim()
   } catch (e) {
     if (DEBUG) {
@@ -84,7 +85,7 @@ function getGitMetadata () {
     gitMetadata.commitSHA = execSync('git rev-parse HEAD', {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'ignore'],
-      cwd: process.cwd()
+      cwd: process.cwd(),
     }).trim()
   } catch (e) {
     if (DEBUG) {
@@ -96,6 +97,12 @@ function getGitMetadata () {
 }
 
 module.exports.setup = function (build) {
+  if (build.initialOptions.minify && !build.initialOptions.keepNames) {
+    throw new Error(
+      'Using --minify without --keep-names will break some dd-trace behavior. Refusing to bundle.'
+    )
+  }
+
   if (DD_IAST_ENABLED) {
     const iastRewriter = require('../dd-trace/src/appsec/iast/taint-tracking/rewriter')
     rewriter = iastRewriter.getRewriter()
@@ -195,8 +202,8 @@ ${build.initialOptions.banner.js}`
         pluginData: {
           path: args.path,
           full: fullPathToModule,
-          applicationFile: true
-        }
+          applicationFile: true,
+        },
       }
     }
 
@@ -221,8 +228,8 @@ ${build.initialOptions.banner.js}`
             pkgOfInterest: true,
             kind: args.kind,
             internal,
-            isESM: true
-          }
+            isESM: true,
+          },
         }
       }
       // The file namespace is used when requiring files from disk in userland
@@ -245,28 +252,45 @@ ${build.initialOptions.banner.js}`
         }
       }
 
-      const packageJson = JSON.parse(fs.readFileSync(pathToPackageJson).toString())
+      try {
+        const packageJson = JSON.parse(fs.readFileSync(pathToPackageJson).toString())
 
-      const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
-      if (isESM && !interceptedESMModules.has(fullPathToModule)) {
-        fullPathToModule += ESM_INTERCEPTED_SUFFIX
-      }
+        const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
+        if (isESM && !interceptedESMModules.has(fullPathToModule)) {
+          fullPathToModule += ESM_INTERCEPTED_SUFFIX
+        }
 
-      if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
+        if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
 
-      // https://esbuild.github.io/plugins/#on-resolve-arguments
-      return {
-        path: fullPathToModule,
-        pluginData: {
-          version: packageJson.version,
-          pkg: extracted.pkg,
-          path: extracted.path,
-          full: fullPathToModule,
-          raw: args.path,
-          pkgOfInterest: true,
-          kind: args.kind,
-          internal,
-          isESM
+        // https://esbuild.github.io/plugins/#on-resolve-arguments
+        return {
+          path: fullPathToModule,
+          pluginData: {
+            version: packageJson.version,
+            pkg: extracted.pkg,
+            path: extracted.path,
+            full: fullPathToModule,
+            raw: args.path,
+            pkgOfInterest: true,
+            kind: args.kind,
+            internal,
+            isESM,
+          },
+        }
+      } catch (e) {
+        // Skip vendored dependencies which never have a `package.json`. This
+        // will use the default resolve logic of ESBuild which is what we want
+        // since those files should be treated as regular files and not modules
+        // even though they are in a `node_modules` folder.
+        if (e.code === 'ENOENT') {
+          if (DEBUG) {
+            console.log([
+              'Skipping `package.json` lookup.',
+              'This usually means the package was vendored but could indicate an issue otherwise.',
+            ].join(' '))
+          }
+        } else {
+          throw e
         }
       }
     }
@@ -298,7 +322,7 @@ ${build.initialOptions.banner.js}`
           const setters = await processModule({
             path: args.path,
             internal: data.internal,
-            context: { format: 'module' }
+            context: { format: 'module' },
           })
 
           const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
@@ -344,7 +368,7 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
       return {
         contents,
         loader: 'js',
-        resolveDir: path.dirname(args.path)
+        resolveDir: path.dirname(args.path),
       }
     }
     if (DD_IAST_ENABLED && args.pluginData?.applicationFile) {
@@ -358,7 +382,7 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
       return {
         contents: rewritten.content,
         loader: 'js',
-        resolveDir: path.dirname(args.path)
+        resolveDir: path.dirname(args.path),
       }
     }
   })

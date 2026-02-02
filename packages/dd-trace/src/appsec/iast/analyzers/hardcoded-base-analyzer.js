@@ -1,7 +1,7 @@
 'use strict'
 
-const Analyzer = require('./vulnerability-analyzer')
 const { getRelativePath } = require('../path-line')
+const Analyzer = require('./vulnerability-analyzer')
 
 class HardcodedBaseAnalyzer extends Analyzer {
   constructor (type, allRules = [], valueOnlyRules = []) {
@@ -49,7 +49,7 @@ class HardcodedBaseAnalyzer extends Analyzer {
           line: match.location.line,
           column: match.location.column,
           ident: match.location.ident,
-          data: match.ruleId
+          data: match.ruleId,
         }))
     }
   }
@@ -63,7 +63,7 @@ class HardcodedBaseAnalyzer extends Analyzer {
       path: value.file,
       line: value.line,
       column: value.column,
-      isInternal: false
+      isInternal: false,
     }
   }
 }

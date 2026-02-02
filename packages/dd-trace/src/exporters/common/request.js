@@ -8,11 +8,11 @@ const http = require('http')
 const https = require('https')
 const zlib = require('zlib')
 
+const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
 const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
-const { storage } = require('../../../../datadog-core')
-const log = require('../../log')
 
 const maxActiveRequests = 8
 
@@ -69,7 +69,7 @@ function request (data, options, callback) {
 
   options.agent = isSecure ? httpsAgent : httpAgent
 
-  const onResponse = res => {
+  const onResponse = (res, finalize) => {
     const chunks = []
 
     res.setTimeout(timeout)
@@ -77,8 +77,9 @@ function request (data, options, callback) {
     res.on('data', chunk => {
       chunks.push(chunk)
     })
-    res.on('end', () => {
-      activeRequests--
+
+    res.once('end', () => {
+      finalize()
       const buffer = Buffer.concat(chunks)
 
       if (res.statusCode >= 200 && res.statusCode <= 299) {
@@ -128,17 +129,36 @@ function request (data, options, callback) {
     activeRequests++
 
     const store = storage('legacy').getStore()
-
     storage('legacy').enterWith({ noop: true })
 
-    const req = client.request(options, onResponse)
+    let finished = false
+    const finalize = () => {
+      if (finished) return
+      finished = true
+      activeRequests--
+    }
+
+    const req = client.request(options, (res) => onResponse(res, finalize))
+
+    req.once('close', finalize)
+    req.once('timeout', finalize)
 
     req.once('error', err => {
-      activeRequests--
+      finalize()
       onError(err)
     })
 
-    req.setTimeout(timeout, req.abort)
+    req.setTimeout(timeout, () => {
+      try {
+        if (typeof req.abort === 'function') {
+          req.abort()
+        } else {
+          req.destroy()
+        }
+      } catch {
+        // ignore
+      }
+    })
 
     if (isReadable) {
       data.pipe(req) // TODO: Validate whether this is actually retriable.
@@ -164,7 +184,7 @@ function byteLength (data) {
 Object.defineProperty(request, 'writable', {
   get () {
     return activeRequests < maxActiveRequests
-  }
+  },
 })
 
 module.exports = request

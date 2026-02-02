@@ -14,7 +14,7 @@ function moleculerTags (broker, ctx, config) {
     'moleculer.context.request_id': ctx.requestID,
     'moleculer.context.service': service.name,
     'moleculer.namespace': broker.namespace,
-    'moleculer.node_id': broker.nodeID
+    'moleculer.node_id': broker.nodeID,
   }
 }
 

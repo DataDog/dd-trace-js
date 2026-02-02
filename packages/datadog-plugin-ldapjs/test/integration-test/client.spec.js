@@ -1,10 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const {
   sandboxCwd, useSandbox, varySandbox, curl,
-  FakeAgent, spawnPluginIntegrationTestProc
+  FakeAgent, spawnPluginIntegrationTestProc,
 } = require('../../../../integration-tests/helpers')
-const assert = require('node:assert/strict')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 withVersions('ldapjs', 'ldapjs', '>=2', version => {
@@ -15,7 +15,7 @@ withVersions('ldapjs', 'ldapjs', '>=2', version => {
       ['./packages/datadog-plugin-ldapjs/test/integration-test/*'])
 
     before(function () {
-      variants = varySandbox('server.mjs', 'ldapjs', 'createClient')
+      variants = varySandbox('server.mjs', 'ldapjs')
     })
 
     beforeEach(async () => {

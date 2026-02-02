@@ -1,17 +1,19 @@
 'use strict'
 
+const assert = require('assert')
 const childProcess = require('child_process')
 const { execSync, fork, spawn } = childProcess
-const http = require('http')
 const { existsSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
 const fs = require('fs/promises')
+const http = require('http')
 const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
-const assert = require('assert')
-const FakeAgent = require('./fake-agent')
+const { inspect } = require('util')
+
 const id = require('../../packages/dd-trace/src/id')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
+const FakeAgent = require('./fake-agent')
 const { BUN, withBun } = require('./bun')
 
 const sandboxRoot = path.join(os.tmpdir(), id().toString())
@@ -22,6 +24,11 @@ const { DEBUG } = process.env
 // This is set by the setShouldKill function
 let shouldKill
 
+// Symbol constants for dynamic value matching in assertObjectContains
+const ANY_STRING = Symbol('test.ANY_STRING')
+const ANY_NUMBER = Symbol('test.ANY_NUMBER')
+const ANY_VALUE = Symbol('test.ANY_VALUE')
+
 /**
  * @param {string} filename
  * @param {string} cwd
@@ -30,15 +37,16 @@ let shouldKill
  */
 async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
+  assert(proc.pid !== undefined, 'Process PID is not available')
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
-    proc.on('error', reject)
+    proc.once('error', reject)
     let out = Buffer.alloc(0)
     proc.stdout.on('data', data => {
       out = Buffer.concat([out, data])
     })
     proc.stderr.pipe(process.stdout)
-    proc.on('exit', () => resolve(out.toString('utf8')))
+    proc.once('exit', () => resolve(out.toString('utf8')))
     if (shouldKill) {
       setTimeout(() => {
         if (proc.exitCode === null) proc.kill()
@@ -116,15 +124,11 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
    */
   function getPoints (...args) {
     const expectedPoints = []
-    let currentPoint = /** @type {{ name?: string, tags?: string[] }} */ ({})
-    for (const arg of args) {
-      if (!currentPoint.name) {
-        currentPoint.name = 'library_entrypoint.' + arg
-      } else {
-        currentPoint.tags = arg.split(',').filter(Boolean)
-        expectedPoints.push(currentPoint)
-        currentPoint = {}
-      }
+    for (let i = 0; i < args.length; i += 2) {
+      expectedPoints.push({
+        name: 'library_entrypoint.' + args[i],
+        tags: args[i + 1].split(',').filter(Boolean),
+      })
     }
     return expectedPoints
   }
@@ -140,7 +144,7 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
       runtime_name: 'nodejs',
       runtime_version: process.versions.node,
       tracer_version: require('../../package.json').version,
-      pid: Number(pid)
+      pid,
     }
 
     // Validate basic metadata
@@ -149,6 +153,9 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
     }
 
     // Validate result metadata is present and has valid values
+    assert(typeof actualMetadata.result === 'string', 'result should be a string')
+    assert(typeof actualMetadata.result_class === 'string', 'result_class should be a string')
+    assert(typeof actualMetadata.result_reason === 'string', 'result_reason should be a string')
     assert(actualMetadata.result, 'result field should be present')
     assert(actualMetadata.result_class, 'result_class field should be present')
     assert(actualMetadata.result_reason, 'result_reason field should be present')
@@ -160,16 +167,24 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
     assert(validResults.includes(actualMetadata.result), `Invalid result: ${actualMetadata.result}`)
     assert(validResultClasses.includes(actualMetadata.result_class),
       `Invalid result_class: ${actualMetadata.result_class}`)
-    assert(typeof actualMetadata.result_reason === 'string', 'result_reason should be a string')
   }
 }
 
 /**
- * @typedef {childProcess.ChildProcess & { url: string }} SpawnedProcess
+ * @typedef {childProcess.ChildProcess & {
+ *   url: string,
+ *   stdout: NodeJS.ReadableStream,
+ *   stderr: NodeJS.ReadableStream
+ * }} SpawnedProcess
  */
 
 /**
  * Spawns a Node.js script in a child process and returns a promise that resolves when the process is ready.
+ *
+ * This function expects the spawned process to stay alive (e.g., a server). If the process exits
+ * (even with code 0), the promise will reject with an error.
+ *
+ * For processes that are expected to run and exit cleanly, use `spawnProcAndExpectExit` instead.
  *
  * @param {string|URL} filename - The filename of the Node.js script to spawn in a child process.
  * @param {childProcess.ForkOptions} [options] - The options to pass to the child process.
@@ -177,46 +192,105 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
  *   standard output of the child process. If not provided, the output will be logged to the console.
  * @param {(data: Buffer) => void} [stderrHandler] - A function that's called with one data argument to handle the
  *   standard error of the child process. If not provided, the error will be logged to the console.
- * @returns {Promise<SpawnedProcess|void>} A promise that resolves when the process is either ready or terminated
- *   without an error. If the process is terminated without an error, the promise will resolve with `undefined`. The
- *   returned process will have a `url` property if the process didn't terminate.
+ * @returns {Promise<SpawnedProcess>} A promise that resolves with a SpawnedProcess when the process is ready.
+ *   The returned `SpawnedProcess` will have a `url` property that can be accessed to get the server URL.
+ *   Note: Accessing `url` before the spawned process sends its port message will throw an error.
  */
 function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
-  const proc = fork(filename, { ...options, stdio: 'pipe' })
+  const proc = spawnProcImpl(filename, options, stdioHandler, stderrHandler)
 
-  return /** @type {Promise<SpawnedProcess|void>} */ (new Promise((resolve, reject) => {
+  let urlValue
+  Object.defineProperty(proc, 'url', {
+    get () {
+      if (urlValue === undefined) {
+        throw new Error('Process URL is not available yet. The spawned process has not sent a port message.')
+      }
+      return urlValue
+    },
+    set (value) {
+      urlValue = value
+    },
+    enumerable: true,
+    configurable: true,
+  })
+
+  return new Promise((resolve, reject) => {
     proc
-      .on('message', ({ port }) => {
+      .on('message', (/** @type {{ port?: unknown }} */ { port }) => {
         if (typeof port !== 'number' && typeof port !== 'string') {
           return reject(new Error(`${filename} sent invalid port: ${port}. Expected a number or string.`))
         }
         proc.url = `http://localhost:${port}`
         resolve(proc)
       })
-      .on('error', reject)
-      .on('exit', code => {
+      .once('error', reject)
+      .once('exit', code => {
+        reject(new Error(`Process exited with status code ${code}.`))
+      })
+  })
+}
+
+/**
+ * Spawns a Node.js script in a child process that is expected to run and exit cleanly.
+ *
+ * This function expects the process to complete and exit with code 0, in which case the promise resolves
+ * with `undefined`. Use this for short-lived processes like validation scripts or tests that run to completion.
+ *
+ * For long-running processes (like servers) that should not exit, use `spawnProc` instead.
+ *
+ * @param {string|URL} filename - The filename of the Node.js script to spawn in a child process.
+ * @param {childProcess.ForkOptions} [options] - The options to pass to the child process.
+ * @param {(data: Buffer) => void} [stdioHandler] - A function that's called with one data argument to handle the
+ *   standard output of the child process. If not provided, the output will be logged to the console.
+ * @param {(data: Buffer) => void} [stderrHandler] - A function that's called with one data argument to handle the
+ *   standard error of the child process. If not provided, the error will be logged to the console.
+ * @returns {Promise<void>} A promise that resolves when the process exits with code 0.
+ */
+function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHandler) {
+  const proc = spawnProcImpl(filename, options, stdioHandler, stderrHandler)
+
+  return new Promise((resolve, reject) => {
+    proc
+      .once('error', reject)
+      .once('exit', code => {
         if (code !== 0) {
           return reject(new Error(`Process exited with status code ${code}.`))
         }
         resolve()
       })
+  })
+}
 
-    proc.stdout.on('data', data => {
-      if (stdioHandler) {
-        stdioHandler(data)
-      }
-      // eslint-disable-next-line no-console
-      if (!options.silent) console.log(data.toString())
-    })
+/**
+ * Internal implementation for spawnProc and spawnProcAndAllowExit.
+ *
+ * @param {string|URL} filename
+ * @param {childProcess.ForkOptions} options
+ * @param {(data: Buffer) => void} [stdioHandler]
+ * @param {(data: Buffer) => void} [stderrHandler]
+ * @returns {SpawnedProcess}
+ */
+function spawnProcImpl (filename, options, stdioHandler, stderrHandler) {
+  // Cast to SpawnedProcess type - when stdio is 'pipe', stdout/stderr are guaranteed non-null
+  const proc = /** @type {SpawnedProcess} */ (fork(filename, { ...options, stdio: 'pipe' }))
 
-    proc.stderr.on('data', data => {
-      if (stderrHandler) {
-        stderrHandler(data)
-      }
-      // eslint-disable-next-line no-console
-      if (!options.silent) console.error(data.toString())
-    })
-  }))
+  proc.stdout.on('data', data => {
+    if (stdioHandler) {
+      stdioHandler(data)
+    }
+    // eslint-disable-next-line no-console
+    if (!options.silent) console.log(data.toString())
+  })
+
+  proc.stderr.on('data', data => {
+    if (stderrHandler) {
+      stderrHandler(data)
+    }
+    // eslint-disable-next-line no-console
+    if (!options.silent) console.error(data.toString())
+  })
+
+  return proc
 }
 
 function log (...args) {
@@ -240,13 +314,75 @@ function execHelper (command, options) {
         execSync('sleep 60')
         log('Exec RETRY START: ', command)
         execSync(command, options)
-        log('Exec RETRY SUCESS: ', command)
+        log('Exec RETRY SUCCESS: ', command)
       } catch (retryError) {
         error('Exec RETRY ERROR', command, retryError)
         throw retryError
       }
     } else {
       throw execError
+    }
+  }
+}
+
+/**
+ * Pack dd-trace into a tarball at the specified path.
+ *
+ * @param {string} tarballPath - The path where the tarball should be created
+ * @param {NodeJS.ProcessEnv} env - The environment to use for the pack command
+ */
+function packTarball (tarballPath, env) {
+  execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
+  log('Tarball packed successfully:', tarballPath)
+}
+
+/**
+ * Pack the tarball with file locking to coordinate between parallel workers.
+ * Only one worker will pack the tarball, others will wait for it to be ready.
+ *
+ * @param {string} tarballPath - The path where the tarball should be created
+ * @param {NodeJS.ProcessEnv} env - The environment to use for the pack command
+ * @returns {Promise<void>}
+ */
+async function packTarballWithLock (tarballPath, env) {
+  if (existsSync(tarballPath)) {
+    log('Tarball already exists:', tarballPath)
+    return
+  }
+
+  const lockFile = `${tarballPath}.lock`
+  let lockFd
+
+  try {
+    // Try to acquire the lock by creating the lock file exclusively
+    lockFd = await fs.open(lockFile, 'wx')
+    log('Lock acquired, packing tarball:', tarballPath)
+
+    // Double-check if tarball was created while we were acquiring the lock
+    if (existsSync(tarballPath)) {
+      log('Tarball already exists (created while waiting for lock):', tarballPath)
+      return
+    }
+
+    // We have the lock, pack the tarball
+    packTarball(tarballPath, env)
+  } catch (err) {
+    if (err.code === 'EEXIST') {
+      // Lock exists, another process is packing - wait for the tarball to appear
+      log('Lock file exists, waiting for tarball:', tarballPath)
+
+      while (!existsSync(tarballPath)) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+
+      log('Tarball ready:', tarballPath)
+    } else {
+      throw err
+    }
+  } finally {
+    // Strictly no need to clean up the lock - it's in a temp directory
+    if (lockFd) {
+      lockFd.close().catch(() => {})
     }
   }
 }
@@ -267,6 +403,9 @@ async function createSandbox (
     if (builtinModules.includes(dep)) return dep
 
     const match = dep.replaceAll(/['"]/g, '').match(/^(@?[^@]+)(@(.+))?$/)
+
+    assert(match !== null, `Invalid dependency format: ${dep}`)
+
     const name = match[1]
     const range = match[3] || ''
     const cappedRange = getCappedRange(name, range)
@@ -288,18 +427,24 @@ async function createSandbox (
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
   const folder = path.join(sandboxRoot, id().toString())
-  const out = path.join(sandboxRoot, 'dd-trace.tgz')
+  const tarballEnv = process.env.DD_TEST_SANDBOX_TARBALL_PATH
+  const out = tarballEnv && tarballEnv !== '0' && tarballEnv !== 'false'
+    ? tarballEnv
+    : path.join(sandboxRoot, 'dd-trace.tgz')
   const deps = cappedDependencies.concat(`file:${out}`)
 
   await fs.mkdir(folder, { recursive: true })
   const addOptions = { cwd: folder, env: restOfEnv }
   const addFlags = ['--trust']
-  if (!existsSync(out)) {
-    execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${out}`, { env: restOfEnv })
-  }
+
+  await packTarballWithLock(out, restOfEnv)
 
   if (process.env.OFFLINE === '1' || process.env.OFFLINE === 'true') {
     addFlags.push('--prefer-offline')
+  }
+
+  if (process.env.OMIT) {
+    addFlags.push(...process.env.OMIT.split(',').map(omit => `--omit=${omit}`))
   }
 
   if (DEBUG !== 'true') {
@@ -308,7 +453,7 @@ async function createSandbox (
 
   execHelper(`${BUN} add ${deps.join(' ')} ${addFlags.join(' ')}`, {
     ...addOptions,
-    timeout: 90_000
+    timeout: 90_000,
   })
 
   for (const path of integrationTestsPaths) {
@@ -358,18 +503,18 @@ async function createSandbox (
       } else {
         return execHelper(`rm -rf ${folder}`)
       }
-    }
+    },
   }
 }
 
 /**
- * @typedef {{ default: string, star: string, destructure: string }} Variants
+ * @typedef {{ default?: string, star: string, destructure: string }} Variants
  */
 /**
  * @overload
  * @param {string} filename - The file that will be copied and modified for each variant.
  * @param {string} bindingName - The binding name that will be use to bind to the packageName.
- * @param {string} [namedVariant] - The name of the named variant to use.
+ * @param {string} [namedExport] - The name of the named variant to use.
  * @param {string} [packageName] - The name of the package. If not provided, the binding name will be used.
  * @returns {Variants} A map from variant names to resulting filenames
  */
@@ -385,30 +530,43 @@ async function createSandbox (
  * @param {Variants} variants - The variants.
  * @returns {Variants} A map from variant names to resulting filenames
  */
-function varySandbox (filename, variants, namedVariant, packageName = variants) {
+function varySandbox (filename, variants, namedExport, packageName = variants, byPassDefault) {
   if (typeof variants === 'string') {
-    const bindingName = namedVariant || variants
-    variants = {
-      default: `import ${bindingName} from '${packageName}'`,
-      star: namedVariant
-        ? `import * as ${bindingName} from '${packageName}'`
-        : `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.default`,
-      destructure: namedVariant
-        ? `import { ${namedVariant} } from '${packageName}'; const ${bindingName} = { ${namedVariant} }`
-        : `import { default as ${bindingName}} from '${packageName}'`
-    }
+    const bindingName = variants
+    // Default namedVariant to bindingName when bypassing default export
+    if (byPassDefault && !namedExport) namedExport = bindingName
+    variants = byPassDefault
+      ? {
+          // eslint-disable-next-line @stylistic/max-len
+          star: `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.${namedExport}`,
+          destructure: `import { ${namedExport} } from '${packageName}'`,
+        }
+      : {
+          default: `import ${bindingName} from '${packageName}'`,
+          star: namedExport
+            ? `import * as ${bindingName} from '${packageName}'`
+            : `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.default`,
+          destructure: namedExport
+            ? `import { ${namedExport} } from '${packageName}'; const ${bindingName} = { ${namedExport} }`
+            : `import { default as ${bindingName}} from '${packageName}'`,
+        }
   }
 
   const origFileData = readFileSync(path.join(sandbox.folder, filename), 'utf8')
   const { name: prefix, ext: suffix } = path.parse(filename)
   const variantFilenames = /** @type {Variants} */ ({})
+  const baseVariant = byPassDefault ? 'destructure' : 'default'
 
   for (const [variant, value] of Object.entries(variants)) {
     const variantFilename = `${prefix}-${variant}${suffix}`
     variantFilenames[variant] = variantFilename
     let newFileData = origFileData
-    if (variant !== 'default') {
-      newFileData = origFileData.replace(variants.default, `${value}`)
+    if (variant !== baseVariant) {
+      const baseValue = variants[baseVariant]
+      assert(baseValue, `Missing ${baseVariant} variant`)
+      newFileData = origFileData.replace(baseValue, `${value}`)
+      // Error out when the default import does not match that of server.mjs
+      if (newFileData === origFileData) throw Error(`Unable to match ${baseVariant}`)
     }
     writeFileSync(path.join(sandbox.folder, variantFilename), newFileData)
   }
@@ -424,9 +582,10 @@ varySandbox.VARIANTS = ['default', 'star', 'destructure']
  * @param {boolean} shouldExpectTelemetryPoints
  */
 function telemetryForwarder (shouldExpectTelemetryPoints = true) {
-  process.env.DD_TELEMETRY_FORWARDER_PATH =
-    path.join(__dirname, '..', 'telemetry-forwarder.sh')
-  process.env.FORWARDER_OUT = path.join(__dirname, 'output', `forwarder-${Date.now()}.out`)
+  const forwarderOut = path.join(__dirname, 'output', `forwarder-${Date.now()}.out`)
+
+  process.env.DD_TELEMETRY_FORWARDER_PATH = path.join(__dirname, '..', 'telemetry-forwarder.sh')
+  process.env.FORWARDER_OUT = forwarderOut
 
   let retries = 0
 
@@ -437,17 +596,20 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   }
 
   const cleanup = function () {
-    let msgs
+    /** @type {string[]} */
+    let lines
     try {
-      msgs = readFileSync(process.env.FORWARDER_OUT, 'utf8').trim().split('\n')
+      lines = readFileSync(forwarderOut, 'utf8').trim().split('\n')
     } catch (e) {
       if (shouldExpectTelemetryPoints && e.code === 'ENOENT' && retries < 10) {
         return tryAgain()
       }
       return []
     }
-    for (let i = 0; i < msgs.length; i++) {
-      const [telemetryType, data] = msgs[i].split('\t')
+    /** @type {Array<[string, unknown]>} */
+    const msgs = []
+    for (const line of lines) {
+      const [telemetryType, data] = line.split('\t')
       if (!data && retries < 10) {
         return tryAgain()
       }
@@ -460,9 +622,9 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
         }
         throw new SyntaxError(`error parsing data: ${e.message}\n${data}`)
       }
-      msgs[i] = [telemetryType, parsed]
+      msgs.push([telemetryType, parsed])
     }
-    unlinkSync(process.env.FORWARDER_OUT)
+    unlinkSync(forwarderOut)
     delete process.env.FORWARDER_OUT
     delete process.env.DD_TELEMETRY_FORWARDER_PATH
     return msgs
@@ -472,32 +634,34 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
 }
 
 /**
- * @param {string|{ then: (callback: () => Promise<string>) => Promise<string> }|URL} url
+ * @param {string | URL | Promise<string | URL | { url: string }> | { url: string }} url
+ * @returns {Promise<import('http').IncomingMessage & { body: string }>}
  */
 async function curl (url) {
   if (url !== null && typeof url === 'object') {
-    if (url.then) {
+    if ('then' in url) {
       return curl(await url)
     }
-    url = url.url
+    if ('url' in url) {
+      url = url.url
+    }
   }
 
   return new Promise((resolve, reject) => {
     http.get(url, res => {
       const bufs = []
       res.on('data', d => bufs.push(d))
-      res.on('end', () => {
-        res.body = Buffer.concat(bufs).toString('utf8')
-        resolve(res)
+      res.once('end', () => {
+        resolve(Object.assign(res, { body: Buffer.concat(bufs).toString('utf8') }))
       })
-      res.on('error', reject)
-    }).on('error', reject)
+      res.once('error', reject)
+    }).once('error', reject)
   })
 }
 
 /**
  * @param {FakeAgent} agent
- * @param {string|{ then: (callback: () => Promise<string>) => Promise<string> }|URL} procOrUrl
+ * @param {string | URL | Promise<string | URL | { url: string }> | { url: string }} procOrUrl
  * @param {(res: { headers: Record<string, string>, payload: unknown[] }) => void} fn
  * @param {number} [timeout]
  * @param {number} [expectedMessageCount]
@@ -511,6 +675,7 @@ async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMess
 
 /**
  * @param {number} port
+ * @returns {NodeJS.ProcessEnv}
  */
 function getCiVisAgentlessConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
@@ -519,15 +684,16 @@ function getCiVisAgentlessConfig (port) {
   return {
     ...rest,
     DD_API_KEY: '1',
-    DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
+    DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
     NODE_OPTIONS: '-r dd-trace/ci/init',
-    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
+    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
   }
 }
 
 /**
  * @param {number} port
+ * @returns {NodeJS.ProcessEnv}
  */
 function getCiVisEvpProxyConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
@@ -535,10 +701,10 @@ function getCiVisEvpProxyConfig (port) {
   const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
-    DD_TRACE_AGENT_PORT: port,
+    DD_TRACE_AGENT_PORT: String(port),
     NODE_OPTIONS: '-r dd-trace/ci/init',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
-    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
+    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
   }
 }
 
@@ -551,35 +717,95 @@ function checkSpansForServiceName (spans, name) {
 }
 
 /**
- * @overload
- * @param {string} cwd
- * @param {string} serverFile
- * @param {string|number} agentPort
- * @param {Record<string, string|undefined>} [additionalEnvArgs]
+ * @typedef {Record<string, string|undefined>} AdditionalEnvArgs
  */
+
 /**
+ * Prepares spawn options for plugin integration tests.
+ *
  * @param {string} cwd
  * @param {string} serverFile
  * @param {string|number} agentPort
+ * @param {AdditionalEnvArgs} [additionalEnvArgs]
+ * @param {string[]} [execArgv]
  * @param {(data: Buffer) => void} [stdioHandler]
- * @param {Record<string, string|undefined>} [additionalEnvArgs]
+ * @returns {{ filename: string, options: childProcess.ForkOptions,
+ *   stdioHandler: ((data: Buffer) => void) | undefined }}
  */
-async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
-  if (typeof stdioHandler !== 'function' && !additionalEnvArgs) {
-    additionalEnvArgs = stdioHandler
-    stdioHandler = undefined
+function preparePluginIntegrationTestSpawnOptions (
+  cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler
+) {
+  additionalEnvArgs = { ...additionalEnvArgs }
+
+  let NODE_OPTIONS = `--loader=${hookFile}`
+  if (additionalEnvArgs.NODE_OPTIONS !== undefined) {
+    if (/--(loader|import)/.test(additionalEnvArgs.NODE_OPTIONS ?? '')) {
+      NODE_OPTIONS = additionalEnvArgs.NODE_OPTIONS
+    } else {
+      NODE_OPTIONS += ` ${additionalEnvArgs.NODE_OPTIONS}`
+    }
+    delete additionalEnvArgs.NODE_OPTIONS
   }
-  additionalEnvArgs = additionalEnvArgs || {}
-  let env = /** @type {Record<string, string|undefined>} */ ({
-    NODE_OPTIONS: `--loader=${hookFile}`,
-    DD_TRACE_AGENT_PORT: String(agentPort),
-    DD_TRACE_FLUSH_INTERVAL: '0'
-  })
-  env = { ...process.env, ...env, ...additionalEnvArgs }
-  return spawnProc(path.join(cwd, serverFile), {
-    cwd,
-    env
-  }, stdioHandler)
+
+  return {
+    filename: path.join(cwd, serverFile),
+    options: {
+      cwd,
+      env: {
+        ...process.env,
+        NODE_OPTIONS,
+        DD_TRACE_AGENT_PORT: String(agentPort),
+        DD_TRACE_FLUSH_INTERVAL: '0',
+        ...additionalEnvArgs,
+      },
+      execArgv,
+    },
+    stdioHandler,
+  }
+}
+
+/**
+ * Spawns a plugin integration test process that runs a long-lived server.
+ *
+ * The spawned process should call `process.send({ port })` to signal it's ready.
+ * Use this for tests that spawn HTTP servers or other long-running processes.
+ *
+ * For short-lived scripts that run and exit, use `spawnPluginIntegrationTestProcAndExpectExit` instead.
+ *
+ * @param {string} cwd
+ * @param {string} serverFile
+ * @param {string|number} agentPort
+ * @param {AdditionalEnvArgs} [additionalEnvArgs]
+ * @param {string[]} [execArgv]
+ * @param {(data: Buffer) => void} [stdioHandler]
+ */
+function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler) {
+  const { filename, options, stdioHandler: handler } =
+    preparePluginIntegrationTestSpawnOptions(cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler)
+  return spawnProc(filename, options, handler)
+}
+
+/**
+ * Spawns a plugin integration test process that is expected to run and exit cleanly.
+ *
+ * Use this for short-lived test scripts that run instrumented code and exit (e.g., making a
+ * fetch request, DNS lookup, etc.) rather than starting a long-running server.
+ *
+ * For tests that spawn a server which should stay alive, use `spawnPluginIntegrationTestProc` instead.
+ *
+ * @param {string} cwd
+ * @param {string} serverFile
+ * @param {string|number} agentPort
+ * @param {AdditionalEnvArgs} [additionalEnvArgs]
+ * @param {string[]} [execArgv]
+ * @param {(data: Buffer) => void} [stdioHandler]
+ */
+function spawnPluginIntegrationTestProcAndExpectExit (
+  cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler
+) {
+  const { filename, options, stdioHandler: handler } =
+    preparePluginIntegrationTestSpawnOptions(cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler)
+  return spawnProcAndExpectExit(filename, options, handler)
 }
 
 /**
@@ -632,11 +858,15 @@ function setShouldKill (value) {
   })
 }
 
-// @ts-expect-error assert.partialDeepStrictEqual does not exist on older Node.js versions
-// eslint-disable-next-line n/no-unsupported-features/node-builtins
-const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
+// Implementation with optional matcher support (ANY_STRING, ANY_NUMBER, ANY_VALUE)
+function assertObjectContainsImpl (actual, expected, msg, useMatchers) {
+  if (expected === null || typeof expected !== 'object') {
+    assert.strictEqual(actual, expected, msg)
+    return
+  }
+
   if (Array.isArray(expected)) {
-    assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
+    assert.ok(Array.isArray(actual), `${msg ?? ''}Expected array but got ${inspect(actual)}`)
     let startIndex = 0
     for (const expectedItem of expected) {
       let found = false
@@ -644,9 +874,9 @@ const assertObjectContains = assert.partialDeepStrictEqual || function assertObj
         const actualItem = actual[i]
         try {
           if (expectedItem !== null && typeof expectedItem === 'object') {
-            assertObjectContains(actualItem, expectedItem)
+            assertObjectContainsImpl(actualItem, expectedItem, msg, useMatchers)
           } else {
-            assert.strictEqual(actualItem, expectedItem)
+            assert.strictEqual(actualItem, expectedItem, msg)
           }
           startIndex = i + 1
           found = true
@@ -655,19 +885,50 @@ const assertObjectContains = assert.partialDeepStrictEqual || function assertObj
           continue
         }
       }
-      assert.ok(found, `Expected array to contain ${JSON.stringify(expectedItem)}`)
+      assert.ok(found, `${msg ?? ''}Expected array ${inspect(actual)} to contain ${inspect(expectedItem)}`)
     }
     return
   }
 
   for (const [key, val] of Object.entries(expected)) {
-    if (val !== null && typeof val === 'object') {
-      assert.ok(Object.hasOwn(actual, key))
-      assert.notStrictEqual(actual[key], null)
-      assert.strictEqual(typeof actual[key], 'object')
-      assertObjectContains(actual[key], val)
+    assert.ok(Object.hasOwn(actual, key), msg)
+    if (useMatchers && val === ANY_STRING) {
+      assert.strictEqual(typeof actual[key], 'string', `Expected ${key} to be a string but got ${typeof actual[key]}`)
+    } else if (useMatchers && val === ANY_NUMBER) {
+      assert.strictEqual(typeof actual[key], 'number', `Expected ${key} to be a number but got ${typeof actual[key]}`)
+    } else if (useMatchers && val === ANY_VALUE) {
+      assert.ok(actual[key] !== undefined, `Expected ${key} to be present but it was undefined`)
+    } else if (val !== null && typeof val === 'object') {
+      assertObjectContainsImpl(actual[key], val, msg, useMatchers)
     } else {
-      assert.strictEqual(actual[key], expected[key])
+      assert.ok(actual, msg)
+      assert.strictEqual(actual[key], expected[key], msg)
+    }
+  }
+}
+
+// Main assertObjectContains: tries partialDeepStrictEqual or strict first, falls back to matchers
+const assertObjectContains = function assertObjectContains (actual, expected, msg) {
+  // @ts-expect-error assert.partialDeepStrictEqual does not exist on older Node.js versions
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  const assertionFn = assert.partialDeepStrictEqual ||
+    ((actual, expected, msg) => assertObjectContainsImpl(actual, expected, msg, false))
+
+  try {
+    assertionFn(actual, expected, msg)
+  } catch {
+    // First attempt failed, retry with matcher support
+    try {
+      assertObjectContainsImpl(actual, expected, msg, true)
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error)
+
+      throw new assert.AssertionError({
+        actual,
+        expected,
+        operator: 'partialDeepStrictEqual',
+      })
     }
   }
 }
@@ -681,11 +942,15 @@ function assertUUID (actual, msg = 'not a valid UUID') {
 }
 
 module.exports = {
+  ANY_NUMBER,
+  ANY_STRING,
+  ANY_VALUE,
   FakeAgent,
   hookFile,
   assertObjectContains,
   assertUUID,
   spawnProc,
+  spawnProcAndExpectExit,
   telemetryForwarder,
   assertTelemetryPoints,
   runAndCheckWithTelemetry,
@@ -695,9 +960,10 @@ module.exports = {
   getCiVisEvpProxyConfig,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
+  spawnPluginIntegrationTestProcAndExpectExit,
   useEnv,
   setShouldKill,
   sandboxCwd,
   useSandbox,
-  varySandbox
+  varySandbox,
 }

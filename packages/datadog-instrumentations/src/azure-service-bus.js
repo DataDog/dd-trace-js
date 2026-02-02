@@ -1,11 +1,10 @@
 'use strict'
 
-const {
-  addHook
-} = require('./helpers/instrument')
-
-const shimmer = require('../../datadog-shimmer')
 const dc = require('dc-polyfill')
+const shimmer = require('../../datadog-shimmer')
+const {
+  addHook,
+} = require('./helpers/instrument')
 
 const producerCh = dc.tracingChannel('apm:azure-service-bus:send')
 const isItDefault = new WeakSet()
@@ -38,7 +37,7 @@ addHook({ name: '@azure/service-bus', versions: ['>=7.9.2'] }, (obj) => {
           shimmer.wrap(batch, 'tryAddMessage', tryAddMessage => function (msg) {
             const functionName = tryAddMessage.name
             const config = this._context.config
-            return producerCh.tracePromise(
+            return producerCh.traceSync(
               tryAddMessage, { config, functionName, batch, msg }, this, ...arguments)
           })
           return batch

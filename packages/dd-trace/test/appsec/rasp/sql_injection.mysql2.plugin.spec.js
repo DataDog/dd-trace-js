@@ -1,12 +1,13 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
+const path = require('path')
+const Axios = require('axios')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const getConfig = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
-const path = require('path')
-const Axios = require('axios')
-const { assert } = require('chai')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - sql_injection', () => {
@@ -16,7 +17,7 @@ describe('RASP - sql_injection', () => {
         const connectionData = {
           host: '127.0.0.1',
           user: 'root',
-          database: 'db'
+          database: 'db',
         }
         let server, axios, app, mysql2
 
@@ -37,14 +38,14 @@ describe('RASP - sql_injection', () => {
             appsec: {
               enabled: true,
               rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
-              rasp: { enabled: true }
-            }
+              rasp: { enabled: true },
+            },
           }))
 
           server = expressApp.listen(0, () => {
             const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
             axios = Axios.create({
-              baseURL: `http://localhost:${port}`
+              baseURL: `http://localhost:${port}`,
             })
             done()
           })

@@ -1,7 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -21,8 +20,8 @@ describe('telemetry logs', () => {
       telemetry: {
         enabled: true,
         logCollection: true,
-        debug: false
-      }
+        debug: false,
+      },
     }
 
     telemetryLog = {
@@ -30,59 +29,59 @@ describe('telemetry logs', () => {
         return this.subscribe.callCount > 0
       },
       subscribe: sinon.stub(),
-      unsubscribe: sinon.stub()
+      unsubscribe: sinon.stub(),
     }
 
     dc = {
-      channel: () => telemetryLog
+      channel: () => telemetryLog,
     }
   })
 
   describe('start', () => {
     it('should be enabled by default and subscribe', () => {
       const logs = proxyquire('../../../src/telemetry/logs', {
-        'dc-polyfill': dc
+        'dc-polyfill': dc,
       })
 
       logs.start(defaultConfig)
 
-      expect(telemetryLog.subscribe).to.have.been.calledTwice
+      sinon.assert.calledTwice(telemetryLog.subscribe)
     })
 
     it('should be subscribe only once', () => {
       const logs = proxyquire('../../../src/telemetry/logs', {
-        'dc-polyfill': dc
+        'dc-polyfill': dc,
       })
 
       logs.start(defaultConfig)
       logs.start(defaultConfig)
       logs.start(defaultConfig)
 
-      expect(telemetryLog.subscribe).to.have.been.calledTwice
+      sinon.assert.calledTwice(telemetryLog.subscribe)
     })
 
     it('should be disabled and not subscribe if DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
       const logs = proxyquire('../../../src/telemetry/logs', {
-        'dc-polyfill': dc
+        'dc-polyfill': dc,
       })
 
       defaultConfig.telemetry.logCollection = false
       logs.start(defaultConfig)
 
-      expect(telemetryLog.subscribe).to.not.been.called
+      sinon.assert.notCalled(telemetryLog.subscribe)
     })
   })
 
   describe('stop', () => {
     it('should unsubscribe configured listeners', () => {
       const logs = proxyquire('../../../src/telemetry/logs', {
-        'dc-polyfill': dc
+        'dc-polyfill': dc,
       })
       logs.start(defaultConfig)
 
       logs.stop()
 
-      expect(telemetryLog.unsubscribe).to.have.been.calledTwice
+      sinon.assert.calledTwice(telemetryLog.unsubscribe)
     })
   })
 
@@ -99,8 +98,8 @@ describe('telemetry logs', () => {
       logCollectorAdd = sinon.stub()
       const logs = proxyquire('../../../src/telemetry/logs', {
         './log-collector': {
-          add: logCollectorAdd
-        }
+          add: logCollectorAdd,
+        },
       })
       logs.start(defaultConfig)
     })
@@ -108,19 +107,19 @@ describe('telemetry logs', () => {
     it('should be not called with DEBUG level', () => {
       telemetryLog.publish({ message: 'message', level: 'DEBUG' })
 
-      expect(logCollectorAdd).to.not.be.called
+      sinon.assert.notCalled(logCollectorAdd)
     })
 
     it('should be called with WARN level', () => {
       telemetryLog.publish({ message: 'message', level: 'WARN' })
 
-      expect(logCollectorAdd).to.be.calledOnceWith(match({ message: 'message', level: 'WARN' }))
+      sinon.assert.calledOnceWithExactly(logCollectorAdd, match({ message: 'message', level: 'WARN' }))
     })
 
     it('should be called with ERROR level', () => {
       telemetryLog.publish({ message: 'message', level: 'ERROR' })
 
-      expect(logCollectorAdd).to.be.calledOnceWith(match({ message: 'message', level: 'ERROR' }))
+      sinon.assert.calledOnceWithExactly(logCollectorAdd, match({ message: 'message', level: 'ERROR' }))
     })
 
     it('should be called with ERROR level and stack_trace', () => {
@@ -128,19 +127,22 @@ describe('telemetry logs', () => {
       const stack = error.stack
       telemetryLog.publish({ message: error.message, stack_trace: stack, level: 'ERROR' })
 
-      expect(logCollectorAdd).to.be.calledOnceWith(match({ message: 'message', level: 'ERROR', stack_trace: stack }))
+      sinon.assert.calledOnceWithExactly(
+        logCollectorAdd,
+        match({ message: 'message', level: 'ERROR', stack_trace: stack })
+      )
     })
 
     it('should not be called with no defined level', () => {
       telemetryLog.publish({ message: 'message' })
 
-      expect(logCollectorAdd).to.not.be.called
+      sinon.assert.notCalled(logCollectorAdd)
     })
 
     it('should not be called with incorrect level', () => {
       telemetryLog.publish({ message: 'message', level: 'INFO' })
 
-      expect(logCollectorAdd).to.not.be.called
+      sinon.assert.notCalled(logCollectorAdd)
     })
 
     describe('datadog:log:error', () => {
@@ -149,41 +151,40 @@ describe('telemetry logs', () => {
         const stack = error.stack
         errorLog.publish({ cause: error, sendViaTelemetry: true })
 
-        expect(logCollectorAdd)
-          .to.be.calledOnceWith(match({
-            message: 'Generic Error',
-            level: 'ERROR',
-            errorType: 'Error',
-            stack_trace: stack
-          }))
+        sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
+          message: 'Generic Error',
+          level: 'ERROR',
+          errorType: 'Error',
+          stack_trace: stack,
+        }))
       })
 
       it('should be called when an error string is published to datadog:log:error', () => {
         errorLog.publish({ message: 'custom error message', sendViaTelemetry: true })
 
-        expect(logCollectorAdd).to.be.calledOnceWith(match({
+        sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
           message: 'custom error message',
           level: 'ERROR',
-          stack_trace: undefined
+          stack_trace: undefined,
         }))
       })
 
       it('should not be called when an invalid object is published to datadog:log:error', () => {
         errorLog.publish({ invalid: 'field', sendViaTelemetry: true })
 
-        expect(logCollectorAdd).not.to.be.called
+        sinon.assert.notCalled(logCollectorAdd)
       })
 
       it('should not be called when an object without message and stack is published to datadog:log:error', () => {
         errorLog.publish(Log.parse(() => new Error('error')))
 
-        expect(logCollectorAdd).not.to.be.called
+        sinon.assert.notCalled(logCollectorAdd)
       })
 
       it('should not be called when an error contains sendViaTelemetry:false', () => {
         errorLog.publish({ message: 'custom error message', sendViaTelemetry: false })
 
-        expect(logCollectorAdd).not.to.be.called
+        sinon.assert.notCalled(logCollectorAdd)
       })
     })
   })
@@ -204,11 +205,11 @@ describe('telemetry logs', () => {
 
       logs = proxyquire('../../../src/telemetry/logs', {
         './log-collector': {
-          drain: logCollectorDrain
+          drain: logCollectorDrain,
         },
         '../send-data': {
-          sendData
-        }
+          sendData,
+        },
       })
     })
 
@@ -217,7 +218,7 @@ describe('telemetry logs', () => {
 
       logs.send(defaultConfig, application, host)
 
-      expect(sendData).to.be.calledOnceWithExactly(defaultConfig, application, host, 'logs', { logs: collectedLogs })
+      sinon.assert.calledOnceWithExactly(sendData, defaultConfig, application, host, 'logs', { logs: collectedLogs })
     })
 
     it('should not drain logCollector and call sendData if not enabled', () => {
@@ -227,8 +228,8 @@ describe('telemetry logs', () => {
 
       logs.send(defaultConfig, application, host)
 
-      expect(logCollectorDrain).to.not.be.called
-      expect(sendData).to.not.be.called
+      sinon.assert.notCalled(logCollectorDrain)
+      sinon.assert.notCalled(sendData)
     })
   })
 })

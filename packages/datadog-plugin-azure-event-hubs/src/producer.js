@@ -1,7 +1,9 @@
 'use strict'
 
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+
+const spanContexts = new WeakMap()
 
 class AzureEventHubsProducerPlugin extends ProducerPlugin {
   static get id () { return 'azure-event-hubs' }
@@ -24,7 +26,7 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
         'messaging.system': 'eventhubs',
         'messaging.destination.name': entityPath,
         'network.destination.name': qualifiedNamespace,
-      }
+      },
     }, ctx)
 
     if (ctx.functionName === 'tryAdd') {
@@ -36,7 +38,12 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
       }
 
       if (batchLinksAreEnabled()) {
-        ctx.batch._spanContexts.push(span.context())
+        const spanContext = spanContexts.get(ctx.batch)
+        if (spanContext) {
+          spanContext.push(span.context())
+        } else {
+          spanContexts.set(ctx.batch, [span.context()])
+        }
         injectTraceContext(this.tracer, span, ctx.eventData)
       }
     }
@@ -53,9 +60,12 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
         })
       } else {
         if (batchLinksAreEnabled()) {
-          eventData._spanContexts.forEach(spanContext => {
-            span.addLink(spanContext)
-          })
+          const contexts = spanContexts.get(eventData)
+          if (contexts) {
+            for (const spanContext of contexts) {
+              span.addLink(spanContext)
+            }
+          }
         }
       }
     }
@@ -63,7 +73,11 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
   }
 
   asyncEnd (ctx) {
-    super.finish()
+    super.finish(ctx)
+  }
+
+  end (ctx) {
+    super.finish(ctx)
   }
 }
 
@@ -75,7 +89,7 @@ function injectTraceContext (tracer, span, event) {
 }
 
 function batchLinksAreEnabled () {
-  const eh = getEnvironmentVariable('DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED')
+  const eh = getValueFromEnvSources('DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED')
   return eh !== 'false'
 }
 

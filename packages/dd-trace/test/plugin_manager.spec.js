@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -24,12 +25,12 @@ describe('Plugin Manager', () => {
 
   beforeEach(() => {
     tracer = {
-      _nomenclature: nomenclature
+      _nomenclature: nomenclature,
     }
     instantiated = []
     class FakePlugin {
       constructor (aTracer) {
-        expect(aTracer).to.equal(tracer)
+        assert.strictEqual(aTracer, tracer)
         instantiated.push(this.constructor.id)
       }
     }
@@ -53,7 +54,7 @@ describe('Plugin Manager', () => {
       eight: class Eight extends FakePlugin {
         static experimental = true
         static id = 'eight'
-      }
+      },
     }
 
     Two = plugins.two
@@ -75,11 +76,14 @@ describe('Plugin Manager', () => {
     PluginManager = proxyquire.noPreserveCache()('../src/plugin_manager', {
       './plugins': { ...plugins, '@noCallThru': true },
       '../../datadog-instrumentations': {},
-      '../../dd-trace/src/config-helper': {
+      '../../dd-trace/src/config/helper': {
         getEnvironmentVariable (name) {
           return process.env[name]
-        }
-      }
+        },
+        getValueFromEnvSources (name) {
+          return process.env[name]
+        },
+      },
     })
     pm = new PluginManager(tracer)
   })
@@ -92,23 +96,23 @@ describe('Plugin Manager', () => {
 
   describe('configurePlugin', () => {
     it('does not throw for old-style plugins', () => {
-      expect(() => pm.configurePlugin('one', false)).to.not.throw()
+      assert.doesNotThrow(() => pm.configurePlugin('one', false))
     })
 
     describe('without configure', () => {
       it('should not configure plugins', () => {
         pm.configurePlugin('two')
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.not.have.been.called
+        sinon.assert.notCalled(Two.prototype.configure)
       })
 
       it('should keep the config for future configure calls', () => {
         pm.configurePlugin('two', { foo: 'bar' })
         pm.configure()
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWithMatch({
+        sinon.assert.calledWithMatch(Two.prototype.configure, {
           enabled: true,
-          foo: 'bar'
+          foo: 'bar',
         })
       })
     })
@@ -119,37 +123,37 @@ describe('Plugin Manager', () => {
       it('works with no config param', () => {
         pm.configurePlugin('two')
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        sinon.assert.calledWithMatch(Two.prototype.configure, { enabled: true })
       })
 
       it('works with empty object config', () => {
         pm.configurePlugin('two', {})
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        sinon.assert.calledWithMatch(Two.prototype.configure, { enabled: true })
       })
 
       it('works with "enabled: false" object config', () => {
         pm.configurePlugin('two', { enabled: false })
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
+        sinon.assert.calledWithMatch(Two.prototype.configure, { enabled: false })
       })
 
       it('works with "enabled: true" object config', () => {
         pm.configurePlugin('two', { enabled: true })
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        sinon.assert.calledWithMatch(Two.prototype.configure, { enabled: true })
       })
 
       it('works with boolean false', () => {
         pm.configurePlugin('two', false)
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
+        sinon.assert.calledWithMatch(Two.prototype.configure, { enabled: false })
       })
 
       it('works with boolean true', () => {
         pm.configurePlugin('two', true)
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        sinon.assert.calledWithMatch(Two.prototype.configure, { enabled: true })
       })
     })
 
@@ -159,14 +163,14 @@ describe('Plugin Manager', () => {
       it('should not call configure on individual enable override', () => {
         pm.configurePlugin('five', { enabled: true })
         loadChannel.publish({ name: 'five' })
-        expect(Five.prototype.configure).to.not.have.been.called
+        sinon.assert.notCalled(Five.prototype.configure)
       })
 
       it('should not configure all disabled plugins', () => {
         pm.configure({})
         loadChannel.publish({ name: 'five' })
-        expect(Five.prototype.configure).to.not.have.been.called
-        expect(Six.prototype.configure).to.not.have.been.called
+        sinon.assert.notCalled(Five.prototype.configure)
+        sinon.assert.notCalled(Six.prototype.configure)
       })
     })
 
@@ -184,37 +188,37 @@ describe('Plugin Manager', () => {
       it('works with no config param', () => {
         pm.configurePlugin('two')
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        sinon.assert.calledWithMatch(Two.prototype.configure, { enabled: true })
       })
 
       it('works with empty object config', () => {
         pm.configurePlugin('two', {})
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        sinon.assert.calledWithMatch(Two.prototype.configure, { enabled: true })
       })
 
       it('works with "enabled: false" object config', () => {
         pm.configurePlugin('two', { enabled: false })
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
+        sinon.assert.calledWithMatch(Two.prototype.configure, { enabled: false })
       })
 
       it('works with "enabled: true" object config', () => {
         pm.configurePlugin('two', { enabled: true })
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        sinon.assert.calledWithMatch(Two.prototype.configure, { enabled: true })
       })
 
       it('works with boolean false', () => {
         pm.configurePlugin('two', false)
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
+        sinon.assert.calledWithMatch(Two.prototype.configure, { enabled: false })
       })
 
       it('works with boolean true', () => {
         pm.configurePlugin('two', true)
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        sinon.assert.calledWithMatch(Two.prototype.configure, { enabled: true })
       })
     })
 
@@ -232,37 +236,37 @@ describe('Plugin Manager', () => {
       it('works with no config param', () => {
         pm.configurePlugin('two')
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.not.have.been.called
+        sinon.assert.notCalled(Two.prototype.configure)
       })
 
       it('works with empty object config', () => {
         pm.configurePlugin('two', {})
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.not.have.been.called
+        sinon.assert.notCalled(Two.prototype.configure)
       })
 
       it('works with "enabled: false" object config', () => {
         pm.configurePlugin('two', { enabled: false })
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.not.have.been.called
+        sinon.assert.notCalled(Two.prototype.configure)
       })
 
       it('works with "enabled: true" object config', () => {
         pm.configurePlugin('two', { enabled: true })
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.not.have.been.called
+        sinon.assert.notCalled(Two.prototype.configure)
       })
 
       it('works with boolean false', () => {
         pm.configurePlugin('two', false)
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.not.have.been.called
+        sinon.assert.notCalled(Two.prototype.configure)
       })
 
       it('works with boolean true', () => {
         pm.configurePlugin('two', true)
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.not.have.been.called
+        sinon.assert.notCalled(Two.prototype.configure)
       })
     })
   })
@@ -272,8 +276,8 @@ describe('Plugin Manager', () => {
       it('should not instantiate plugins', () => {
         pm.configure()
         pm.configurePlugin('two')
-        expect(instantiated).to.be.empty
-        expect(Two.prototype.configure).to.not.have.been.called
+        assert.strictEqual(instantiated.length, 0)
+        sinon.assert.notCalled(Two.prototype.configure)
       })
     })
 
@@ -281,21 +285,21 @@ describe('Plugin Manager', () => {
       it('should disable the plugin by default', () => {
         pm.configure()
         loadChannel.publish({ name: 'eight' })
-        expect(Eight.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
+        sinon.assert.calledWithMatch(Eight.prototype.configure, { enabled: false })
       })
 
       it('should enable the plugin when configured programmatically', () => {
         pm.configure()
         pm.configurePlugin('eight')
         loadChannel.publish({ name: 'eight' })
-        expect(Eight.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        sinon.assert.calledWithMatch(Eight.prototype.configure, { enabled: true })
       })
 
       it('should enable the plugin when configured with an environment variable', () => {
         process.env.DD_TRACE_EIGHT_ENABLED = 'true'
         pm.configure()
         loadChannel.publish({ name: 'eight' })
-        expect(Eight.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        sinon.assert.calledWithMatch(Eight.prototype.configure, { enabled: true })
       })
     })
 
@@ -303,13 +307,13 @@ describe('Plugin Manager', () => {
       pm.configure()
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
-      expect(instantiated).to.deep.equal(['two', 'four'])
+      assert.deepStrictEqual(instantiated, ['two', 'four'])
     })
 
     describe('service naming schema manager', () => {
       const config = {
         foo: { bar: 1 },
-        baz: 2
+        baz: 2,
       }
       let configureSpy
 
@@ -323,14 +327,14 @@ describe('Plugin Manager', () => {
 
       it('is configured when plugin manager is configured', () => {
         pm.configure(config)
-        expect(configureSpy).to.have.been.calledWith(config)
+        sinon.assert.calledWith(configureSpy, config)
       })
     })
 
     it('skips configuring plugins entirely when plugins is false', () => {
       pm.configurePlugin = sinon.spy()
       pm.configure({ plugins: false })
-      expect(pm.configurePlugin).not.to.have.been.called
+      sinon.assert.notCalled(pm.configurePlugin)
     })
 
     it('observes configuration options', () => {
@@ -338,22 +342,22 @@ describe('Plugin Manager', () => {
         serviceMapping: { two: 'deux' },
         logInjection: true,
         queryStringObfuscation: '.*',
-        clientIpEnabled: true
+        clientIpEnabled: true,
       })
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
-      expect(Two.prototype.configure).to.have.been.calledWithMatch({
+      sinon.assert.calledWithMatch(Two.prototype.configure, {
         enabled: true,
         service: 'deux',
         logInjection: true,
         queryStringObfuscation: '.*',
-        clientIpEnabled: true
+        clientIpEnabled: true,
       })
-      expect(Four.prototype.configure).to.have.been.calledWithMatch({
+      sinon.assert.calledWithMatch(Four.prototype.configure, {
         enabled: true,
         logInjection: true,
         queryStringObfuscation: '.*',
-        clientIpEnabled: true
+        clientIpEnabled: true,
       })
     })
   })
@@ -365,8 +369,8 @@ describe('Plugin Manager', () => {
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
       pm.destroy()
-      expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
-      expect(Four.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
+      sinon.assert.calledWithMatch(Two.prototype.configure, { enabled: false })
+      sinon.assert.calledWithMatch(Four.prototype.configure, { enabled: false })
     })
   })
 })

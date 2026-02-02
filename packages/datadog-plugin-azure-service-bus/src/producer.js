@@ -1,6 +1,6 @@
 'use strict'
 
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const spanContexts = new WeakMap()
 
@@ -25,7 +25,7 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
         'messaging.operation': 'send',
         'messaging.system': 'servicebus',
         'network.destination.name': qualifiedSenderNamespace,
-      }
+      },
     }, ctx)
 
     if (ctx.functionName === 'tryAddMessage') {
@@ -75,6 +75,10 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
   asyncEnd (ctx) {
     super.finish(ctx)
   }
+
+  end (ctx) {
+    super.finish(ctx)
+  }
 }
 
 function injectTraceContext (tracer, span, msg) {
@@ -86,7 +90,7 @@ function injectTraceContext (tracer, span, msg) {
 }
 
 function batchLinksAreEnabled () {
-  const sb = getEnvironmentVariable('DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED')
+  const sb = getValueFromEnvSources('DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED')
   return sb !== 'false'
 }
 

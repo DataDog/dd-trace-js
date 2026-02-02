@@ -2,11 +2,12 @@
 
 const tracer = require('dd-trace')
 tracer.init({
-  flushInterval: 1
+  flushInterval: 1,
 })
 
-const express = require('express')
 const childProcess = require('child_process')
+
+const express = require('express')
 
 const app = express()
 

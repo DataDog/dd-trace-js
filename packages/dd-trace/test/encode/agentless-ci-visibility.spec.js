@@ -1,14 +1,16 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const msgpack = require('@msgpack/msgpack')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
-
 const id = require('../../src/id')
+
 const {
   MAX_META_KEY_LENGTH,
   MAX_META_VALUE_LENGTH,
@@ -18,7 +20,7 @@ const {
   MAX_RESOURCE_NAME_LENGTH,
   MAX_TYPE_LENGTH,
   DEFAULT_SPAN_NAME,
-  DEFAULT_SERVICE_NAME
+  DEFAULT_SERVICE_NAME,
 } = require('../../src/encode/tags-processors')
 
 const { version: ddTraceVersion } = require('../../../../package.json')
@@ -31,10 +33,10 @@ describe('agentless-ci-visibility-encode', () => {
 
   beforeEach(() => {
     logger = {
-      debug: sinon.stub()
+      debug: sinon.stub(),
     }
     const { AgentlessCiVisibilityEncoder } = proxyquire('../../src/encode/agentless-ci-visibility', {
-      '../log': logger
+      '../log': logger,
     })
     writer = { flush: sinon.spy() }
     encoder = new AgentlessCiVisibilityEncoder(writer, {})
@@ -49,7 +51,7 @@ describe('agentless-ci-visibility-encode', () => {
       type: 'foo',
       error: 0,
       meta: {
-        bar: 'baz'
+        bar: 'baz',
       },
       metrics: {
         positive: 123456712345,
@@ -57,10 +59,10 @@ describe('agentless-ci-visibility-encode', () => {
         float: 1.23456712345,
         negativefloat: -1.23456789,
         bigfloat: 12345678.9,
-        bignegativefloat: -12345678.9
+        bignegativefloat: -12345678.9,
       },
       start: 123,
-      duration: 456
+      duration: 456,
     }]
   })
 
@@ -70,58 +72,58 @@ describe('agentless-ci-visibility-encode', () => {
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
 
-    expect(decodedTrace.version).to.equal(1)
-    expect(decodedTrace.metadata['*']).to.contain({
+    assert.strictEqual(decodedTrace.version, 1)
+    assertObjectContains(decodedTrace.metadata['*'], {
       language: 'javascript',
-      library_version: ddTraceVersion
+      library_version: ddTraceVersion,
     })
     const spanEvent = decodedTrace.events[0]
-    expect(spanEvent.type).to.equal('span')
-    expect(spanEvent.version).to.equal(1)
-    expect(spanEvent.content.trace_id.toString(10)).to.equal(trace[0].trace_id.toString(10))
-    expect(spanEvent.content.span_id.toString(10)).to.equal(trace[0].span_id.toString(10))
-    expect(spanEvent.content.parent_id.toString(10)).to.equal(trace[0].parent_id.toString(10))
-    expect(spanEvent.content).to.contain({
+    assert.strictEqual(spanEvent.type, 'span')
+    assert.strictEqual(spanEvent.version, 1)
+    assert.strictEqual(spanEvent.content.trace_id.toString(10), trace[0].trace_id.toString(10))
+    assert.strictEqual(spanEvent.content.span_id.toString(10), trace[0].span_id.toString(10))
+    assert.strictEqual(spanEvent.content.parent_id.toString(10), trace[0].parent_id.toString(10))
+    assertObjectContains(spanEvent.content, {
       name: 'test',
       resource: 'test-r',
       service: 'test-s',
-      type: 'foo'
+      type: 'foo',
     })
-    expect(spanEvent.content.error).to.equal(0)
-    expect(spanEvent.content.start).to.equal(123)
-    expect(spanEvent.content.duration).to.equal(456)
+    assert.strictEqual(spanEvent.content.error, 0)
+    assert.strictEqual(spanEvent.content.start, 123)
+    assert.strictEqual(spanEvent.content.duration, 456)
 
-    expect(spanEvent.content.meta).to.eql({
-      bar: 'baz'
+    assert.deepStrictEqual(spanEvent.content.meta, {
+      bar: 'baz',
     })
-    expect(spanEvent.content.metrics).to.contain({
+    assertObjectContains(spanEvent.content.metrics, {
       float: 1.23456712345,
       negativefloat: -1.23456789,
       bigfloat: 12345678.9,
-      bignegativefloat: -12345678.9
+      bignegativefloat: -12345678.9,
     })
 
-    expect(spanEvent.content.metrics.positive).to.equal(123456712345)
-    expect(spanEvent.content.metrics.negative).to.equal(-123456712345)
+    assert.strictEqual(spanEvent.content.metrics.positive, 123456712345)
+    assert.strictEqual(spanEvent.content.metrics.negative, -123456712345)
   })
 
   it('should report its count', () => {
-    expect(encoder.count()).to.equal(0)
+    assert.strictEqual(encoder.count(), 0)
 
     encoder.encode(trace)
 
-    expect(encoder.count()).to.equal(1)
+    assert.strictEqual(encoder.count(), 1)
 
     encoder.encode(trace)
 
-    expect(encoder.count()).to.equal(2)
+    assert.strictEqual(encoder.count(), 2)
   })
 
   it('should reset after making a payload', () => {
     encoder.encode(trace)
     encoder.makePayload()
 
-    expect(encoder.count()).to.equal(0)
+    assert.strictEqual(encoder.count(), 0)
   })
 
   it('should truncate name, service, type and resource when they are too long', () => {
@@ -133,7 +135,7 @@ describe('agentless-ci-visibility-encode', () => {
       parent_id: id('1234abcd1234abcd'),
       error: 0,
       meta: {
-        bar: 'baz'
+        bar: 'baz',
       },
       metrics: {},
       name: tooLongString,
@@ -141,20 +143,20 @@ describe('agentless-ci-visibility-encode', () => {
       type: tooLongString,
       service: tooLongString,
       start: 123,
-      duration: 456
+      duration: 456,
     }]
     encoder.encode(traceToTruncate)
 
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
 
-    expect(decodedTrace)
+    assert.ok(decodedTrace)
     const spanEvent = decodedTrace.events[0]
-    expect(spanEvent.content.type.length).to.equal(MAX_TYPE_LENGTH)
-    expect(spanEvent.content.name.length).to.equal(MAX_NAME_LENGTH)
-    expect(spanEvent.content.service.length).to.equal(MAX_SERVICE_LENGTH)
+    assert.strictEqual(spanEvent.content.type.length, MAX_TYPE_LENGTH)
+    assert.strictEqual(spanEvent.content.name.length, MAX_NAME_LENGTH)
+    assert.strictEqual(spanEvent.content.service.length, MAX_SERVICE_LENGTH)
     // ellipsis is added
-    expect(spanEvent.content.resource.length).to.equal(MAX_RESOURCE_NAME_LENGTH + 3)
+    assert.strictEqual(spanEvent.content.resource.length, MAX_RESOURCE_NAME_LENGTH + 3)
   })
 
   it('should fallback to a default name and service if they are not present', () => {
@@ -164,22 +166,22 @@ describe('agentless-ci-visibility-encode', () => {
       parent_id: id('1234abcd1234abcd'),
       error: 0,
       meta: {
-        bar: 'baz'
+        bar: 'baz',
       },
       metrics: {},
       resource: 'resource',
       start: 123,
-      duration: 456
+      duration: 456,
     }]
     encoder.encode(traceToTruncate)
 
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
 
-    expect(decodedTrace)
+    assert.ok(decodedTrace)
     const spanEvent = decodedTrace.events[0]
-    expect(spanEvent.content.service).to.equal(DEFAULT_SERVICE_NAME)
-    expect(spanEvent.content.name).to.equal(DEFAULT_SPAN_NAME)
+    assert.strictEqual(spanEvent.content.service, DEFAULT_SERVICE_NAME)
+    assert.strictEqual(spanEvent.content.name, DEFAULT_SPAN_NAME)
   })
 
   it('should cut too long meta and metrics keys and meta values', () => {
@@ -191,28 +193,28 @@ describe('agentless-ci-visibility-encode', () => {
       parent_id: id('1234abcd1234abcd'),
       error: 0,
       meta: {
-        [tooLongKey]: tooLongValue
+        [tooLongKey]: tooLongValue,
       },
       metrics: {
-        [tooLongKey]: 15
+        [tooLongKey]: 15,
       },
       start: 123,
       duration: 456,
       type: 'foo',
       name: '',
       resource: '',
-      service: ''
+      service: '',
     }]
     encoder.encode(traceToTruncate)
 
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
     const spanEvent = decodedTrace.events[0]
-    expect(spanEvent.content.meta).to.eql({
-      [`${tooLongKey.slice(0, MAX_META_KEY_LENGTH)}...`]: `${tooLongValue.slice(0, MAX_META_VALUE_LENGTH)}...`
+    assert.deepStrictEqual(spanEvent.content.meta, {
+      [`${tooLongKey.slice(0, MAX_META_KEY_LENGTH)}...`]: `${tooLongValue.slice(0, MAX_META_VALUE_LENGTH)}...`,
     })
-    expect(spanEvent.content.metrics).to.eql({
-      [`${tooLongKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`]: 15
+    assert.deepStrictEqual(spanEvent.content.metrics, {
+      [`${tooLongKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`]: 15,
     })
   })
 
@@ -230,7 +232,7 @@ describe('agentless-ci-visibility-encode', () => {
         type: 'test_session_end',
         name: '',
         resource: '',
-        service: ''
+        service: '',
       },
       {
         trace_id: id('1234abcd1234abcd'),
@@ -244,17 +246,17 @@ describe('agentless-ci-visibility-encode', () => {
         type: 'http',
         name: '',
         resource: '',
-        service: ''
-      }
+        service: '',
+      },
     ]
 
     encoder.encode(traceToFilter)
 
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
-    expect(decodedTrace.events.length).to.equal(1)
-    expect(decodedTrace.events[0].type).to.equal('test_session_end')
-    expect(decodedTrace.events[0].content.type).to.eql('test_session_end')
+    assert.strictEqual(decodedTrace.events.length, 1)
+    assert.strictEqual(decodedTrace.events[0].type, 'test_session_end')
+    assert.deepStrictEqual(decodedTrace.events[0].content.type, 'test_session_end')
   })
 
   it('does not crash if test_session_id is in meta but not test_module_id', () => {
@@ -264,7 +266,7 @@ describe('agentless-ci-visibility-encode', () => {
       parent_id: id('1234abcd1234abcd'),
       error: 0,
       meta: {
-        test_session_id: '1234abcd1234abcd'
+        test_session_id: '1234abcd1234abcd',
       },
       metrics: {},
       start: 123,
@@ -272,14 +274,14 @@ describe('agentless-ci-visibility-encode', () => {
       type: 'foo',
       name: '',
       resource: '',
-      service: ''
+      service: '',
     }]
     encoder.encode(traceToTruncate)
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
     const spanEvent = decodedTrace.events[0]
-    expect(spanEvent.type).to.equal('span')
-    expect(spanEvent.version).to.equal(1)
+    assert.strictEqual(spanEvent.type, 'span')
+    assert.strictEqual(spanEvent.version, 1)
   })
 
   describe('addMetadataTags', () => {
@@ -290,31 +292,31 @@ describe('agentless-ci-visibility-encode', () => {
     it('should add simple metadata tags', () => {
       const tags = {
         test: { tag: 'value1' },
-        test_session_end: { tag: 'value2' }
+        test_session_end: { tag: 'value2' },
       }
       encoder.addMetadataTags(tags)
-      expect(encoder.metadataTags).to.eql(tags)
+      assert.deepStrictEqual(encoder.metadataTags, tags)
     })
 
     it('should merge dictionaries if there are values already', () => {
       encoder.metadataTags = {
-        test: { tag: 'value1' }
+        test: { tag: 'value1' },
       }
       const tags = {
         test: { other: 'value2' },
-        test_session_end: { tag: 'value3' }
+        test_session_end: { tag: 'value3' },
       }
       encoder.addMetadataTags(tags)
-      expect(encoder.metadataTags).to.eql({
+      assert.deepStrictEqual(encoder.metadataTags, {
         test: { tag: 'value1', other: 'value2' },
-        test_session_end: { tag: 'value3' }
+        test_session_end: { tag: 'value3' },
       })
     })
 
     it('should handle empty tags', () => {
       encoder.metadataTags = { test: { tag: 'value1' } }
       encoder.addMetadataTags({})
-      expect(encoder.metadataTags).to.eql({ test: { tag: 'value1' } })
+      assert.deepStrictEqual(encoder.metadataTags, { test: { tag: 'value1' } })
     })
   })
 })

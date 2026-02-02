@@ -1,9 +1,9 @@
 'use strict'
 
 const NoopTracer = require('../../dd-trace/src/noop/tracer')
-const cypressPlugin = require('./cypress-plugin')
-const satisfies = require('semifies')
+const satisfies = require('../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../version')
+const cypressPlugin = require('./cypress-plugin')
 
 const noopTask = {
   'dd:testSuiteStart': () => {
@@ -17,7 +17,7 @@ const noopTask = {
   },
   'dd:addTags': () => {
     return null
-  }
+  },
 }
 
 module.exports = function CypressPlugin (on, config) {

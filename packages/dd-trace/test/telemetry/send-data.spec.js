@@ -1,16 +1,18 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 
 describe('sendData', () => {
   const application = {
     language_name: 'nodejs',
-    tracer_version: 'version'
+    tracer_version: 'version',
   }
 
   let sendDataModule
@@ -19,7 +21,7 @@ describe('sendData', () => {
   beforeEach(() => {
     request = sinon.stub()
     sendDataModule = proxyquire('../../src/telemetry/send-data', {
-      '../exporters/common/request': request
+      '../exporters/common/request': request,
     })
   })
 
@@ -27,13 +29,13 @@ describe('sendData', () => {
     sendDataModule.sendData({
       hostname: '',
       port: '12345',
-      tags: { 'runtime-id': '123' }
+      tags: { 'runtime-id': '123' },
     }, application, 'test', 'req-type')
 
-    expect(request).to.have.been.calledOnce
+    sinon.assert.calledOnce(request)
     const options = request.getCall(0).args[1]
 
-    expect(options).to.deep.equal({
+    assert.deepStrictEqual(options, {
       method: 'POST',
       path: '/telemetry/proxy/api/v2/apmtelemetry',
       headers: {
@@ -41,24 +43,24 @@ describe('sendData', () => {
         'dd-telemetry-api-version': 'v2',
         'dd-telemetry-request-type': 'req-type',
         'dd-client-library-language': application.language_name,
-        'dd-client-library-version': application.tracer_version
+        'dd-client-library-version': application.tracer_version,
       },
       url: undefined,
       hostname: '',
-      port: '12345'
+      port: '12345',
     })
   })
 
   it('should call to request (UDP)', () => {
     sendDataModule.sendData({
       url: 'unix:/foo/bar/baz',
-      tags: { 'runtime-id': '123' }
+      tags: { 'runtime-id': '123' },
     }, application, 'test', 'req-type')
 
-    expect(request).to.have.been.calledOnce
+    sinon.assert.calledOnce(request)
     const options = request.getCall(0).args[1]
 
-    expect(options).to.deep.equal({
+    assert.deepStrictEqual(options, {
       method: 'POST',
       path: '/telemetry/proxy/api/v2/apmtelemetry',
       headers: {
@@ -66,11 +68,11 @@ describe('sendData', () => {
         'dd-telemetry-api-version': 'v2',
         'dd-telemetry-request-type': 'req-type',
         'dd-client-library-language': application.language_name,
-        'dd-client-library-version': application.tracer_version
+        'dd-client-library-version': application.tracer_version,
       },
       url: 'unix:/foo/bar/baz',
       hostname: undefined,
-      port: undefined
+      port: undefined,
     })
   })
 
@@ -78,13 +80,13 @@ describe('sendData', () => {
     sendDataModule.sendData({
       url: '/test',
       tags: { 'runtime-id': '123' },
-      telemetry: { debug: true }
+      telemetry: { debug: true },
     }, application, 'test', 'req-type')
 
-    expect(request).to.have.been.calledOnce
+    sinon.assert.calledOnce(request)
     const options = request.getCall(0).args[1]
 
-    expect(options).to.deep.equal({
+    assert.deepStrictEqual(options, {
       method: 'POST',
       path: '/telemetry/proxy/api/v2/apmtelemetry',
       headers: {
@@ -93,11 +95,11 @@ describe('sendData', () => {
         'dd-telemetry-request-type': 'req-type',
         'dd-telemetry-debug-enabled': 'true',
         'dd-client-library-language': application.language_name,
-        'dd-client-library-version': application.tracer_version
+        'dd-client-library-version': application.tracer_version,
       },
       url: '/test',
       hostname: undefined,
-      port: undefined
+      port: undefined,
     })
   })
 
@@ -106,15 +108,15 @@ describe('sendData', () => {
       message: 'test',
       logger: {},
       tags: {},
-      serviceMapping: {}
+      serviceMapping: {},
     }
     sendDataModule.sendData({ tags: { 'runtime-id': '123' } }, 'test', 'test', 'req-type', payload)
 
-    expect(request).to.have.been.calledOnce
+    sinon.assert.calledOnce(request)
     const data = JSON.parse(request.getCall(0).args[0])
 
     const { logger, tags, serviceMapping, ...trimmedPayload } = payload
-    expect(data.payload).to.deep.equal(trimmedPayload)
+    assert.deepStrictEqual(data.payload, trimmedPayload)
   })
 
   it('should send batch request with retryPayload', () => {
@@ -124,16 +126,16 @@ describe('sendData', () => {
       payload: {
         integrations: [
           { name: 'foo2', enabled: true, auto_enabled: true },
-          { name: 'bar2', enabled: false, auto_enabled: true }
-        ]
-      }
+          { name: 'bar2', enabled: false, auto_enabled: true },
+        ],
+      },
 
     }, retryObjData]
 
     sendDataModule.sendData({ tags: { 'runtime-id': '123' } },
       { language: 'js' }, 'test', 'message-batch', payload) /
 
-    expect(request).to.have.been.calledOnce
+    sinon.assert.calledOnce(request)
 
     const data = JSON.parse(request.getCall(0).args[0])
     const expectedPayload = [{
@@ -141,15 +143,15 @@ describe('sendData', () => {
       payload: {
         integrations: [
           { name: 'foo2', enabled: true, auto_enabled: true },
-          { name: 'bar2', enabled: false, auto_enabled: true }
-        ]
-      }
+          { name: 'bar2', enabled: false, auto_enabled: true },
+        ],
+      },
     }, {
       request_type: 'req-type-1',
-      payload: { foo: 'bar' }
+      payload: { foo: 'bar' },
     }]
-    expect(data.request_type).to.equal('message-batch')
-    expect(data.payload).to.deep.equal(expectedPayload)
+    assert.strictEqual(data.request_type, 'message-batch')
+    assert.deepStrictEqual(data.payload, expectedPayload)
   })
 
   it('should also work in CI Visibility agentless mode', () => {
@@ -159,20 +161,20 @@ describe('sendData', () => {
       {
         isCiVisibility: true,
         tags: { 'runtime-id': '123' },
-        site: 'datadoghq.eu'
+        site: 'datadoghq.eu',
       },
       application,
       'test', 'req-type'
     )
 
-    expect(request).to.have.been.calledOnce
+    sinon.assert.calledOnce(request)
     const options = request.getCall(0).args[1]
-    expect(options).to.include({
+    assertObjectContains(options, {
       method: 'POST',
-      path: '/api/v2/apmtelemetry'
+      path: '/api/v2/apmtelemetry',
     })
     const { url } = options
-    expect(url).to.eql(new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
+    assert.deepStrictEqual(url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
     delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
   })
 })

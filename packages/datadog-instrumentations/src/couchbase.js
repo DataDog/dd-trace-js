@@ -1,11 +1,11 @@
 'use strict'
 
 const { errorMonitor } = require('events')
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 function findCallbackIndex (args, lowerbound = 2) {
   for (let i = args.length - 1; i >= lowerbound; i--) {
@@ -176,7 +176,7 @@ function wrapWithName (name) {
       return wrapCBandPromise(operation, name, {
         collection: { name: this._name || '_default' },
         bucket: { name: this._scope._bucket._name },
-        seedNodes: this._dd_connStr
+        seedNodes: this._dd_connStr,
       }, this, arguments)
     }
   }

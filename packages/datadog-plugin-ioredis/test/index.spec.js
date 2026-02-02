@@ -1,13 +1,13 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const assert = require('node:assert/strict')
 
-const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
@@ -47,11 +47,11 @@ describe('Plugin', () => {
               'db.type': 'redis',
               'span.kind': 'client',
               'out.host': 'localhost',
-              'redis.raw_command': 'GET foo'
+              'redis.raw_command': 'GET foo',
             },
             metrics: {
-              'network.destination.port': 6379
-            }
+              'network.destination.port': 6379,
+            },
           })
         })
 
@@ -60,7 +60,7 @@ describe('Plugin', () => {
 
           return tracer.scope().activate(span, async () => {
             await redis.get('foo')
-            expect(tracer.scope().active()).to.equal(span)
+            assert.strictEqual(tracer.scope().active(), span)
           })
         })
 
@@ -79,8 +79,8 @@ describe('Plugin', () => {
               [ERROR_TYPE]: error.name,
               [ERROR_MESSAGE]: error.message,
               [ERROR_STACK]: error.stack,
-              component: 'ioredis'
-            }
+              component: 'ioredis',
+            },
           })
         })
 
@@ -100,11 +100,11 @@ describe('Plugin', () => {
               'span.kind': 'client',
               'out.host': 'localhost',
               'redis.raw_command': 'GET foo',
-              component: 'ioredis'
+              component: 'ioredis',
             },
             metrics: {
-              'network.destination.port': 6379
-            }
+              'network.destination.port': 6379,
+            },
           })
         })
 
@@ -118,7 +118,7 @@ describe('Plugin', () => {
         before(() => agent.load('ioredis', {
           service: 'custom',
           splitByInstance: true,
-          allowlist: ['get']
+          allowlist: ['get'],
         }))
 
         after(() => agent.close({ ritmReset: false }))
@@ -127,7 +127,7 @@ describe('Plugin', () => {
           await redis.get('foo')
 
           await agent.assertFirstTraceSpan({
-            service: 'custom-test'
+            service: 'custom-test',
           })
         })
 
@@ -135,7 +135,7 @@ describe('Plugin', () => {
           await redis.get('foo')
 
           await agent.assertFirstTraceSpan({
-            resource: 'get'
+            resource: 'get',
           })
         })
 
@@ -144,19 +144,19 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'redis.command',
-              serviceName: 'custom-test'
+              serviceName: 'custom-test',
             },
             v1: {
               opName: 'redis.command',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })
 
       describe('with legacy configuration', () => {
         before(() => agent.load('ioredis', {
-          whitelist: ['get']
+          whitelist: ['get'],
         }))
 
         after(() => agent.close({ ritmReset: false }))
@@ -165,7 +165,7 @@ describe('Plugin', () => {
           await redis.get('foo')
 
           await agent.assertFirstTraceSpan({
-            resource: 'get'
+            resource: 'get',
           })
         })
       })

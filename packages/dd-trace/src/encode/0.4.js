@@ -1,11 +1,11 @@
 'use strict'
 
-const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const { MsgpackChunk, MsgpackEncoder } = require('../msgpack')
 const log = require('../log')
 const { isTrue } = require('../util')
 const { memoize } = require('../log/utils')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getValueFromEnvSources } = require('../config/helper')
+const { truncateSpan, normalizeSpan } = require('./tags-processors')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 
@@ -31,7 +31,7 @@ class AgentEncoder {
     this._stringBytes = new MsgpackChunk()
     this._writer = writer
     this._reset()
-    this._debugEncoding = isTrue(getEnvironmentVariable('DD_TRACE_ENCODING_DEBUG'))
+    this._debugEncoding = isTrue(getValueFromEnvSources('DD_TRACE_ENCODING_DEBUG'))
     this._config = this._writer?._config
   }
 
@@ -317,7 +317,7 @@ class AgentEncoder {
       this._stringCount++
       this._stringMap[value] = {
         start: this._stringBytes.length,
-        end: this._stringBytes.length + this._stringBytes.write(value)
+        end: this._stringBytes.length + this._stringBytes.write(value),
       }
     }
   }
@@ -367,14 +367,14 @@ function convertSpanEventAttributeValues (key, value, depth = 0) {
   if (typeof value === 'string') {
     return {
       type: 0,
-      string_value: value
+      string_value: value,
     }
   }
 
   if (typeof value === 'boolean') {
     return {
       type: 1,
-      bool_value: value
+      bool_value: value,
     }
   }
 
@@ -382,12 +382,12 @@ function convertSpanEventAttributeValues (key, value, depth = 0) {
     if (Number.isInteger(value)) {
       return {
         type: 2,
-        int_value: value
+        int_value: value,
       }
     }
     return {
       type: 3,
-      double_value: value
+      double_value: value,
     }
   }
 
@@ -405,7 +405,7 @@ function convertSpanEventAttributeValues (key, value, depth = 0) {
       if (convertedArray.length > 0) {
         return {
           type: 4,
-          array_value: { values: convertedArray }
+          array_value: { values: convertedArray },
         }
       }
       // If all elements were unsupported, return undefined

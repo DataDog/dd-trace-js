@@ -4,7 +4,8 @@ const log = require('./log')
 const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
-const { getEnvironmentVariable } = require('./config-helper')
+const processTags = require('./process-tags')
+const { getValueFromEnvSources } = require('./config/helper')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -24,6 +25,10 @@ class SpanProcessor {
 
     this._spanSampler = new SpanSampler(config.sampler)
     this._gitMetadataTagger = new GitMetadataTagger(config)
+
+    this._processTags = config.propagateProcessTags?.enabled
+      ? processTags.serialized
+      : false
   }
 
   sample (span) {
@@ -49,14 +54,14 @@ class SpanProcessor {
       this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
-      let isChunkRoot = true
+      let isFirstSpanInChunk = true
 
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
         } else {
-          const formattedSpan = spanFormat(span, isChunkRoot)
-          isChunkRoot = false
+          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+          isFirstSpanInChunk = false
           this._stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
         }
@@ -83,7 +88,7 @@ class SpanProcessor {
   }
 
   _erase (trace, active) {
-    if (getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_STATE_TRACKING') === 'true') {
+    if (getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING') === 'true') {
       const started = new Set()
       const startedIds = new Set()
       const finished = new Set()

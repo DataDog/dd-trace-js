@@ -1,10 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
 
 require('../../setup/core')
-
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 
@@ -22,18 +22,18 @@ describe('BinaryPropagator', () => {
       const carrier = {}
       const spanContext = new SpanContext({
         traceId: id('123', 10),
-        spanId: id('456', 10)
+        spanId: id('456', 10),
       })
 
       propagator.inject(spanContext, carrier)
 
-      expect(carrier).to.deep.equal(carrier)
+      assert.deepStrictEqual(carrier, carrier)
     })
   })
 
   describe('extract', () => {
     it('should not be supported', () => {
-      expect(propagator.extract({})).to.equal(null)
+      assert.strictEqual(propagator.extract({}), null)
     })
   })
 })

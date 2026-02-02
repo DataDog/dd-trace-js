@@ -1,20 +1,21 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
 const { NODE_MAJOR } = require('../../../../../../../version')
-const agent = require('../../../../plugins/agent')
 const { storage } = require('../../../../../../datadog-core')
 const iast = require('../../../../../src/appsec/iast')
 const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
 const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-tracking/operations')
+const agent = require('../../../../plugins/agent')
 const { withVersions } = require('../../../../setup/mocha')
 const {
   HTTP_REQUEST_PATH_PARAM,
-  HTTP_REQUEST_URI
+  HTTP_REQUEST_URI,
 } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 const { getConfigFresh } = require('../../../../helpers/config')
 
@@ -41,9 +42,9 @@ describe('URI sourcing with express', () => {
         experimental: {
           iast: {
             enabled: true,
-            requestSampling: 100
-          }
-        }
+            requestSampling: 100,
+          },
+        },
       }))
 
       express = require(`../../../../../../../versions/express@${version}`).get()
@@ -63,9 +64,9 @@ describe('URI sourcing with express', () => {
         const store = storage('legacy').getStore()
         const iastContext = iastContextFunctions.getIastContext(store)
         const isPathTainted = isTainted(iastContext, req.url)
-        expect(isPathTainted).to.be.true
+        assert.strictEqual(isPathTainted, true)
         const taintedPathValueRanges = getRanges(iastContext, req.url)
-        expect(taintedPathValueRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_URI)
+        assert.strictEqual(taintedPathValueRanges[0].iinfo.type, HTTP_REQUEST_URI)
         res.status(200).send()
       })
 
@@ -98,9 +99,9 @@ describe('Path params sourcing with express', () => {
 
       const pathParamValue = name ? req.params[name] : req.params
       const isParameterTainted = isTainted(iastContext, pathParamValue)
-      expect(isParameterTainted).to.be.true
+      assert.strictEqual(isParameterTainted, true)
       const taintedParameterValueRanges = getRanges(iastContext, pathParamValue)
-      expect(taintedParameterValueRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_PATH_PARAM)
+      assert.strictEqual(taintedParameterValueRanges[0].iinfo.type, HTTP_REQUEST_PATH_PARAM)
 
       next()
     }
@@ -118,9 +119,9 @@ describe('Path params sourcing with express', () => {
         experimental: {
           iast: {
             enabled: true,
-            requestSampling: 100
-          }
-        }
+            requestSampling: 100,
+          },
+        },
       }))
 
       const expressRequire = require(`../../../../../../../versions/express@${version}`)
@@ -144,9 +145,9 @@ describe('Path params sourcing with express', () => {
         for (const pathParamName of ['parameter1', 'parameter2']) {
           const pathParamValue = req.params[pathParamName]
           const isParameterTainted = isTainted(iastContext, pathParamValue)
-          expect(isParameterTainted).to.be.true
+          assert.strictEqual(isParameterTainted, true)
           const taintedParameterValueRanges = getRanges(iastContext, pathParamValue)
-          expect(taintedParameterValueRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_PATH_PARAM)
+          assert.strictEqual(taintedParameterValueRanges[0].iinfo.type, HTTP_REQUEST_PATH_PARAM)
         }
 
         res.status(200).send()
@@ -177,9 +178,9 @@ describe('Path params sourcing with express', () => {
         for (const pathParamName of ['parameterParent', 'parameterChild']) {
           const pathParamValue = req.params[pathParamName]
           const isParameterTainted = isTainted(iastContext, pathParamValue)
-          expect(isParameterTainted).to.be.true
+          assert.strictEqual(isParameterTainted, true)
           const taintedParameterValueRanges = getRanges(iastContext, pathParamValue)
-          expect(taintedParameterValueRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_PATH_PARAM)
+          assert.strictEqual(taintedParameterValueRanges[0].iinfo.type, HTTP_REQUEST_PATH_PARAM)
         }
 
         res.status(200).send()

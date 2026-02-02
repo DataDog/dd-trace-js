@@ -1,14 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, before, after } = require('mocha')
-
+const assert = require('node:assert/strict')
 const { promisify } = require('node:util')
 
+const { after, before, describe, it } = require('mocha')
+
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const helpers = require('./kinesis_helpers')
 const { setup } = require('./spec_helpers')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   describe('Serverless', function () {
@@ -41,7 +41,7 @@ describe('Plugin', () => {
             TableName: tableName,
             KeySchema: [{ AttributeName: 'id', KeyType: 'HASH' }],
             AttributeDefinitions: [{ AttributeName: 'id', AttributeType: 'S' }],
-            ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+            ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 },
           }
         }
 
@@ -65,8 +65,8 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-            expect(awsSpan.meta['peer.service']).to.equal(peerService)
-            expect(httpSpan.meta['peer.service']).to.equal(peerService)
+            assert.strictEqual(awsSpan.meta['peer.service'], peerService)
+            assert.strictEqual(httpSpan.meta['peer.service'], peerService)
           }, { timeoutMs: 15000 })
 
           await Promise.all([
@@ -74,9 +74,9 @@ describe('Plugin', () => {
             send({
               TableName: tableName,
               Item: {
-                id: { S: '123' }
-              }
-            })
+                id: { S: '123' },
+              },
+            }),
           ])
         })
       })
@@ -91,7 +91,7 @@ describe('Plugin', () => {
 
           const params = {
             endpoint: 'http://127.0.0.1:4566',
-            region: 'us-east-1'
+            region: 'us-east-1',
           }
 
           if (moduleName === '@aws-sdk/smithy-client') {
@@ -104,7 +104,7 @@ describe('Plugin', () => {
 
           kinesis.createStream({
             StreamName: streamName,
-            ShardCount: 1
+            ShardCount: 1,
           }, (err) => {
             if (err) return cb(err)
 
@@ -118,7 +118,7 @@ describe('Plugin', () => {
 
         after(done => {
           kinesis.deleteStream({
-            StreamName: streamName
+            StreamName: streamName,
           }, (err, res) => {
             if (err) return done(err)
 
@@ -132,8 +132,8 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-            expect(awsSpan.meta['peer.service']).to.equal(peerService)
-            expect(httpSpan.meta['peer.service']).to.equal(peerService)
+            assert.strictEqual(awsSpan.meta['peer.service'], peerService)
+            assert.strictEqual(httpSpan.meta['peer.service'], peerService)
           }, { timeoutMs: 15000 })
             .then(done, done)
 
@@ -194,8 +194,8 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-            expect(awsSpan.meta['peer.service']).to.equal(peerService)
-            expect(httpSpan.meta['peer.service']).to.equal(peerService)
+            assert.strictEqual(awsSpan.meta['peer.service'], peerService)
+            assert.strictEqual(httpSpan.meta['peer.service'], peerService)
           }, { timeoutMs: 15000 })
             .then(done, done)
 
@@ -205,8 +205,8 @@ describe('Plugin', () => {
             MessageAttributes: {
               baz: { DataType: 'String', StringValue: 'bar' },
               keyOne: { DataType: 'String', StringValue: 'keyOne' },
-              keyTwo: { DataType: 'String', StringValue: 'keyTwo' }
-            }
+              keyTwo: { DataType: 'String', StringValue: 'keyTwo' },
+            },
           }, e => e && done(e))
         })
       })
@@ -219,8 +219,8 @@ describe('Plugin', () => {
           return {
             QueueName: queueName,
             Attributes: {
-              MessageRetentionPeriod: '86400'
-            }
+              MessageRetentionPeriod: '86400',
+            },
           }
         }
 
@@ -246,14 +246,14 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-            expect(awsSpan.meta['peer.service']).to.equal(peerService)
-            expect(httpSpan.meta['peer.service']).to.equal(peerService)
+            assert.strictEqual(awsSpan.meta['peer.service'], peerService)
+            assert.strictEqual(httpSpan.meta['peer.service'], peerService)
           }, { timeoutMs: 15000 })
             .then(done, done)
 
           sqs.sendMessage({
             MessageBody: 'test body',
-            QueueUrl
+            QueueUrl,
           }, () => {})
         })
       })
@@ -281,7 +281,7 @@ describe('Plugin', () => {
           await put({
             Bucket: bucketName,
             Key: 'test-key',
-            Body: 'dummy-data'
+            Body: 'dummy-data',
           })
 
           await agent.assertSomeTraces(traces => {
@@ -289,8 +289,8 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-            expect(awsSpan.meta['peer.service']).to.equal(peerService)
-            expect(httpSpan.meta['peer.service']).to.equal(peerService)
+            assert.strictEqual(awsSpan.meta['peer.service'], peerService)
+            assert.strictEqual(httpSpan.meta['peer.service'], peerService)
           }, { timeoutMs: 15000 })
         })
       })

@@ -9,7 +9,7 @@ runs:
   using: composite
   steps:
     - id: yarn-cache
-      uses: actions/cache@v4
+      uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
       with:
         key: yarn-cache-${{ github.workflow }}-${{ github.job }}-${{ hashFiles('yarn.lock') }}-v2
         path: node_modules.tar

@@ -1,10 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 function wrapPino (symbol, wrapper, pino) {
   return function pinoWithTrace () {
@@ -14,7 +14,7 @@ function wrapPino (symbol, wrapper, pino) {
       configurable: true,
       enumerable: true,
       writable: true,
-      value: wrapper(instance[symbol])
+      value: wrapper(instance[symbol]),
     })
 
     return instance

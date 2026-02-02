@@ -3,19 +3,19 @@
  * Modifications copyright 2022 Datadog, Inc.
  *
  * Some functions are part of aws-lambda-nodejs-runtime-interface-client
- * https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/main/src/utils/UserFunction.ts
+ * https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/v2.1.0/src/utils/UserFunction.ts
  */
 'use strict'
 
 const path = require('path')
 
 const log = require('../../log')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
 const Hook = require('../../../../datadog-instrumentations/src/helpers/hook')
 const instrumentations = require('../../../../datadog-instrumentations/src/helpers/instrumentations')
 const {
   filename,
-  pathSepExpr
+  pathSepExpr,
 } = require('../../../../datadog-instrumentations/src/helpers/register')
 
 /**
@@ -61,7 +61,7 @@ function _extractModuleNameAndHandlerPath (handler) {
 /**
  * Returns all possible paths of the files to be patched when required.
  *
- * @param {*} lambdaStylePath the path comprised of the `LAMBDA_TASK_ROOT`,
+ * @param {string} lambdaStylePath the path comprised of the `LAMBDA_TASK_ROOT`,
  * the root of the module of the Lambda handler, and the module name.
  * @returns the lambdaStylePath with appropiate extensions for the hook.
  */
@@ -69,7 +69,7 @@ function _getLambdaFilePaths (lambdaStylePath) {
   return [
     `${lambdaStylePath}.js`,
     `${lambdaStylePath}.mjs`,
-    `${lambdaStylePath}.cjs`
+    `${lambdaStylePath}.cjs`,
   ]
 }
 
@@ -79,7 +79,7 @@ function _getLambdaFilePaths (lambdaStylePath) {
  */
 const registerLambdaHook = () => {
   const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
-  const originalLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER')
+  const originalLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER')
 
   if (originalLambdaHandler !== undefined && lambdaTaskRoot !== undefined) {
     const [moduleRoot, moduleAndHandler] = _extractModuleRootAndHandler(originalLambdaHandler)
@@ -129,5 +129,5 @@ module.exports = {
   _extractModuleRootAndHandler,
   _extractModuleNameAndHandlerPath,
   _getLambdaFilePaths,
-  registerLambdaHook
+  registerLambdaHook,
 }

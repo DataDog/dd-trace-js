@@ -7,35 +7,35 @@ const EXIT_SPAN_STACK_FRAMES_LIMIT = Number(process.env._DD_CODE_ORIGIN_FOR_SPAN
 
 module.exports = {
   entryTags,
-  exitTags
+  exitTags,
 }
 
 /**
- * @param {Function} topOfStackFunc - A function present in the current stack, above which no stack frames should be
+ * @param {Function} [topOfStackFunc] - A function present in the current stack, above which no stack frames should be
  *   collected.
  * @returns {Record<string, string>}
  */
 function entryTags (topOfStackFunc) {
-  return tag('entry', topOfStackFunc, ENTRY_SPAN_STACK_FRAMES_LIMIT)
+  return tag('entry', ENTRY_SPAN_STACK_FRAMES_LIMIT, topOfStackFunc)
 }
 
 /**
- * @param {Function} topOfStackFunc - A function present in the current stack, above which no stack frames should be
+ * @param {Function} [topOfStackFunc] - A function present in the current stack, above which no stack frames should be
  *   collected.
  * @returns {Record<string, string>}
  */
 function exitTags (topOfStackFunc) {
-  return tag('exit', topOfStackFunc, EXIT_SPAN_STACK_FRAMES_LIMIT)
+  return tag('exit', EXIT_SPAN_STACK_FRAMES_LIMIT, topOfStackFunc)
 }
 
 /**
  * @param {'entry'|'exit'} type - The type of code origin.
- * @param {Function} topOfStackFunc - A function present in the current stack, above which no stack frames should be
- *   collected.
  * @param {number} limit - The maximum number of stack frames to include in the tags.
+ * @param {Function} [topOfStackFunc] - A function present in the current stack, above which no stack frames should be
+ *   collected.
  * @returns {Record<string, string>}
  */
-function tag (type, topOfStackFunc, limit) {
+function tag (type, limit, topOfStackFunc) {
   // The `Error.prepareStackTrace` API doesn't support resolving source maps.
   // Fall back to manually parsing the stack trace.
   const originalLimit = Error.stackTraceLimit
@@ -46,7 +46,7 @@ function tag (type, topOfStackFunc, limit) {
   Error.stackTraceLimit = originalLimit
 
   const tags = {
-    '_dd.code_origin.type': type
+    '_dd.code_origin.type': type,
   }
   for (let i = 0; i < frames.length; i++) {
     const frame = frames[i]

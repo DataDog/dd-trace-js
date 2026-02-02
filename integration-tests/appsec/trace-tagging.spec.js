@@ -1,6 +1,6 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const path = require('path')
 const Axios = require('axios')
 
@@ -8,7 +8,7 @@ const {
   sandboxCwd,
   useSandbox,
   FakeAgent,
-  spawnProc
+  spawnProc,
 } = require('../helpers')
 
 describe('ASM Trace Tagging rules', () => {
@@ -20,8 +20,8 @@ describe('ASM Trace Tagging rules', () => {
 
       const env = {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_APPSEC_ENABLED: true,
-        DD_APPSEC_RULES: path.join(cwd, 'appsec', 'data-collection', 'data-collection-rules.json')
+        DD_APPSEC_ENABLED: 'true',
+        DD_APPSEC_RULES: path.join(cwd, 'appsec', 'data-collection', 'data-collection-rules.json'),
       }
 
       proc = await spawnProc(appFile, { cwd, env, execArgv: [] })
@@ -48,9 +48,9 @@ describe('ASM Trace Tagging rules', () => {
       await axios.get('/', { headers: { 'User-Agent': 'TraceTaggingTest/v1' } })
 
       await agent.assertMessageReceived(({ _, payload }) => {
-        assert.property(payload[0][0].meta, '_dd.appsec.trace.agent')
+        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.trace.agent'))
         assert.strictEqual(payload[0][0].meta['_dd.appsec.trace.agent'], 'TraceTaggingTest/v1')
-        assert.property(payload[0][0].metrics, '_dd.appsec.trace.integer')
+        assert.ok(Object.hasOwn(payload[0][0].metrics, '_dd.appsec.trace.integer'))
         assert.strictEqual(payload[0][0].metrics['_dd.appsec.trace.integer'], 1234)
       })
     })
@@ -81,13 +81,13 @@ describe('ASM Trace Tagging rules', () => {
 
         fastifyRequestReceived = true
 
-        assert.property(payload[0][0].meta, '_dd.appsec.trace.agent')
+        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.trace.agent'))
         assert.strictEqual(payload[0][0].meta['_dd.appsec.trace.agent'], 'TraceTaggingTest/v1')
-        assert.property(payload[0][0].metrics, '_dd.appsec.trace.integer')
+        assert.ok(Object.hasOwn(payload[0][0].metrics, '_dd.appsec.trace.integer'))
         assert.strictEqual(payload[0][0].metrics['_dd.appsec.trace.integer'], 1234)
       }, 30000, 10, true)
 
-      assert.isTrue(fastifyRequestReceived)
+      assert.strictEqual(fastifyRequestReceived, true)
     })
   })
 })

@@ -7,10 +7,11 @@ const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
-const urlFilter = require('./urlfilter')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
-const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const TracingPlugin = require('../tracing')
+const urlFilter = require('./urlfilter')
+const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
+const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
 
 let extractIp
 
@@ -25,15 +26,12 @@ const HTTP_METHOD = tags.HTTP_METHOD
 const HTTP_URL = tags.HTTP_URL
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
+const HTTP_ENDPOINT = tags.HTTP_ENDPOINT
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_USERAGENT = tags.HTTP_USERAGENT
 const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 const MANUAL_DROP = tags.MANUAL_DROP
-
-const HTTP2_HEADER_AUTHORITY = ':authority'
-const HTTP2_HEADER_SCHEME = ':scheme'
-const HTTP2_HEADER_PATH = ':path'
 
 const contexts = new WeakMap()
 const ends = new WeakMap()
@@ -76,7 +74,7 @@ const web = {
       hooks,
       filter,
       middleware,
-      queryStringObfuscation
+      queryStringObfuscation,
     }
   },
 
@@ -190,7 +188,7 @@ const web = {
     analyticsSampler.sample(span, config.measured)
 
     span.addTags({
-      [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>'
+      [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>',
     })
 
     context.middleware.push(span)
@@ -220,7 +218,7 @@ const web = {
         span.addTags({
           [ERROR_TYPE]: error.name,
           [ERROR_MESSAGE]: error.message,
-          [ERROR_STACK]: error.stack
+          [ERROR_STACK]: error.stack,
         })
       }
 
@@ -252,7 +250,7 @@ const web = {
       paths: [],
       middleware: [],
       beforeEnd: [],
-      config: {}
+      config: {},
     }
 
     contexts.set(req, context)
@@ -276,11 +274,14 @@ const web = {
     return context.middleware.at(-1)
   },
 
-  // Extract the parent span from the headers and start a new span as its child
   startChildSpan (tracer, config, name, req, traceCtx) {
     const headers = req.headers
     const reqCtx = contexts.get(req)
-    let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
+    const { storage } = require('../../../../datadog-core')
+    const store = storage('legacy').getStore()
+    const pubsubSpan = store?.span?._name === 'pubsub.push.receive' ? store.span : null
+
+    let childOf = pubsubSpan || tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.inferredProxyServicesEnabled) {
@@ -363,24 +364,6 @@ const web = {
     finishInferredProxySpan(context)
   },
 
-  obfuscateQs (config, url) {
-    const { queryStringObfuscation } = config
-
-    if (queryStringObfuscation === false) return url
-
-    const i = url.indexOf('?')
-    if (i === -1) return url
-
-    const path = url.slice(0, i)
-    if (queryStringObfuscation === true) return path
-
-    let qs = url.slice(i + 1)
-
-    qs = qs.replace(queryStringObfuscation, '<redacted>')
-
-    return `${path}?${qs}`
-  },
-
   wrapWriteHead (context) {
     const { req, res } = context
     const writeHead = res.writeHead
@@ -423,9 +406,9 @@ const web = {
       },
       set (value) {
         ends.set(this, scope.bind(value, context.span))
-      }
+      },
     })
-  }
+  },
 }
 
 function addAllowHeaders (req, res, headers) {
@@ -437,7 +420,7 @@ function addAllowHeaders (req, res, headers) {
     'x-datadog-sampled', // Deprecated, but still accept it in case it's sent.
     'x-datadog-sampling-priority',
     'x-datadog-trace-id',
-    'x-datadog-tags'
+    'x-datadog-tags',
   ]
 
   for (const header of contextHeaders) {
@@ -475,11 +458,11 @@ function addRequestTags (context, spanType) {
   const url = extractURL(req)
 
   span.addTags({
-    [HTTP_URL]: web.obfuscateQs(config, url),
+    [HTTP_URL]: obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
     [SPAN_TYPE]: spanType,
-    [HTTP_USERAGENT]: req.headers['user-agent']
+    [HTTP_USERAGENT]: req.headers['user-agent'],
   })
 
   // if client ip has already been set by appsec, no need to run it again
@@ -496,18 +479,24 @@ function addRequestTags (context, spanType) {
 }
 
 function addResponseTags (context) {
-  const { req, res, paths, span, inferredProxySpan } = context
+  const { req, res, paths, span, inferredProxySpan, config } = context
 
   const route = paths.join('')
   if (route) {
+    // Use http.route from trusted framework instrumentation
     span.setTag(HTTP_ROUTE, route)
+  } else if (config.resourceRenamingEnabled) {
+    // Route is unavailable, compute http.endpoint instead
+    const url = span.context()._tags[HTTP_URL]
+    const endpoint = url ? calculateHttpEndpoint(url) : '/'
+    span.setTag(HTTP_ENDPOINT, endpoint)
   }
 
   span.addTags({
-    [HTTP_STATUS_CODE]: res.statusCode
+    [HTTP_STATUS_CODE]: res.statusCode,
   })
   inferredProxySpan?.addTags({
-    [HTTP_STATUS_CODE]: res.statusCode
+    [HTTP_STATUS_CODE]: res.statusCode,
   })
 
   web.addStatusError(req, res.statusCode)
@@ -517,7 +506,7 @@ function addResourceTag (context) {
   const { req, span } = context
   const tags = span.context()._tags
 
-  if (tags['resource.name']) return
+  if (tags[RESOURCE_NAME]) return
 
   const resource = [req.method, tags[HTTP_ROUTE]]
     .filter(Boolean)
@@ -543,23 +532,6 @@ function addHeaders (context) {
       inferredProxySpan?.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
     }
   })
-}
-
-function extractURL (req) {
-  const headers = req.headers
-
-  if (req.stream) {
-    return `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
-  }
-  const protocol = getProtocol(req)
-  return `${protocol}://${req.headers.host}${req.originalUrl || req.url}`
-}
-
-function getProtocol (req) {
-  if (req.socket && req.socket.encrypted) return 'https'
-  if (req.connection && req.connection.encrypted) return 'https'
-
-  return 'http'
 }
 
 function getHeadersToRecord (config) {

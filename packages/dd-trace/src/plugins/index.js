@@ -1,6 +1,6 @@
 'use strict'
 
-module.exports = {
+const plugins = {
   get '@anthropic-ai/sdk' () { return require('../../../datadog-plugin-anthropic/src') },
   get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo/src') },
   get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
@@ -13,6 +13,7 @@ module.exports = {
   get '@elastic/transport' () { return require('../../../datadog-plugin-elasticsearch/src') },
   get '@google-cloud/pubsub' () { return require('../../../datadog-plugin-google-cloud-pubsub/src') },
   get '@google-cloud/vertexai' () { return require('../../../datadog-plugin-google-cloud-vertexai/src') },
+  get '@google/genai' () { return require('../../../datadog-plugin-google-genai/src') },
   get '@grpc/grpc-js' () { return require('../../../datadog-plugin-grpc/src') },
   get '@hapi/hapi' () { return require('../../../datadog-plugin-hapi/src') },
   get '@happy-dom/jest-environment' () { return require('../../../datadog-plugin-jest/src') },
@@ -25,6 +26,7 @@ module.exports = {
   get '@node-redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@opensearch-project/opensearch' () { return require('../../../datadog-plugin-opensearch/src') },
   get '@prisma/client' () { return require('../../../datadog-plugin-prisma/src') },
+  get './runtime/library.js' () { return require('../../../datadog-plugin-prisma/src') },
   get '@redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@smithy/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@vitest/runner' () { return require('../../../datadog-plugin-vitest/src') },
@@ -34,6 +36,7 @@ module.exports = {
   get amqplib () { return require('../../../datadog-plugin-amqplib/src') },
   get avsc () { return require('../../../datadog-plugin-avsc/src') },
   get 'aws-sdk' () { return require('../../../datadog-plugin-aws-sdk/src') },
+  get bullmq () { return require('../../../datadog-plugin-bullmq/src') },
   get bunyan () { return require('../../../datadog-plugin-bunyan/src') },
   get 'cassandra-driver' () { return require('../../../datadog-plugin-cassandra-driver/src') },
   get child_process () { return require('../../../datadog-plugin-child_process/src') },
@@ -107,5 +110,7 @@ module.exports = {
   get tedious () { return require('../../../datadog-plugin-tedious/src') },
   get undici () { return require('../../../datadog-plugin-undici/src') },
   get winston () { return require('../../../datadog-plugin-winston/src') },
-  get ws () { return require('../../../datadog-plugin-ws/src') }
+  get ws () { return require('../../../datadog-plugin-ws/src') },
 }
+
+module.exports = plugins

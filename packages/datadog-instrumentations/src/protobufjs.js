@@ -1,9 +1,9 @@
 'use strict'
 
+const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
 
-const dc = require('dc-polyfill')
 const serializeChannel = dc.channel('apm:protobufjs:serialize-start')
 const deserializeChannel = dc.channel('apm:protobufjs:deserialize-end')
 
@@ -65,12 +65,12 @@ function wrapReflection (protobuf) {
   const reflectionMethods = [
     {
       target: protobuf.Root,
-      name: 'fromJSON'
+      name: 'fromJSON',
     },
     {
       target: protobuf.Type.prototype,
-      name: 'fromObject'
-    }
+      name: 'fromObject',
+    },
   ]
 
   reflectionMethods.forEach(method => {
@@ -95,7 +95,7 @@ function isPromise (obj) {
 
 addHook({
   name: 'protobufjs',
-  versions: ['>=6.8.0']
+  versions: ['>=6.8.0'],
 }, protobuf => {
   shimmer.wrap(protobuf.Root.prototype, 'load', original => function () {
     const result = original.apply(this, arguments)

@@ -2,8 +2,8 @@
 
 const dc = require('dc-polyfill')
 
-const { addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { addHook } = require('./helpers/instrument')
 
 const graphqlMiddlewareChannel = dc.tracingChannel('datadog:apollo:middleware')
 const apolloHttpServerChannel = dc.tracingChannel('datadog:apollo:httpserver')
@@ -41,8 +41,8 @@ function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
           status: abortData.statusCode,
           body: {
             kind: 'complete',
-            string: abortData.message
-          }
+            string: abortData.message,
+          },
         })
       }, { once: true })
     })

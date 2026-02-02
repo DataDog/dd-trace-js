@@ -1,6 +1,9 @@
 'use strict'
 
 const { randomUUID } = require('crypto')
+const { version } = require('../../../../../package.json')
+const { NODE_MAJOR } = require('../../../../../version')
+const processTags = require('../../process-tags')
 const { breakpointToProbes } = require('./state')
 const session = require('./session')
 const { getLocalStateForCallFrame } = require('./snapshot')
@@ -10,10 +13,10 @@ const { ackEmitting } = require('./status')
 const config = require('./config')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
 const log = require('./log')
-const { version } = require('../../../../../package.json')
-const { NODE_MAJOR } = require('../../../../../version')
 
 require('./remote_config')
+
+/** @typedef {import('node:inspector').Debugger.EvaluateOnCallFrameReturnType} EvaluateOnCallFrameResult */
 
 // Expression to run on a call frame of the paused thread to get its active trace and span id.
 const templateExpressionSetupCode = `
@@ -114,21 +117,23 @@ session.on('Debugger.paused', async ({ params }) => {
         }
 
         snapshotProbeIndex[numberOfProbesWithSnapshots++] = probes.length
-        maxReferenceDepth = highestOrUndefined(probe.capture.maxReferenceDepth, maxReferenceDepth)
-        maxCollectionSize = highestOrUndefined(probe.capture.maxCollectionSize, maxCollectionSize)
-        maxFieldCount = highestOrUndefined(probe.capture.maxFieldCount, maxFieldCount)
-        maxLength = highestOrUndefined(probe.capture.maxLength, maxLength)
+        maxReferenceDepth = highestOrUndefined(probe.capture?.maxReferenceDepth, maxReferenceDepth)
+        maxCollectionSize = highestOrUndefined(probe.capture?.maxCollectionSize, maxCollectionSize)
+        maxFieldCount = highestOrUndefined(probe.capture?.maxFieldCount, maxFieldCount)
+        maxLength = highestOrUndefined(probe.capture?.maxLength, maxLength)
       }
 
       if (probe.condition !== undefined) {
         // TODO: Bundle all conditions and evaluate them in a single call
         // TODO: Handle errors
-        // eslint-disable-next-line no-await-in-loop
-        const { result } = await session.post('Debugger.evaluateOnCallFrame', {
-          callFrameId: params.callFrames[0].callFrameId,
-          expression: probe.condition,
-          returnByValue: true
-        })
+        const { result } = /** @type {EvaluateOnCallFrameResult} */ (
+          // eslint-disable-next-line no-await-in-loop
+          await session.post('Debugger.evaluateOnCallFrame', {
+            callFrameId: params.callFrames[0].callFrameId,
+            expression: probe.condition,
+            returnByValue: true,
+          })
+        )
         if (result.value !== true) continue
       }
 
@@ -150,14 +155,16 @@ session.on('Debugger.paused', async ({ params }) => {
   const timestamp = Date.now()
 
   let evalResults
-  const { result } = await session.post('Debugger.evaluateOnCallFrame', {
-    callFrameId: params.callFrames[0].callFrameId,
-    expression: templateExpressions.length === 0
-      ? `[${getDDTagsExpression}]`
-      : `${templateExpressionSetupCode}[${getDDTagsExpression}${templateExpressions}]`,
-    returnByValue: true,
-    includeCommandLineAPI: true
-  })
+  const { result } = /** @type {EvaluateOnCallFrameResult} */ (
+    await session.post('Debugger.evaluateOnCallFrame', {
+      callFrameId: params.callFrames[0].callFrameId,
+      expression: templateExpressions.length === 0
+        ? `[${getDDTagsExpression}]`
+        : `${templateExpressionSetupCode}[${getDDTagsExpression}${templateExpressions}]`,
+      returnByValue: true,
+      includeCommandLineAPI: true,
+    })
+  )
   if (result?.subtype === 'error') {
     log.error('[debugger:devtools_client] Error evaluating code on call frame: %s', result?.description)
     evalResults = []
@@ -166,19 +173,20 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
-  const processLocalState = numberOfProbesWithSnapshots !== 0 && await getLocalStateForCallFrame(
-    params.callFrames[0],
-    {
+  let processLocalState, captureErrors
+  if (numberOfProbesWithSnapshots !== 0) {
+    const opts = {
       maxReferenceDepth,
       maxCollectionSize,
       maxFieldCount,
       maxLength,
-      deadlineNs: start + config.dynamicInstrumentation.captureTimeoutNs
+      deadlineNs: start + config.dynamicInstrumentation.captureTimeoutNs,
     }
-  )
+    ;({ processLocalState, captureErrors } = await getLocalStateForCallFrame(params.callFrames[0], opts))
+  }
 
   await session.post('Debugger.resume')
-  const diff = process.hrtime.bigint() - start // TODO: Recored as telemetry (DEBUG-2858)
+  const diff = process.hrtime.bigint() - start // TODO: Recorded as telemetry (DEBUG-2858)
 
   // This doesn't measure the overhead of the CDP protocol. The actual pause time is slightly larger.
   // On my machine I'm seeing around 1.7ms of overhead.
@@ -193,10 +201,10 @@ session.on('Debugger.paused', async ({ params }) => {
     method: params.callFrames[0].functionName, // name of the method/function emitting the snapshot
     version,
     thread_id: threadId,
-    thread_name: threadName
+    thread_name: threadName,
   }
 
-  const stack = getStackFromCallFrames(params.callFrames)
+  const stack = await getStackFromCallFrames(params.callFrames)
   const dd = processDD(evalResults[0]) // the first result is the dd tags, the rest are the probe template results
   let messageIndex = 1
 
@@ -208,21 +216,32 @@ session.on('Debugger.paused', async ({ params }) => {
       probe: {
         id: probe.id,
         version: probe.version,
-        location: probe.location
+        location: probe.location,
       },
       stack,
-      language: 'javascript'
+      language: 'javascript',
+    }
+
+    if (config.propagateProcessTags.enabled) {
+      snapshot[processTags.DYNAMIC_INSTRUMENTATION_FIELD_NAME] = processTags.tagsObject
     }
 
     if (probe.captureSnapshot) {
-      const state = processLocalState()
-      if (state instanceof Error) {
-        snapshot.captureError = state.message
-      } else if (state) {
-        snapshot.captures = {
-          lines: { [probe.location.lines[0]]: { locals: state } }
-        }
+      if (captureErrors?.length > 0) {
+        // There was an error collecting the snapshot for this probe, let's not try again
+        probe.captureSnapshot = false
+        probe.permanentEvaluationErrors = captureErrors.map(error => ({
+          expr: '',
+          message: error.message,
+        }))
       }
+      snapshot.captures = {
+        lines: { [probe.location.lines[0]]: { locals: processLocalState() } },
+      }
+    }
+
+    if (probe.permanentEvaluationErrors !== undefined) {
+      snapshot.evaluationErrors = [...probe.permanentEvaluationErrors]
     }
 
     let message = ''

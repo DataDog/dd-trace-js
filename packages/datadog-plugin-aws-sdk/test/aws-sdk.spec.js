@@ -1,13 +1,15 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, before, after } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { after, before, describe, it } = require('mocha')
 const semver = require('semver')
 
-const agent = require('../../dd-trace/test/plugins/agent')
-const { setup, sort } = require('./spec_helpers')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { setup, sort } = require('./spec_helpers')
 
 describe('Plugin', () => {
   // TODO: use the Request class directly for generic tests
@@ -32,20 +34,20 @@ describe('Plugin', () => {
           agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
 
-            expect(span).to.include({
+            assertObjectContains(span, {
               name: 'aws.request',
               resource: 'listBuckets',
-              service: 'test-aws-s3'
+              service: 'test-aws-s3',
             })
 
-            expect(span.meta).to.include({
+            assertObjectContains(span.meta, {
               component: 'aws-sdk',
               'aws.region': 'us-east-1',
               region: 'us-east-1',
               'aws.partition': 'aws',
               'aws.service': 'S3',
               aws_service: 'S3',
-              'aws.operation': 'listBuckets'
+              'aws.operation': 'listBuckets',
             })
           }).then(done, done)
 
@@ -56,10 +58,10 @@ describe('Plugin', () => {
           agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
 
-            expect(span).to.include({
+            assertObjectContains(span, {
               name: 'aws.request',
               resource: 'listBuckets',
-              service: 'test-aws-s3'
+              service: 'test-aws-s3',
             })
           }).then(done, done)
 
@@ -100,20 +102,20 @@ describe('Plugin', () => {
           agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
 
-            expect(span).to.include({
+            assertObjectContains(span, {
               name: 'aws.request',
               resource: 'listBuckets',
-              service: 'test-aws-s3'
+              service: 'test-aws-s3',
             })
 
-            expect(span.meta).to.include({
+            assertObjectContains(span.meta, {
               component: 'aws-sdk',
               'aws.region': 'us-east-1',
               region: 'us-east-1',
               'aws.partition': 'aws',
               'aws.service': 'S3',
               aws_service: 'S3',
-              'aws.operation': 'listBuckets'
+              'aws.operation': 'listBuckets',
             })
           }).then(done, done)
 
@@ -126,27 +128,27 @@ describe('Plugin', () => {
           agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
 
-            expect(span).to.include({
+            assertObjectContains(span, {
               name: 'aws.request',
               resource: 'completeMultipartUpload my-bucket',
-              service: 'test-aws-s3'
+              service: 'test-aws-s3',
             })
 
-            expect(span.meta).to.include({
+            assertObjectContains(span.meta, {
               [ERROR_TYPE]: error.name,
               [ERROR_MESSAGE]: error.message,
               [ERROR_STACK]: error.stack,
-              component: 'aws-sdk'
+              component: 'aws-sdk',
             })
             if (semver.intersects(version, '>=2.3.4')) {
-              expect(span.meta['aws.response.request_id']).to.match(/[\w]{8}(-[\w]{4}){3}-[\w]{12}/)
+              assert.match(span.meta['aws.response.request_id'], /[\w]{8}(-[\w]{4}){3}-[\w]{12}/)
             }
           }).then(done, done)
 
           s3.completeMultipartUpload({
             Bucket: 'my-bucket',
             Key: 'my-key',
-            UploadId: 'my-upload-id'
+            UploadId: 'my-upload-id',
           }, e => {
             error = e
           })
@@ -157,10 +159,10 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               const span = sort(traces[0])[0]
 
-              expect(span).to.include({
+              assertObjectContains(span, {
                 name: 'aws.request',
                 resource: 'listBuckets',
-                service: 'test-aws-s3'
+                service: 'test-aws-s3',
               })
             }).then(done, done)
 
@@ -171,10 +173,10 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               const span = sort(traces[0])[0]
 
-              expect(span).to.include({
+              assertObjectContains(span, {
                 name: 'aws.request',
                 resource: 'listBuckets',
-                service: 'test-aws-s3'
+                service: 'test-aws-s3',
               })
             }).then(done, done)
 
@@ -187,10 +189,10 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               const span = sort(traces[0])[0]
 
-              expect(span).to.include({
+              assertObjectContains(span, {
                 name: 'aws.request',
                 resource: 'listBuckets',
-                service: 'test-aws-s3'
+                service: 'test-aws-s3',
               })
             }).then(done, done)
 
@@ -204,7 +206,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             s3.listBuckets({}, () => {
               try {
-                expect(tracer.scope().active()).to.equal(span)
+                assert.strictEqual(tracer.scope().active(), span)
                 done()
               } catch (e) {
                 done(e)
@@ -218,7 +220,7 @@ describe('Plugin', () => {
             { region: 'us-east-1', partition: 'aws' },
             { region: 'eu-west-1', partition: 'aws' },
             { region: 'cn-north-1', partition: 'aws-cn' },
-            { region: 'us-gov-west-1', partition: 'aws-us-gov' }
+            { region: 'us-gov-west-1', partition: 'aws-us-gov' },
           ]
 
           let completed = 0
@@ -228,16 +230,16 @@ describe('Plugin', () => {
             const regionalS3 = new AWS.S3({
               endpoint: 'http://127.0.0.1:4566',
               region,
-              s3ForcePathStyle: true
+              s3ForcePathStyle: true,
             })
 
             agent.assertSomeTraces(traces => {
               const span = sort(traces[0])[0]
 
-              expect(span.meta).to.include({
+              assertObjectContains(span.meta, {
                 'aws.region': region,
                 region,
-                'aws.partition': partition
+                'aws.partition': partition,
               })
 
               if (++completed === total) {
@@ -258,10 +260,10 @@ describe('Plugin', () => {
               request (span, response) {
                 span.setTag('hook.operation', response.request.operation)
                 span.addTags({
-                  error: 0
+                  error: 0,
                 })
-              }
-            }
+              },
+            },
           }, { server: false }])
         })
 
@@ -278,15 +280,17 @@ describe('Plugin', () => {
         it('should be configured', (done) => {
           agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
-            expect(span).to.include({
+            assertObjectContains(span, {
               name: 'aws.request',
               resource: 'listBuckets',
-              service: 'test'
+              service: 'test',
             })
-            expect(span).to.have.property('error', 0)
-            expect(span.meta).to.include({
-              'hook.operation': 'listBuckets',
-              component: 'aws-sdk'
+            assertObjectContains(span, {
+              error: 0,
+              meta: {
+                'hook.operation': 'listBuckets',
+                component: 'aws-sdk',
+              },
             })
           }).then(done, done)
 
@@ -298,7 +302,7 @@ describe('Plugin', () => {
         before(() => {
           return agent.load(['aws-sdk', 'http'], [{
             service: 'test',
-            s3: false
+            s3: false,
           }, { server: false }])
         })
 
@@ -321,10 +325,10 @@ describe('Plugin', () => {
           agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
 
-            expect(span).to.include({
+            assertObjectContains(span, {
               name: 'aws.request',
               resource: 'listBuckets',
-              service: 'test'
+              service: 'test',
             })
 
             total++
@@ -333,10 +337,10 @@ describe('Plugin', () => {
           agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
 
-            expect(span).to.include({
+            assertObjectContains(span, {
               name: 'aws.request',
               resource: 'listQueues',
-              service: 'test'
+              service: 'test',
             })
 
             total++
@@ -347,7 +351,7 @@ describe('Plugin', () => {
 
           setTimeout(() => {
             try {
-              expect(total).to.equal(1)
+              assert.strictEqual(total, 1)
               done()
             } catch (e) {
               done(e)
@@ -362,12 +366,12 @@ describe('Plugin', () => {
             service: 'test',
             batchPropagationEnabled: true,
             kinesis: {
-              batchPropagationEnabled: false
+              batchPropagationEnabled: false,
             },
             sns: false,
             sqs: {
-              batchPropagationEnabled: false
-            }
+              batchPropagationEnabled: false,
+            },
           }])
         })
 
@@ -382,10 +386,10 @@ describe('Plugin', () => {
         it('should be configurable on a per-service basis', () => {
           const { kinesis, sns, sqs } = tracer._pluginManager._pluginsByName['aws-sdk'].services
 
-          expect(kinesis.config.batchPropagationEnabled).to.equal(false)
-          expect(sns.config.batchPropagationEnabled).to.equal(true)
-          expect(sns.config.enabled).to.equal(false)
-          expect(sqs.config.batchPropagationEnabled).to.equal(false)
+          assert.strictEqual(kinesis.config.batchPropagationEnabled, false)
+          assert.strictEqual(sns.config.batchPropagationEnabled, true)
+          assert.strictEqual(sns.config.enabled, false)
+          assert.strictEqual(sqs.config.batchPropagationEnabled, false)
         })
       })
 
@@ -409,9 +413,9 @@ describe('Plugin', () => {
         it('should be configurable on a per-service basis', () => {
           const { kinesis, sns, sqs } = tracer._pluginManager._pluginsByName['aws-sdk'].services
 
-          expect(kinesis.config.batchPropagationEnabled).to.equal(false)
-          expect(sns.config.batchPropagationEnabled).to.equal(true)
-          expect(sqs.config.batchPropagationEnabled).to.equal(true)
+          assert.strictEqual(kinesis.config.batchPropagationEnabled, false)
+          assert.strictEqual(sns.config.batchPropagationEnabled, true)
+          assert.strictEqual(sqs.config.batchPropagationEnabled, true)
         })
       })
     })

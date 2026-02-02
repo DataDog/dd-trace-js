@@ -1,17 +1,16 @@
 'use strict'
 
-const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-
-const path = require('node:path')
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
+const path = require('node:path')
 
-const { graphqlJson, json } = require('../../src/appsec/blocked_templates')
-const agent = require('../plugins/agent')
+const axios = require('axios')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+
 const appsec = require('../../src/appsec')
+const { graphqlJson, json } = require('../../src/appsec/blocked_templates')
 const { getConfigFresh } = require('../helpers/config')
-
+const agent = require('../plugins/agent')
 const schema = `
 directive @case(format: String) on FIELD
 
@@ -45,8 +44,8 @@ function makeQuery (derivativeParam) {
 const books = [
   {
     title: 'Test title',
-    author: 'Test author'
-  }
+    author: 'Test author',
+  },
 ]
 
 const resolvers = {
@@ -55,21 +54,21 @@ const resolvers = {
       return books.filter(book => {
         return book.title.includes(args.title)
       })
-    }
-  }
+    },
+  },
 }
 
 async function makeGraphqlRequest (port, variables, derivativeParam, extraHeaders = {}) {
   const headers = {
     'content-type': 'application/json',
-    ...extraHeaders
+    ...extraHeaders,
   }
 
   const query = makeQuery(derivativeParam)
   return axios.post(`http://localhost:${port}/graphql`, {
     operationName: 'GetBooks',
     query,
-    variables
+    variables,
   }, { headers, maxRedirects: 0 })
 }
 
@@ -89,8 +88,8 @@ function graphqlCommonTests (config) {
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
-        expect(e.response.status).to.be.equals(403)
-        expect(e.response.data).to.be.deep.equal(JSON.parse(graphqlJson))
+        assert.strictEqual(e.response.status, 403)
+        assert.deepStrictEqual(e.response.data, JSON.parse(graphqlJson))
       }
     })
 
@@ -100,14 +99,14 @@ function graphqlCommonTests (config) {
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
-        expect(e.response.status).to.be.equals(403)
-        expect(e.response.data).to.be.deep.equal(JSON.parse(graphqlJson))
+        assert.strictEqual(e.response.status, 403)
+        assert.deepStrictEqual(e.response.data, JSON.parse(graphqlJson))
       }
     })
 
     it('Should set appsec.blocked on blocked attack', (done) => {
       agent.assertSomeTraces(payload => {
-        expect(payload[0][0].meta['appsec.blocked']).to.be.equal('true')
+        assert.strictEqual(payload[0][0].meta['appsec.blocked'], 'true')
         done()
       })
 
@@ -119,7 +118,7 @@ function graphqlCommonTests (config) {
     it('Should not block a safe request', async () => {
       const response = await makeGraphqlRequest(config.port, { title: 'Test' }, 'lower')
 
-      expect(response.data).to.be.deep.equal({ data: { books } })
+      assert.deepStrictEqual(response.data, { data: { books } })
     })
 
     it('Should block an http attack with graphql response', async () => {
@@ -130,8 +129,8 @@ function graphqlCommonTests (config) {
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
-        expect(e.response.status).to.be.equals(403)
-        expect(e.response.data).to.be.deep.equal(JSON.parse(graphqlJson))
+        assert.strictEqual(e.response.status, 403)
+        assert.deepStrictEqual(e.response.data, JSON.parse(graphqlJson))
       }
     })
 
@@ -143,8 +142,8 @@ function graphqlCommonTests (config) {
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
-        expect(e.response.status).to.be.equals(403)
-        expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+        assert.strictEqual(e.response.status, 403)
+        assert.deepStrictEqual(e.response.data, JSON.parse(json))
       }
     })
   })
@@ -158,8 +157,8 @@ function graphqlCommonTests (config) {
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'graphql-rules.json'),
-          blockedTemplateGraphql
-        }
+          blockedTemplateGraphql,
+        },
       }))
     })
 
@@ -173,8 +172,8 @@ function graphqlCommonTests (config) {
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
-        expect(e.response.status).to.be.equals(403)
-        expect(e.response.data).to.be.deep.equal(JSON.parse(customGraphqlJson))
+        assert.strictEqual(e.response.status, 403)
+        assert.deepStrictEqual(e.response.data, JSON.parse(customGraphqlJson))
       }
     })
   })
@@ -184,8 +183,8 @@ function graphqlCommonTests (config) {
       appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'graphql-rules-redirect.json')
-        }
+          rules: path.join(__dirname, 'graphql-rules-redirect.json'),
+        },
       }))
     })
 
@@ -199,14 +198,14 @@ function graphqlCommonTests (config) {
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
-        expect(e.response.status).to.be.equal(301)
-        expect(e.response.headers.location).to.be.equal('/you-have-been-blocked')
+        assert.strictEqual(e.response.status, 301)
+        assert.strictEqual(e.response.headers.location, '/you-have-been-blocked')
       }
     })
 
     it('Should set appsec.blocked on blocked attack', (done) => {
       agent.assertSomeTraces(payload => {
-        expect(payload[0][0].meta['appsec.blocked']).to.be.equal('true')
+        assert.strictEqual(payload[0][0].meta['appsec.blocked'], 'true')
         done()
       })
 
@@ -218,7 +217,7 @@ function graphqlCommonTests (config) {
     it('Should not block a safe request', async () => {
       const response = await makeGraphqlRequest(config.port, { title: 'Test' }, 'lower')
 
-      expect(response.data).to.be.deep.equal({ data: { books } })
+      assert.deepStrictEqual(response.data, { data: { books } })
     })
   })
 }
@@ -228,5 +227,5 @@ module.exports = {
   schema,
   query,
   resolvers,
-  graphqlCommonTests
+  graphqlCommonTests,
 }

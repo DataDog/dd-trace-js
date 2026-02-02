@@ -1,5 +1,8 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
+const { execSync } = require('child_process')
 const {
   FakeAgent,
   curlAndAssertMessage,
@@ -7,12 +10,11 @@ const {
   spawnPluginIntegrationTestProc,
   sandboxCwd,
   useSandbox,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { NODE_MAJOR } = require('../../../../version')
-const { execSync } = require('child_process')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
@@ -34,8 +36,8 @@ describe('esm', () => {
         cwd: sandboxCwd(),
         env: {
           ...process.env,
-          NODE_OPTIONS: '--openssl-legacy-provider'
-        }
+          NODE_OPTIONS: '--openssl-legacy-provider',
+        },
       })
       variants = varySandbox('server.mjs', 'next')
     })
@@ -51,12 +53,12 @@ describe('esm', () => {
 
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, undefined, {
-          NODE_OPTIONS: `--loader=${hookFile} --require dd-trace/init --openssl-legacy-provider`
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, {
+          NODE_OPTIONS: `--loader=${hookFile} --require dd-trace/init --openssl-legacy-provider`,
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
+          assertObjectContains(headers, { host: `127.0.0.1:${agent.port}` })
+          assert.ok(Array.isArray(payload))
           assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
         }, undefined, undefined, true)
       }).timeout(300 * 1000)

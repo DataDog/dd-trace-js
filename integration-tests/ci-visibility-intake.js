@@ -1,12 +1,12 @@
 'use strict'
 
+const http = require('http')
+const zlib = require('zlib')
 const express = require('express')
 const bodyParser = require('body-parser')
 const msgpack = require('@msgpack/msgpack')
-const http = require('http')
 const multer = require('multer')
 const upload = multer()
-const zlib = require('zlib')
 
 const { FakeAgent } = require('./helpers')
 
@@ -18,23 +18,24 @@ const DEFAULT_SETTINGS = {
   early_flake_detection: {
     enabled: false,
     slow_test_retries: {
-      '5s': 3
-    }
+      '5s': 3,
+    },
   },
   flaky_test_retries_enabled: false,
   di_enabled: false,
   known_tests_enabled: false,
   test_management: {
-    enabled: false
+    enabled: false,
   },
-  impacted_tests_enabled: false
+  impacted_tests_enabled: false,
+  coverage_report_upload_enabled: false,
 }
 
 const DEFAULT_SUITES_TO_SKIP = []
 const DEFAULT_GIT_UPLOAD_STATUS = 200
 const DEFAULT_KNOWN_TESTS_RESPONSE_STATUS = 200
 const DEFAULT_INFO_RESPONSE = {
-  endpoints: ['/evp_proxy/v2', '/debugger/v1/input']
+  endpoints: ['/evp_proxy/v2', '/debugger/v1/input'],
 }
 const DEFAULT_CORRELATION_ID = '1234'
 const DEFAULT_KNOWN_TESTS = ['test-suite1.js.test-name1', 'test-suite2.js.test-name2']
@@ -104,7 +105,7 @@ class FakeCiVisIntake extends FakeAgent {
       this.emit('message', {
         headers: req.headers,
         payload: msgpack.decode(req.body, { useBigInt64: true }),
-        url: req.url
+        url: req.url,
       })
     })
 
@@ -112,7 +113,7 @@ class FakeCiVisIntake extends FakeAgent {
       res.status(200).send(JSON.stringify(infoResponse))
       this.emit('message', {
         headers: req.headers,
-        url: req.url
+        url: req.url,
       })
     })
 
@@ -123,37 +124,37 @@ class FakeCiVisIntake extends FakeAgent {
         this.emit('message', {
           headers: req.headers,
           payload: msgpack.decode(req.body, { useBigInt64: true }),
-          url: req.url
+          url: req.url,
         })
       }, waitingTime || 0)
     })
 
     app.post([
       '/api/v2/git/repository/search_commits',
-      '/evp_proxy/:version/api/v2/git/repository/search_commits'
+      '/evp_proxy/:version/api/v2/git/repository/search_commits',
     ], (req, res) => {
       res.status(gitUploadStatus).send(JSON.stringify({ data: [] }))
       this.emit('message', {
         headers: req.headers,
         payload: req.body,
-        url: req.url
+        url: req.url,
       })
     })
 
     app.post([
       '/api/v2/git/repository/packfile',
-      '/evp_proxy/:version/api/v2/git/repository/packfile'
+      '/evp_proxy/:version/api/v2/git/repository/packfile',
     ], (req, res) => {
       res.status(202).send('')
       this.emit('message', {
         headers: req.headers,
-        url: req.url
+        url: req.url,
       })
     })
 
     app.post([
       '/api/v2/citestcov',
-      '/evp_proxy/:version/api/v2/citestcov'
+      '/evp_proxy/:version/api/v2/citestcov',
     ], upload.any(), (req, res) => {
       res.status(200).send('OK')
 
@@ -164,60 +165,84 @@ class FakeCiVisIntake extends FakeAgent {
             name: file.fieldname,
             type: file.mimetype,
             filename: file.originalname,
-            content: msgpack.decode(file.buffer)
+            content: msgpack.decode(file.buffer),
           }
         })
 
       this.emit('message', {
         headers: req.headers,
         payload: coveragePayloads,
-        url: req.url
+        url: req.url,
+      })
+    })
+
+    // Coverage report upload endpoint - one file per request
+    app.post([
+      '/api/v2/cicovreprt',
+      '/evp_proxy/:version/api/v2/cicovreprt',
+    ], upload.any(), (req, res) => {
+      res.status(200).send('OK')
+
+      const coverageFile = req.files.find(f => f.fieldname === 'coverage')
+      const eventFile = req.files.find(f => f.fieldname === 'event')
+
+      this.emit('message', {
+        headers: req.headers,
+        coverageFile: coverageFile && {
+          name: coverageFile.fieldname,
+          content: zlib.gunzipSync(coverageFile.buffer).toString('utf8'),
+        },
+        eventFile: eventFile && {
+          name: eventFile.fieldname,
+          content: JSON.parse(eventFile.buffer.toString('utf8')),
+        },
+        url: req.url,
       })
     })
 
     app.post([
       '/api/v2/libraries/tests/services/setting',
-      '/evp_proxy/:version/api/v2/libraries/tests/services/setting'
+      '/evp_proxy/:version/api/v2/libraries/tests/services/setting',
     ], (req, res) => {
       res.status(200).send(JSON.stringify({
         data: {
-          attributes: settings
-        }
+          attributes: settings,
+        },
       }))
       this.emit('message', {
         headers: req.headers,
-        url: req.url
+        url: req.url,
       })
     })
 
     app.post([
       '/api/v2/ci/tests/skippable',
-      '/evp_proxy/:version/api/v2/ci/tests/skippable'
+      '/evp_proxy/:version/api/v2/ci/tests/skippable',
     ], (req, res) => {
       res.status(200).send(JSON.stringify({
         data: suitesToSkip,
         meta: {
-          correlation_id: correlationId
-        }
+          correlation_id: correlationId,
+        },
       }))
       this.emit('message', {
         headers: req.headers,
-        url: req.url
+        url: req.url,
       })
     })
 
     app.post([
       '/api/v2/ci/libraries/tests',
-      '/evp_proxy/:version/api/v2/ci/libraries/tests'
+      '/evp_proxy/:version/api/v2/ci/libraries/tests',
     ], (req, res) => {
       // The endpoint returns compressed data if 'accept-encoding' is set to 'gzip'
       const isGzip = req.headers['accept-encoding'] === 'gzip'
       const data = JSON.stringify({
         data: {
           attributes: {
-            tests: knownTests
-          }
-        }
+            tests: knownTests,
+          },
+        },
       })
       res.setHeader('content-type', 'application/json')
       if (isGzip) {
@@ -226,38 +251,48 @@ class FakeCiVisIntake extends FakeAgent {
       res.status(knownTestsStatusCode).send(isGzip ? zlib.gzipSync(data) : data)
       this.emit('message', {
         headers: req.headers,
-        url: req.url
+        url: req.url,
       })
     })
 
     app.post([
       '/api/v2/logs',
-      '/debugger/v1/input'
+      '/debugger/v1/input',
     ], express.json(), (req, res) => {
       res.status(200).send('OK')
       this.emit('message', {
         headers: req.headers,
         url: req.url,
-        logMessage: req.body
+        logMessage: req.body,
       })
     })
 
     app.post([
       '/api/v2/test/libraries/test-management/tests',
-      '/evp_proxy/:version/api/v2/test/libraries/test-management/tests'
+      '/evp_proxy/:version/api/v2/test/libraries/test-management/tests',
     ], (req, res) => {
       res.setHeader('content-type', 'application/json')
       const data = JSON.stringify({
         data: {
           attributes: {
-            modules: testManagementResponse
-          }
-        }
+            modules: testManagementResponse,
+          },
+        },
       })
       res.status(testManagementResponseStatusCode).send(data)
       this.emit('message', {
         headers: req.headers,
-        url: req.url
+        url: req.url,
+      })
+    })
+
+    app.post('/telemetry/proxy/api/v2/apmtelemetry', express.json(), (req, res) => {
+      res.status(200).send()
+      if (req.body?.payload?.namespace !== 'civisibility') return
+      this.emit('message', {
+        headers: req.headers,
+        payload: req.body,
+        url: req.url,
       })
     })
 

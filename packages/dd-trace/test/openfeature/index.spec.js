@@ -1,13 +1,13 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('../setup/core')
-
-const { channel } = require('dc-polyfill')
 
 describe('OpenFeature Module', () => {
   let config
@@ -19,14 +19,14 @@ describe('OpenFeature Module', () => {
   beforeEach(() => {
     config = {
       ffeFlushInterval: 1000,
-      ffeTimeout: 5000
+      ffeTimeout: 5000,
     }
 
     mockWriter = {
       append: sinon.spy(),
       flush: sinon.spy(),
       destroy: sinon.spy(),
-      setEnabled: sinon.spy()
+      setEnabled: sinon.spy(),
     }
 
     ExposuresWriterStub = sinon.stub().returns(mockWriter)
@@ -34,7 +34,7 @@ describe('OpenFeature Module', () => {
 
     openfeatureModule = proxyquire('../../src/openfeature', {
       './writers/exposures': ExposuresWriterStub,
-      './writers/util': { setAgentStrategy: setAgentStrategyStub }
+      './writers/util': { setAgentStrategy: setAgentStrategyStub },
     })
   })
 
@@ -44,29 +44,29 @@ describe('OpenFeature Module', () => {
 
   describe('enable/disable', () => {
     it('should export enable and disable functions', () => {
-      expect(openfeatureModule.enable).to.be.a('function')
-      expect(openfeatureModule.disable).to.be.a('function')
+      assert.strictEqual(typeof openfeatureModule.enable, 'function')
+      assert.strictEqual(typeof openfeatureModule.disable, 'function')
     })
 
     it('should setup writer when enabled', () => {
       openfeatureModule.enable(config)
 
-      expect(ExposuresWriterStub).to.have.been.calledOnceWith(config)
-      expect(setAgentStrategyStub).to.have.been.calledOnce
+      sinon.assert.calledOnceWithExactly(ExposuresWriterStub, config)
+      sinon.assert.calledOnce(setAgentStrategyStub)
     })
 
     it('should handle multiple enable calls gracefully', () => {
       openfeatureModule.enable(config)
       openfeatureModule.enable(config)
 
-      expect(ExposuresWriterStub).to.have.been.calledOnce
+      sinon.assert.calledOnce(ExposuresWriterStub)
     })
 
     it('should destroy writer when disabled', () => {
       openfeatureModule.enable(config)
       openfeatureModule.disable()
 
-      expect(mockWriter.destroy).to.have.been.calledOnce
+      sinon.assert.calledOnce(mockWriter.destroy)
     })
   })
 
@@ -85,13 +85,13 @@ describe('OpenFeature Module', () => {
         subject: {
           id: 'user-123',
           type: 'user',
-          attributes: {}
-        }
+          attributes: {},
+        },
       }
 
       exposureSubmitCh.publish(exposureEvent)
 
-      expect(mockWriter.append).to.have.been.calledWith(exposureEvent)
+      sinon.assert.calledWith(mockWriter.append, exposureEvent)
     })
 
     it('handles array of exposure events', () => {
@@ -102,20 +102,20 @@ describe('OpenFeature Module', () => {
           allocation: { key: 'test-allocation-1' },
           flag: { key: 'test-flag-1' },
           variant: { key: 'test-variant-1' },
-          subject: { id: 'user-123', type: 'user', attributes: {} }
+          subject: { id: 'user-123', type: 'user', attributes: {} },
         },
         {
           timestamp: Date.now(),
           allocation: { key: 'test-allocation-2' },
           flag: { key: 'test-flag-2' },
           variant: { key: 'test-variant-2' },
-          subject: { id: 'user-456', type: 'user', attributes: {} }
-        }
+          subject: { id: 'user-456', type: 'user', attributes: {} },
+        },
       ]
 
       exposureSubmitCh.publish(exposureEvents)
 
-      expect(mockWriter.append).to.have.been.calledOnceWith(exposureEvents)
+      sinon.assert.calledOnceWithExactly(mockWriter.append, exposureEvents)
     })
 
     it('flushes the exposures writer', () => {
@@ -123,7 +123,7 @@ describe('OpenFeature Module', () => {
 
       flushCh.publish()
 
-      expect(mockWriter.flush).to.have.been.calledOnce
+      sinon.assert.calledOnce(mockWriter.flush)
     })
 
     it('removes all subscribers when disabling', () => {
@@ -132,8 +132,8 @@ describe('OpenFeature Module', () => {
 
       openfeatureModule.disable()
 
-      expect(exposureSubmitCh.hasSubscribers).to.be.false
-      expect(flushCh.hasSubscribers).to.be.false
+      assert.strictEqual(exposureSubmitCh.hasSubscribers, false)
+      assert.strictEqual(flushCh.hasSubscribers, false)
     })
   })
 })

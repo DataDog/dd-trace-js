@@ -1,23 +1,25 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
-const express = require('express')
-const upload = require('multer')()
-const { Profile } = require('pprof-format')
+const assert = require('node:assert/strict')
 const os = require('node:os')
 const path = require('node:path')
 const { request } = require('node:http')
 
-require('../../setup/core')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+const express = require('express')
+const upload = require('multer')()
 
+const { Profile } = require('../../../../../vendor/dist/pprof-format')
+require('../../setup/core')
 const tracer = require('../../../../../init')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
 const logger = require('../../../src/log')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const version = require('../../../../../package.json').version
+const processTags = require('../../../src/process-tags')
 
 const RUNTIME_ID = 'a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
 const ENV = 'test-env'
@@ -41,8 +43,8 @@ async function createProfile (periodType) {
         throw err
       },
       warn (err) {
-      }
-    }
+      },
+    },
   })
 
   await wait(50)
@@ -63,92 +65,101 @@ describe('exporters/agent', function () {
   let startSpan
 
   function verifyRequest (req, profiles, start, end) {
-    expect(req.headers).to.have.property('test', 'injected')
-    expect(req.headers).to.have.property('dd-evp-origin', 'dd-trace-js')
-    expect(req.headers).to.have.property('dd-evp-origin-version', version)
+    assert.strictEqual(req.headers.test, 'injected')
+    assert.strictEqual(req.headers['dd-evp-origin'], 'dd-trace-js')
+    assert.strictEqual(req.headers['dd-evp-origin-version'], version)
 
-    expect(req.files[0]).to.have.property('fieldname', 'event')
-    expect(req.files[0]).to.have.property('originalname', 'event.json')
-    expect(req.files[0]).to.have.property('mimetype', 'application/json')
-    expect(req.files[0]).to.have.property('size', req.files[0].buffer.length)
+    assert.strictEqual(req.files[0].fieldname, 'event')
+    assert.strictEqual(req.files[0].originalname, 'event.json')
+    assert.strictEqual(req.files[0].mimetype, 'application/json')
+    assert.strictEqual(req.files[0].size, req.files[0].buffer.length)
 
     const event = JSON.parse(req.files[0].buffer.toString())
-    expect(event).to.have.property('attachments')
-    expect(event.attachments).to.have.lengthOf(2)
-    expect(event.attachments[0]).to.equal('wall.pprof')
-    expect(event.attachments[1]).to.equal('space.pprof')
-    expect(event).to.have.property('start', start.toISOString())
-    expect(event).to.have.property('end', end.toISOString())
-    expect(event).to.have.property('family', 'node')
-    expect(event).to.have.property('version', '4')
-    expect(event).to.have.property('tags_profiler', [
-      'language:javascript',
-      'runtime:nodejs',
-      `runtime_arch:${process.arch}`,
-      `runtime_os:${process.platform}`,
-      `runtime_version:${process.version}`,
-      `process_id:${process.pid}`,
-      `profiler_version:${version}`,
-      'format:pprof',
-      `runtime-id:${RUNTIME_ID}`
-    ].join(','))
-    expect(event).to.have.property('info')
-    expect(event.info).to.have.property('application')
-    expect(Object.keys(event.info.application)).to.have.length(4)
-    expect(event.info.application).to.have.property('env', ENV)
-    expect(event.info.application).to.have.property('service', SERVICE)
-    expect(event.info.application).to.have.property('start_time')
-    expect(event.info.application).to.have.property('version', '1.2.3')
-    expect(event.info).to.have.property('platform')
-    expect(Object.keys(event.info.platform)).to.have.length(4)
-    expect(event.info.platform).to.have.property('hostname', HOST)
-    expect(event.info.platform).to.have.property('kernel_name', os.type())
-    expect(event.info.platform).to.have.property('kernel_release', os.release())
-    expect(event.info.platform).to.have.property('kernel_version', os.version())
-    expect(event.info).to.have.property('profiler')
-    expect(Object.keys(event.info.profiler)).to.have.length(3)
-    expect(event.info.profiler).to.have.property('activation', 'unknown')
-    expect(event.info.profiler).to.have.property('ssi')
-    expect(event.info.profiler.ssi).to.have.property('mechanism', 'none')
-    expect(event.info.profiler).to.have.property('version', version)
-    expect(event.info).to.have.property('runtime')
-    expect(Object.keys(event.info.runtime)).to.have.length(3)
-    expect(event.info.runtime).to.have.property('available_processors')
-    expect(event.info.runtime).to.have.property('engine', 'nodejs')
-    expect(event.info.runtime).to.have.property('version', process.version.substring(1))
 
-    expect(req.files[1]).to.have.property('fieldname', 'wall.pprof')
-    expect(req.files[1]).to.have.property('originalname', 'wall.pprof')
-    expect(req.files[1]).to.have.property('mimetype', 'application/octet-stream')
-    expect(req.files[1]).to.have.property('size', req.files[1].buffer.length)
+    assert.strictEqual(typeof event.info.application.start_time, 'string')
 
-    expect(req.files[2]).to.have.property('fieldname', 'space.pprof')
-    expect(req.files[2]).to.have.property('originalname', 'space.pprof')
-    expect(req.files[2]).to.have.property('mimetype', 'application/octet-stream')
-    expect(req.files[2]).to.have.property('size', req.files[2].buffer.length)
+    delete event.info.application.start_time
+
+    assert.deepStrictEqual(event, {
+      attachments: ['wall.pprof', 'space.pprof'],
+      start: start.toISOString(),
+      end: end.toISOString(),
+      family: 'node',
+      version: '4',
+      tags_profiler: [
+        'language:javascript',
+        'runtime:nodejs',
+        `runtime_arch:${process.arch}`,
+        `runtime_os:${process.platform}`,
+        `runtime_version:${process.version}`,
+        `process_id:${process.pid}`,
+        `profiler_version:${version}`,
+        'format:pprof',
+        `runtime-id:${RUNTIME_ID}`,
+      ].join(','),
+      info: {
+        application: {
+          env: ENV,
+          service: SERVICE,
+          version: APP_VERSION,
+        },
+        platform: {
+          hostname: HOST,
+          kernel_name: os.type(),
+          kernel_release: os.release(),
+          kernel_version: os.version(),
+        },
+        profiler: {
+          activation: 'unknown',
+          ssi: {
+            mechanism: 'none',
+          },
+          version,
+        },
+        runtime: {
+          // @ts-expect-error - availableParallelism is only available from node 18.14.0 and above
+          available_processors: os.availableParallelis?.() ?? os.cpus().length,
+          engine: 'nodejs',
+          version: process.version.substring(1),
+        },
+      },
+      process_tags: processTags.serialized,
+    })
+
+    assertObjectContains(req.files, [{
+      fieldname: 'wall.pprof',
+      originalname: 'wall.pprof',
+      mimetype: 'application/octet-stream',
+      size: req.files[1].buffer.length,
+    }, {
+      fieldname: 'space.pprof',
+      originalname: 'space.pprof',
+      mimetype: 'application/octet-stream',
+      size: req.files[2].buffer.length,
+    }])
 
     const wallProfile = Profile.decode(req.files[1].buffer)
     const spaceProfile = Profile.decode(req.files[2].buffer)
 
-    expect(wallProfile).to.be.a.profile
-    expect(spaceProfile).to.be.a.profile
+    assertIsProfile(wallProfile)
+    assertIsProfile(spaceProfile)
 
-    expect(wallProfile).to.deep.equal(Profile.decode(profiles.wall))
-    expect(spaceProfile).to.deep.equal(Profile.decode(profiles.space))
+    assert.deepStrictEqual(wallProfile, Profile.decode(profiles.wall))
+    assert.deepStrictEqual(spaceProfile, Profile.decode(profiles.space))
   }
 
   beforeEach(() => {
     docker = {
       inject (carrier) {
         carrier.test = 'injected'
-      }
+      },
     }
     http = {
-      request: sinon.spy(request)
+      request: sinon.spy(request),
     }
     const agent = proxyquire('../../../src/profiling/exporters/agent', {
       '../../exporters/common/docker': docker,
-      http
+      http,
     })
     AgentExporter = agent.AgentExporter
     computeRetries = agent.computeRetries
@@ -164,7 +175,7 @@ describe('exporters/agent', function () {
       env: ENV,
       service: SERVICE,
       version: APP_VERSION,
-      host: HOST
+      host: HOST,
     })
   }
 
@@ -190,17 +201,17 @@ describe('exporters/agent', function () {
       const start = new Date()
       const end = new Date()
       const tags = {
-        'runtime-id': RUNTIME_ID
+        'runtime-id': RUNTIME_ID,
       }
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
@@ -233,17 +244,17 @@ describe('exporters/agent', function () {
       const start = new Date()
       const end = new Date()
       const tags = {
-        'runtime-id': RUNTIME_ID
+        'runtime-id': RUNTIME_ID,
       }
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       let attempt = 0
@@ -262,18 +273,18 @@ describe('exporters/agent', function () {
       try {
         await exporter.export({ profiles, start, end, tags })
       } catch (err) {
-        expect(err.message).to.match(/^HTTP Error 500$/)
+        assert.match(err.message, /^HTTP Error 500$/)
         failed = true
       }
-      expect(failed).to.be.true
-      expect(attempt).to.be.greaterThan(0)
+      assert.strictEqual(failed, true)
+      assert.ok(attempt > 0)
 
       // Verify computeRetries produces correct starting values
       for (let i = 1; i <= 100; i++) {
         const [retries, timeout] = computeRetries(i * 1000)
-        expect(retries).to.be.gte(2)
-        expect(timeout).to.be.lte(1000)
-        expect(Number.isInteger(timeout)).to.be.true
+        assert.ok(retries >= 2)
+        assert.ok(timeout <= 1000)
+        assert.strictEqual(Number.isInteger(timeout), true)
       }
 
       const initialTimeout = computeRetries(uploadTimeout)[1]
@@ -282,11 +293,10 @@ describe('exporters/agent', function () {
         const call = spyCalls[i]
 
         // Verify number does not have decimals as this causes timer warnings
-        expect(Number.isInteger(call.args[0].timeout)).to.be.true
+        assert.strictEqual(Number.isInteger(call.args[0].timeout), true)
 
         // Retry is 1-indexed so add 1 to i
-        expect(call.args[0].timeout)
-          .to.equal(initialTimeout * Math.pow(2, i + 1))
+        assert.strictEqual(call.args[0].timeout, initialTimeout * Math.pow(2, i + 1))
       }
     })
 
@@ -298,7 +308,7 @@ describe('exporters/agent', function () {
         /^Submitting profiler agent report attempt #1 to:/i,
         /^Error from the agent: HTTP Error 500$/,
         /^Submitting profiler agent report attempt #2 to:/i,
-        /^Agent export response: ([0-9a-f]{2}( |$))*/
+        /^Agent export response: ([0-9a-f]{2}( |$))*/,
       ]
 
       let doneLogs
@@ -308,8 +318,7 @@ describe('exporters/agent', function () {
 
       function onMessage (message) {
         const expected = expectedLogs[index++]
-        expect(typeof message === 'function' ? message() : message)
-          .to.match(expected)
+        assert.match(typeof message === 'function' ? message() : message, expected)
         if (index >= expectedLogs.length) doneLogs()
       }
 
@@ -321,12 +330,12 @@ describe('exporters/agent', function () {
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       let tries = 0
@@ -339,14 +348,14 @@ describe('exporters/agent', function () {
         const data = Buffer.from(json)
         res.writeHead(500, {
           'content-type': 'application/json',
-          'content-length': data.length
+          'content-length': data.length,
         })
         res.end(data)
       })
 
       await Promise.all([
         exporter.export({ profiles, start, end, tags }),
-        waitForResponse
+        waitForResponse,
       ])
     })
 
@@ -358,12 +367,12 @@ describe('exporters/agent', function () {
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       let tries = 0
@@ -373,7 +382,7 @@ describe('exporters/agent', function () {
         const data = Buffer.from(json)
         res.writeHead(400, {
           'content-type': 'application/json',
-          'content-length': data.length
+          'content-length': data.length,
         })
         res.end(data)
       })
@@ -382,9 +391,9 @@ describe('exporters/agent', function () {
         await exporter.export({ profiles, start, end, tags })
         throw new Error('should have thrown')
       } catch (err) {
-        expect(err.message).to.equal('HTTP Error 400')
+        assert.strictEqual(err.message, 'HTTP Error 400')
       }
-      expect(tries).to.equal(1)
+      assert.strictEqual(tries, 1)
     })
   })
 
@@ -410,17 +419,17 @@ describe('exporters/agent', function () {
       const start = new Date()
       const end = new Date()
       const tags = {
-        'runtime-id': RUNTIME_ID
+        'runtime-id': RUNTIME_ID,
       }
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
@@ -440,7 +449,7 @@ describe('exporters/agent', function () {
     })
   })
 
-  describe('using UDS', () => {
+  ;(os.platform() === 'win32' ? describe.skip : describe)('using UDS', () => {
     let listener
 
     beforeEach(done => {
@@ -460,17 +469,17 @@ describe('exporters/agent', function () {
       const start = new Date()
       const end = new Date()
       const tags = {
-        'runtime-id': RUNTIME_ID
+        'runtime-id': RUNTIME_ID,
       }
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
@@ -488,5 +497,58 @@ describe('exporters/agent', function () {
         exporter.export({ profiles, start, end, tags }).catch(reject)
       }))
     })
-  }, { skip: os.platform() === 'win32' })
+  })
 })
+
+function assertIsProfile (obj, msg) {
+  assert.ok(typeof obj === 'object' && obj !== null, msg)
+  assert.strictEqual(typeof obj.timeNanos, 'bigint', msg)
+  assert.ok(typeof obj.period === 'number' || typeof obj.period === 'bigint', msg)
+
+  assertIsValueType(obj.periodType, msg)
+
+  assert.ok(Array.isArray(obj.sampleType), msg)
+  assert.strictEqual(obj.sampleType.length, 2, msg)
+  assert.ok(Array.isArray(obj.sample), msg)
+  assert.ok(Array.isArray(obj.location), msg)
+  assert.ok(Array.isArray(obj.function), msg)
+
+  assert.ok(typeof obj.stringTable === 'object' && obj.stringTable !== null, msg)
+  assert.ok(Array.isArray(obj.stringTable.strings), msg)
+  assert.ok(obj.stringTable.strings.length >= 1, msg)
+  assert.strictEqual(obj.stringTable.strings[0], '', msg)
+
+  for (const sampleType of obj.sampleType) {
+    assertIsValueType(sampleType, msg)
+  }
+
+  for (const fn of obj.function) {
+    assert.strictEqual(typeof fn.filename, 'number', msg)
+    assert.strictEqual(typeof fn.systemName, 'number', msg)
+    assert.strictEqual(typeof fn.name, 'number', msg)
+    assert.ok(Number.isSafeInteger(fn.id), msg)
+  }
+
+  for (const location of obj.location) {
+    assert.ok(Number.isSafeInteger(location.id), msg)
+    assert.ok(Array.isArray(location.line), msg)
+
+    for (const line of location.line) {
+      assert.ok(Number.isSafeInteger(line.functionId), msg)
+      assert.strictEqual(typeof line.line, 'number', msg)
+    }
+  }
+
+  for (const sample of obj.sample) {
+    assert.ok(Array.isArray(sample.locationId), msg)
+    assert.ok(sample.locationId.length >= 1, msg)
+    assert.ok(Array.isArray(sample.value), msg)
+    assert.strictEqual(sample.value.length, obj.sampleType.length, msg)
+  }
+
+  function assertIsValueType (valueType, msg) {
+    assert.ok(typeof valueType === 'object' && valueType !== null, msg)
+    assert.strictEqual(typeof valueType.type, 'number', msg)
+    assert.strictEqual(typeof valueType.unit, 'number', msg)
+  }
+}

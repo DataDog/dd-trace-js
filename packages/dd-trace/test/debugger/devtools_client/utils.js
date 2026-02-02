@@ -4,8 +4,14 @@ const { randomUUID } = require('node:crypto')
 
 module.exports = {
   generateProbeConfig,
-  getRequestOptions
+  getRequestOptions,
 }
+
+/**
+ * @typedef {object} RequestOptions
+ * @property {string} method
+ * @property {string} path
+ */
 
 /**
  * @typedef {object} ProbeConfig
@@ -55,7 +61,7 @@ function generateProbeConfig (breakpoint, overrides = {}) {
     evaluateAt: 'EXIT',
     ...overrides,
     capture: { maxReferenceDepth: 3, ...overrides.capture },
-    sampling: { snapshotsPerSecond: 5000, ...overrides.sampling }
+    sampling: { snapshotsPerSecond: 5000, ...overrides.sampling },
   }
 }
 
@@ -63,7 +69,7 @@ function generateProbeConfig (breakpoint, overrides = {}) {
  * Get the request options from a request spy call
  *
  * @param {sinon.SinonSpy} request - The request spy to get the options from.
- * @returns {unknown} - The 2nd argument to the `request` function (i.e. the request options).
+ * @returns {RequestOptions} - The 2nd argument to the `request` function (i.e. the request options).
  */
 function getRequestOptions (request) {
   return request.lastCall.args[1]

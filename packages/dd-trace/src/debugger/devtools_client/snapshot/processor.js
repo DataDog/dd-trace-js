@@ -1,10 +1,11 @@
 'use strict'
 
-const { collectionSizeSym, fieldCountSym, timeBudgetSym } = require('./symbols')
+const { LARGE_OBJECT_SKIP_THRESHOLD } = require('./constants')
+const { collectionSizeSym, largeCollectionSkipThresholdSym, fieldCountSym, timeBudgetSym } = require('./symbols')
 const { normalizeName, REDACTED_IDENTIFIERS } = require('./redaction')
 
 module.exports = {
-  processRawState: processProperties
+  processRawState: processProperties,
 }
 
 // Matches classes in source code, no matter how it's written:
@@ -149,7 +150,7 @@ function toString (str, maxLength) {
     type: 'string',
     value: str.slice(0, maxLength),
     truncated: true,
-    size
+    size,
   }
 }
 
@@ -159,7 +160,7 @@ function toObject (type, props, maxLength, timeBudgetReached) {
 
   const result = {
     type,
-    fields: processProperties(props, maxLength)
+    fields: processProperties(props, maxLength),
   }
 
   if (props[fieldCountSym] !== undefined) {
@@ -178,10 +179,11 @@ function toArray (type, elements, maxLength, timeBudgetReached) {
     type,
     elements: elements.map((element) => {
       return getPropertyValue(element, maxLength)
-    })
+    }),
   }
 
   setNotCaptureReasonOnCollection(result, elements)
+  setNotCaptureReasonOnTooLargeCollection(result, elements)
 
   return result
 }
@@ -202,16 +204,25 @@ function toMap (type, pairs, maxLength, timeBudgetReached) {
       // This can be skipped and we can go directly to its children, of which
       // there will always be exactly two, the first containing the key, and the
       // second containing the value of this entry of the Map.
+
+      if (value[timeBudgetSym] === true) {
+        return [{ notCapturedReason: 'timeout' }, { notCapturedReason: 'timeout' }]
+      }
+      if (value.properties === undefined) {
+        return [{ notCapturedReason: 'unknown' }, { notCapturedReason: 'unknown' }]
+      }
+
       const shouldRedact = shouldRedactMapValue(value.properties[0])
       const key = getPropertyValue(value.properties[0], maxLength)
       const val = shouldRedact
         ? notCapturedRedacted(value.properties[1].value.type)
         : getPropertyValue(value.properties[1], maxLength)
       return [key, val]
-    })
+    }),
   }
 
   setNotCaptureReasonOnCollection(result, pairs)
+  setNotCaptureReasonOnTooLargeCollection(result, pairs)
 
   return result
 }
@@ -234,11 +245,16 @@ function toSet (type, values, maxLength, timeBudgetReached) {
       // `internal#entry`. This can be skipped and we can go directly to its
       // children, of which there will always be exactly one, which contain the
       // actual value in this entry of the Set.
+
+      if (value[timeBudgetSym] === true) return { notCapturedReason: 'timeout' }
+      if (value.properties === undefined) return { notCapturedReason: 'unknown' }
+
       return getPropertyValue(value.properties[0], maxLength)
-    })
+    }),
   }
 
   setNotCaptureReasonOnCollection(result, values)
+  setNotCaptureReasonOnTooLargeCollection(result, values)
 
   return result
 }
@@ -254,7 +270,7 @@ function toArrayBuffer (type, bytes, maxLength, timeBudgetReached) {
         type,
         value: arrayBufferToString(bytes, maxLength),
         truncated: true,
-        size: bytes.length
+        size: bytes.length,
       }
     : { type, value: arrayBufferToString(bytes, size) }
 }
@@ -290,6 +306,15 @@ function setNotCaptureReasonOnCollection (result, collection) {
   if (collection[collectionSizeSym] !== undefined) {
     result.notCapturedReason = 'collectionSize'
     result.size = collection[collectionSizeSym]
+  }
+}
+
+function setNotCaptureReasonOnTooLargeCollection (result, collection) {
+  if (collection[largeCollectionSkipThresholdSym] !== undefined) {
+    result.notCapturedReason = `Large collection with too many elements (skip threshold: ${
+      LARGE_OBJECT_SKIP_THRESHOLD
+    })`
+    result.size = collection[largeCollectionSkipThresholdSym]
   }
 }
 

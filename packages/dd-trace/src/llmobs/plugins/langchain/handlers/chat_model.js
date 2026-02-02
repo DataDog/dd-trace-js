@@ -1,8 +1,8 @@
 'use strict'
 
-const LangChainLLMObsHandler = require('.')
 const LLMObsTagger = require('../../../tagger')
 const { spanHasError } = require('../../../util')
+const LangChainLLMObsHandler = require('.')
 
 const LLM = 'llm'
 
@@ -85,7 +85,7 @@ class LangChainLLMObsChatModelHandler extends LangChainLLMObsHandler {
       this._tagger.tagMetrics(span, {
         inputTokens,
         outputTokens,
-        totalTokens
+        totalTokens,
       })
     }
   }
@@ -100,7 +100,7 @@ class LangChainLLMObsChatModelHandler extends LangChainLLMObsHandler {
       toolCallsInfo.push({
         name: toolCall.name || '',
         arguments: toolCall.args || {},
-        tool_id: toolCall.id || ''
+        tool_id: toolCall.id || '',
       })
     }
 

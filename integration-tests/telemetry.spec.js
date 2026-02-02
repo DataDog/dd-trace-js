@@ -1,9 +1,9 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, before, it, beforeEach, afterEach } = require('mocha')
-
+const assert = require('node:assert/strict')
 const path = require('node:path')
+
+const { afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, assertObjectContains } = require('./helpers')
 
@@ -27,8 +27,8 @@ describe('telemetry', () => {
         cwd,
         env: {
           AGENT_PORT: agent.port,
-          DD_LOGS_INJECTION: 'true'
-        }
+          DD_LOGS_INJECTION: 'true',
+        },
       })
     })
 
@@ -58,8 +58,8 @@ describe('telemetry', () => {
         }
       }, 'app-dependencies-loaded', 5_000, 1)
 
-      expect(ddTraceFound).to.be.true
-      expect(importInTheMiddleFound).to.be.true
+      assert.strictEqual(ddTraceFound, true)
+      assert.strictEqual(importInTheMiddleFound, true)
     })
 
     it('Assert configuration chaining data is sent', async () => {
@@ -68,7 +68,7 @@ describe('telemetry', () => {
         assertObjectContains(configuration, [
           { name: 'DD_LOG_INJECTION', value: true, origin: 'default' },
           { name: 'DD_LOG_INJECTION', value: true, origin: 'env_var' },
-          { name: 'DD_LOG_INJECTION', value: false, origin: 'code' }
+          { name: 'DD_LOG_INJECTION', value: false, origin: 'code' },
         ])
       }, 'app-started', 5_000, 1)
     })

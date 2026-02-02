@@ -1,14 +1,14 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const {
   FakeAgent,
-  spawnPluginIntegrationTestProc,
+  spawnPluginIntegrationTestProcAndExpectExit,
   sandboxCwd,
   useSandbox,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { expect } = require('chai')
 
 describe('esm', () => {
   let agent
@@ -34,13 +34,15 @@ describe('esm', () => {
 
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
-        proc = await spawnPluginIntegrationTestProc(
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),
           variants[variant],
           agent.port,
+          undefined,
+          undefined,
           (data) => {
             const jsonObject = JSON.parse(data.toString())
-            expect(jsonObject).to.have.property('dd')
+            assert.ok(Object.hasOwn(jsonObject, 'dd'))
           }
         )
       }).timeout(20000)

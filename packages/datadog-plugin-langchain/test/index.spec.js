@@ -1,16 +1,16 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, before, after } = require('mocha')
+const assert = require('node:assert/strict')
 
-const { useEnv } = require('../../../integration-tests/helpers')
-const agent = require('../../dd-trace/test/plugins/agent')
+const { after, before, beforeEach, describe, it } = require('mocha')
+const semifies = require('semifies')
+
+const { assertObjectContains, useEnv } = require('../../../integration-tests/helpers')
 const iastFilter = require('../../dd-trace/src/appsec/iast/taint-tracking/filter')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const isDdTrace = iastFilter.isDdTrace
-
-const semifies = require('semifies')
 
 describe('Plugin', () => {
   let langchainOpenai
@@ -27,14 +27,14 @@ describe('Plugin', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
     ANTHROPIC_API_KEY: '<not-a-real-key>',
-    GOOGLE_API_KEY: '<not-a-real-key>'
+    GOOGLE_API_KEY: '<not-a-real-key>',
   })
 
   function getLangChainOpenAiClient (type = 'llm', options = {}) {
     Object.assign(options, {
       configuration: {
-        baseURL: 'http://127.0.0.1:9126/vcr/openai'
-      }
+        baseURL: 'http://127.0.0.1:9126/vcr/openai',
+      },
     })
 
     if (type === 'llm') {
@@ -55,8 +55,8 @@ describe('Plugin', () => {
   function getLangChainAnthropicClient (type = 'chat', options = {}) {
     Object.assign(options, {
       clientOptions: {
-        baseURL: 'http://127.0.0.1:9126/vcr/anthropic'
-      }
+        baseURL: 'http://127.0.0.1:9126/vcr/anthropic',
+      },
     })
 
     if (type === 'chat') {
@@ -68,7 +68,7 @@ describe('Plugin', () => {
 
   function getLangChainGoogleGenAIClient (type = 'embedding', options = {}) {
     Object.assign(options, {
-      baseUrl: 'http://127.0.0.1:9126/vcr/genai'
+      baseUrl: 'http://127.0.0.1:9126/vcr/genai',
     })
 
     if (type === 'embedding') {
@@ -131,18 +131,18 @@ describe('Plugin', () => {
         it('does not tag output on error', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0].length).to.equal(1)
+              assert.strictEqual(traces[0].length, 1)
 
               const span = traces[0][0]
 
               const langchainResponseRegex = /^langchain\.response\.completions\./
               const hasMatching = Object.keys(span.meta).some(key => langchainResponseRegex.test(key))
 
-              expect(hasMatching).to.be.false
+              assert.strictEqual(hasMatching, false)
 
-              expect(span.meta).to.have.property('error.message')
-              expect(span.meta).to.have.property('error.type')
-              expect(span.meta).to.have.property('error.stack')
+              assert.ok(Object.hasOwn(span.meta, 'error.message'))
+              assert.ok(Object.hasOwn(span.meta, 'error.type'))
+              assert.ok(Object.hasOwn(span.meta, 'error.stack'))
             })
 
           try {
@@ -159,20 +159,23 @@ describe('Plugin', () => {
           const llm = getLangChainOpenAiClient('llm', { model: 'gpt-3.5-turbo-instruct' })
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0].length).to.equal(1)
+              assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
 
-              expect(span).to.have.property('name', 'langchain.request')
-              expect(span).to.have.property('resource', 'langchain.llms.openai.OpenAI')
-
-              expect(span.meta).to.have.property('langchain.request.provider', 'openai')
-              expect(span.meta).to.have.property('langchain.request.model', 'gpt-3.5-turbo-instruct')
-              expect(span.meta).to.have.property('langchain.request.type', 'llm')
+              assertObjectContains(span, {
+                name: 'langchain.request',
+                resource: 'langchain.llms.openai.OpenAI',
+                meta: {
+                  'langchain.request.provider': 'openai',
+                  'langchain.request.model': 'gpt-3.5-turbo-instruct',
+                  'langchain.request.type': 'llm',
+                },
+              })
             })
 
           const result = await llm.generate(['what is 2 + 2?'])
 
-          expect(result.generations[0][0].text).to.exist
+          assert.ok(result.generations[0][0].text)
 
           await checkTraces
         })
@@ -180,17 +183,19 @@ describe('Plugin', () => {
         it('instruments a langchain openai llm call for multiple prompts', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0].length).to.equal(1)
+              assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
-              expect(span.meta).to.have.property('langchain.request.provider', 'openai')
-              expect(span.meta).to.have.property('langchain.request.model', 'gpt-3.5-turbo-instruct')
+              assertObjectContains(span.meta, {
+                'langchain.request.provider': 'openai',
+                'langchain.request.model': 'gpt-3.5-turbo-instruct',
+              })
             })
 
           const llm = getLangChainOpenAiClient('llm', { model: 'gpt-3.5-turbo-instruct' })
           const result = await llm.generate(['what is 2 + 2?', 'what is the circumference of the earth?'])
 
-          expect(result.generations[0][0].text).to.exist
-          expect(result.generations[1][0].text).to.exist
+          assert.ok(result.generations[0][0].text)
+          assert.ok(result.generations[1][0].text)
 
           await checkTraces
         })
@@ -198,18 +203,20 @@ describe('Plugin', () => {
         it('instruments a langchain openai llm call for a single prompt and multiple responses', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0].length).to.equal(1)
+              assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
 
-              expect(span.meta).to.have.property('langchain.request.provider', 'openai')
-              expect(span.meta).to.have.property('langchain.request.model', 'gpt-3.5-turbo-instruct')
+              assertObjectContains(span.meta, {
+                'langchain.request.provider': 'openai',
+                'langchain.request.model': 'gpt-3.5-turbo-instruct',
+              })
             })
 
           const llm = getLangChainOpenAiClient('llm', { model: 'gpt-3.5-turbo-instruct', n: 2 })
           const result = await llm.generate(['what is 2 + 2?'])
 
-          expect(result.generations[0][0].text).to.exist
-          expect(result.generations[0][1].text).to.exist
+          assert.ok(result.generations[0][0].text)
+          assert.ok(result.generations[0][1].text)
 
           await checkTraces
         })
@@ -219,17 +226,17 @@ describe('Plugin', () => {
         it('does not tag output on error', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0].length).to.equal(1)
+              assert.strictEqual(traces[0].length, 1)
 
               const span = traces[0][0]
 
               const langchainResponseRegex = /^langchain\.response\.completions\./
               const hasMatching = Object.keys(span.meta).some(key => langchainResponseRegex.test(key))
-              expect(hasMatching).to.be.false
+              assert.strictEqual(hasMatching, false)
 
-              expect(span.meta).to.have.property('error.message')
-              expect(span.meta).to.have.property('error.type')
-              expect(span.meta).to.have.property('error.stack')
+              assert.ok(Object.hasOwn(span.meta, 'error.message'))
+              assert.ok(Object.hasOwn(span.meta, 'error.type'))
+              assert.ok(Object.hasOwn(span.meta, 'error.stack'))
             })
 
           try {
@@ -243,21 +250,24 @@ describe('Plugin', () => {
         it('instruments a langchain openai chat model call for a single string prompt', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0].length).to.equal(1)
+              assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
 
-              expect(span).to.have.property('name', 'langchain.request')
-              expect(span).to.have.property('resource', 'langchain.chat_models.openai.ChatOpenAI')
-
-              expect(span.meta).to.have.property('langchain.request.provider', 'openai')
-              expect(span.meta).to.have.property('langchain.request.model', 'gpt-4')
-              expect(span.meta).to.have.property('langchain.request.type', 'chat_model')
+              assertObjectContains(span, {
+                name: 'langchain.request',
+                resource: 'langchain.chat_models.openai.ChatOpenAI',
+                meta: {
+                  'langchain.request.provider': 'openai',
+                  'langchain.request.model': 'gpt-4',
+                  'langchain.request.type': 'chat_model',
+                },
+              })
             })
 
           const chatModel = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
           const result = await chatModel.invoke('Hello!')
 
-          expect(result.content).to.exist
+          assert.ok(result.content)
 
           await checkTraces
         })
@@ -265,21 +275,23 @@ describe('Plugin', () => {
         it('instruments a langchain openai chat model call for a JSON message input', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0].length).to.equal(1)
+              assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
 
-              expect(span.meta).to.have.property('langchain.request.provider', 'openai')
-              expect(span.meta).to.have.property('langchain.request.model', 'gpt-4')
+              assertObjectContains(span.meta, {
+                'langchain.request.provider': 'openai',
+                'langchain.request.model': 'gpt-4',
+              })
             })
 
           const chatModel = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
           const messages = [
             { role: 'system', content: 'You only respond with one word answers' },
-            { role: 'human', content: 'Hello!' }
+            { role: 'human', content: 'Hello!' },
           ]
 
           const result = await chatModel.invoke(messages)
-          expect(result.content).to.exist
+          assert.ok(result.content)
 
           await checkTraces
         })
@@ -287,21 +299,23 @@ describe('Plugin', () => {
         it('instruments a langchain openai chat model call for a BaseMessage-like input', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0].length).to.equal(1)
+              assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
 
-              expect(span.meta).to.have.property('langchain.request.provider', 'openai')
-              expect(span.meta).to.have.property('langchain.request.model', 'gpt-4')
+              assertObjectContains(span.meta, {
+                'langchain.request.provider': 'openai',
+                'langchain.request.model': 'gpt-4',
+              })
             })
 
           const chatModel = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
           const messages = [
             new langchainMessages.SystemMessage('You only respond with one word answers'),
-            new langchainMessages.HumanMessage('Hello!')
+            new langchainMessages.HumanMessage('Hello!'),
           ]
           const result = await chatModel.invoke(messages)
 
-          expect(result.content).to.exist
+          assert.ok(result.content)
 
           await checkTraces
         })
@@ -309,11 +323,13 @@ describe('Plugin', () => {
         it('instruments a langchain openai chat model call with tool calls', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0].length).to.equal(1)
+              assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
 
-              expect(span.meta).to.have.property('langchain.request.provider', 'openai')
-              expect(span.meta).to.have.property('langchain.request.model', 'gpt-4')
+              assertObjectContains(span.meta, {
+                'langchain.request.provider': 'openai',
+                'langchain.request.model': 'gpt-4',
+              })
             })
 
           const tools = [
@@ -326,11 +342,11 @@ describe('Plugin', () => {
                   type: 'object',
                   properties: {
                     name: { type: 'string', description: 'Name of the character' },
-                    origin: { type: 'string', description: 'Where they live' }
-                  }
-                }
-              }
-            }
+                    origin: { type: 'string', description: 'Where they live' },
+                  },
+                },
+              },
+            },
           ]
 
           const model = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
@@ -338,8 +354,8 @@ describe('Plugin', () => {
           const modelWithTools = model.bindTools(tools)
 
           const result = await modelWithTools.invoke('My name is SpongeBob and I live in Bikini Bottom.')
-          expect(result.tool_calls).to.have.length(1)
-          expect(result.tool_calls[0].name).to.equal('extract_fictional_info')
+          assert.strictEqual(result.tool_calls.length, 1)
+          assert.strictEqual(result.tool_calls[0].name, 'extract_fictional_info')
 
           await checkTraces
         })
@@ -347,21 +363,25 @@ describe('Plugin', () => {
         it('instruments a langchain anthropic chat model call', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0].length).to.equal(1)
+              assert.strictEqual(traces[0].length, 1)
               const span = traces[0][0]
 
-              expect(span).to.have.property('name', 'langchain.request')
-              expect(span).to.have.property('resource', 'langchain.chat_models.anthropic.ChatAnthropic')
+              assertObjectContains(span, {
+                name: 'langchain.request',
+                resource: 'langchain.chat_models.anthropic.ChatAnthropic',
+                meta: {
+                  'langchain.request.provider': 'anthropic',
+                  'langchain.request.type': 'chat_model',
+                },
+              })
 
-              expect(span.meta).to.have.property('langchain.request.provider', 'anthropic')
-              expect(span.meta).to.have.property('langchain.request.model')
-              expect(span.meta).to.have.property('langchain.request.type', 'chat_model')
+              assert.ok(Object.hasOwn(span.meta, 'langchain.request.model'))
             })
 
           const chatModel = getLangChainAnthropicClient('chat', { modelName: 'claude-3-5-sonnet-20241022' })
 
           const result = await chatModel.invoke('Hello!')
-          expect(result.content).to.exist
+          assert.ok(result.content)
 
           await checkTraces
         })
@@ -371,18 +391,18 @@ describe('Plugin', () => {
         it('does not tag output on error', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0].length).to.equal(2)
+              assert.strictEqual(traces[0].length, 2)
 
               const chainSpan = traces[0][0]
 
               const langchainResponseRegex = /^langchain\.response\.outputs\./
 
               const hasMatching = Object.keys(chainSpan.meta).some(key => langchainResponseRegex.test(key))
-              expect(hasMatching).to.be.false
+              assert.strictEqual(hasMatching, false)
 
-              expect(chainSpan.meta).to.have.property('error.message')
-              expect(chainSpan.meta).to.have.property('error.type')
-              expect(chainSpan.meta).to.have.property('error.stack')
+              assert.ok(Object.hasOwn(chainSpan.meta, 'error.message'))
+              assert.ok(Object.hasOwn(chainSpan.meta, 'error.type'))
+              assert.ok(Object.hasOwn(chainSpan.meta, 'error.stack'))
             })
 
           try {
@@ -402,16 +422,19 @@ describe('Plugin', () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
               const spans = traces[0]
-              expect(spans).to.have.length(2)
+              assert.strictEqual(spans.length, 2)
 
               const chainSpan = spans[0]
               // we already check the chat model span in previous tests
-              expect(spans[1]).to.have.property('resource', 'langchain.chat_models.openai.ChatOpenAI')
+              assert.strictEqual(spans[1].resource, 'langchain.chat_models.openai.ChatOpenAI')
 
-              expect(chainSpan).to.have.property('name', 'langchain.request')
-              expect(chainSpan).to.have.property('resource', 'langchain_core.runnables.RunnableSequence')
-
-              expect(chainSpan.meta).to.have.property('langchain.request.type', 'chain')
+              assertObjectContains(chainSpan, {
+                name: 'langchain.request',
+                resource: 'langchain_core.runnables.RunnableSequence',
+                meta: {
+                  'langchain.request.type': 'chain',
+                },
+              })
             })
 
           const model = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
@@ -420,11 +443,11 @@ describe('Plugin', () => {
           const chain = model.pipe(parser)
           const messages = [
             new langchainMessages.SystemMessage('You only respond with one word answers'),
-            new langchainMessages.HumanMessage('Hello!')
+            new langchainMessages.HumanMessage('Hello!'),
           ]
           const result = await chain.invoke(messages)
 
-          expect(result).to.exist
+          assert.ok(result)
 
           await checkTraces
         })
@@ -441,28 +464,30 @@ describe('Plugin', () => {
           const chain = langchainRunnables.RunnableSequence.from([
             {
               topic: new langchainRunnables.RunnablePassthrough(),
-              style: new langchainRunnables.RunnablePassthrough()
+              style: new langchainRunnables.RunnablePassthrough(),
             },
             prompt,
             model,
-            parser
+            parser,
           ])
 
           const checkTraces = agent
             .assertSomeTraces(traces => {
               const spans = traces[0]
-              expect(spans).to.have.length(2)
+              assert.strictEqual(spans.length, 2)
 
               const chainSpan = spans[0]
               // we already check the chat model span in previous tests
-              expect(spans[1]).to.have.property('resource', 'langchain.chat_models.openai.ChatOpenAI')
+              assert.strictEqual(spans[1].resource, 'langchain.chat_models.openai.ChatOpenAI')
 
-              expect(chainSpan.meta).to.have.property('langchain.request.type', 'chain')
+              assertObjectContains(chainSpan.meta, {
+                'langchain.request.type': 'chain',
+              })
             })
 
           const result = await chain.invoke({ topic: 'chickens', style: 'dad joke' })
 
-          expect(result).to.exist
+          assert.ok(result)
 
           await checkTraces
         })
@@ -476,28 +501,30 @@ describe('Plugin', () => {
 
           const chain = langchainRunnables.RunnableSequence.from([
             {
-              topic: new langchainRunnables.RunnablePassthrough()
+              topic: new langchainRunnables.RunnablePassthrough(),
             },
             prompt,
             model,
-            parser
+            parser,
           ])
 
           const checkTraces = agent
             .assertSomeTraces(traces => {
               const spans = traces[0]
-              expect(spans).to.have.length(3) // 1 chain + 2 chat model
+              assert.strictEqual(spans.length, 3) // 1 chain + 2 chat model
 
               const chainSpan = spans[0]
 
-              expect(chainSpan.meta).to.have.property('langchain.request.type', 'chain')
+              assertObjectContains(chainSpan.meta, {
+                'langchain.request.type': 'chain',
+              })
             })
 
           const result = await chain.batch(['chickens', 'dogs'])
 
-          expect(result).to.have.length(2)
-          expect(result[0]).to.exist
-          expect(result[1]).to.exist
+          assert.strictEqual(result.length, 2)
+          assert.ok(result[0])
+          assert.ok(result[1])
 
           await checkTraces
         })
@@ -508,11 +535,13 @@ describe('Plugin', () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
               const spans = traces[0]
-              expect(spans).to.have.length(2) // 1 chain + 1 chat model
+              assert.strictEqual(spans.length, 2) // 1 chain + 1 chat model
 
               const chainSpan = spans[0]
 
-              expect(chainSpan.meta).to.have.property('langchain.request.type', 'chain')
+              assertObjectContains(chainSpan.meta, {
+                'langchain.request.type': 'chain',
+              })
             })
 
           const parser = new langchainOutputParsers.JsonOutputParser()
@@ -521,7 +550,7 @@ describe('Plugin', () => {
           const chain = model.pipe(parser)
 
           const response = await chain.invoke('Generate a JSON object with name and age.')
-          expect(response).to.exist.and.be.an('object')
+          assert.ok(response != null && typeof response === 'object')
 
           await checkTraces
         })
@@ -532,15 +561,15 @@ describe('Plugin', () => {
           it('does not tag output on error', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0].length).to.equal(1)
+                assert.strictEqual(traces[0].length, 1)
 
                 const span = traces[0][0]
 
-                expect(span.meta).to.not.have.property('langchain.response.outputs.embedding_length')
+                assert.ok(!('langchain.response.outputs.embedding_length' in span.meta))
 
-                expect(span.meta).to.have.property('error.message')
-                expect(span.meta).to.have.property('error.type')
-                expect(span.meta).to.have.property('error.stack')
+                assert.ok(Object.hasOwn(span.meta, 'error.message'))
+                assert.ok(Object.hasOwn(span.meta, 'error.type'))
+                assert.ok(Object.hasOwn(span.meta, 'error.stack'))
               })
 
             try {
@@ -557,21 +586,24 @@ describe('Plugin', () => {
 
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0].length).to.equal(1)
+                assert.strictEqual(traces[0].length, 1)
                 const span = traces[0][0]
 
-                expect(span).to.have.property('name', 'langchain.request')
-                expect(span).to.have.property('resource', 'langchain.embeddings.openai.OpenAIEmbeddings')
-
-                expect(span.meta).to.have.property('langchain.request.provider', 'openai')
-                expect(span.meta).to.have.property('langchain.request.model', 'text-embedding-ada-002')
-                expect(span.meta).to.have.property('langchain.request.type', 'embedding')
+                assertObjectContains(span, {
+                  name: 'langchain.request',
+                  resource: 'langchain.embeddings.openai.OpenAIEmbeddings',
+                  meta: {
+                    'langchain.request.provider': 'openai',
+                    'langchain.request.model': 'text-embedding-ada-002',
+                    'langchain.request.type': 'embedding',
+                  },
+                })
               })
 
             const query = 'Hello, world!'
             const result = await embeddings.embedQuery(query)
 
-            expect(result).to.have.length(1536)
+            assert.strictEqual(result.length, 1536)
 
             await checkTraces
           })
@@ -579,12 +611,14 @@ describe('Plugin', () => {
           it('instruments a langchain openai embedDocuments call', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0].length).to.equal(1)
+                assert.strictEqual(traces[0].length, 1)
                 const span = traces[0][0]
 
-                expect(span.meta).to.have.property('langchain.request.type', 'embedding')
-                expect(span.meta).to.have.property('langchain.request.provider', 'openai')
-                expect(span.meta).to.have.property('langchain.request.model', 'text-embedding-ada-002')
+                assertObjectContains(span.meta, {
+                  'langchain.request.type': 'embedding',
+                  'langchain.request.provider': 'openai',
+                  'langchain.request.model': 'text-embedding-ada-002',
+                })
               })
 
             const embeddings = getLangChainOpenAiClient('embedding')
@@ -592,9 +626,9 @@ describe('Plugin', () => {
             const documents = ['Hello, world!', 'Goodbye, world!']
             const result = await embeddings.embedDocuments(documents)
 
-            expect(result).to.have.length(2)
-            expect(result[0]).to.have.length(1536)
-            expect(result[1]).to.have.length(1536)
+            assert.strictEqual(result.length, 2)
+            assert.strictEqual(result[0].length, 1536)
+            assert.strictEqual(result[1].length, 1536)
 
             await checkTraces
           })
@@ -607,25 +641,28 @@ describe('Plugin', () => {
             const embeddings = getLangChainGoogleGenAIClient('embedding', {
               model: 'text-embedding-004',
               taskType: 'RETRIEVAL_DOCUMENT',
-              title: 'Document title'
+              title: 'Document title',
             })
 
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0].length).to.equal(1)
+                assert.strictEqual(traces[0].length, 1)
 
                 const span = traces[0][0]
-                expect(span).to.have.property('name', 'langchain.request')
-                expect(span).to.have.property('resource', 'langchain.embeddings.GoogleGenerativeAIEmbeddings')
-
-                expect(span.meta).to.have.property('langchain.request.provider', 'googlegenerativeai')
-                expect(span.meta).to.have.property('langchain.request.model', 'text-embedding-004')
-                expect(span.meta).to.have.property('langchain.request.type', 'embedding')
+                assertObjectContains(span, {
+                  name: 'langchain.request',
+                  resource: 'langchain.embeddings.GoogleGenerativeAIEmbeddings',
+                  meta: {
+                    'langchain.request.provider': 'googlegenerativeai',
+                    'langchain.request.model': 'text-embedding-004',
+                    'langchain.request.type': 'embedding',
+                  },
+                })
               })
 
             const query = 'Hello, world!'
             const result = await embeddings.embedQuery(query)
-            expect(result).to.have.length(768)
+            assert.strictEqual(result.length, 768)
 
             await checkTraces
           })
@@ -640,18 +677,18 @@ describe('Plugin', () => {
             () => 'Hello, world!',
             {
               name: 'myTool',
-              description: 'A tool that returns a greeting'
+              description: 'A tool that returns a greeting',
             }
           )
 
           const checkTraces = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
-            expect(span).to.have.property('name', 'langchain.request')
-            expect(span.resource).to.match(/^langchain\.tools\.[^.]+\.myTool$/)
+            assert.strictEqual(span.name, 'langchain.request')
+            assert.match(span.resource, /^langchain\.tools\.[^.]+\.myTool$/)
           })
           const result = await myTool.invoke()
-          expect(result).to.equal('Hello, world!')
+          assert.strictEqual(result, 'Hello, world!')
 
           await checkTraces
         })
@@ -663,24 +700,24 @@ describe('Plugin', () => {
             () => { throw new Error('This is a test error') },
             {
               name: 'myTool',
-              description: 'A tool that throws an error'
+              description: 'A tool that throws an error',
             }
           )
 
           const checkTraces = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
-            expect(span).to.have.property('name', 'langchain.request')
-            expect(span.resource).to.match(/^langchain\.tools\.[^.]+\.myTool$/)
+            assert.strictEqual(span.name, 'langchain.request')
+            assert.match(span.resource, /^langchain\.tools\.[^.]+\.myTool$/)
 
-            expect(span.meta).to.have.property('error.message')
-            expect(span.meta).to.have.property('error.type')
-            expect(span.meta).to.have.property('error.stack')
+            assert.ok(Object.hasOwn(span.meta, 'error.message'))
+            assert.ok(Object.hasOwn(span.meta, 'error.type'))
+            assert.ok(Object.hasOwn(span.meta, 'error.stack'))
           })
 
           try {
             await myTool.invoke()
-            expect.fail('Expected an error to be thrown')
+            assert.fail('Expected an error to be thrown')
           } catch {}
 
           await checkTraces
@@ -697,7 +734,7 @@ describe('Plugin', () => {
           const document = {
             pageContent: 'The powerhouse of the cell is the mitochondria',
             metadata: { source: 'https://example.com' },
-            id: '1'
+            id: '1',
           }
 
           return vectorstore.addDocuments([document])
@@ -707,21 +744,21 @@ describe('Plugin', () => {
           const checkTraces = agent.assertSomeTraces(traces => {
             const spans = traces[0]
 
-            expect(spans).to.have.length(2)
+            assert.strictEqual(spans.length, 2)
 
             const vectorstoreSpan = spans[0]
             const embeddingSpan = spans[1]
 
-            expect(vectorstoreSpan).to.have.property('name', 'langchain.request')
-            expect(vectorstoreSpan).to.have.property('resource', 'langchain.vectorstores.memory.MemoryVectorStore')
+            assert.strictEqual(vectorstoreSpan.name, 'langchain.request')
+            assert.strictEqual(vectorstoreSpan.resource, 'langchain.vectorstores.memory.MemoryVectorStore')
 
-            expect(embeddingSpan).to.have.property('name', 'langchain.request')
-            expect(embeddingSpan).to.have.property('resource', 'langchain.embeddings.openai.OpenAIEmbeddings')
+            assert.strictEqual(embeddingSpan.name, 'langchain.request')
+            assert.strictEqual(embeddingSpan.resource, 'langchain.embeddings.openai.OpenAIEmbeddings')
           }, { spanResourceMatch: /langchain\.vectorstores\.memory\.MemoryVectorStore/ })
           // we need the spanResourceMatch, otherwise we'll match from the beforeEach
 
           const result = await vectorstore.similaritySearch('The powerhouse of the cell is the mitochondria', 2)
-          expect(result).to.exist
+          assert.ok(result)
 
           await checkTraces
         })
@@ -730,23 +767,23 @@ describe('Plugin', () => {
           const checkTraces = agent.assertSomeTraces(traces => {
             const spans = traces[0]
 
-            expect(spans).to.have.length(2)
+            assert.strictEqual(spans.length, 2)
 
             const vectorstoreSpan = spans[0]
             const embeddingSpan = spans[1]
 
-            expect(vectorstoreSpan).to.have.property('name', 'langchain.request')
-            expect(vectorstoreSpan).to.have.property('resource', 'langchain.vectorstores.memory.MemoryVectorStore')
+            assert.strictEqual(vectorstoreSpan.name, 'langchain.request')
+            assert.strictEqual(vectorstoreSpan.resource, 'langchain.vectorstores.memory.MemoryVectorStore')
 
-            expect(embeddingSpan).to.have.property('name', 'langchain.request')
-            expect(embeddingSpan).to.have.property('resource', 'langchain.embeddings.openai.OpenAIEmbeddings')
+            assert.strictEqual(embeddingSpan.name, 'langchain.request')
+            assert.strictEqual(embeddingSpan.resource, 'langchain.embeddings.openai.OpenAIEmbeddings')
           }, { spanResourceMatch: /langchain\.vectorstores\.memory\.MemoryVectorStore/ })
           // we need the spanResourceMatch, otherwise we'll match from the beforeEach
 
           const result = await vectorstore.similaritySearchWithScore(
             'The powerhouse of the cell is the mitochondria', 2
           )
-          expect(result).to.exist
+          assert.ok(result)
 
           await checkTraces
         })

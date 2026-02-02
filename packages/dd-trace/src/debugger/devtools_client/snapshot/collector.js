@@ -1,24 +1,27 @@
 'use strict'
 
-const { collectionSizeSym, fieldCountSym, timeBudgetSym } = require('./symbols')
 const session = require('../session')
+const { collectionSizeSym, largeCollectionSkipThresholdSym, fieldCountSym, timeBudgetSym } = require('./symbols')
+const { LARGE_OBJECT_SKIP_THRESHOLD } = require('./constants')
 
 const LEAF_SUBTYPES = new Set(['date', 'regexp'])
 const ITERABLE_SUBTYPES = new Set(['map', 'set', 'weakmap', 'weakset'])
+const SIZE_IN_DESCRIPTION_SUBTYPES = new Set(['array', 'typedarray', 'arraybuffer', 'dataview', 'map', 'set'])
 
 module.exports = {
-  collectObjectProperties
+  collectObjectProperties,
 }
 
 /**
- * @typedef {Object} GetObjectOptions
- * @property {Object} maxReferenceDepth - The maximum depth of the object to traverse
+ * @typedef {object} GetObjectOptions
+ * @property {object} maxReferenceDepth - The maximum depth of the object to traverse
  * @property {number} maxCollectionSize - The maximum size of a collection to include in the snapshot
  * @property {number} maxFieldCount - The maximum number of properties on an object to include in the snapshot
  * @property {bigint} deadlineNs - The deadline in nanoseconds compared to `process.hrtime.bigint()`
- * @property {Object} [ctx={}] - A context object to track the state/progress of the snapshot collection.
- * @property {boolean} [ctx.deadlineReached=false] - Whether the deadline has been reached. Should not be set by the
- *   caller, but is used to signal the deadline overrun to the caller.
+ * @property {object} ctx - A context object to track the state/progress of the snapshot collection.
+ * @property {boolean} ctx.deadlineReached - Will be set to `true` if the deadline has been reached.
+ * @property {Error[]} ctx.captureErrors - An array on which errors can be pushed if an issue is detected while
+ *   collecting the snapshot.
  */
 
 /**
@@ -31,12 +34,12 @@ module.exports = {
  *   and should not be set by the caller.
  * @param {boolean} [collection=false] - Whether the object is a collection. Only used internally by this module to
  *   track the current object type and should not be set by the caller.
- * @returns {Promise<Object[]>} The properties of the object
+ * @returns {Promise<object[]>} The properties of the object
  */
 async function collectObjectProperties (objectId, opts, depth = 0, collection = false) {
   const { result, privateProperties } = await session.post('Runtime.getProperties', {
     objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   if (collection) {
@@ -51,6 +54,13 @@ async function collectObjectProperties (objectId, opts, depth = 0, collection = 
   } else if (result.length > opts.maxFieldCount) {
     // Trim the number of properties on the object if there's too many.
     const size = result.length
+    if (size > LARGE_OBJECT_SKIP_THRESHOLD) {
+      opts.ctx.captureErrors.push(new Error(
+        `An object with ${size} properties was detected while collecting a snapshot. ` +
+        `This exceeds the maximum number of allowed properties of ${LARGE_OBJECT_SKIP_THRESHOLD}. ` +
+        'Future snapshots for existing probes in this location will be skipped until the Node.js process is restarted'
+      ))
+    }
     result.length = opts.maxFieldCount
     result[fieldCountSym] = size
   } else if (privateProperties) {
@@ -70,22 +80,29 @@ async function traverseGetPropertiesResult (props, opts, depth) {
 
   for (const prop of props) {
     if (prop.value === undefined) continue
-    const { value: { type, objectId, subtype } } = prop
+    const { value: { type, objectId, subtype, description } } = prop
     if (type === 'object') {
       if (objectId === undefined) continue // if `subtype` is "null"
       if (LEAF_SUBTYPES.has(subtype)) continue // don't waste time with these subtypes
+      const size = parseLengthFromDescription(description, subtype)
+      if (size !== null && size >= LARGE_OBJECT_SKIP_THRESHOLD) {
+        const empty = []
+        empty[largeCollectionSkipThresholdSym] = size
+        prop.value.properties = empty
+        continue
+      }
       work.push([
         prop.value,
         () => collectPropertiesBySubtype(subtype, objectId, opts, depth).then((properties) => {
           prop.value.properties = properties
-        })
+        }),
       ])
     } else if (type === 'function') {
       work.push([
         prop.value,
         () => getFunctionProperties(objectId, opts, depth + 1).then((properties) => {
           prop.value.properties = properties
-        })
+        }),
       ])
     }
   }
@@ -94,7 +111,7 @@ async function traverseGetPropertiesResult (props, opts, depth) {
     // Iterate over the work in chunks of 2. The closer to 1, the less we'll overshoot the deadline, but the longer it
     // takes to complete. `2` seems to be the best compromise.
     // Anecdotally, on my machine, with no deadline, a concurrency of `1` takes twice as long as a concurrency of `2`.
-    // From thereon, there's no real measureable savings with a higher concurrency.
+    // From thereon, there's no real measurable savings with a higher concurrency.
     for (let i = 0; i < work.length; i += 2) {
       if (overBudget(opts)) {
         for (let j = i; j < work.length; j++) {
@@ -105,7 +122,7 @@ async function traverseGetPropertiesResult (props, opts, depth) {
       // eslint-disable-next-line no-await-in-loop
       await Promise.all([
         work[i][1](),
-        work[i + 1]?.[1]()
+        work[i + 1]?.[1](),
       ])
     }
   }
@@ -132,7 +149,7 @@ function collectPropertiesBySubtype (subtype, objectId, opts, depth) {
 async function getFunctionProperties (objectId, opts, depth) {
   let { result } = await session.post('Runtime.getProperties', {
     objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   // For legacy reasons (I assume) functions has a `prototype` property besides the internal `[[Prototype]]`
@@ -146,7 +163,7 @@ async function getIterable (objectId, opts, depth) {
   // exist in the return value below in the `result` property. We currently do not collect these.
   const { internalProperties } = await session.post('Runtime.getProperties', {
     objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   let entry = internalProperties[1]
@@ -158,7 +175,7 @@ async function getIterable (objectId, opts, depth) {
   // Skip the `[[Entries]]` level and go directly to the content of the iterable
   const { result } = await session.post('Runtime.getProperties', {
     objectId: entry.value.objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   removeNonEnumerableProperties(result) // remove the `length` property
@@ -174,7 +191,7 @@ async function getIterable (objectId, opts, depth) {
 async function getInternalProperties (objectId, opts, depth) {
   const { internalProperties } = await session.post('Runtime.getProperties', {
     objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   // We want all internal properties except the prototype
@@ -186,7 +203,7 @@ async function getInternalProperties (objectId, opts, depth) {
 async function getProxy (objectId, opts, depth) {
   const { internalProperties } = await session.post('Runtime.getProperties', {
     objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   // TODO: If we do not skip the proxy wrapper, we can add a `revoked` boolean
@@ -199,7 +216,7 @@ async function getProxy (objectId, opts, depth) {
   // Skip the `[[Target]]` level and go directly to the target of the Proxy
   const { result } = await session.post('Runtime.getProperties', {
     objectId: entry.value.objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   return traverseGetPropertiesResult(result, opts, depth)
@@ -212,7 +229,7 @@ async function getProxy (objectId, opts, depth) {
 async function getArrayBuffer (objectId, opts, depth) {
   const { internalProperties } = await session.post('Runtime.getProperties', {
     objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   // Use Uint8 to make it easy to convert to a string later.
@@ -221,7 +238,7 @@ async function getArrayBuffer (objectId, opts, depth) {
   // Skip the `[[Uint8Array]]` level and go directly to the content of the ArrayBuffer
   const { result } = await session.post('Runtime.getProperties', {
     objectId: entry.value.objectId,
-    ownProperties: true // exclude inherited properties
+    ownProperties: true, // exclude inherited properties
   })
 
   return traverseGetPropertiesResult(result, opts, depth)
@@ -233,6 +250,26 @@ function removeNonEnumerableProperties (props) {
       props.splice(i--, 1)
     }
   }
+}
+
+function parseLengthFromDescription (description, subtype) {
+  if (typeof description !== 'string') return null
+  if (!SIZE_IN_DESCRIPTION_SUBTYPES.has(subtype)) return null
+
+  const open = description.lastIndexOf('(')
+  if (open === -1) return null
+
+  const close = description.indexOf(')', open + 1)
+  if (close === -1) return null
+
+  const s = description.slice(open + 1, close)
+  if (s === '') return null
+
+  const n = Number(s)
+  if (!Number.isSafeInteger(n) || n < 0) return null
+  if (String(n) !== s) return null
+
+  return n
 }
 
 function overBudget (opts) {

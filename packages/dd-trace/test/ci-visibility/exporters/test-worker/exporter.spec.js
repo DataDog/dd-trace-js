@@ -1,17 +1,17 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, context } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const context = describe
 const sinon = require('sinon')
 
 require('../../../../../dd-trace/test/setup/core')
-
 const TestWorkerCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/test-worker')
+
 const {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
-  MOCHA_WORKER_TRACE_PAYLOAD_CODE
+  MOCHA_WORKER_TRACE_PAYLOAD_CODE,
 } = require('../../../../src/plugins/util/test')
 
 describe('CI Visibility Test Worker Exporter', () => {
@@ -42,7 +42,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       jestWorkerExporter.export(trace)
       jestWorkerExporter.export(traceSecond)
       jestWorkerExporter.flush()
-      expect(send).to.have.been.calledWith([JEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+      sinon.assert.calledWith(send, [JEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
     })
 
     it('can export coverages', () => {
@@ -52,7 +52,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       jestWorkerExporter.exportCoverage(coverage)
       jestWorkerExporter.exportCoverage(coverageSecond)
       jestWorkerExporter.flush()
-      expect(send).to.have.been.calledWith(
+      sinon.assert.calledWith(send,
         [JEST_WORKER_COVERAGE_PAYLOAD_CODE, JSON.stringify([coverage, coverageSecond])]
       )
     })
@@ -63,7 +63,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       const jestWorkerExporter = new TestWorkerCiVisibilityExporter()
       jestWorkerExporter.export(trace)
       jestWorkerExporter.flush()
-      expect(send).not.to.have.been.called
+      sinon.assert.notCalled(send)
     })
   })
 
@@ -82,7 +82,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       cucumberWorkerExporter.export(trace)
       cucumberWorkerExporter.export(traceSecond)
       cucumberWorkerExporter.flush()
-      expect(send).to.have.been.calledWith([CUCUMBER_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+      sinon.assert.calledWith(send, [CUCUMBER_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
     })
 
     it('does not break if process.send is undefined', () => {
@@ -91,7 +91,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       const cucumberWorkerExporter = new TestWorkerCiVisibilityExporter()
       cucumberWorkerExporter.export(trace)
       cucumberWorkerExporter.flush()
-      expect(send).not.to.have.been.called
+      sinon.assert.notCalled(send)
     })
   })
 
@@ -110,7 +110,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       mochaWorkerExporter.export(trace)
       mochaWorkerExporter.export(traceSecond)
       mochaWorkerExporter.flush()
-      expect(send).to.have.been.calledWith([MOCHA_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+      sinon.assert.calledWith(send, [MOCHA_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
     })
 
     it('does not break if process.send is undefined', () => {
@@ -119,7 +119,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       const mochaWorkerExporter = new TestWorkerCiVisibilityExporter()
       mochaWorkerExporter.export(trace)
       mochaWorkerExporter.flush()
-      expect(send).not.to.have.been.called
+      sinon.assert.notCalled(send)
     })
   })
 })

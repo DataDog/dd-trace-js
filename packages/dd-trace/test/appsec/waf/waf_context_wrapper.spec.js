@@ -1,18 +1,21 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
+const assert = require('node:assert/strict')
+
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
-const WAFContextWrapper = require('../../../src/appsec/waf/waf_context_wrapper')
+const sinon = require('sinon')
+
 const addresses = require('../../../src/appsec/addresses')
 const { wafRunFinished } = require('../../../src/appsec/channels')
 const Reporter = require('../../../src/appsec/reporter')
+const WAFContextWrapper = require('../../../src/appsec/waf/waf_context_wrapper')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 describe('WAFContextWrapper', () => {
   const knownAddresses = new Set([
     addresses.HTTP_INCOMING_QUERY,
-    addresses.HTTP_INCOMING_GRAPHQL_RESOLVER
+    addresses.HTTP_INCOMING_GRAPHQL_RESOLVER,
   ])
 
   beforeEach(() => {
@@ -28,114 +31,114 @@ describe('WAFContextWrapper', () => {
     const ddwafContext = {
       run: sinon.stub().returns({
         events: {},
-        attributes: {}
-      })
+        attributes: {},
+      }),
     }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
       persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
-      }
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+      },
     }
 
     wafContextWrapper.run(payload)
     wafContextWrapper.run(payload)
 
-    expect(ddwafContext.run).to.have.been.calledOnceWithExactly(payload, 1000)
-    expect(Reporter.reportMetrics).to.have.been.calledOnce
+    sinon.assert.calledOnceWithExactly(ddwafContext.run, payload, 1000)
+    sinon.assert.calledOnce(Reporter.reportMetrics)
   })
 
   it('Should send HTTP_INCOMING_QUERY twice if waf run fails', () => {
     const ddwafContext = {
-      run: sinon.stub().throws(new Error('test'))
+      run: sinon.stub().throws(new Error('test')),
     }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
       persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
-      }
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+      },
     }
 
     wafContextWrapper.run(payload)
     wafContextWrapper.run(payload)
 
-    expect(ddwafContext.run).to.have.been.calledTwice
-    expect(ddwafContext.run).to.always.have.been.calledWithExactly(payload, 1000)
+    sinon.assert.calledTwice(ddwafContext.run)
+    sinon.assert.calledWithExactly(ddwafContext.run, payload, 1000)
 
     const firstCall = Reporter.reportMetrics.getCall(0).args[0]
-    expect(firstCall).to.have.property('errorCode', -127)
+    assert.strictEqual(firstCall.errorCode, -127)
 
     const secondCall = Reporter.reportMetrics.getCall(1).args[0]
-    expect(secondCall).to.have.property('errorCode', -127)
+    assert.strictEqual(secondCall.errorCode, -127)
   })
 
   it('Should send ephemeral addresses every time', () => {
     const ddwafContext = {
       run: sinon.stub().returns({
         events: {},
-        attributes: {}
-      })
+        attributes: {},
+      }),
     }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
       persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
       },
       ephemeral: {
-        [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { anotherKey: 'anotherValue' }
-      }
+        [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { anotherKey: 'anotherValue' },
+      },
     }
 
     wafContextWrapper.run(payload)
     wafContextWrapper.run(payload)
 
-    expect(ddwafContext.run).to.have.been.calledTwice
-    expect(ddwafContext.run.firstCall).to.have.been.calledWithExactly(payload, 1000)
-    expect(ddwafContext.run.secondCall).to.have.been.calledWithExactly({
+    sinon.assert.calledTwice(ddwafContext.run)
+    sinon.assert.calledWithExactly(ddwafContext.run.firstCall, payload, 1000)
+    sinon.assert.calledWithExactly(ddwafContext.run.secondCall, {
       ephemeral: {
         [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: {
-          anotherKey: 'anotherValue'
-        }
-      }
+          anotherKey: 'anotherValue',
+        },
+      },
     }, 1000)
-    expect(Reporter.reportMetrics).to.have.been.calledTwice
+    sinon.assert.calledTwice(Reporter.reportMetrics)
   })
 
   it('Should ignore run without known addresses', () => {
     const ddwafContext = {
-      run: sinon.stub()
+      run: sinon.stub(),
     }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
       persistent: {
-        'persistent-unknown-address': { key: 'value' }
+        'persistent-unknown-address': { key: 'value' },
       },
       ephemeral: {
-        'ephemeral-unknown-address': { key: 'value' }
-      }
+        'ephemeral-unknown-address': { key: 'value' },
+      },
     }
 
     wafContextWrapper.run(payload)
 
-    expect(ddwafContext.run).to.not.have.been.called
+    sinon.assert.notCalled(ddwafContext.run)
   })
 
   it('should publish the payload in the dc channel', () => {
     const ddwafContext = {
-      run: sinon.stub().returns([])
+      run: sinon.stub().returns([]),
     }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
     const payload = {
       persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
       },
       ephemeral: {
-        [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { anotherKey: 'anotherValue' }
-      }
+        [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { anotherKey: 'anotherValue' },
+      },
     }
     const finishedCallback = sinon.stub()
 
@@ -143,28 +146,28 @@ describe('WAFContextWrapper', () => {
     wafContextWrapper.run(payload)
     wafRunFinished.unsubscribe(finishedCallback)
 
-    expect(finishedCallback).to.be.calledOnceWith({ payload })
+    sinon.assert.calledOnceWithMatch(finishedCallback, { payload })
   })
 
   it('should report error code when the waf run fails', () => {
     const ddwafContext = {
-      run: sinon.stub().returns({ errorCode: -2 })
+      run: sinon.stub().returns({ errorCode: -2 }),
     }
 
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
       persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
-      }
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+      },
     }
 
     wafContextWrapper.run(payload)
 
-    expect(Reporter.reportMetrics).to.have.been.calledOnce
+    sinon.assert.calledOnce(Reporter.reportMetrics)
     const reportedMetrics = Reporter.reportMetrics.getCall(0).args[0]
 
-    expect(reportedMetrics).to.include({
+    assertObjectContains(reportedMetrics, {
       rulesVersion: '1.8.0',
       wafVersion: '1.14.0',
       wafTimeout: false,
@@ -173,7 +176,7 @@ describe('WAFContextWrapper', () => {
       errorCode: -2,
       maxTruncatedString: null,
       maxTruncatedContainerSize: null,
-      maxTruncatedContainerDepth: null
+      maxTruncatedContainerDepth: null,
     })
   })
 
@@ -184,33 +187,33 @@ describe('WAFContextWrapper', () => {
         attributes: [],
         actions: {
           redirect_request: {
-            status_code: 301
-          }
+            status_code: 301,
+          },
         },
         duration: 123456,
         timeout: false,
         metrics: {
           maxTruncatedString: 5000,
           maxTruncatedContainerSize: 300,
-          maxTruncatedContainerDepth: 20
-        }
-      })
+          maxTruncatedContainerDepth: 20,
+        },
+      }),
     }
 
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
       persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
-      }
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+      },
     }
 
     wafContextWrapper.run(payload)
 
-    expect(Reporter.reportMetrics).to.have.been.calledOnce
+    sinon.assert.calledOnce(Reporter.reportMetrics)
     const reportedMetrics = Reporter.reportMetrics.getCall(0).args[0]
 
-    expect(reportedMetrics).to.include({
+    assertObjectContains(reportedMetrics, {
       rulesVersion: '1.8.0',
       wafVersion: '1.14.0',
       wafTimeout: false,
@@ -219,7 +222,7 @@ describe('WAFContextWrapper', () => {
       errorCode: null,
       maxTruncatedString: 5000,
       maxTruncatedContainerSize: 300,
-      maxTruncatedContainerDepth: 20
+      maxTruncatedContainerDepth: 20,
     })
   })
 
@@ -230,15 +233,15 @@ describe('WAFContextWrapper', () => {
 
     beforeEach(() => {
       log = {
-        warn: sinon.stub()
+        warn: sinon.stub(),
       }
 
       ddwafContext = {
-        run: sinon.stub()
+        run: sinon.stub(),
       }
 
       const ProxiedWafContextWrapper = proxyquire('../../../src/appsec/waf/waf_context_wrapper', {
-        '../../log': log
+        '../../log': log,
       })
 
       wafContextWrapper = new ProxiedWafContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
@@ -253,14 +256,14 @@ describe('WAFContextWrapper', () => {
 
       const payload = {
         persistent: {
-          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
-        }
+          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+        },
       }
 
       wafContextWrapper.run(payload)
 
       sinon.assert.calledOnce(ddwafContext.run)
-      expect(Reporter.reportMetrics).to.have.been.calledOnce
+      sinon.assert.calledOnce(Reporter.reportMetrics)
     })
 
     it('Should not call run and log a warn if context is disposed', () => {
@@ -268,16 +271,16 @@ describe('WAFContextWrapper', () => {
 
       const payload = {
         persistent: {
-          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
-        }
+          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+        },
       }
 
       wafContextWrapper.run(payload)
 
       sinon.assert.notCalled(ddwafContext.run)
       sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Calling run on a disposed context')
-      expect(Reporter.reportRaspRuleSkipped).to.not.have.been.called
-      expect(Reporter.reportMetrics).to.not.have.been.called
+      sinon.assert.notCalled(Reporter.reportRaspRuleSkipped)
+      sinon.assert.notCalled(Reporter.reportMetrics)
     })
 
     it('Should call run with raspRule and call reportRaspRuleSkipped if context is disposed', () => {
@@ -285,8 +288,8 @@ describe('WAFContextWrapper', () => {
 
       const payload = {
         persistent: {
-          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
-        }
+          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+        },
       }
 
       const raspRule = { type: 'rule-type' }
@@ -294,8 +297,8 @@ describe('WAFContextWrapper', () => {
 
       sinon.assert.notCalled(ddwafContext.run)
       sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Calling run on a disposed context')
-      expect(Reporter.reportRaspRuleSkipped).to.have.been.calledOnceWithExactly(raspRule, 'after-request')
-      expect(Reporter.reportMetrics).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(Reporter.reportRaspRuleSkipped, raspRule, 'after-request')
+      sinon.assert.notCalled(Reporter.reportMetrics)
     })
   })
 })

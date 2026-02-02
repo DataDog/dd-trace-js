@@ -3,6 +3,7 @@
 const { SourceIastPlugin } = require('../iast-plugin')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
+const { EXECUTED_SOURCE } = require('../telemetry/iast-metric')
 const { taintObject, newTaintedString, getRanges, taintQueryWithCache } = require('./operations')
 const {
   HTTP_REQUEST_BODY,
@@ -13,9 +14,8 @@ const {
   HTTP_REQUEST_PARAMETER,
   HTTP_REQUEST_PATH_PARAM,
   HTTP_REQUEST_URI,
-  SQL_ROW_VALUE
+  SQL_ROW_VALUE,
 } = require('./source-types')
-const { EXECUTED_SOURCE } = require('../telemetry/iast-metric')
 
 const REQ_HEADER_TAGS = EXECUTED_SOURCE.formatTags(HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_HEADER_NAME)
 const REQ_URI_TAGS = EXECUTED_SOURCE.formatTags(HTTP_REQUEST_URI)
@@ -244,7 +244,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.execSource({
       handler: () => taintObject(iastContext, headers, HTTP_REQUEST_HEADER_VALUE),
       tags: REQ_HEADER_TAGS,
-      iastContext
+      iastContext,
     })
   }
 
@@ -254,7 +254,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         req.url = newTaintedString(iastContext, req.url, HTTP_REQUEST_URI, HTTP_REQUEST_URI)
       },
       tags: REQ_URI_TAGS,
-      iastContext
+      iastContext,
     })
   }
 

@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
 const msgpack = require('@msgpack/msgpack')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -14,8 +15,9 @@ const {
   MAX_RESOURCE_NAME_LENGTH,
   MAX_TYPE_LENGTH,
   DEFAULT_SPAN_NAME,
-  DEFAULT_SERVICE_NAME
+  DEFAULT_SERVICE_NAME,
 } = require('../../src/encode/tags-processors')
+const processTags = require('../../src/process-tags')
 
 describe('span-stats-encode', () => {
   let encoder
@@ -27,10 +29,10 @@ describe('span-stats-encode', () => {
 
   beforeEach(() => {
     logger = {
-      debug: sinon.stub()
+      debug: sinon.stub(),
     }
     const { SpanStatsEncoder } = proxyquire('../../src/encode/span-stats', {
-      '../log': logger
+      '../log': logger,
     })
     writer = { flush: sinon.spy() }
     encoder = new SpanStatsEncoder(writer)
@@ -42,20 +44,22 @@ describe('span-stats-encode', () => {
       Resource: 'GET',
       Synthetics: false,
       HTTPStatusCode: 200,
+      HTTPMethod: 'GET',
+      HTTPEndpoint: '/users/:id',
       Hits: 30799,
       TopLevelHits: 30799,
       Duration: 1230,
       Errors: 0,
       OkSummary: Buffer.from(''),
-      ErrorSummary: Buffer.from('')
+      ErrorSummary: Buffer.from(''),
     }
 
     bucket = {
       Start: 1660000000000,
       Duration: 10000000000,
       Stats: [
-        stat
-      ]
+        stat,
+      ],
     }
 
     stats = {
@@ -63,12 +67,13 @@ describe('span-stats-encode', () => {
       Env: 'env',
       Version: '4.0.0-pre',
       Stats: [
-        bucket
+        bucket,
       ],
       Lang: 'javascript',
       TracerVersion: '1.2.3',
       RuntimeID: 'some-runtime-id',
-      Sequence: 1
+      Sequence: 1,
+      ProcessTags: processTags.serialized,
     }
   })
 
@@ -78,26 +83,26 @@ describe('span-stats-encode', () => {
     const buffer = encoder.makePayload()
     const decoded = msgpack.decode(buffer)
 
-    expect(decoded).to.deep.equal(stats)
+    assert.deepStrictEqual(decoded, stats)
   })
 
   it('should report its count', () => {
-    expect(encoder.count()).to.equal(0)
+    assert.strictEqual(encoder.count(), 0)
 
     encoder.encode(stats)
 
-    expect(encoder.count()).to.equal(1)
+    assert.strictEqual(encoder.count(), 1)
 
     encoder.encode(stats)
 
-    expect(encoder.count()).to.equal(2)
+    assert.strictEqual(encoder.count(), 2)
   })
 
   it('should reset after making a payload', () => {
     encoder.encode(stats)
     encoder.makePayload()
 
-    expect(encoder.count()).to.equal(0)
+    assert.strictEqual(encoder.count(), 0)
   })
 
   it('should truncate name, service, type and resource when they are too long', () => {
@@ -114,24 +119,24 @@ describe('span-stats-encode', () => {
               Name: tooLongString,
               Type: tooLongString,
               Service: tooLongString,
-              Resource: resourceTooLongString
-            }
-          ]
-        }
-      ]
+              Resource: resourceTooLongString,
+            },
+          ],
+        },
+      ],
     }
     encoder.encode(statsToTruncate)
 
     const buffer = encoder.makePayload()
     const decoded = msgpack.decode(buffer)
 
-    expect(decoded)
+    assert.ok(decoded)
     const decodedStat = decoded.Stats[0].Stats[0]
-    expect(decodedStat.Type.length).to.equal(MAX_TYPE_LENGTH)
-    expect(decodedStat.Name.length).to.equal(MAX_NAME_LENGTH)
-    expect(decodedStat.Service.length).to.equal(MAX_SERVICE_LENGTH)
+    assert.strictEqual(decodedStat.Type.length, MAX_TYPE_LENGTH)
+    assert.strictEqual(decodedStat.Name.length, MAX_NAME_LENGTH)
+    assert.strictEqual(decodedStat.Service.length, MAX_SERVICE_LENGTH)
     // ellipsis is added
-    expect(decodedStat.Resource.length).to.equal(MAX_RESOURCE_NAME_LENGTH + 3)
+    assert.strictEqual(decodedStat.Resource.length, MAX_RESOURCE_NAME_LENGTH + 3)
   })
 
   it('should fallback to a default name and service if they are not present', () => {
@@ -144,21 +149,32 @@ describe('span-stats-encode', () => {
             {
               ...stat,
               Name: undefined,
-              Service: undefined
-            }
-          ]
-        }
-      ]
+              Service: undefined,
+            },
+          ],
+        },
+      ],
     }
     encoder.encode(statsToTruncate)
 
     const buffer = encoder.makePayload()
     const decodedStats = msgpack.decode(buffer)
-    expect(decodedStats)
+    assert.ok(decodedStats)
 
     const decodedStat = decodedStats.Stats[0].Stats[0]
-    expect(decodedStat)
-    expect(decodedStat.Service).to.equal(DEFAULT_SERVICE_NAME)
-    expect(decodedStat.Name).to.equal(DEFAULT_SPAN_NAME)
+    assert.ok(decodedStat)
+    assert.strictEqual(decodedStat.Service, DEFAULT_SERVICE_NAME)
+    assert.strictEqual(decodedStat.Name, DEFAULT_SPAN_NAME)
+  })
+
+  it('should encode HTTPMethod and HTTPEndpoint', () => {
+    encoder.encode(stats)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer)
+
+    const decodedStat = decoded.Stats[0].Stats[0]
+    assert.strictEqual(decodedStat.HTTPMethod, 'GET')
+    assert.strictEqual(decodedStat.HTTPEndpoint, '/users/:id')
   })
 })

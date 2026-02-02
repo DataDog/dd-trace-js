@@ -1,10 +1,11 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+
 const dc = require('dc-polyfill')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const taintTrackingOperations = require('../../../../src/appsec/iast/taint-tracking/operations')
@@ -13,7 +14,7 @@ const {
   HTTP_REQUEST_HEADER_VALUE,
   HTTP_REQUEST_PATH_PARAM,
   HTTP_REQUEST_URI,
-  SQL_ROW_VALUE
+  SQL_ROW_VALUE,
 } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 const { getConfigFresh } = require('../../../helpers/config')
 
@@ -33,15 +34,15 @@ describe('IAST Taint tracking plugin', () => {
   const datadogCore = {
     storage: () => {
       return {
-        getStore: () => store
+        getStore: () => store,
       }
-    }
+    },
   }
 
   beforeEach(() => {
     taintTrackingPlugin = proxyquire('../../../../src/appsec/iast/taint-tracking/plugin', {
       './operations': sinon.spy(taintTrackingOperations),
-      '../../../../../datadog-core': datadogCore
+      '../../../../../datadog-core': datadogCore,
     })
     const config = getConfigFresh()
     taintTrackingPlugin.enable(config.iast)
@@ -53,25 +54,25 @@ describe('IAST Taint tracking plugin', () => {
   })
 
   it('Should subscribe to body parser, qs, cookie and process_params channel', () => {
-    expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(17)
+    assert.strictEqual(taintTrackingPlugin._subscriptions.length, 17)
     let i = 0
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:body-parser:read:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:multer:read:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:fastify:body-parser:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('apm:express:middleware:next')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:query:read:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:fastify:query-params:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:express:query:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:cookie:parse:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:fastify-cookie:read:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:sequelize:query:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('apm:pg:query:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:express:process_params:start')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:router:param:start')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:fastify:path-params:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('apm:graphql:resolve:start')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:url:parse:finish')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:url:getter:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:body-parser:read:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:multer:read:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:fastify:body-parser:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'apm:express:middleware:next')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:query:read:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:fastify:query-params:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:express:query:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:cookie:parse:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:fastify-cookie:read:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:sequelize:query:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'apm:pg:query:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:express:process_params:start')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:router:param:start')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:fastify:path-params:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'apm:graphql:resolve:start')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:url:parse:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:url:getter:finish')
   })
 
   describe('taint sources', () => {
@@ -97,24 +98,25 @@ describe('IAST Taint tracking plugin', () => {
       const originType = 'ORIGIN_TYPE'
       const objToBeTainted = {
         foo: {
-          bar: 'taintValue'
-        }
+          bar: 'taintValue',
+        },
       }
 
       taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted)
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(iastContext, objToBeTainted, originType)
+      sinon.assert.calledOnceWithExactly(taintTrackingOperations.taintObject, iastContext, objToBeTainted, originType)
     })
 
     it('Should taint property in object', () => {
       const propertyToBeTainted = 'foo'
       const objToBeTainted = {
         [propertyToBeTainted]: {
-          bar: 'taintValue'
-        }
+          bar: 'taintValue',
+        },
       }
 
       taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted)
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         objToBeTainted[propertyToBeTainted],
         originType
@@ -125,14 +127,15 @@ describe('IAST Taint tracking plugin', () => {
       const propertyToBeTainted = 'foo'
       const objToBeTainted = {
         [propertyToBeTainted]: {
-          bar: 'taintValue'
-        }
+          bar: 'taintValue',
+        },
       }
 
       objToBeTainted[propertyToBeTainted].self = objToBeTainted
 
       taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted)
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         objToBeTainted[propertyToBeTainted],
         originType
@@ -142,23 +145,24 @@ describe('IAST Taint tracking plugin', () => {
     it('Should non fail on null value', () => {
       const propertyToBeTainted = 'invalid'
       const objToBeTainted = {
-        [propertyToBeTainted]: null
+        [propertyToBeTainted]: null,
       }
 
       taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted)
-      expect(taintTrackingOperations.taintObject).not.to.be.called
+      sinon.assert.notCalled(taintTrackingOperations.taintObject)
     })
 
     it('Should taint request parameter when qs event is published', () => {
       const req = {
         query: {
-          bar: 'taintValue'
-        }
+          bar: 'taintValue',
+        },
       }
 
       queryReadFinishChannel.publish({ query: req.query })
 
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         req.query,
         'http.request.parameter'
@@ -168,13 +172,14 @@ describe('IAST Taint tracking plugin', () => {
     it('Should taint request body when body-parser event is published', () => {
       const req = {
         body: {
-          bar: 'taintValue'
-        }
+          bar: 'taintValue',
+        },
       }
 
       bodyParserFinishChannel.publish({ req })
 
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         req.body,
         'http.request.body'
@@ -184,13 +189,14 @@ describe('IAST Taint tracking plugin', () => {
     it('Should taint request body when express middleware next event is published', () => {
       const req = {
         body: {
-          bar: 'taintValue'
-        }
+          bar: 'taintValue',
+        },
       }
 
       middlewareNextChannel.publish({ req })
 
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         req.body,
         'http.request.body'
@@ -200,15 +206,16 @@ describe('IAST Taint tracking plugin', () => {
     it('Should taint request body only once when bodyparser and express events are published', () => {
       const req = {
         body: {
-          bar: 'taintValue'
-        }
+          bar: 'taintValue',
+        },
       }
 
       bodyParserFinishChannel.publish({ req })
       middlewareNextChannel.publish({ req })
       bodyParserFinishChannel.publish({ req })
 
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         req.body,
         'http.request.body'
@@ -217,12 +224,13 @@ describe('IAST Taint tracking plugin', () => {
 
     it('Should taint cookies when cookie parser event is published', () => {
       const cookies = {
-        cookie1: 'tainted_cookie'
+        cookie1: 'tainted_cookie',
       }
 
       cookieParseFinishCh.publish({ cookies })
 
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         cookies,
         HTTP_REQUEST_COOKIE_VALUE
@@ -232,12 +240,13 @@ describe('IAST Taint tracking plugin', () => {
     it('Should taint request params when process params event is published with processParamsStartCh', () => {
       const req = {
         params: {
-          parameter1: 'tainted1'
-        }
+          parameter1: 'tainted1',
+        },
       }
 
       processParamsStartCh.publish({ req })
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         req.params,
         HTTP_REQUEST_PATH_PARAM
@@ -247,12 +256,13 @@ describe('IAST Taint tracking plugin', () => {
     it('Should taint request params when process params event is published with routerParamStartCh', () => {
       const req = {
         params: {
-          parameter1: 'tainted1'
-        }
+          parameter1: 'tainted1',
+        },
       }
 
       routerParamStartCh.publish({ req })
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         req.params,
         HTTP_REQUEST_PATH_PARAM
@@ -263,25 +273,27 @@ describe('IAST Taint tracking plugin', () => {
       const req = {}
 
       processParamsStartCh.publish({ req })
-      expect(taintTrackingOperations.taintObject).to.not.be.called
+      sinon.assert.notCalled(taintTrackingOperations.taintObject)
     })
 
     it('Should taint headers and uri from request', () => {
       const req = {
         headers: {
-          'x-iast-header': 'header-value'
+          'x-iast-header': 'header-value',
         },
-        url: 'https://testurl'
+        url: 'https://testurl',
       }
       taintTrackingPlugin.taintRequest(req, iastContext)
 
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
         iastContext,
         req.headers,
         HTTP_REQUEST_HEADER_VALUE
       )
 
-      expect(taintTrackingOperations.newTaintedString).to.be.calledOnceWith(
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.newTaintedString,
         iastContext,
         req.url,
         HTTP_REQUEST_URI,
@@ -299,15 +311,15 @@ describe('IAST Taint tracking plugin', () => {
         const result = [
           {
             id: 1,
-            name: 'string value 1'
+            name: 'string value 1',
           },
           {
             id: 2,
-            name: 'string value 2'
+            name: 'string value 2',
           }]
         sequelizeFinish.publish({ result })
 
-        expect(taintTrackingOperations.newTaintedString).to.not.have.been.called
+        sinon.assert.notCalled(taintTrackingOperations.newTaintedString)
       })
 
       describe('with default config', () => {
@@ -315,15 +327,16 @@ describe('IAST Taint tracking plugin', () => {
           const result = [
             {
               id: 1,
-              name: 'string value 1'
+              name: 'string value 1',
             },
             {
               id: 2,
-              name: 'string value 2'
+              name: 'string value 2',
             }]
           sequelizeFinish.publish({ result })
 
-          expect(taintTrackingOperations.newTaintedString).to.be.calledOnceWith(
+          sinon.assert.calledOnceWithExactly(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'string value 1',
             '0.name',
@@ -335,7 +348,8 @@ describe('IAST Taint tracking plugin', () => {
           const result = { id: 1, description: 'value' }
           sequelizeFinish.publish({ result })
 
-          expect(taintTrackingOperations.newTaintedString).to.be.calledOnceWith(
+          sinon.assert.calledOnceWithExactly(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'value',
             'description',
@@ -351,13 +365,13 @@ describe('IAST Taint tracking plugin', () => {
               children: [
                 {
                   id: 11,
-                  name: 'child1'
+                  name: 'child1',
                 },
                 {
                   id: 12,
-                  name: 'child2'
-                }
-              ]
+                  name: 'child2',
+                },
+              ],
             },
             {
               id: 2,
@@ -365,25 +379,27 @@ describe('IAST Taint tracking plugin', () => {
               children: [
                 {
                   id: 21,
-                  name: 'child3'
+                  name: 'child3',
                 },
                 {
                   id: 22,
-                  name: 'child4'
-                }
-              ]
-            }
+                  name: 'child4',
+                },
+              ],
+            },
           ]
           sequelizeFinish.publish({ result })
 
-          expect(taintTrackingOperations.newTaintedString).to.be.calledTwice
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledTwice(taintTrackingOperations.newTaintedString)
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'value',
             '0.description',
             SQL_ROW_VALUE
           )
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'child1',
             '0.children.0.name',
@@ -404,26 +420,28 @@ describe('IAST Taint tracking plugin', () => {
           const result = [
             {
               id: 1,
-              name: 'string value 1'
+              name: 'string value 1',
             },
             {
               id: 2,
-              name: 'string value 2'
+              name: 'string value 2',
             },
             {
               id: 3,
-              name: 'string value 2'
+              name: 'string value 2',
             }]
           sequelizeFinish.publish({ result })
 
-          expect(taintTrackingOperations.newTaintedString).to.be.calledTwice
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledTwice(taintTrackingOperations.newTaintedString)
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'string value 1',
             '0.name',
             SQL_ROW_VALUE
           )
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'string value 2',
             '1.name',
@@ -435,7 +453,8 @@ describe('IAST Taint tracking plugin', () => {
           const result = { id: 1, description: 'value' }
           sequelizeFinish.publish({ result })
 
-          expect(taintTrackingOperations.newTaintedString).to.be.calledOnceWith(
+          sinon.assert.calledOnceWithExactly(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'value',
             'description',
@@ -451,17 +470,17 @@ describe('IAST Taint tracking plugin', () => {
               children: [
                 {
                   id: 11,
-                  name: 'child1'
+                  name: 'child1',
                 },
                 {
                   id: 12,
-                  name: 'child2'
+                  name: 'child2',
                 },
                 {
                   id: 13,
-                  name: 'child3'
-                }
-              ]
+                  name: 'child3',
+                },
+              ],
             },
             {
               id: 2,
@@ -469,17 +488,17 @@ describe('IAST Taint tracking plugin', () => {
               children: [
                 {
                   id: 21,
-                  name: 'child4'
+                  name: 'child4',
                 },
                 {
                   id: 22,
-                  name: 'child5'
+                  name: 'child5',
                 },
                 {
                   id: 23,
-                  name: 'child6'
-                }
-              ]
+                  name: 'child6',
+                },
+              ],
             },
             {
               id: 3,
@@ -487,53 +506,59 @@ describe('IAST Taint tracking plugin', () => {
               children: [
                 {
                   id: 31,
-                  name: 'child7'
+                  name: 'child7',
                 },
                 {
                   id: 32,
-                  name: 'child8'
+                  name: 'child8',
                 },
                 {
                   id: 33,
-                  name: 'child9'
-                }
-              ]
-            }
+                  name: 'child9',
+                },
+              ],
+            },
           ]
           sequelizeFinish.publish({ result })
 
-          expect(taintTrackingOperations.newTaintedString).to.callCount(6)
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.callCount(taintTrackingOperations.newTaintedString, 6)
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'value',
             '0.description',
             SQL_ROW_VALUE
           )
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'child1',
             '0.children.0.name',
             SQL_ROW_VALUE
           )
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'child2',
             '0.children.1.name',
             SQL_ROW_VALUE
           )
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'value2',
             '1.description',
             SQL_ROW_VALUE
           )
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'child4',
             '1.children.0.name',
             SQL_ROW_VALUE
           )
-          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+          sinon.assert.calledWith(
+            taintTrackingOperations.newTaintedString,
             iastContext,
             'child5',
             '1.children.1.name',

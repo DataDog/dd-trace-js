@@ -1,14 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
-
 require('../../setup/mocha')
 
-const { getRequestOptions } = require('./utils')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
+const { getRequestOptions } = require('./utils')
 
 const ddsource = 'dd_debugger'
 const service = 'my-service'
@@ -22,12 +22,12 @@ describe('diagnostic message http requests', function () {
     ['ackReceived', 'RECEIVED'],
     ['ackInstalled', 'INSTALLED'],
     ['ackEmitting', 'EMITTING'],
-    ['ackError', 'ERROR', new Error('boom')]
+    ['ackError', 'ERROR', new Error('boom')],
   ]
 
   beforeEach(function () {
     clock = sinon.useFakeTimers({
-      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
 
     request = sinon.spy()
@@ -47,12 +47,12 @@ describe('diagnostic message http requests', function () {
         runtimeId,
         maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
         dynamicInstrumentation: {
-          uploadIntervalSeconds: 1
+          uploadIntervalSeconds: 1,
         },
-        '@noCallThru': true
+        '@noCallThru': true,
       },
       './json-buffer': JSONBufferSpy,
-      '../../exporters/common/request': request
+      '../../exporters/common/request': request,
     })
   })
 
@@ -69,7 +69,7 @@ describe('diagnostic message http requests', function () {
           ackFn = statusproxy[ackFnName].bind(null, err)
           exception = {
             message: err.message,
-            stacktrace: err.stack
+            stacktrace: err.stack,
           }
         } else {
           ackFn = statusproxy[ackFnName]
@@ -79,44 +79,44 @@ describe('diagnostic message http requests', function () {
 
       it('should buffer instead of calling request directly', function () {
         ackFn({ id: 'foo', version: 0 })
-        expect(request).to.not.have.been.called
-        expect(jsonBuffer.write).to.have.been.calledOnceWith(
+        sinon.assert.notCalled(request)
+        sinon.assert.calledOnceWithExactly(jsonBuffer.write,
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
         )
       })
 
       it('should only add to buffer once if no change', function () {
         ackFn({ id: 'foo', version: 0 })
-        expect(jsonBuffer.write).to.have.been.calledOnceWith(
+        sinon.assert.calledOnceWithExactly(jsonBuffer.write,
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
         )
 
         ackFn({ id: 'foo', version: 0 })
-        expect(jsonBuffer.write).to.have.been.calledOnce
+        sinon.assert.calledOnce(jsonBuffer.write)
       })
 
       it('should add to buffer again if version changes', function () {
         ackFn({ id: 'foo', version: 0 })
-        expect(jsonBuffer.write).to.have.been.calledOnceWith(
+        sinon.assert.calledOnceWithExactly(jsonBuffer.write,
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
         )
 
         ackFn({ id: 'foo', version: 1 })
-        expect(jsonBuffer.write).to.have.been.calledTwice
-        expect(jsonBuffer.write.lastCall).to.have.been.calledWith(
+        sinon.assert.calledTwice(jsonBuffer.write)
+        sinon.assert.calledWith(jsonBuffer.write.lastCall,
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 1, status, exception }))
         )
       })
 
       it('should add to buffer again if probeId changes', function () {
         ackFn({ id: 'foo', version: 0 })
-        expect(jsonBuffer.write).to.have.been.calledOnceWith(
+        sinon.assert.calledOnceWithExactly(jsonBuffer.write,
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
         )
 
         ackFn({ id: 'bar', version: 0 })
-        expect(jsonBuffer.write).to.have.been.calledTwice
-        expect(jsonBuffer.write.lastCall).to.have.been.calledWith(
+        sinon.assert.calledTwice(jsonBuffer.write)
+        sinon.assert.calledWith(jsonBuffer.write.lastCall,
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'bar', version: 0, status, exception }))
         )
       })
@@ -125,23 +125,23 @@ describe('diagnostic message http requests', function () {
         ackFn({ id: 'foo', version: 0 })
         ackFn({ id: 'foo', version: 1 })
         ackFn({ id: 'bar', version: 0 })
-        expect(request).to.not.have.been.called
+        sinon.assert.notCalled(request)
 
         clock.tick(1000)
 
-        expect(request).to.have.been.calledOnce
+        sinon.assert.calledOnce(request)
 
         const payload = getFormPayload(request)
 
-        expect(payload).to.deep.equal([
+        assert.deepStrictEqual(payload, [
           formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }),
           formatAsDiagnosticsEvent({ probeId: 'foo', version: 1, status, exception }),
-          formatAsDiagnosticsEvent({ probeId: 'bar', version: 0, status, exception })
+          formatAsDiagnosticsEvent({ probeId: 'bar', version: 0, status, exception }),
         ])
 
         const opts = getRequestOptions(request)
-        expect(opts).to.have.property('method', 'POST')
-        expect(opts).to.have.property('path', '/debugger/v1/diagnostics')
+        assert.strictEqual(opts.method, 'POST')
+        assert.strictEqual(opts.path, '/debugger/v1/diagnostics')
 
         done()
       })

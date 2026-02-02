@@ -1,9 +1,9 @@
 import 'dd-trace/init.js'
-import { Kafka } from 'kafkajs'
+import kafkaLib from 'kafkajs'
 
-const kafka = new Kafka({
+const kafka = new kafkaLib.Kafka({
   clientId: 'my-app',
-  brokers: ['127.0.0.1:9092']
+  brokers: ['127.0.0.1:9092'],
 })
 
 const sendMessage = async (topic, messages) => {
@@ -11,7 +11,7 @@ const sendMessage = async (topic, messages) => {
   await producer.connect()
   await producer.send({
     topic,
-    messages
+    messages,
   })
   await producer.disconnect()
 }

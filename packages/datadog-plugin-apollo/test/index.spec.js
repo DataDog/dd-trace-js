@@ -1,34 +1,18 @@
 'use strict'
 
-const { expect } = require('chai')
-const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent.js')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants.js')
-const { expectedSchema, rawExpectedSchema } = require('./naming.js')
+const assert = require('node:assert/strict')
+
 const axios = require('axios')
 
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants.js')
+const agent = require('../../dd-trace/test/plugins/agent.js')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const accounts = require('./fixtures.js')
-
-const graphqlTag = require('../../../versions/graphql-tag/index.js').get()
-const gql = graphqlTag.gql
-accounts.typeDefs = gql(accounts.typeDefs)
+const { expectedSchema, rawExpectedSchema } = require('./naming.js')
 
 const fixtures = [accounts]
-
-async function execute (executor, source, variables, operationName) {
-  const resp = await executor({
-    source,
-    document: gql(source),
-    request: {
-      variables
-    },
-    operationName,
-    queryHash: 'hashed',
-    context: null,
-    cache: {}
-  })
-  return resp
-}
+const typeDefs = accounts.typeDefs
 
 describe('Plugin', () => {
   let ApolloGateway
@@ -36,12 +20,28 @@ describe('Plugin', () => {
   let buildSubgraphSchema
   let ApolloServer
   let startStandaloneServer
+  let gql
+
+  function setupFixtures () {
+    const graphqlTag = require('../../../versions/graphql-tag/index.js').get()
+    gql = graphqlTag.gql
+    accounts.typeDefs = gql(typeDefs)
+  }
+
+  function setupApollo (version) {
+    require('../../dd-trace/index.js')
+    const apollo = require(`../../../versions/@apollo/gateway@${version}`).get()
+    const subgraph = require('../../../versions/@apollo/subgraph').get()
+    buildSubgraphSchema = subgraph.buildSubgraphSchema
+    ApolloGateway = apollo.ApolloGateway
+    LocalGraphQLDataSource = apollo.LocalGraphQLDataSource
+  }
 
   function setupGateway () {
     const localDataSources = Object.fromEntries(
       fixtures.map((f) => [
         f.name,
-        new LocalGraphQLDataSource(buildSubgraphSchema(f))
+        new LocalGraphQLDataSource(buildSubgraphSchema(f)),
       ])
     )
 
@@ -49,9 +49,24 @@ describe('Plugin', () => {
       localServiceList: fixtures,
       buildService (service) {
         return localDataSources[service.name]
-      }
+      },
     })
     return gateway
+  }
+
+  async function execute (executor, source, variables, operationName) {
+    const resp = await executor({
+      source,
+      document: gql(source),
+      request: {
+        variables,
+      },
+      operationName,
+      queryHash: 'hashed',
+      context: null,
+      cache: {},
+    })
+    return resp
   }
 
   function gateway () {
@@ -60,14 +75,6 @@ describe('Plugin', () => {
 
   describe('@apollo/gateway', () => {
     withVersions('apollo', '@apollo/gateway', version => {
-      before(() => {
-        require('../../dd-trace/index.js')
-        const apollo = require(`../../../versions/@apollo/gateway@${version}`).get()
-        const subgraph = require('../../../versions/@apollo/subgraph').get()
-        buildSubgraphSchema = subgraph.buildSubgraphSchema
-        ApolloGateway = apollo.ApolloGateway
-        LocalGraphQLDataSource = apollo.LocalGraphQLDataSource
-      })
       after(() => {
         return agent.close({ ritmReset: false })
       })
@@ -75,6 +82,10 @@ describe('Plugin', () => {
       describe('@apollo/server', () => {
         let server
         let port
+
+        before(() => agent.load('apollo'))
+        before(() => setupFixtures())
+        before(() => setupApollo(version))
 
         before(() => {
           ApolloServer = require('../../../versions/@apollo/server/index.js').get().ApolloServer
@@ -84,18 +95,14 @@ describe('Plugin', () => {
 
           server = new ApolloServer({
             gateway: setupGateway(),
-            subscriptions: false // Disable subscriptions (not supported with Apollo Gateway)
+            subscriptions: false, // Disable subscriptions (not supported with Apollo Gateway)
           })
 
           return startStandaloneServer(server, {
-            listen: { port: 0 }
+            listen: { port: 0 },
           }).then(({ url }) => {
             port = new URL(url).port
           })
-        })
-
-        before(() => {
-          return agent.load('apollo')
         })
 
         after(() => {
@@ -114,26 +121,26 @@ describe('Plugin', () => {
             }`
           agent
             .assertSomeTraces((traces) => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
-              expect(traces[0][1]).to.have.property('name', 'apollo.gateway.validate')
-              expect(traces[0][2]).to.have.property('name', 'apollo.gateway.plan')
-              expect(traces[0][3]).to.have.property('name', 'apollo.gateway.execute')
-              expect(traces[0][4]).to.have.property('name', 'apollo.gateway.fetch')
-              expect(traces[0][5]).to.have.property('name', 'apollo.gateway.postprocessing')
+              assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
+              assert.strictEqual(traces[0][1].name, 'apollo.gateway.validate')
+              assert.strictEqual(traces[0][2].name, 'apollo.gateway.plan')
+              assert.strictEqual(traces[0][3].name, 'apollo.gateway.execute')
+              assert.strictEqual(traces[0][4].name, 'apollo.gateway.fetch')
+              assert.strictEqual(traces[0][5].name, 'apollo.gateway.postprocessing')
             })
             .then(done)
             .catch(done)
 
           axios.post(`http://localhost:${port}/`, {
-            query
+            query,
           })
         })
       })
 
       describe('without configuration', () => {
-        before(() => {
-          return agent.load('apollo')
-        })
+        before(() => agent.load('apollo'))
+        before(() => setupFixtures())
+        before(() => setupApollo(version))
 
         it('should instrument apollo/gateway', done => {
           const operationName = 'MyQuery'
@@ -142,47 +149,63 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces((traces) => {
               // the spans are in order of execution
-              expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][0]).to.have.property('resource', 'query MyQuery{hello(name:"")}')
-              expect(traces[0][0]).to.have.property('type', 'web')
-              expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.have.property('graphql.operation.name', operationName)
-              expect(traces[0][0].meta).to.not.have.property('graphql.source')
-              expect(traces[0][0].meta).to.have.property('graphql.operation.type', 'query')
-              expect(traces[0][0].meta).to.have.property('component', 'apollo.gateway')
-              expect(traces[0][0].meta).to.have.property('_dd.integration', 'apollo.gateway')
+              assertObjectContains(traces[0][0], {
+                name: expectedSchema.server.opName,
+                service: expectedSchema.server.serviceName,
+                resource: 'query MyQuery{hello(name:"")}',
+                type: 'web',
+                error: 0,
+                meta: {
+                  'graphql.operation.name': operationName,
+                  'graphql.operation.type': 'query',
+                  component: 'apollo.gateway',
+                  '_dd.integration': 'apollo.gateway',
+                },
+              })
+              assert.ok(!('graphql.source' in traces[0][0].meta))
 
-              expect(traces[0][1]).to.have.property('name', 'apollo.gateway.validate')
-              expect(traces[0][1]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][1]).to.have.property('type', 'web')
-              expect(traces[0][1]).to.have.property('error', 0)
-              expect(traces[0][1].meta).to.have.property('component', 'apollo.gateway')
+              assertObjectContains(traces[0][1], {
+                name: 'apollo.gateway.validate',
+                service: expectedSchema.server.serviceName,
+                type: 'web',
+                error: 0,
+                meta: { component: 'apollo.gateway' },
+              })
 
-              expect(traces[0][2]).to.have.property('name', 'apollo.gateway.plan')
-              expect(traces[0][2]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][2]).to.have.property('type', 'web')
-              expect(traces[0][2]).to.have.property('error', 0)
-              expect(traces[0][2].meta).to.have.property('component', 'apollo.gateway')
+              assertObjectContains(traces[0][2], {
+                name: 'apollo.gateway.plan',
+                service: expectedSchema.server.serviceName,
+                type: 'web',
+                error: 0,
+                meta: { component: 'apollo.gateway' },
+              })
 
-              expect(traces[0][3]).to.have.property('name', 'apollo.gateway.execute')
-              expect(traces[0][3]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][3]).to.have.property('type', 'web')
-              expect(traces[0][3]).to.have.property('error', 0)
-              expect(traces[0][3].meta).to.have.property('component', 'apollo.gateway')
+              assertObjectContains(traces[0][3], {
+                name: 'apollo.gateway.execute',
+                service: expectedSchema.server.serviceName,
+                type: 'web',
+                error: 0,
+                meta: { component: 'apollo.gateway' },
+              })
 
-              expect(traces[0][4]).to.have.property('name', 'apollo.gateway.fetch')
-              expect(traces[0][4]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][4]).to.have.property('type', 'web')
-              expect(traces[0][4]).to.have.property('error', 0)
-              expect(traces[0][4].meta).to.have.property('serviceName', 'accounts')
-              expect(traces[0][4].meta).to.have.property('component', 'apollo.gateway')
+              assertObjectContains(traces[0][4], {
+                name: 'apollo.gateway.fetch',
+                service: expectedSchema.server.serviceName,
+                type: 'web',
+                error: 0,
+                meta: {
+                  serviceName: 'accounts',
+                  component: 'apollo.gateway',
+                },
+              })
 
-              expect(traces[0][5]).to.have.property('name', 'apollo.gateway.postprocessing')
-              expect(traces[0][5]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][5]).to.have.property('type', 'web')
-              expect(traces[0][5]).to.have.property('error', 0)
-              expect(traces[0][5].meta).to.have.property('component', 'apollo.gateway')
+              assertObjectContains(traces[0][5], {
+                name: 'apollo.gateway.postprocessing',
+                service: expectedSchema.server.serviceName,
+                type: 'web',
+                error: 0,
+                meta: { component: 'apollo.gateway' },
+              })
             })
             .then(done)
             .catch(done)
@@ -197,14 +220,16 @@ describe('Plugin', () => {
           const source = '{ hello(name: "world") }'
           agent
             .assertSomeTraces((traces) => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][0]).to.have.property('resource', '{hello(name:"")}')
-              expect(traces[0][0]).to.have.property('type', 'web')
-              expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.not.have.property('graphql.source')
-              expect(traces[0][0].meta).to.have.property('graphql.operation.type', 'query')
-              expect(traces[0][0].meta).to.have.property('component', 'apollo.gateway')
+              assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.server.serviceName)
+              assert.strictEqual(traces[0][0].resource, '{hello(name:"")}')
+              assert.strictEqual(traces[0][0].type, 'web')
+              assert.strictEqual(traces[0][0].error, 0)
+              assert.ok(!('graphql.source' in traces[0][0].meta))
+              assertObjectContains(traces[0][0].meta, {
+                'graphql.operation.type': 'query',
+                component: 'apollo.gateway',
+              })
             })
             .then(done)
             .catch(done)
@@ -229,14 +254,16 @@ describe('Plugin', () => {
           `
           agent
             .assertSomeTraces((traces) => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][0]).to.have.property('resource', '{human{address{civicNumber street}name}}')
-              expect(traces[0][0]).to.have.property('type', 'web')
-              expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.not.have.property('graphql.source')
-              expect(traces[0][0].meta).to.have.property('graphql.operation.type', 'query')
-              expect(traces[0][0].meta).to.have.property('component', 'apollo.gateway')
+              assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.server.serviceName)
+              assert.strictEqual(traces[0][0].resource, '{human{address{civicNumber street}name}}')
+              assert.strictEqual(traces[0][0].type, 'web')
+              assert.strictEqual(traces[0][0].error, 0)
+              assert.ok(!('graphql.source' in traces[0][0].meta))
+              assertObjectContains(traces[0][0].meta, {
+                'graphql.operation.type': 'query',
+                component: 'apollo.gateway',
+              })
             })
             .then(done)
             .catch(done)
@@ -250,10 +277,11 @@ describe('Plugin', () => {
         it('should instrument mutations', done => {
           const source = 'mutation { human { name } }'
 
-          agent
-            .assertSomeTraces((traces) => {
-              expect(traces[0][0].meta).to.have.property('graphql.operation.type', 'mutation')
-            })
+          agent.assertFirstTraceSpan({
+            meta: {
+              'graphql.operation.type': 'mutation',
+            },
+          })
             .then(done)
             .catch(done)
 
@@ -269,7 +297,7 @@ describe('Plugin', () => {
           gateway()
             .then(({ executor }) => {
               return execute(executor, source).then((result) => {
-                expect(result.data.human.pets[0].owner.name).to.equal('test')
+                assert.strictEqual(result.data.human.pets[0].owner.name, 'test')
               })
                 .then(done)
                 .catch(done)
@@ -287,22 +315,30 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
           agent
             .assertSomeTraces((traces) => {
-              expect(traces[0].length).equal(2)
-              expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][0]).to.have.property('error', 1)
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(traces[0][0].meta).to.have.property('component', 'apollo.gateway')
+              assert.strictEqual(traces[0].length, 2)
+              assertObjectContains(traces[0][0], {
+                name: expectedSchema.server.opName,
+                service: expectedSchema.server.serviceName,
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'apollo.gateway',
+                },
+              })
 
-              expect(traces[0][1]).to.have.property('name', 'apollo.gateway.validate')
-              expect(traces[0][1]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][1]).to.have.property('error', 1)
-              expect(traces[0][1].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][1].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][1].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(traces[0][1].meta).to.have.property('component', 'apollo.gateway')
+              assertObjectContains(traces[0][1], {
+                name: 'apollo.gateway.validate',
+                service: expectedSchema.server.serviceName,
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'apollo.gateway',
+                },
+              })
             })
             .then(done)
             .catch(done)
@@ -322,20 +358,24 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
           agent
             .assertSomeTraces((traces) => {
-              expect(traces[0].length).equal(3)
-              expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][0]).to.have.property('error', 1)
+              assert.strictEqual(traces[0].length, 3)
+              assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.server.serviceName)
+              assert.strictEqual(traces[0][0].error, 1)
 
-              expect(traces[0][1]).to.have.property('name', 'apollo.gateway.validate')
-              expect(traces[0][1]).to.have.property('error', 0)
+              assert.strictEqual(traces[0][1].name, 'apollo.gateway.validate')
+              assert.strictEqual(traces[0][1].error, 0)
 
-              expect(traces[0][2]).to.have.property('name', 'apollo.gateway.plan')
-              expect(traces[0][2]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][2]).to.have.property('error', 1)
-              expect(traces[0][2].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][2].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][2].meta).to.have.property(ERROR_STACK, error.stack)
+              assertObjectContains(traces[0][2], {
+                name: 'apollo.gateway.plan',
+                service: expectedSchema.server.serviceName,
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                },
+              })
             })
             .then(done)
             .catch(done)
@@ -357,40 +397,52 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
           agent
             .assertSomeTraces((traces) => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
-              expect(traces[0][0]).to.have.property('error', 1)
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+              assertObjectContains(traces[0][0], {
+                name: expectedSchema.server.opName,
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                },
+              })
 
-              expect(traces[0][1]).to.have.property('name', 'apollo.gateway.validate')
-              expect(traces[0][1]).to.have.property('error', 0)
+              assert.strictEqual(traces[0][1].name, 'apollo.gateway.validate')
+              assert.strictEqual(traces[0][1].error, 0)
 
-              expect(traces[0][2]).to.have.property('name', 'apollo.gateway.plan')
-              expect(traces[0][2]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][2]).to.have.property('error', 0)
+              assert.strictEqual(traces[0][2].name, 'apollo.gateway.plan')
+              assert.strictEqual(traces[0][2].service, expectedSchema.server.serviceName)
+              assert.strictEqual(traces[0][2].error, 0)
 
-              expect(traces[0][3]).to.have.property('name', 'apollo.gateway.execute')
+              assert.strictEqual(traces[0][3].name, 'apollo.gateway.execute')
               // In order to mimick the ApolloGateway instrumentation we also patch
               // the call to  the recordExceptions() method by ApolloGateway
               // in version 2.3.0, there is no recordExceptions method thus we can't ever attach an error to the
               // fetch span but instead the error will be propagated to the request span and be set there
               if (version > '2.3.0') {
-                expect(traces[0][3]).to.have.property('error', 1)
-                expect(traces[0][3].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(traces[0][3].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(traces[0][3].meta).to.have.property(ERROR_STACK, error.stack)
-              } else { expect(traces[0][3]).to.have.property('error', 0) }
+                assertObjectContains(traces[0][3], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                  },
+                })
+              } else { assert.strictEqual(traces[0][3].error, 0) }
 
-              expect(traces[0][4]).to.have.property('name', 'apollo.gateway.fetch')
-              expect(traces[0][4]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][4]).to.have.property('error', 1)
-              expect(traces[0][4].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][4].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][4].meta).to.have.property(ERROR_STACK, error.stack)
+              assertObjectContains(traces[0][4], {
+                name: 'apollo.gateway.fetch',
+                service: expectedSchema.server.serviceName,
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                },
+              })
 
-              expect(traces[0][5]).to.have.property('name', 'apollo.gateway.postprocessing')
-              expect(traces[0][5]).to.have.property('error', 0)
+              assert.strictEqual(traces[0][5].name, 'apollo.gateway.postprocessing')
+              assert.strictEqual(traces[0][5].error, 0)
             })
             .then(done)
             .catch(done)
@@ -399,7 +451,7 @@ describe('Plugin', () => {
             localServiceList: fixtures,
             fetcher: () => {
               throw Error('Nooo')
-            }
+            },
           })
           gateway.load().then(resp => {
             return execute(resp.executor, source, variableValues, operationName)
@@ -418,22 +470,22 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces((traces) => {
               // the spans are in order of execution
-              expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
+              assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
 
-              expect(traces[0][1]).to.have.property('name', 'apollo.gateway.validate')
-              expect(traces[0][1].parent_id.toString()).to.equal(traces[0][0].span_id.toString())
+              assert.strictEqual(traces[0][1].name, 'apollo.gateway.validate')
+              assert.strictEqual(traces[0][1].parent_id.toString(), traces[0][0].span_id.toString())
 
-              expect(traces[0][2]).to.have.property('name', 'apollo.gateway.plan')
-              expect(traces[0][2].parent_id.toString()).to.equal(traces[0][0].span_id.toString())
+              assert.strictEqual(traces[0][2].name, 'apollo.gateway.plan')
+              assert.strictEqual(traces[0][2].parent_id.toString(), traces[0][0].span_id.toString())
 
-              expect(traces[0][3]).to.have.property('name', 'apollo.gateway.execute')
-              expect(traces[0][3].parent_id.toString()).to.equal(traces[0][0].span_id.toString())
+              assert.strictEqual(traces[0][3].name, 'apollo.gateway.execute')
+              assert.strictEqual(traces[0][3].parent_id.toString(), traces[0][0].span_id.toString())
 
-              expect(traces[0][4]).to.have.property('name', 'apollo.gateway.fetch')
-              expect(traces[0][4].parent_id.toString()).to.equal(traces[0][3].span_id.toString())
+              assert.strictEqual(traces[0][4].name, 'apollo.gateway.fetch')
+              assert.strictEqual(traces[0][4].parent_id.toString(), traces[0][3].span_id.toString())
 
-              expect(traces[0][5]).to.have.property('name', 'apollo.gateway.postprocessing')
-              expect(traces[0][5].parent_id.toString()).to.equal(traces[0][3].span_id.toString())
+              assert.strictEqual(traces[0][5].name, 'apollo.gateway.postprocessing')
+              assert.strictEqual(traces[0][5].parent_id.toString(), traces[0][3].span_id.toString())
             })
             .then(done)
             .catch(done)
@@ -456,14 +508,14 @@ describe('Plugin', () => {
           {
             selectSpan: (traces) => {
               return traces[0][0]
-            }
+            },
           }
         )
 
         describe('with configuration', () => {
-          before(() => {
-            return agent.load('apollo', { service: 'custom', source: true, signature: false })
-          })
+          before(() => agent.load('apollo', { service: 'custom', source: true, signature: false }))
+          before(() => setupFixtures())
+          before(() => setupApollo(version))
 
           it('should be configured with the correct values', done => {
             const operationName = 'MyQuery'
@@ -471,25 +523,25 @@ describe('Plugin', () => {
             const variableValues = { who: 'world' }
             agent
               .assertSomeTraces((traces) => {
-                expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
-                expect(traces[0][0]).to.have.property('service', 'custom')
-                expect(traces[0][0]).to.have.property('resource', `query ${operationName}`)
-                expect(traces[0][0].meta).to.have.property('graphql.source', source)
+                assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
+                assert.strictEqual(traces[0][0].service, 'custom')
+                assert.strictEqual(traces[0][0].resource, `query ${operationName}`)
+                assert.strictEqual(traces[0][0].meta['graphql.source'], source)
 
-                expect(traces[0][1]).to.have.property('name', 'apollo.gateway.validate')
-                expect(traces[0][1]).to.have.property('service', 'custom')
+                assert.strictEqual(traces[0][1].name, 'apollo.gateway.validate')
+                assert.strictEqual(traces[0][1].service, 'custom')
 
-                expect(traces[0][2]).to.have.property('name', 'apollo.gateway.plan')
-                expect(traces[0][2]).to.have.property('service', 'custom')
+                assert.strictEqual(traces[0][2].name, 'apollo.gateway.plan')
+                assert.strictEqual(traces[0][2].service, 'custom')
 
-                expect(traces[0][3]).to.have.property('name', 'apollo.gateway.execute')
-                expect(traces[0][3]).to.have.property('service', 'custom')
+                assert.strictEqual(traces[0][3].name, 'apollo.gateway.execute')
+                assert.strictEqual(traces[0][3].service, 'custom')
 
-                expect(traces[0][4]).to.have.property('name', 'apollo.gateway.fetch')
-                expect(traces[0][4]).to.have.property('service', 'custom')
+                assert.strictEqual(traces[0][4].name, 'apollo.gateway.fetch')
+                assert.strictEqual(traces[0][4].service, 'custom')
 
-                expect(traces[0][5]).to.have.property('name', 'apollo.gateway.postprocessing')
-                expect(traces[0][5]).to.have.property('service', 'custom')
+                assert.strictEqual(traces[0][5].name, 'apollo.gateway.postprocessing')
+                assert.strictEqual(traces[0][5].service, 'custom')
               })
               .then(done)
               .catch(done)

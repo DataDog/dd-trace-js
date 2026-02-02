@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -14,7 +15,7 @@ describe('profilers/native/wall', () => {
 
   beforeEach(() => {
     profile0 = {
-      encodeAsync: sinon.stub().returns(Promise.resolve('encoded'))
+      encodeAsync: sinon.stub().returns(Promise.resolve('encoded')),
     }
     pprof = {
       time: {
@@ -24,17 +25,17 @@ describe('profilers/native/wall', () => {
         v8ProfilerStuckEventLoopDetected: sinon.stub().returns(false),
         constants: {
           kSampleCount: 0,
-          NON_JS_THREADS_FUNCTION_NAME: 'Non JS threads activity'
+          NON_JS_THREADS_FUNCTION_NAME: 'Non JS threads activity',
         },
         getMetrics: sinon.stub().returns({
           totalAsyncContextCount: 0,
-          usedAsyncContextCount: 0
-        })
-      }
+          usedAsyncContextCount: 0,
+        }),
+      },
     }
 
     NativeWallProfiler = proxyquire('../../../src/profiling/profilers/wall', {
-      '@datadog/pprof': pprof
+      '@datadog/pprof': pprof,
     })
   })
 
@@ -56,9 +57,9 @@ describe('profilers/native/wall', () => {
     profiler.start()
 
     // @ts-expect-error: _startProfilerIdleNotifier is not typed on process
-    expect(process._startProfilerIdleNotifier).to.be.a('function')
+    assert.strictEqual(typeof process._startProfilerIdleNotifier, 'function')
     // @ts-expect-error: _stopProfilerIdleNotifier is not typed on process
-    expect(process._stopProfilerIdleNotifier).to.be.a('function')
+    assert.strictEqual(typeof process._stopProfilerIdleNotifier, 'function')
 
     // @ts-expect-error: _startProfilerIdleNotifier is not typed on process
     process._startProfilerIdleNotifier = start
@@ -75,7 +76,7 @@ describe('profilers/native/wall', () => {
         lineNumbers: false,
         workaroundV8Bug: false,
         collectCpuTime: false,
-        useCPED: false
+        useCPED: false,
       })
   })
 
@@ -95,7 +96,7 @@ describe('profilers/native/wall', () => {
         lineNumbers: false,
         workaroundV8Bug: false,
         collectCpuTime: false,
-        useCPED: false
+        useCPED: false,
       })
   })
 
@@ -132,26 +133,26 @@ describe('profilers/native/wall', () => {
     const info = profiler.getInfo()
     profiler.stop()
 
-    expect(info.totalAsyncContextCount).to.not.be.undefined
-    expect(info.usedAsyncContextCount).to.not.be.undefined
+    assert.notStrictEqual(info.totalAsyncContextCount, undefined)
+    assert.notStrictEqual(info.usedAsyncContextCount, undefined)
   })
 
   it('should collect profiles from the internal time profiler', () => {
     const profiler = new NativeWallProfiler()
 
-    expect(profiler.isStarted()).to.be.false
+    assert.strictEqual(profiler.isStarted(), false)
     profiler.start()
-    expect(profiler.isStarted()).to.be.true
+    assert.strictEqual(profiler.isStarted(), true)
 
     const profile = profiler.profile(true)
 
-    expect(profile).to.be.equal(profile0)
+    assert.strictEqual(profile, profile0)
 
     sinon.assert.calledOnce(pprof.time.stop)
     sinon.assert.calledOnce(pprof.time.start)
-    expect(profiler.isStarted()).to.be.true
+    assert.strictEqual(profiler.isStarted(), true)
     profiler.stop()
-    expect(profiler.isStarted()).to.be.false
+    assert.strictEqual(profiler.isStarted(), false)
     sinon.assert.calledTwice(pprof.time.stop)
   })
 
@@ -162,11 +163,11 @@ describe('profilers/native/wall', () => {
 
     const profile = profiler.profile(false)
 
-    expect(profile).to.equal(profile0)
+    assert.strictEqual(profile, profile0)
 
     sinon.assert.calledOnce(pprof.time.stop)
     sinon.assert.calledOnce(pprof.time.start)
-    expect(profiler.isStarted()).to.be.false
+    assert.strictEqual(profiler.isStarted(), false)
     profiler.stop()
     sinon.assert.calledOnce(pprof.time.stop)
   })
@@ -202,7 +203,7 @@ describe('profilers/native/wall', () => {
         lineNumbers: false,
         workaroundV8Bug: false,
         collectCpuTime: false,
-        useCPED: false
+        useCPED: false,
       })
   })
 
@@ -213,13 +214,13 @@ describe('profilers/native/wall', () => {
 
     function expectLabels (context, expected) {
       const actual = profiler._generateLabels({ node: {}, context })
-      expect(actual).to.deep.equal(expected)
+      assert.deepStrictEqual(actual, expected)
     }
 
-    expect(profiler._generateLabels({ node: { name: 'Non JS threads activity' } })).to.deep.equal({
+    assert.deepStrictEqual(profiler._generateLabels({ node: { name: 'Non JS threads activity' } }), {
       'thread name': 'Non-JS threads',
       'thread id': 'NA',
-      'os thread id': 'NA'
+      'os thread id': 'NA',
     })
 
     const shared = require('../../../src/profiling/profilers/shared')
@@ -227,14 +228,14 @@ describe('profilers/native/wall', () => {
     const threadInfo = {
       'thread name': 'Main Event Loop',
       'thread id': '0',
-      'os thread id': nativeThreadId
+      'os thread id': nativeThreadId,
     }
 
     expectLabels(undefined, threadInfo)
 
     const threadInfoWithTimestamp = {
       ...threadInfo,
-      end_timestamp_ns: 1234000n
+      end_timestamp_ns: 1234000n,
     }
 
     expectLabels({ timestamp: 1234n }, threadInfoWithTimestamp)
@@ -243,7 +244,7 @@ describe('profilers/native/wall', () => {
 
     expectLabels({ timestamp: 1234n, asyncId: 1 }, {
       ...threadInfoWithTimestamp,
-      'async id': 1
+      'async id': 1,
     })
 
     expectLabels({ timestamp: 1234n, context: {} }, threadInfoWithTimestamp)
@@ -252,25 +253,25 @@ describe('profilers/native/wall', () => {
 
     expectLabels({ timestamp: 1234n, context: { ref: { spanId: 'foo' } } }, {
       ...threadInfoWithTimestamp,
-      'span id': 'foo'
+      'span id': 'foo',
     })
 
     expectLabels({ timestamp: 1234n, context: { ref: { rootSpanId: 'foo' } } }, {
       ...threadInfoWithTimestamp,
-      'local root span id': 'foo'
+      'local root span id': 'foo',
     })
 
     expectLabels({
       timestamp: 1234n,
-      context: { ref: { webTags: { 'http.method': 'GET', 'http.route': '/foo/bar' } } }
+      context: { ref: { webTags: { 'http.method': 'GET', 'http.route': '/foo/bar' } } },
     }, {
       ...threadInfoWithTimestamp,
-      'trace endpoint': 'GET /foo/bar'
+      'trace endpoint': 'GET /foo/bar',
     })
 
     expectLabels({ timestamp: 1234n, context: { ref: { endpoint: 'GET /foo/bar/2' } } }, {
       ...threadInfoWithTimestamp,
-      'trace endpoint': 'GET /foo/bar/2'
+      'trace endpoint': 'GET /foo/bar/2',
     })
 
     // All at once
@@ -281,15 +282,15 @@ describe('profilers/native/wall', () => {
         ref: {
           spanId: '1234567890',
           rootSpanId: '0987654321',
-          webTags: { 'http.method': 'GET', 'http.route': '/foo/bar' }
-        }
-      }
+          webTags: { 'http.method': 'GET', 'http.route': '/foo/bar' },
+        },
+      },
     }, {
       ...threadInfoWithTimestamp,
       'async id': 2,
       'span id': '1234567890',
       'local root span id': '0987654321',
-      'trace endpoint': 'GET /foo/bar'
+      'trace endpoint': 'GET /foo/bar',
     })
   })
 })

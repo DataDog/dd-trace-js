@@ -3,28 +3,28 @@
 const assert = require('node:assert')
 const { join, basename } = require('node:path')
 
-const session = require('./stub-session')
 const proxyquire = require('proxyquire')
+const session = require('./stub-session')
 
 const collectorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/collector', {
-  '../session': session
+  '../session': session,
 })
 const redactionWithStub = proxyquire.noCallThru()('../../../../src/debugger/devtools_client/snapshot/redaction', {
   '../config': {
     dynamicInstrumentation: {
       redactedIdentifiers: [],
-      redactionExcludedIdentifiers: []
+      redactionExcludedIdentifiers: [],
     },
-  }
+  },
 })
 
 const processorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/processor', {
-  './redaction': redactionWithStub
+  './redaction': redactionWithStub,
 })
 
 const { getLocalStateForCallFrame } = proxyquire('../../../../src/debugger/devtools_client/snapshot', {
   './collector': collectorWithStub,
-  './processor': processorWithStub
+  './processor': processorWithStub,
 })
 
 module.exports = {
@@ -34,7 +34,7 @@ module.exports = {
   teardown,
   setAndTriggerBreakpoint,
   assertOnBreakpoint,
-  getLocalStateForCallFrame
+  getLocalStateForCallFrame,
 }
 
 /**
@@ -88,8 +88,8 @@ async function setAndTriggerBreakpoint (path, line) {
   await session.post('Debugger.setBreakpoint', {
     location: {
       scriptId: await scriptId,
-      lineNumber: line - 1 // Beware! lineNumber is zero-indexed
-    }
+      lineNumber: line - 1, // Beware! lineNumber is zero-indexed
+    },
   })
   run()
 }
@@ -103,8 +103,8 @@ function assertOnBreakpoint (done, snapshotConfig, callback) {
   session.once('Debugger.paused', ({ params }) => {
     assert.strictEqual(params.hitBreakpoints.length, 1)
 
-    getLocalStateForCallFrame(params.callFrames[0], snapshotConfig).then((process) => {
-      callback(process())
+    getLocalStateForCallFrame(params.callFrames[0], snapshotConfig).then(({ processLocalState }) => {
+      callback(processLocalState())
       done()
     }).catch(done)
   })

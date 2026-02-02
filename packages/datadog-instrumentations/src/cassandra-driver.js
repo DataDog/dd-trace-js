@@ -1,10 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('apm:cassandra-driver:query:start')
 const finishCh = channel('apm:cassandra-driver:query:finish')

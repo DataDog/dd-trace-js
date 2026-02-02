@@ -64,7 +64,7 @@ jobs:
       SERVICES: aerospike
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -78,9 +78,11 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-aerospike-${{ matrix.node-version }}-${{ matrix.range_clean }}
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -100,7 +102,7 @@ jobs:
       SERVICES: qpid
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -116,7 +118,7 @@ jobs:
       PLUGINS: amqplib
       SERVICES: rabbitmq
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -126,7 +128,7 @@ jobs:
     env:
       PLUGINS: apollo
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -137,7 +139,7 @@ jobs:
       PLUGINS: avsc
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -147,8 +149,24 @@ jobs:
     env:
       PLUGINS: axios
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  bullmq:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.0-alpine
+        ports:
+          - 6379:6379
+    env:
+      PLUGINS: bullmq
+      SERVICES: redis
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
@@ -157,7 +175,7 @@ jobs:
     env:
       PLUGINS: bunyan
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -173,7 +191,7 @@ jobs:
       PLUGINS: cassandra-driver
       SERVICES: cassandra
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -183,7 +201,7 @@ jobs:
     env:
       PLUGINS: child_process
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
@@ -193,9 +211,11 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-child-process
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -205,7 +225,7 @@ jobs:
     env:
       PLUGINS: crypto
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -249,7 +269,7 @@ jobs:
       SERVICES: kafka
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -260,9 +280,11 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-confluentinc-kafka-javascript-${{ matrix.node-version }}
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -272,7 +294,7 @@ jobs:
     env:
       PLUGINS: cookie-parser
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -282,7 +304,7 @@ jobs:
     env:
       PLUGINS: cookie
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -312,7 +334,7 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
       DD_INJECT_FORCE: 'true'
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -320,9 +342,11 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn config set ignore-engines true
       - run: yarn test:plugins:ci --ignore-engines
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-couchbase-${{ matrix.node-version }}
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -332,7 +356,7 @@ jobs:
     env:
       PLUGINS: connect
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -342,7 +366,7 @@ jobs:
     env:
       PLUGINS: dns
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -357,9 +381,11 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-dns
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -377,7 +403,7 @@ jobs:
       PLUGINS: elasticsearch
       SERVICES: elasticsearch
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -386,9 +412,11 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-elasticsearch
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -398,7 +426,7 @@ jobs:
     env:
       PLUGINS: express
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -409,7 +437,7 @@ jobs:
     env:
       PLUGINS: express-mongo-sanitize
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -419,7 +447,7 @@ jobs:
     env:
       PLUGINS: express-session
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -429,7 +457,7 @@ jobs:
     env:
       PLUGINS: fastify
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -439,7 +467,7 @@ jobs:
     env:
       PLUGINS: fetch
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -449,7 +477,7 @@ jobs:
     env:
       PLUGINS: fs
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -459,7 +487,7 @@ jobs:
     env:
       PLUGINS: generic-pool
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -469,7 +497,7 @@ jobs:
     env:
       PLUGINS: graphql
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -479,7 +507,7 @@ jobs:
     env:
       PLUGINS: grpc
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -489,7 +517,7 @@ jobs:
     env:
       PLUGINS: handlebars
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -499,7 +527,7 @@ jobs:
     env:
       PLUGINS: hapi
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -509,7 +537,7 @@ jobs:
     env:
       PLUGINS: hono
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -522,7 +550,7 @@ jobs:
     env:
       PLUGINS: http
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -533,9 +561,11 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-http-${{ matrix.node-version }}
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -545,7 +575,7 @@ jobs:
     env:
       PLUGINS: http2
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -560,9 +590,11 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-http2
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -599,7 +631,7 @@ jobs:
       PLUGINS: kafkajs
       SERVICES: kafka
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -610,9 +642,11 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-kafkajs-${{ matrix.node-version }}
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -622,7 +656,7 @@ jobs:
     env:
       PLUGINS: knex
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -632,7 +666,7 @@ jobs:
     env:
       PLUGINS: koa
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -642,7 +676,7 @@ jobs:
     env:
       PLUGINS: ldapjs
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -662,7 +696,7 @@ jobs:
       PLUGINS: limitd-client
       SERVICES: limitd
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -672,7 +706,7 @@ jobs:
     env:
       PLUGINS: lodash
     steps:
-    - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - uses: ./.github/actions/plugins/test
       with:
         dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -691,7 +725,7 @@ jobs:
       PLUGINS: mariadb
       SERVICES: mariadb
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -707,7 +741,7 @@ jobs:
       PLUGINS: memcached
       SERVICES: memcached
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -717,7 +751,7 @@ jobs:
     env:
       PLUGINS: microgateway-core
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -727,7 +761,7 @@ jobs:
     env:
       PLUGINS: moleculer
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -744,7 +778,7 @@ jobs:
       PACKAGE_NAMES: mongodb
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -761,7 +795,7 @@ jobs:
       PACKAGE_NAMES: mongodb-core,express-mongo-sanitize
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -777,7 +811,7 @@ jobs:
       PLUGINS: mongoose
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -787,7 +821,7 @@ jobs:
     env:
       PLUGINS: multer
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -806,7 +840,7 @@ jobs:
       PLUGINS: mysql
       SERVICES: mysql
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -825,7 +859,7 @@ jobs:
       PLUGINS: mysql2
       SERVICES: mysql2
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -835,7 +869,7 @@ jobs:
     env:
       PLUGINS: net
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -850,9 +884,11 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-net
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -897,7 +933,7 @@ jobs:
       PLUGINS: next
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -906,9 +942,11 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-next-${{ matrix.range_clean }}
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -918,7 +956,7 @@ jobs:
     env:
       PLUGINS: node-serialize
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -937,12 +975,11 @@ jobs:
       PLUGINS: opensearch
       SERVICES: opensearch
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
-  # TODO: Figure out why nyc stopped working with EACCESS errors.
   oracledb:
     runs-on: ubuntu-latest
     services:
@@ -967,7 +1004,7 @@ jobs:
       SERVICES: oracledb
       DD_INJECT_FORCE: 'true'
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node
         with:
           version: eol
@@ -983,10 +1020,12 @@ jobs:
           sudo ldconfig
       - run: yarn config set ignore-engines true
       - run: yarn services --ignore-engines
-      - run: yarn test:plugins --ignore-engines
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - run: yarn test:plugins:ci --ignore-engines
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-oracledb
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -997,7 +1036,7 @@ jobs:
     env:
       PLUGINS: pino
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
@@ -1009,9 +1048,11 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-pino
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -1030,12 +1071,21 @@ jobs:
       PLUGINS: pg
       SERVICES: postgres
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
   prisma:
+    strategy:
+      matrix:
+        include:
+          - node-version: 18
+            range: '>=6.1.0 <7.0.0'
+            range_clean: gte.6.16.0.and.lt.7.0.0
+          - node-version: 'latest'
+            range: ''
+            range_clean: all
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -1047,18 +1097,35 @@ jobs:
     env:
       PLUGINS: prisma
       SERVICES: prisma
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
-      - uses: ./.github/actions/plugins/test
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          version: ${{ matrix.node-version }}
+      - uses: ./.github/actions/install
+      - name: Run tests
+        run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-prisma-${{ matrix.node-version }}-${{ matrix.range_clean }}
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   process:
     runs-on: ubuntu-latest
     env:
       PLUGINS: process
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1069,7 +1136,7 @@ jobs:
       PLUGINS: protobufjs
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1079,7 +1146,7 @@ jobs:
     env:
       PLUGINS: pug
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1095,7 +1162,7 @@ jobs:
       PLUGINS: redis
       SERVICES: redis
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1111,7 +1178,7 @@ jobs:
       PLUGINS: ioredis
       SERVICES: ioredis
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1127,7 +1194,7 @@ jobs:
       PLUGINS: iovalkey
       SERVICES: valkey
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1139,7 +1206,7 @@ jobs:
     env:
       PLUGINS: restify
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
@@ -1162,7 +1229,7 @@ jobs:
       SERVICES: qpid
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1172,7 +1239,7 @@ jobs:
     env:
       PLUGINS: router
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1182,7 +1249,7 @@ jobs:
     env:
       PLUGINS: sequelize
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1192,7 +1259,7 @@ jobs:
     env:
       PLUGINS: sharedb
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -1201,9 +1268,11 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-sharedb
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -1223,7 +1292,7 @@ jobs:
       PLUGINS: tedious
       SERVICES: mssql
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -1233,9 +1302,11 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: apm-integrations-tedious
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
@@ -1245,7 +1316,7 @@ jobs:
     env:
       PLUGINS: undici
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1255,7 +1326,7 @@ jobs:
     env:
       PLUGINS: url
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1265,7 +1336,7 @@ jobs:
     env:
       PLUGINS: vm
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1275,7 +1346,7 @@ jobs:
     env:
       PLUGINS: winston
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1285,7 +1356,7 @@ jobs:
     env:
       PLUGINS: ws
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}

@@ -2,5 +2,5 @@
 
 module.exports = {
   ValueOnly: 'ValueOnly',
-  NameAndValue: 'NameAndValue'
+  NameAndValue: 'NameAndValue',
 }

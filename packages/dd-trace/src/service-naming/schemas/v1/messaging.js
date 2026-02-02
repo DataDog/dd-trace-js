@@ -4,12 +4,12 @@ const { identityService } = require('../util')
 
 const amqpInbound = {
   opName: () => 'amqp.process',
-  serviceName: identityService
+  serviceName: identityService,
 }
 
 const amqpOutbound = {
   opName: () => 'amqp.send',
-  serviceName: identityService
+  serviceName: identityService,
 }
 
 const messaging = {
@@ -18,65 +18,73 @@ const messaging = {
     amqp10: amqpOutbound,
     'azure-service-bus': {
       opName: () => 'azure.servicebus.send',
-      serviceName: identityService
+      serviceName: identityService,
     },
     'azure-event-hubs': {
       opName: () => 'azure.eventhubs.send',
-      serviceName: identityService
+      serviceName: identityService,
     },
     'google-cloud-pubsub': {
       opName: () => 'gcp.pubsub.send',
-      serviceName: identityService
+      serviceName: identityService,
     },
     kafkajs: {
       opName: () => 'kafka.send',
-      serviceName: identityService
+      serviceName: identityService,
     },
     'confluentinc-kafka-javascript': {
       opName: () => 'kafka.send',
-      serviceName: identityService
+      serviceName: identityService,
     },
     rhea: amqpOutbound,
     sqs: {
       opName: () => 'aws.sqs.send',
-      serviceName: identityService
+      serviceName: identityService,
     },
     sns: {
       opName: () => 'aws.sns.send',
-      serviceName: identityService
-    }
+      serviceName: identityService,
+    },
+    bullmq: {
+      opName: () => 'bullmq.add',
+      serviceName: identityService,
+    },
   },
   consumer: {
     amqplib: amqpInbound,
     amqp10: amqpInbound,
     'google-cloud-pubsub': {
       opName: () => 'gcp.pubsub.process',
-      serviceName: identityService
+      serviceName: identityService,
     },
     kafkajs: {
       opName: () => 'kafka.process',
-      serviceName: identityService
+      serviceName: identityService,
     },
     'confluentinc-kafka-javascript': {
       opName: () => 'kafka.process',
-      serviceName: identityService
+      serviceName: identityService,
     },
     rhea: amqpInbound,
     sqs: {
       opName: () => 'aws.sqs.process',
-      serviceName: identityService
-    }
+      serviceName: identityService,
+    },
+    bullmq: {
+      opName: () => 'bullmq.processJob',
+      serviceName: identityService,
+    },
   },
   client: {
     amqplib: {
       opName: () => 'amqp.command',
-      serviceName: identityService
+      serviceName: identityService,
     },
     'google-cloud-pubsub': {
       opName: () => 'gcp.pubsub.request',
-      serviceName: identityService
-    }
-  }
+      serviceName: identityService,
+    },
+  },
 }
 
 module.exports = messaging

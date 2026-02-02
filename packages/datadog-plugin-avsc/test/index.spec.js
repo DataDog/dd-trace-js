@@ -1,8 +1,10 @@
 'use strict'
 
 const fs = require('fs')
+const assert = require('node:assert/strict')
 const path = require('path')
-const { expect } = require('chai')
+
+const sinon = require('sinon')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const {
@@ -11,12 +13,12 @@ const {
   SCHEMA_NAME,
   SCHEMA_OPERATION,
   SCHEMA_WEIGHT,
-  SCHEMA_TYPE
+  SCHEMA_TYPE,
 } = require('../../dd-trace/src/constants')
-const sinon = require('sinon')
-const { loadMessage } = require('./helpers')
 const { SchemaBuilder } = require('../../dd-trace/src/datastreams/schemas/schema_builder')
 const { NODE_MAJOR } = require('../../../version')
+const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
+const { loadMessage } = require('./helpers')
 
 const BASIC_USER_SCHEMA_DEF = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'schemas/expected_user_schema.json'), 'utf8')
@@ -41,7 +43,7 @@ describe('Plugin', () => {
     let mockTime = 0
 
     // avsc version 5.0.0 currently does not support a nodeMajor version greater than major version 24
-    withVersions('avsc', ['avsc'], NODE_MAJOR >= 25 ? '>5.0.0' : undefined, (version) => {
+    withVersions('avsc', ['avsc'], NODE_MAJOR >= 25 ? '>5.0.0' : '*', (version) => {
       before(() => {
         tracer = require('../../dd-trace').init()
         // reset sampled schemas
@@ -60,6 +62,7 @@ describe('Plugin', () => {
           const cache = SchemaBuilder.getCache()
           cache.clear()
           return agent.load('avsc').then(() => {
+            temporaryWarningExceptions.add('SlowBuffer() is deprecated. Please use Buffer.allocUnsafeSlow()')
             avro = require(`../../../versions/avsc@${version}`).get()
           })
         })
@@ -78,14 +81,14 @@ describe('Plugin', () => {
             const buf = type.toBuffer({ name: 'Alyssa', favorite_number: 256, favorite_color: null })
             fs.writeFileSync(filePath, buf)
 
-            expect(span._name).to.equal('user.serialize')
+            assert.strictEqual(span._name, 'user.serialize')
 
-            expect(compareJson(BASIC_USER_SCHEMA_DEF, span)).to.equal(true)
-            expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'avro')
-            expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'example.avro.User')
-            expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'serialization')
-            expect(span.context()._tags).to.have.property(SCHEMA_ID, BASIC_USER_SCHEMA_ID)
-            expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+            assert.strictEqual(compareJson(BASIC_USER_SCHEMA_DEF, span), true)
+            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')
+            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.avro.User')
+            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
+            assert.strictEqual(span.context()._tags[SCHEMA_ID], BASIC_USER_SCHEMA_ID)
+            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -105,18 +108,18 @@ describe('Plugin', () => {
               status: 'ACTIVE',
               profile_picture: Buffer.from('binarydata'),
               metadata: Buffer.from('metadata12345678'),
-              address: { street: '123 Main St', city: 'Metropolis', zipcode: '12345' }
+              address: { street: '123 Main St', city: 'Metropolis', zipcode: '12345' },
             })
             fs.writeFileSync(filePath, buf)
 
-            expect(span._name).to.equal('advanced_user.serialize')
+            assert.strictEqual(span._name, 'advanced_user.serialize')
 
-            expect(compareJson(ADVANCED_USER_SCHEMA_DEF, span)).to.equal(true)
-            expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'avro')
-            expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'example.avro.AdvancedUser')
-            expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'serialization')
-            expect(span.context()._tags).to.have.property(SCHEMA_ID, ADVANCED_USER_SCHEMA_ID)
-            expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+            assert.strictEqual(compareJson(ADVANCED_USER_SCHEMA_DEF, span), true)
+            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')
+            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.avro.AdvancedUser')
+            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
+            assert.strictEqual(span.context()._tags[SCHEMA_ID], ADVANCED_USER_SCHEMA_ID)
+            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -130,14 +133,14 @@ describe('Plugin', () => {
           tracer.trace('user.deserialize', span => {
             type.fromBuffer(buf)
 
-            expect(span._name).to.equal('user.deserialize')
+            assert.strictEqual(span._name, 'user.deserialize')
 
-            expect(compareJson(BASIC_USER_SCHEMA_DEF, span)).to.equal(true)
-            expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'avro')
-            expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'example.avro.User')
-            expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'deserialization')
-            expect(span.context()._tags).to.have.property(SCHEMA_ID, BASIC_USER_SCHEMA_ID)
-            expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+            assert.strictEqual(compareJson(BASIC_USER_SCHEMA_DEF, span), true)
+            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')
+            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.avro.User')
+            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context()._tags[SCHEMA_ID], BASIC_USER_SCHEMA_ID)
+            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -155,21 +158,21 @@ describe('Plugin', () => {
             status: 'ACTIVE',
             profile_picture: Buffer.from('binarydata'),
             metadata: Buffer.from('metadata12345678'),
-            address: { street: '123 Main St', city: 'Metropolis', zipcode: '12345' }
+            address: { street: '123 Main St', city: 'Metropolis', zipcode: '12345' },
           })
           fs.writeFileSync(filePath, buf)
 
           tracer.trace('advanced_user.deserialize', span => {
             type.fromBuffer(buf)
 
-            expect(span._name).to.equal('advanced_user.deserialize')
+            assert.strictEqual(span._name, 'advanced_user.deserialize')
 
-            expect(compareJson(ADVANCED_USER_SCHEMA_DEF, span)).to.equal(true)
-            expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'avro')
-            expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'example.avro.AdvancedUser')
-            expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'deserialization')
-            expect(span.context()._tags).to.have.property(SCHEMA_ID, ADVANCED_USER_SCHEMA_ID)
-            expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+            assert.strictEqual(compareJson(ADVANCED_USER_SCHEMA_DEF, span), true)
+            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')
+            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.avro.AdvancedUser')
+            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context()._tags[SCHEMA_ID], ADVANCED_USER_SCHEMA_ID)
+            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
           })
         })
       })

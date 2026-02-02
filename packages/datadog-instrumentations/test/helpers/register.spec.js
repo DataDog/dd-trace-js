@@ -1,8 +1,9 @@
 'use strict'
 
-const { expect } = require('chai')
-const sinon = require('sinon')
 const Module = require('module')
+const assert = require('node:assert/strict')
+
+const sinon = require('sinon')
 
 describe('register', () => {
   let hooksMock
@@ -20,11 +21,11 @@ describe('register', () => {
 
     hooksMock = {
       '@confluentinc/kafka-javascript': {
-        fn: sinon.stub().returns('hooked')
+        fn: sinon.stub().returns('hooked'),
       },
       'mongodb-core': {
-        fn: sinon.stub().returns('hooked')
-      }
+        fn: sinon.stub().returns('hooked'),
+      },
     }
 
     HookMock = sinon.stub()
@@ -36,7 +37,7 @@ describe('register', () => {
       if (this.filename === registerPath) {
         const stubs = {
           './hooks': hooksMock,
-          './hook': HookMock
+          './hook': HookMock,
         }
         return stubs[request] || originalModuleProtoRequire.call(this, request)
       }
@@ -67,18 +68,18 @@ describe('register', () => {
       const moduleName = hookMock.args[i][0][0]
       const moduleExports = 'original'
       const result = callback(moduleExports, moduleName, '/path/to/module', '1.0.0')
-      expect(result).to.equal('original')
+      assert.strictEqual(result, 'original')
     }
   }
 
   it('should disable hooks that are disabled by DD_TRACE_DISABLED_INSTRUMENTATIONS', () => {
     loadRegisterWithEnv({ DD_TRACE_DISABLED_INSTRUMENTATIONS: 'mongodb-core,@confluentinc/kafka-javascript' })
 
-    expect(HookMock.callCount).to.equal(0)
+    assert.strictEqual(HookMock.callCount, 0)
 
     runHookCallbacks(HookMock)
 
-    expect(hooksMock['@confluentinc/kafka-javascript'].fn).to.not.have.been.called
-    expect(hooksMock['mongodb-core'].fn).to.not.have.been.called
+    sinon.assert.notCalled(hooksMock['@confluentinc/kafka-javascript'].fn)
+    sinon.assert.notCalled(hooksMock['mongodb-core'].fn)
   })
 })

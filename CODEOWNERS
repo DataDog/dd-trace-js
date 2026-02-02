@@ -77,11 +77,17 @@
 /packages/dd-trace/src/llmobs/ @DataDog/ml-observability
 /packages/dd-trace/test/llmobs/ @DataDog/ml-observability
 
+# Data Streams Monitoring
+/packages/dd-trace/src/datastreams/ @DataDog/data-streams-monitoring
+/packages/dd-trace/test/datastreams/ @DataDog/data-streams-monitoring
+/packages/**/dsm.spec.js @DataDog/data-streams-monitoring
+/packages/**/*.dsm.spec.js @DataDog/data-streams-monitoring
+
 # API SDK
 /packages/dd-trace/src/telemetry/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/telemetry/ @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/src/config.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/config.spec.js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/src/config/ @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/test/config/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/opentracing/ @DataDog/apm-sdk-capabilities-js

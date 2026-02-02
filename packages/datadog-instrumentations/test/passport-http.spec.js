@@ -1,9 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const axios = require('axios').create({ validateStatus: null })
-const { expect } = require('chai')
+
 const dc = require('dc-polyfill')
-const { describe, it, beforeEach, before, after } = require('mocha')
+const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -40,7 +41,7 @@ withVersions('passport-http', 'passport-http', version => {
           _id: 1,
           username: 'test',
           password: '1234',
-          email: 'testuser@ddog.com'
+          email: 'testuser@ddog.com',
         }]
 
         const user = users.find(user => (user.username === username) && (user.password === password))
@@ -55,13 +56,13 @@ withVersions('passport-http', 'passport-http', version => {
       passport.use('basic', new BasicStrategy({
         usernameField: 'username',
         passwordField: 'password',
-        passReqToCallback: false
+        passReqToCallback: false,
       }, validateUser))
 
       passport.use('basic-withreq', new BasicStrategy({
         usernameField: 'username',
         passwordField: 'password',
-        passReqToCallback: true
+        passReqToCallback: true,
       }, validateUser))
 
       app.use(passport.initialize())
@@ -71,7 +72,7 @@ withVersions('passport-http', 'passport-http', version => {
         passport.authenticate('basic', {
           successRedirect: '/grant',
           failureRedirect: '/deny',
-          session: false
+          session: false,
         })
       )
 
@@ -79,7 +80,7 @@ withVersions('passport-http', 'passport-http', version => {
         passport.authenticate('basic-withreq', {
           successRedirect: '/grant',
           failureRedirect: '/deny',
-          session: false
+          session: false,
         })
       )
 
@@ -112,30 +113,30 @@ withVersions('passport-http', 'passport-http', version => {
       const res = await axios.get(`http://localhost:${port}/`, {
         headers: {
           // error:1234
-          Authorization: 'Basic ZXJyb3I6MTIzNA=='
-        }
+          Authorization: 'Basic ZXJyb3I6MTIzNA==',
+        },
       })
 
-      expect(res.status).to.equal(500)
-      expect(subscriberStub).to.not.be.called
+      assert.strictEqual(res.status, 500)
+      sinon.assert.notCalled(subscriberStub)
     })
 
     it('should call subscriber with proper arguments on success', async () => {
       const res = await axios.get(`http://localhost:${port}/`, {
         headers: {
           // test:1234
-          Authorization: 'Basic dGVzdDoxMjM0'
-        }
+          Authorization: 'Basic dGVzdDoxMjM0',
+        },
       })
 
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Granted')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'Granted')
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-basic',
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
         success: true,
-        abortController: new AbortController()
+        abortController: new AbortController(),
       })
     })
 
@@ -143,18 +144,18 @@ withVersions('passport-http', 'passport-http', version => {
       const res = await axios.get(`http://localhost:${port}/req`, {
         headers: {
           // test:1234
-          Authorization: 'Basic dGVzdDoxMjM0'
-        }
+          Authorization: 'Basic dGVzdDoxMjM0',
+        },
       })
 
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Granted')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'Granted')
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-basic',
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
         success: true,
-        abortController: new AbortController()
+        abortController: new AbortController(),
       })
     })
 
@@ -162,18 +163,18 @@ withVersions('passport-http', 'passport-http', version => {
       const res = await axios.get(`http://localhost:${port}/`, {
         headers: {
           // test:1
-          Authorization: 'Basic dGVzdDox'
-        }
+          Authorization: 'Basic dGVzdDox',
+        },
       })
 
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Denied')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'Denied')
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-basic',
         login: 'test',
         user: false,
         success: false,
-        abortController: new AbortController()
+        abortController: new AbortController(),
       })
     })
 
@@ -186,18 +187,18 @@ withVersions('passport-http', 'passport-http', version => {
       const res = await axios.get(`http://localhost:${port}/`, {
         headers: {
           // test:1234
-          Authorization: 'Basic dGVzdDoxMjM0'
-        }
+          Authorization: 'Basic dGVzdDoxMjM0',
+        },
       })
 
-      expect(res.status).to.equal(403)
-      expect(res.data).to.equal('Blocked')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      assert.strictEqual(res.status, 403)
+      assert.strictEqual(res.data, 'Blocked')
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-basic',
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
         success: true,
-        abortController: new AbortController()
+        abortController: new AbortController(),
       })
     })
   })

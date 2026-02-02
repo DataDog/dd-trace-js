@@ -2,8 +2,8 @@
 
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { IAST_TRANSACTION_ID } = require('../iast-context')
-const { HTTP_REQUEST_PARAMETER } = require('./source-types')
 const log = require('../../../log')
+const { HTTP_REQUEST_PARAMETER } = require('./source-types')
 
 const SEPARATOR = '\u0000' // Unit Separator (cannot be in URL keys)
 
@@ -87,5 +87,5 @@ function traverseAndTaint (node, path, cache, transactionId) {
 
 module.exports = {
   taintObject,
-  taintQueryWithCache
+  taintQueryWithCache,
 }

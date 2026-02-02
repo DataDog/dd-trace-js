@@ -1,9 +1,8 @@
 'use strict'
 
-const { addHook } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
-
 const vertexaiTracingChannel = require('dc-polyfill').tracingChannel('apm:vertexai:request')
+const shimmer = require('../../datadog-shimmer')
+const { addHook } = require('./helpers/instrument')
 
 function wrapGenerate (generate) {
   return function (request) {
@@ -14,7 +13,7 @@ function wrapGenerate (generate) {
     const ctx = {
       request,
       instance: this,
-      resource: [this.constructor.name, generate.name].join('.')
+      resource: [this.constructor.name, generate.name].join('.'),
     }
 
     return vertexaiTracingChannel.tracePromise(generate, ctx, this, ...arguments)
@@ -31,7 +30,7 @@ function wrapGenerateStream (generateStream) {
       request,
       instance: this,
       resource: [this.constructor.name, generateStream.name].join('.'),
-      stream: true
+      stream: true,
     }
 
     return vertexaiTracingChannel.start.runStores(ctx, () => {
@@ -78,7 +77,7 @@ function finish (ctx, response, err, publishEndEvent = false) {
 addHook({
   name: '@google-cloud/vertexai',
   file: 'build/src/models/generative_models.js',
-  versions: ['>=1']
+  versions: ['>=1'],
 }, exports => {
   const GenerativeModel = exports.GenerativeModel
 
@@ -91,7 +90,7 @@ addHook({
 addHook({
   name: '@google-cloud/vertexai',
   file: 'build/src/models/chat_session.js',
-  versions: ['>=1']
+  versions: ['>=1'],
 }, exports => {
   const ChatSession = exports.ChatSession
 

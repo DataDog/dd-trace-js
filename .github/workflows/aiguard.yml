@@ -17,23 +17,27 @@ env:
 jobs:
 
   macos:
+    name: ${{ github.workflow }} / macos
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:aiguard:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: aiguard-macos
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
 
   ubuntu:
+    name: ${{ github.workflow }} / ubuntu
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:aiguard:ci
@@ -43,38 +47,44 @@ jobs:
       - run: yarn test:aiguard:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:aiguard:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: ./.github/actions/coverage
+        with:
+          flags: aiguard-ubuntu
 
   windows:
+    name: ${{ github.workflow }} / windows
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
         with:
           cache: 'true'
       - run: yarn test:aiguard:ci
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
+        with:
+          flags: aiguard-windows
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
 
   integration:
+    name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
     strategy:
       matrix:
         version: [maintenance, active, latest]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
       - run: yarn test:integration:aiguard
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests

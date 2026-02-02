@@ -1,21 +1,20 @@
 'use strict'
 
-const { expect } = require('chai')
-const { channel } = require('dc-polyfill')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-const sinon = require('sinon')
 const assert = require('node:assert')
 
-const { getConfigFresh } = require('../../helpers/config')
+const { channel } = require('dc-polyfill')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
+const LLMObsSpanProcessor = require('../../../src/llmobs/span_processor')
 const LLMObsTagger = require('../../../src/llmobs/tagger')
 const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
 const LLMObsSpanWriter = require('../../../src/llmobs/writers/spans')
-const LLMObsSpanProcessor = require('../../../src/llmobs/span_processor')
-
+const { getConfigFresh } = require('../../helpers/config')
 const tracerVersion = require('../../../../../package.json').version
-
 const agent = require('../../plugins/agent')
+const { removeDestroyHandler } = require('../util')
+
 const injectCh = channel('dd-trace:span:inject')
 
 describe('sdk', () => {
@@ -31,8 +30,8 @@ describe('sdk', () => {
       service: 'service',
       llmobs: {
         mlApp: 'mlApp',
-        agentlessEnabled: false
-      }
+        agentlessEnabled: false,
+      },
     })
     llmobs = tracer.llmobs
 
@@ -52,10 +51,10 @@ describe('sdk', () => {
     LLMObsSDK = require('../../../src/llmobs/sdk')
 
     // remove max listener warnings, we don't care about the writer anyways
-    process.removeAllListeners('beforeExit')
+    removeDestroyHandler()
 
     clock = sinon.useFakeTimers({
-      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
   })
 
@@ -70,7 +69,7 @@ describe('sdk', () => {
     LLMObsSpanWriter.prototype.append.resetHistory()
     LLMObsSpanWriter.prototype.flush.resetHistory()
 
-    process.removeAllListeners('beforeExit')
+    removeDestroyHandler()
   })
 
   after(() => {
@@ -82,12 +81,12 @@ describe('sdk', () => {
   describe('enabled', () => {
     for (const [value, label] of [
       [true, 'enabled'],
-      [false, 'disabled']
+      [false, 'disabled'],
     ]) {
       it(`returns ${value} when llmobs is ${label}`, () => {
         const enabledOrDisabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { enabled: value } })
 
-        expect(enabledOrDisabledLLMObs.enabled).to.equal(value)
+        assert.strictEqual(enabledOrDisabledLLMObs.enabled, value)
         enabledOrDisabledLLMObs.disable() // unsubscribe
       })
     }
@@ -98,21 +97,21 @@ describe('sdk', () => {
       const config = getConfigFresh({})
       const llmobsModule = {
         enable: sinon.stub(),
-        disable () {}
+        disable () {},
       }
 
       // do not fully enable a disabled llmobs
       const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
 
       disabledLLMObs.enable({
-        mlApp: 'mlApp'
+        mlApp: 'mlApp',
       })
 
-      expect(disabledLLMObs.enabled).to.be.true
-      expect(disabledLLMObs._config.llmobs.mlApp).to.equal('mlApp')
-      expect(disabledLLMObs._config.llmobs.agentlessEnabled).to.be.undefined
+      assert.strictEqual(disabledLLMObs.enabled, true)
+      assert.strictEqual(disabledLLMObs._config.llmobs.mlApp, 'mlApp')
+      assert.strictEqual(disabledLLMObs._config.llmobs.agentlessEnabled, undefined)
 
-      expect(llmobsModule.enable).to.have.been.called
+      sinon.assert.called(llmobsModule.enable)
 
       disabledLLMObs.disable() // unsubscribe
     })
@@ -121,15 +120,15 @@ describe('sdk', () => {
       sinon.spy(llmobs._llmobsModule, 'enable')
       llmobs.enable({})
 
-      expect(llmobs.enabled).to.be.true
-      expect(llmobs._llmobsModule.enable).to.not.have.been.called
+      assert.strictEqual(llmobs.enabled, true)
+      sinon.assert.notCalled(llmobs._llmobsModule.enable)
       llmobs._llmobsModule.enable.restore()
     })
 
     it('does not enable llmobs if env var conflicts', () => {
       const config = getConfigFresh({})
       const llmobsModule = {
-        enable: sinon.stub()
+        enable: sinon.stub(),
       }
 
       // do not fully enable a disabled llmobs
@@ -138,7 +137,7 @@ describe('sdk', () => {
 
       disabledLLMObs.enable({})
 
-      expect(disabledLLMObs.enabled).to.be.false
+      assert.strictEqual(disabledLLMObs.enabled, false)
       delete process.env.DD_LLMOBS_ENABLED
       disabledLLMObs.disable() // unsubscribe
     })
@@ -147,20 +146,20 @@ describe('sdk', () => {
   describe('disable', () => {
     it('disables llmobs if it is enabled', () => {
       const llmobsModule = {
-        disable: sinon.stub()
+        disable: sinon.stub(),
       }
 
       const config = getConfigFresh({
-        llmobs: {}
+        llmobs: {},
       })
 
       const enabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
 
-      expect(enabledLLMObs.enabled).to.be.true
+      assert.strictEqual(enabledLLMObs.enabled, true)
       enabledLLMObs.disable()
 
-      expect(enabledLLMObs.enabled).to.be.false
-      expect(llmobsModule.disable).to.have.been.called
+      assert.strictEqual(enabledLLMObs.enabled, false)
+      sinon.assert.called(llmobsModule.disable)
     })
 
     it('does not disable llmobs if it is already disabled', () => {
@@ -170,8 +169,8 @@ describe('sdk', () => {
 
       disabledLLMObs.disable()
 
-      expect(disabledLLMObs.enabled).to.be.false
-      expect(disabledLLMObs._llmobsModule.disable).to.not.have.been.called
+      assert.strictEqual(disabledLLMObs.enabled, false)
+      sinon.assert.notCalled(disabledLLMObs._llmobsModule.disable)
     })
   })
 
@@ -182,30 +181,30 @@ describe('sdk', () => {
           tracer._tracer._config.llmobs.enabled = false
 
           llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, (span, cb) => {
-            expect(LLMObsTagger.tagMap.get(span)).to.not.exist
-            expect(() => span.setTag('k', 'v')).to.not.throw()
-            expect(() => cb()).to.not.throw()
+            assert.ok(LLMObsTagger.tagMap.get(span) == null)
+            assert.doesNotThrow(() => span.setTag('k', 'v'))
+            assert.doesNotThrow(() => cb())
           })
 
-          expect(llmobs._tracer._processor.process).to.have.been.called
-          expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
+          sinon.assert.called(llmobs._tracer._processor.process)
+          sinon.assert.notCalled(LLMObsSpanProcessor.prototype.format)
 
           tracer._tracer._config.llmobs.enabled = true
         })
 
         it('throws if the kind is invalid', () => {
-          expect(() => llmobs.trace({ kind: 'invalid' }, () => {})).to.throw()
+          assert.throws(() => llmobs.trace({ kind: 'invalid' }, () => {}))
 
-          expect(llmobs._tracer._processor.process).to.not.have.been.called
-          expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
+          sinon.assert.notCalled(llmobs._tracer._processor.process)
+          sinon.assert.notCalled(LLMObsSpanProcessor.prototype.format)
         })
 
         // TODO: need span kind optional for this
         it.skip('throws if no name is provided', () => {
-          expect(() => llmobs.trace({ kind: 'workflow' }, () => {})).to.throw()
+          assert.throws(() => llmobs.trace({ kind: 'workflow' }, () => {}))
 
-          expect(llmobs._tracer._processor.process).to.not.have.been.called
-          expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
+          sinon.assert.notCalled(llmobs._tracer._processor.process)
+          sinon.assert.notCalled(LLMObsSpanProcessor.prototype.format)
         })
 
         it('traces a block', () => {
@@ -216,7 +215,7 @@ describe('sdk', () => {
             sinon.spy(span, 'finish')
           })
 
-          expect(span.finish).to.have.been.called
+          sinon.assert.called(span.finish)
         })
 
         it('traces a block with a callback', () => {
@@ -229,11 +228,11 @@ describe('sdk', () => {
             done = _done
           })
 
-          expect(span.finish).to.not.have.been.called
+          sinon.assert.notCalled(span.finish)
 
           done()
 
-          expect(span.finish).to.have.been.called
+          sinon.assert.called(span.finish)
         })
 
         it('traces a promise', done => {
@@ -251,12 +250,12 @@ describe('sdk', () => {
               return promise
             })
             .then(() => {
-              expect(span.finish).to.have.been.called
+              sinon.assert.called(span.finish)
               done()
             })
             .catch(done)
 
-          expect(span.finish).to.not.have.been.called
+          sinon.assert.notCalled(span.finish)
 
           deferred.resolve()
         })
@@ -266,16 +265,19 @@ describe('sdk', () => {
         // TODO: need to implement custom trace IDs
         it.skip('starts a span with a distinct trace id', () => {
           llmobs.trace({ kind: 'workflow', name: 'test' }, span => {
-            expect(LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id'])
-              .to.exist.and.to.not.equal(span.context().toTraceId(true))
+            const traceId = LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id']
+            assert.ok(traceId)
+            assert.notStrictEqual(traceId, span.context().toTraceId(true))
           })
         })
 
         it('sets span parentage correctly', () => {
           llmobs.trace({ kind: 'workflow', name: 'test' }, outerLLMSpan => {
             llmobs.trace({ kind: 'task', name: 'test' }, innerLLMSpan => {
-              expect(LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'])
-                .to.equal(outerLLMSpan.context().toSpanId())
+              assert.strictEqual(
+                LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'],
+                outerLLMSpan.context().toSpanId()
+              )
               // TODO: need to implement custom trace IDs
               // expect(innerLLMSpan.context()._tags['_ml_obs.trace_id'])
               //   .to.equal(outerLLMSpan.context()._tags['_ml_obs.trace_id'])
@@ -285,19 +287,21 @@ describe('sdk', () => {
 
         it('maintains llmobs parentage separately from apm spans', () => {
           llmobs.trace({ kind: 'workflow', name: 'outer-llm' }, outerLLMSpan => {
-            expect(llmobs._active()).to.equal(outerLLMSpan)
+            assert.strictEqual(llmobs._active(), outerLLMSpan)
             tracer.trace('apmSpan', apmSpan => {
-              expect(llmobs._active()).to.equal(outerLLMSpan)
+              assert.strictEqual(llmobs._active(), outerLLMSpan)
               llmobs.trace({ kind: 'workflow', name: 'inner-llm' }, innerLLMSpan => {
-                expect(llmobs._active()).to.equal(innerLLMSpan)
+                assert.strictEqual(llmobs._active(), innerLLMSpan)
 
                 // llmobs span linkage
-                expect(LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'])
-                  .to.equal(outerLLMSpan.context().toSpanId())
+                assert.strictEqual(
+                  LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'],
+                  outerLLMSpan.context().toSpanId()
+                )
 
                 // apm span linkage
-                expect(innerLLMSpan.context()._parentId.toString(10)).to.equal(apmSpan.context().toSpanId())
-                expect(apmSpan.context()._parentId.toString(10)).to.equal(outerLLMSpan.context().toSpanId())
+                assert.strictEqual(innerLLMSpan.context()._parentId.toString(10), apmSpan.context().toSpanId())
+                assert.strictEqual(apmSpan.context()._parentId.toString(10), outerLLMSpan.context().toSpanId())
               })
             })
           })
@@ -317,24 +321,24 @@ describe('sdk', () => {
             })
           })
 
-          expect(traceId1).to.not.equal(traceId2)
-          expect(traceId1).to.not.equal(apmTraceId)
-          expect(traceId2).to.not.equal(apmTraceId)
+          assert.notStrictEqual(traceId1, traceId2)
+          assert.notStrictEqual(traceId1, apmTraceId)
+          assert.notStrictEqual(traceId2, apmTraceId)
         })
 
         it('maintains the llmobs parentage when error callbacks are used', () => {
           llmobs.trace({ kind: 'workflow' }, outer => {
             llmobs.trace({ kind: 'task' }, (inner, cb) => {
-              expect(llmobs._active()).to.equal(inner)
-              expect(LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id']).to.equal(outer.context().toSpanId())
+              assert.strictEqual(llmobs._active(), inner)
+              assert.strictEqual(LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id'], outer.context().toSpanId())
               cb() // finish the span
             })
 
-            expect(llmobs._active()).to.equal(outer)
+            assert.strictEqual(llmobs._active(), outer)
 
             llmobs.trace({ kind: 'task' }, (inner) => {
-              expect(llmobs._active()).to.equal(inner)
-              expect(LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id']).to.equal(outer.context().toSpanId())
+              assert.strictEqual(llmobs._active(), inner)
+              assert.strictEqual(LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id'], outer.context().toSpanId())
             })
           })
         })
@@ -348,18 +352,18 @@ describe('sdk', () => {
           mlApp: 'override',
           sessionId: 'sessionId',
           modelName: 'modelName',
-          modelProvider: 'modelProvider'
+          modelProvider: 'modelProvider',
         }, (_span) => {
           span = _span
         })
 
-        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'workflow',
           '_ml_obs.meta.ml_app': 'override',
           '_ml_obs.meta.model_name': 'modelName',
           '_ml_obs.meta.model_provider': 'modelProvider',
           '_ml_obs.session_id': 'sessionId',
-          '_ml_obs.llmobs_parent_id': 'undefined'
+          '_ml_obs.llmobs_parent_id': 'undefined',
         })
       })
     })
@@ -370,20 +374,20 @@ describe('sdk', () => {
           tracer._tracer._config.llmobs.enabled = false
 
           const fn = llmobs.wrap({ kind: 'workflow' }, (a) => {
-            expect(a).to.equal(1)
-            expect(LLMObsTagger.tagMap.get(llmobs._active())).to.not.exist
+            assert.strictEqual(a, 1)
+            assert.ok(LLMObsTagger.tagMap.get(llmobs._active()) == null)
           })
 
-          expect(() => fn(1)).to.not.throw()
+          assert.doesNotThrow(() => fn(1))
 
-          expect(llmobs._tracer._processor.process).to.have.been.called
-          expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
+          sinon.assert.called(llmobs._tracer._processor.process)
+          sinon.assert.notCalled(LLMObsSpanProcessor.prototype.format)
 
           tracer._tracer._config.llmobs.enabled = true
         })
 
         it('throws if the kind is invalid', () => {
-          expect(() => llmobs.wrap({ kind: 'invalid' }, () => {})).to.throw()
+          assert.throws(() => llmobs.wrap({ kind: 'invalid' }, () => {}))
         })
 
         it('wraps a function', () => {
@@ -395,7 +399,7 @@ describe('sdk', () => {
 
           fn()
 
-          expect(span.finish).to.have.been.called
+          sinon.assert.called(span.finish)
         })
 
         it('wraps a function with a callback', () => {
@@ -410,11 +414,11 @@ describe('sdk', () => {
 
           fn(() => {})
 
-          expect(span.finish).to.not.have.been.called
+          sinon.assert.notCalled(span.finish)
 
           next()
 
-          expect(span.finish).to.have.been.called
+          sinon.assert.called(span.finish)
         })
 
         it('does not auto-annotate llm spans', () => {
@@ -428,10 +432,10 @@ describe('sdk', () => {
 
           wrappedMyLLM('input')
 
-          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
             '_ml_obs.meta.span.kind': 'llm',
             '_ml_obs.meta.ml_app': 'mlApp',
-            '_ml_obs.llmobs_parent_id': 'undefined'
+            '_ml_obs.llmobs_parent_id': 'undefined',
           })
         })
 
@@ -446,11 +450,11 @@ describe('sdk', () => {
 
           wrappedMyEmbedding('input')
 
-          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
             '_ml_obs.meta.span.kind': 'embedding',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
-            '_ml_obs.meta.output.value': 'output'
+            '_ml_obs.meta.output.value': 'output',
           })
         })
 
@@ -465,11 +469,11 @@ describe('sdk', () => {
 
           wrappedMyRetrieval('input')
 
-          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
             '_ml_obs.meta.span.kind': 'retrieval',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
-            '_ml_obs.meta.input.value': 'input'
+            '_ml_obs.meta.input.value': 'input',
           })
         })
 
@@ -482,7 +486,7 @@ describe('sdk', () => {
             span = llmobs._active()
             llmobs.annotate({
               inputData: 'circular',
-              outputData: 'foo'
+              outputData: 'foo',
             })
             return ''
           }
@@ -490,12 +494,12 @@ describe('sdk', () => {
           const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
           wrappedMyWorkflow(circular)
 
-          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
             '_ml_obs.meta.span.kind': 'workflow',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
             '_ml_obs.meta.input.value': 'circular',
-            '_ml_obs.meta.output.value': 'foo'
+            '_ml_obs.meta.output.value': 'foo',
           })
         })
 
@@ -508,13 +512,13 @@ describe('sdk', () => {
 
           const wrappedMyTask = llmobs.wrap({ kind: 'task' }, myTask)
 
-          expect(() => wrappedMyTask('foo', 'bar')).to.throw()
+          assert.throws(() => wrappedMyTask('foo', 'bar'))
 
-          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
             '_ml_obs.meta.span.kind': 'task',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
-            '_ml_obs.meta.input.value': JSON.stringify({ foo: 'foo', bar: 'bar' })
+            '_ml_obs.meta.input.value': JSON.stringify({ foo: 'foo', bar: 'bar' }),
           })
         })
 
@@ -529,11 +533,11 @@ describe('sdk', () => {
 
           return wrappedMyTask('foo', 'bar')
             .catch(() => {
-              expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+              assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
                 '_ml_obs.meta.span.kind': 'task',
                 '_ml_obs.meta.ml_app': 'mlApp',
                 '_ml_obs.llmobs_parent_id': 'undefined',
-                '_ml_obs.meta.input.value': JSON.stringify({ foo: 'foo', bar: 'bar' })
+                '_ml_obs.meta.input.value': JSON.stringify({ foo: 'foo', bar: 'bar' }),
               })
             })
         })
@@ -549,18 +553,18 @@ describe('sdk', () => {
 
           const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
           wrappedMyWorkflow('input', (err, res) => {
-            expect(err).to.not.exist
-            expect(res).to.equal('output')
+            assert.ok(err == null)
+            assert.strictEqual(res, 'output')
           })
 
           clock.tick(1000)
 
-          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
             '_ml_obs.meta.span.kind': 'workflow',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
             '_ml_obs.meta.input.value': JSON.stringify({ input: 'input' }),
-            '_ml_obs.meta.output.value': 'output'
+            '_ml_obs.meta.output.value': 'output',
           })
         })
 
@@ -575,18 +579,18 @@ describe('sdk', () => {
 
           const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
           wrappedMyWorkflow('input', (err, res) => {
-            expect(err).to.exist
-            expect(res).to.equal('output')
+            assert.ok(err)
+            assert.strictEqual(res, 'output')
           })
 
           clock.tick(1000)
 
-          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
             '_ml_obs.meta.span.kind': 'workflow',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
             '_ml_obs.meta.input.value': JSON.stringify({ input: 'input' }),
-            '_ml_obs.meta.output.value': 'output'
+            '_ml_obs.meta.output.value': 'output',
           })
         })
 
@@ -601,18 +605,18 @@ describe('sdk', () => {
 
           const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
           wrappedMyWorkflow('input', (res, irrelevant) => {
-            expect(res).to.equal('output')
-            expect(irrelevant).to.equal('ignore')
+            assert.strictEqual(res, 'output')
+            assert.strictEqual(irrelevant, 'ignore')
           })
 
           clock.tick(1000)
 
-          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
             '_ml_obs.meta.span.kind': 'workflow',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
             '_ml_obs.meta.input.value': JSON.stringify({ input: 'input' }),
-            '_ml_obs.meta.output.value': 'output'
+            '_ml_obs.meta.output.value': 'output',
           })
         })
 
@@ -631,16 +635,16 @@ describe('sdk', () => {
             workflowSpan = _workflow
             tracer.trace('apmOperation', () => {
               myWrappedLlm('input', (err, res) => {
-                expect(err).to.not.exist
-                expect(res).to.equal('output')
+                assert.ok(err == null)
+                assert.strictEqual(res, 'output')
                 llmobs.trace({ kind: 'task', name: 'afterLlmTask' }, _task => {
                   taskSpan = _task
 
                   const llmParentId = LLMObsTagger.tagMap.get(llmSpan)['_ml_obs.llmobs_parent_id']
-                  expect(llmParentId).to.equal(workflowSpan.context().toSpanId())
+                  assert.strictEqual(llmParentId, workflowSpan.context().toSpanId())
 
                   const taskParentId = LLMObsTagger.tagMap.get(taskSpan)['_ml_obs.llmobs_parent_id']
-                  expect(taskParentId).to.equal(workflowSpan.context().toSpanId())
+                  assert.strictEqual(taskParentId, workflowSpan.context().toSpanId())
                 })
               })
             })
@@ -656,7 +660,7 @@ describe('sdk', () => {
 
           fn()
 
-          expect(span.context()._name).to.equal('unnamed-anonymous-function')
+          assert.strictEqual(span.context()._name, 'unnamed-anonymous-function')
         })
       })
 
@@ -665,8 +669,10 @@ describe('sdk', () => {
         it.skip('starts a span with a distinct trace id', () => {
           const fn = llmobs.wrap('workflow', { name: 'test' }, () => {
             const span = llmobs._active()
-            expect(span.context()._tags['_ml_obs.trace_id'])
-              .to.exist.and.to.not.equal(span.context().toTraceId(true))
+
+            const traceId = span.context()._tags['_ml_obs.trace_id']
+            assert.ok(traceId)
+            assert.notStrictEqual(traceId, span.context().toTraceId(true))
           })
 
           fn()
@@ -682,8 +688,10 @@ describe('sdk', () => {
 
           function inner () {
             innerLLMSpan = llmobs._active()
-            expect(LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'])
-              .to.equal(outerLLMSpan.context().toSpanId())
+            assert.strictEqual(
+              LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'],
+              outerLLMSpan.context().toSpanId()
+            )
             // TODO: need to implement custom trace IDs
             // expect(innerLLMSpan.context()._tags['_ml_obs.trace_id'])
             //   .to.equal(outerLLMSpan.context()._tags['_ml_obs.trace_id'])
@@ -700,19 +708,21 @@ describe('sdk', () => {
 
           function outerLLMObs () {
             outerLLMObsSpan = llmobs._active()
-            expect(outerLLMObsSpan).to.equal(tracer.scope().active())
+            assert.strictEqual(outerLLMObsSpan, tracer.scope().active())
 
             apmWrapped()
           }
           function apm () {
-            expect(llmobs._active()).to.equal(outerLLMObsSpan)
+            assert.strictEqual(llmobs._active(), outerLLMObsSpan)
             innerWrapped()
           }
           function innerLLMObs () {
             innerLLMObsSpan = llmobs._active()
-            expect(innerLLMObsSpan).to.equal(tracer.scope().active())
-            expect(LLMObsTagger.tagMap.get(innerLLMObsSpan)['_ml_obs.llmobs_parent_id'])
-              .to.equal(outerLLMObsSpan.context().toSpanId())
+            assert.strictEqual(innerLLMObsSpan, tracer.scope().active())
+            assert.strictEqual(
+              LLMObsTagger.tagMap.get(innerLLMObsSpan)['_ml_obs.llmobs_parent_id'],
+              outerLLMObsSpan.context().toSpanId()
+            )
             // TODO: need to implement custom trace IDs
             // expect(innerLLMObsSpan.context()._tags['_ml_obs.trace_id'])
             //   .to.equal(outerLLMObsSpan.context()._tags['_ml_obs.trace_id'])
@@ -746,9 +756,9 @@ describe('sdk', () => {
 
           apmWrapped()
 
-          expect(traceId1).to.not.equal(traceId2)
-          expect(traceId1).to.not.equal(apmTraceId)
-          expect(traceId2).to.not.equal(apmTraceId)
+          assert.notStrictEqual(traceId1, traceId2)
+          assert.notStrictEqual(traceId1, apmTraceId)
+          assert.notStrictEqual(traceId2, apmTraceId)
         })
 
         it('maintains the llmobs parentage when callbacks are used', () => {
@@ -756,21 +766,27 @@ describe('sdk', () => {
           function outer () {
             outerSpan = llmobs._active()
             wrappedInner1(() => {})
-            expect(outerSpan).to.equal(tracer.scope().active())
+            assert.strictEqual(outerSpan, tracer.scope().active())
             wrappedInner2()
           }
 
           function inner1 (cb) {
             const inner = tracer.scope().active()
-            expect(llmobs._active()).to.equal(inner)
-            expect(LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id']).to.equal(outerSpan.context().toSpanId())
+            assert.strictEqual(llmobs._active(), inner)
+            assert.strictEqual(
+              LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id'],
+              outerSpan.context().toSpanId()
+            )
             cb()
           }
 
           function inner2 () {
             const inner = tracer.scope().active()
-            expect(llmobs._active()).to.equal(inner)
-            expect(LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id']).to.equal(outerSpan.context().toSpanId())
+            assert.strictEqual(llmobs._active(), inner)
+            assert.strictEqual(
+              LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id'],
+              outerSpan.context().toSpanId()
+            )
           }
 
           const wrappedOuter = llmobs.wrap({ kind: 'workflow' }, outer)
@@ -790,20 +806,20 @@ describe('sdk', () => {
           mlApp: 'override',
           sessionId: 'sessionId',
           modelName: 'modelName',
-          modelProvider: 'modelProvider'
+          modelProvider: 'modelProvider',
         }, () => {
           span = llmobs._active()
         })
 
         fn()
 
-        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'workflow',
           '_ml_obs.meta.ml_app': 'override',
           '_ml_obs.meta.model_name': 'modelName',
           '_ml_obs.meta.model_provider': 'modelProvider',
           '_ml_obs.session_id': 'sessionId',
-          '_ml_obs.llmobs_parent_id': 'undefined'
+          '_ml_obs.llmobs_parent_id': 'undefined',
         })
       })
     })
@@ -815,35 +831,35 @@ describe('sdk', () => {
       sinon.spy(llmobs, '_active')
       llmobs.annotate()
 
-      expect(llmobs._active).to.not.have.been.called
+      sinon.assert.notCalled(llmobs._active)
       llmobs._active.restore()
 
       tracer._tracer._config.llmobs.enabled = true
     })
 
     it('throws if no arguments are provided', () => {
-      expect(() => llmobs.annotate()).to.throw()
+      assert.throws(() => llmobs.annotate())
     })
 
     it('throws if there are no options given', () => {
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
-        expect(() => llmobs.annotate(span)).to.throw()
+        assert.throws(() => llmobs.annotate(span))
 
         // span should still exist in the registry, just with no annotations
-        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
-          '_ml_obs.llmobs_parent_id': 'undefined'
+          '_ml_obs.llmobs_parent_id': 'undefined',
         })
       })
     })
 
     it('throws if the provided span is not an LLMObs span', () => {
       tracer.trace('test', span => {
-        expect(() => llmobs.annotate(span, {})).to.throw()
+        assert.throws(() => llmobs.annotate(span, {}))
 
         // no span in registry, should not throw
-        expect(LLMObsTagger.tagMap.get(span)).to.not.exist
+        assert.ok(LLMObsTagger.tagMap.get(span) == null)
       })
     })
 
@@ -855,8 +871,8 @@ describe('sdk', () => {
           innerLLMSpan = _span
         })
 
-        expect(() => llmobs.annotate(innerLLMSpan, {})).to.throw()
-        expect(llmobs._tagger.tagTextIO).to.not.have.been.called
+        assert.throws(() => llmobs.annotate(innerLLMSpan, {}))
+        sinon.assert.notCalled(llmobs._tagger.tagTextIO)
       })
       llmobs._tagger.tagTextIO.restore()
     })
@@ -866,10 +882,10 @@ describe('sdk', () => {
       sinon.spy(llmobs._tagger, 'tagLLMIO')
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
         LLMObsTagger.tagMap.get(span)['_ml_obs.meta.span.kind'] = undefined // somehow this is set
-        expect(() => llmobs.annotate(span, {})).to.throw()
+        assert.throws(() => llmobs.annotate(span, {}))
       })
 
-      expect(llmobs._tagger.tagLLMIO).to.not.have.been.called
+      sinon.assert.notCalled(llmobs._tagger.tagLLMIO)
       llmobs._tagger.tagLLMIO.restore()
     })
 
@@ -880,7 +896,7 @@ describe('sdk', () => {
         const inputData = {}
         llmobs.annotate({ inputData })
 
-        expect(llmobs._tagger.tagTextIO).to.have.been.calledWith(span, inputData, undefined)
+        sinon.assert.calledWith(llmobs._tagger.tagTextIO, span, inputData, undefined)
       })
 
       llmobs._tagger.tagTextIO.restore()
@@ -894,7 +910,7 @@ describe('sdk', () => {
           const inputData = {}
           llmobs.annotate({ inputData })
 
-          expect(llmobs._tagger.tagTextIO).to.have.been.calledWith(llmobsSpan, inputData, undefined)
+          sinon.assert.calledWith(llmobs._tagger.tagTextIO, llmobsSpan, inputData, undefined)
         })
       })
 
@@ -908,12 +924,12 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
         llmobs.annotate({ inputData, outputData })
 
-        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
           '_ml_obs.meta.input.messages': inputData,
-          '_ml_obs.meta.output.messages': outputData
+          '_ml_obs.meta.output.messages': outputData,
         })
       })
     })
@@ -925,12 +941,12 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'embedding', name: 'test' }, span => {
         llmobs.annotate({ inputData, outputData })
 
-        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'embedding',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
           '_ml_obs.meta.input.documents': inputData,
-          '_ml_obs.meta.output.value': outputData
+          '_ml_obs.meta.output.value': outputData,
         })
       })
     })
@@ -942,12 +958,12 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'retrieval', name: 'test' }, span => {
         llmobs.annotate({ inputData, outputData })
 
-        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'retrieval',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
           '_ml_obs.meta.input.value': inputData,
-          '_ml_obs.meta.output.documents': outputData
+          '_ml_obs.meta.output.documents': outputData,
         })
       })
     })
@@ -958,11 +974,11 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
         llmobs.annotate({ metadata })
 
-        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
-          '_ml_obs.meta.metadata': metadata
+          '_ml_obs.meta.metadata': metadata,
         })
       })
     })
@@ -973,11 +989,11 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
         llmobs.annotate({ metrics })
 
-        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
-          '_ml_obs.metrics': metrics
+          '_ml_obs.metrics': metrics,
         })
       })
     })
@@ -988,11 +1004,11 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
         llmobs.annotate({ tags })
 
-        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
-          '_ml_obs.tags': tags
+          '_ml_obs.tags': tags,
         })
       })
     })
@@ -1000,12 +1016,12 @@ describe('sdk', () => {
 
   describe('exportSpan', () => {
     it('throws if no span is provided', () => {
-      expect(() => llmobs.exportSpan()).to.throw()
+      assert.throws(() => llmobs.exportSpan())
     })
 
     it('throws if the provided span is not an LLMObs span', () => {
       tracer.trace('test', span => {
-        expect(() => llmobs.exportSpan(span)).to.throw()
+        assert.throws(() => llmobs.exportSpan(span))
       })
     })
 
@@ -1016,7 +1032,7 @@ describe('sdk', () => {
         const traceId = span.context().toTraceId(true)
         const spanId = span.context().toSpanId()
 
-        expect(spanCtx).to.deep.equal({ traceId, spanId })
+        assert.deepStrictEqual(spanCtx, { traceId, spanId })
       })
     })
 
@@ -1027,7 +1043,7 @@ describe('sdk', () => {
         const traceId = span.context().toTraceId(true)
         const spanId = span.context().toSpanId()
 
-        expect(spanCtx).to.deep.equal({ traceId, spanId })
+        assert.deepStrictEqual(spanCtx, { traceId, spanId })
       })
     })
 
@@ -1039,7 +1055,7 @@ describe('sdk', () => {
           const traceId = llmobsSpan.context().toTraceId(true)
           const spanId = llmobsSpan.context().toSpanId()
 
-          expect(spanCtx).to.deep.equal({ traceId, spanId })
+          assert.deepStrictEqual(spanCtx, { traceId, spanId })
         })
       })
     })
@@ -1050,7 +1066,7 @@ describe('sdk', () => {
         LLMObsTagger.tagMap.set(fakeSpan, {})
         const spanCtx = llmobs.exportSpan(fakeSpan)
 
-        expect(spanCtx).to.be.undefined
+        assert.strictEqual(spanCtx, undefined)
       })
     })
   })
@@ -1067,7 +1083,7 @@ describe('sdk', () => {
     beforeEach(() => {
       spanCtx = {
         traceId: '1234',
-        spanId: '5678'
+        spanId: '5678',
       }
     })
 
@@ -1079,7 +1095,7 @@ describe('sdk', () => {
       tracer._tracer._config.llmobs.enabled = false
       llmobs.submitEvaluation()
 
-      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
+      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
 
       tracer._tracer._config.llmobs.enabled = true
     })
@@ -1087,77 +1103,77 @@ describe('sdk', () => {
     it('throws for an invalid span context', () => {
       const invalid = {}
 
-      expect(() => llmobs.submitEvaluation(invalid, {})).to.throw()
-      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
+      assert.throws(() => llmobs.submitEvaluation(invalid, {}))
+      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
     })
 
     it('throws for a missing mlApp', () => {
       const mlApp = tracer._tracer._config.llmobs.mlApp
       delete tracer._tracer._config.llmobs.mlApp
 
-      expect(() => llmobs.submitEvaluation(spanCtx)).to.throw()
-      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
+      assert.throws(() => llmobs.submitEvaluation(spanCtx))
+      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
 
       tracer._tracer._config.llmobs.mlApp = mlApp
     })
 
     it('throws for an invalid timestamp', () => {
-      expect(() => {
+      assert.throws(() => {
         llmobs.submitEvaluation(spanCtx, {
           mlApp: 'test',
-          timestampMs: 'invalid'
+          timestampMs: 'invalid',
         })
-      }).to.throw()
-      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
+      })
+      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
     })
 
     it('throws for a missing label', () => {
-      expect(() => {
+      assert.throws(() => {
         llmobs.submitEvaluation(spanCtx, {
           mlApp: 'test',
-          timestampMs: 1234
+          timestampMs: 1234,
         })
-      }).to.throw()
-      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
+      })
+      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
     })
 
     it('throws for an invalid metric type', () => {
-      expect(() => {
+      assert.throws(() => {
         llmobs.submitEvaluation(spanCtx, {
           mlApp: 'test',
           timestampMs: 1234,
           label: 'test',
-          metricType: 'invalid'
+          metricType: 'invalid',
         })
-      }).to.throw()
-      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
+      })
+      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
     })
 
     it('throws for a mismatched value for a categorical metric', () => {
-      expect(() => {
+      assert.throws(() => {
         llmobs.submitEvaluation(spanCtx, {
           mlApp: 'test',
           timestampMs: 1234,
           label: 'test',
           metricType: 'categorical',
-          value: 1
+          value: 1,
         })
-      }).to.throw()
-      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
+      })
+      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
     })
 
     it('throws for a mismatched value for a score metric', () => {
-      expect(() => {
+      assert.throws(() => {
         llmobs.submitEvaluation(spanCtx, {
           mlApp: 'test',
           timestampMs: 1234,
           label: 'test',
           metricType: 'score',
-          value: 'string'
+          value: 'string',
         })
-      }).to.throw()
+      })
 
-      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
+      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
     })
 
     it('submits an evaluation metric', () => {
@@ -1168,11 +1184,11 @@ describe('sdk', () => {
         metricType: 'score',
         value: 0.6,
         tags: {
-          host: 'localhost'
-        }
+          host: 'localhost',
+        },
       })
 
-      expect(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]).to.deep.equal({
+      assert.deepStrictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0], {
         trace_id: spanCtx.traceId,
         span_id: spanCtx.spanId,
         ml_app: 'test',
@@ -1180,7 +1196,7 @@ describe('sdk', () => {
         label: 'test',
         metric_type: 'score',
         score_value: 0.6,
-        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test', 'host:localhost']
+        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test', 'host:localhost'],
       })
     })
 
@@ -1192,11 +1208,12 @@ describe('sdk', () => {
         metricType: 'categorical',
         value: 'foo',
         tags: {
-          host: 'localhost'
-        }
+          host: 'localhost',
+        },
       })
 
-      expect(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]).to.have.property('categorical_value', 'foo')
+      assert.ok('categorical_value' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0])
+      assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].categorical_value, 'foo')
     })
 
     it('defaults to the current time if no timestamp is provided', () => {
@@ -1205,10 +1222,11 @@ describe('sdk', () => {
         mlApp: 'test',
         label: 'test',
         metricType: 'score',
-        value: 0.6
+        value: 0.6,
       })
 
-      expect(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]).to.have.property('timestamp_ms', 1234)
+      assert.ok('timestamp_ms' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0])
+      assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].timestamp_ms, 1234)
       Date.now.restore()
     })
 
@@ -1217,12 +1235,12 @@ describe('sdk', () => {
         label: 'has_toxicity',
         metricType: 'boolean',
         value: true,
-        timestampMs: 1234
+        timestampMs: 1234,
       })
 
       const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
 
-      assert.deepEqual(evalMetric, {
+      assert.deepStrictEqual(evalMetric, {
         span_id: '5678',
         trace_id: '1234',
         label: 'has_toxicity',
@@ -1230,7 +1248,7 @@ describe('sdk', () => {
         ml_app: 'mlApp',
         boolean_value: true,
         timestamp_ms: 1234,
-        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:mlApp']
+        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:mlApp'],
       })
     })
 
@@ -1238,8 +1256,31 @@ describe('sdk', () => {
       assert.throws(() => llmobs.submitEvaluation(spanCtx, {
         label: 'has_toxicity',
         metricType: 'boolean',
-        value: 'it is super toxic!'
+        value: 'it is super toxic!',
       }), { message: 'value must be a boolean for a boolean metric' })
+    })
+
+    describe('with DD_TRACE_OTEL_ENABLED set', () => {
+      before(() => {
+        process.env.DD_TRACE_OTEL_ENABLED = 'true'
+      })
+
+      after(() => {
+        delete process.env.DD_TRACE_OTEL_ENABLED
+      })
+
+      it('adds source:otel tag', () => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          timestampMs: 1234,
+          label: 'test',
+          metricType: 'score',
+          value: 0.6,
+        })
+
+        const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
+        assert.ok(evalMetric.tags.includes('source:otel'), 'Expected source:otel tag to be present')
+      })
     })
   })
 
@@ -1248,22 +1289,22 @@ describe('sdk', () => {
       tracer._tracer._config.llmobs.enabled = false
       llmobs.flush()
 
-      expect(LLMObsEvalMetricsWriter.prototype.flush).to.not.have.been.called
-      expect(LLMObsSpanWriter.prototype.flush).to.not.have.been.called
+      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.flush)
+      sinon.assert.notCalled(LLMObsSpanWriter.prototype.flush)
       tracer._tracer._config.llmobs.enabled = true
     })
 
     it('flushes the evaluation writer and span writer', () => {
       llmobs.flush()
 
-      expect(LLMObsEvalMetricsWriter.prototype.flush).to.have.been.called
-      expect(LLMObsSpanWriter.prototype.flush).to.have.been.called
+      sinon.assert.called(LLMObsEvalMetricsWriter.prototype.flush)
+      sinon.assert.called(LLMObsSpanWriter.prototype.flush)
     })
 
     it('logs if there was an error flushing', () => {
       LLMObsEvalMetricsWriter.prototype.flush.throws(new Error('boom'))
 
-      expect(() => llmobs.flush()).to.not.throw()
+      assert.doesNotThrow(() => llmobs.flush())
     })
   })
 
@@ -1280,7 +1321,7 @@ describe('sdk', () => {
         injectCh.publish({ carrier })
       })
 
-      expect(carrier['x-datadog-tags']).to.equal(`,_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp`)
+      assert.strictEqual(carrier['x-datadog-tags'], `,_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp`)
     })
   })
 })

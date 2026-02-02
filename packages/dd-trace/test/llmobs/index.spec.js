@@ -1,12 +1,13 @@
 'use strict'
 
-const { expect } = require('chai')
-const { channel } = require('dc-polyfill')
-const { describe, it, beforeEach, afterEach, after } = require('mocha')
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
+const assert = require('node:assert/strict')
 
-const AgentInfoExporter = require('../../src/exporters/common/agent-info-exporter')
+const { channel } = require('dc-polyfill')
+const { after, afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
+const { removeDestroyHandler } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -20,6 +21,7 @@ describe('module', () => {
 
   let LLMObsSpanWriterSpy
   let LLMObsEvalMetricsWriterSpy
+  let fetchAgentInfoStub
 
   beforeEach(() => {
     store = {}
@@ -27,14 +29,16 @@ describe('module', () => {
 
     LLMObsSpanWriterSpy = sinon.stub().returns({
       destroy: sinon.stub(),
-      setAgentless: sinon.stub()
+      setAgentless: sinon.stub(),
     })
 
     LLMObsEvalMetricsWriterSpy = sinon.stub().returns({
       destroy: sinon.stub(),
       append: sinon.stub(),
-      setAgentless: sinon.stub()
+      setAgentless: sinon.stub(),
     })
+
+    fetchAgentInfoStub = sinon.stub()
 
     llmobsModule = proxyquire('../../../dd-trace/src/llmobs', {
       './writers/spans': LLMObsSpanWriterSpy,
@@ -44,12 +48,17 @@ describe('module', () => {
         storage: {
           getStore () {
             return store
-          }
-        }
-      }
+          },
+        },
+      },
+      './writers/util': proxyquire('../../../dd-trace/src/llmobs/writers/util', {
+        '../../agent/info': {
+          fetchAgentInfo: fetchAgentInfoStub,
+        },
+      }),
     })
 
-    process.removeAllListeners('beforeExit')
+    removeDestroyHandler()
   })
 
   afterEach(() => {
@@ -71,57 +80,59 @@ describe('module', () => {
           return {
             toSpanId () {
               return 'parent-id'
-            }
+            },
           }
-        }
+        },
       }
 
       const carrier = {
-        'x-datadog-tags': ''
+        'x-datadog-tags': '',
       }
       injectCh.publish({ carrier })
 
-      expect(carrier['x-datadog-tags']).to.equal(',_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
+      assert.strictEqual(carrier['x-datadog-tags'], ',_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
     })
 
     it('does not inject LLMObs parent ID info when there is no parent LLMObs span', () => {
       llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
       const carrier = {
-        'x-datadog-tags': ''
+        'x-datadog-tags': '',
       }
       injectCh.publish({ carrier })
-      expect(carrier['x-datadog-tags']).to.equal(',_dd.p.llmobs_ml_app=test')
+      assert.strictEqual(carrier['x-datadog-tags'], ',_dd.p.llmobs_ml_app=test')
     })
 
     it('does not inject LLMOBs info when there is no mlApp configured and no parent LLMObs span', () => {
       llmobsModule.enable({ llmobs: { agentlessEnabled: false } })
 
       const carrier = {
-        'x-datadog-tags': ''
+        'x-datadog-tags': '',
       }
       injectCh.publish({ carrier })
-      expect(carrier['x-datadog-tags']).to.equal('')
+      assert.strictEqual(carrier['x-datadog-tags'], '')
     })
   })
 
   describe('with agentlessEnabled set to `true`', () => {
     describe('when no api key is provided', () => {
       it('throws an error', () => {
-        expect(() => llmobsModule.enable({
+        assert.throws(() => llmobsModule.enable({
           llmobs: {
-            agentlessEnabled: true
-          }
-        })).to.throw(
-          'Cannot send LLM Observability data without a running agent or without both a Datadog API key and site.\n' +
-          'Ensure these configurations are set before running your application.'
-        )
+            agentlessEnabled: true,
+          },
+        }),
+        {
+          message: 'Cannot send LLM Observability data without a running agent ' +
+            'or without both a Datadog API key and site.\n' +
+            'Ensure these configurations are set before running your application.',
+        })
       })
     })
 
     describe('when no site is provided', () => {
       it('throws an error', () => {
-        expect(() => llmobsModule.enable({ llmobs: { agentlessEnabled: true, apiKey: 'test' } })).to.throw()
+        assert.throws(() => llmobsModule.enable({ llmobs: { agentlessEnabled: true, apiKey: 'test' } }))
       })
     })
 
@@ -129,14 +140,14 @@ describe('module', () => {
       it('configures agentless writers', () => {
         llmobsModule.enable({
           llmobs: {
-            agentlessEnabled: true
+            agentlessEnabled: true,
           },
           apiKey: 'test',
-          site: 'datadoghq.com'
+          site: 'datadoghq.com',
         })
 
-        expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(true)
-        expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(true)
+        sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
+        sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)
       })
     })
   })
@@ -145,12 +156,12 @@ describe('module', () => {
     it('configures agent-proxy writers', () => {
       llmobsModule.enable({
         llmobs: {
-          agentlessEnabled: false
-        }
+          agentlessEnabled: false,
+        },
       })
 
-      expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(false)
-      expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(false)
+      sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
+      sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
     })
   })
 
@@ -162,21 +173,20 @@ describe('module', () => {
     describe('when an agent is running', () => {
       describe('when the agent does not have the correct proxy endpoint', () => {
         beforeEach(() => {
-          sinon.stub(AgentInfoExporter.prototype, 'getAgentInfo')
-          AgentInfoExporter.prototype.getAgentInfo.callsFake((cb) => {
+          fetchAgentInfoStub.callsFake((url, cb) => {
             cb(null, {})
           })
         })
 
         describe('when no API key is provided', () => {
           it('throws an error', () => {
-            expect(() => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } })).to.throw()
+            assert.throws(() => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } }))
           })
         })
 
         describe('when no site is provided', () => {
           it('throws an error', () => {
-            expect(() => llmobsModule.enable({ llmobs: { mlApp: 'test', apiKey: 'test' } })).to.throw()
+            assert.throws(() => llmobsModule.enable({ llmobs: { mlApp: 'test', apiKey: 'test' } }))
           })
         })
 
@@ -184,18 +194,17 @@ describe('module', () => {
           llmobsModule.enable({
             llmobs: {},
             apiKey: 'test',
-            site: 'datadoghq.com'
+            site: 'datadoghq.com',
           })
 
-          expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(true)
-          expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(true)
+          sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
+          sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)
         })
       })
 
       describe('when the agent has the correct proxy endpoint', () => {
         beforeEach(() => {
-          sinon.stub(AgentInfoExporter.prototype, 'getAgentInfo')
-          AgentInfoExporter.prototype.getAgentInfo.callsFake((cb) => {
+          fetchAgentInfoStub.callsFake((url, cb) => {
             cb(null, { endpoints: ['/evp_proxy/v2/'] })
           })
         })
@@ -203,32 +212,35 @@ describe('module', () => {
         it('configures the agent-proxy writers', () => {
           llmobsModule.enable({ llmobs: { mlApp: 'test' } })
 
-          expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(false)
-          expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(false)
+          sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
+          sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
         })
       })
     })
 
     describe('when no agent is running', () => {
       beforeEach(() => {
-        sinon.stub(AgentInfoExporter.prototype, 'getAgentInfo')
-        AgentInfoExporter.prototype.getAgentInfo.callsFake((cb) => {
+        fetchAgentInfoStub.callsFake((url, cb) => {
           cb(new Error('No agent running'))
         })
       })
 
       describe('when no API key is provided', () => {
         it('throws an error', () => {
-          expect(() => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } })).to.throw(
-            'Cannot send LLM Observability data without a running agent or without both a Datadog API key and site.\n' +
-            'Ensure these configurations are set before running your application.'
+          assert.throws(
+            () => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } }),
+            {
+              message: 'Cannot send LLM Observability data without a running agent ' +
+                'or without both a Datadog API key and site.\n' +
+                'Ensure these configurations are set before running your application.',
+            }
           )
         })
       })
 
       describe('when no site is provided', () => {
         it('throws an error', () => {
-          expect(() => llmobsModule.enable({ llmobs: {}, apiKey: 'test' })).to.throw()
+          assert.throws(() => llmobsModule.enable({ llmobs: {}, apiKey: 'test' }))
         })
       })
 
@@ -236,8 +248,8 @@ describe('module', () => {
         it('configures the agentless writers', () => {
           llmobsModule.enable({ llmobs: {}, apiKey: 'test', site: 'datadoghq.com' })
 
-          expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(true)
-          expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(true)
+          sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
+          sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)
         })
       })
     })
@@ -248,9 +260,9 @@ describe('module', () => {
 
     const payload = {}
 
-    evalMetricAppendCh.publish(payload)
+    evalMetricAppendCh.publish({ payload })
 
-    expect(LLMObsEvalMetricsWriterSpy().append).to.have.been.calledWith(payload)
+    sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().append, payload, undefined)
   })
 
   it('removes all subscribers when disabling', () => {
@@ -258,9 +270,9 @@ describe('module', () => {
 
     llmobsModule.disable()
 
-    expect(injectCh.hasSubscribers).to.be.false
-    expect(evalMetricAppendCh.hasSubscribers).to.be.false
-    expect(spanFinishCh.hasSubscribers).to.be.false
-    expect(flushCh.hasSubscribers).to.be.false
+    assert.strictEqual(injectCh.hasSubscribers, false)
+    assert.strictEqual(evalMetricAppendCh.hasSubscribers, false)
+    assert.strictEqual(spanFinishCh.hasSubscribers, false)
+    assert.strictEqual(flushCh.hasSubscribers, false)
   })
 })

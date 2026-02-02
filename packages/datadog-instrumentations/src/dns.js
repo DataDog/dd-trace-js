@@ -1,7 +1,7 @@
 'use strict'
 
-const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { channel, addHook } = require('./helpers/instrument')
 
 const rrtypes = {
   resolveAny: 'ANY',
@@ -14,7 +14,7 @@ const rrtypes = {
   resolveSrv: 'SRV',
   resolvePtr: 'PTR',
   resolveNaptr: 'NAPTR',
-  resolveSoa: 'SOA'
+  resolveSoa: 'SOA',
 }
 
 const rrtypeMap = new WeakMap()

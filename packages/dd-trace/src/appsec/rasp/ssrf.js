@@ -3,14 +3,14 @@
 const { format } = require('url')
 const {
   httpClientRequestStart,
-  httpClientResponseFinish
+  httpClientResponseFinish,
 } = require('../channels')
 const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
 const waf = require('../waf')
-const { RULE_TYPES, handleResult } = require('./utils')
 const downstream = require('../downstream_requests')
 const { updateRaspRuleMatchMetricTags } = require('../telemetry')
+const { RULE_TYPES, handleResult } = require('./utils')
 
 let config
 
@@ -43,7 +43,7 @@ function analyzeSsrf (ctx) {
 
   const ephemeral = {
     [addresses.HTTP_OUTGOING_URL]: outgoingUrl,
-    ...requestAddresses
+    ...requestAddresses,
   }
 
   const raspRule = { type: RULE_TYPES.SSRF, variant: 'request' }

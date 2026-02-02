@@ -1,13 +1,13 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+const URL = require('url').URL
+
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
-
-const URL = require('url').URL
 
 describe('span-stats exporter', () => {
   let url
@@ -17,28 +17,28 @@ describe('span-stats exporter', () => {
   let writer
 
   beforeEach(() => {
-    url = 'www.example.com'
+    url = 'http://www.example.com:8126'
     writer = {
       append: sinon.spy(),
-      flush: sinon.spy()
+      flush: sinon.spy(),
     }
     Writer = sinon.stub().returns(writer)
 
     Exporter = proxyquire('../../../src/exporters/span-stats', {
-      './writer': { Writer }
+      './writer': { Writer },
     }).SpanStatsExporter
   })
 
   it('should flush immediately on export', () => {
     exporter = new Exporter({ url })
 
-    expect(writer.append).to.have.not.been.called
-    expect(writer.flush).to.have.not.been.called
+    sinon.assert.notCalled(writer.append)
+    sinon.assert.notCalled(writer.flush)
 
     exporter.export('')
 
-    expect(writer.append).to.have.been.called
-    expect(writer.flush).to.have.been.called
+    sinon.assert.called(writer.append)
+    sinon.assert.called(writer.flush)
   })
 
   it('should set url from hostname and port', () => {
@@ -48,21 +48,9 @@ describe('span-stats exporter', () => {
 
     exporter = new Exporter({ hostname, port })
 
-    expect(exporter._url).to.be.deep.equal(url)
-    expect(Writer).to.have.been.calledWith({
+    assert.deepStrictEqual(exporter._url, url)
+    sinon.assert.calledWith(Writer, {
       url: exporter._url,
-      tags: undefined
-    })
-  })
-
-  it('should pass tags through to writer', () => {
-    const tags = { foo: 'bar' }
-
-    exporter = new Exporter({ url, tags })
-
-    expect(Writer).to.have.been.calledWith({
-      url: exporter._url,
-      tags
     })
   })
 })

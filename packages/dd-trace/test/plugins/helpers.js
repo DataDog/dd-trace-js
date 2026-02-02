@@ -1,16 +1,16 @@
 'use strict'
 
-const { AssertionError } = require('assert')
 const { inspect } = require('util')
 const { AsyncResource } = require('../../../datadog-instrumentations/src/helpers/instrument')
 
 const Nomenclature = require('../../src/service-naming')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 function resolveNaming (namingSchema) {
   return new Proxy(namingSchema, {
     get (target, prop, receiver) {
       return target[prop][Nomenclature.version]
-    }
+    },
   })
 }
 
@@ -20,7 +20,7 @@ function expectSomeSpan (agent, expected, timeout) {
     for (const trace of traces) {
       for (const span of trace) {
         try {
-          deepInclude(expected, span)
+          assertObjectContains(span, expected)
           return
         } catch (err) {
           scoredErrors.push({ err, score: compare(expected, span) })
@@ -39,37 +39,13 @@ function expectSomeSpan (agent, expected, timeout) {
   }, { timeoutMs: timeout })
 }
 
-// This is a bit like chai's `expect(expected).to.deep.include(actual)`, except
-// that when it recurses it uses the same inclusion check, rather than deep
-// equality. Some nice output is included.
-function deepInclude (expected, actual, path = []) {
-  for (const propName in expected) {
-    path.push(propName.includes('.') ? `['${propName}']` : propName)
-    if (isObject(expected[propName]) && isObject(actual[propName])) {
-      if (typeof expected[propName] === 'bigint') {
-        deepInclude(expected[propName].toString(), actual[propName].toString(), path)
-      } else {
-        deepInclude(expected[propName], actual[propName], path)
-      }
-    } else if (actual[propName] !== expected[propName]) {
-      const pathStr = path.join('.').replace(/\.\[/g, '[')
-      throw new AssertionError({
-        expected: expected[propName],
-        actual: actual[propName],
-        message: `expected.${pathStr} !== actual.${pathStr}`
-      })
-    }
-    path.pop()
-  }
-}
-
 // How "wrong" are we? This gives the edit distance from the actual to the
 // expected. Here, an edit means adding or changing a property.
 function compare (expected, actual) {
   let score = 0
   for (const name in expected) {
     // If both the expected property and the actual property are objects, then
-    // we can do a deeper comparison. Otherise we just compare strict equality.
+    // we can do a deeper comparison. Otherwise we just compare strict equality.
     if (isObject(expected[name]) && isObject(actual[name])) {
       score += compare(expected[name], actual[name])
     } else if (expected[name] !== actual[name]) {
@@ -123,10 +99,9 @@ function getNextLineNumber () {
 module.exports = {
   breakThen,
   compare,
-  deepInclude,
   expectSomeSpan,
   getNextLineNumber,
   resolveNaming,
   unbreakThen,
-  withDefaults
+  withDefaults,
 }

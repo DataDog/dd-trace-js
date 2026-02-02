@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 'use strict'
 
-const ddPlugin = require('../../esbuild') // dd-trace/esbuild
 const esbuild = require('esbuild')
+const ddPlugin = require('../../esbuild') // dd-trace/esbuild
 
 esbuild.build({
   entryPoints: ['basic-test.js'],
@@ -21,8 +21,8 @@ esbuild.build({
     'oracledb',
     'pg-query-stream',
     'tedious',
-    '@yaacovcr/transform'
-  ]
+    '@yaacovcr/transform',
+  ],
 }).catch((err) => {
   console.error(err) // eslint-disable-line no-console
   process.exit(1)

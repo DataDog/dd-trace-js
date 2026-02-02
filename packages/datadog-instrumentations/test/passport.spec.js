@@ -1,13 +1,12 @@
 'use strict'
 
+const assert = require('node:assert')
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
-const assert = require('node:assert')
-
-const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios').create({ validateStatus: null })
+const agent = require('../../dd-trace/test/plugins/agent')
 const { storage } = require('../../datadog-core')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
@@ -16,18 +15,18 @@ const users = [
     id: 'error_user',
     username: 'error',
     password: '1234',
-    email: 'a@b.c'
+    email: 'a@b.c',
   }, {
     id: 'notfound_user',
     username: 'notfound',
     password: '1234',
-    email: 'a@b.c'
+    email: 'a@b.c',
   }, {
     id: 'uuid_42',
     username: 'test',
     password: '1234',
-    email: 'testuser@ddog.com'
-  }
+    email: 'testuser@ddog.com',
+  },
 ]
 
 withVersions('passport', 'passport', version => {
@@ -51,7 +50,7 @@ withVersions('passport', 'passport', version => {
         secret: 'secret',
         resave: false,
         rolling: true,
-        saveUninitialized: true
+        saveUninitialized: true,
       }))
 
       app.use(passport.initialize())
@@ -141,7 +140,7 @@ withVersions('passport', 'passport', version => {
       sinon.assert.calledOnce(subscriberStub)
       sinon.assert.calledWith(subscriberStub, {
         user: { id: 'uuid_42', username: 'test', password: '1234', email: 'testuser@ddog.com' },
-        abortController: new AbortController()
+        abortController: new AbortController(),
       })
     })
 
@@ -166,7 +165,7 @@ withVersions('passport', 'passport', version => {
       sinon.assert.calledOnce(subscriberStub)
       sinon.assert.calledWith(subscriberStub, {
         user: { id: 'uuid_42', username: 'test', password: '1234', email: 'testuser@ddog.com' },
-        abortController
+        abortController,
       })
     })
   })

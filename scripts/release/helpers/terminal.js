@@ -33,7 +33,7 @@ function prompt (question) {
 
   const { stdout } = spawnSync('bash', ['-c', 'read answer && echo $answer'], {
     encoding: 'utf8',
-    stdio: ['inherit']
+    stdio: ['inherit'],
   })
 
   return stdout
@@ -172,5 +172,5 @@ module.exports = {
   params,
   pass,
   run,
-  start
+  start,
 }

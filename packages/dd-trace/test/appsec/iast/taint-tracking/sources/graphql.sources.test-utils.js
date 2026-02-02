@@ -1,15 +1,15 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 
-const agent = require('../../../../plugins/agent')
 const iast = require('../../../../../src/appsec/iast')
-const { getConfigFresh } = require('../../../../helpers/config')
-const vulnerabilityReporter = require('../../../../../src/appsec/iast/vulnerability-reporter')
 const overheadController = require('../../../../../src/appsec/iast/overhead-controller')
-
+const vulnerabilityReporter = require('../../../../../src/appsec/iast/vulnerability-reporter')
+const { getConfigFresh } = require('../../../../helpers/config')
+const agent = require('../../../../plugins/agent')
 const schema = `
 type Book {
   title: String,
@@ -39,8 +39,8 @@ query GetBooks {
 const books = [
   {
     title: 'Test title',
-    author: 'Test author'
-  }
+    author: 'Test author',
+  },
 ]
 
 const resolvers = {
@@ -51,19 +51,19 @@ const resolvers = {
       return books.filter(book => {
         return book.title.includes(args.title)
       })
-    }
-  }
+    },
+  },
 }
 
 async function makeGraphqlRequest (port, query, variables = {}) {
   const headers = {
-    'content-type': 'application/json'
+    'content-type': 'application/json',
   }
 
   return axios.post(`http://localhost:${port}/graphql`, {
     operationName: 'GetBooks',
     query,
-    variables
+    variables,
   }, { headers, maxRedirects: 0 })
 }
 
@@ -74,9 +74,9 @@ function graphqlCommonTests (config) {
         experimental: {
           iast: {
             enabled: true,
-            requestSampling: 100
-          }
-        }
+            requestSampling: 100,
+          },
+        },
       }))
       vulnerabilityReporter.clearCache()
       overheadController.clearGlobalRouteMap()
@@ -88,10 +88,10 @@ function graphqlCommonTests (config) {
 
     it('Should detect COMMAND_INJECTION vulnerability with hardcoded query', (done) => {
       agent.assertSomeTraces(payload => {
-        expect(payload[0][0].meta).to.have.property('_dd.iast.json')
+        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
 
         const iastJson = JSON.parse(payload[0][0].meta['_dd.iast.json'])
-        expect(iastJson.vulnerabilities[0].type).to.be.equal('COMMAND_INJECTION')
+        assert.strictEqual(iastJson.vulnerabilities[0].type, 'COMMAND_INJECTION')
         done()
       })
 
@@ -100,15 +100,15 @@ function graphqlCommonTests (config) {
 
     it('Should detect COMMAND_INJECTION vulnerability with query and variables', (done) => {
       agent.assertSomeTraces(payload => {
-        expect(payload[0][0].meta).to.have.property('_dd.iast.json')
+        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
 
         const iastJson = JSON.parse(payload[0][0].meta['_dd.iast.json'])
-        expect(iastJson.vulnerabilities[0].type).to.be.equal('COMMAND_INJECTION')
+        assert.strictEqual(iastJson.vulnerabilities[0].type, 'COMMAND_INJECTION')
         done()
       })
 
       makeGraphqlRequest(config.port, query, {
-        title: 'test'
+        title: 'test',
       })
     })
   })
@@ -119,5 +119,5 @@ module.exports = {
   schema,
   query,
   resolvers,
-  graphqlCommonTests
+  graphqlCommonTests,
 }

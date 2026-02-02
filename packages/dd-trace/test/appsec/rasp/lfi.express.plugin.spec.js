@@ -1,19 +1,20 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const os = require('node:os')
 const fs = require('node:fs')
 const path = require('node:path')
 
 const Axios = require('axios')
-const { assert } = require('chai')
 const semver = require('semver')
 
 const { NODE_MAJOR } = require('../../../../../version')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const { withVersions } = require('../../setup/mocha')
-const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 const { getConfigFresh } = require('../../helpers/config')
+const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - lfi', () => {
   let axios
@@ -64,14 +65,14 @@ describe('RASP - lfi', () => {
           appsec: {
             enabled: true,
             rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),
-            rasp: { enabled: true }
-          }
+            rasp: { enabled: true },
+          },
         }))
 
         server = expressApp.listen(0, () => {
           const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
           axios = Axios.create({
-            baseURL: `http://localhost:${port}`
+            baseURL: `http://localhost:${port}`,
           })
           done()
         })
@@ -265,7 +266,7 @@ describe('RASP - lfi', () => {
               } catch (e) {
                 // some ops are blocked
               }
-            }
+            },
           }, dirname)
         })
 
@@ -278,7 +279,7 @@ describe('RASP - lfi', () => {
                 fs.close(fd, () => {
                 })
               }
-            }
+            },
           }, __filename, 'r')
         })
 
@@ -295,7 +296,7 @@ describe('RASP - lfi', () => {
           runFsMethodTestThreeWay('opendir', {
             onfinish: (dir) => {
               dir.close()
-            }
+            },
           }, dirname)
         })
 
@@ -476,14 +477,14 @@ describe('RASP - lfi', () => {
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),
-          rasp: { enabled: true }
-        }
+          rasp: { enabled: true },
+        },
       }))
 
       server.listen(0, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({
-          baseURL: `http://localhost:${port}`
+          baseURL: `http://localhost:${port}`,
         })
 
         done()
@@ -512,8 +513,8 @@ describe('RASP - lfi', () => {
 
       return testBlockingRequest('/', {
         headers: {
-          file: '/test.file'
-        }
+          file: '/test.file',
+        },
       })
     })
   })

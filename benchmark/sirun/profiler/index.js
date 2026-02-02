@@ -3,7 +3,7 @@
 const {
   profiler,
   WallProfiler,
-  SpaceProfiler
+  SpaceProfiler,
 } = require('../../../packages/dd-trace/src/profiling')
 
 const { PROFILER } = process.env
@@ -23,7 +23,7 @@ if (profilers.length === 0) {
     start: () => {},
     stop: () => {},
     profile: () => { return true },
-    encode: () => { Promise.resolve(true) }
+    encode: () => { Promise.resolve(true) },
   })
 }
 
@@ -31,13 +31,13 @@ const exporters = [{
   export () {
     profiler.stop()
     return Promise.resolve()
-  }
+  },
 }]
 
 profiler._start({
   profilers,
   exporters,
-  interval: 0
+  interval: 0,
 }).then(() => {
   profiler._timer.ref()
 })

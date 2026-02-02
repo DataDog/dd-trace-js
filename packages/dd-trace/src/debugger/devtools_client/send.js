@@ -3,13 +3,14 @@
 const { hostname: getHostname } = require('os')
 const { stringify } = require('querystring')
 
-const config = require('./config')
-const JSONBuffer = require('./json-buffer')
 const request = require('../../exporters/common/request')
 const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags')
-const log = require('./log')
 const { version } = require('../../../../../package.json')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getValueFromEnvSources } = require('../../config/helper')
+const log = require('./log')
+const JSONBuffer = require('./json-buffer')
+const config = require('./config')
+const { pruneSnapshot } = require('./snapshot-pruner')
 
 module.exports = send
 
@@ -22,12 +23,12 @@ const hostname = getHostname()
 const service = config.service
 
 const ddtags = [
-  ['env', getEnvironmentVariable('DD_ENV')],
-  ['version', getEnvironmentVariable('DD_VERSION')],
+  ['env', getValueFromEnvSources('DD_ENV')],
+  ['version', getValueFromEnvSources('DD_VERSION')],
   ['debugger_version', version],
   ['host_name', hostname],
   [GIT_COMMIT_SHA, config.commitSHA],
-  [GIT_REPOSITORY_URL, config.repositoryUrl]
+  [GIT_REPOSITORY_URL, config.repositoryUrl],
 ].filter(([, value]) => value !== undefined).map((pair) => pair.join(':')).join(',')
 
 const path = `/debugger/v1/input?${stringify({ ddtags })}`
@@ -35,7 +36,7 @@ const path = `/debugger/v1/input?${stringify({ ddtags })}`
 const jsonBuffer = new JSONBuffer({
   size: config.maxTotalPayloadSize,
   timeout: config.dynamicInstrumentation.uploadIntervalSeconds * 1000,
-  onFlush
+  onFlush,
 })
 
 function send (message, logger, dd, snapshot) {
@@ -48,21 +49,30 @@ function send (message, logger, dd, snapshot) {
       : message,
     logger,
     dd,
-    debugger: { snapshot }
+    debugger: { snapshot },
   }
 
   let json = JSON.stringify(payload)
   let size = Buffer.byteLength(json)
 
   if (size > MAX_LOG_PAYLOAD_SIZE_BYTES) {
-    // TODO: This is a very crude way to handle large payloads. Proper pruning will be implemented later (DEBUG-2624)
-    delete payload.debugger.snapshot.captures
-    payload.debugger.snapshot.captureError =
-      `Snapshot was too large (max allowed size is ${MAX_LOG_PAYLOAD_SIZE_MB} MiB). ` +
-      'Consider reducing the capture depth or turn off "Capture Variables" completely, ' +
-      'and instead include the variables of interest directly in the message template.'
-    json = JSON.stringify(payload)
-    size = Buffer.byteLength(json)
+    let pruned
+    try {
+      pruned = pruneSnapshot(json, size, MAX_LOG_PAYLOAD_SIZE_BYTES)
+    } catch (err) {
+      log.error('[debugger:devtools_client] Error pruning snapshot', err)
+    }
+
+    if (pruned) {
+      json = pruned
+      size = Buffer.byteLength(json)
+    } else {
+      // Fallback if pruning fails
+      const line = Object.keys(snapshot.captures.lines)[0]
+      snapshot.captures.lines[line] = { pruned: true }
+      json = JSON.stringify(payload)
+      size = Buffer.byteLength(json)
+    }
   }
 
   jsonBuffer.write(json, size)
@@ -75,7 +85,7 @@ function onFlush (payload) {
     method: 'POST',
     url: config.url,
     path,
-    headers: { 'Content-Type': 'application/json; charset=utf-8' }
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
   }
 
   request(payload, opts, (err) => {

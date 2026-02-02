@@ -1,9 +1,9 @@
 'use strict'
 const { logs } = require('@opentelemetry/api-logs')
 const { context } = require('@opentelemetry/api')
-const Logger = require('./logger')
 const log = require('../../log')
 const ContextManager = require('../context_manager')
+const Logger = require('./logger')
 
 /**
  * @typedef {import('@opentelemetry/api-logs').Logger} Logger
@@ -26,7 +26,7 @@ class LoggerProvider {
   /**
    * Creates a new LoggerProvider instance with a single processor for Datadog Agent export.
    *
-   * @param {Object} [options] - LoggerProvider options
+   * @param {object} [options] - LoggerProvider options
    * @param {BatchLogRecordProcessor} [options.processor] - Single LogRecordProcessor instance for
    *   exporting logs to Datadog Agent
    */
@@ -40,9 +40,9 @@ class LoggerProvider {
   /**
    * Gets or creates a logger instance.
    *
-   * @param {string|Object} nameOrOptions - Logger name or options object
+   * @param {string | object} nameOrOptions - Logger name or options object
    * @param {string} [version] - Logger version (when nameOrOptions is a string)
-   * @param {Object} [options] - Additional options (when nameOrOptions is a string)
+   * @param {object} [options] - Additional options (when nameOrOptions is a string)
    * @returns {Logger} Logger instance
    */
   getLogger (nameOrOptions, version, options = {}) {
@@ -111,14 +111,14 @@ class LoggerProvider {
     return {
       instrumentationScope: {
         name: 'dd-trace-js',
-        version: ''
+        version: '',
       },
       emit: () => {},
       debug: () => {},
       info: () => {},
       warn: () => {},
       error: () => {},
-      fatal: () => {}
+      fatal: () => {},
     }
   }
 }

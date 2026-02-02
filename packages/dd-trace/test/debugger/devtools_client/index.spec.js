@@ -1,11 +1,10 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('mocha')
-const sinon = require('sinon')
+const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 require('../../setup/mocha')
 
@@ -20,8 +19,8 @@ const event = {
   params: {
     reason: 'other',
     hitBreakpoints: [breakpointId],
-    callFrames: [{ functionName, location: { scriptId, lineNumber: breakpoint.line - 1, columnNumber: 0 } }]
-  }
+    callFrames: [{ functionName, location: { scriptId, lineNumber: breakpoint.line - 1, columnNumber: 0 } }],
+  },
 }
 
 describe('onPause', function () {
@@ -35,7 +34,7 @@ describe('onPause', function () {
    */
   /** @type {MockSession} */
   let session
-  /** @type {Function} */
+  /** @type {sinon.SinonSpy} */
   let send
   /** @type {Function} */
   let onPaused
@@ -49,7 +48,7 @@ describe('onPause', function () {
     log = {
       error: sinon.spy(),
       debug: sinon.spy(),
-      '@noCallThru': true
+      '@noCallThru': true,
     }
 
     session = {
@@ -60,7 +59,7 @@ describe('onPause', function () {
       }),
       post: sinon.spy(),
       emit: sinon.spy(),
-      '@noCallThru': true
+      '@noCallThru': true,
     }
 
     const config = {
@@ -70,9 +69,9 @@ describe('onPause', function () {
       dynamicInstrumentation: {
         captureTimeoutNs: 15_000_000n, // Default value is 15ms
         redactedIdentifiers: [],
-        redactionExcludedIdentifiers: []
+        redactionExcludedIdentifiers: [],
       },
-      '@noCallThru': true
+      '@noCallThru': true,
     }
 
     send = sinon.spy()
@@ -83,11 +82,11 @@ describe('onPause', function () {
     const collector = proxyquire('../../../src/debugger/devtools_client/snapshot/collector', { '../session': session })
     const redaction = proxyquire('../../../src/debugger/devtools_client/snapshot/redaction', { '../config': config })
     const processor = proxyquire('../../../src/debugger/devtools_client/snapshot/processor', {
-      './redaction': redaction
+      './redaction': redaction,
     })
     const snapshot = proxyquire('../../../src/debugger/devtools_client/snapshot', {
       './collector': collector,
-      './processor': processor
+      './processor': processor,
     })
     proxyquire('../../../src/debugger/devtools_client', {
       './config': config,
@@ -97,7 +96,7 @@ describe('onPause', function () {
       './log': log,
       './send': send,
       './status': { ackReceived },
-      './remote_config': { '@noCallThru': true }
+      './remote_config': { '@noCallThru': true },
     })
 
     const onPausedCall = session.on.args.find(([event]) => event === 'Debugger.paused')
@@ -107,9 +106,9 @@ describe('onPause', function () {
 
   it('should not fail if there is no probe for at the breakpoint', async function () {
     await onPaused(event)
-    expect(session.post).to.have.been.calledOnceWith('Debugger.resume')
-    expect(ackReceived).to.not.have.been.called
-    expect(send).to.not.have.been.called
+    sinon.assert.calledOnceWithExactly(session.post, 'Debugger.resume')
+    sinon.assert.notCalled(ackReceived)
+    sinon.assert.notCalled(send)
   })
 
   it('should throw if paused for an unknown reason', async function () {
@@ -117,8 +116,8 @@ describe('onPause', function () {
       ...event,
       params: {
         ...event.params,
-        reason: 'OOM'
-      }
+        reason: 'OOM',
+      },
     }
 
     let thrown
@@ -128,10 +127,10 @@ describe('onPause', function () {
       thrown = err
     }
 
-    expect(thrown).to.be.an('error')
-    expect(thrown.message).to.equal('Unexpected Debugger.paused reason: OOM')
-    expect(session.post).to.not.have.been.called
-    expect(ackReceived).to.not.have.been.called
-    expect(send).to.not.have.been.called
+    assert(thrown instanceof Error)
+    assert.strictEqual(thrown.message, 'Unexpected Debugger.paused reason: OOM')
+    sinon.assert.notCalled(session.post)
+    sinon.assert.notCalled(ackReceived)
+    sinon.assert.notCalled(send)
   })
 })

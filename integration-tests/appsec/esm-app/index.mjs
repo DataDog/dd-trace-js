@@ -1,6 +1,6 @@
 import childProcess from 'node:child_process'
-import express from 'express'
 import Module from 'node:module'
+import express from 'express'
 import './worker.mjs'
 
 const app = express()
@@ -18,5 +18,5 @@ const server = app.listen(process.env.APP_PORT || 0, () => {
 })
 
 Module.register('./custom-noop-hooks.mjs', {
-  parentURL: import.meta.url
+  parentURL: import.meta.url,
 })

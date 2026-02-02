@@ -1,15 +1,15 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
-const sinon = require('sinon')
-const nock = require('nock')
+const assert = require('node:assert/strict')
 const http = require('node:http')
 const zlib = require('node:zlib')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+const nock = require('nock')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
-
 const FormData = require('../../../src/exporters/common/form-data')
 
 const initHTTPServer = () => {
@@ -45,16 +45,16 @@ describe('request', function () {
   beforeEach(() => {
     log = {
       error: sinon.spy(),
-      debug: sinon.spy()
+      debug: sinon.spy(),
     }
     docker = {
       inject (carrier) {
         carrier['datadog-container-id'] = 'abcd'
-      }
+      },
     }
     request = proxyquire('../../../src/exporters/common/request', {
       './docker': docker,
-      '../../log': log
+      '../../log': log,
     })
   })
 
@@ -66,8 +66,8 @@ describe('request', function () {
     nock('http://test:123', {
       reqheaders: {
         'content-type': 'application/octet-stream',
-        'content-length': '13'
-      }
+        'content-length': '13',
+      },
     })
       .put('/path')
       .reply(200, 'OK')
@@ -80,11 +80,11 @@ describe('request', function () {
         path: '/path',
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/octet-stream'
-        }
+          'Content-Type': 'application/octet-stream',
+        },
       },
       (err, res) => {
-        expect(res).to.equal('OK')
+        assert.strictEqual(res, 'OK')
         done(err)
       })
   })
@@ -97,10 +97,10 @@ describe('request', function () {
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
-      port: 8080
+      port: 8080,
     }, err => {
-      expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('Error from http://localhost:8080/path: 400 Bad Request.')
+      assert.ok(err instanceof Error)
+      assert.strictEqual(err.message, 'Error from http://localhost:8080/path: 400 Bad Request.')
       done()
     })
   })
@@ -113,10 +113,10 @@ describe('request', function () {
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
-      url: new URL('http://api.datadog.com/')
+      url: new URL('http://api.datadog.com/'),
     }, err => {
-      expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('Error from http://api.datadog.com/path: 400 Bad Request.')
+      assert.ok(err instanceof Error)
+      assert.strictEqual(err.message, 'Error from http://api.datadog.com/path: 400 Bad Request.')
       done()
     })
   })
@@ -131,10 +131,10 @@ describe('request', function () {
 
     request(Buffer.from(''), {
       path: '/path',
-      method: 'PUT'
+      method: 'PUT',
     }, err => {
-      expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('socket hang up')
+      assert.ok(err instanceof Error)
+      assert.strictEqual(err.message, 'socket hang up')
       done()
     })
   })
@@ -149,10 +149,10 @@ describe('request', function () {
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
-      timeout: 100
+      timeout: 100,
     }, err => {
-      expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('socket hang up')
+      assert.ok(err instanceof Error)
+      assert.strictEqual(err.message, 'socket hang up')
       done()
     })
   })
@@ -160,8 +160,8 @@ describe('request', function () {
   it('should inject the container ID', () => {
     nock('http://test:123', {
       reqheaders: {
-        'datadog-container-id': 'abcd'
-      }
+        'datadog-container-id': 'abcd',
+      },
     })
       .get('/')
       .reply(200, 'OK')
@@ -169,9 +169,9 @@ describe('request', function () {
     return request(Buffer.from(''), {
       hostname: 'test',
       port: 123,
-      path: '/'
+      path: '/',
     }, (err, res) => {
-      expect(res).to.equal('OK')
+      assert.strictEqual(res, 'OK')
     })
   })
 
@@ -184,9 +184,9 @@ describe('request', function () {
 
     request(Buffer.from(''), {
       path: '/path',
-      method: 'PUT'
+      method: 'PUT',
     }, (err, res) => {
-      expect(res).to.equal('OK')
+      assert.strictEqual(res, 'OK')
       done()
     })
   })
@@ -202,9 +202,9 @@ describe('request', function () {
 
     request(Buffer.from(''), {
       path: '/path',
-      method: 'PUT'
+      method: 'PUT',
     }, (err, res) => {
-      expect(err).to.equal(error)
+      assert.strictEqual(err, error)
       done()
     })
   })
@@ -220,9 +220,9 @@ describe('request', function () {
 
     request(form, {
       path: '/path',
-      method: 'PUT'
+      method: 'PUT',
     }, (err, res) => {
-      expect(res).to.equal('OK')
+      assert.strictEqual(res, 'OK')
       done()
     })
   })
@@ -236,7 +236,7 @@ describe('request', function () {
           method: 'POST',
           hostname: 'localhost',
           protocol: 'http:',
-          port: shutdownFirst.port
+          port: shutdownFirst.port,
         }, () => {})
       }, 1000)
 
@@ -246,9 +246,9 @@ describe('request', function () {
           method: 'POST',
           hostname: 'localhost',
           protocol: 'http:',
-          port: shutdownSecond.port
+          port: shutdownSecond.port,
         }, (err, res) => {
-          expect(res).to.equal('OK')
+          assert.strictEqual(res, 'OK')
           shutdownFirst()
           shutdownSecond()
           clearInterval(intervalId)
@@ -262,8 +262,8 @@ describe('request', function () {
     nock('http://[2607:f0d0:1002:51::4]:123', {
       reqheaders: {
         'content-type': 'application/octet-stream',
-        'content-length': '13'
-      }
+        'content-length': '13',
+      },
     })
       .put('/path')
       .reply(200, 'OK')
@@ -273,11 +273,11 @@ describe('request', function () {
         url: 'http://[2607:f0d0:1002:51::4]:123/path',
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/octet-stream'
-        }
+          'Content-Type': 'application/octet-stream',
+        },
       },
       (err, res) => {
-        expect(res).to.equal('OK')
+        assert.strictEqual(res, 'OK')
         done(err)
       })
   })
@@ -288,10 +288,10 @@ describe('request', function () {
     request(
       Buffer.from(''), {
         url: 'unix:' + sock,
-        method: 'PUT'
+        method: 'PUT',
       },
       (err, _) => {
-        expect(err.address).to.equal(sock)
+        assert.strictEqual(err.address, sock)
         done()
       })
   })
@@ -302,10 +302,10 @@ describe('request', function () {
     request(
       Buffer.from(''), {
         url: 'unix:' + pipe,
-        method: 'PUT'
+        method: 'PUT',
       },
       (err, _) => {
-        expect(err.address).to.equal(pipe)
+        assert.strictEqual(err.address, pipe)
         done()
       })
   })
@@ -318,7 +318,7 @@ describe('request', function () {
     const charLength = body.length
     const byteLength = Buffer.byteLength(body, 'utf-8')
 
-    expect(charLength).to.be.below(byteLength)
+    assert.ok(charLength < byteLength)
 
     nock('http://test:123').post('/').reply(200, 'OK')
 
@@ -328,13 +328,13 @@ describe('request', function () {
         host: 'test',
         port: 123,
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       },
       (err, res) => {
-        expect(res).to.equal('OK')
+        assert.strictEqual(res, 'OK')
         const { headers } = http.request.getCall(0).args[0]
         sandbox.restore()
-        expect(headers['Content-Length']).to.equal(byteLength)
+        assert.strictEqual(headers['Content-Length'], byteLength)
         done(err)
       }
     )
@@ -355,8 +355,8 @@ describe('request', function () {
       nock('http://[1337::cafe]:123', {
         reqheaders: {
           'content-type': 'application/octet-stream',
-          'content-length': '13'
-        }
+          'content-length': '13',
+        },
       })
         .put('/path')
         .reply(200, 'OK')
@@ -366,13 +366,13 @@ describe('request', function () {
           url: new URL('http://[1337::cafe]:123/path'),
           method: 'PUT',
           headers: {
-            'Content-Type': 'application/octet-stream'
-          }
+            'Content-Type': 'application/octet-stream',
+          },
         },
         (err, res) => {
           const options = http.request.getCall(0).args[0]
-          expect(options.hostname).to.equal('1337::cafe') // no brackets
-          expect(res).to.equal('OK')
+          assert.strictEqual(options.hostname, '1337::cafe') // no brackets
+          assert.strictEqual(res, 'OK')
           done(err)
         })
     })
@@ -384,8 +384,8 @@ describe('request', function () {
       nock('http://test:123', {
         reqheaders: {
           'content-type': 'application/json',
-          'accept-encoding': 'gzip'
-        }
+          'accept-encoding': 'gzip',
+        },
       })
         .post('/path')
         .reply(200, compressedData, { 'content-encoding': 'gzip' })
@@ -398,10 +398,10 @@ describe('request', function () {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'accept-encoding': 'gzip'
-        }
+          'accept-encoding': 'gzip',
+        },
       }, (err, res) => {
-        expect(res).to.equal(JSON.stringify({ foo: 'bar' }))
+        assert.strictEqual(res, JSON.stringify({ foo: 'bar' }))
         done(err)
       })
     })
@@ -411,8 +411,8 @@ describe('request', function () {
       nock('http://test:123', {
         reqheaders: {
           'content-type': 'application/json',
-          'accept-encoding': 'gzip'
-        }
+          'accept-encoding': 'gzip',
+        },
       })
         .post('/path')
         .reply(200, badlyCompressedData, { 'content-encoding': 'gzip' })
@@ -425,11 +425,11 @@ describe('request', function () {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'accept-encoding': 'gzip'
-        }
+          'accept-encoding': 'gzip',
+        },
       }, (err, res) => {
-        expect(log.error).to.have.been.calledWith('Could not gunzip response: %s', 'unexpected end of file')
-        expect(res).to.equal('')
+        sinon.assert.calledWith(log.error, 'Could not gunzip response: %s', 'unexpected end of file')
+        assert.strictEqual(res, '')
         done(err)
       })
     })

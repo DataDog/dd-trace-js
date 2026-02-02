@@ -1,3 +1,4 @@
+import { readFileSync } from 'fs'
 import eslintPluginJs from '@eslint/js'
 import eslintPluginStylistic from '@stylistic/eslint-plugin'
 import eslintPluginCypress from 'eslint-plugin-cypress'
@@ -13,6 +14,8 @@ import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 
+const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
+
 const SRC_FILES = [
   '*.js',
   '*.mjs',
@@ -21,7 +24,7 @@ const SRC_FILES = [
   'ci/**/*.js',
   'ci/**/*.mjs',
   'packages/*/src/**/*.js',
-  'packages/*/src/**/*.mjs'
+  'packages/*/src/**/*.mjs',
 ]
 
 const TEST_FILES = [
@@ -29,7 +32,7 @@ const TEST_FILES = [
   'packages/*/test/**/*.mjs',
   'integration-tests/**/*.js',
   'integration-tests/**/*.mjs',
-  '**/*.spec.js'
+  '**/*.spec.js',
 ]
 
 export default [
@@ -45,6 +48,7 @@ export default [
       '**/versions', // This is effectively a node_modules tree.
       '**/acmeair-nodejs', // We don't own this.
       '**/vendor', // Generally, we didn't author this code.
+      '**/.analysis', // Ignore apm-instrumentation-toolkit analysis results
       'integration-tests/code-origin/typescript.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/bundle.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/hello/world.js', // Generated
@@ -54,8 +58,8 @@ export default [
       'integration-tests/esbuild/aws-sdk-out.js', // Generated
       'packages/datadog-plugin-graphql/src/tools/index.js', // Inlined from apollo-graphql
       'packages/datadog-plugin-graphql/src/tools/signature.js', // Inlined from apollo-graphql
-      'packages/datadog-plugin-graphql/src/tools/transforms.js' // Inlined from apollo-graphql
-    ]
+      'packages/datadog-plugin-graphql/src/tools/transforms.js', // Inlined from apollo-graphql
+    ],
   },
   eslintPluginJs.configs.recommended,
   eslintPluginJSDoc.configs['flat/recommended'],
@@ -75,23 +79,23 @@ export default [
       sourceType: 'module',
       parserOptions: {
         ecmaFeatures: {
-          jsx: true
-        }
+          jsx: true,
+        },
       },
       globals: {
         ...globals.es2022,
         ...globals.node,
         document: 'readonly',
         navigator: 'readonly',
-        window: 'readonly'
-      }
+        window: 'readonly',
+      },
     },
     plugins: {
       '@stylistic': eslintPluginStylistic,
       jsdoc: eslintPluginJSDoc,
       import: eslintPluginImport,
       n: eslintPluginN,
-      promise: eslintPluginPromise
+      promise: eslintPluginPromise,
     },
     rules: {
       '@stylistic/array-bracket-spacing': ['error', 'never'],
@@ -118,17 +122,17 @@ export default [
       '@stylistic/operator-linebreak': [
         'error',
         'after',
-        { overrides: { '?': 'before', ':': 'before', '|>': 'before' } }
+        { overrides: { '?': 'before', ':': 'before', '|>': 'before' } },
       ],
       '@stylistic/padded-blocks': [
         'error',
-        { blocks: 'never', switches: 'never', classes: 'never' }
+        { blocks: 'never', switches: 'never', classes: 'never' },
       ],
       '@stylistic/quote-props': ['error', 'as-needed'],
       '@stylistic/quotes': [
         'error',
         'single',
-        { avoidEscape: true, allowTemplateLiterals: 'never' }
+        { avoidEscape: true, allowTemplateLiterals: 'never' },
       ],
       '@stylistic/rest-spread-spacing': ['error', 'never'],
       '@stylistic/semi': ['error', 'never'],
@@ -146,9 +150,9 @@ export default [
           block: {
             balanced: true,
             markers: ['*package', '!', ',', ':', '::', 'flow-include'],
-            exceptions: ['*']
-          }
-        }
+            exceptions: ['*'],
+          },
+        },
       ],
       '@stylistic/template-curly-spacing': ['error', 'never'],
       '@stylistic/template-tag-spacing': ['error', 'never'],
@@ -159,15 +163,15 @@ export default [
       'brace-style': [ // TODO: Deprecated, use @stylistic/brace-style instead
         'error',
         '1tbs',
-        { allowSingleLine: true }
+        { allowSingleLine: true },
       ],
       camelcase: [
         'error',
         {
           allow: ['^UNSAFE_'],
           properties: 'never',
-          ignoreGlobals: true
-        }
+          ignoreGlobals: true,
+        },
       ],
       'comma-style': ['error', 'last'], // TODO: Deprecated, use @stylistic/comma-style instead
       curly: ['error', 'multi-line'],
@@ -208,24 +212,38 @@ export default [
             'JSXClosingFragment',
             'JSXText',
             'JSXEmptyExpression',
-            'JSXSpreadChild'
+            'JSXSpreadChild',
           ],
-          offsetTernaryExpressions: true
-        }
+          offsetTernaryExpressions: true,
+        },
       ],
       'import/export': 'error',
       'import/first': 'error',
       'import/no-absolute-path': ['error', { esmodule: true, commonjs: true, amd: false }],
+      'import/no-cycle': 'error',
       'import/no-duplicates': 'error',
       'import/no-named-default': 'error',
+      'import/no-self-import': 'error',
+      'import/order': ['error', {
+        // `dd-trace` must be allowed first (and is often intentionally required before any other module).
+        // eslint-plugin-import defaults can exclude some import types (notably `builtin`) from `pathGroups`,
+        // which would make the `dd-trace` exception below a no-op. Make this explicit.
+        pathGroupsExcludedImportTypes: [],
+        pathGroups: [
+          {
+            pattern: 'dd-trace',
+            group: 'builtin',
+            position: 'before',
+          },
+        ],
+      }],
+      'import/no-useless-path-segments': 'error',
       'import/no-webpack-loader-syntax': 'error',
       'jsdoc/check-tag-names': ['error', { definedTags: ['datadog'] }],
       // TODO: Enable the rules that we want to use.
-      'jsdoc/check-types': 'off', // Should be activated, but it needs a couple of fixes.
       // no-defaults: This should be activated, since the defaults will not be picked up in a description.
       'jsdoc/no-defaults': 'off',
       'jsdoc/no-undefined-types': 'off',
-      'jsdoc/reject-any-type': 'off', // Should be activated, but it needs a couple of fixes.
       'jsdoc/reject-function-type': 'off',
       'jsdoc/require-jsdoc': 'off',
       'jsdoc/require-param-description': 'off', // Having a description is not crucial for now.
@@ -277,8 +295,8 @@ export default [
           args: 'none',
           caughtErrors: 'none',
           ignoreRestSiblings: true,
-          vars: 'all'
-        }
+          vars: 'all',
+        },
       ],
       'no-use-before-define': ['error', { functions: false, classes: false, variables: false }],
       'no-useless-call': 'error',
@@ -289,7 +307,7 @@ export default [
       'no-void': 'error',
       'object-property-newline': [ // TODO: Deprecated, use @stylistic/object-property-newline instead
         'error',
-        { allowMultiplePropertiesPerLine: true }
+        { allowMultiplePropertiesPerLine: true },
       ],
       'object-shorthand': ['warn', 'properties'],
       'one-var': ['error', { initialized: 'never' }],
@@ -301,10 +319,10 @@ export default [
       'unicode-bom': ['error', 'never'],
       'use-isnan': [ // override config from @eslint/js/recommended
         'error',
-        { enforceForSwitchCase: true, enforceForIndexOf: true }
+        { enforceForSwitchCase: true, enforceForIndexOf: true },
       ],
-      yoda: ['error', 'never']
-    }
+      yoda: ['error', 'never'],
+    },
   },
   {
     ...eslintPluginN.configs['flat/recommended'],
@@ -316,21 +334,21 @@ export default [
       'packages/datadog-plugin-next/test/app/**/*.js',
       'packages/datadog-plugin-next/test/**/pages/**/*.js',
       'packages/datadog-plugin-next/test/middleware.js',
-      '**/*.mjs' // TODO: This shoudln't be required, research why it is
-    ]
+      '**/*.mjs', // TODO: This shoudln't be required, research why it is
+    ],
   },
   {
     name: 'dd-trace/defaults',
     plugins: {
       '@stylistic': eslintPluginStylistic,
       import: eslintPluginImport,
-      n: eslintPluginN
+      n: eslintPluginN,
     },
     languageOptions: {
       globals: {
-        ...globals.node
+        ...globals.node,
       },
-      ecmaVersion: 2022
+      ecmaVersion: 2022,
     },
     settings: {
       node: {
@@ -338,23 +356,30 @@ export default [
         // Normally setting this in the `package.json` engines field is enough, but when we have more than one active
         // major release line at the same time, we need to specify the lowest version here to ensure backporting will
         // not fail.
-        version: '>=18.0.0'
-      }
+        version: '>=18.0.0',
+      },
+      jsdoc: { mode: 'typescript' },
     },
     rules: {
       '@stylistic/max-len': ['error', { code: 120, tabWidth: 2, ignoreUrls: true, ignoreRegExpLiterals: true }],
       '@stylistic/object-curly-newline': ['error', { multiline: true, consistent: true }],
       '@stylistic/object-curly-spacing': ['error', 'always'],
       '@stylistic/comma-dangle': ['error', {
-        arrays: 'only-multiline',
-        objects: 'only-multiline',
+        arrays: 'always-multiline',
+        objects: 'always-multiline',
         imports: 'always-multiline',
         exports: 'always-multiline',
         functions: 'only-multiline',
         importAttributes: 'always-multiline',
-        dynamicImports: 'always-multiline'
+        dynamicImports: 'always-multiline',
       }],
       'import/no-extraneous-dependencies': 'error',
+      'n/no-extraneous-require': ['error', {
+        allowModules: Object.keys(dependencies),
+      }],
+      'n/no-unpublished-require': ['error', {
+        allowModules: Object.keys(dependencies),
+      }],
       'n/no-restricted-require': ['error', ['diagnostics_channel']],
       'n/hashbang': 'off', // TODO: Enable this rule once we have a plan to address it
       'n/no-process-exit': 'off', // TODO: Enable this rule once we have a plan to address it
@@ -366,15 +391,15 @@ export default [
           'async_hooks.executionAsyncId',
           'async_hooks.executionAsyncResource',
           'fetch',
-          'fs/promises.cp'
-        ]
+          'fs/promises.cp',
+        ],
       }],
       'no-console': 'error',
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
       'no-var': 'error',
       'require-await': 'error',
-      strict: 'error'
-    }
+      strict: 'error',
+    },
   },
   {
     name: 'dd-trace/src/all',
@@ -384,11 +409,11 @@ export default [
         rules: {
           'eslint-process-env': eslintProcessEnv,
           'eslint-env-aliases': eslintEnvAliases,
-          'eslint-safe-typeof-object': eslintSafeTypeOfObject
-        }
+          'eslint-safe-typeof-object': eslintSafeTypeOfObject,
+        },
       },
       n: eslintPluginN,
-      unicorn: eslintPluginUnicorn
+      unicorn: eslintPluginUnicorn,
     },
     rules: {
       'eslint-rules/eslint-process-env': 'error',
@@ -397,24 +422,32 @@ export default [
       'n/no-restricted-require': ['error', [
         {
           name: 'diagnostics_channel',
-          message: 'Please use dc-polyfill instead.'
+          message: 'Please use `dc-polyfill` instead.',
         },
         {
           name: 'semver',
-          message: 'Please use semifies instead.'
+          message: 'Please use `semifies` instead.',
         },
         {
           name: 'get-port',
-          message: 'Please listen on port 0 instead.'
+          message: 'Please listen on port 0 instead.',
         },
         {
           name: 'rimraf',
-          message: 'Please use fs.rm(path, { recursive: true, force: true }) instead.'
+          message: 'Please use `fs.rm(path, { recursive: true, force: true })` instead.',
         },
         {
           name: 'koalas',
-          message: 'Please use nullish coalescing operator (??) instead.'
-        }
+          message: 'Please use nullish coalescing operator (??) instead.',
+        },
+        {
+          name: 'chai',
+          message: 'Please use `node:assert/strict` instead.',
+        },
+        {
+          name: 'tap',
+          message: 'Please use `mocha` instead.',
+        },
       ]],
 
       'no-await-in-loop': 'error',
@@ -466,24 +499,25 @@ export default [
       'unicorn/prefer-switch': 'off', // Questionable benefit
       'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
       'unicorn/switch-case-braces': 'off', // Questionable benefit
-    }
+    },
   },
   {
     name: 'dd-trace/defaults/v0.8-oldest',
     plugins: {
-      n: eslintPluginN
+      n: eslintPluginN,
     },
     files: [
       'init.js',
       'packages/dd-trace/src/guardrails/**/*',
-      'version.js'
+      'version.js',
     ],
     settings: {
       node: {
-        version: '>=0.8.0'
-      }
+        version: '>=0.8.0',
+      },
     },
     rules: {
+      '@stylistic/comma-dangle': 'off', // Only supported in Node.js 0.10+
       'eslint-rules/eslint-process-env': 'off', // Would require us to load a module outside the guardrails directory
       'n/no-unsupported-features/es-builtins': ['error', {
         // The following are false positives that are supported in Node.js 0.8.0
@@ -491,15 +525,15 @@ export default [
           'JSON',
           'JSON.stringify',
           'parseInt',
-          'String'
-        ]
+          'String',
+        ],
       }],
       'n/no-unsupported-features/es-syntax': ['error', {
         // The following are false positives that are supported in Node.js 0.8.0
         ignores: [
           'array-prototype-indexof',
-          'json'
-        ]
+          'json',
+        ],
       }],
       'no-var': 'off', // Only supported in Node.js 6+
       'object-shorthand': 'off', // Only supported in Node.js 4+
@@ -507,72 +541,72 @@ export default [
       'unicorn/prefer-number-properties': 'off', // Only supported in Node.js 0.12+
       'unicorn/prefer-optional-catch-binding': 'off', // Only supported in Node.js 10+
       'unicorn/prefer-set-has': 'off', // Only supported in Node.js 0.12+
-      'unicorn/prefer-string-replace-all': 'off' // Only supported in Node.js 15+
-    }
+      'unicorn/prefer-string-replace-all': 'off', // Only supported in Node.js 15+
+    },
   },
   {
     name: 'dd-trace/defaults/v16-oldest',
     plugins: {
-      n: eslintPluginN
+      n: eslintPluginN,
     },
     files: [
-      'packages/datadog-plugin-cypress/src/support.js'
+      'packages/datadog-plugin-cypress/src/support.js',
     ],
     settings: {
       node: {
-        version: '>=16.0.0'
-      }
-    }
+        version: '>=16.0.0',
+      },
+    },
   },
   {
     name: 'dd-trace/defaults/v18-latest',
     plugins: {
-      n: eslintPluginN
+      n: eslintPluginN,
     },
     files: [
       'benchmark/**/*',
       'scripts/**/*',
-      ...TEST_FILES
+      ...TEST_FILES,
     ],
     settings: {
       node: {
-        version: '>=18' // These files don't have to support the oldest v18 release
-      }
+        version: '>=18', // These files don't have to support the oldest v18 release
+      },
     },
     rules: {
       'n/no-unsupported-features/node-builtins': ['error', {
         allowExperimental: true,
         ignores: [
-          'module.register'
-        ]
-      }]
-    }
+          'module.register',
+        ],
+      }],
+    },
   },
   {
     ...eslintPluginCypress.configs.recommended,
     files: [
-      'packages/datadog-plugin-cypress/src/support.js'
-    ]
+      'packages/datadog-plugin-cypress/src/support.js',
+    ],
   },
   {
     ...eslintPluginMocha.configs.recommended,
-    files: TEST_FILES
+    files: TEST_FILES,
   },
   {
     name: 'dd-trace/benchmarks',
     files: [
-      'benchmark/**/*'
+      'benchmark/**/*',
     ],
     rules: {
-      'n/no-missing-require': 'off'
-    }
+      'n/no-missing-require': 'off',
+    },
   },
   {
     name: 'dd-trace/tests/all',
     files: TEST_FILES,
     plugins: {
       mocha: eslintPluginMocha,
-      n: eslintPluginN
+      n: eslintPluginN,
     },
     rules: {
       'mocha/consistent-spacing-between-blocks': 'off',
@@ -582,9 +616,15 @@ export default [
       'mocha/no-sibling-hooks': 'off',
       'mocha/no-top-level-hooks': 'off',
       'n/handle-callback-err': 'off',
+      'n/no-extraneous-require': ['error', {
+        allowModules: [
+          ...Object.keys(dependencies),
+          'mocha',
+        ],
+      }],
       'n/no-missing-require': 'off',
-      'require-await': 'off'
-    }
+      'require-await': 'off',
+    },
   },
   {
     name: 'dd-trace/test-optimization/relaxed',
@@ -601,16 +641,22 @@ export default [
     plugins: {
       mocha: eslintPluginMocha,
     },
+    languageOptions: {
+      globals: {
+        afterAll: 'readonly',
+        expect: 'readonly',
+        jest: 'readonly',
+      },
+    },
     rules: {
-      'no-undef': 'off',
       'mocha/max-top-level-suites': 'off',
       'mocha/no-pending-tests': 'off',
-    }
+    },
   },
   {
     name: 'dd-trace/tests/integration-and-resources',
     plugins: {
-      import: eslintPluginImport
+      import: eslintPluginImport,
     },
     files: [
       'integration-tests/**/*.js',
@@ -624,7 +670,7 @@ export default [
       'packages/datadog-plugin-jest/test/jest-test.js',
     ],
     rules: {
-      'import/no-extraneous-dependencies': 'off'
-    }
-  }
+      'import/no-extraneous-dependencies': 'off',
+    },
+  },
 ]

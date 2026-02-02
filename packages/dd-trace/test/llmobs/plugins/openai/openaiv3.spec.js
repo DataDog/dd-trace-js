@@ -16,7 +16,7 @@ describe('integrations', () => {
   let openai
 
   describe('openai', () => {
-    const getEvents = useLlmObs({ plugin: 'openai', closeOptions: { wipe: true } })
+    const { getEvents } = useLlmObs({ plugin: 'openai', closeOptions: { wipe: true } })
 
     withVersions('openai', 'openai', '<4', version => {
       const moduleRequirePath = `../../../../../../versions/openai@${version}`
@@ -31,7 +31,7 @@ describe('integrations', () => {
 
         const configuration = new Configuration({
           apiKey: process.env.OPENAI_API_KEY ?? 'sk-DATADOG-ACCEPTANCE-TESTS',
-          basePath: 'http://127.0.0.1:9126/vcr/openai'
+          basePath: 'http://127.0.0.1:9126/vcr/openai',
         })
 
         openai = new OpenAIApi(configuration)
@@ -53,15 +53,16 @@ describe('integrations', () => {
           spanKind: 'llm',
           name: 'OpenAI.createCompletion',
           inputMessages: [
-            { content: 'Hello, OpenAI!', role: '' }
+            { content: 'Hello, OpenAI!', role: '' },
           ],
           outputMessages: [
-            { content: MOCK_STRING, role: '' }
+            { content: MOCK_STRING, role: '' },
           ],
           metrics: {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
-            total_tokens: MOCK_NUMBER
+            total_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
           },
           modelName: 'gpt-3.5-turbo-instruct:20230824-v2',
           modelProvider: 'openai',
@@ -71,7 +72,7 @@ describe('integrations', () => {
             n: 1,
             stream: false,
           },
-          tags: { ml_app: 'test', integration: 'openai' }
+          tags: { ml_app: 'test', integration: 'openai' },
         })
       })
 
@@ -85,18 +86,18 @@ describe('integrations', () => {
           messages: [
             {
               role: 'system',
-              content: 'You are a helpful assistant.'
+              content: 'You are a helpful assistant.',
             },
             {
               role: 'user',
-              content: 'Hello, OpenAI!'
-            }
+              content: 'Hello, OpenAI!',
+            },
           ],
           temperature: 0.5,
           stream: false,
           max_tokens: 100,
           n: 1,
-          user: 'dd-trace-test'
+          user: 'dd-trace-test',
         })
 
         const { apmSpans, llmobsSpans } = await getEvents()
@@ -106,16 +107,17 @@ describe('integrations', () => {
           name: 'OpenAI.createChatCompletion',
           inputMessages: [
             { role: 'system', content: 'You are a helpful assistant.' },
-            { role: 'user', content: 'Hello, OpenAI!' }
+            { role: 'user', content: 'Hello, OpenAI!' },
           ],
           outputMessages: [
-            { role: 'assistant', content: MOCK_STRING }
+            { role: 'assistant', content: MOCK_STRING },
           ],
           metrics: {
             cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
-            total_tokens: MOCK_NUMBER
+            total_tokens: MOCK_NUMBER,
           },
           modelName: 'gpt-3.5-turbo-0125',
           modelProvider: 'openai',
@@ -124,9 +126,9 @@ describe('integrations', () => {
             temperature: 0.5,
             n: 1,
             stream: false,
-            user: 'dd-trace-test'
+            user: 'dd-trace-test',
           },
-          tags: { ml_app: 'test', integration: 'openai' }
+          tags: { ml_app: 'test', integration: 'openai' },
         })
       })
 
@@ -134,7 +136,7 @@ describe('integrations', () => {
         await openai.createEmbedding({
           model: 'text-embedding-ada-002',
           input: 'hello world',
-          encoding_format: 'base64'
+          encoding_format: 'base64',
         })
 
         const { apmSpans, llmobsSpans } = await getEvents()
@@ -143,14 +145,16 @@ describe('integrations', () => {
           spanKind: 'embedding',
           name: 'OpenAI.createEmbedding',
           inputDocuments: [
-            { text: 'hello world' }
+            { text: 'hello world' },
           ],
           outputValue: '[1 embedding(s) returned]',
-          metrics: { input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER },
+          metrics: {
+            input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER, reasoning_output_tokens: 0,
+          },
           modelName: 'text-embedding-ada-002-v2',
           modelProvider: 'openai',
           metadata: { encoding_format: 'base64' },
-          tags: { ml_app: 'test', integration: 'openai' }
+          tags: { ml_app: 'test', integration: 'openai' },
         })
       })
 
@@ -169,9 +173,9 @@ describe('integrations', () => {
             parameters: {
               type: 'object',
               properties: {
-                city: { type: 'string', description: 'The city to get the weather for' }
-              }
-            }
+                city: { type: 'string', description: 'The city to get the weather for' },
+              },
+            },
           }],
           function_call: 'auto',
           stream: false,
@@ -193,12 +197,12 @@ describe('integrations', () => {
               {
                 name: 'get_weather',
                 arguments: {
-                  city: 'New York City'
+                  city: 'New York City',
                 },
                 tool_id: MOCK_STRING,
-                type: 'function'
-              }
-            ]
+                type: 'function',
+              },
+            ],
           }],
           metadata: { function_call: 'auto', stream: false },
           tags: { ml_app: 'test', integration: 'openai' },
@@ -206,8 +210,8 @@ describe('integrations', () => {
             cache_read_input_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
-            total_tokens: MOCK_NUMBER
-          }
+            total_tokens: MOCK_NUMBER,
+          },
         })
       })
 
@@ -241,8 +245,8 @@ describe('integrations', () => {
           error: {
             type: error.type || error.name,
             message: error.message,
-            stack: error.stack
-          }
+            stack: error.stack,
+          },
         })
       })
 
@@ -259,18 +263,18 @@ describe('integrations', () => {
             messages: [
               {
                 role: 'system',
-                content: 'You are a helpful assistant.'
+                content: 'You are a helpful assistant.',
               },
               {
                 role: 'user',
-                content: 'Hello, OpenAI!'
-              }
+                content: 'Hello, OpenAI!',
+              },
             ],
             temperature: 0.5,
             stream: false,
             max_tokens: 100,
             n: 1,
-            user: 'dd-trace-test'
+            user: 'dd-trace-test',
           })
         } catch (e) {
           error = e
@@ -283,7 +287,7 @@ describe('integrations', () => {
           name: 'OpenAI.createChatCompletion',
           inputMessages: [
             { role: 'system', content: 'You are a helpful assistant.' },
-            { role: 'user', content: 'Hello, OpenAI!' }
+            { role: 'user', content: 'Hello, OpenAI!' },
           ],
           outputMessages: [{ content: '', role: '' }],
           modelName: 'gpt-3.5-turbo-instruct',
@@ -293,7 +297,7 @@ describe('integrations', () => {
           error: {
             type: error.type || error.name,
             message: error.message,
-            stack: error.stack
+            stack: error.stack,
           },
         })
       })

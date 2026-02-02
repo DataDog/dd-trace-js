@@ -46,7 +46,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       topic,
       type: 'kafka_commit',
       offset: Number(offset),
-      consumer_group: groupId
+      consumer_group: groupId,
     }
   }
 
@@ -57,7 +57,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       'type',
       'partition',
       'offset',
-      'topic'
+      'topic',
     ]
     for (const commit of commitList.map(this.transformCommit)) {
       if (keys.some(key => !commit.hasOwnProperty(key))) continue
@@ -81,11 +81,11 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
         component: this.constructor.id,
         'kafka.topic': topic,
         'kafka.cluster_id': clusterId,
-        [MESSAGING_DESTINATION_KEY]: topic
+        [MESSAGING_DESTINATION_KEY]: topic,
       },
       metrics: {
-        'kafka.partition': partition
-      }
+        'kafka.partition': partition,
+      },
     }, ctx)
     if (message?.offset) span.setTag('kafka.message.offset', message?.offset)
 

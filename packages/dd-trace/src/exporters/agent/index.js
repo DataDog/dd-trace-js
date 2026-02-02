@@ -1,21 +1,17 @@
 'use strict'
 
-const { URL, format } = require('url')
+const { URL } = require('url')
 const log = require('../../log')
+const { getAgentUrl } = require('../../agent/url')
 const Writer = require('./writer')
-const defaults = require('../../config_defaults')
 
 class AgentExporter {
   #timer
 
   constructor (config, prioritySampler) {
     this._config = config
-    const { url, hostname = defaults.hostname, port, lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
-    this._url = url || new URL(format({
-      protocol: 'http:',
-      hostname,
-      port
-    }))
+    const { lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
+    this._url = getAgentUrl(config)
 
     const headers = {}
     if (stats.enabled || apmTracingEnabled === false) {
@@ -28,12 +24,10 @@ class AgentExporter {
       lookup,
       protocolVersion,
       headers,
-      config
+      config,
     })
 
-    process.once('beforeExit', () => {
-      this.flush()
-    })
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
   }
 
   setUrl (url) {

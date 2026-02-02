@@ -1,10 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 const connectionAttributes = new WeakMap()
 const poolAttributes = new WeakMap()
@@ -68,7 +68,7 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
         port,
         hostname,
         query: dbQuery,
-        connAttrs
+        connAttrs,
       }
 
       return startChannel.runStores(ctx, () => {

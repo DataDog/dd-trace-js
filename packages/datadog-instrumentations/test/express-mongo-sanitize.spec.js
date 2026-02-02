@@ -1,9 +1,11 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const axios = require('axios')
-const { expect } = require('chai')
+
 const { channel } = require('dc-polyfill')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -47,21 +49,21 @@ describe('express-mongo-sanitize', () => {
 
       describe('without subscriptions', () => {
         it('it continues working without sanitization request', async () => {
-          expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.false
+          assert.strictEqual(sanitizeMiddlewareFinished.hasSubscribers, false)
 
           await axios.get(`http://localhost:${port}/?param=paramvalue`)
 
-          expect(requestBody).to.be.calledOnce
-          expect(requestBody.firstCall.args[0].query.param).to.be.equal('paramvalue')
+          sinon.assert.calledOnce(requestBody)
+          assert.strictEqual(requestBody.firstCall.args[0].query.param, 'paramvalue')
         })
 
         it('it continues working with sanitization request', async () => {
-          expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.false
+          assert.strictEqual(sanitizeMiddlewareFinished.hasSubscribers, false)
 
           await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
 
-          expect(requestBody).to.be.calledOnce
-          expect(requestBody.firstCall.args[0].query.param.$eq).to.be.undefined
+          sinon.assert.calledOnce(requestBody)
+          assert.strictEqual(requestBody.firstCall.args[0].query.param.$eq, undefined)
         })
       })
 
@@ -78,43 +80,48 @@ describe('express-mongo-sanitize', () => {
         })
 
         it('it continues working without sanitization request', async () => {
-          expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.true
+          assert.strictEqual(sanitizeMiddlewareFinished.hasSubscribers, true)
 
           await axios.get(`http://localhost:${port}/?param=paramvalue`)
 
-          expect(requestBody).to.be.calledOnce
-          expect(requestBody.firstCall.args[0].query.param).to.be.equal('paramvalue')
+          sinon.assert.calledOnce(requestBody)
+          assert.strictEqual(requestBody.firstCall.args[0].query.param, 'paramvalue')
         })
 
         it('it continues working with sanitization request', async () => {
-          expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.true
+          assert.strictEqual(sanitizeMiddlewareFinished.hasSubscribers, true)
 
           await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
 
-          expect(requestBody).to.be.calledOnce
-          expect(requestBody.firstCall.args[0].query.param.$eq).to.be.undefined
+          sinon.assert.calledOnce(requestBody)
+          assert.strictEqual(requestBody.firstCall.args[0].query.param.$eq, undefined)
         })
 
         it('subscription is called with expected parameters without sanitization request', async () => {
-          expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.true
+          assert.strictEqual(sanitizeMiddlewareFinished.hasSubscribers, true)
 
           await axios.get(`http://localhost:${port}/?param=paramvalue`)
 
-          expect(subscription).to.be.calledOnce
-          expect(subscription.firstCall.args[0].sanitizedProperties)
-            .to.be.deep.equal(['body', 'params', 'headers', 'query'])
-          expect(subscription.firstCall.args[0].req.query.param).to.be.equal('paramvalue')
+          sinon.assert.calledOnce(subscription)
+          assert.deepStrictEqual(
+            subscription.firstCall.args[0].sanitizedProperties,
+            ['body', 'params', 'headers', 'query'],
+          )
+          assert.strictEqual(subscription.firstCall.args[0].req.query.param, 'paramvalue')
         })
 
         it('subscription is called with expected parameters with sanitization request', async () => {
-          expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.true
+          assert.strictEqual(sanitizeMiddlewareFinished.hasSubscribers, true)
 
           await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
 
-          expect(subscription).to.be.calledOnce
-          expect(subscription.firstCall.args[0].sanitizedProperties)
-            .to.be.deep.equal(['body', 'params', 'headers', 'query'])
-          expect(subscription.firstCall.args[0].req.query.param.$eq).to.be.undefined
+          sinon.assert.calledOnce(subscription)
+          assert.deepStrictEqual(
+            subscription.firstCall.args[0].sanitizedProperties,
+            ['body', 'params', 'headers', 'query'],
+            'Sanitized properties should be called with expected parameters'
+          )
+          assert.strictEqual(subscription.firstCall.args[0].req.query.param.$eq, undefined)
         })
       })
     })
@@ -137,31 +144,31 @@ describe('express-mongo-sanitize', () => {
 
       describe('without subscriptions', () => {
         it('it works as expected without modifications', () => {
-          expect(sanitizeFinished.hasSubscribers).to.be.false
+          assert.strictEqual(sanitizeFinished.hasSubscribers, false)
 
           const objectToSanitize = {
-            safeKey: 'safeValue'
+            safeKey: 'safeValue',
           }
 
           const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
 
-          expect(sanitizedObject.safeKey).to.be.equal(objectToSanitize.safeKey)
+          assert.strictEqual(sanitizedObject.safeKey, objectToSanitize.safeKey)
         })
 
         it('it works as expected with modifications', () => {
-          expect(sanitizeFinished.hasSubscribers).to.be.false
+          assert.strictEqual(sanitizeFinished.hasSubscribers, false)
 
           const objectToSanitize = {
             unsafeKey: {
-              $ne: 'test'
+              $ne: 'test',
             },
-            safeKey: 'safeValue'
+            safeKey: 'safeValue',
           }
 
           const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
 
-          expect(sanitizedObject.safeKey).to.be.equal(objectToSanitize.safeKey)
-          expect(sanitizedObject.unsafeKey.$ne).to.be.undefined
+          assert.strictEqual(sanitizedObject.safeKey, objectToSanitize.safeKey)
+          assert.strictEqual(sanitizedObject.unsafeKey.$ne, undefined)
         })
       })
 
@@ -179,33 +186,33 @@ describe('express-mongo-sanitize', () => {
         })
 
         it('it works as expected without modifications', () => {
-          expect(sanitizeFinished.hasSubscribers).to.be.true
+          assert.strictEqual(sanitizeFinished.hasSubscribers, true)
 
           const objectToSanitize = {
-            safeKey: 'safeValue'
+            safeKey: 'safeValue',
           }
 
           const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
 
-          expect(sanitizedObject.safeKey).to.be.equal(objectToSanitize.safeKey)
-          expect(subscription).to.be.calledOnceWith({ sanitizedObject })
+          assert.strictEqual(sanitizedObject.safeKey, objectToSanitize.safeKey)
+          sinon.assert.calledOnceWithMatch(subscription, { sanitizedObject })
         })
 
         it('it works as expected with modifications', () => {
-          expect(sanitizeFinished.hasSubscribers).to.be.true
+          assert.strictEqual(sanitizeFinished.hasSubscribers, true)
 
           const objectToSanitize = {
             unsafeKey: {
-              $ne: 'test'
+              $ne: 'test',
             },
-            safeKey: 'safeValue'
+            safeKey: 'safeValue',
           }
 
           const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
 
-          expect(sanitizedObject.safeKey).to.be.equal(objectToSanitize.safeKey)
-          expect(sanitizedObject.unsafeKey.$ne).to.be.undefined
-          expect(subscription).to.be.calledOnceWith({ sanitizedObject })
+          assert.strictEqual(sanitizedObject.safeKey, objectToSanitize.safeKey)
+          assert.strictEqual(sanitizedObject.unsafeKey.$ne, undefined)
+          sinon.assert.calledOnceWithMatch(subscription, { sanitizedObject })
         })
       })
     })

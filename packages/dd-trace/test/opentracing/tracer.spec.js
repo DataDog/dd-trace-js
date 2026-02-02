@@ -1,17 +1,17 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
-const sinon = require('sinon')
-const opentracing = require('opentracing')
-const proxyquire = require('proxyquire')
-
+const assert = require('node:assert/strict')
 const os = require('node:os')
 
-require('../setup/core')
+const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 
+const opentracing = require('../../../../vendor/dist/opentracing')
+require('../setup/core')
 const SpanContext = require('../../src/opentracing/span_context')
 const formats = require('../../../../ext/formats')
+
 const Reference = opentracing.Reference
 
 describe('Tracer', () => {
@@ -41,22 +41,22 @@ describe('Tracer', () => {
     fields = {}
 
     span = {
-      addTags: sinon.stub().returns(span)
+      addTags: sinon.stub().returns(span),
     }
     Span = sinon.stub().returns(span)
 
     prioritySampler = {
-      sample: sinon.stub()
+      sample: sinon.stub(),
     }
     PrioritySampler = sinon.stub().returns(prioritySampler)
 
     agentExporter = {
-      export: sinon.spy()
+      export: sinon.spy(),
     }
     AgentExporter = sinon.stub().returns(agentExporter)
 
     processor = {
-      process: sinon.spy()
+      process: sinon.spy(),
     }
     SpanProcessor = sinon.stub().returns(processor)
 
@@ -69,7 +69,7 @@ describe('Tracer', () => {
     LogPropagator = sinon.stub()
     propagator = {
       inject: sinon.stub(),
-      extract: sinon.stub()
+      extract: sinon.stub(),
     }
 
     config = {
@@ -80,13 +80,13 @@ describe('Tracer', () => {
       logger: 'logger',
       tags: {},
       debug: true,
-      experimental: {}
+      experimental: {},
     }
 
     log = {
       use: sinon.spy(),
       toggle: sinon.spy(),
-      error: sinon.spy()
+      error: sinon.spy(),
     }
 
     exporter = sinon.stub().returns(AgentExporter)
@@ -101,24 +101,24 @@ describe('Tracer', () => {
       './propagation/binary': BinaryPropagator,
       './propagation/log': LogPropagator,
       '../log': log,
-      '../exporter': exporter
+      '../exporter': exporter,
     })
   })
 
   it('should support recording', () => {
     tracer = new Tracer(config)
 
-    expect(AgentExporter).to.have.been.called
-    expect(AgentExporter).to.have.been.calledWith(config, prioritySampler)
-    expect(SpanProcessor).to.have.been.calledWith(agentExporter, prioritySampler, config)
+    sinon.assert.called(AgentExporter)
+    sinon.assert.calledWith(AgentExporter, config, prioritySampler)
+    sinon.assert.calledWith(SpanProcessor, agentExporter, prioritySampler, config)
   })
 
   it('should allow to configure an alternative prioritySampler', () => {
     const sampler = {}
     tracer = new Tracer(config, sampler)
 
-    expect(AgentExporter).to.have.been.calledWith(config, sampler)
-    expect(SpanProcessor).to.have.been.calledWith(agentExporter, sampler, config)
+    sinon.assert.calledWith(AgentExporter, config, sampler)
+    sinon.assert.calledWith(SpanProcessor, agentExporter, sampler, config)
   })
 
   describe('startSpan', () => {
@@ -129,39 +129,39 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWith(tracer, processor, prioritySampler, {
+      sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         tags: {
-          'service.name': 'service'
+          'service.name': 'service',
         },
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
         integrationName: undefined,
-        links: undefined
+        links: undefined,
       }, true)
 
-      expect(span.addTags).to.have.been.calledWith({
-        foo: 'bar'
+      sinon.assert.calledWith(span.addTags, {
+        foo: 'bar',
       })
 
-      expect(testSpan).to.equal(span)
+      assert.strictEqual(testSpan, span)
     })
 
     it('should start a span that is the child of a span', () => {
       const parent = new SpanContext()
 
       fields.references = [
-        new Reference(opentracing.REFERENCE_CHILD_OF, parent)
+        new Reference(opentracing.REFERENCE_CHILD_OF, parent),
       ]
 
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
+      sinon.assert.calledWithMatch(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
-        parent
+        parent,
       })
     })
 
@@ -169,15 +169,15 @@ describe('Tracer', () => {
       const parent = new SpanContext()
 
       fields.references = [
-        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, parent)
+        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, parent),
       ]
 
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
+      sinon.assert.calledWithMatch(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
-        parent
+        parent,
       })
     })
 
@@ -188,20 +188,20 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWith(tracer, processor, prioritySampler, {
+      sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         tags: {
-          'service.name': 'service'
+          'service.name': 'service',
         },
         startTime: fields.startTime,
         hostname: os.hostname(),
         traceId128BitGenerationEnabled: undefined,
         integrationName: undefined,
-        links: undefined
+        links: undefined,
       })
 
-      expect(testSpan).to.equal(span)
+      assert.strictEqual(testSpan, span)
     })
 
     it('should ignore additional follow references', () => {
@@ -209,15 +209,15 @@ describe('Tracer', () => {
 
       fields.references = [
         new Reference(opentracing.REFERENCE_FOLLOWS_FROM, parent),
-        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, new SpanContext())
+        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, new SpanContext()),
       ]
 
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
+      sinon.assert.calledWithMatch(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
-        parent
+        parent,
       })
     })
 
@@ -225,68 +225,68 @@ describe('Tracer', () => {
       const parent = new SpanContext()
 
       fields.references = [
-        new Reference('test', parent)
+        new Reference('test', parent),
       ]
 
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
+      sinon.assert.calledWithMatch(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
-        parent: null
+        parent: null,
       })
     })
 
     it('should merge default tracer tags with span tags', () => {
       config.tags = {
         foo: 'tracer',
-        bar: 'tracer'
+        bar: 'tracer',
       }
 
       fields.tags = {
         bar: 'span',
-        baz: 'span'
+        baz: 'span',
       }
 
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(span.addTags).to.have.been.calledWith(config.tags)
-      expect(span.addTags).to.have.been.calledWith(fields.tags)
+      sinon.assert.calledWith(span.addTags, config.tags)
+      sinon.assert.calledWith(span.addTags, fields.tags)
     })
 
     it('If span is granted a service name that differs from the global service name' +
       'ensure spans `version` tag is undefined.', () => {
       config.tags = {
         foo: 'tracer',
-        bar: 'tracer'
+        bar: 'tracer',
       }
 
       fields.tags = {
         bar: 'span',
         baz: 'span',
-        service: 'new-service'
+        service: 'new-service',
 
       }
 
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      expect(span.addTags).to.have.been.calledWith(config.tags)
-      expect(span.addTags).to.have.been.calledWith({ ...fields.tags, version: undefined })
-      expect(Span).to.have.been.calledWith(tracer, processor, prioritySampler, {
+      sinon.assert.calledWith(span.addTags, config.tags)
+      sinon.assert.calledWith(span.addTags, { ...fields.tags, version: undefined })
+      sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         tags: {
-          'service.name': 'new-service'
+          'service.name': 'new-service',
         },
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
         integrationName: undefined,
-        links: undefined
+        links: undefined,
       })
-      expect(testSpan).to.equal(span)
+      assert.strictEqual(testSpan, span)
     })
 
     it('should start a span with the trace ID generation configuration', () => {
@@ -294,20 +294,20 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWith(tracer, processor, prioritySampler, {
+      sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         tags: {
-          'service.name': 'service'
+          'service.name': 'service',
         },
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: true,
         integrationName: undefined,
-        links: undefined
+        links: undefined,
       })
 
-      expect(testSpan).to.equal(span)
+      assert.strictEqual(testSpan, span)
     })
 
     it('should start a span with span links attached', () => {
@@ -316,20 +316,20 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWith(tracer, processor, prioritySampler, {
+      sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         tags: {
-          'service.name': 'service'
+          'service.name': 'service',
         },
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
         integrationName: undefined,
-        links: [{ context }]
+        links: [{ context }],
       })
 
-      expect(testSpan).to.equal(span)
+      assert.strictEqual(testSpan, span)
     })
   })
 
@@ -340,8 +340,8 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.inject(spanContext, opentracing.FORMAT_TEXT_MAP, carrier)
 
-      expect(TextMapPropagator).to.have.been.calledWith(config)
-      expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
+      sinon.assert.calledWith(TextMapPropagator, config)
+      sinon.assert.calledWith(propagator.inject, spanContext, carrier)
     })
 
     it('should support http headers format', () => {
@@ -350,8 +350,8 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.inject(spanContext, opentracing.FORMAT_HTTP_HEADERS, carrier)
 
-      expect(HttpPropagator).to.have.been.calledWith(config)
-      expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
+      sinon.assert.calledWith(HttpPropagator, config)
+      sinon.assert.calledWith(propagator.inject, spanContext, carrier)
     })
 
     it('should support binary format', () => {
@@ -360,14 +360,14 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.inject(spanContext, opentracing.FORMAT_BINARY, carrier)
 
-      expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
+      sinon.assert.calledWith(propagator.inject, spanContext, carrier)
     })
 
     it('should handle errors', () => {
       tracer = new Tracer(config)
 
-      expect(() => tracer.inject({})).not.to.throw()
-      expect(log.error).to.have.been.calledOnce
+      assert.doesNotThrow(() => tracer.inject({}))
+      sinon.assert.calledOnce(log.error)
     })
 
     it('should generate the sampling priority', () => {
@@ -376,7 +376,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.inject(spanContext, opentracing.FORMAT_TEXT_MAP, carrier)
 
-      expect(prioritySampler.sample).to.have.been.calledWith(spanContext)
+      sinon.assert.calledWith(prioritySampler.sample, spanContext)
     })
 
     it('should not generate sampling priority for log injection', () => {
@@ -385,8 +385,8 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.inject(spanContext, formats.LOG, carrier)
 
-      expect(prioritySampler.sample).to.not.have.been.called
-      expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
+      sinon.assert.notCalled(prioritySampler.sample)
+      sinon.assert.calledWith(propagator.inject, spanContext, carrier)
     })
   })
 
@@ -398,7 +398,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const spanContext = tracer.extract(opentracing.FORMAT_TEXT_MAP, carrier)
 
-      expect(spanContext).to.equal('spanContext')
+      assert.strictEqual(spanContext, 'spanContext')
     })
 
     it('should support http headers format', () => {
@@ -408,7 +408,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const spanContext = tracer.extract(opentracing.FORMAT_HTTP_HEADERS, carrier)
 
-      expect(spanContext).to.equal('spanContext')
+      assert.strictEqual(spanContext, 'spanContext')
     })
 
     it('should support binary format', () => {
@@ -418,13 +418,13 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const spanContext = tracer.extract(opentracing.FORMAT_BINARY, carrier)
 
-      expect(spanContext).to.equal('spanContext')
+      assert.strictEqual(spanContext, 'spanContext')
     })
 
     it('should handle errors', () => {
       tracer = new Tracer(config)
 
-      expect(() => tracer.extract()).not.to.throw()
+      assert.doesNotThrow(() => tracer.extract())
     })
   })
 })

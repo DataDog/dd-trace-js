@@ -2,9 +2,9 @@
 
 const { errorMonitor } = require('node:events')
 
-const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const satisfies = require('semifies')
+const satisfies = require('../../../vendor/dist/semifies')
+const { channel, addHook } = require('./helpers/instrument')
 
 function wrapConnection (Connection, version) {
   const startCh = channel('apm:mysql2:query:start')
@@ -141,11 +141,11 @@ function wrapConnection (Connection, version) {
             finishCh.runStores(ctx, onResult, this, ...arguments)
           })
         } else {
-          this.on(errorMonitor, error => {
+          this.once(errorMonitor, error => {
             ctx.error = error
             errorCh.publish(ctx)
           })
-          this.on('end', () => finishCh.publish(ctx))
+          this.once('end', () => finishCh.publish(ctx))
         }
 
         this.execute = execute

@@ -13,7 +13,7 @@ class MoleculerClientPlugin extends ClientPlugin {
     const span = this.startSpan(this.operationName(), {
       service: this.config.service || this.serviceName(),
       resource: actionName,
-      kind: 'client'
+      kind: 'client',
     }, ctx)
 
     this.tracer.inject(span, 'text_map', opts.meta)

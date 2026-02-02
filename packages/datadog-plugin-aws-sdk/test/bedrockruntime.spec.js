@@ -1,14 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert')
 const { describe, it, before, after } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { setup } = require('./spec_helpers')
 const { models } = require('./fixtures/bedrockruntime')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const assert = require('node:assert')
-
 const serviceName = 'bedrock-service-name-test'
 
 describe('Plugin', () => {
@@ -39,7 +37,7 @@ describe('Plugin', () => {
               endpoint: { url: 'http://127.0.0.1:9126/vcr/bedrock-runtime' },
               region: 'us-east-1',
               ServiceId: serviceName,
-              requestHandler: new NodeHttpHandler()
+              requestHandler: new NodeHttpHandler(),
             }
           )
         })
@@ -54,18 +52,17 @@ describe('Plugin', () => {
               body: JSON.stringify(model.requestBody),
               contentType: 'application/json',
               accept: 'application/json',
-              modelId: model.modelId
+              modelId: model.modelId,
             }
 
             const command = new AWS.InvokeModelCommand(request)
 
-            const tracesPromise = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-              expect(span.meta).to.include({
+            const tracesPromise = agent.assertFirstTraceSpan({
+              meta: {
                 'aws.operation': 'invokeModel',
                 'aws.bedrock.request.model': model.modelId.split('.')[1],
                 'aws.bedrock.request.model_provider': model.provider.toLowerCase(),
-              })
+              },
             })
 
             await bedrockRuntimeClient.send(command)
@@ -77,18 +74,17 @@ describe('Plugin', () => {
               body: JSON.stringify(model.requestBody),
               contentType: 'application/json',
               accept: 'application/json',
-              modelId: model.modelId
+              modelId: model.modelId,
             }
 
             const command = new AWS.InvokeModelWithResponseStreamCommand(request)
 
-            const tracesPromise = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-              expect(span.meta).to.include({
+            const tracesPromise = agent.assertFirstTraceSpan({
+              meta: {
                 'aws.operation': 'invokeModelWithResponseStream',
                 'aws.bedrock.request.model': model.modelId.split('.')[1],
                 'aws.bedrock.request.model_provider': model.provider.toLowerCase(),
-              })
+              },
             })
 
             const stream = await bedrockRuntimeClient.send(command)

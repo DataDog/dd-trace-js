@@ -1,22 +1,23 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const { EventEmitter } = require('node:events')
 
 const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
-const DatadogSpanContext = require('../../../src/opentracing/span_context')
-const id = require('../../../src/id')
 const iast = require('../../../src/appsec/iast')
 const rewriter = require('../../../src/appsec/iast/taint-tracking/rewriter')
-const { testInRequest } = require('./utils')
-const agent = require('../../plugins/agent')
 const vulnerabilities = require('../../../src/appsec/iast/vulnerabilities')
+const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
+const id = require('../../../src/id')
+const DatadogSpanContext = require('../../../src/opentracing/span_context')
 const { getConfigFresh } = require('../../helpers/config')
+const agent = require('../../plugins/agent')
+const { testInRequest } = require('./utils')
 
 describe('Overhead controller', () => {
   let oceContextKey, overheadController, web
@@ -24,18 +25,18 @@ describe('Overhead controller', () => {
   describe('unit tests', () => {
     beforeEach(() => {
       web = {
-        getContext: sinon.stub()
+        getContext: sinon.stub(),
       }
 
       overheadController = proxyquire('../../../src/appsec/iast/overhead-controller', {
-        '../../plugins/util/web': web
+        '../../plugins/util/web': web,
       })
       oceContextKey = overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY
 
       const config = getConfigFresh({
         experimental: {
-          iast: true
-        }
+          iast: true,
+        },
       })
       overheadController.configure(config.iast)
     })
@@ -49,7 +50,7 @@ describe('Overhead controller', () => {
         it('should populate request context', () => {
           const iastContext = {}
           overheadController.initializeRequestContext(iastContext)
-          expect(iastContext).to.have.nested.property(overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY)
+          assert.ok(hasNestedProperty(iastContext, overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY))
         })
       })
     })
@@ -80,7 +81,7 @@ describe('Overhead controller', () => {
       it('should not start refresher interval when already started', () => {
         overheadController.startGlobalContext()
         overheadController.startGlobalContext()
-        expect(global.setInterval).to.have.been.calledOnce
+        sinon.assert.calledOnce(global.setInterval)
         overheadController.finishGlobalContext()
       })
 
@@ -88,7 +89,7 @@ describe('Overhead controller', () => {
         overheadController.startGlobalContext()
         overheadController.finishGlobalContext()
         overheadController.finishGlobalContext()
-        expect(global.clearInterval).to.have.been.calledOnce
+        sinon.assert.calledOnce(global.clearInterval)
       })
 
       it('should restart refresher when already finished', () => {
@@ -96,8 +97,8 @@ describe('Overhead controller', () => {
         overheadController.finishGlobalContext()
         overheadController.startGlobalContext()
         overheadController.finishGlobalContext()
-        expect(global.setInterval).to.have.been.calledTwice
-        expect(global.clearInterval).to.have.been.calledTwice
+        sinon.assert.calledTwice(global.setInterval)
+        sinon.assert.calledTwice(global.clearInterval)
       })
     })
 
@@ -105,81 +106,81 @@ describe('Overhead controller', () => {
       it('should allow requests which span id ends with a smaller number than default 30', () => {
         const rootSpan = {
           context: sinon.stub().returns(new DatadogSpanContext({
-            spanId: id('6004358438913972427', 10)
-          }))
+            spanId: id('6004358438913972427', 10),
+          })),
         }
 
         const reserved = overheadController.acquireRequest(rootSpan)
-        expect(reserved).to.be.true
+        assert.strictEqual(reserved, true)
       })
 
       it('should allow requests which span id ends with a default 30', () => {
         const rootSpan = {
           context: sinon.stub().returns(new DatadogSpanContext({
-            spanId: id('6004358438913972430', 10)
-          }))
+            spanId: id('6004358438913972430', 10),
+          })),
         }
 
         const reserved = overheadController.acquireRequest(rootSpan)
-        expect(reserved).to.be.true
+        assert.strictEqual(reserved, true)
       })
 
       it('should not allow requests which span id ends with a bigger number than default 30', () => {
         const rootSpan = {
           context: sinon.stub().returns(new DatadogSpanContext({
-            spanId: id('6004358438913972431', 10)
-          }))
+            spanId: id('6004358438913972431', 10),
+          })),
         }
 
         const reserved = overheadController.acquireRequest(rootSpan)
-        expect(reserved).to.be.false
+        assert.strictEqual(reserved, false)
       })
 
       it('should allow a maximum of 2 request at same time', () => {
         const rootSpan1 = {
           context: sinon.stub().returns(new DatadogSpanContext({
-            spanId: id('6004358438913972418', 10)
-          }))
+            spanId: id('6004358438913972418', 10),
+          })),
         }
         const rootSpan2 = {
           context: sinon.stub().returns(new DatadogSpanContext({
-            spanId: id('6004358438913972417', 10)
-          }))
+            spanId: id('6004358438913972417', 10),
+          })),
         }
         const rootSpan3 = {
           context: sinon.stub().returns(new DatadogSpanContext({
-            spanId: id('6004358438913972416', 10)
-          }))
+            spanId: id('6004358438913972416', 10),
+          })),
         }
 
         const reserved1 = overheadController.acquireRequest(rootSpan1)
         const reserved2 = overheadController.acquireRequest(rootSpan2)
         const reserved3 = overheadController.acquireRequest(rootSpan3)
-        expect(reserved1).to.be.true
-        expect(reserved2).to.be.true
-        expect(reserved3).to.be.false
+        assert.strictEqual(reserved1, true)
+        assert.strictEqual(reserved2, true)
+        assert.strictEqual(reserved3, false)
       })
 
       it('should release a request', () => {
         const rootSpan1 = {
           context: sinon.stub().returns(new DatadogSpanContext({
-            spanId: id('6004358438913972418', 10)
-          }))
+            spanId: id('6004358438913972418', 10),
+          })),
         }
         const rootSpan2 = {
           context: sinon.stub().returns(new DatadogSpanContext({
-            spanId: id('6004358438913972417', 10)
-          }))
+            spanId: id('6004358438913972417', 10),
+          })),
         }
         const rootSpan3 = {
           context: sinon.stub().returns(new DatadogSpanContext({
-            spanId: id('6004358438913972416', 10)
-          }))
+            spanId: id('6004358438913972416', 10),
+          })),
         }
         const rootSpan4 = {
           context: sinon.stub().returns(new DatadogSpanContext({
-            spanId: id('6004358438913972429', 10)
-          }))
+            spanId: id('6004358438913972429', 10),
+          })),
         }
 
         const reserved1 = overheadController.acquireRequest(rootSpan1)
@@ -187,10 +188,10 @@ describe('Overhead controller', () => {
         const reserved3 = overheadController.acquireRequest(rootSpan3)
         overheadController.releaseRequest()
         const reserved4 = overheadController.acquireRequest(rootSpan4)
-        expect(reserved1).to.be.true
-        expect(reserved2).to.be.true
-        expect(reserved3).to.be.false
-        expect(reserved4).to.be.true
+        assert.strictEqual(reserved1, true)
+        assert.strictEqual(reserved2, true)
+        assert.strictEqual(reserved3, false)
+        assert.strictEqual(reserved4, true)
       })
     })
 
@@ -214,11 +215,11 @@ describe('Overhead controller', () => {
 
           beforeEach(() => {
             req = {
-              method: 'GET'
+              method: 'GET',
             }
             iastContext = { req }
             webContext = {
-              paths: []
+              paths: [],
             }
             web.getContext.returns(webContext)
             overheadController.initializeRequestContext(iastContext)
@@ -229,32 +230,34 @@ describe('Overhead controller', () => {
           })
 
           it('should populate initial context with available tokens', () => {
-            expect(iastContext[oceContextKey])
-              .to.have.nested.property(`tokens.${OPERATION.name}`, OPERATION.initialTokenBucketSize())
+            assert.strictEqual(
+              iastContext[oceContextKey].tokens[OPERATION.name],
+              OPERATION.initialTokenBucketSize()
+            )
           })
 
           it('should allow when available tokens', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 2
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 1)
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 1)
           })
 
           it('should detect the first vulnerability of the type ' +
             'when in the previous request the budget has been finished with the same vulnerability type', () => {
             // the previous request first request filling the cache and detecting SSRF
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // Ignoring the first SSRF in the next request
             iastContext = { req }
             overheadController.initializeRequestContext(iastContext)
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.false
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), false)
 
             // and finding the second
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
           })
 
           it('should detect the first vulnerability of the type ' +
@@ -263,112 +266,115 @@ describe('Overhead controller', () => {
             webContext.paths = undefined
             // the previous request first request filling the cache and detecting SSRF
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // Ignoring the first SSRF in the next request
             iastContext = { req }
             overheadController.initializeRequestContext(iastContext)
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.false
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), false)
 
             // and finding the second
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
           })
 
           it('should detect the first vulnerability of the type ' +
             'when in the previous request the budget has been finished with different vulnerability types', () => {
             // the previous request first request filling the cache and detecting SSRF
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // Detecting the first CODE_INJECTION in the next request
             iastContext = { req }
             overheadController.initializeRequestContext(iastContext)
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.CODE_INJECTION)).to.be.true
+            assert.strictEqual(
+              overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.CODE_INJECTION),
+              true
+            )
 
             // and ingoring the SSRF
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.false
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), false)
           })
 
           it('should detect the first vulnerability of the type in different routes', () => {
             // the previous request first request filling the cache and detecting SSRF
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // Detecting the first CODE_INJECTION in the next request
             iastContext = { req }
             webContext.paths = ['/route-2']
             overheadController.initializeRequestContext(iastContext)
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
           })
 
           it('should detect the first vulnerability of the type in different methods', () => {
             // the previous request first request filling the cache and detecting SSRF
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // Detecting the first CODE_INJECTION in the next request
             req.method = 'POST'
             iastContext = { req }
             overheadController.initializeRequestContext(iastContext)
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
           })
 
           it('should detect the first vulnerability of the type in same route/method ' +
             'when the budget is not finished', () => {
             // first request finishing with budget
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 2
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 1)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 1)
 
             // Detecting the first CODE_INJECTION in the next request
             iastContext = { req }
             overheadController.initializeRequestContext(iastContext)
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
           })
 
           it('should update globalMap correctly in the second request using the whole budget', () => {
             // first request using the whole budget
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // second request using the whole budget
             iastContext = { req }
             overheadController.initializeRequestContext(iastContext)
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.false
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), false)
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
             overheadController.consolidateVulnerabilities(iastContext)
 
             // third request detecting only the third SSRF
             iastContext = { req }
             overheadController.initializeRequestContext(iastContext)
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.false
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.false
-            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), false)
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), false)
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
           })
 
           it('should not allow when no available tokens', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 0
-            expect(overheadController.hasQuota(OPERATION, iastContext)).to.be.false
-            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext), false)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
           })
         })
 
@@ -376,9 +382,9 @@ describe('Overhead controller', () => {
           it('should reject the operation once all tokens has been spent', () => {
             overheadController._resetGlobalContext()
             for (let i = 0, l = OPERATION.initialTokenBucketSize(); i < l; i++) {
-              expect(overheadController.hasQuota(OPERATION, {})).to.be.true
+              assert.strictEqual(overheadController.hasQuota(OPERATION, {}), true)
             }
-            expect(overheadController.hasQuota(OPERATION, {})).to.be.false
+            assert.strictEqual(overheadController.hasQuota(OPERATION, {}), false)
           })
         })
       })
@@ -440,9 +446,9 @@ describe('Overhead controller', () => {
               iast: {
                 enabled: true,
                 requestSampling: 100,
-                maxConcurrentRequests: 1
-              }
-            }
+                maxConcurrentRequests: 1,
+              },
+            },
           })
           iast.enable(config)
           let urlCounter = 0
@@ -454,12 +460,12 @@ describe('Overhead controller', () => {
                   if (trace.type === 'web') {
                     const url = trace.meta['http.url']
                     if (url.includes(FIRST_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                      expect(trace.metrics['_dd.iast.enabled']).eq(1)
+                      assert.notStrictEqual(trace.meta['_dd.iast.json'], undefined)
+                      assert.strictEqual(trace.metrics['_dd.iast.enabled'], 1)
                       urlCounter++
                     } else if (url.includes(SECOND_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).to.be.undefined
-                      expect(trace.metrics['_dd.iast.enabled']).eq(0)
+                      assert.strictEqual(trace.meta['_dd.iast.json'], undefined)
+                      assert.strictEqual(trace.metrics['_dd.iast.enabled'], 0)
                       urlCounter++
                     }
                     if (urlCounter === 2) {
@@ -493,9 +499,9 @@ describe('Overhead controller', () => {
                 enabled: true,
                 requestSampling: 100,
                 maxConcurrentRequests: 2,
-                deduplicationEnabled: false
-              }
-            }
+                deduplicationEnabled: false,
+              },
+            },
           })
           iast.enable(config)
           let urlCounter = 0
@@ -506,8 +512,8 @@ describe('Overhead controller', () => {
                   const trace = traces[i][j]
                   if (trace.type === 'web') {
                     urlCounter++
-                    expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                    expect(trace.metrics['_dd.iast.enabled']).eq(1)
+                    assert.notStrictEqual(trace.meta['_dd.iast.json'], undefined)
+                    assert.strictEqual(trace.metrics['_dd.iast.enabled'], 1)
                     if (urlCounter === 2) {
                       done()
                     }
@@ -549,9 +555,9 @@ describe('Overhead controller', () => {
                 enabled: true,
                 requestSampling: 100,
                 maxConcurrentRequests: 2,
-                deduplicationEnabled: false
-              }
-            }
+                deduplicationEnabled: false,
+              },
+            },
           })
           iast.enable(config)
           rewriter.enable(config)
@@ -566,15 +572,15 @@ describe('Overhead controller', () => {
                     counter++
                     const url = trace.meta['http.url']
                     if (url.includes(FIRST_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).not.to.be.undefined
+                      assert.notStrictEqual(trace.meta['_dd.iast.json'], undefined)
                     } else if (url.includes(SECOND_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).not.to.be.undefined
+                      assert.notStrictEqual(trace.meta['_dd.iast.json'], undefined)
                     } else if (url.includes(THIRD_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).to.be.undefined
+                      assert.strictEqual(trace.meta['_dd.iast.json'], undefined)
                     } else if (url.includes(FOURTH_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).not.to.be.undefined
+                      assert.notStrictEqual(trace.meta['_dd.iast.json'], undefined)
                     } else if (url.includes(FIFTH_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).to.be.undefined
+                      assert.strictEqual(trace.meta['_dd.iast.json'], undefined)
                     }
                     counter === 5 && done()
                   }
@@ -620,9 +626,9 @@ describe('Overhead controller', () => {
               iast: {
                 enabled: true,
                 requestSampling: 100,
-                maxConcurrentRequests: 1
-              }
-            }
+                maxConcurrentRequests: 1,
+              },
+            },
           })
           iast.enable(config)
 
@@ -634,8 +640,8 @@ describe('Overhead controller', () => {
                   if (trace.type === 'web') {
                     const url = trace.meta['http.url']
                     if (url.includes(SECURE_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).to.be.undefined
-                      expect(trace.metrics['_dd.iast.enabled']).eq(1)
+                      assert.strictEqual(trace.meta['_dd.iast.json'], undefined)
+                      assert.strictEqual(trace.metrics['_dd.iast.enabled'], 1)
                       done()
                     }
                   }
@@ -664,3 +670,16 @@ describe('Overhead controller', () => {
     })
   })
 })
+
+function hasNestedProperty (obj, path) {
+  if (obj == null || typeof path !== 'string') return false
+
+  const parts = path.split('.')
+  let cur = obj
+  for (const part of parts) {
+    if (cur == null || !Object.hasOwn(cur, part)) return false
+    cur = cur[part]
+  }
+
+  return true
+}

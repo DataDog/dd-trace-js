@@ -1,17 +1,21 @@
 'use strict'
 
+const tracingChannel = require('dc-polyfill').tracingChannel
+
+const shimmer = require('../../datadog-shimmer')
 const {
   addHook,
-  channel
+  channel,
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
-const tracingChannel = require('dc-polyfill').tracingChannel
 const serverCh = tracingChannel('ws:server:connect')
 const producerCh = tracingChannel('ws:send')
 const receiverCh = tracingChannel('ws:receive')
 const closeCh = tracingChannel('ws:close')
 const emitCh = channel('tracing:ws:server:connect:emit')
+// TODO: Add a error channel / handle error events properly.
+
+const eventHandlerMap = new WeakMap()
 
 function wrapHandleUpgrade (handleUpgrade) {
   return function () {
@@ -67,21 +71,34 @@ function createWrapEmit (emit) {
 }
 
 function createWrappedHandler (handler) {
-  return function wrappedMessageHandler (data, binary) {
+  return shimmer.wrapFunction(handler, originalHandler => function (data, binary) {
     const byteLength = dataLength(data)
 
     const ctx = { data, binary, socket: this._sender?._socket, byteLength }
 
-    return receiverCh.traceSync(handler, ctx, this, data, binary)
-  }
+    return receiverCh.traceSync(originalHandler, ctx, this, data, binary)
+  })
 }
 
 function wrapListener (originalOn) {
   return function (eventName, handler) {
     if (eventName === 'message') {
-      return originalOn.call(this, eventName, createWrappedHandler(handler))
+      // Prevent multiple wrapping of the same handler in case the user adds the listener multiple times
+      const wrappedHandler = eventHandlerMap.get(handler) ?? createWrappedHandler(handler)
+      eventHandlerMap.set(handler, wrappedHandler)
+      return originalOn.call(this, eventName, wrappedHandler)
     }
     return originalOn.apply(this, arguments)
+  }
+}
+
+function removeListener (originalOff) {
+  return function (eventName, handler) {
+    if (eventName === 'message') {
+      const wrappedHandler = eventHandlerMap.get(handler)
+      return originalOff.call(this, eventName, wrappedHandler)
+    }
+    return originalOff.apply(this, arguments)
   }
 }
 
@@ -102,7 +119,7 @@ function wrapClose (close) {
 addHook({
   name: 'ws',
   file: 'lib/websocket-server.js',
-  versions: ['>=8.0.0']
+  versions: ['>=8.0.0'],
 }, ws => {
   shimmer.wrap(ws.prototype, 'handleUpgrade', wrapHandleUpgrade)
   shimmer.wrap(ws.prototype, 'emit', createWrapEmit)
@@ -112,25 +129,27 @@ addHook({
 addHook({
   name: 'ws',
   file: 'lib/websocket.js',
-  versions: ['>=8.0.0']
+  versions: ['>=8.0.0'],
 }, ws => {
   shimmer.wrap(ws.prototype, 'send', wrapSend)
-  shimmer.wrap(ws.prototype, 'on', wrapListener)
   shimmer.wrap(ws.prototype, 'close', wrapClose)
+
+  // TODO: Do not wrap these methods. Instead, add a listener to the websocket instance when one is created.
+  // That way it avoids producing too many spans for the same websocket instance and less user code is impacted.
+  shimmer.wrap(ws.prototype, 'on', wrapListener)
+  shimmer.wrap(ws.prototype, 'addListener', wrapListener)
+  shimmer.wrap(ws.prototype, 'off', removeListener)
+  shimmer.wrap(ws.prototype, 'removeListener', removeListener)
+
   return ws
 })
 
-function detectType (data) {
-  if (typeof Blob !== 'undefined' && data instanceof Blob) return 'Blob'
-  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(data)) return 'Buffer'
-  if (typeof data === 'string') return 'string'
-  return 'Unknown'
-}
-
 function dataLength (data) {
-  const type = detectType(data)
-  if (type === 'Blob') return data.size
-  if (type === 'Buffer') return data.length
-  if (type === 'string') return Buffer.byteLength(data)
-  return 0
+  if (typeof data === 'string') {
+    return Buffer.byteLength(data)
+  }
+  if (data instanceof Blob) {
+    return data.size
+  }
+  return data?.length ?? 0
 }

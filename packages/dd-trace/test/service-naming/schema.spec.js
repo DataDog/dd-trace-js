@@ -1,11 +1,11 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 require('../setup/core')
-
 const SchemaDefinition = require('../../src/service-naming/schemas/definition')
 
 describe('Service naming', () => {
@@ -21,12 +21,12 @@ describe('Service naming', () => {
     })
 
     it('Should default to v0 when required', () => {
-      expect(singleton.version).to.be.equal('v0')
+      assert.strictEqual(singleton.version, 'v0')
     })
 
     it('Should grab the version given by `spanAttributeSchema`', () => {
       singleton.configure({ spanAttributeSchema: 'MyShinyNewVersion' })
-      expect(singleton.version).to.be.equal('MyShinyNewVersion')
+      assert.strictEqual(singleton.version, 'MyShinyNewVersion')
     })
 
     describe('Name resolution proxy', () => {
@@ -43,18 +43,18 @@ describe('Service naming', () => {
 
       it('should forward additional args to opName', () => {
         singleton.opName('messaging', 'producer', 'redis', extra)
-        expect(versions.v0.getOpName).to.have.been.calledWith('messaging', 'producer', 'redis', extra)
+        sinon.assert.calledWith(versions.v0.getOpName, 'messaging', 'producer', 'redis', extra)
       })
 
       it('should forward additional args to serviceName and add configured service', () => {
         singleton.serviceName('messaging', 'producer', 'redis', extra)
-        expect(versions.v0.getServiceName).to.have.been.calledWith(
+        sinon.assert.calledWith(versions.v0.getServiceName,
           'messaging',
           'producer',
           'redis',
           {
             tracerService: 'test-service',
-            ...extra
+            ...extra,
           }
         )
       })
@@ -67,10 +67,10 @@ describe('Service naming', () => {
         inbound: {
           kafka: {
             opName: sinon.spy(),
-            serviceName: sinon.spy()
-          }
-        }
-      }
+            serviceName: sinon.spy(),
+          },
+        },
+      },
     }
 
     const resolver = new SchemaDefinition(dummySchema)
@@ -79,7 +79,7 @@ describe('Service naming', () => {
     describe('Operation name getter', () => {
       it('should passthrough operation name arguments', () => {
         resolver.getOpName('messaging', 'inbound', 'kafka', extra)
-        expect(dummySchema.messaging.inbound.kafka.opName).to.be.calledWith(extra)
+        sinon.assert.calledWith(dummySchema.messaging.inbound.kafka.opName, extra)
       })
     })
 
@@ -87,7 +87,7 @@ describe('Service naming', () => {
       it('should add service name and passthrough service name arguments', () => {
         const opts = { tracerService: 'test-service', ...extra }
         resolver.getServiceName('messaging', 'inbound', 'kafka', opts)
-        expect(dummySchema.messaging.inbound.kafka.serviceName).to.be.calledWith(opts)
+        sinon.assert.calledWith(dummySchema.messaging.inbound.kafka.serviceName, opts)
       })
     })
   })

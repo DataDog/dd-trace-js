@@ -6,14 +6,16 @@ include:
 
 .macrobenchmarks:
   stage: macrobenchmarks
-  when: always
   rules:
+    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
+      when: never
     - if: $CI_COMMIT_BRANCH == 'master'
+      when: always
       interruptible: false
     - interruptible: true
   tags: ["runner:apm-k8s-same-cpu"]
   needs: []
-  timeout: 15m # TODO: Fix worker queueing and reduce this.
+  timeout: 15m  # TODO: Reduce this once GitLab CI runner availability improves
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:js-hapi
   script:
     - git clone --branch js/hapi https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform platform && cd platform
@@ -101,17 +103,31 @@ check-slo-breaches:
     - baseline
     - only-tracing
     - only-tracing-with-runtime-metrics-enabled
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'master'
+      when: always
+      interruptible: false
+    - interruptible: true
   artifacts:
     name: "artifacts"
     when: always
     paths:
       - platform/artifacts/
     expire_in: 3 months
+  variables:
+    DDOCTOSTS_POLICY: "self.gitlab.read"
+    ARTIFACTS_DIR: "platform/artifacts"
+    SLO_FILE: ".gitlab/benchmarks/bp-runner.fail-on-breach.yml"
 
 notify-slo-breaches:
   extends: .notify-slo-breaches
   stage: macrobenchmarks-notify
   needs:
     - check-slo-breaches
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'master'
+      when: always
+      interruptible: false
+    - interruptible: true
   variables:
     CHANNEL: "notifications-apm-js"

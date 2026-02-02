@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -51,8 +52,8 @@ describe('Plugin', () => {
                 'span.kind': 'client',
                 'out.host': 'localhost',
                 'network.destination.port': '11211',
-                component: 'memcached'
-              }
+                component: 'memcached',
+              },
             })
             .then(done)
             .catch(done)
@@ -69,7 +70,7 @@ describe('Plugin', () => {
             memcached.get('test', err => {
               if (err) return done(err)
               try {
-                expect(tracer.scope().active()).to.equal(span)
+                assert.strictEqual(tracer.scope().active(), span)
                 done()
               } catch (e) {
                 done(e)
@@ -91,8 +92,8 @@ describe('Plugin', () => {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
-                  component: 'memcached'
-                }
+                  component: 'memcached',
+                },
               })
             })
             .then(done)
@@ -111,8 +112,8 @@ describe('Plugin', () => {
               meta: {
                 'out.host': 'localhost',
                 'network.destination.port': '11211',
-                component: 'memcached'
-              }
+                component: 'memcached',
+              },
             })
             .then(done)
             .catch(done)
@@ -123,7 +124,7 @@ describe('Plugin', () => {
         it('should support an object of servers with weights', done => {
           memcached = new Memcached({
             'localhost:11211': 1,
-            'other:11211': 1
+            'other:11211': 1,
           }, { retries: 0 })
 
           agent
@@ -131,8 +132,8 @@ describe('Plugin', () => {
               meta: {
                 'out.host': 'localhost',
                 'network.destination.port': '11211',
-                component: 'memcached'
-              }
+                component: 'memcached',
+              },
             })
             .then(done)
             .catch(done)
@@ -143,10 +144,10 @@ describe('Plugin', () => {
         it('should support redundancy', done => {
           memcached = new Memcached({
             'localhost:11211': 1,
-            'other:11211': 1
+            'other:11211': 1,
           }, {
             retries: 0,
-            redundancy: 1
+            redundancy: 1,
           })
 
           try {
@@ -157,8 +158,8 @@ describe('Plugin', () => {
                 meta: {
                   'out.host': 'localhost',
                   'network.destination.port': '11211',
-                  component: 'memcached'
-                }
+                  component: 'memcached',
+                },
               })
               .then(done)
               .catch(done)
@@ -184,7 +185,7 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           agent
             .assertFirstTraceSpan({
-              service: 'custom'
+              service: 'custom',
             })
             .then(done)
             .catch(done)
@@ -211,8 +212,8 @@ describe('Plugin', () => {
             agent
               .assertFirstTraceSpan({
                 meta: {
-                  'memcached.command': 'version'
-                }
+                  'memcached.command': 'version',
+                },
               })
               .then(done)
               .catch(done)
@@ -237,7 +238,7 @@ describe('Plugin', () => {
           it('trace should not contain memcached.command', done => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.not.have.property('memcached.command')
+                assert.ok(!('memcached.command' in traces[0][0].meta))
               })
               .then(done)
               .catch(done)

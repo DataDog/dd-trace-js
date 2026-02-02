@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it } = require('mocha')
 
 require('../setup/core')
 
@@ -14,8 +15,8 @@ describe('config/disabled_instrumentations', () => {
     tracer.init()
     const handleAfterInit = require('express').application.handle
 
-    expect(handleBefore).to.equal(handleAfterImport)
-    expect(handleBefore).to.equal(handleAfterInit)
+    assert.strictEqual(handleBefore, handleAfterImport)
+    assert.strictEqual(handleBefore, handleAfterInit)
     delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
   })
 
@@ -27,8 +28,8 @@ describe('config/disabled_instrumentations', () => {
     tracer.init()
     const handleAfterInit = require('express').application.handle
 
-    expect(handleBefore).to.equal(handleAfterImport)
-    expect(handleBefore).to.equal(handleAfterInit)
+    assert.strictEqual(handleBefore, handleAfterImport)
+    assert.strictEqual(handleBefore, handleAfterInit)
     delete process.env.DD_TRACE_EXPRESS_ENABLED
   })
 })

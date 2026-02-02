@@ -1,10 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 const circularBufferConstructor = Symbol('circularBufferConstructor')
 const inFlightDeliveries = Symbol('inFlightDeliveries')
@@ -195,7 +195,7 @@ function patchCircularBuffer (proto, Session) {
           }
         }
       }
-    }
+    },
   })
 }
 

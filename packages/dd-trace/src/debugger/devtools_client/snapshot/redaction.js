@@ -95,7 +95,7 @@ const REDACTED_IDENTIFIERS = new Set(
     'x_forwarded_for',
     'x_real_ip',
     'XSRF-TOKEN',
-    ...config.dynamicInstrumentation.redactedIdentifiers
+    ...config.dynamicInstrumentation.redactedIdentifiers,
   ]
     .map((name) => normalizeName(name))
     .filter((name) => excludedIdentifiers.has(name) === false)
@@ -108,5 +108,5 @@ function normalizeName (name, isSymbol) {
 
 module.exports = {
   REDACTED_IDENTIFIERS,
-  normalizeName
+  normalizeName,
 }

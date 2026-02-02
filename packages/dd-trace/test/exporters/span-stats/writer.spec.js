@@ -1,12 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
-
 const pkg = require('../../../../../package.json')
 
 let Writer
@@ -26,16 +24,16 @@ describe('span-stats writer', () => {
     encoder = {
       encode: sinon.stub(),
       count: sinon.stub().returns(0),
-      makePayload: sinon.stub().returns([])
+      makePayload: sinon.stub().returns([]),
     }
 
     url = {
       protocol: 'https:',
-      hostname: '127.0.0.1:8126'
+      hostname: '127.0.0.1:8126',
     }
 
     log = {
-      error: sinon.spy()
+      error: sinon.spy(),
     }
 
     const SpanStatsEncoder = function () {
@@ -45,7 +43,7 @@ describe('span-stats writer', () => {
     Writer = proxyquire('../../../src/exporters/span-stats/writer', {
       '../common/request': request,
       '../../encode/span-stats': { SpanStatsEncoder },
-      '../../log': log
+      '../../log': log,
     }).Writer
     writer = new Writer({ url, tags: { 'runtime-id': 'runtime-id' } })
   })
@@ -54,7 +52,7 @@ describe('span-stats writer', () => {
     it('should encode a trace', () => {
       writer.append([span])
 
-      expect(encoder.encode).to.have.been.calledWith([span])
+      sinon.assert.calledWith(encoder.encode, [span])
     })
   })
 
@@ -62,7 +60,7 @@ describe('span-stats writer', () => {
     it('should skip flushing if empty', () => {
       writer.flush()
 
-      expect(encoder.makePayload).to.not.have.been.called
+      sinon.assert.notCalled(encoder.makePayload)
     })
 
     it('should empty the internal queue', () => {
@@ -70,7 +68,7 @@ describe('span-stats writer', () => {
 
       writer.flush()
 
-      expect(encoder.makePayload).to.have.been.called
+      sinon.assert.called(encoder.makePayload)
     })
 
     it('should call callback when empty', (done) => {
@@ -84,7 +82,7 @@ describe('span-stats writer', () => {
       encoder.makePayload.returns([expectedData])
 
       writer.flush(() => {
-        expect(request).to.have.been.calledWithMatch([expectedData], {
+        sinon.assert.calledWithMatch(request, [expectedData], {
           protocol: url.protocol,
           hostname: url.hostname,
           path: '/v0.6/stats',
@@ -92,8 +90,8 @@ describe('span-stats writer', () => {
           headers: {
             'Datadog-Meta-Lang': 'javascript',
             'Datadog-Meta-Tracer-Version': pkg.version,
-            'Content-Type': 'application/msgpack'
-          }
+            'Content-Type': 'application/msgpack',
+          },
         })
         done()
       })
@@ -108,7 +106,7 @@ describe('span-stats writer', () => {
         encoder.count.returns(1)
 
         writer.flush(() => {
-          expect(log.error).to.have.been.calledWith('Error sending span stats', error)
+          sinon.assert.calledWith(log.error, 'Error sending span stats', error)
           done()
         })
       })

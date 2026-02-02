@@ -3,48 +3,48 @@
 const { storage } = require('../../datadog-core')
 const id = require('../../dd-trace/src/id')
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
-  TEST_STATUS,
   finishAllTraceSpans,
-  getTestSuitePath,
   getTestSuiteCommonTags,
-  TEST_SOURCE_START,
+  getTestSuitePath,
+  isModifiedTest,
+  TEST_BROWSER_NAME,
+  TEST_BROWSER_VERSION,
   TEST_CODE_OWNERS,
-  TEST_SOURCE_FILE,
-  TEST_PARAMETERS,
+  TEST_COMMAND,
+  TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_EARLY_FLAKE_ENABLED,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_IS_MODIFIED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_ENABLED,
-  TEST_EARLY_FLAKE_ABORT_REASON,
-  TELEMETRY_TEST_SESSION,
-  TEST_RETRY_REASON,
-  TEST_MANAGEMENT_IS_QUARANTINED,
-  TEST_MANAGEMENT_ENABLED,
-  TEST_BROWSER_NAME,
-  TEST_MANAGEMENT_IS_DISABLED,
-  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
-  TEST_HAS_FAILED_ALL_RETRIES,
-  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
-  TEST_SESSION_ID,
-  TEST_MODULE_ID,
-  TEST_COMMAND,
-  TEST_MODULE,
-  TEST_SUITE,
-  TEST_SUITE_ID,
-  TEST_NAME,
   TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_VERSION,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MODULE_ID,
+  TEST_MODULE,
+  TEST_NAME,
+  TEST_PARAMETERS,
   TEST_RETRY_REASON_TYPES,
-  TEST_IS_MODIFIED,
-  isModifiedTest
+  TEST_RETRY_REASON,
+  TEST_SESSION_ID,
+  TEST_SOURCE_FILE,
+  TEST_SOURCE_START,
+  TEST_STATUS,
+  TEST_SUITE_ID,
+  TEST_SUITE,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
   TELEMETRY_EVENT_CREATED,
-  TELEMETRY_EVENT_FINISHED
+  TELEMETRY_EVENT_FINISHED,
+  TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const log = require('../../dd-trace/src/log')
@@ -62,7 +62,7 @@ class PlaywrightPlugin extends CiPlugin {
     this.addSub('ci:playwright:test:is-modified', ({
       filePath,
       modifiedFiles,
-      onDone
+      onDone,
     }) => {
       const testSuite = getTestSuitePath(filePath, this.repositoryRoot)
       const isModified = isModifiedTest(testSuite, 0, 0, modifiedFiles, this.constructor.id)
@@ -74,7 +74,7 @@ class PlaywrightPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
-      onDone
+      onDone,
     }) => {
       this.testModuleSpan.setTag(TEST_STATUS, status)
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -106,7 +106,7 @@ class PlaywrightPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getEnvironmentVariable('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
+        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
       })
       appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
@@ -140,8 +140,8 @@ class PlaywrightPlugin extends CiPlugin {
         tags: {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
-          ...testSuiteMetadata
-        }
+          ...testSuiteMetadata,
+        },
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       ctx.parentStore = store
@@ -171,7 +171,7 @@ class PlaywrightPlugin extends CiPlugin {
 
     this.addSub('ci:playwright:test:page-goto', ({
       isRumActive,
-      page
+      page,
     }) => {
       const store = storage('legacy').getStore()
       const span = store && store.span
@@ -196,7 +196,7 @@ class PlaywrightPlugin extends CiPlugin {
             name: 'datadog-ci-visibility-test-execution-id',
             value: span.context().toTraceId(),
             domain,
-            path: '/'
+            path: '/',
           }])
         }
       }
@@ -213,7 +213,7 @@ class PlaywrightPlugin extends CiPlugin {
             ...span,
             span_id: id(span.span_id),
             trace_id: id(span.trace_id),
-            parent_id: id(span.parent_id)
+            parent_id: id(span.parent_id),
           }
           if (span.name === 'playwright.test') {
             // TODO: remove this comment
@@ -257,7 +257,7 @@ class PlaywrightPlugin extends CiPlugin {
         testSuiteAbsolutePath,
         testSourceLine,
         browserName,
-        isDisabled
+        isDisabled,
       } = ctx
       const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
@@ -299,7 +299,7 @@ class PlaywrightPlugin extends CiPlugin {
       hasFailedAttemptToFixRetries,
       isAtrRetry,
       isModified,
-      onDone
+      onDone,
     }) => {
       if (!span) return
 
@@ -364,8 +364,8 @@ class PlaywrightPlugin extends CiPlugin {
           tags: {
             [COMPONENT]: this.constructor.id,
             'playwright.step': step.title,
-            [RESOURCE_NAME]: step.title
-          }
+            [RESOURCE_NAME]: step.title,
+          },
         })
         if (step.error) {
           stepSpan.setTag('error', step.error)
@@ -387,13 +387,13 @@ class PlaywrightPlugin extends CiPlugin {
           hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS],
           isNew,
           isRum: isRUMActive,
-          browserDriver: 'playwright'
+          browserDriver: 'playwright',
         }
       )
       span.finish()
 
       finishAllTraceSpans(span)
-      if (getEnvironmentVariable('DD_PLAYWRIGHT_WORKER')) {
+      if (getValueFromEnvSources('DD_PLAYWRIGHT_WORKER')) {
         this.tracer._exporter.flush(onDone)
       }
     })
@@ -406,7 +406,7 @@ class PlaywrightPlugin extends CiPlugin {
       isNew,
       isDisabled,
       isModified,
-      isQuarantined
+      isQuarantined,
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
       const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
@@ -443,7 +443,7 @@ class PlaywrightPlugin extends CiPlugin {
     const testSuiteSpan = this._testSuiteSpansByTestSuiteAbsolutePath.get(testSuiteAbsolutePath)
 
     const extraTags = {
-      [TEST_SOURCE_START]: testSourceLine
+      [TEST_SOURCE_START]: testSourceLine,
     }
     if (testSourceFile) {
       extraTags[TEST_SOURCE_FILE] = testSourceFile || testSuite

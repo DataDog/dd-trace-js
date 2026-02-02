@@ -1,12 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
+const assert = require('node:assert/strict')
+
 const dc = require('dc-polyfill')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const setCookiesHeaderInterceptor = require('../../../../src/appsec/iast/analyzers/set-cookies-header-interceptor')
-
 const iastSetCookieChannel = dc.channel('datadog:iast:set-cookie')
 const setHeaderChannel = dc.channel('datadog:http:server:response:set-header:finish')
 
@@ -28,15 +28,15 @@ describe('Test IntermediateCookiesAnalyzer', () => {
     setHeaderChannel.publish({
       name: 'set-cookie',
       value: 'key=value; Secure; HttpOnly',
-      res: {}
+      res: {},
     })
 
-    expect(setCookieCallback).to.have.been.calledOnceWithExactly({
+    sinon.assert.calledOnceWithExactly(setCookieCallback, {
       cookieName: 'key',
       cookieValue: 'value',
       cookieProperties: ['Secure', 'HttpOnly'],
       cookieString: 'key=value; Secure; HttpOnly',
-      location: undefined
+      location: undefined,
     }, 'datadog:iast:set-cookie')
   })
 
@@ -44,10 +44,10 @@ describe('Test IntermediateCookiesAnalyzer', () => {
     setHeaderChannel.publish({
       name: 'location',
       value: 'https://www.datadoghq.com',
-      res: {}
+      res: {},
     })
 
-    expect(setCookieCallback).to.not.have.been.called
+    sinon.assert.notCalled(setCookieCallback)
   })
 
   it('Should not send same cookie twice in the same response', () => {
@@ -55,30 +55,30 @@ describe('Test IntermediateCookiesAnalyzer', () => {
     setHeaderChannel.publish({
       name: 'set-cookie',
       value: 'key1=value1',
-      res
+      res,
     })
     setHeaderChannel.publish({
       name: 'set-cookie',
       value: ['key1=value1', 'key2=value2; Secure'],
-      res
+      res,
     })
 
-    expect(setCookieCallback).to.have.been.calledTwice
+    sinon.assert.calledTwice(setCookieCallback)
 
-    expect(setCookieCallback.firstCall).to.have.been.calledWithExactly({
+    sinon.assert.calledWithExactly(setCookieCallback.firstCall, {
       cookieName: 'key1',
       cookieValue: 'value1',
       cookieProperties: [],
       cookieString: 'key1=value1',
-      location: undefined
+      location: undefined,
     }, 'datadog:iast:set-cookie')
 
-    expect(setCookieCallback.secondCall).to.have.been.calledWithExactly({
+    sinon.assert.calledWithExactly(setCookieCallback.secondCall, {
       cookieName: 'key2',
       cookieValue: 'value2',
       cookieProperties: ['Secure'],
       cookieString: 'key2=value2; Secure',
-      location: undefined
+      location: undefined,
     }, 'datadog:iast:set-cookie')
   })
 
@@ -87,11 +87,11 @@ describe('Test IntermediateCookiesAnalyzer', () => {
     const location = { path: 'test.js', line: 12 }
     setCookieCallback.callsFake(function (event) {
       if (i === 0) {
-        expect(event.location).to.be.undefined
+        assert.strictEqual(event.location, undefined)
         event.location = location
         i++
       } else {
-        expect(event.location).to.be.equal(location)
+        assert.strictEqual(event.location, location)
       }
     })
 
@@ -99,9 +99,9 @@ describe('Test IntermediateCookiesAnalyzer', () => {
     setHeaderChannel.publish({
       name: 'set-cookie',
       value: ['key1=value1', 'key2=value2'],
-      res
+      res,
     })
 
-    expect(setCookieCallback).to.have.been.calledTwice
+    sinon.assert.calledTwice(setCookieCallback)
   })
 })

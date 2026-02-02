@@ -1,28 +1,29 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const proxyquire = require('proxyquire')
-const sinon = require('sinon')
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const { prepareTestServerForIast } = require('../utils')
-const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 const weakRandomnessAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-randomness-analyzer')
+const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
+const { prepareTestServerForIast } = require('../utils')
 
 describe('weak-randomness-analyzer', () => {
   weakRandomnessAnalyzer.configure(true)
 
   it('should subscribe to Math random call channel', () => {
-    expect(weakRandomnessAnalyzer._subscriptions).to.have.lengthOf(1)
-    expect(weakRandomnessAnalyzer._subscriptions[0]._channel.name).to.equals('datadog:random:call')
+    assert.strictEqual(weakRandomnessAnalyzer._subscriptions.length, 1)
+    assert.strictEqual(weakRandomnessAnalyzer._subscriptions[0]._channel.name, 'datadog:random:call')
   })
 
   it('should detect Math.random as vulnerable', () => {
     const isVulnerable = weakRandomnessAnalyzer._isVulnerable(Math.random)
-    expect(isVulnerable).to.be.true
+    assert.strictEqual(isVulnerable, true)
   })
 
   it('should not detect custom random as vulnerable', () => {
@@ -30,17 +31,17 @@ describe('weak-randomness-analyzer', () => {
       return 4 // chosen by fair dice roll - guaranteed to be random
     }
     const isVulnerable = weakRandomnessAnalyzer._isVulnerable(random)
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('should not detect vulnerability when checking empty object', () => {
     const isVulnerable = weakRandomnessAnalyzer._isVulnerable({})
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('should not detect vulnerability when no target', () => {
     const isVulnerable = weakRandomnessAnalyzer._isVulnerable()
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('should report "WEAK_RANDOMNESS" vulnerability', () => {
@@ -51,25 +52,25 @@ describe('weak-randomness-analyzer', () => {
           return {
             toSpanId () {
               return '123'
-            }
+            },
           }
-        }
-      }
+        },
+      },
     }
     const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
       '../iast-context': {
-        getIastContext: () => iastContext
+        getIastContext: () => iastContext,
       },
       '../overhead-controller': { hasQuota: () => true },
-      '../vulnerability-reporter': { addVulnerability }
+      '../vulnerability-reporter': { addVulnerability },
     })
     const proxiedWeakRandomnessAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/weak-randomness-analyzer',
       {
-        './vulnerability-analyzer': ProxyAnalyzer
+        './vulnerability-analyzer': ProxyAnalyzer,
       })
     proxiedWeakRandomnessAnalyzer.analyze(Math.random)
-    expect(addVulnerability).to.have.been.calledOnce
-    expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'WEAK_RANDOMNESS' })
+    sinon.assert.calledOnce(addVulnerability)
+    sinon.assert.calledWithMatch(addVulnerability, {}, { type: 'WEAK_RANDOMNESS' })
   })
 
   describe('Math.random instrumentation', () => {
@@ -97,8 +98,8 @@ describe('weak-randomness-analyzer', () => {
           occurrences: 1,
           location: {
             path: randomFunctionsPath,
-            line: 4
-          }
+            line: 4,
+          },
         })
       })
 

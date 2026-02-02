@@ -1,6 +1,5 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
@@ -16,7 +15,7 @@ describe('Appsec User Telemetry metrics', () => {
   beforeEach(() => {
     inc = sinon.spy()
     count = sinon.stub(appsecNamespace, 'count').returns({
-      inc
+      inc,
     })
 
     appsecNamespace.metrics.clear()
@@ -38,9 +37,9 @@ describe('Appsec User Telemetry metrics', () => {
       it('should increment instrum.user_auth.missing_user_login metric', () => {
         appsecTelemetry.incrementMissingUserLoginMetric('passport-local', 'login_success')
 
-        expect(count).to.have.been.calledOnceWithExactly('instrum.user_auth.missing_user_login', {
+        sinon.assert.calledOnceWithExactly(count, 'instrum.user_auth.missing_user_login', {
           framework: 'passport-local',
-          event_type: 'login_success'
+          event_type: 'login_success',
         })
       })
     })
@@ -49,9 +48,9 @@ describe('Appsec User Telemetry metrics', () => {
       it('should increment instrum.user_auth.missing_user_id metric', () => {
         appsecTelemetry.incrementMissingUserIdMetric('passport', 'authenticated_request')
 
-        expect(count).to.have.been.calledOnceWithExactly('instrum.user_auth.missing_user_id', {
+        sinon.assert.calledOnceWithExactly(count, 'instrum.user_auth.missing_user_id', {
           framework: 'passport',
-          event_type: 'authenticated_request'
+          event_type: 'authenticated_request',
         })
       })
     })
@@ -60,9 +59,9 @@ describe('Appsec User Telemetry metrics', () => {
       it('should increment sdk.event metric', () => {
         appsecTelemetry.incrementSdkEventMetric('login_success')
 
-        expect(count).to.have.been.calledOnceWithExactly('sdk.event', {
+        sinon.assert.calledOnceWithExactly(count, 'sdk.event', {
           event_type: 'login_success',
-          sdk_version: 'v1'
+          sdk_version: 'v1',
         })
       })
     })

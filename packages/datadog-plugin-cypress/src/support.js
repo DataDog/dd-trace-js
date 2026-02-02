@@ -9,6 +9,9 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let isModifiedTest = false
+let isTestIsolationEnabled = false
+// Array of test names that have been retried and the reason
+const retryReasonsByTestName = new Map()
 
 // We need to grab the original window as soon as possible,
 // in case the test changes the origin. If the test does change the origin,
@@ -43,17 +46,20 @@ function getTestProperties (testName) {
   return { isAttemptToFix, isDisabled, isQuarantined }
 }
 
-function retryTest (test, suiteTests, numRetries, tags) {
+function getRetriedTests (test, numRetries, tags) {
+  const retriedTests = []
   for (let retryIndex = 0; retryIndex < numRetries; retryIndex++) {
-    const clonedTest = test.clone()
     // TODO: signal in framework logs that this is a retry.
     // TODO: Change it so these tests are allowed to fail.
-    // TODO: figure out if reported duration is skewed.
-    suiteTests.unshift(clonedTest)
+    const clonedTest = test.clone()
     tags.forEach(tag => {
-      clonedTest[tag] = true
+      if (tag) {
+        clonedTest[tag] = true
+      }
     })
+    retriedTests.push(clonedTest)
   }
+  return retriedTests
 }
 
 const oldRunTests = Cypress.mocha.getRunner().runTests
@@ -61,46 +67,81 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
   if (!isKnownTestsEnabled && !isTestManagementEnabled && !isImpactedTestsEnabled) {
     return oldRunTests.apply(this, arguments)
   }
-  // We copy the new tests at the beginning of the suite run (runTests), so that they're run
-  // multiple times.
-  suite.tests.forEach(test => {
+  // We copy the tests array and add retries to it, then assign it back to suite.tests
+  // to avoid modifying the array while iterating over it
+  const testsWithRetries = []
+
+  for (let testIndex = 0; testIndex < suite.tests.length; testIndex++) {
+    const test = suite.tests[testIndex]
     const testName = test.fullTitle()
-
     const { isAttemptToFix } = getTestProperties(testName)
+    const isSkipped = test.isPending()
 
-    if (isTestManagementEnabled && isAttemptToFix && !test.isPending()) {
-      test._ddIsAttemptToFix = true
-      retryTest(test, suite.tests, testManagementAttemptToFixRetries, ['_ddIsAttemptToFix'])
-    }
-    if (isImpactedTestsEnabled && isModifiedTest) {
+    const isAtemptToFix = isTestManagementEnabled && isAttemptToFix && !isSkipped
+    const isModified = isImpactedTestsEnabled && isModifiedTest
+    const isNew = isKnownTestsEnabled && !isSkipped && isNewTest(test)
+
+    // We want is_modified and is_new regardless of the retry reason
+    if (isModified) {
       test._ddIsModified = true
-      if (isEarlyFlakeDetectionEnabled && !isAttemptToFix) {
-        retryTest(
-          test,
-          suite.tests,
-          earlyFlakeDetectionNumRetries,
-          ['_ddIsModified', '_ddIsEfdRetry', isKnownTestsEnabled && isNewTest(test) && '_ddIsNew']
-        )
-      }
     }
-    if (isKnownTestsEnabled && !test._ddIsNew && !test.isPending() && isNewTest(test)) {
+    if (isNew) {
       test._ddIsNew = true
-      if (isImpactedTestsEnabled && isModifiedTest) {
-        test._ddIsModified = true
-      }
-      if (isEarlyFlakeDetectionEnabled && !isAttemptToFix && !isModifiedTest) {
-        retryTest(test, suite.tests, earlyFlakeDetectionNumRetries, ['_ddIsNew', '_ddIsEfdRetry'])
-      }
     }
-  })
+
+    // Add the original test first
+    testsWithRetries.push(test)
+
+    if (!isTestIsolationEnabled) {
+      continue
+    }
+
+    // Then add retries right after it
+    let retriedTests = []
+    let retryMessage = ''
+    if (isAtemptToFix) {
+      test._ddIsAttemptToFix = true
+      retryMessage = 'because it is an attempt to fix'
+      retriedTests = getRetriedTests(test, testManagementAttemptToFixRetries, ['_ddIsAttemptToFix'])
+    } else if (isModified && isEarlyFlakeDetectionEnabled) {
+      retryMessage = 'to detect flakes because it is modified'
+      retriedTests = getRetriedTests(test, earlyFlakeDetectionNumRetries, [
+        '_ddIsModified',
+        '_ddIsEfdRetry',
+        isKnownTestsEnabled && isNewTest(test) && '_ddIsNew',
+      ])
+    } else if (isNew && isEarlyFlakeDetectionEnabled) {
+      retryMessage = 'to detect flakes because it is new'
+      retriedTests = getRetriedTests(test, earlyFlakeDetectionNumRetries, ['_ddIsNew', '_ddIsEfdRetry'])
+    }
+
+    testsWithRetries.push(...retriedTests)
+
+    if (retryMessage) {
+      retryReasonsByTestName.set(testName, retryMessage)
+    }
+  }
+
+  suite.tests = testsWithRetries
 
   return oldRunTests.apply(this, [suite, fn])
 }
 
 beforeEach(function () {
+  const testName = Cypress.mocha.getRunner().suite.ctx.currentTest.fullTitle()
+
+  const retryMessage = retryReasonsByTestName.get(testName)
+  if (retryMessage) {
+    cy.task(
+      'dd:log',
+      `Retrying "${testName}" ${retryMessage}`
+    )
+    retryReasonsByTestName.delete(testName)
+  }
+
   cy.task('dd:beforeEach', {
-    testName: Cypress.mocha.getRunner().suite.ctx.currentTest.fullTitle(),
-    testSuite: Cypress.mocha.getRootSuite().file
+    testName,
+    testSuite: Cypress.mocha.getRootSuite().file,
   }).then(({ traceId, shouldSkip }) => {
     Cypress.env('traceId', traceId)
     if (shouldSkip) {
@@ -115,7 +156,7 @@ beforeEach(function () {
 before(function () {
   cy.task('dd:testSuiteStart', {
     testSuite: Cypress.mocha.getRootSuite().file,
-    testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute
+    testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
   }).then((suiteConfig) => {
     if (suiteConfig) {
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
@@ -127,6 +168,7 @@ before(function () {
       testManagementTests = suiteConfig.testManagementTests
       isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
       isModifiedTest = suiteConfig.isModifiedTest
+      isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
     }
   })
 })
@@ -152,7 +194,7 @@ afterEach(function () {
     isNew: currentTest._ddIsNew,
     isEfdRetry: currentTest._ddIsEfdRetry,
     isAttemptToFix: currentTest._ddIsAttemptToFix,
-    isModified: currentTest._ddIsModified
+    isModified: currentTest._ddIsModified,
   }
   try {
     testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line

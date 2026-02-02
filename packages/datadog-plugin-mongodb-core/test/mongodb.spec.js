@@ -1,23 +1,41 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-const semver = require('semver')
+const assert = require('node:assert/strict')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const ddpv = require('mocha/package.json').version
+const semver = require('semver')
+const sinon = require('sinon')
 
 const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
-const ddpv = require('mocha/package.json').version
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const withTopologies = fn => {
-  withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName) => {
+  withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName, resolvedVersion) => {
     describe('using the default topology', () => {
       fn(async () => {
+        // Different warnings for different versions of mongodb-core
+        temporaryWarningExceptions.add(
+          'current Server Discovery and Monitoring engine is deprecated, and will be removed in a future version. ' +
+            'the new Server Discover and Monitoring engine, pass option { useUnifiedTopology: true } to ' +
+            'MongoClient.connect.'
+        )
+        temporaryWarningExceptions.add(
+          'current Server Discovery and Monitoring engine is deprecated, and will be removed in a future version. ' +
+            'To use the new Server Discover and Monitoring engine, pass option { useUnifiedTopology: true } to the ' +
+            'MongoClient constructor.'
+        )
+        temporaryWarningExceptions.add(
+          'current Server Discovery and Monitoring engine is deprecated, and will be removed in a future version. ' +
+            'To use the new Server Discover and Monitoring engine, pass option { useUnifiedTopology: true } to ' +
+            'MongoClient.connect.'
+        )
+        const options = semver.satisfies(resolvedVersion, '<6') ? { useNewUrlParser: true } : {}
         const { MongoClient } = require(`../../../versions/${moduleName}@${version}`).get()
-        const client = new MongoClient('mongodb://127.0.0.1:27017')
+        const client = new MongoClient('mongodb://127.0.0.1:27017', options)
 
         await client.connect()
 
@@ -51,6 +69,7 @@ describe('Plugin', () => {
   let db
   let BSON
   let startSpy
+  let injectCommentSpy
   let usesDelete
 
   describe('mongodb-core', () => {
@@ -98,14 +117,14 @@ describe('Plugin', () => {
                 const span = traces[0][0]
                 const resource = `insert test.${collectionName}`
 
-                expect(span).to.have.property('name', expectedSchema.outbound.opName)
-                expect(span).to.have.property('service', expectedSchema.outbound.serviceName)
-                expect(span).to.have.property('resource', resource)
-                expect(span).to.have.property('type', 'mongodb')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('db.name', `test.${collectionName}`)
-                expect(span.meta).to.have.property('out.host', '127.0.0.1')
-                expect(span.meta).to.have.property('component', 'mongodb')
+                assert.strictEqual(span.name, expectedSchema.outbound.opName)
+                assert.strictEqual(span.service, expectedSchema.outbound.serviceName)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.type, 'mongodb')
+                assert.strictEqual(span.meta['span.kind'], 'client')
+                assert.strictEqual(span.meta['db.name'], `test.${collectionName}`)
+                assert.strictEqual(span.meta['out.host'], '127.0.0.1')
+                assert.strictEqual(span.meta.component, 'mongodb')
               })
               .then(done)
               .catch(done)
@@ -119,8 +138,8 @@ describe('Plugin', () => {
             return agent.assertFirstTraceSpan({
               resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
               meta: {
-                'mongodb.query': '{"a":1}'
-              }
+                'mongodb.query': '{"a":1}',
+              },
             })
           })
 
@@ -131,8 +150,8 @@ describe('Plugin', () => {
             return agent.assertFirstTraceSpan({
               resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
               meta: {
-                'mongodb.query': '{"a":1}'
-              }
+                'mongodb.query': '{"a":1}',
+              },
             })
           })
 
@@ -143,8 +162,8 @@ describe('Plugin', () => {
             return agent.assertFirstTraceSpan({
               resource,
               meta: {
-                'mongodb.query': '{"a":1}'
-              }
+                'mongodb.query': '{"a":1}',
+              },
             })
           })
 
@@ -155,22 +174,22 @@ describe('Plugin', () => {
             return agent.assertFirstTraceSpan({
               resource,
               meta: {
-                'mongodb.query': '{"a":1}'
-              }
+                'mongodb.query': '{"a":1}',
+              },
             })
           })
 
           it('should have the statement tag when doing a multi statement update', async () => {
             collection.bulkWrite([
               { updateOne: { filter: { a: 1 }, update: { $set: { a: 2 } } } },
-              { updateOne: { filter: { b: 2 }, update: { $set: { b: 2 } } } }
+              { updateOne: { filter: { b: 2 }, update: { $set: { b: 2 } } } },
             ])
 
             return agent.assertFirstTraceSpan({
               resource: `update test.${collectionName}`,
               meta: {
-                'mongodb.query': '[{"a":1},{"b":2}]'
-              }
+                'mongodb.query': '[{"a":1},{"b":2}]',
+              },
             })
           })
 
@@ -180,22 +199,22 @@ describe('Plugin', () => {
             return agent.assertFirstTraceSpan({
               resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
               meta: {
-                'mongodb.query': '[{"a":1},{"b":2}]'
-              }
+                'mongodb.query': '[{"a":1},{"b":2}]',
+              },
             })
           })
 
           it('should sanitize buffers as values and not as objects when doing multi statement operations', async () => {
             collection.bulkWrite([
               { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
-              { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } }
+              { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
             ])
 
             return agent.assertFirstTraceSpan({
               resource: `update test.${collectionName}`,
               meta: {
-                'mongodb.query': '[{"_id":"?"},{"_id":"?"}]'
-              }
+                'mongodb.query': '[{"_id":"?"},{"_id":"?"}]',
+              },
             })
           })
 
@@ -205,8 +224,8 @@ describe('Plugin', () => {
             return agent.assertFirstTraceSpan({
               resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
               meta: {
-                'mongodb.query': '{"_id":"9999999999999999999999"}'
-              }
+                'mongodb.query': '{"_id":"9999999999999999999999"}',
+              },
             })
           })
 
@@ -216,36 +235,36 @@ describe('Plugin', () => {
             return agent.assertFirstTraceSpan({
               resource: `update test.${collectionName}`,
               meta: {
-                'mongodb.query': '{"_id":"9999999999999999999999"}'
-              }
+                'mongodb.query': '{"_id":"9999999999999999999999"}',
+              },
             })
           })
 
-          it('shoud sanitize BigInts when doing a multi statement update', async () => {
+          it('should sanitize BigInts when doing a multi statement update', async () => {
             collection.bulkWrite([
               { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } },
-              { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } }
+              { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } },
             ])
 
             return agent.assertFirstTraceSpan({
               resource: `update test.${collectionName}`,
               meta: {
-                'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]'
-              }
+                'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]',
+              },
             })
           })
 
           it('should sanitize BigInts when doing a multi delete operation', async () => {
             collection.bulkWrite([
               { deleteOne: { filter: { _id: 9999999999999999999999n } } },
-              { deleteOne: { filter: { _id: 9999999999999999999999n } } }
+              { deleteOne: { filter: { _id: 9999999999999999999999n } } },
             ])
 
             return agent.assertFirstTraceSpan({
               resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
               meta: {
-                'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]'
-              }
+                'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]',
+              },
             })
           })
 
@@ -256,15 +275,15 @@ describe('Plugin', () => {
                 const resource = 'planCacheListPlans test.$cmd'
                 const query = '{}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
 
             db.command({
               planCacheListPlans: `test.${collectionName}`,
-              query: {}
+              query: {},
             }, () => {})
           })
 
@@ -275,14 +294,14 @@ describe('Plugin', () => {
                 const resource = `find test.${collectionName}`
                 const query = '{"_id":"?"}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
 
             collection.find({
-              _id: Buffer.from('1234')
+              _id: Buffer.from('1234'),
             }).toArray()
           })
 
@@ -293,14 +312,14 @@ describe('Plugin', () => {
                 const resource = `find test.${collectionName}`
                 const query = '{"_bin":"?"}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
 
             collection.find({
-              _bin: new BSON.Binary()
+              _bin: new BSON.Binary(),
             }).toArray()
           })
 
@@ -313,14 +332,14 @@ describe('Plugin', () => {
                 const resource = `find test.${collectionName}`
                 const query = `{"_id":"${id}"}`
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
 
             collection.find({
-              _id: new BSON.ObjectID(id)
+              _id: new BSON.ObjectID(id),
             }).toArray()
           })
 
@@ -331,14 +350,14 @@ describe('Plugin', () => {
                 const resource = `find test.${collectionName}`
                 const query = '{"_time":{"$timestamp":"0"}}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
 
             collection.find({
-              _time: new BSON.Timestamp()
+              _time: new BSON.Timestamp(),
             }).toArray()
           })
 
@@ -349,14 +368,14 @@ describe('Plugin', () => {
                 const resource = `find test.${collectionName}`
                 const query = '{"_id":"?"}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
 
             collection.find({
-              _id: new BSON.MinKey()
+              _id: new BSON.MinKey(),
             }).toArray()
           })
 
@@ -367,15 +386,15 @@ describe('Plugin', () => {
                 const resource = `find test.${collectionName}`
                 const query = '{"_id":"1234"}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
 
             collection.find({
               _id: '1234',
-              foo: () => {}
+              foo: () => {},
             }).toArray()
           })
 
@@ -386,15 +405,15 @@ describe('Plugin', () => {
                 const resource = 'aggregate test.$cmd'
                 const query = '[{"$match":{"_id":"1234"}},{"$project":{"_id":1}}]'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
 
             collection.aggregate([
               { $match: { _id: '1234' } },
-              { $project: { _id: 1 } }
+              { $project: { _id: 1 } },
             ]).toArray()
           })
 
@@ -407,25 +426,25 @@ describe('Plugin', () => {
                 const resource = `find test.${collectionName}`
                 const query = `{"_id":"${id}"}`
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
 
             collection.find({
-              _id: { toJSON: () => id }
+              _id: { toJSON: () => id },
             }).toArray()
           })
 
           it('should run the callback in the parent context', done => {
             const insertPromise = collection.insertOne({ a: 1 }, {}, () => {
-              expect(tracer.scope().active()).to.be.null
+              assert.strictEqual(tracer.scope().active(), null)
               done()
             })
             if (insertPromise && insertPromise.then) {
               insertPromise.then(() => {
-                expect(tracer.scope().active()).to.be.null
+                assert.strictEqual(tracer.scope().active(), null)
                 done()
               })
             }
@@ -442,7 +461,7 @@ describe('Plugin', () => {
         before(() => {
           return agent.load('mongodb-core', {
             service: 'custom',
-            queryInResourceName: true
+            queryInResourceName: true,
           })
         })
 
@@ -459,8 +478,8 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', 'custom')
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, 'custom')
             })
             .then(done)
             .catch(done)
@@ -474,27 +493,27 @@ describe('Plugin', () => {
               const span = traces[0][0]
               const resource = `find test.${collectionName} {"_bin":"?"}`
 
-              expect(span).to.have.property('resource', resource)
+              assert.strictEqual(span.resource, resource)
             })
             .then(done)
             .catch(done)
 
           collection.find({
-            _bin: new BSON.Binary()
+            _bin: new BSON.Binary(),
           }).toArray()
         })
 
         it('should sanitize query in resource when configured and doing a multi statement update', async () => {
           collection.bulkWrite([
             { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
-            { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } }
+            { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
           ])
 
           return agent.assertFirstTraceSpan({
             resource: `update test.${collectionName} [{"_id":"?"},{"_id":"?"}]`,
             meta: {
-              'mongodb.query': '[{"_id":"?"},{"_id":"?"}]'
-            }
+              'mongodb.query': '[{"_id":"?"},{"_id":"?"}]',
+            },
           })
         })
 
@@ -503,12 +522,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'mongodb.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'mongodb.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })
@@ -516,7 +535,7 @@ describe('Plugin', () => {
       describe('with dbmPropagationMode service', () => {
         before(() => {
           return agent.load('mongodb-core', {
-            dbmPropagationMode: 'service'
+            dbmPropagationMode: 'service',
           })
         })
 
@@ -541,9 +560,9 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(startSpy.called).to.be.true
+              assert.strictEqual(startSpy.called, true)
               const { comment } = startSpy.getCall(0).args[0].ops
-              expect(comment).to.equal(
+              assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
                 'dde=\'tester\',' +
@@ -557,16 +576,15 @@ describe('Plugin', () => {
             .catch(done)
 
           collection.find({
-            _id: Buffer.from('1234')
+            _id: Buffer.from('1234'),
           }).toArray()
         })
       })
 
       describe('with dbmPropagationMode full', () => {
         before(() => {
-          return agent.load('mongodb-core', {
-            dbmPropagationMode: 'full'
-          })
+          tracer._tracer.configure({ sampler: { sampleRate: 1 } })
+          return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
         })
 
         after(() => {
@@ -579,22 +597,25 @@ describe('Plugin', () => {
           collection = db.collection(collectionName)
 
           startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+          injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
           startSpy?.restore()
+          injectCommentSpy?.restore()
         })
 
         it('DBM propagation should inject full mode with traceparent as comment', done => {
           agent
-            .assertSomeTraces(traces => {
-              const span = traces[0][0]
+            .assertFirstTraceSpan(span => {
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
 
-              expect(startSpy.called).to.be.true
-              const { comment } = startSpy.getCall(0).args[0].ops
-              expect(comment).to.equal(
+              assert.strictEqual(startSpy.called, true)
+              assert.strictEqual(injectCommentSpy.called, true)
+
+              const comment = injectCommentSpy.getCall(0).returnValue
+              assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
                 'dde=\'tester\',' +
@@ -609,7 +630,7 @@ describe('Plugin', () => {
             .catch(done)
 
           collection.find({
-            _id: Buffer.from('1234')
+            _id: Buffer.from('1234'),
           }).toArray()
         })
       })
@@ -619,7 +640,7 @@ describe('Plugin', () => {
           tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
 
           return agent.load('mongodb-core', {
-            dbmPropagationMode: 'full'
+            dbmPropagationMode: 'full',
           })
         })
 
@@ -650,15 +671,18 @@ describe('Plugin', () => {
                 const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
                 const spanId = span.span_id.toString(16).padStart(16, '0')
 
-                expect(startSpy.called).to.be.true
+                assert.strictEqual(startSpy.called, true)
                 const { comment } = startSpy.getCall(0).args[0].ops
-                expect(comment).to.include(`traceparent='00-${traceId}-${spanId}-00'`)
+                assert.match(
+                  comment,
+                  new RegExp(String.raw`traceparent='00-${traceId}-${spanId}-00'`)
+                )
               })
               .then(done)
               .catch(done)
 
             collection.find({
-              _id: Buffer.from('1234')
+              _id: Buffer.from('1234'),
             }).toArray()
           })
       })
@@ -667,7 +691,7 @@ describe('Plugin', () => {
         describe('when heartbeat tracing is disabled via config', () => {
           before(() => {
             return agent.load('mongodb-core', {
-              heartbeatEnabled: false
+              heartbeatEnabled: false,
             })
           })
 
@@ -680,26 +704,26 @@ describe('Plugin', () => {
             db = client.db('test')
           })
 
-          it('should NOT create a span for heartbeat commands', (done) => {
+          it('should NOT create a span for heartbeat commands (hello, helloOk, ismaster, isMaster)', (done) => {
             const parentSpan = tracer.startSpan('test.parent')
 
             agent
               .assertSomeTraces(traces => {
                 // Should only receive the trace for the parent span
-                expect(traces[0]).to.have.length(1)
+                assert.strictEqual(traces[0].length, 1)
                 const span = traces[0][0]
-                expect(span.name).to.equal('test.parent')
+                assert.strictEqual(span.name, 'test.parent')
               })
               .then(done)
+              .catch(done)
 
-            // Activate parent span scope and trigger heartbeat command
-            tracer.scope().activate(parentSpan, async () => {
-              // Admin connect should be all that is needed to trigger heartbeat command for newer versions of mongo
-              client = await createClient()
-              db = client.db('test')
-
-              // but we should send a test heartbeat command since older versions of mongo don't auto-send heartbeats
-              db.command({ hello: 1 })
+            // Activate parent span scope and trigger heartbeat commands
+            tracer.scope().activate(parentSpan, () => {
+              // Test all heartbeat command variations
+              db.command({ hello: 1 }).catch(() => {})
+              db.command({ helloOk: true }).catch(() => {})
+              db.command({ ismaster: 1 }).catch(() => {})
+              db.command({ isMaster: 1 }).catch(() => {})
               setTimeout(() => parentSpan.finish(), 50)
             })
           })
@@ -708,7 +732,7 @@ describe('Plugin', () => {
         describe('when heartbeat tracing is enabled via config (default)', () => {
           before(() => {
             return agent.load('mongodb-core', {
-              heartbeatEnabled: true
+              heartbeatEnabled: true,
             })
           })
 
@@ -721,33 +745,33 @@ describe('Plugin', () => {
             db = client.db('test')
           })
 
-          it('should create a child span for heartbeat commands', (done) => {
+          it('should create a child span for heartbeat commands (hello, helloOk, ismaster, isMaster)', (done) => {
             const parentSpan = tracer.startSpan('test.parent')
 
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0]).to.have.length.at.least(2)
+                assert.ok(traces[0].length >= 2)
                 const rootSpan = traces[0][0]
 
-                expect(rootSpan.name).to.equal('test.parent')
+                assert.strictEqual(rootSpan.name, 'test.parent')
 
                 // assert that some child spans were created, these are the heartbeat spans
                 // don't assert on exact number of spans because it's dynamic
                 for (const childSpan of traces[0].slice(1)) {
-                  expect(childSpan.name).to.equal(expectedSchema.outbound.opName)
-                  expect(childSpan.parent_id.toString()).to.equal(rootSpan.span_id.toString()) // Verify parent-child
+                  assert.strictEqual(childSpan.name, expectedSchema.outbound.opName)
+                  assert.strictEqual(childSpan.parent_id.toString(), rootSpan.span_id.toString()) // Verify parent-child
                 }
               })
               .then(done)
+              .catch(done)
 
-            // Activate parent span scope and trigger heartbeat command
-            tracer.scope().activate(parentSpan, async () => {
-              // Admin connect should be all that is needed to trigger heartbeat command for newer versions of mongo
-              client = await createClient()
-              db = client.db('test')
-
-              // but we should send a test heartbeat command since older versions of mongo don't auto-send heartbeats
-              db.command({ hello: 1 })
+            // Activate parent span scope and trigger heartbeat commands
+            tracer.scope().activate(parentSpan, () => {
+              // Test all heartbeat command variations
+              db.command({ hello: 1 }).catch(() => {})
+              db.command({ helloOk: true }).catch(() => {})
+              db.command({ ismaster: 1 }).catch(() => {})
+              db.command({ isMaster: 1 }).catch(() => {})
               setTimeout(() => parentSpan.finish(), 200)
             })
           })
@@ -768,26 +792,26 @@ describe('Plugin', () => {
             db = client.db('test')
           })
 
-          it('should NOT create a span for heartbeat commands', (done) => {
+          it('should NOT create a span for heartbeat commands (hello, helloOk, ismaster, isMaster)', (done) => {
             const parentSpan = tracer.startSpan('test.parent')
 
             agent
               .assertSomeTraces(traces => {
                 // Should only receive the trace for the parent span
-                expect(traces[0]).to.have.length(1)
+                assert.strictEqual(traces[0].length, 1)
                 const span = traces[0][0]
-                expect(span.name).to.equal('test.parent')
+                assert.strictEqual(span.name, 'test.parent')
               })
               .then(done)
+              .catch(done)
 
-            // Activate parent span scope and trigger heartbeat command
-            tracer.scope().activate(parentSpan, async () => {
-              // Admin connect should be all that is needed to trigger heartbeat command for newer versions of mongo
-              client = await createClient()
-              db = client.db('test')
-
-              // but we should send a test heartbeat command since older versions of mongo don't auto-send heartbeats
-              db.command({ hello: 1 })
+            // Activate parent span scope and trigger heartbeat commands
+            tracer.scope().activate(parentSpan, () => {
+              // Test all heartbeat command variations
+              db.command({ hello: 1 }).catch(() => {})
+              db.command({ helloOk: true }).catch(() => {})
+              db.command({ ismaster: 1 }).catch(() => {})
+              db.command({ isMaster: 1 }).catch(() => {})
               setTimeout(() => parentSpan.finish(), 50)
             })
           })
@@ -808,33 +832,33 @@ describe('Plugin', () => {
             db = client.db('test')
           })
 
-          it('should create a child span for heartbeat commands', (done) => {
+          it('should create a child span for heartbeat commands (hello, helloOk, ismaster, isMaster)', (done) => {
             const parentSpan = tracer.startSpan('test.parent')
 
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0]).to.have.length.at.least(2)
+                assert.ok(traces[0].length >= 2)
                 const rootSpan = traces[0][0]
 
-                expect(rootSpan.name).to.equal('test.parent')
+                assert.strictEqual(rootSpan.name, 'test.parent')
 
                 // assert that some child spans were created, these are the heartbeat spans
                 // don't assert on exact number of spans because it's dynamic
                 for (const childSpan of traces[0].slice(1)) {
-                  expect(childSpan.name).to.equal(expectedSchema.outbound.opName)
-                  expect(childSpan.parent_id.toString()).to.equal(rootSpan.span_id.toString()) // Verify parent-child
+                  assert.strictEqual(childSpan.name, expectedSchema.outbound.opName)
+                  assert.strictEqual(childSpan.parent_id.toString(), rootSpan.span_id.toString()) // Verify parent-child
                 }
               })
               .then(done)
+              .catch(done)
 
-            // Activate parent span scope and trigger heartbeat command
-            tracer.scope().activate(parentSpan, async () => {
-              // Admin connect should be all that is needed to trigger heartbeat command for newer versions of mongo
-              client = await createClient()
-              db = client.db('test')
-
-              // but we should send a test heartbeat command since older versions of mongo don't auto-send heartbeats
-              db.command({ hello: 1 })
+            // Activate parent span scope and trigger heartbeat commands
+            tracer.scope().activate(parentSpan, () => {
+              // Test all heartbeat command variations
+              db.command({ hello: 1 }).catch(() => {})
+              db.command({ helloOk: true }).catch(() => {})
+              db.command({ ismaster: 1 }).catch(() => {})
+              db.command({ isMaster: 1 }).catch(() => {})
               setTimeout(() => parentSpan.finish(), 200)
             })
           })

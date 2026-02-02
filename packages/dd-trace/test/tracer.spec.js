@@ -1,11 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
-
 const Tracer = require('../src/tracer')
 const Span = require('../src/opentracing/span')
 const getConfig = require('../src/config')
@@ -37,22 +38,22 @@ describe('Tracer', () => {
       const sampler = { sampleRate: 0.5 }
       const options = { env, sampler }
       tracer.configure(options)
-      expect(tracer._prioritySampler.configure).to.have.been.calledWith(env, sampler)
+      sinon.assert.calledWith(tracer._prioritySampler.configure, env, sampler)
     })
   })
 
   describe('setUrl', () => {
     it('should pass the setUrl call to the exporter', () => {
       tracer.setUrl('http://example.com')
-      expect(tracer._exporter.setUrl).to.have.been.calledWith('http://example.com')
+      sinon.assert.calledWith(tracer._exporter.setUrl, 'http://example.com')
     })
   })
 
   describe('trace', () => {
     it('should run the callback with a new span', () => {
       tracer.trace('name', {}, span => {
-        expect(span).to.be.instanceof(Span)
-        expect(span.context()._name).to.equal('name')
+        assert.ok(span instanceof Span)
+        assert.strictEqual(span.context()._name, 'name')
       })
     })
 
@@ -62,17 +63,17 @@ describe('Tracer', () => {
         resource: 'resource',
         type: 'type',
         tags: {
-          foo: 'bar'
-        }
+          foo: 'bar',
+        },
       }
 
       tracer.trace('name', options, span => {
-        expect(span).to.be.instanceof(Span)
-        expect(span.context()._tags).to.include(options.tags)
-        expect(span.context()._tags).to.include({
+        assert.ok(span instanceof Span)
+        assertObjectContains(span.context()._tags, options.tags)
+        assertObjectContains(span.context()._tags, {
           [SERVICE_NAME]: 'service',
           [RESOURCE_NAME]: 'resource',
-          [SPAN_TYPE]: 'type'
+          [SPAN_TYPE]: 'type',
         })
       })
     })
@@ -81,28 +82,28 @@ describe('Tracer', () => {
       it('should be set when tracer.trace service mismatches configured service', () => {
         tracer.trace('name', { service: 'custom' }, () => {})
         const trace = tracer._exporter.export.getCall(0).args[0][0]
-        expect(trace).to.have.property(EXPORT_SERVICE_NAME, 'custom')
-        expect(trace.meta).to.have.property(BASE_SERVICE, 'service')
+        assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'custom')
+        assert.strictEqual(trace.meta[BASE_SERVICE], 'service')
       })
 
       it('should not be set when tracer.trace service is not supplied', () => {
         tracer.trace('name', {}, () => {})
         const trace = tracer._exporter.export.getCall(0).args[0][0]
-        expect(trace).to.have.property(EXPORT_SERVICE_NAME, 'service')
-        expect(trace.meta).to.not.have.property(BASE_SERVICE)
+        assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'service')
+        assert.ok(!(BASE_SERVICE in trace.meta))
       })
 
       it('should not be set when tracer.trace service matched configured service', () => {
         tracer.trace('name', { service: 'service' }, () => {})
         const trace = tracer._exporter.export.getCall(0).args[0][0]
-        expect(trace).to.have.property(EXPORT_SERVICE_NAME, 'service')
-        expect(trace.meta).to.not.have.property(BASE_SERVICE)
+        assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'service')
+        assert.ok(!(BASE_SERVICE in trace.meta))
       })
     })
 
     it('should activate the span', () => {
       tracer.trace('name', {}, span => {
-        expect(tracer.scope().active()).to.equal(span)
+        assert.strictEqual(tracer.scope().active(), span)
       })
     })
 
@@ -111,7 +112,7 @@ describe('Tracer', () => {
 
       tracer.scope().activate(childOf, () => {
         tracer.trace('name', {}, span => {
-          expect(span.context()._parentId.toString(10)).to.equal(childOf.context().toSpanId())
+          assert.strictEqual(span.context()._parentId.toString(10), childOf.context().toSpanId())
         })
       })
     })
@@ -122,7 +123,7 @@ describe('Tracer', () => {
 
       tracer.scope().activate(root, () => {
         tracer.trace('name', { childOf }, span => {
-          expect(span.context()._parentId.toString(10)).to.equal(childOf.context().toSpanId())
+          assert.strictEqual(span.context()._parentId.toString(10), childOf.context().toSpanId())
         })
       })
     })
@@ -130,7 +131,7 @@ describe('Tracer', () => {
     it('should return the value from the callback', () => {
       const result = tracer.trace('name', {}, span => 'test')
 
-      expect(result).to.equal('test')
+      assert.strictEqual(result, 'test')
     })
 
     it('should finish the span', () => {
@@ -141,7 +142,7 @@ describe('Tracer', () => {
         sinon.spy(span, 'finish')
       })
 
-      expect(span.finish).to.have.been.called
+      sinon.assert.called(span.finish)
     })
 
     it('should handle exceptions', () => {
@@ -156,11 +157,11 @@ describe('Tracer', () => {
           throw new Error('boom')
         })
       } catch (e) {
-        expect(span.finish).to.have.been.called
-        expect(tags).to.include({
+        sinon.assert.called(span.finish)
+        assertObjectContains(tags, {
           [ERROR_TYPE]: e.name,
           [ERROR_MESSAGE]: e.message,
-          [ERROR_STACK]: e.stack
+          [ERROR_STACK]: e.stack,
         })
       }
     })
@@ -176,11 +177,11 @@ describe('Tracer', () => {
           done = _done
         })
 
-        expect(span.finish).to.not.have.been.called
+        sinon.assert.notCalled(span.finish)
 
         done()
 
-        expect(span.finish).to.have.been.called
+        sinon.assert.called(span.finish)
       })
 
       it('should handle errors', () => {
@@ -198,11 +199,11 @@ describe('Tracer', () => {
 
         done(error)
 
-        expect(span.finish).to.have.been.called
-        expect(tags).to.include({
+        sinon.assert.called(span.finish)
+        assertObjectContains(tags, {
           [ERROR_TYPE]: error.name,
           [ERROR_MESSAGE]: error.message,
-          [ERROR_STACK]: error.stack
+          [ERROR_STACK]: error.stack,
         })
       })
     })
@@ -223,12 +224,12 @@ describe('Tracer', () => {
             return promise
           })
           .then(() => {
-            expect(span.finish).to.have.been.called
+            sinon.assert.called(span.finish)
             done()
           })
           .catch(done)
 
-        expect(span.finish).to.not.have.been.called
+        sinon.assert.notCalled(span.finish)
 
         deferred.resolve()
       })
@@ -245,11 +246,11 @@ describe('Tracer', () => {
             return Promise.reject(new Error('boom'))
           })
           .catch(e => {
-            expect(span.finish).to.have.been.called
-            expect(tags).to.include({
+            sinon.assert.called(span.finish)
+            assertObjectContains(tags, {
               [ERROR_TYPE]: e.name,
               [ERROR_MESSAGE]: e.message,
-              [ERROR_STACK]: e.stack
+              [ERROR_STACK]: e.stack,
             })
             done()
           })
@@ -265,7 +266,7 @@ describe('Tracer', () => {
           })
 
         process.once('unhandledRejection', (received) => {
-          expect(received).to.equal(err)
+          assert.strictEqual(received, err)
           done()
         })
       })
@@ -284,7 +285,7 @@ describe('Tracer', () => {
 
     it('should be disabled by default', () => {
       tracer.trace('getRumData', {}, () => {
-        expect(tracer.getRumData()).to.equal('')
+        assert.strictEqual(tracer.getRumData(), '')
       })
     })
 
@@ -296,8 +297,8 @@ describe('Tracer', () => {
         const re = /<meta name="dd-trace-id" content="([\d\w]+)" \/><meta name="dd-trace-time" content="(\d+)" \/>/
         const [, traceId, traceTime] = re.exec(data)
         const span = tracer.scope().active().context()
-        expect(traceId).to.equal(span.toTraceId())
-        expect(traceTime).to.equal(time.toString())
+        assert.strictEqual(traceId, span.toTraceId())
+        assert.strictEqual(traceTime, time.toString())
       })
     })
   })
@@ -306,9 +307,9 @@ describe('Tracer', () => {
     it('should return a new function that automatically calls tracer.trace()', () => {
       const it = {}
       const callback = sinon.spy(function (foo) {
-        expect(tracer.scope().active()).to.not.be.null
-        expect(this).to.equal(it)
-        expect(foo).to.equal('foo')
+        assert.notStrictEqual(tracer.scope().active(), null)
+        assert.strictEqual(this, it)
+        assert.strictEqual(foo, 'foo')
 
         return 'test'
       })
@@ -318,9 +319,9 @@ describe('Tracer', () => {
 
       const result = fn.call(it, 'foo')
 
-      expect(callback).to.have.been.called
-      expect(tracer.trace).to.have.been.calledWith('name', {})
-      expect(result).to.equal('test')
+      sinon.assert.called(callback)
+      sinon.assert.calledWith(tracer.trace, 'name', {})
+      assert.strictEqual(result, 'test')
     })
 
     it('should wait for the callback to be called before finishing the span', done => {
@@ -330,13 +331,13 @@ describe('Tracer', () => {
         sinon.spy(span, 'finish')
 
         setImmediate(() => {
-          expect(span.finish).to.not.have.been.called
+          sinon.assert.notCalled(span.finish)
         })
 
         setImmediate(() => cb())
 
         setImmediate(() => {
-          expect(span.finish).to.have.been.called
+          sinon.assert.called(span.finish)
           done()
         })
       }))
@@ -348,11 +349,11 @@ describe('Tracer', () => {
 
     it('should handle rejected promises', done => {
       const fn = tracer.wrap('name', {}, (cb) => cb())
-      const catchHandler = sinon.spy(({ message }) => expect(message).to.equal('boom'))
+      const catchHandler = sinon.spy(({ message }) => assert.strictEqual(message, 'boom'))
 
       fn(() => Promise.reject(new Error('boom')))
         .catch(catchHandler)
-        .then(() => expect(catchHandler).to.have.been.called)
+        .then(() => sinon.assert.called(catchHandler))
         .then(() => done())
     })
 
@@ -365,8 +366,8 @@ describe('Tracer', () => {
 
       fn('hello', 'goodbye')
 
-      expect(tracer.trace).to.have.been.calledWith('name', {
-        tags: { sometag: 'somevalue' }
+      sinon.assert.calledWith(tracer.trace, 'name', {
+        tags: { sometag: 'somevalue' },
       })
     })
 
@@ -377,9 +378,9 @@ describe('Tracer', () => {
 
       function options (foo, bar) {
         invocations++
-        expect(this).to.equal(it)
-        expect(foo).to.equal('hello')
-        expect(bar).to.equal('goodbye')
+        assert.strictEqual(this, it)
+        assert.strictEqual(foo, 'hello')
+        assert.strictEqual(bar, 'goodbye')
         return { tags: { sometag: 'somevalue', invocations } }
       }
 
@@ -389,14 +390,14 @@ describe('Tracer', () => {
 
       fn.call(it, 'hello', 'goodbye')
 
-      expect(tracer.trace).to.have.been.calledWith('name', {
-        tags: { sometag: 'somevalue', invocations: 1 }
+      sinon.assert.calledWith(tracer.trace, 'name', {
+        tags: { sometag: 'somevalue', invocations: 1 },
       })
 
       fn.call(it, 'hello', 'goodbye')
 
-      expect(tracer.trace).to.have.been.calledWith('name', {
-        tags: { sometag: 'somevalue', invocations: 2 }
+      sinon.assert.calledWith(tracer.trace, 'name', {
+        tags: { sometag: 'somevalue', invocations: 2 },
       })
     })
   })

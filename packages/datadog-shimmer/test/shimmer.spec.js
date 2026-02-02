@@ -1,7 +1,7 @@
 'use strict'
 
-const { expect } = require('chai')
 const assert = require('node:assert/strict')
+
 const shimmer = require('../src/shimmer')
 
 describe('shimmer', () => {
@@ -35,7 +35,7 @@ describe('shimmer', () => {
         get method () {
           index++
           return returned
-        }
+        },
       }
 
       shimmer.wrap(obj, 'method', method => () => {
@@ -59,7 +59,7 @@ describe('shimmer', () => {
       const obj = { set setter (_method_) {} }
 
       assert.throws(() => shimmer.wrap(obj, 'setter', setter => () => {}), {
-        message: 'Replacing setters is not supported. Implement if required.'
+        message: 'Replacing setters is not supported. Implement if required.',
       })
     })
 
@@ -69,7 +69,7 @@ describe('shimmer', () => {
 
       shimmer.wrap(obj, 'count', count => inc => count(inc) + 1)
 
-      expect(obj.count(1)).to.equal(2)
+      assert.strictEqual(obj.count(1), 2)
     })
 
     it('should wrap the method on a frozen object', () => {
@@ -81,9 +81,9 @@ describe('shimmer', () => {
 
       obj = shimmer.wrap(obj, 'count', count => inc => count(inc) + 1)
 
-      expect(obj.count(1)).to.equal(2)
-      expect(obj.foo).to.equal(42)
-      expect(Object.hasOwn(obj, 'foo')).to.equal(true)
+      assert.strictEqual(obj.count(1), 2)
+      assert.strictEqual(obj.foo, 42)
+      assert.strictEqual(Object.hasOwn(obj, 'foo'), true)
     })
 
     it('should wrap the method on a frozen method', () => {
@@ -100,11 +100,11 @@ describe('shimmer', () => {
 
       method = shimmer.wrap(method, 'count', count => inc => count(inc) + 1)
 
-      expect(method.count(1)).to.equal(2)
-      expect(method.foo).to.equal('bar')
-      expect(method.name).to.equal('abc')
-      expect(method).to.not.equal(abc)
-      expect(method()).to.equal(42)
+      assert.strictEqual(method.count(1), 2)
+      assert.strictEqual(method.foo, 'bar')
+      assert.strictEqual(method.name, 'abc')
+      assert.notStrictEqual(method, abc)
+      assert.strictEqual(method(), 42)
     })
 
     it('should mass wrap targets', () => {
@@ -114,8 +114,8 @@ describe('shimmer', () => {
 
       shimmer.massWrap([foo, bar], 'count', count => inc => count(inc) + 1)
 
-      expect(foo.count(1)).to.equal(2)
-      expect(bar.count(1)).to.equal(2)
+      assert.strictEqual(foo.count(1), 2)
+      assert.strictEqual(bar.count(1), 2)
     })
 
     it('should mass wrap methods', () => {
@@ -124,8 +124,8 @@ describe('shimmer', () => {
 
       shimmer.massWrap(obj, ['count', 'increment'], count => inc => count(inc) + 1)
 
-      expect(obj.count(1)).to.equal(2)
-      expect(obj.increment(1)).to.equal(2)
+      assert.strictEqual(obj.count(1), 2)
+      assert.strictEqual(obj.increment(1), 2)
     })
 
     it('should wrap the method on functions', () => {
@@ -136,7 +136,7 @@ describe('shimmer', () => {
 
       shimmer.wrap(obj, 'count', count => inc => count(inc) + 1)
 
-      expect(obj.count(1)).to.equal(2)
+      assert.strictEqual(obj.count(1), 2)
     })
 
     it('should bail, if not receiving a target', () => {
@@ -151,7 +151,7 @@ describe('shimmer', () => {
 
       shimmer.wrap(obj, 'count', count => inc => count(inc) + 1)
 
-      expect(obj.count(1)).to.equal(2)
+      assert.strictEqual(obj.count(1), 2)
     })
 
     it('should wrap a constructor', () => {
@@ -167,8 +167,8 @@ describe('shimmer', () => {
 
       const counter = new obj.Counter(1)
 
-      expect(counter.value).to.equal(2)
-      expect(counter).to.be.an.instanceof(Counter)
+      assert.strictEqual(counter.value, 2)
+      assert.ok(counter instanceof Counter)
     })
 
     it('should wrap a class constructor', () => {
@@ -186,8 +186,8 @@ describe('shimmer', () => {
 
       const counter = new obj.Counter()
 
-      expect(counter).to.be.instanceof(SubCounter)
-      expect(counter).to.be.instanceof(Counter)
+      assert.ok(counter instanceof SubCounter)
+      assert.ok(counter instanceof Counter)
     })
 
     it('should preserve property descriptors from the original', () => {
@@ -204,11 +204,11 @@ describe('shimmer', () => {
 
       const bar = Object.getOwnPropertyDescriptor(obj.count, 'bar')
 
-      expect(obj.count).to.have.property('foo', 'foo')
-      expect(obj.count).to.have.property('bar', 'bar')
-      expect(bar).to.have.property('enumerable', false)
-      expect(obj.count).to.have.property(sym, 'sym')
-      expect(obj.count).to.have.property('test', 'test')
+      assert.strictEqual(obj.count.foo, 'foo')
+      assert.strictEqual(obj.count.bar, 'bar')
+      assert.strictEqual(bar.enumerable, false)
+      assert.strictEqual(obj.count[sym], 'sym')
+      assert.strictEqual(obj.count.test, 'test')
     })
 
     it('should preserve the original function length', () => {
@@ -216,7 +216,7 @@ describe('shimmer', () => {
 
       shimmer.wrap(obj, 'count', () => () => {})
 
-      expect(obj.count).to.have.length(3)
+      assert.strictEqual(obj.count.length, 3)
     })
 
     it('should preserve the original function name', () => {
@@ -224,7 +224,7 @@ describe('shimmer', () => {
 
       shimmer.wrap(obj, 'count', () => () => {})
 
-      expect(obj.count).to.have.property('name', 'count')
+      assert.strictEqual(obj.count.name, 'count')
     })
 
     it('should inherit from the original method prototype', () => {
@@ -234,8 +234,8 @@ describe('shimmer', () => {
 
       shimmer.wrap(obj, 'count', () => () => {})
 
-      expect(obj.count).to.have.property('test', 'test')
-      expect(Object.getOwnPropertyNames(obj.count)).to.not.include('test')
+      assert.strictEqual(obj.count.test, 'test')
+      assert.strictEqual(Object.hasOwn(obj.count, 'test'), false)
     })
 
     it('should inherit from the original method prototype 2', () => {
@@ -249,9 +249,9 @@ describe('shimmer', () => {
 
       shimmer.wrap(obj, 'count', () => () => {})
 
-      expect(obj.count).to.have.property('test', 'test')
-      expect(obj.count).to.have.property('foo', 42)
-      expect(Object.getOwnPropertyNames(obj.count)).to.not.include('test')
+      assert.strictEqual(obj.count.test, 'test')
+      assert.strictEqual(obj.count.foo, 42)
+      assert.strictEqual(Object.hasOwn(obj.count, 'test'), false)
     })
 
     it('should preserve the property descriptor of the original', () => {
@@ -259,15 +259,15 @@ describe('shimmer', () => {
 
       Object.defineProperty(obj, 'count', {
         value: () => {},
-        configurable: true
+        configurable: true,
       })
 
       shimmer.wrap(obj, 'count', () => () => {})
 
       const count = Object.getOwnPropertyDescriptor(obj, 'count')
 
-      expect(count).to.have.property('enumerable', false)
-      expect(count).to.have.property('writable', false)
+      assert.strictEqual(count.enumerable, false)
+      assert.strictEqual(count.writable, false)
     })
 
     it('should handle writable non-configurable properties well', () => {
@@ -276,26 +276,26 @@ describe('shimmer', () => {
       Object.defineProperty(obj, 'count', {
         value: () => {},
         writable: true,
-        configurable: false
+        configurable: false,
       })
 
       shimmer.wrap(obj, 'count', () => () => {})
 
       const count = Object.getOwnPropertyDescriptor(obj, 'count')
 
-      expect(count).to.have.property('enumerable', false)
-      expect(count).to.have.property('writable', true)
-      expect(count).to.have.property('configurable', false)
+      assert.strictEqual(count.enumerable, false)
+      assert.strictEqual(count.writable, true)
+      assert.strictEqual(count.configurable, false)
     })
 
     it('should skip non-configurable/writable string keyed methods', () => {
       const obj = {
-        configurable () {}
+        configurable () {},
       }
       Object.defineProperty(obj, 'count', {
         value: () => {},
         configurable: false, // Explicit, even if it's the default
-        writable: false
+        writable: false,
       })
 
       const countDescriptorBefore = Object.getOwnPropertyDescriptor(obj, 'count')
@@ -317,13 +317,13 @@ describe('shimmer', () => {
     it('should skip non-configurable/writable symbol keyed methods', () => {
       const configurable = Symbol('configurable')
       const obj = {
-        [configurable] () {}
+        [configurable] () {},
       }
       const symbol = Symbol('count')
       Object.defineProperty(obj, symbol, {
         value: () => {},
         configurable: false, // Explicit, even if it's the default
-        writable: false
+        writable: false,
       })
 
       const descriptorBefore = Object.getOwnPropertyDescriptor(obj, symbol)
@@ -343,45 +343,45 @@ describe('shimmer', () => {
     })
 
     it('should validate that there is a target object', () => {
-      expect(() => shimmer.wrap()).to.throw()
+      assert.throws(() => shimmer.wrap())
     })
 
     it('should validate that the target object is valid', () => {
-      expect(() => shimmer.wrap('invalid')).to.throw()
+      assert.throws(() => shimmer.wrap('invalid'))
     })
 
     it('should validate that a method exists on the target object', () => {
-      expect(() => shimmer.wrap({}, 'invalid', () => () => {})).to.throw()
+      assert.throws(() => shimmer.wrap({}, 'invalid', () => () => {}))
     })
 
     it('should validate that the target method is a function', () => {
-      expect(() => shimmer.wrap({ a: 1234 }, 'a', () => () => {})).to.throw()
+      assert.throws(() => shimmer.wrap({ a: 1234 }, 'a', () => () => {}))
     })
 
     it('should validate that the method wrapper is passed', () => {
-      expect(() => shimmer.wrap({ a: () => {} }, 'a')).to.throw()
+      assert.throws(() => shimmer.wrap({ a: () => {} }, 'a'))
     })
 
     it('should validate that the method wrapper is a function', () => {
-      expect(() => shimmer.wrap({ a: () => {} }, 'a', 'notafunction')).to.throw()
+      assert.throws(() => shimmer.wrap({ a: () => {} }, 'a', 'notafunction'))
     })
   })
 
   describe('with a function', () => {
     it('should not work with a wrap()', () => {
-      expect(() => shimmer.wrap(() => {}, () => {})).to.throw()
+      assert.throws(() => shimmer.wrap(() => {}, () => {}))
     })
 
     it('should not work with null instead of function', () => {
       const a = null
       const wrapped = shimmer.wrapFunction(a, x => () => x)
-      expect(typeof wrapped).to.not.equal('function')
+      assert.notStrictEqual(typeof wrapped, 'function')
     })
 
     it('should not work with an object', () => {
       const a = { b: 1 }
       const wrapped = shimmer.wrapFunction(a, x => () => x)
-      expect(typeof wrapped).to.not.equal('function')
+      assert.notStrictEqual(typeof wrapped, 'function')
     })
 
     it('should wrap the function', () => {
@@ -389,8 +389,8 @@ describe('shimmer', () => {
 
       const wrapped = shimmer.wrapFunction(count, count => inc => count(inc) + 1)
 
-      expect(wrapped).to.not.equal(count)
-      expect(wrapped(1)).to.equal(2)
+      assert.notStrictEqual(wrapped, count)
+      assert.strictEqual(wrapped(1), 2)
     })
 
     it('should wrap the constructor', () => {
@@ -405,8 +405,8 @@ describe('shimmer', () => {
 
       const counter = new WrappedCounter(1)
 
-      expect(counter.value).to.equal(2)
-      expect(counter).to.be.an.instanceof(Counter)
+      assert.strictEqual(counter.value, 2)
+      assert.ok(counter instanceof Counter)
     })
 
     it('should not wrap the class constructor', () => {
@@ -416,9 +416,7 @@ describe('shimmer', () => {
         }
       }
 
-      expect(() => shimmer.wrapFunction(Counter, Counter => function () {})).to.throw(
-        'Target is a native class constructor and cannot be wrapped.'
-      )
+      assert.throws(() => shimmer.wrapFunction(Counter, Counter => function () {}), /Target is a native class constructor and cannot be wrapped\./)
     })
 
     it('should not wrap the class constructor with invalid toString()', () => {
@@ -430,9 +428,7 @@ describe('shimmer', () => {
 
       Counter.toString = 'invalid'
 
-      expect(() => shimmer.wrapFunction(Counter, Counter => function () {})).to.throw(
-        'Target is a native class constructor and cannot be wrapped.'
-      )
+      assert.throws(() => shimmer.wrapFunction(Counter, Counter => function () {}), /Target is a native class constructor and cannot be wrapped\./)
     })
 
     it('should preserve property descriptors from the original', () => {
@@ -448,11 +444,11 @@ describe('shimmer', () => {
       const wrapped = shimmer.wrapFunction(count, count => () => {})
       const bar = Object.getOwnPropertyDescriptor(wrapped, 'bar')
 
-      expect(wrapped).to.have.property('foo', 'foo')
-      expect(wrapped).to.have.property('bar', 'bar')
-      expect(bar).to.have.property('enumerable', false)
-      expect(wrapped).to.have.property(sym, 'sym')
-      expect(wrapped).to.have.property('test', 'test')
+      assert.strictEqual(wrapped.foo, 'foo')
+      assert.strictEqual(wrapped.bar, 'bar')
+      assert.strictEqual(bar.enumerable, false)
+      assert.strictEqual(wrapped[sym], 'sym')
+      assert.strictEqual(wrapped.test, 'test')
     })
 
     it('should preserve the original function length', () => {
@@ -460,7 +456,7 @@ describe('shimmer', () => {
 
       const wrapped = shimmer.wrapFunction(count, count => () => {})
 
-      expect(wrapped).to.have.length(3)
+      assert.strictEqual(wrapped.length, 3)
     })
 
     it('should preserve the original function name', () => {
@@ -468,7 +464,7 @@ describe('shimmer', () => {
 
       const wrapped = shimmer.wrapFunction(count, count => () => {})
 
-      expect(wrapped).to.have.property('name', 'count')
+      assert.strictEqual(wrapped.name, 'count')
     })
 
     it('should inherit from the original prototype', () => {
@@ -478,35 +474,35 @@ describe('shimmer', () => {
 
       const wrapped = shimmer.wrapFunction(count, count => () => {})
 
-      expect(wrapped).to.have.property('test', 'test')
-      expect(Object.getOwnPropertyNames(wrapped)).to.not.include('test')
+      assert.strictEqual(wrapped.test, 'test')
+      assert.strictEqual(Object.hasOwn(wrapped, 'test'), false)
     })
 
     it('should mass wrap methods on objects', () => {
       const foo = {
         a: () => 'original',
-        b: () => 'original'
+        b: () => 'original',
       }
 
       const bar = {
         a: () => 'original',
-        b: () => 'original'
+        b: () => 'original',
       }
 
       shimmer.massWrap([foo, bar], ['a', 'b'], () => () => 'wrapped')
 
-      expect(foo.a()).to.equal('wrapped')
-      expect(foo.b()).to.equal('wrapped')
-      expect(bar.a()).to.equal('wrapped')
-      expect(bar.b()).to.equal('wrapped')
+      assert.strictEqual(foo.a(), 'wrapped')
+      assert.strictEqual(foo.b(), 'wrapped')
+      assert.strictEqual(bar.a(), 'wrapped')
+      assert.strictEqual(bar.b(), 'wrapped')
     })
 
     it('should validate that the function wrapper exists', () => {
-      expect(() => shimmer.wrap(() => {})).to.throw()
+      assert.throws(() => shimmer.wrap(() => {}))
     })
 
     it('should validate that the function wrapper is a function', () => {
-      expect(() => shimmer.wrap(() => {}, 'a')).to.throw()
+      assert.throws(() => shimmer.wrap(() => {}, 'a'))
     })
   })
 })

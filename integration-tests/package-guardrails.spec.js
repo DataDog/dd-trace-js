@@ -1,14 +1,14 @@
 'use strict'
 
+const path = require('path')
+const fs = require('fs')
+const assert = require('assert')
 const {
   runAndCheckWithTelemetry: testFile,
   useEnv,
   useSandbox,
-  sandboxCwd
+  sandboxCwd,
 } = require('./helpers')
-const path = require('path')
-const fs = require('fs')
-const assert = require('assert')
 
 const NODE_OPTIONS = '--require dd-trace/init.js'
 const DD_TRACE_DEBUG = 'true'
@@ -34,7 +34,7 @@ describe('package guardrails', () => {
       it('should not instrument the package, and send telemetry', () =>
         runTest('false\n',
           ['complete', 'injection_forced:false',
-            'abort.integration', 'integration:bluebird,integration_version:1.0.0'
+            'abort.integration', 'integration:bluebird,integration_version:1.0.0',
           ]
         ))
     })
@@ -119,11 +119,11 @@ addHook({ name: 'bluebird', versions: ['*'] }, Promise => {
       it('should not instrument the package', () =>
         runTest(
           log => {
-            assert.ok(log.includes(`
-Error during ddtrace instrumentation of application, aborting.
-ReferenceError: this is a test error
-    at `))
-            assert.ok(log.includes('\nfalse\n'))
+            assert.match(
+              log,
+              /\nError during ddtrace instrumentation of application, aborting.\nReferenceError: this is a test error\n {4}at /m
+            )
+            assert.match(log, /\nfalse\n/)
           }, []))
     })
   })

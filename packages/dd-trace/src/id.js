@@ -14,26 +14,43 @@ let batch = 0
 
 // Internal representation of a trace or span ID.
 class Identifier {
+  /**
+   * @param {string} value
+   * @param {number} [radix]
+   */
   constructor (value, radix = 16) {
     this._buffer = radix === 16
       ? createBuffer(value)
       : fromString(value, radix)
   }
 
+  /**
+   * @param {number} [radix]
+   * @returns {string}
+   */
   toString (radix = 16) {
     return radix === 16
       ? toHexString(this._buffer)
       : toNumberString(this._buffer, radix)
   }
 
+  /**
+   * @returns {bigint}
+   */
   toBigInt () {
     return Buffer.from(this._buffer).readBigUInt64BE(0)
   }
 
+  /**
+   * @returns {number[] | Uint8Array}
+   */
   toBuffer () {
     return this._buffer
   }
 
+  /**
+   * @returns {number[] | Uint8Array}
+   */
   toArray () {
     if (this._buffer.length === 8) {
       return this._buffer
@@ -41,10 +58,17 @@ class Identifier {
     return this._buffer.slice(-8)
   }
 
+  /**
+   * @returns {string}
+   */
   toJSON () {
     return this.toString()
   }
 
+  /**
+   * @param {Identifier} other
+   * @returns {boolean}
+   */
   equals (other) {
     const length = this._buffer.length
     const otherLength = other._buffer.length
@@ -59,6 +83,10 @@ class Identifier {
 }
 
 // Create a buffer, using an optional hexadecimal value if provided.
+/**
+ * @param {string} value
+ * @returns {number[] | Uint8Array}
+ */
 function createBuffer (value) {
   if (value === '0') return zeroId
   if (!value) return pseudoRandom()
@@ -77,6 +105,11 @@ function createBuffer (value) {
 }
 
 // Convert a numerical string to a buffer using the specified radix.
+/**
+ * @param {string} str
+ * @param {number} raddix
+ * @returns {number[]}
+ */
 function fromString (str, raddix) {
   const buffer = new Array(8)
   const len = str.length
@@ -116,6 +149,11 @@ function fromString (str, raddix) {
 }
 
 // Convert a buffer to a numerical string.
+/**
+ * @param {number[] | Uint8Array} buffer
+ * @param {number} [radix]
+ * @returns {string}
+ */
 function toNumberString (buffer, radix) {
   let high = readInt32(buffer, buffer.length - 8)
   let low = readInt32(buffer, buffer.length - 4)
@@ -137,11 +175,18 @@ function toNumberString (buffer, radix) {
 }
 
 // Convert a buffer to a hexadecimal string.
+/**
+ * @param {number[] | Uint8Array} buffer
+ * @returns {string}
+ */
 function toHexString (buffer) {
   return map.call(buffer, pad).join('')
 }
 
 // Simple pseudo-random 64-bit ID generator.
+/**
+ * @returns {number[] | Uint8Array}
+ */
 function pseudoRandom () {
   if (batch === 0) {
     randomFillSync(data)
@@ -159,11 +204,16 @@ function pseudoRandom () {
     data[offset + 4],
     data[offset + 5],
     data[offset + 6],
-    data[offset + 7]
+    data[offset + 7],
   ]
 }
 
 // Read a buffer to unsigned integer bytes.
+/**
+ * @param {number[] | Uint8Array} buffer
+ * @param {number} offset
+ * @returns {number}
+ */
 function readInt32 (buffer, offset) {
   return (buffer[offset + 0] * 16_777_216) +
     (buffer[offset + 1] << 16) +
@@ -172,6 +222,11 @@ function readInt32 (buffer, offset) {
 }
 
 // Write unsigned integer bytes to a buffer.
+/**
+ * @param {number[] | Uint8Array} buffer
+ * @param {number} value
+ * @param {number} offset
+ */
 function writeUInt32BE (buffer, value, offset) {
   buffer[3 + offset] = value & 255
   value >>= 8
@@ -182,6 +237,11 @@ function writeUInt32BE (buffer, value, offset) {
   buffer[0 + offset] = value & 255
 }
 
+/**
+ * @param {string} [value]
+ * @param {number} [radix]
+ * @returns {Identifier}
+ */
 module.exports = function createIdentifier (value, radix) {
   return new Identifier(value, radix)
 }

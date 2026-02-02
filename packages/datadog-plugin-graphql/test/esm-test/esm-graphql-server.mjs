@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
-import graphql from 'graphql'
 import { createServer } from 'node:http'
+import graphql from 'graphql'
 
 const schema = new graphql.GraphQLSchema({
   query: new graphql.GraphQLObjectType({
@@ -9,14 +9,14 @@ const schema = new graphql.GraphQLSchema({
       hello: {
         type: graphql.GraphQLString,
         args: {
-          name: { type: graphql.GraphQLString }
+          name: { type: graphql.GraphQLString },
         },
         resolve (obj, args) {
           return `Hello, ${args.name || 'world'}!`
-        }
-      }
-    }
-  })
+        },
+      },
+    },
+  }),
 })
 
 const server = createServer(async (req, res) => {
@@ -31,7 +31,7 @@ const server = createServer(async (req, res) => {
         const result = await graphql.graphql({
           schema,
           source: query,
-          variableValues: variables
+          variableValues: variables,
         })
 
         res.writeHead(200, { 'Content-Type': 'application/json' })

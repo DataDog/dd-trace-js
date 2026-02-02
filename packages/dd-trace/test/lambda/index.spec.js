@@ -1,11 +1,11 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
 const path = require('node:path')
 
-const agent = require('../plugins/agent')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 
+const agent = require('../plugins/agent')
 const oldEnv = process.env
 /**
  * Sets up the minimum environment variables to make sure
@@ -16,7 +16,7 @@ const setup = () => {
     LAMBDA_TASK_ROOT: './packages/dd-trace/test/lambda/fixtures',
     AWS_LAMBDA_FUNCTION_NAME: 'mock-function-name',
     DD_TRACE_ENABLED: 'true',
-    DD_LOG_LEVEL: 'debug'
+    DD_LOG_LEVEL: 'debug',
   }
   process.env = { ...oldEnv, ...newEnv }
 }
@@ -29,16 +29,15 @@ const restoreEnv = () => {
  * Loads the test agent and makes sure the hook for the
  * AWS Lambda function patch is re-registered.
  *
- * @param {*} exporter defines the type of exporter for the test agent.
  * @returns a promise of the agent to load.
  */
-const loadAgent = ({ exporter = 'agent' } = {}) => {
+const loadAgent = () => {
   // Make sure the hook is re-registered
   require('../../src/lambda')
   return agent.load([], [], {
     experimental: {
-      exporter
-    }
+      exporter: 'agent',
+    },
   })
 }
 
@@ -74,7 +73,7 @@ describe('lambda', () => {
       await loadAgent()
 
       const _context = {
-        getRemainingTimeInMillis: () => 150
+        getRemainingTimeInMillis: () => 150,
       }
       const _event = {}
 
@@ -86,16 +85,16 @@ describe('lambda', () => {
       // Run the function.
       const result = await datadog(app.handler)(_event, _context)
 
-      expect(result).to.not.equal(undefined)
+      assert.notStrictEqual(result, undefined)
       const body = JSON.parse(result.body)
-      expect(body.message).to.equal('hello!')
+      assert.strictEqual(body.message, 'hello!')
 
       // Expect traces to be correct.
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
-          expect(trace.error).to.equal(0)
+          assert.strictEqual(trace.error, 0)
         })
       })
       await checkTraces
@@ -108,7 +107,7 @@ describe('lambda', () => {
       await loadAgent()
 
       const _context = {
-        getRemainingTimeInMillis: () => 150
+        getRemainingTimeInMillis: () => 150,
       }
       const _event = {}
 
@@ -123,16 +122,16 @@ describe('lambda', () => {
       // Run the function.
       datadog(app.callbackHandler)(_event, _context, callback)
 
-      expect(result).to.not.equal(undefined)
+      assert.notStrictEqual(result, undefined)
       const body = JSON.parse(result.body)
-      expect(body.message).to.equal('hello!')
+      assert.strictEqual(body.message, 'hello!')
 
       // Expect traces to be correct.
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
-          expect(trace.error).to.equal(0)
+          assert.strictEqual(trace.error, 0)
         })
       })
       await checkTraces
@@ -145,7 +144,7 @@ describe('lambda', () => {
       await loadAgent()
 
       const _context = {
-        getRemainingTimeInMillis: () => 150
+        getRemainingTimeInMillis: () => 150,
       }
       const _event = {}
 
@@ -158,15 +157,15 @@ describe('lambda', () => {
       try {
         await datadog(app.errorHandler)(_event, _context)
       } catch (e) {
-        expect(e.name).to.equal('CustomError')
+        assert.strictEqual(e.name, 'CustomError')
       }
 
       // Expect traces to be correct.
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
-          expect(trace.error).to.equal(1)
+          assert.strictEqual(trace.error, 1)
         })
       })
       await checkTraces
@@ -178,7 +177,7 @@ describe('lambda', () => {
       await loadAgent()
 
       const _context = {
-        getRemainingTimeInMillis: () => 150
+        getRemainingTimeInMillis: () => 150,
       }
       const _event = {}
       const _ = {}
@@ -189,15 +188,15 @@ describe('lambda', () => {
 
       const result = await datadog(app.swappedArgsHandler)(_event, _, _context)
 
-      expect(result).to.not.equal(undefined)
+      assert.notStrictEqual(result, undefined)
       const body = JSON.parse(result.body)
-      expect(body.message).to.equal('hello!')
+      assert.strictEqual(body.message, 'hello!')
 
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
-          expect(trace.error).to.equal(0)
+          assert.strictEqual(trace.error, 0)
         })
       })
       await checkTraces
@@ -215,7 +214,7 @@ describe('lambda', () => {
 
       // Mock `datadog-lambda` handler resolve and import.
       const handlerAfter = require(_handlerPath).handler
-      expect(handlerBefore).to.equal(handlerAfter)
+      assert.strictEqual(handlerBefore, handlerAfter)
     })
   })
 
@@ -232,7 +231,7 @@ describe('lambda', () => {
       await loadAgent()
 
       const _context = {
-        getRemainingTimeInMillis: () => 25
+        getRemainingTimeInMillis: () => 25,
       }
       const _event = {}
 
@@ -244,7 +243,7 @@ describe('lambda', () => {
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
         traces.forEach((trace) => {
-          expect(trace.error).to.equal(0)
+          assert.strictEqual(trace.error, 0)
         })
       })
 
@@ -253,17 +252,17 @@ describe('lambda', () => {
 
     const deadlines = [
       {
-        envVar: 'default'
+        envVar: 'default',
         // will use default remaining time
       },
       {
         envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
-        value: '-100' // will default to 0
+        value: '-100', // will default to 0
       },
       {
         envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
-        value: '10' // subtract 10 from the remaining time
-      }
+        value: '10', // subtract 10 from the remaining time
+      },
     ]
 
     deadlines.forEach(deadline => {
@@ -275,7 +274,7 @@ describe('lambda', () => {
         process.env.DD_LAMBDA_HANDLER = 'handler.timeoutHandler'
 
         const _context = {
-          getRemainingTimeInMillis: () => 25
+          getRemainingTimeInMillis: () => 25,
         }
         const _event = {}
 
@@ -291,8 +290,8 @@ describe('lambda', () => {
           const checkTraces = agent.assertSomeTraces(_traces => {
             // First trace, since errors are tagged at root span level.
             const trace = _traces[0][0]
-            expect(trace.error).to.equal(1)
-            expect(trace.meta['error.type']).to.equal('Impending Timeout')
+            assert.strictEqual(trace.error, 1)
+            assert.strictEqual(trace.meta['error.type'], 'Impending Timeout')
             // Ensure that once this finish, an error was tagged.
           })
 

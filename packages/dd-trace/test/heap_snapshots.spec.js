@@ -1,14 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it } = require('tap').mocha
+const assert = require('node:assert/strict')
 const { mkdtempSync, readdirSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const { threadId } = require('node:worker_threads')
 
-require('./setup/core')
+const { describe, it } = require('mocha')
 
+require('./setup/core')
 const { start } = require('../src/heap_snapshots')
 
 const destination = mkdtempSync(join(tmpdir(), 'dd-trace-heap-snapshot-'))
@@ -22,8 +22,8 @@ describe('Heap Snapshots', () => {
       heapSnapshot: {
         count: 3,
         destination,
-        interval: 1
-      }
+        interval: 1,
+      },
     })
 
     clearInterval(interval)
@@ -31,8 +31,8 @@ describe('Heap Snapshots', () => {
     const pattern = new RegExp(`^Heap-\\d{8}-\\d{6}-${process.pid}-${threadId}\\.heapsnapshot$`)
     const files = readdirSync(destination)
 
-    expect(files).to.have.length(3)
-    expect(files[0]).to.match(pattern)
-    expect(files[1]).to.match(pattern)
+    assert.strictEqual(files.length, 3)
+    assert.match(files[0], pattern)
+    assert.match(files[1], pattern)
   })
 })

@@ -59,7 +59,7 @@
  *   InstanceofExpression|
  *   IsDefinedExpression} Expression
  *
- * @typedef {Object.<string, unknown>} VariableBindings
+ * @typedef {Record<string, unknown>} VariableBindings
  *
  * @typedef {[Expression, VariableBindings, unknown]} TestCaseTuple
  * @typedef {{
@@ -79,7 +79,7 @@ class HasInstanceSideEffect {
 }
 const weakKey = { weak: 'key' }
 const objectWithToPrimitiveSymbol = Object.create(Object.prototype, {
-  [Symbol.toPrimitive]: { value: () => { throw new Error('This should never throw!') } }
+  [Symbol.toPrimitive]: { value: () => { throw new Error('This should never throw!') } },
 })
 class EvilRegex extends RegExp {
   // @ts-expect-error: We want to throw an error here.
@@ -91,7 +91,7 @@ const literals = [
   [null, {}, null],
   [42, {}, 42],
   [true, {}, true],
-  ['foo', {}, 'foo']
+  ['foo', {}, 'foo'],
 ]
 
 /** @type {TestCase[]} */
@@ -103,7 +103,7 @@ const references = [
   [{ ref: 'this' }, {}, global], // Unless bound, `this` defaults to the global object
   { ast: { ref: 'super' }, expected: 'super', execute: false },
 
-  // Litterals, but we allow them as they can be useful
+  // Literals, but we allow them as they can be useful
   [{ ref: 'undefined' }, {}, undefined],
   [{ ref: 'Infinity' }, {}, Infinity],
 
@@ -115,62 +115,62 @@ const references = [
     ast: { ref: 'break' },
     vars: { foo: { bar: 42 } },
     expected: new SyntaxError('Illegal identifier: break'),
-    execute: false
+    execute: false,
   },
   {
     ast: { ref: 'let' },
     vars: { foo: { bar: 42 } },
     expected: new SyntaxError('Illegal identifier: let'),
-    execute: false
+    execute: false,
   },
   {
     ast: { ref: 'await' },
     vars: { foo: { bar: 42 } },
     expected: new SyntaxError('Illegal identifier: await'),
-    execute: false
+    execute: false,
   },
   {
     ast: { ref: 'enum' },
     vars: { foo: { bar: 42 } },
     expected: new SyntaxError('Illegal identifier: enum'),
-    execute: false
+    execute: false,
   },
   {
     ast: { ref: 'implements' },
     vars: { foo: { bar: 42 } },
     expected: new SyntaxError('Illegal identifier: implements'),
-    execute: false
+    execute: false,
   },
   { ast: { ref: 'NaN' }, expected: new SyntaxError('Illegal identifier: NaN'), execute: false },
   {
     ast: { ref: 'foo.bar' },
     vars: { foo: { bar: 42 } },
     expected: new SyntaxError('Illegal identifier: foo.bar'),
-    execute: false
+    execute: false,
   },
   {
     ast: { ref: 'foo()' },
     vars: { foo: () => {} },
     expected: new SyntaxError('Illegal identifier: foo()'),
-    execute: false
+    execute: false,
   },
   {
     ast: { ref: 'foo; bar' },
     vars: { foo: 1, bar: 2 },
     expected: new SyntaxError('Illegal identifier: foo; bar'),
-    execute: false
+    execute: false,
   },
   {
     ast: { ref: 'foo\nbar' },
     vars: { foo: 1, bar: 2 },
     expected: new SyntaxError('Illegal identifier: foo\nbar'),
-    execute: false
+    execute: false,
   },
   {
     ast: { ref: 'throw new Error()' },
     expected: new SyntaxError('Illegal identifier: throw new Error()'),
-    execute: false
-  }
+    execute: false,
+  },
 ]
 
 /** @type {TestCase[]} */
@@ -179,38 +179,38 @@ const propertyAccess = [
   [
     { getmember: [{ getmember: [{ ref: 'obj' }, 'foo'] }, 'bar'] },
     { obj: { foo: { bar: 'test-me' } } },
-    'test-me'
+    'test-me',
   ],
   [
     { getmember: [{ ref: 'set' }, 'foo'] },
     { set: new Set(['foo', 'bar']) },
-    new Error('Accessing a Set or WeakSet is not allowed')
+    new Error('Accessing a Set or WeakSet is not allowed'),
   ],
   [
     { getmember: [{ ref: 'wset' }, { ref: 'key' }] },
     { key: weakKey, wset: new WeakSet([weakKey]) },
-    new Error('Accessing a Set or WeakSet is not allowed')
+    new Error('Accessing a Set or WeakSet is not allowed'),
   ],
   [
     { getmember: [{ ref: 'map' }, 'foo'] },
     { map: new Map([['foo', 'bar']]) },
-    new Error('Accessing a Map is not allowed')
+    new Error('Accessing a Map is not allowed'),
   ],
   [
     { getmember: [{ ref: 'wmap' }, { ref: 'key' }] },
     { key: weakKey, wmap: new WeakMap([[weakKey, 'bar']]) },
-    new Error('Accessing a WeakMap is not allowed')
+    new Error('Accessing a WeakMap is not allowed'),
   ],
   [
     { getmember: [{ ref: 'obj' }, 'getter'] },
     { obj: Object.create(Object.prototype, { getter: { get () { return 'x' } } }) },
-    new Error('Possibility of side effect')
+    new Error('Possibility of side effect'),
   ],
   {
-    before: () => { process[Symbol.for('datadog:node:util:types')] = undefined },
+    before: () => { delete globalThis[Symbol.for('dd-trace')].utilTypes },
     ast: { getmember: [{ ref: 'proxy' }, 'foo'] },
     vars: { proxy: {} },
-    expected: new Error('Possibility of side effect')
+    expected: new Error('Possibility of side effect'),
   },
 
   [{ index: [{ ref: 'arr' }, 1] }, { arr: ['foo', 'bar'] }, 'bar'],
@@ -220,12 +220,12 @@ const propertyAccess = [
   [
     { index: [{ ref: 'set' }, 'foo'] },
     { set: new Set(['foo']) },
-    new Error('Accessing a Set or WeakSet is not allowed')
+    new Error('Accessing a Set or WeakSet is not allowed'),
   ],
   [
     { index: [{ ref: 'set' }, 'bar'] },
     { set: new Set(['foo']) },
-    new Error('Accessing a Set or WeakSet is not allowed')
+    new Error('Accessing a Set or WeakSet is not allowed'),
   ],
   [{ index: [{ ref: 'map' }, 'foo'] }, { map: new Map([['foo', 'bar']]) }, 'bar'],
   [{ index: [{ ref: 'map' }, 'bar'] }, { map: new Map([['foo', 'bar']]) }, undefined], // Should throw according to spec
@@ -233,23 +233,23 @@ const propertyAccess = [
   [
     { index: [{ ref: 'wmap' }, { ref: 'key' }] },
     { key: {}, wmap: new WeakMap([[weakKey, 'bar']]) },
-    undefined // Should throw according to spec
+    undefined, // Should throw according to spec
   ],
   [
     { index: [{ ref: 'set' }, { ref: 'key' }] },
     { key: weakKey, set: new WeakSet([weakKey]) },
-    new Error('Accessing a Set or WeakSet is not allowed')
+    new Error('Accessing a Set or WeakSet is not allowed'),
   ],
   [
     { index: [{ ref: 'set' }, { ref: 'key' }] },
     { key: {}, set: new WeakSet([weakKey]) },
-    new Error('Accessing a Set or WeakSet is not allowed')
+    new Error('Accessing a Set or WeakSet is not allowed'),
   ],
   [
     { index: [{ ref: 'obj' }, 'getter'] },
     { obj: Object.create(Object.prototype, { getter: { get () { return 'x' } } }) },
-    new Error('Possibility of side effect')
-  ]
+    new Error('Possibility of side effect'),
+  ],
 ]
 
 /** @type {TestCase[]} */
@@ -262,36 +262,36 @@ const sizes = [
   [
     { len: { ref: 'set' } },
     { set: overloadPropertyWithGetter(new Set([1, 2]), 'size') },
-    new Error('Possibility of side effect')
+    new Error('Possibility of side effect'),
   ],
   [{ len: { ref: 'map' } }, { map: new Map([[1, 2]]) }, 1],
   [
     { len: { ref: 'map' } },
     { map: overloadPropertyWithGetter(new Map([[1, 2]]), 'size') },
-    new Error('Possibility of side effect')
+    new Error('Possibility of side effect'),
   ],
   [
     { len: { ref: 'wset' } },
     { wset: new WeakSet([weakKey]) },
-    new TypeError('Cannot get size of WeakSet or WeakMap')
+    new TypeError('Cannot get size of WeakSet or WeakMap'),
   ],
   [
     { len: { ref: 'wmap' } },
     { wmap: new WeakMap([[weakKey, 2]]) },
-    new TypeError('Cannot get size of WeakSet or WeakMap')
+    new TypeError('Cannot get size of WeakSet or WeakMap'),
   ],
   [{ len: { getmember: [{ ref: 'obj' }, 'arr'] } }, { obj: { arr: Array(10).fill(0) } }, 10],
   [{ len: { getmember: [{ ref: 'obj' }, 'tarr'] } }, { obj: { tarr: new Int16Array([10, 20, 30]) } }, 3],
   [
     { len: { getmember: [{ ref: 'obj' }, 'tarr'] } },
     { obj: { tarr: overloadPropertyWithGetter(new Int16Array([10, 20, 30]), 'length') } },
-    new Error('Possibility of side effect')
+    new Error('Possibility of side effect'),
   ],
   [{ len: { ref: 'pojo' } }, { pojo: { a: 1, b: 2, c: 3 } }, 3],
   [
     { len: { getmember: [{ ref: 'obj' }, 'unknownProp'] } },
     { obj: {} },
-    new TypeError('Cannot get length of variable')
+    new TypeError('Cannot get length of variable'),
   ],
   [{ len: { ref: 'invalid' } }, {}, new ReferenceError('invalid is not defined')],
 
@@ -316,8 +316,8 @@ const sizes = [
   [
     { isEmpty: { ref: 'obj' } },
     { obj: new WeakSet() },
-    new TypeError('Cannot get size of WeakSet or WeakMap')
-  ]
+    new TypeError('Cannot get size of WeakSet or WeakMap'),
+  ],
 ]
 
 /** @type {TestCase[]} */
@@ -340,7 +340,7 @@ const equality = [
   [
     { eq: [{ getmember: [{ ref: 'proxy' }, 'foo'] }, 'bar'] },
     { proxy: new Proxy({}, { get (_, p) { if (p === 'foo') throw new Error('This should never throw!') } }) },
-    new Error('Possibility of side effect')
+    new Error('Possibility of side effect'),
   ],
 
   [{ ne: [{ ref: 'str' }, 'foo'] }, { str: 'foo' }, false],
@@ -364,42 +364,42 @@ const equality = [
   [
     { gt: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
-    new Error('Possibility of side effect due to coercion method')
+    new Error('Possibility of side effect due to coercion method'),
   ],
   [
     { gt: [5, { ref: 'obj' }] },
     { obj: objectWithToPrimitiveSymbol },
-    new Error('Possibility of side effect due to coercion method')
+    new Error('Possibility of side effect due to coercion method'),
   ],
   [
     { gt: [{ ref: 'obj' }, 5] },
     { obj: { valueOf () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method')
+    new Error('Possibility of side effect due to coercion method'),
   ],
   [
     { gt: [5, { ref: 'obj' }] },
     { obj: { valueOf () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method')
+    new Error('Possibility of side effect due to coercion method'),
   ],
   [
     { gt: [{ ref: 'obj' }, 5] },
     { obj: { toString () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method')
+    new Error('Possibility of side effect due to coercion method'),
   ],
   [
     { gt: [5, { ref: 'obj' }] },
     { obj: { toString () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method')
+    new Error('Possibility of side effect due to coercion method'),
   ],
   [
     { gt: [{ ref: 'obj' }, 5] },
     { obj: new Proxy({}, { get (_, p) { if (p === 'valueOf') throw new Error('This should never throw!') } }) },
-    new Error('Possibility of side effect')
+    new Error('Possibility of side effect'),
   ],
   [
     { gt: [5, { ref: 'obj' }] },
     { obj: new Proxy({}, { get (_, p) { if (p === 'valueOf') throw new Error('This should never throw!') } }) },
-    new Error('Possibility of side effect')
+    new Error('Possibility of side effect'),
   ],
 
   [{ ge: [{ ref: 'num' }, 42] }, { num: 43 }, true],
@@ -413,17 +413,17 @@ const equality = [
   [
     { ge: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
-    new Error('Possibility of side effect due to coercion method')
+    new Error('Possibility of side effect due to coercion method'),
   ],
   [
     { ge: [{ ref: 'obj' }, 5] },
     { obj: { valueOf () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method')
+    new Error('Possibility of side effect due to coercion method'),
   ],
   [
     { ge: [{ ref: 'obj' }, 5] },
     { obj: { toString () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method')
+    new Error('Possibility of side effect due to coercion method'),
   ],
 
   [{ lt: [{ ref: 'num' }, 42] }, { num: 43 }, false],
@@ -437,17 +437,17 @@ const equality = [
   [
     { lt: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
-    new Error('Possibility of side effect due to coercion method')
+    new Error('Possibility of side effect due to coercion method'),
   ],
   [
     { lt: [{ ref: 'obj' }, 5] },
     { obj: { valueOf () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method')
+    new Error('Possibility of side effect due to coercion method'),
   ],
   [
     { lt: [{ ref: 'obj' }, 5] },
     { obj: { toString () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method')
+    new Error('Possibility of side effect due to coercion method'),
   ],
 
   [{ le: [{ ref: 'num' }, 42] }, { num: 43 }, false],
@@ -461,18 +461,18 @@ const equality = [
   [
     { le: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
-    new Error('Possibility of side effect due to coercion method')
+    new Error('Possibility of side effect due to coercion method'),
   ],
   [
     { le: [{ ref: 'obj' }, 5] },
     { obj: { valueOf () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method')
+    new Error('Possibility of side effect due to coercion method'),
   ],
   [
     { le: [{ ref: 'obj' }, 5] },
     { obj: { toString () { throw new Error('This should never throw!') } } },
-    new Error('Possibility of side effect due to coercion method')
-  ]
+    new Error('Possibility of side effect due to coercion method'),
+  ],
 ]
 
 /** @type {TestCase[]} */
@@ -489,13 +489,13 @@ const stringManipulation = [
   [
     { substring: [{ ref: 'str' }, 4, 7] },
     { str: overloadMethod(new String('hello world'), 'substring') }, // eslint-disable-line no-new-wrappers
-    'hello world'.substring(4, 7)
+    'hello world'.substring(4, 7),
   ],
   [
     { substring: [{ ref: 'str' }, 4, 7] },
     { str: new (createClassWithOverloadedMethodInPrototypeChain(String, 'substring'))('hello world') },
-    'hello world'.substring(4, 7)
-  ]
+    'hello world'.substring(4, 7),
+  ],
 ]
 
 /** @type {TestCase[]} */
@@ -515,17 +515,17 @@ const stringComparison = [
   [
     { startsWith: [{ ref: 'str' }, 'hello'] },
     { str: Object.create({ startsWith () { throw new Error('This should never throw!') } }) },
-    new TypeError('Variable is not a string')
+    new TypeError('Variable is not a string'),
   ],
   [
     { startsWith: ['hello world!', { ref: 'str' }] },
     { str: { toString () { throw new Error('This should never throw!') } } },
-    new TypeError('Variable is not a string')
+    new TypeError('Variable is not a string'),
   ],
   [
     { startsWith: [{ ref: 'str' }, 'hello'] },
     { str: new (createClassWithOverloadedMethodInPrototypeChain(String, 'startsWith'))('hello world!') },
-    true
+    true,
   ],
 
   [{ endsWith: [{ ref: 'str' }, 'hello'] }, { str: 'hello world!' }, false],
@@ -543,18 +543,18 @@ const stringComparison = [
   [
     { endsWith: [{ ref: 'str' }, 'hello'] },
     { str: Object.create({ endsWith () { throw new Error('This should never throw!') } }) },
-    new TypeError('Variable is not a string')
+    new TypeError('Variable is not a string'),
   ],
   [
     { endsWith: ['hello world!', { ref: 'str' }] },
     { str: { toString () { throw new Error('This should never throw!') } } },
-    new TypeError('Variable is not a string')
+    new TypeError('Variable is not a string'),
   ],
   [
     { endsWith: [{ ref: 'str' }, 'world!'] },
     { str: new (createClassWithOverloadedMethodInPrototypeChain(String, 'endsWith'))('hello world!') },
-    true
-  ]
+    true,
+  ],
 ]
 
 /** @type {TestCase[]} */
@@ -577,7 +577,7 @@ const logicalOperators = [
   [{ or: [{ ref: 'bar' }, { ref: 'foo' }] }, { bar: 0 }, new ReferenceError('foo is not defined')],
 
   [{ and: [{ ref: 'bar' }, { ref: 'foo' }] }, { bar: 0 }, 0],
-  [{ and: [{ ref: 'bar' }, { ref: 'foo' }] }, { bar: 42 }, new ReferenceError('foo is not defined')]
+  [{ and: [{ ref: 'bar' }, { ref: 'foo' }] }, { bar: 42 }, new ReferenceError('foo is not defined')],
 ]
 
 /** @type {TestCase[]} */
@@ -587,18 +587,18 @@ const collectionOperations = [
   [
     { filter: [{ ref: 'set' }, { not: { isEmpty: { ref: '@it' } } }] },
     { set: new Set(['foo', 'bar', '']) },
-    ['foo', 'bar']
+    ['foo', 'bar'],
   ],
   [
     { filter: [{ ref: 'obj' }, { not: { isEmpty: { ref: '@value' } } }] },
     { obj: { 1: 'foo', 2: 'bar', 3: '' } },
-    { 1: 'foo', 2: 'bar' }
+    { 1: 'foo', 2: 'bar' },
   ],
   [
     { filter: [{ ref: 'obj' }, { not: { isEmpty: { ref: '@key' } } }] },
     { obj: { foo: 1, bar: 2, '': 3 } },
-    { foo: 1, bar: 2 }
-  ]
+    { foo: 1, bar: 2 },
+  ],
 ]
 
 /** @type {TestCase[]} */
@@ -627,7 +627,7 @@ const membershipAndMatching = [
   [
     { contains: [{ ref: 'wset' }, { ref: 'key' }] },
     { key: weakKey, wset: overloadMethod(new WeakSet([weakKey]), 'has') },
-    true
+    true,
   ],
   [{ contains: [{ ref: 'map' }, 'foo'] }, { map: new Map([['foo', 'bar']]) }, true],
   [{ contains: [{ ref: 'map' }, 'missing'] }, { map: new Map([['foo', 'bar']]) }, false],
@@ -641,37 +641,37 @@ const membershipAndMatching = [
   [
     { contains: [{ ref: 'obj' }, 'foo'] },
     { obj: { foo: 'bar' } },
-    new TypeError('Variable does not support contains')
+    new TypeError('Variable does not support contains'),
   ],
   [
     { contains: [{ ref: 'obj' }, 'missing'] },
     { obj: { foo: 'bar' } },
-    new TypeError('Variable does not support contains')
+    new TypeError('Variable does not support contains'),
   ],
   [
     { contains: [{ ref: 'str' }, 'world'] },
     { str: new (createClassWithOverloadedMethodInPrototypeChain(String, 'includes'))('hello world!') },
-    true
+    true,
   ],
   [
     { contains: [{ ref: 'arr' }, 'foo'] },
     { arr: new (createClassWithOverloadedMethodInPrototypeChain(Array, 'includes'))('foo', 'bar') },
-    true
+    true,
   ],
   [
     { contains: [{ ref: 'tarr' }, 10] },
     { tarr: new (createClassWithOverloadedMethodInPrototypeChain(Int32Array, 'includes'))([10, 20]) },
-    true
+    true,
   ],
   [
     { contains: [{ ref: 'set' }, 'foo'] },
     { set: new (createClassWithOverloadedMethodInPrototypeChain(Set, 'has'))(['foo', 'bar']) },
-    true
+    true,
   ],
   [
     { contains: [{ ref: 'map' }, 'foo'] },
     { map: new (createClassWithOverloadedMethodInPrototypeChain(Map, 'has'))([['foo', 'bar']]) },
-    true
+    true,
   ],
 
   [{ matches: [{ ref: 'foo' }, '[0-9]+'] }, { foo: '42' }, true],
@@ -689,24 +689,24 @@ const membershipAndMatching = [
   [
     { matches: [{ ref: 'foo' }, { ref: 'regex' }] },
     { foo: '42', regex: overloadMethod(new String('[0-9]+'), 'match') }, // eslint-disable-line no-new-wrappers
-    true
+    true,
   ],
   [
     { matches: [{ ref: 'foo' }, { ref: 'regex' }] },
     { foo: '42', regex: overloadMethod({}, Symbol.match) },
-    new TypeError('Regular expression must be either a string or an instance of RegExp')
+    new TypeError('Regular expression must be either a string or an instance of RegExp'),
   ],
   [{ matches: [{ ref: 'foo' }, { ref: 'regex' }] }, { foo: '42', regex: overloadMethod(/[0-9]+/, Symbol.match) }, true],
   [
     { matches: [{ ref: 'foo' }, '[0-9]+'] },
     { foo: new (createClassWithOverloadedMethodInPrototypeChain(String, 'match'))('42') },
-    true
+    true,
   ],
   [
     { matches: ['42', { ref: 'regex' }] },
     { regex: new EvilRegex('[0-9]+') },
-    new TypeError('Regular expression must be either a string or an instance of RegExp')
-  ]
+    new TypeError('Regular expression must be either a string or an instance of RegExp'),
+  ],
 ]
 
 /** @type {TestCase[]} */
@@ -730,12 +730,12 @@ const typeAndDefinitionChecks = [
   [
     { instanceof: [{ ref: 'bar' }, 'HasInstanceSideEffect'] },
     { bar: new HasInstanceSideEffect(), HasInstanceSideEffect },
-    true
+    true,
   ],
   {
     ast: { instanceof: [{ ref: 'foo' }, 'foo.bar'] },
     expected: new SyntaxError('Illegal identifier: foo.bar'),
-    execute: false
+    execute: false,
   },
 
   [{ isDefined: { ref: 'foo' } }, { bar: 42 }, false],
@@ -750,7 +750,7 @@ const typeAndDefinitionChecks = [
   { ast: { isDefined: { ref: 'foo' } }, suffix: 'var foo = undefined', expected: true }, // var is hoisted
   { ast: { isDefined: { ref: 'foo' } }, suffix: 'var foo = 42', expected: true }, // var is hoisted
   { ast: { isDefined: { ref: 'foo' } }, suffix: 'function foo () {}', expected: true }, // function is hoisted
-  { ast: { isDefined: { ref: 'foo' } }, suffix: '', expected: false }
+  { ast: { isDefined: { ref: 'foo' } }, suffix: '', expected: false },
 ]
 
 /**
@@ -763,7 +763,7 @@ const typeAndDefinitionChecks = [
  */
 function overloadPropertyWithGetter (obj, propName) {
   Object.defineProperty(obj, propName, {
-    get () { throw new Error('This should never throw!') }
+    get () { throw new Error('This should never throw!') },
   })
   return obj
 }
@@ -861,5 +861,5 @@ module.exports = {
   logicalOperators,
   collectionOperations,
   membershipAndMatching,
-  typeAndDefinitionChecks
+  typeAndDefinitionChecks,
 }

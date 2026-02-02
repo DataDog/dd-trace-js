@@ -1,11 +1,15 @@
 'use strict'
 
-// encodes positive and negative numbers, using zig zag encoding to reduce the size of the variable length encoding.
-// uses high and low part to ensure those parts are under the limit for byte operations in javascript (32 bits)
-// maximum number possible to encode is MAX_SAFE_INTEGER/2 (using zig zag shifts the bits by 1 to the left)
+/**
+ * Encodes positive and negative numbers, using zig zag encoding to reduce the size of the variable length encoding.
+ * Uses high and low part to ensure those parts are under the limit for byte operations in javascript (32 bits)
+ * Maximum number possible to encode is MAX_SAFE_INTEGER/2 (using zig zag shifts the bits by 1 to the left)
+ * @param {number} v
+ * @returns {Uint8Array|undefined}
+ */
 function encodeVarint (v) {
   const sign = v >= 0 ? 0 : 1
-  // we leave the least significant bit for the sign.
+  // We leave the least significant bit for the sign.
   const double = Math.abs(v) * 2
   if (double > Number.MAX_SAFE_INTEGER) {
     return
@@ -15,8 +19,12 @@ function encodeVarint (v) {
   return encodeUvarint64(low, high)
 }
 
-// decodes positive and negative numbers, using zig zag encoding to reduce the size of the variable length encoding.
-// uses high and low part to ensure those parts are under the limit for byte operations in javascript (32 bits)
+/**
+ * Decodes positive and negative numbers, using zig zag encoding to reduce the size of the variable length encoding.
+ * Uses high and low part to ensure those parts are under the limit for byte operations in javascript (32 bits)
+ * @param {Uint8Array} b
+ * @returns {[number|undefined, Uint8Array]}
+ */
 function decodeVarint (b) {
   const [low, high, bytes] = decodeUvarint64(b)
   if (low === undefined || high === undefined) {
@@ -29,6 +37,11 @@ function decodeVarint (b) {
 
 const maxVarLen64 = 9
 
+/**
+ * @param {number} low
+ * @param {number} high
+ * @returns {Uint8Array}
+ */
 function encodeUvarint64 (low, high) {
   const result = new Uint8Array(maxVarLen64)
   let i = 0
@@ -44,6 +57,10 @@ function encodeUvarint64 (low, high) {
   return result.slice(0, i + 1)
 }
 
+/**
+ * @param {Uint8Array} bytes
+ * @returns {[number|undefined, number|undefined, Uint8Array]}
+ */
 function decodeUvarint64 (
   bytes
 ) {
@@ -78,5 +95,5 @@ function decodeUvarint64 (
 
 module.exports = {
   encodeVarint,
-  decodeVarint
+  decodeVarint,
 }

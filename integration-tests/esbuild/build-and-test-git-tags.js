@@ -6,8 +6,8 @@ const fs = require('fs')
 const { spawnSync } = require('child_process')
 const assert = require('assert')
 
-const ddPlugin = require('../../esbuild')
 const esbuild = require('esbuild')
+const ddPlugin = require('../../esbuild')
 
 const SCRIPT = './git-tags-out.js'
 
@@ -28,12 +28,12 @@ esbuild.build({
     'oracledb',
     'pg-query-stream',
     'tedious',
-    '@yaacovcr/transform'
-  ]
+    '@yaacovcr/transform',
+  ],
 }).then(() => {
   const { status, stdout, stderr } = spawnSync('node', [SCRIPT], {
     env: { ...process.env, DD_TRACE_DEBUG: 'true' },
-    encoding: 'utf8'
+    encoding: 'utf8',
   })
   if (stderr.length) {
     console.error(stderr)

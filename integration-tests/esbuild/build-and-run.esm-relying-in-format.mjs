@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
-import esbuild from 'esbuild'
 import { spawnSync } from 'child_process'
 import { renameSync } from 'fs'
+import esbuild from 'esbuild'
 import commonConfig from './build.esm.common-config.js'
 
 await esbuild.build({
   ...commonConfig,
-  outfile: 'out.js'
+  outfile: 'out.js',
 })
 
 // to force being executed as module

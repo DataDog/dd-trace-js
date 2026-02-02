@@ -1,11 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const path = require('node:path')
+const os = require('node:os')
+const { Worker } = require('node:worker_threads')
+
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const path = require('node:path')
-const { Worker } = require('node:worker_threads')
 
 require('../setup/core')
 
@@ -18,21 +19,23 @@ describe('crashtracking', () => {
   beforeEach(() => {
     crashtracker = {
       start: sinon.stub(),
-      configure: sinon.stub()
+      configure: sinon.stub(),
     }
 
     noop = {
       start: sinon.stub(),
-      configure: sinon.stub()
+      configure: sinon.stub(),
     }
 
     config = {}
   })
 
-  describe('with a working crashtracker', () => {
+  const describeNotWindows = os.platform() !== 'win32' ? describe : describe.skip
+
+  describeNotWindows('with a working crashtracker', function () {
     beforeEach(() => {
       crashtracking = proxyquire('../../src/crashtracking', {
-        './crashtracker': crashtracker
+        './crashtracker': crashtracker,
       })
     })
 
@@ -40,8 +43,8 @@ describe('crashtracking', () => {
       crashtracking.start(config)
       crashtracking.configure(config)
 
-      expect(crashtracker.start).to.have.been.calledWith(config)
-      expect(crashtracker.configure).to.have.been.calledWith(config)
+      sinon.assert.calledWith(crashtracker.start, config)
+      sinon.assert.calledWith(crashtracker.configure, config)
     })
   })
 
@@ -49,7 +52,7 @@ describe('crashtracking', () => {
     beforeEach(() => {
       crashtracking = proxyquire('../../src/crashtracking', {
         './crashtracker': null,
-        './noop': noop
+        './noop': noop,
       })
     })
 
@@ -57,8 +60,8 @@ describe('crashtracking', () => {
       crashtracking.start(config)
       crashtracking.configure(config)
 
-      expect(noop.start).to.have.been.calledWith(config)
-      expect(noop.configure).to.have.been.calledWith(config)
+      sinon.assert.calledWith(noop.start, config)
+      sinon.assert.calledWith(noop.configure, config)
     })
   })
 
@@ -68,7 +71,7 @@ describe('crashtracking', () => {
     beforeEach(() => {
       crashtracking = proxyquire('../../src/crashtracking', {
         './crashtracker': null,
-        './noop': noop
+        './noop': noop,
       })
 
       worker = new Worker(path.join(__dirname, 'worker.js'))

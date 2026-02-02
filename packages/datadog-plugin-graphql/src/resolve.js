@@ -1,7 +1,7 @@
 'use strict'
 
-const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const dc = require('dc-polyfill')
+const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const collapsedPathSym = Symbol('collapsedPaths')
 
@@ -50,8 +50,8 @@ class GraphQLResolvePlugin extends TracingPlugin {
         'graphql.field.name': info.fieldName,
         'graphql.field.path': computedPathString,
         'graphql.field.type': info.returnType.name,
-        'graphql.source': source
-      }
+        'graphql.source': source,
+      },
     }, fieldCtx)
 
     if (fieldNode && this.config.variables && fieldNode.arguments) {

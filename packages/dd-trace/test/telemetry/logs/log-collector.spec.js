@@ -1,10 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, afterEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, afterEach } = require('mocha')
 
 require('../../setup/core')
-
 const { ddBasePath } = require('../../../src/util')
 
 const EOL = '\n'
@@ -18,70 +18,70 @@ describe('telemetry log collector', () => {
 
   describe('add', () => {
     it('should not store logs with same hash', () => {
-      expect(logCollector.add({ message: 'Error', level: 'ERROR' })).to.be.true
-      expect(logCollector.add({ message: 'Error', level: 'ERROR' })).to.be.false
-      expect(logCollector.add({ message: 'Error', level: 'ERROR' })).to.be.false
+      assert.strictEqual(logCollector.add({ message: 'Error', level: 'ERROR' }), true)
+      assert.strictEqual(logCollector.add({ message: 'Error', level: 'ERROR' }), false)
+      assert.strictEqual(logCollector.add({ message: 'Error', level: 'ERROR' }), false)
     })
 
     it('should store logs with different message', () => {
-      expect(logCollector.add({ message: 'Error 1', level: 'ERROR' })).to.be.true
-      expect(logCollector.add({ message: 'Error 2', level: 'ERROR' })).to.be.true
-      expect(logCollector.add({ message: 'Warn 1', level: 'WARN' })).to.be.true
+      assert.strictEqual(logCollector.add({ message: 'Error 1', level: 'ERROR' }), true)
+      assert.strictEqual(logCollector.add({ message: 'Error 2', level: 'ERROR' }), true)
+      assert.strictEqual(logCollector.add({ message: 'Warn 1', level: 'WARN' }), true)
     })
 
     it('should store logs with same message but different stack', () => {
       const ddFrame1 = `at T (${ddBasePath}path/to/dd/file1.js:1:2)`
       const ddFrame2 = `at T (${ddBasePath}path/to/dd/file2.js:3:4)`
       const ddFrame3 = `at T (${ddBasePath}path/to/dd/file3.js:5:6)`
-      expect(logCollector.add({
+      assert.strictEqual(logCollector.add({
         message: 'Error 1',
         level: 'ERROR',
         stack_trace: `Error: msg\n${ddFrame1}`,
-        errorType: 'Error'
-      })).to.be.true
-      expect(logCollector.add({
+        errorType: 'Error',
+      }), true)
+      assert.strictEqual(logCollector.add({
         message: 'Error 1',
         level: 'ERROR',
         stack_trace: `Error: msg\n${ddFrame2}`,
-        errorType: 'Error'
-      })).to.be.true
-      expect(logCollector.add({
+        errorType: 'Error',
+      }), true)
+      assert.strictEqual(logCollector.add({
         message: 'Error 1',
         level: 'ERROR',
         stack_trace: `Error: msg\n${ddFrame3}`,
-        errorType: 'Error'
-      })).to.be.true
+        errorType: 'Error',
+      }), true)
     })
 
     it('should store logs with same message, same stack but different level', () => {
       const ddFrame = `at T (${ddBasePath}path/to/dd/file.js:1:2)`
-      expect(logCollector.add({
+      assert.strictEqual(logCollector.add({
         message: 'Error 1',
         level: 'ERROR',
         stack_trace: `Error: msg\n${ddFrame}`,
-        errorType: 'Error'
-      })).to.be.true
-      expect(logCollector.add({
+        errorType: 'Error',
+      }), true)
+      assert.strictEqual(logCollector.add({
         message: 'Error 1',
         level: 'WARN',
         stack_trace: `Error: msg\n${ddFrame}`,
-        errorType: 'Error'
-      })).to.be.true
-      expect(logCollector.add({
+        errorType: 'Error',
+      }), true)
+      assert.strictEqual(logCollector.add({
         message: 'Error 1',
         level: 'DEBUG',
         stack_trace: `Error: msg\n${ddFrame}`,
-        errorType: 'Error'
-      })).to.be.true
+        errorType: 'Error',
+      }), true)
     })
 
     it('should not store logs with empty stack and \'Generic Error\' message', () => {
-      expect(logCollector.add({
+      assert.strictEqual(logCollector.add({
         message: 'Generic Error',
         level: 'ERROR',
-        stack_trace: 'stack 1\n/not/a/dd/frame'
+        stack_trace: 'stack 1\n/not/a/dd/frame',
       })
-      ).to.be.false
+      , false)
     })
 
     it('should redact error message and include only dd frames', () => {
@@ -95,18 +95,18 @@ describe('telemetry log collector', () => {
         .map(line => line.replace(ddBasePath, ''))
         .join(EOL)
 
-      expect(logCollector.add({
+      assert.strictEqual(logCollector.add({
         message: 'Error 1',
         level: 'ERROR',
         stack_trace: stack,
-        errorType: 'TypeError'
-      })).to.be.true
+        errorType: 'TypeError',
+      }), true)
 
-      expect(logCollector.hasEntry({
+      assert.strictEqual(logCollector.hasEntry({
         message: 'Error 1',
         level: 'ERROR',
-        stack_trace: `TypeError: redacted${EOL}${ddFrames}`
-      })).to.be.true
+        stack_trace: `TypeError: redacted${EOL}${ddFrames}`,
+      }), true)
     })
 
     it('should redact error message regardless of whether first frame is DD code', () => {
@@ -120,21 +120,21 @@ describe('telemetry log collector', () => {
         ...stack
           .split(EOL)
           .filter(line => line.includes(ddBasePath))
-          .map(line => line.replace(ddBasePath, ''))
+          .map(line => line.replace(ddBasePath, '')),
       ].join(EOL)
 
-      expect(logCollector.add({
+      assert.strictEqual(logCollector.add({
         message: 'Error 1',
         level: 'ERROR',
         stack_trace: stack,
-        errorType: 'TypeError'
-      })).to.be.true
+        errorType: 'TypeError',
+      }), true)
 
-      expect(logCollector.hasEntry({
+      assert.strictEqual(logCollector.hasEntry({
         message: 'Error 1',
         level: 'ERROR',
-        stack_trace: ddFrames
-      })).to.be.true
+        stack_trace: ddFrames,
+      }), true)
     })
 
     it('should redact multi-line error messages', () => {
@@ -148,18 +148,18 @@ describe('telemetry log collector', () => {
         .map(line => line.replace(ddBasePath, ''))
         .join(EOL)
 
-      expect(logCollector.add({
+      assert.strictEqual(logCollector.add({
         message: 'Git plugin error',
         level: 'ERROR',
         stack_trace: multiLineError,
-        errorType: 'Error'
-      })).to.be.true
+        errorType: 'Error',
+      }), true)
 
-      expect(logCollector.hasEntry({
+      assert.strictEqual(logCollector.hasEntry({
         message: 'Git plugin error',
         level: 'ERROR',
-        stack_trace: `Error: redacted${EOL}${ddFrames}`
-      })).to.be.true
+        stack_trace: `Error: redacted${EOL}${ddFrames}`,
+      }), true)
     })
   })
 
@@ -168,8 +168,8 @@ describe('telemetry log collector', () => {
       logCollector.add({ message: 'Error 1', level: 'ERROR' })
       logCollector.add({ message: 'Error 2', level: 'ERROR' })
 
-      expect(logCollector.drain().length).to.be.equal(2)
-      expect(logCollector.drain()).to.be.undefined
+      assert.strictEqual(logCollector.drain().length, 2)
+      assert.strictEqual(logCollector.drain(), undefined)
     })
 
     it('should add an error log when max size is reached', () => {
@@ -180,8 +180,8 @@ describe('telemetry log collector', () => {
       logCollector.add({ message: 'Error 5', level: 'ERROR' })
 
       const logs = logCollector.drain()
-      expect(logs.length).to.be.equal(4)
-      expect(logs[3]).to.deep.eq({ message: 'Omitted 2 entries due to overflowing', level: 'ERROR' })
+      assert.strictEqual(logs.length, 4)
+      assert.deepStrictEqual(logs[3], { message: 'Omitted 2 entries due to overflowing', level: 'ERROR' })
     })
 
     it('duplicated errors should send incremented count values', () => {
@@ -196,9 +196,9 @@ describe('telemetry log collector', () => {
       logCollector.add(err1)
 
       const drainedErrors = logCollector.drain()
-      expect(drainedErrors.length).to.be.equal(2)
-      expect(drainedErrors[0].count).to.be.equal(3)
-      expect(drainedErrors[1].count).to.be.equal(2)
+      assert.strictEqual(drainedErrors.length, 2)
+      assert.strictEqual(drainedErrors[0].count, 3)
+      assert.strictEqual(drainedErrors[1].count, 2)
     })
   })
 })

@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -14,18 +15,18 @@ describe('profilers/native/space', () => {
 
   beforeEach(() => {
     profile0 = {
-      encodeAsync: sinon.stub().returns(Promise.resolve('encoded'))
+      encodeAsync: sinon.stub().returns(Promise.resolve('encoded')),
     }
     pprof = {
       heap: {
         start: sinon.stub(),
         stop: sinon.stub(),
-        profile: sinon.stub().returns(profile0)
-      }
+        profile: sinon.stub().returns(profile0),
+      },
     }
 
     NativeSpaceProfiler = proxyquire('../../../src/profiling/profilers/space', {
-      '@datadog/pprof': pprof
+      '@datadog/pprof': pprof,
     })
   })
 
@@ -50,11 +51,11 @@ describe('profilers/native/space', () => {
   it('should stop the internal space profiler', () => {
     const profiler = new NativeSpaceProfiler()
 
-    expect(profiler.isStarted()).to.be.false
+    assert.strictEqual(profiler.isStarted(), false)
     profiler.start()
-    expect(profiler.isStarted()).to.be.true
+    assert.strictEqual(profiler.isStarted(), true)
     profiler.stop()
-    expect(profiler.isStarted()).to.be.false
+    assert.strictEqual(profiler.isStarted(), false)
 
     sinon.assert.calledOnce(pprof.heap.stop)
   })
@@ -63,7 +64,7 @@ describe('profilers/native/space', () => {
     const profiler = new NativeSpaceProfiler()
 
     const info = profiler.getInfo()
-    expect(Object.keys(info)).to.be.empty
+    assert.strictEqual(Object.keys(info).length, 0)
   })
 
   it('should collect profiles from the pprof space profiler', () => {
@@ -74,9 +75,9 @@ describe('profilers/native/space', () => {
     pprof.heap.profile.returns('profile')
 
     const profile = profiler.profile(true)
-    expect(profiler.isStarted()).to.be.true
+    assert.strictEqual(profiler.isStarted(), true)
 
-    expect(profile).to.equal('profile')
+    assert.strictEqual(profile, 'profile')
   })
 
   it('should collect profiles from the pprof space profiler and stop profiler if not restarted', () => {
@@ -87,9 +88,9 @@ describe('profilers/native/space', () => {
     pprof.heap.profile.returns('profile')
 
     const profile = profiler.profile(false)
-    expect(profiler.isStarted()).to.be.false
+    assert.strictEqual(profiler.isStarted(), false)
 
-    expect(profile).to.equal('profile')
+    assert.strictEqual(profile, 'profile')
   })
 
   it('should encode profiles using their encodeAsync method', () => {

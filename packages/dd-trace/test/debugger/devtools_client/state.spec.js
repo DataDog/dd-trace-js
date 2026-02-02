@@ -1,11 +1,9 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, before } = require('mocha')
+const { before, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
-
 require('../../setup/mocha')
 
 describe('findScriptFromPartialPath', function () {
@@ -15,7 +13,7 @@ describe('findScriptFromPartialPath', function () {
     ['file:///path/to/foo.js', 'script-id-posix'],
     ['file:///C:/path/to/bar.js', 'script-id-win-slash'],
     // We have no evidence that Chrome DevTools Protocol uses backslashes in paths, but test in case it changes
-    ['file:///C:\\path\\to\\baz.js', 'script-id-win-backslash']
+    ['file:///C:\\path\\to\\baz.js', 'script-id-win-backslash'],
   ]
 
   before(function () {
@@ -26,10 +24,10 @@ describe('findScriptFromPartialPath', function () {
           readFileSync: () => JSON.stringify({
             sources: [
               'index.ts',
-              'folder/./file.ts'
-            ]
-          })
-        }
+              'folder/./file.ts',
+            ],
+          }),
+        },
       }),
       './session': {
         '@noCallThru': true,
@@ -55,13 +53,13 @@ describe('findScriptFromPartialPath', function () {
               params: {
                 scriptId: 'should-match-source-mapped',
                 url: 'file:///source-mapped/index.js',
-                sourceMapURL: 'index.js.map'
-              }
+                sourceMapURL: 'index.js.map',
+              },
             })
           }
         },
-        emit () {}
-      }
+        emit () {},
+      },
     })
   })
 
@@ -145,7 +143,7 @@ describe('findScriptFromPartialPath', function () {
       function testPath (path) {
         return function () {
           const result = state.findScriptFromPartialPath(path)
-          expect(result).to.deep.equal({ url, scriptId, sourceMapURL: undefined, source: undefined })
+          assert.deepStrictEqual(result, { url, scriptId, sourceMapURL: undefined, source: undefined })
         }
       }
     })
@@ -154,20 +152,20 @@ describe('findScriptFromPartialPath', function () {
   describe('multiple partial matches', function () {
     it('should match the longest partial match', function () {
       const result = state.findScriptFromPartialPath('server/index.js')
-      expect(result).to.deep.equal({
-        url: 'file:///server/index.js', scriptId: 'should-match', sourceMapURL: undefined, source: undefined
+      assert.deepStrictEqual(result, {
+        url: 'file:///server/index.js', scriptId: 'should-match', sourceMapURL: undefined, source: undefined,
       })
     })
 
     it('should match the shorter of two equal length partial matches', function () {
       const result1 = state.findScriptFromPartialPath('foo/index.js')
-      expect(result1).to.deep.equal({
-        url: 'file:///foo/index.js', scriptId: 'should-match-shortest-a', sourceMapURL: undefined, source: undefined
+      assert.deepStrictEqual(result1, {
+        url: 'file:///foo/index.js', scriptId: 'should-match-shortest-a', sourceMapURL: undefined, source: undefined,
       })
 
       const result2 = state.findScriptFromPartialPath('bar/index.js')
-      expect(result2).to.deep.equal({
-        url: 'file:///bar/index.js', scriptId: 'should-match-shortest-b', sourceMapURL: undefined, source: undefined
+      assert.deepStrictEqual(result2, {
+        url: 'file:///bar/index.js', scriptId: 'should-match-shortest-b', sourceMapURL: undefined, source: undefined,
       })
     })
   })
@@ -175,21 +173,21 @@ describe('findScriptFromPartialPath', function () {
   describe('source maps', function () {
     it('should match the source map path', function () {
       const result = state.findScriptFromPartialPath('source-mapped/index.ts')
-      expect(result).to.deep.equal({
+      assert.deepStrictEqual(result, {
         url: 'file:///source-mapped/index.js',
         scriptId: 'should-match-source-mapped',
         sourceMapURL: 'index.js.map',
-        source: 'index.ts'
+        source: 'index.ts',
       })
     })
 
     it('should normalize relative source paths', function () {
       const result = state.findScriptFromPartialPath('source-mapped/folder/./file.ts')
-      expect(result).to.deep.equal({
+      assert.deepStrictEqual(result, {
         url: 'file:///source-mapped/index.js',
         scriptId: 'should-match-source-mapped',
         sourceMapURL: 'index.js.map',
-        source: 'folder/file.ts'
+        source: 'folder/file.ts',
       })
     })
   })
@@ -214,26 +212,231 @@ describe('findScriptFromPartialPath', function () {
     it('should be cleared when calling clearState', function () {
       const path = 'server/index.js'
 
-      expect(state._loadedScripts.length).to.be.above(0)
-      expect(state._scriptUrls.size).to.be.above(0)
+      assert.ok(state._loadedScripts.length > 0)
+      assert.ok(state._scriptUrls.size > 0)
 
       const result = state.findScriptFromPartialPath(path)
-      expect(result).to.be.an('object')
+      assert.ok(typeof result === 'object' && result !== null)
 
       state.clearState()
 
-      expect(state._loadedScripts.length).to.equal(0)
-      expect(state._scriptUrls.size).to.equal(0)
+      assert.strictEqual(state._loadedScripts.length, 0)
+      assert.strictEqual(state._scriptUrls.size, 0)
 
       const result2 = state.findScriptFromPartialPath(path)
-      expect(result2).to.be.null
+      assert.strictEqual(result2, null)
     })
   })
 
   function testPathNoMatch (path) {
     return function () {
       const result = state.findScriptFromPartialPath(path)
-      expect(result).to.be.null
+      assert.strictEqual(result, null)
     }
   }
+})
+
+describe('getStackFromCallFrames', function () {
+  let state, getOriginalPositionStub
+
+  /**
+   * Helper to create a state instance with configurable scripts and source map behavior
+   *
+   * @param {object} options - Configuration options
+   * @param {Array<object>} options.scripts - Scripts to register
+   * @param {Function} options.getOriginalPosition - Source map resolution function
+   * @param {Function} [options.loadSourceMapSync] - Source map loader function
+   * @returns {object} - The state module
+   */
+  function createState ({ scripts, getOriginalPosition, loadSourceMapSync = () => ({ sources: [] }) }) {
+    return proxyquire('../../../src/debugger/devtools_client/state', {
+      './source-maps': {
+        loadSourceMapSync,
+        getOriginalPosition,
+      },
+      './session': {
+        '@noCallThru': true,
+        on (event, listener) {
+          if (event === 'Debugger.scriptParsed') {
+            scripts.forEach(script => listener({ params: script }))
+          }
+        },
+        emit () {},
+      },
+      './log': {
+        warn: () => {},
+        error: () => {},
+      },
+    })
+  }
+
+  before(function () {
+    getOriginalPositionStub = async function (url, line, column, sourceMapURL) {
+      // Mock implementation that returns original positions for source-mapped files
+      if (sourceMapURL === 'bundle.js.map') {
+        return {
+          source: 'src/original.ts',
+          line: 42,
+          column: 10,
+          name: null,
+        }
+      }
+      return { source: null, line: null, column: null, name: null }
+    }
+
+    state = createState({
+      scripts: [
+        // Script without source map
+        {
+          scriptId: 'script-1',
+          url: 'file:///app/plain.js',
+        },
+        // Script with source map
+        {
+          scriptId: 'script-2',
+          url: 'file:///app/bundle.js',
+          sourceMapURL: 'bundle.js.map',
+        },
+      ],
+      getOriginalPosition: getOriginalPositionStub,
+      loadSourceMapSync: () => ({ sources: ['src/original.ts'] }),
+    })
+  })
+
+  it('should return stack frames without source maps', async function () {
+    const callFrames = [
+      {
+        functionName: 'myFunction',
+        location: {
+          scriptId: 'script-1',
+          lineNumber: 9, // 0-indexed
+          columnNumber: 4, // 0-indexed
+        },
+      },
+      {
+        functionName: 'callerFunction',
+        location: {
+          scriptId: 'script-1',
+          lineNumber: 19,
+          columnNumber: 14,
+        },
+      },
+    ]
+
+    const result = await state.getStackFromCallFrames(callFrames)
+
+    assert.strictEqual(result.length, 2)
+    assert.deepStrictEqual(result[0], {
+      fileName: '/app/plain.js',
+      function: 'myFunction',
+      lineNumber: 10, // 1-indexed
+      columnNumber: 5, // 1-indexed
+    })
+    assert.deepStrictEqual(result[1], {
+      fileName: '/app/plain.js',
+      function: 'callerFunction',
+      lineNumber: 20,
+      columnNumber: 15,
+    })
+  })
+
+  it('should apply source maps to stack frames', async function () {
+    const callFrames = [
+      {
+        functionName: 'bundledFunction',
+        location: {
+          scriptId: 'script-2',
+          lineNumber: 99, // 0-indexed generated position
+          columnNumber: 24,
+        },
+      },
+    ]
+
+    const result = await state.getStackFromCallFrames(callFrames)
+
+    assert.strictEqual(result.length, 1)
+    assert.deepStrictEqual(result[0], {
+      fileName: '/app/src/original.ts', // Mapped to original source
+      function: 'bundledFunction',
+      lineNumber: 42, // Original line from source map
+      columnNumber: 10, // Original column from source map
+    })
+  })
+
+  it('should handle mixed stack with and without source maps', async function () {
+    const callFrames = [
+      {
+        functionName: 'bundledFunction',
+        location: {
+          scriptId: 'script-2',
+          lineNumber: 99,
+          columnNumber: 24,
+        },
+      },
+      {
+        functionName: 'plainFunction',
+        location: {
+          scriptId: 'script-1',
+          lineNumber: 9,
+          columnNumber: 4,
+        },
+      },
+    ]
+
+    const result = await state.getStackFromCallFrames(callFrames)
+
+    assert.strictEqual(result.length, 2)
+    // First frame: source-mapped
+    assert.deepStrictEqual(result[0], {
+      fileName: '/app/src/original.ts',
+      function: 'bundledFunction',
+      lineNumber: 42,
+      columnNumber: 10,
+    })
+    // Second frame: no source map
+    assert.deepStrictEqual(result[1], {
+      fileName: '/app/plain.js',
+      function: 'plainFunction',
+      lineNumber: 10,
+      columnNumber: 5,
+    })
+  })
+
+  it('should gracefully handle source map errors', async function () {
+    // Create a state instance where getOriginalPosition throws
+    const stateWithError = createState({
+      scripts: [
+        {
+          scriptId: 'script-error',
+          url: 'file:///app/error.js',
+          sourceMapURL: 'error.js.map',
+        },
+      ],
+      getOriginalPosition: async () => {
+        throw new Error('Source map error')
+      },
+    })
+
+    const callFrames = [
+      {
+        functionName: 'errorFunction',
+        location: {
+          scriptId: 'script-error',
+          lineNumber: 5,
+          columnNumber: 10,
+        },
+      },
+    ]
+
+    const result = await stateWithError.getStackFromCallFrames(callFrames)
+
+    // Should fall back to generated positions when source map fails
+    assert.strictEqual(result.length, 1)
+    assert.deepStrictEqual(result[0], {
+      fileName: '/app/error.js',
+      function: 'errorFunction',
+      lineNumber: 6, // 1-indexed generated position (fallback)
+      columnNumber: 11,
+    })
+  })
 })

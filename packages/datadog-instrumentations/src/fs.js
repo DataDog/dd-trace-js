@@ -1,8 +1,8 @@
 'use strict'
 
 const { errorMonitor } = require('events')
-const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { channel, addHook } = require('./helpers/instrument')
 
 const startChannel = channel('apm:fs:operation:start')
 const finishChannel = channel('apm:fs:operation:finish')
@@ -54,13 +54,13 @@ const paramsByMethod = {
   utimes: ['path', 'atime', 'mtime'],
   write: ['fd'],
   writeFile: ['file', 'data', 'options'],
-  writev: ['fd']
+  writev: ['fd'],
 }
 
 const watchMethods = {
   unwatchFile: ['path', 'listener'],
   watch: ['path', 'options', 'listener'],
-  watchFile: ['path', 'options', 'listener']
+  watchFile: ['path', 'options', 'listener'],
 }
 
 const paramsByFileHandleMethods = {
@@ -82,7 +82,7 @@ const paramsByFileHandleMethods = {
   utimes: ['atime', 'mtime'],
   write: ['buffer', 'offset', 'length', 'position'],
   writeFile: ['data', 'options'],
-  writev: ['buffers', 'position']
+  writev: ['buffers', 'position'],
 }
 const names = ['fs', 'node:fs']
 names.forEach(name => {
@@ -130,7 +130,7 @@ function wrapFileHandle (fh) {
         this[ddFhSym] = h
         wrap(this, 'close', createWrapFunction('filehandle.'))
       },
-      configurable: true
+      configurable: true,
     })
   }
   for (const name of Reflect.ownKeys(fileHandlePrototype)) {
@@ -181,7 +181,7 @@ function createWrapDirAsyncIterator () {
 function wrapCreateStream (original) {
   const classes = {
     createReadStream: 'ReadStream',
-    createWriteStream: 'WriteStream'
+    createWriteStream: 'WriteStream',
   }
   const name = classes[original.name]
 

@@ -1,12 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, before, after } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, before, after } = require('mocha')
 const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
 
 require('../setup/core')
-
 const TracingPlugin = require('../../src/plugins/tracing')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
@@ -17,17 +17,17 @@ describe('TracingPlugin', () => {
       const startSpanSpy = sinon.spy()
       const plugin = new TracingPlugin({
         _tracer: {
-          startSpan: startSpanSpy
-        }
+          startSpan: startSpanSpy,
+        },
       })
       plugin.configure({})
 
       plugin.startSpan('Test span', { childOf: 'some parent span' })
 
-      expect(startSpanSpy).to.have.been.calledWith(
+      sinon.assert.calledWith(startSpanSpy,
         'Test span',
         sinon.match({
-          childOf: 'some parent span'
+          childOf: 'some parent span',
         })
       )
     })
@@ -44,7 +44,7 @@ describe('common Plugin behaviour', () => {
 
     start () {
       return this.startSpan('common.operation', {
-        service: this.config.service || this._tracerConfig.service
+        service: this.config.service || this._tracerConfig.service,
       }, true)
     }
   }
@@ -54,7 +54,7 @@ describe('common Plugin behaviour', () => {
     static operation = 'dothings'
     start () {
       return this.startSpan('common.operation', {
-        service: this.config.service || `${this.tracer._service}-suffix`
+        service: this.config.service || `${this.tracer._service}-suffix`,
       }, true)
     }
   }
@@ -97,8 +97,8 @@ describe('common Plugin behaviour', () => {
       makeSpan(
         done, 'commonPlugin', { service: 'not-the-right-test' },
         span => {
-          expect(span).to.have.property('service', 'not-the-right-test')
-          expect(span.meta).to.have.property('_dd.base_service', 'test')
+          assert.strictEqual(span.service, 'not-the-right-test')
+          assert.strictEqual(span.meta['_dd.base_service'], 'test')
         }
       )
     })
@@ -107,8 +107,8 @@ describe('common Plugin behaviour', () => {
       makeSpan(
         done, 'suffixPlugin', {},
         span => {
-          expect(span).to.have.property('service', 'test-suffix')
-          expect(span.meta).to.have.property('_dd.base_service', 'test')
+          assert.strictEqual(span.service, 'test-suffix')
+          assert.strictEqual(span.meta['_dd.base_service'], 'test')
         }
       )
     })
@@ -117,8 +117,8 @@ describe('common Plugin behaviour', () => {
       makeSpan(
         done, 'commonPlugin', {},
         span => {
-          expect(span).to.have.property('service', 'test')
-          expect(span.meta).to.not.have.property('_dd.base_service', 'test')
+          assert.strictEqual(span.service, 'test')
+          assert.ok(!('_dd.base_service' in span.meta) || span.meta['_dd.base_service'] !== 'test')
         }
       )
     })

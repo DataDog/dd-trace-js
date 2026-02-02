@@ -7,7 +7,7 @@ const LIBRARY_FRAMES_BUFFER = 20
 
 const STACK_TRACE_NAMESPACES = {
   RASP: 'exploit',
-  IAST: 'vulnerability'
+  IAST: 'vulnerability',
 }
 
 function prepareStackTrace (_, callsites) {
@@ -44,7 +44,7 @@ function filterOutFramesFromLibrary (callSiteList) {
       const callSiteLocation = {
         path: callSite.getTranslatedFileName?.() ?? callSite.getFileName(),
         line: callSite.getTranslatedLineNumber?.() ?? callSite.getLineNumber(),
-        column: callSite.getTranslatedColumnNumber?.() ?? callSite.getColumnNumber()
+        column: callSite.getTranslatedColumnNumber?.() ?? callSite.getColumnNumber(),
       }
       const { path } = getOriginalPathAndLineFromSourceMap(callSiteLocation)
       return !path?.startsWith(ddBasePath)
@@ -73,7 +73,7 @@ function getCallsiteFrames (maxDepth = 32, constructorOpt = getCallsiteFrames, c
       column: callSite.getTranslatedColumnNumber?.() ?? callSite.getColumnNumber(),
       function: callSite.getFunctionName(),
       class_name: callSite.getTypeName(),
-      isNative: callSite.isNative()
+      isNative: callSite.isNative(),
     })
   }
 
@@ -99,7 +99,7 @@ function reportStackTrace (rootSpan, stackId, frames, namespace = STACK_TRACE_NA
   rootSpan.meta_struct['_dd.stack'][namespace].push({
     id: stackId,
     language: 'nodejs',
-    frames
+    frames,
   })
 }
 
@@ -113,5 +113,5 @@ module.exports = {
   getCallsiteFrames,
   reportStackTrace,
   canReportStackTrace,
-  STACK_TRACE_NAMESPACES
+  STACK_TRACE_NAMESPACES,
 }

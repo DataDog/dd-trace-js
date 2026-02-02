@@ -20,6 +20,8 @@ module.exports = {
     'oracledb',
     'pg-query-stream',
     'tedious',
-    '@yaacovcr/transform'
-  ]
+    '@yaacovcr/transform',
+    // required if you use OpenFeature (peer dependency)
+    '@openfeature/server-sdk',
+  ],
 }

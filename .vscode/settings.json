@@ -1,9 +1,32 @@
 {
-  "eslint.workingDirectories": [
-    "."
+  // Use the workspace version of TypeScript instead of VSCode's bundled version
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "cSpell.words": [
+    "aerospike",
+    "appsec",
+    "backportability",
+    "kafkajs",
+    "llmobs",
+    "microbenchmarks",
+    "oracledb",
+    "rabbitmq",
+    "rspack",
+    "sirun"
   ],
-  "eslint.options": {
-    "overrideConfigFile": "${workspaceFolder}/eslint.config.mjs"
+  "editor.defaultFormatter": "dbaeumer.vscode-eslint",
+  "editor.formatOnSave": true,
+  "eslint.format.enable": true,
+  "[javascript]": {
+    "editor.defaultFormatter": "dbaeumer.vscode-eslint",
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "explicit"
+    }
   },
-  "typescript.tsdk": "node_modules/typescript/lib"
+  "[typescript]": {
+    "editor.defaultFormatter": "dbaeumer.vscode-eslint",
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "explicit"
+    }
+  }
 }

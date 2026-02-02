@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
+import crypto from 'node:crypto'
 import express from 'express'
-import { createHash } from 'node:crypto'
 import dc from 'dc-polyfill'
 
 const cryptoHashCh = dc.channel('datadog:crypto:hashing:start')
@@ -12,7 +12,7 @@ cryptoHashCh.subscribe(() => {
 const app = express()
 
 app.get('/', (req, res) => {
-  createHash('sha256')
+  crypto.createHash('sha256')
   res.setHeader('X-Counter', counter)
   res.end('ok')
 })

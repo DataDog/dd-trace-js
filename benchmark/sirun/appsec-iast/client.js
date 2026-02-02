@@ -1,7 +1,7 @@
 'use strict'
 
-const { port, reqs } = require('./common')
 const http = require('http')
+const { port, reqs } = require('./common')
 
 let connectionsMade = 0
 function request (opts) {
@@ -22,9 +22,9 @@ function request (opts) {
 const path = '/?param=value'
 const opts = {
   headers: {
-    accept: 'text/html'
+    accept: 'text/html',
   },
   port,
-  path
+  path,
 }
 request(opts)

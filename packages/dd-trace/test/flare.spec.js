@@ -1,19 +1,17 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const http = require('node:http')
 
-const { expect } = require('chai')
-const { channel } = require('dc-polyfill')
 const express = require('express')
 const upload = require('multer')()
 const proxyquire = require('proxyquire').noCallThru()
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
-
+const log = require('../src/log')
 const { getConfigFresh } = require('./helpers/config')
-
-const debugChannel = channel('datadog:log:debug')
 
 describe('Flare', () => {
   let flare
@@ -48,12 +46,12 @@ describe('Flare', () => {
   beforeEach(() => {
     startupLog = {
       tracerInfo: () => ({
-        lang: 'nodejs'
-      })
+        lang: 'nodejs',
+      }),
     }
 
     flare = proxyquire('../src/flare', {
-      '../startup-log': startupLog
+      '../startup-log': startupLog,
     })
   })
 
@@ -61,13 +59,13 @@ describe('Flare', () => {
 
   beforeEach(() => {
     tracerConfig = getConfigFresh({
-      url: `http://127.0.0.1:${port}`
+      url: `http://127.0.0.1:${port}`,
     })
 
     task = {
       case_id: '111',
       hostname: 'myhostname',
-      user_handle: 'user.name@datadoghq.com'
+      user_handle: 'user.name@datadoghq.com',
     }
   })
 
@@ -88,11 +86,11 @@ describe('Flare', () => {
   it('should send a flare', done => {
     handler = req => {
       try {
-        expect(req.body).to.include({
+        assertObjectContains(req.body, {
           case_id: task.case_id,
           hostname: task.hostname,
           email: task.user_handle,
-          source: 'tracer_nodejs'
+          source: 'tracer_nodejs',
         })
 
         done()
@@ -108,16 +106,16 @@ describe('Flare', () => {
   it('should send the tracer info', done => {
     handler = req => {
       try {
-        expect(req.files).to.have.length(1)
-        expect(req.files[0]).to.include({
+        assert.strictEqual(req.files.length, 1)
+        assertObjectContains(req.files[0], {
           fieldname: 'flare_file',
           originalname: 'tracer_info.txt',
-          mimetype: 'application/octet-stream'
+          mimetype: 'application/octet-stream',
         })
 
         const content = JSON.parse(req.files[0].buffer.toString())
 
-        expect(content).to.have.property('lang', 'nodejs')
+        assert.strictEqual(content.lang, 'nodejs')
 
         done()
       } catch (e) {
@@ -136,15 +134,15 @@ describe('Flare', () => {
 
         if (file.originalname !== 'tracer_logs.txt') return
 
-        expect(file).to.include({
+        assertObjectContains(file, {
           fieldname: 'flare_file',
           originalname: 'tracer_logs.txt',
-          mimetype: 'application/octet-stream'
+          mimetype: 'application/octet-stream',
         })
 
         const content = file.buffer.toString()
 
-        expect(content).to.equal('foo\nbar\n{"foo":"bar"}\n')
+        assert.strictEqual(content, 'foo\nbar\n{"foo":"bar"}\n')
 
         done()
       } catch (e) {
@@ -155,10 +153,28 @@ describe('Flare', () => {
     flare.enable(tracerConfig)
     flare.prepare('debug')
 
-    debugChannel.publish('foo')
-    debugChannel.publish('bar')
-    debugChannel.publish({ foo: 'bar' })
+    log.debug('foo')
+    log.debug('bar')
+    log.debug(JSON.stringify({ foo: 'bar' }))
 
+    flare.send(task)
+  })
+
+  it('should not send an empty file', done => {
+    const timer = setTimeout(() => done(), 100)
+
+    handler = req => {
+      const file = req.files[0]
+
+      if (file.originalname !== 'tracer_logs.txt') return
+
+      clearTimeout(timer)
+
+      done(new Error('Received empty file.'))
+    }
+
+    flare.enable(tracerConfig)
+    flare.prepare('debug')
     flare.send(task)
   })
 })

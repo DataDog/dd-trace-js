@@ -1,13 +1,13 @@
 'use strict'
 
+const { EventEmitter } = require('events')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const { EventEmitter } = require('events')
 
 const {
   httpClientRequestStart,
-  httpClientResponseFinish
+  httpClientResponseFinish,
 } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
 
@@ -23,10 +23,10 @@ describe('RASP - ssrf.js', () => {
   const makeCtx = (overrides = {}) => ({
     args: {
       uri: DEFAULT_URL,
-      options: {}
+      options: {},
     },
     abortController: {},
-    ...overrides
+    ...overrides,
   })
 
   const stubStore = (req = {}, res = {}) => {
@@ -49,11 +49,11 @@ describe('RASP - ssrf.js', () => {
 
   beforeEach(() => {
     legacyStorage = {
-      getStore: sinon.stub()
+      getStore: sinon.stub(),
     }
 
     waf = {
-      run: sinon.stub()
+      run: sinon.stub(),
     }
 
     downstream = {
@@ -65,18 +65,18 @@ describe('RASP - ssrf.js', () => {
       extractResponseData: sinon.stub().returns({}),
       incrementDownstreamAnalysisCount: sinon.stub(),
       handleResponseTracing: sinon.stub(),
-      storeRedirectBodyCollectionDecision: sinon.stub()
+      storeRedirectBodyCollectionDecision: sinon.stub(),
     }
 
     telemetry = {
-      updateRaspRuleMatchMetricTags: sinon.stub()
+      updateRaspRuleMatchMetricTags: sinon.stub(),
     }
 
     ssrf = proxyquire('../../../src/appsec/rasp/ssrf', {
       '../../../../datadog-core': { storage: () => legacyStorage },
       '../waf': waf,
       '../downstream_requests': downstream,
-      '../telemetry': telemetry
+      '../telemetry': telemetry,
     })
 
     const config = {
@@ -84,9 +84,9 @@ describe('RASP - ssrf.js', () => {
         stackTrace: {
           enabled: true,
           maxStackTraces: 2,
-          maxDepth: 42
-        }
-      }
+          maxDepth: 42,
+        },
+      },
     }
 
     ssrf.enable(config)
@@ -105,7 +105,7 @@ describe('RASP - ssrf.js', () => {
       publishRequestStart({
         ctx,
         includeBodies: false,
-        requestAddresses: { [addresses.HTTP_OUTGOING_METHOD]: 'GET' }
+        requestAddresses: { [addresses.HTTP_OUTGOING_METHOD]: 'GET' },
       })
 
       sinon.assert.calledOnceWithExactly(
@@ -113,8 +113,8 @@ describe('RASP - ssrf.js', () => {
         {
           ephemeral: {
             [addresses.HTTP_OUTGOING_URL]: DEFAULT_URL,
-            [addresses.HTTP_OUTGOING_METHOD]: 'GET'
-          }
+            [addresses.HTTP_OUTGOING_METHOD]: 'GET',
+          },
         },
         req,
         { type: 'ssrf', variant: 'request' }
@@ -175,7 +175,7 @@ describe('RASP - ssrf.js', () => {
       const requestAddresses = { [addresses.HTTP_OUTGOING_METHOD]: 'POST' }
       const responseAddresses = {
         [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200',
-        [addresses.HTTP_OUTGOING_RESPONSE_BODY]: { ok: true }
+        [addresses.HTTP_OUTGOING_RESPONSE_BODY]: { ok: true },
       }
 
       downstream.extractResponseData.returns(responseAddresses)
@@ -201,7 +201,7 @@ describe('RASP - ssrf.js', () => {
       const { req } = stubStore({}, {})
 
       downstream.extractResponseData.returns({
-        [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200'
+        [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200',
       })
       waf.run.returns({ events: [] })
 
@@ -238,7 +238,7 @@ describe('RASP - ssrf.js', () => {
       downstream.handleRedirectResponse.returns(true)
       downstream.extractResponseData.returns({
         [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '302',
-        [addresses.HTTP_OUTGOING_RESPONSE_HEADERS]: { location: 'http://example.com/redirect' }
+        [addresses.HTTP_OUTGOING_RESPONSE_HEADERS]: { location: 'http://example.com/redirect' },
       })
       waf.run.returns({ events: [] })
 
@@ -262,7 +262,7 @@ describe('RASP - ssrf.js', () => {
       downstream.handleRedirectResponse.returns(false)
       downstream.extractResponseData.returns({
         [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200',
-        [addresses.HTTP_OUTGOING_RESPONSE_BODY]: { ok: true }
+        [addresses.HTTP_OUTGOING_RESPONSE_BODY]: { ok: true },
       })
       waf.run.returns({ events: [] })
 
@@ -293,7 +293,7 @@ describe('RASP - ssrf.js', () => {
 
       downstream.handleRedirectResponse.returns(false)
       downstream.extractResponseData.returns({
-        [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200'
+        [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200',
       })
       waf.run.returns({ events: [] })
 

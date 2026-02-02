@@ -1,10 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it } = require('mocha')
 
 require('../../setup/core')
-
 const { SchemaBuilder } = require('../../../src/datastreams/schemas/schema_builder')
 
 class Iterator {
@@ -36,24 +36,24 @@ describe('SchemaBuilder', () => {
               name: { description: 'name of the person', type: 'string' },
               phone_numbers: { items: { type: 'string' }, type: 'array' },
               person_name: { type: 'string' },
-              address: { $ref: '#/components/schemas/address', type: 'object' }
+              address: { $ref: '#/components/schemas/address', type: 'object' },
             },
-            type: 'object'
+            type: 'object',
           },
           address: {
             properties: { zip: { format: 'int', type: 'number' }, street: { type: 'string' } },
-            type: 'object'
-          }
-        }
+            type: 'object',
+          },
+        },
       },
-      openapi: '3.0.0'
+      openapi: '3.0.0',
     }
 
-    expect(JSON.parse(schema.definition)).to.deep.equal(expectedSchema)
-    expect(schema.id).to.equal('9510078321201428652')
-    expect(shouldExtractPerson).to.be.true
-    expect(shouldExtractAddress).to.be.true
-    expect(shouldExtractPerson2).to.be.false
-    expect(shouldExtractTooDeep).to.be.false
+    assert.deepStrictEqual(JSON.parse(schema.definition), expectedSchema)
+    assert.strictEqual(schema.id, '9510078321201428652')
+    assert.strictEqual(shouldExtractPerson, true)
+    assert.strictEqual(shouldExtractAddress, true)
+    assert.strictEqual(shouldExtractPerson2, false)
+    assert.strictEqual(shouldExtractTooDeep, false)
   })
 })

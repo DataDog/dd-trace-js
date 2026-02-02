@@ -1,11 +1,11 @@
 'use strict'
 
-const { createCoverageMap } = require('istanbul-lib-coverage')
+const { createCoverageMap } = require('../../../../vendor/dist/istanbul-lib-coverage')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
 const log = require('../../../dd-trace/src/log')
-const { getEnvironmentVariable } = require('../../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
 const {
   getTestSuitePath,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
@@ -13,7 +13,7 @@ const {
   getCoveredFilenamesFromCoverage,
   mergeCoverage,
   resetCoverage,
-  getIsFaultyEarlyFlakeDetection
+  getIsFaultyEarlyFlakeDetection,
 } = require('../../../dd-trace/src/plugins/util/test')
 
 const {
@@ -33,7 +33,7 @@ const {
   getTestFullName,
   getRunTestsWrapper,
   testsAttemptToFix,
-  testsStatuses
+  testsStatuses,
 } = require('./utils')
 
 require('./common')
@@ -196,7 +196,7 @@ function getOnEndHandler (isParallel) {
       isEarlyFlakeDetectionEnabled: config.isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty: config.isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
-      isParallel
+      isParallel,
     })
   }
 }
@@ -204,7 +204,7 @@ function getOnEndHandler (isParallel) {
 function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFinishRequest) {
   const ctx = {
     isParallel,
-    frameworkVersion
+    frameworkVersion,
   }
 
   const onReceivedSkippableSuites = ({ err, skippableSuites, itrCorrelationId: responseItrCorrelationId }) => {
@@ -282,7 +282,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     if (config.isTestManagementTestsEnabled) {
       ctx.onDone = onReceivedTestManagementTests
       testManagementTestsCh.runStores(ctx, () => {})
-    } if (config.isImpactedTestsEnabled) {
+    } else if (config.isImpactedTestsEnabled) {
       ctx.onDone = onReceivedImpactedTests
       modifiedFilesCh.runStores(ctx, () => {})
     } else if (config.isSuitesSkippingEnabled) {
@@ -343,7 +343,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
-  file: 'lib/mocha.js'
+  file: 'lib/mocha.js',
 }, (Mocha, frameworkVersion) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     // Workers do not need to request any data, just run the tests
@@ -383,7 +383,7 @@ addHook({
           onDone: (receivedCodeCoverage) => {
             untestedCoverage = receivedCodeCoverage
             global.run()
-          }
+          },
         })
       } else {
         global.run()
@@ -398,7 +398,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
-  file: 'lib/cli/run-helpers.js'
+  file: 'lib/cli/run-helpers.js',
 }, (run) => {
   // `runMocha` is an async function
   shimmer.wrap(run, 'runMocha', runMocha => function () {
@@ -429,7 +429,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
-  file: 'lib/runner.js'
+  file: 'lib/runner.js',
 }, function (Runner, frameworkVersion) {
   if (patched.has(Runner)) return Runner
 
@@ -473,7 +473,7 @@ addHook({
           testSuiteAbsolutePath: suite.file,
           isUnskippable,
           isForcedToRun,
-          itrCorrelationId
+          itrCorrelationId,
         }
         testFileToSuiteCtx.set(suite.file, ctx)
         testSuiteStartCh.runStores(ctx, () => {})
@@ -510,7 +510,7 @@ addHook({
 
         testSuiteCodeCoverageCh.publish({
           coverageFiles,
-          suiteFile: suite.file
+          suiteFile: suite.file,
         })
         // We need to reset coverage to get a code coverage per suite
         // Before that, we preserve the original coverage
@@ -537,7 +537,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
-  file: 'lib/runnable.js'
+  file: 'lib/runnable.js',
 }, (runnablePackage) => runnableWrapper(runnablePackage, config))
 
 function onMessage (message) {
@@ -557,7 +557,7 @@ addHook({
   // The version they use is 6.0.0:
   // https://github.com/mochajs/mocha/blob/612fa31228c695f16173ac675f40ccdf26b4cfb5/package.json#L75
   versions: ['>=6.0.0'],
-  file: 'src/WorkerHandler.js'
+  file: 'src/WorkerHandler.js',
 }, (workerHandlerPackage) => {
   shimmer.wrap(workerHandlerPackage.prototype, 'exec', exec => function (_, path) {
     if (!testFinishCh.hasSubscribers) {
@@ -607,7 +607,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=8.0.0'],
-  file: 'lib/nodejs/parallel-buffered-runner.js'
+  file: 'lib/nodejs/parallel-buffered-runner.js',
 }, (ParallelBufferedRunner, frameworkVersion) => {
   shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files }) {
     if (!testFinishCh.hasSubscribers) {
@@ -646,7 +646,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=8.0.0'],
-  file: 'lib/nodejs/buffered-worker-pool.js'
+  file: 'lib/nodejs/buffered-worker-pool.js',
 }, (BufferedWorkerPoolPackage) => {
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
 
@@ -670,8 +670,8 @@ addHook({
         newWorkerArgs._ddIsKnownTestsEnabled = true
         newWorkerArgs._ddKnownTests = {
           mocha: {
-            [testPath]: testSuiteKnownTests
-          }
+            [testPath]: testSuiteKnownTests,
+          },
         }
       } else {
         config.isEarlyFlakeDetectionEnabled = false
@@ -689,9 +689,9 @@ addHook({
       newWorkerArgs._ddTestManagementTests = {
         mocha: {
           suites: {
-            [testPath]: testSuiteTestManagementTests
-          }
-        }
+            [testPath]: testSuiteTestManagementTests,
+          },
+        },
       }
     }
 
@@ -705,7 +705,7 @@ addHook({
       this,
       [
         testSuiteAbsolutePath,
-        newWorkerArgs
+        newWorkerArgs,
       ]
     )
 

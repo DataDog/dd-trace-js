@@ -1,18 +1,19 @@
 'use strict'
 
-const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
 
-const { getConfigFresh } = require('../../../../helpers/config')
+const axios = require('axios')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+
 const { storage } = require('../../../../../../datadog-core')
 const iast = require('../../../../../src/appsec/iast')
 const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
 const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-tracking/operations')
+const { getConfigFresh } = require('../../../../helpers/config')
 const { withVersions } = require('../../../../setup/mocha')
 const {
   HTTP_REQUEST_COOKIE_NAME,
-  HTTP_REQUEST_COOKIE_VALUE
+  HTTP_REQUEST_COOKIE_VALUE,
 } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 const { testInRequest } = require('../../utils')
 
@@ -28,13 +29,13 @@ describe('Cookies sourcing with cookies', () => {
       Object.getOwnPropertySymbols(parsedCookies).forEach(cookieName => {
         const cookieValue = parsedCookies[cookieName]
         const isCookieValueTainted = isTainted(iastContext, cookieValue)
-        expect(isCookieValueTainted).to.be.true
+        assert.strictEqual(isCookieValueTainted, true)
         const taintedCookieValueRanges = getRanges(iastContext, cookieValue)
-        expect(taintedCookieValueRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_COOKIE_VALUE)
+        assert.strictEqual(taintedCookieValueRanges[0].iinfo.type, HTTP_REQUEST_COOKIE_VALUE)
         const isCookieNameTainted = isTainted(iastContext, cookieName)
-        expect(isCookieNameTainted).to.be.true
+        assert.strictEqual(isCookieNameTainted, true)
         const taintedCookieNameRanges = getRanges(iastContext, cookieName)
-        expect(taintedCookieNameRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_COOKIE_NAME)
+        assert.strictEqual(taintedCookieNameRanges[0].iinfo.type, HTTP_REQUEST_COOKIE_NAME)
       })
     }
 
@@ -44,9 +45,9 @@ describe('Cookies sourcing with cookies', () => {
           experimental: {
             iast: {
               enabled: true,
-              requestSampling: 100
-            }
-          }
+              requestSampling: 100,
+            },
+          },
         }))
 
         cookie = require(`../../../../../../../versions/cookie@${version}`).get()

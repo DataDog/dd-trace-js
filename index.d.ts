@@ -1,6 +1,6 @@
 import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from "http";
 import { LookupFunction } from 'net';
-import * as opentracing from "opentracing";
+import * as opentracing from "./vendor/dist/opentracing";
 import * as otel from "@opentelemetry/api";
 
 /**
@@ -148,7 +148,7 @@ interface Tracer extends opentracing.Tracer {
    * OpenFeature Provider with Remote Config integration.
    *
    * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
-   * Enable with DD_FLAGGING_PROVIDER_ENABLED=true.
+   * Enable with DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED=true.
    *
    * @beta This feature is in preview and not ready for production use
    */
@@ -161,18 +161,54 @@ interface Tracer extends opentracing.Tracer {
 
   /**
    * @experimental
+   *
+   * Set a baggage item and return the new context.
+   *
+   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#set-value
+   *
+   * ----
+   *
    * Provide same functionality as OpenTelemetry Baggage:
    * https://opentelemetry.io/docs/concepts/signals/baggage/
    *
    * Since the equivalent of OTel Context is implicit in dd-trace-js,
    * these APIs act on the currently active baggage
    *
-   * Work with storage('baggage'), therefore do not follow the same continuity as other APIs
+   * Work with storage('baggage'), therefore do not follow the same continuity as other APIs.
    */
-  setBaggageItem (key: string, value: string): Record<string, string>;
+  setBaggageItem (key: string, value: string, metadata?: object): Record<string, string>;
+  /**
+   * @experimental
+   *
+   * Returns a specific baggage item from the current context.
+   *
+   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#get-value
+   */
   getBaggageItem (key: string): string | undefined;
+  /**
+   * @experimental
+   *
+   * Returns all baggage items from the current context.
+   *
+   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#get-all-values
+   */
   getAllBaggageItems (): Record<string, string>;
+  /**
+   * @experimental
+   *
+   * Removes a specific baggage item from the current context and returns the new context.
+   *
+   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#remove-value
+   */
   removeBaggageItem (key: string): Record<string, string>;
+
+  /**
+   * @experimental
+   *
+   * Removes all baggage items from the current context and returns the new context.
+   *
+   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#remove-all-values
+   */
   removeAllBaggageItems (): Record<string, string>;
 }
 
@@ -191,6 +227,7 @@ interface Plugins {
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
+  "bullmq": tracer.plugins.bullmq;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
@@ -204,9 +241,12 @@ interface Plugins {
   "express": tracer.plugins.express;
   "fastify": tracer.plugins.fastify;
   "fetch": tracer.plugins.fetch;
+  "find-my-way": tracer.plugins.find_my_way;
+  "fs": tracer.plugins.fs;
   "generic-pool": tracer.plugins.generic_pool;
   "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
   "google-cloud-vertexai": tracer.plugins.google_cloud_vertexai;
+  "google-genai": tracer.plugins.google_genai;
   "graphql": tracer.plugins.graphql;
   "grpc": tracer.plugins.grpc;
   "hapi": tracer.plugins.hapi;
@@ -231,6 +271,7 @@ interface Plugins {
   "mysql2": tracer.plugins.mysql2;
   "net": tracer.plugins.net;
   "next": tracer.plugins.next;
+  "nyc": tracer.plugins.nyc;
   "openai": tracer.plugins.openai;
   "opensearch": tracer.plugins.opensearch;
   "oracledb": tracer.plugins.oracledb;
@@ -248,7 +289,9 @@ interface Plugins {
   "tedious": tracer.plugins.tedious;
   "undici": tracer.plugins.undici;
   "vitest": tracer.plugins.vitest;
+  "web": tracer.plugins.web;
   "winston": tracer.plugins.winston;
+  "ws": tracer.plugins.ws;
 }
 
 declare namespace tracer {
@@ -542,6 +585,12 @@ declare namespace tracer {
     }
 
     /**
+     * Whether to add an auto-generated `runtime-id` tag to metrics.
+     * @default false
+     */
+    runtimeMetricsRuntimeId?: boolean
+
+    /**
      * Custom function for DNS lookups when sending requests to the agent.
      * @default dns.lookup()
      */
@@ -577,13 +626,6 @@ declare namespace tracer {
      */
     experimental?: {
       b3?: boolean
-      traceparent?: boolean
-
-      /**
-       * Whether to add an auto-generated `runtime-id` tag to metrics.
-       * @default false
-       */
-      runtimeId?: boolean
 
       /**
        * Whether to write traces to log output or agentless, rather than send to an agent
@@ -650,6 +692,7 @@ declare namespace tracer {
         /**
          * Whether to enable the feature flagging provider.
          * Requires Remote Config to be properly configured.
+         * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED environment variable.
          *
          * @default false
          */
@@ -657,6 +700,7 @@ declare namespace tracer {
         /**
          * Timeout in milliseconds for OpenFeature provider initialization.
          * If configuration is not received within this time, initialization fails.
+         * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variable.
          *
          * @default 30000
          */
@@ -688,13 +732,6 @@ declare namespace tracer {
     tags?: { [key: string]: any };
 
     /**
-     * Specifies which scope implementation to use. The default is to use the best
-     * implementation for the runtime. Only change this if you know what you are
-     * doing.
-     */
-    scope?: 'async_hooks' | 'async_local_storage' | 'async_resource' | 'sync' | 'noop'
-
-    /**
      * Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.
      * @default false
      */
@@ -705,13 +742,6 @@ declare namespace tracer {
      * @default 'debug'
      */
     logLevel?: 'error' | 'debug'
-
-    /**
-     * If false, require a parent in order to trace.
-     * @default true
-     * @deprecated since version 4.0
-     */
-    orphanable?: boolean
 
     /**
      * Enables DBM to APM link using tag injection.
@@ -919,7 +949,7 @@ declare namespace tracer {
     /**
      * The selection and priority order of context propagation injection and extraction mechanisms.
      */
-    propagationStyle?: string[] | PropagationStyle
+    tracePropagationStyle?: string[] | PropagationStyle
 
     /**
      * Cloud payload report as tags
@@ -945,6 +975,46 @@ declare namespace tracer {
      * Configuration enabling LLM Observability. Enablement is superseded by the DD_LLMOBS_ENABLED environment variable.
      */
     llmobs?: llmobs.LLMObsEnableOptions
+
+    /**
+     * Configuration for Dynamic Instrumentation (Live Debugging).
+     */
+    dynamicInstrumentation?: {
+      /**
+       * Whether to enable Dynamic Instrumentation.
+       * @default false
+       */
+      enabled?: boolean
+
+      /**
+       * Path to a custom probes configuration file.
+       */
+      probeFile?: string
+
+      /**
+       * Timeout in milliseconds for capturing variable values.
+       * @default 100
+       */
+      captureTimeoutMs?: number
+
+      /**
+       * Interval in seconds between uploads of probe data.
+       * @default 1
+       */
+      uploadIntervalSeconds?: number
+
+      /**
+       * List of identifier names to redact in captured data.
+       * @default []
+       */
+      redactedIdentifiers?: string[]
+
+      /**
+       * List of identifier names to exclude from redaction.
+       * @default []
+       */
+      redactionExcludedIdentifiers?: string[]
+    }
   }
 
   /**
@@ -1334,6 +1404,10 @@ declare namespace tracer {
        * Human-readable explanation for why this action was chosen.
        */
       reason: string;
+      /**
+       * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
+       */
+      tags: string[];
     }
 
     /**
@@ -1345,6 +1419,10 @@ declare namespace tracer {
        * Human-readable explanation from AI Guard describing why the conversation was blocked.
        */
       reason: string;
+      /**
+       * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
+       */
+      tags: string[];
     }
 
     /**
@@ -1763,6 +1841,12 @@ declare namespace tracer {
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
      * on the tracer.
      */
+    /**
+     * This plugin automatically instruments the
+     * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
+     */
+    interface bullmq extends Instrumentation {}
+
     interface bunyan extends Integration {}
 
     /**
@@ -1848,6 +1932,16 @@ declare namespace tracer {
     interface fetch extends HttpClient {}
 
     /**
+     * This plugin patches the [find-my-way](https://github.com/delvedor/find-my-way) router.
+     */
+    interface find_my_way extends Integration {}
+
+    /**
+     * This plugin automatically instruments Node.js core fs operations.
+     */
+    interface fs extends Instrumentation {}
+
+    /**
      * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)
      * module to bind the callbacks the the caller context.
      */
@@ -1862,19 +1956,25 @@ declare namespace tracer {
     /**
      * This plugin automatically instruments the
      * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
-     */
-    interface google_cloud_vertexai extends Integration {}
+    */
+   interface google_cloud_vertexai extends Integration {}
 
-    /** @hidden */
-    interface ExecutionArgs {
-      schema: any,
-      document: any,
-      rootValue?: any,
-      contextValue?: any,
-      variableValues?: any,
-      operationName?: string,
-      fieldResolver?: any,
-      typeResolver?: any,
+   /**
+    * This plugin automatically instruments the
+    * [@google-genai](https://github.com/googleapis/js-genai) module.
+    */
+   interface google_genai extends Integration {}
+
+   /** @hidden */
+   interface ExecutionArgs {
+     schema: any,
+     document: any,
+     rootValue?: any,
+     contextValue?: any,
+     variableValues?: any,
+     operationName?: string,
+     fieldResolver?: any,
+     typeResolver?: any,
     }
 
     /**
@@ -2273,6 +2373,11 @@ declare namespace tracer {
     }
 
     /**
+     * This plugin integrates with [nyc](https://github.com/istanbuljs/nyc) for CI visibility.
+     */
+    interface nyc extends Integration {}
+
+    /**
      * This plugin automatically instruments the
      * [openai](https://platform.openai.com/docs/api-reference?lang=node.js) module.
      *
@@ -2459,12 +2564,50 @@ declare namespace tracer {
     interface vitest extends Integration {}
 
     /**
+     * This plugin implements shared web request instrumentation helpers.
+     */
+    interface web extends HttpServer {
+      /**
+       * Custom filter function used to decide whether a URL/path should be instrumented.
+       * Takes precedence over allowlist/blocklist.
+       */
+      filter?: (urlOrPath: string) => boolean;
+
+      /**
+       * Whether (or how) to obfuscate querystring values in `http.url`.
+       *
+       * - `true`: obfuscate all values
+       * - `false`: disable obfuscation
+       * - `string`: regex string used to obfuscate matching values (empty string disables)
+       * - `RegExp`: regex used to obfuscate matching values
+       */
+      queryStringObfuscation?: boolean | string | RegExp;
+
+      /**
+       * Whether to enable resource renaming when the framework route is unavailable.
+       */
+      resourceRenamingEnabled?: boolean;
+    }
+
+    /**
      * This plugin patches the [winston](https://github.com/winstonjs/winston)
      * to automatically inject trace identifiers in log records when the
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
      * on the tracer.
      */
     interface winston extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
+     * [ws](https://github.com/websockets/ws) module.
+     */
+    interface ws extends Instrumentation {
+      /**
+       * Controls whether websocket messages should be traced.
+       * This is also configurable via `DD_TRACE_WEBSOCKET_MESSAGES_ENABLED`.
+       */
+      traceWebsocketMessagesEnabled?: boolean;
+    }
   }
 
   export namespace opentelemetry {
@@ -2987,6 +3130,14 @@ declare namespace tracer {
       annotationContext<T> (options: llmobs.AnnotationContextOptions, fn: () => T): T
 
       /**
+       * Execute a function within a routing context, directing all LLMObs spans to a specific Datadog organization.
+       * @param options The routing context options containing the target API key and optional site.
+       * @param fn The callback over which to apply the routing context.
+       * @returns The result of the function.
+       */
+      routingContext<T> (options: llmobs.RoutingContextOptions, fn: () => T): T
+
+      /**
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
       flush (): void
@@ -3112,6 +3263,49 @@ declare namespace tracer {
     }
 
     /**
+     * A Prompt object that represents the prompt template used for an LLM call.
+     * Used to power LLM Observability prompts and hallucination evaluations.
+     */
+    interface Prompt {
+      /**
+       * Version of the prompt
+       */
+      version?: string,
+
+
+      /**
+       * The id of the prompt set by the user. Should be unique per mlApp.
+       */
+      id?: string,
+
+      /**
+       * An object of string key-value pairs that will be used to render the prompt
+       */
+      variables?: Record<string, string>,
+
+      /**
+       * List of tags to add to the prompt run.
+       */
+      tags?: Record<string, string>,
+
+
+      /**
+       * A list of variable key names that contains query information
+       */
+      queryVariables?: string[],
+
+      /**
+       * A list of variable key names that contain ground truth context information.
+       */
+      contextVariables?: string[],
+
+      /**
+       * A template string or chat message template list.
+       */
+      template?: string | Message[]
+    }
+
+    /**
      * Annotation options for LLM Observability spans.
      */
     interface AnnotationOptions {
@@ -3144,7 +3338,12 @@ declare namespace tracer {
       /**
        * Object of JSON serializable key-value tag pairs to set or update on the LLM Observability span regarding the span's context.
        */
-      tags?: { [key: string]: any }
+      tags?: { [key: string]: any },
+
+      /**
+       * A Prompt object that represents the prompt used for an LLM call. Only used on `llm` spans.
+       */
+      prompt?: Prompt,
     }
 
     interface AnnotationContextOptions {
@@ -3157,6 +3356,23 @@ declare namespace tracer {
        * Set to override the span name for any spans annotated within the returned context.
        */
       name?: string,
+
+      /**
+       * A Prompt object that represents the prompt used for an LLM call. Only used on `llm` spans.
+       */
+      prompt?: Prompt,
+    }
+
+    interface RoutingContextOptions {
+      /**
+       * The Datadog API key for the target organization.
+       */
+      ddApiKey: string,
+
+      /**
+       * The Datadog site for the target organization (e.g., 'datadoghq.eu').
+       */
+      ddSite?: string,
     }
 
     /**

@@ -1,9 +1,9 @@
 'use strict'
 
+const URL = require('url').URL
+
 const { storage } = require('../../datadog-core')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
-
-const URL = require('url').URL
 const log = require('../../dd-trace/src/log')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
@@ -49,11 +49,11 @@ class Http2ClientPlugin extends ClientPlugin {
         'span.type': 'http',
         'http.method': method,
         'http.url': uri,
-        'out.host': sessionDetails.host
+        'out.host': sessionDetails.host,
       },
       metrics: {
-        [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port)
-      }
+        [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port),
+      },
     }, false)
 
     // TODO: Figure out a better way to do this for any span.
@@ -184,7 +184,7 @@ function normalizeConfig (config) {
     ...config,
     validateStatus,
     filter,
-    headers
+    headers,
   }
 }
 

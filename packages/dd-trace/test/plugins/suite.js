@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 /* eslint-disable no-console */
 
 const childProcess = require('child_process')
@@ -8,7 +9,6 @@ const util = require('util')
 const os = require('os')
 const path = require('path')
 const { once } = require('events')
-const { expect } = require('chai')
 const latests = require('../plugins/versions/package.json').dependencies
 
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
@@ -22,12 +22,12 @@ function exec (cmd, opts = {}) {
   const time = [
     String(date.getHours()).padStart(2, '0'),
     String(date.getMinutes()).padStart(2, '0'),
-    String(date.getSeconds()).padStart(2, '0')
+    String(date.getSeconds()).padStart(2, '0'),
   ].join(':')
   console.log(time, '❯', cmd)
   return new Promise((resolve, reject) => {
     const proc = childProcess.spawn(cmd, Object.assign({
-      shell: true
+      shell: true,
     }, opts))
     proc.on('error', reject)
     const stdout = []
@@ -38,7 +38,7 @@ function exec (cmd, opts = {}) {
       resolve({
         code,
         stdout: Buffer.concat(stdout).toString('utf8'),
-        stderr: Buffer.concat(stderr).toString('utf8')
+        stderr: Buffer.concat(stderr).toString('utf8'),
       })
     })
   })
@@ -110,7 +110,7 @@ async function run (modName, repoUrl, commitish, testCmd, parallel) {
 async function runParallel (testCmd) {
   const [withoutTracer, withTracer] = await Promise.all([
     runOne(false, testCmd),
-    runOne(true, testCmd)
+    runOne(true, testCmd),
   ])
 
   return { withoutTracer, withTracer }
@@ -125,7 +125,7 @@ async function runSequential (testCmd) {
 
 function defaultRunner ({ withoutTracer, withTracer }) {
   try {
-    expect(withTracer.code).to.equal(withoutTracer.code)
+    assert.strictEqual(withTracer.code, withoutTracer.code)
   } catch (e) {
     console.log(`======= BEGIN STDOUT WITHOUT TRACER
 ${withoutTracer.stdout}
@@ -149,7 +149,7 @@ function getOpts (args) {
     commitish,
     testCmd,
     runner,
-    timeout
+    timeout,
   }
   if (testCmd) {
     options.testCmd = testCmd
@@ -174,7 +174,7 @@ module.exports = async function runWithOptions (options) {
       commitish,
       testCmd = 'npm test',
       runner = defaultRunner,
-      parallel = true
+      parallel = true,
     } = options
     return runner(await run(modName, repoUrl, commitish, testCmd, parallel))
   } catch (e) {

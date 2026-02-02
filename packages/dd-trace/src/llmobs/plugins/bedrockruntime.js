@@ -1,16 +1,16 @@
 'use strict'
 
-const BaseLLMObsPlugin = require('./base')
 const { storage } = require('../../../../datadog-core')
-const llmobsStore = storage('llmobs')
 const telemetry = require('../telemetry')
-
 const {
   extractRequestParams,
   extractTextAndResponseReason,
   parseModelId,
-  extractTextAndResponseReasonFromStream
+  extractTextAndResponseReasonFromStream,
 } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
+const BaseLLMObsPlugin = require('./base')
+
+const llmobsStore = storage('llmobs')
 
 const ENABLED_OPERATIONS = new Set(['invokeModel', 'invokeModelWithResponseStream'])
 
@@ -49,7 +49,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
         inputTokensFromHeaders: inputTokenCount && Number.parseInt(inputTokenCount),
         outputTokensFromHeaders: outputTokenCount && Number.parseInt(outputTokenCount),
         cacheReadTokensFromHeaders: cacheReadTokenCount && Number.parseInt(cacheReadTokenCount),
-        cacheWriteTokensFromHeaders: cacheWriteTokenCount && Number.parseInt(cacheWriteTokenCount)
+        cacheWriteTokensFromHeaders: cacheWriteTokenCount && Number.parseInt(cacheWriteTokenCount),
       }
     })
 
@@ -71,7 +71,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       modelProvider: modelProvider.toLowerCase(),
       kind: 'llm',
       name: 'bedrock-runtime.command',
-      integration: 'bedrock'
+      integration: 'bedrock',
     })
 
     const requestParams = extractRequestParams(request.params, modelProvider)
@@ -83,7 +83,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     // add metadata tags
     this._tagger.tagMetadata(span, {
       temperature: Number.parseFloat(requestParams.temperature) || 0,
-      max_tokens: Number.parseInt(requestParams.maxTokens) || 0
+      max_tokens: Number.parseInt(requestParams.maxTokens) || 0,
     })
 
     // add I/O tags
@@ -96,14 +96,14 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     // add token metrics
     const { inputTokens, outputTokens, totalTokens, cacheReadTokens, cacheWriteTokens } = extractTokens({
       requestId: response.$metadata.requestId,
-      usage: textAndResponseReason.usage
+      usage: textAndResponseReason.usage,
     })
     this._tagger.tagMetrics(span, {
       inputTokens,
       outputTokens,
       totalTokens,
       cacheReadTokens,
-      cacheWriteTokens
+      cacheWriteTokens,
     })
   }
 }
@@ -113,7 +113,7 @@ function extractTokens ({ requestId, usage }) {
     inputTokensFromHeaders,
     outputTokensFromHeaders,
     cacheReadTokensFromHeaders,
-    cacheWriteTokensFromHeaders
+    cacheWriteTokensFromHeaders,
   } = requestIdsToTokens[requestId] || {}
   delete requestIdsToTokens[requestId]
 
@@ -130,7 +130,7 @@ function extractTokens ({ requestId, usage }) {
     outputTokens,
     totalTokens: normalizedInputTokens + outputTokens,
     cacheReadTokens,
-    cacheWriteTokens
+    cacheWriteTokens,
   }
 }
 

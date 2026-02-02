@@ -1,7 +1,7 @@
 'use strict'
 
-const { channel } = require('./instrument')
 const shimmer = require('../../../datadog-shimmer')
+const { channel } = require('./instrument')
 
 const routerMountPaths = new WeakMap() // to track mount paths for router instances
 const layerMatchers = new WeakMap() // to store layer matchers
@@ -61,7 +61,7 @@ function collectRoutesFromRouter (router, prefix) {
           if (!enabled) continue
           routeAddedChannel.publish({
             method: normalizeMethodName(method),
-            path: fullPath
+            path: fullPath,
           })
         }
       }
@@ -168,7 +168,7 @@ function extractMountPaths (path) {
   const paths = normalizeRoutePaths(path)
   return {
     mountPaths: paths.length ? paths : ['/'],
-    startIdx: 1
+    startIdx: 1,
   }
 }
 
@@ -211,7 +211,7 @@ function wrapRouteMethodsAndPublish (route, paths, publish) {
       for (const path of uniquePaths) {
         publish({
           method: normalizedMethod,
-          path
+          path,
         })
       }
 
@@ -234,5 +234,5 @@ module.exports = {
   wrapRouteMethodsAndPublish,
   extractMountPaths,
   hasRouterCycle,
-  collectRoutesFromRouter
+  collectRoutesFromRouter,
 }

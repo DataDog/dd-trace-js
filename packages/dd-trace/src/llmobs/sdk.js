@@ -1,26 +1,22 @@
 'use strict'
 
-const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
+const { channel } = require('dc-polyfill')
 
-const {
-  getFunctionArguments,
-  validateKind
-} = require('./util')
 const { isTrue, isError } = require('../util')
-
-const { storage } = require('./storage')
-
-const Span = require('../opentracing/span')
-
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getValueFromEnvSources } = require('../config/helper')
+const Span = require('../opentracing/span')
+const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
+const {
+  getFunctionArguments,
+  validateKind,
+} = require('./util')
+const { storage } = require('./storage')
 const telemetry = require('./telemetry')
-
 const LLMObsTagger = require('./tagger')
 
 // communicating with writer
-const { channel } = require('dc-polyfill')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const registerUserSpanProcessorCh = channel('llmobs:register-processor')
@@ -53,23 +49,20 @@ class LLMObs extends NoopLLMObs {
 
     logger.debug('Enabling LLMObs')
 
-    const { mlApp, agentlessEnabled } = options
+    const DD_LLMOBS_ENABLED = getValueFromEnvSources('DD_LLMOBS_ENABLED')
 
-    const DD_LLMOBS_ENABLED = getEnvironmentVariable('DD_LLMOBS_ENABLED')
-
-    const llmobsConfig = {
-      mlApp,
-      agentlessEnabled
-    }
-
-    const enabled = DD_LLMOBS_ENABLED == null || isTrue(DD_LLMOBS_ENABLED)
-    if (!enabled) {
+    if (DD_LLMOBS_ENABLED != null && !isTrue(DD_LLMOBS_ENABLED)) {
       logger.debug('LLMObs.enable() called when DD_LLMOBS_ENABLED is false. No action taken.')
       return
     }
 
-    this._config.llmobs.enabled = true
-    this._config.configure({ ...this._config, llmobs: llmobsConfig })
+    const llmobs = {
+      mlApp: options.mlApp,
+      agentlessEnabled: options.agentlessEnabled,
+    }
+    // TODO: This will update config telemetry with the origin 'code', which is not ideal when `enable()` is called
+    // based on `APM_TRACING` RC product updates.
+    this._config.updateOptions({ llmobs })
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)
@@ -248,7 +241,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('LLMObs span must have a span kind specified')
       }
 
-      const { inputData, outputData, metadata, metrics, tags } = options
+      const { inputData, outputData, metadata, metrics, tags, prompt } = options
 
       if (inputData || outputData) {
         if (spanKind === 'llm') {
@@ -270,6 +263,9 @@ class LLMObs extends NoopLLMObs {
       }
       if (tags) {
         this._tagger.tagSpanTags(span, tags)
+      }
+      if (prompt) {
+        this._tagger.tagPrompt(span, prompt)
       }
     } catch (e) {
       if (e.ddErrorTag) {
@@ -306,7 +302,7 @@ class LLMObs extends NoopLLMObs {
     try {
       return {
         traceId: span.context().toTraceId(true),
-        spanId: span.context().toSpanId()
+        spanId: span.context().toSpanId(),
       }
     } catch {
       err = 'invalid_span'
@@ -388,7 +384,7 @@ class LLMObs extends NoopLLMObs {
 
       const evaluationTags = {
         'ddtrace.version': tracerVersion,
-        ml_app: mlApp
+        ml_app: mlApp,
       }
 
       if (tags) {
@@ -410,6 +406,11 @@ class LLMObs extends NoopLLMObs {
         }
       }
 
+      // When OTel tracing is enabled, add source:otel tag to allow backend to wait for OTel span conversion
+      if (isTrue(getValueFromEnvSources('DD_TRACE_OTEL_ENABLED'))) {
+        evaluationTags.source = 'otel'
+      }
+
       const payload = {
         span_id: spanId,
         trace_id: traceId,
@@ -418,9 +419,11 @@ class LLMObs extends NoopLLMObs {
         ml_app: mlApp,
         [`${metricType}_value`]: value,
         timestamp_ms: timestampMs,
-        tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
+        tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`),
       }
-      evalMetricAppendCh.publish(payload)
+      const currentStore = storage.getStore()
+      const routing = currentStore?.routingContext
+      evalMetricAppendCh.publish({ payload, routing })
     } finally {
       telemetry.recordSubmitEvaluation(options, err)
     }
@@ -435,10 +438,32 @@ class LLMObs extends NoopLLMObs {
       ...currentStore,
       annotationContext: {
         ...currentStore?.annotationContext,
-        ...options
-      }
+        ...options,
+      },
     }
 
+    return storage.run(store, fn)
+  }
+
+  routingContext (options, fn) {
+    if (!this.enabled) return fn()
+    if (!options?.ddApiKey) {
+      throw new Error('ddApiKey is required for routing context')
+    }
+    const currentStore = storage.getStore()
+    if (currentStore?.routingContext) {
+      logger.warn(
+        '[LLM Observability] Nested routing context detected. Inner context will override outer context. ' +
+        'Spans created in the inner context will only be sent to the inner context.'
+      )
+    }
+    const store = {
+      ...currentStore,
+      routingContext: {
+        apiKey: options.ddApiKey,
+        site: options.ddSite,
+      },
+    }
     return storage.run(store, fn)
   }
 
@@ -473,7 +498,7 @@ class LLMObs extends NoopLLMObs {
     if (options) {
       this._tagger.registerLLMObsSpan(span, {
         ...options,
-        parent: parentStore?.span
+        parent: parentStore?.span,
       })
     }
 
@@ -516,7 +541,7 @@ class LLMObs extends NoopLLMObs {
       modelProvider,
       sessionId,
       _decorator,
-      spanOptions
+      spanOptions,
     }
   }
 }

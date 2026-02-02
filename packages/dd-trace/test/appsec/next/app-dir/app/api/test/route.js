@@ -4,13 +4,13 @@ export async function POST (request) {
   return NextResponse.json({
     now: Date.now(),
     cache: 'no-store',
-    data: body
+    data: body,
   })
 }
 export async function GET (request) {
   return NextResponse.json({
     now: Date.now(),
     cache: 'no-store',
-    data: request.nextUrl.searchParams
+    data: request.nextUrl.searchParams,
   })
 }

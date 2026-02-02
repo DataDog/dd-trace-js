@@ -3,17 +3,16 @@
 const tracer = require('dd-trace').init()
 
 const { TracerProvider } = tracer
-
 const provider = new TracerProvider()
 provider.register()
+
+const http = require('http')
 
 const ot = require('@opentelemetry/api')
 
 const otelTracer = ot.trace.getTracer(
   'my-service-tracer'
 )
-
-const http = require('http')
 
 const server = http.createServer()
 
