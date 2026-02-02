@@ -13,7 +13,7 @@ class BaseLangGraphLLMObsPlugin extends LLMObsPlugin {
 
     return {
       kind: 'workflow',
-      name
+      name,
     }
   }
 
@@ -26,7 +26,9 @@ class BaseLangGraphLLMObsPlugin extends LLMObsPlugin {
     const hasError = ctx.error || spanHasError(span)
 
     const input = inputs !== undefined && inputs !== null ? this.formatIO(inputs) : undefined
-    const output = hasError ? undefined : (results !== undefined && results !== null ? this.formatIO(results) : undefined)
+    const output = hasError
+      ? undefined
+      : (results !== undefined && results !== null ? this.formatIO(results) : undefined)
 
     this._tagger.tagTextIO(span, input, output)
   }
@@ -73,5 +75,5 @@ class PregelStreamLLMObsPlugin extends BaseLangGraphLLMObsPlugin {
 
 module.exports = [
   PregelInvokeLLMObsPlugin,
-  PregelStreamLLMObsPlugin
+  PregelStreamLLMObsPlugin,
 ]

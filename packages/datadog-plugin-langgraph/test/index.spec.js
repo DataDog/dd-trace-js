@@ -7,7 +7,7 @@ const TestSetup = require('./test-setup')
 const testSetup = new TestSetup()
 
 createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
-  category: 'llm'
+  category: 'llm',
 }, (meta) => {
   const { agent } = meta
 
@@ -33,8 +33,8 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
           name: 'langgraph.invoke',
           meta: {
             'span.kind': 'internal',
-            component: 'langgraph'
-          }
+            component: 'langgraph',
+          },
         })
       })
 
@@ -60,8 +60,8 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
             component: 'langgraph',
             'error.type': ANY_STRING,
             'error.message': ANY_STRING,
-            'error.stack': ANY_STRING
-          }
+            'error.stack': ANY_STRING,
+          },
         })
       })
 
@@ -85,8 +85,8 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
           name: 'langgraph.stream',
           meta: {
             'span.kind': 'internal',
-            component: 'langgraph'
-          }
+            component: 'langgraph',
+          },
         })
       })
 
@@ -112,8 +112,8 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
             component: 'langgraph',
             'error.type': ANY_STRING,
             'error.message': ANY_STRING,
-            'error.stack': ANY_STRING
-          }
+            'error.stack': ANY_STRING,
+          },
         })
       })
 

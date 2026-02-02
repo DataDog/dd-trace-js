@@ -19,12 +19,12 @@ class LanggraphTestSetup {
     const StateAnnotation = Annotation.Root({
       messages: Annotation({
         default: () => [],
-        reducer: (prev, next) => [...prev, ...next]
+        reducer: (prev, next) => [...prev, ...next],
       }),
       step: Annotation({
         default: () => 0,
-        reducer: (prev, next) => next
-      })
+        reducer: (prev, next) => next,
+      }),
     })
 
     // Create a new StateGraph
@@ -34,21 +34,21 @@ class LanggraphTestSetup {
     graph.addNode('preprocess', (state) => {
       return {
         messages: ['preprocessed'],
-        step: 1
+        step: 1,
       }
     })
 
     graph.addNode('process', (state) => {
       return {
         messages: ['processed'],
-        step: 2
+        step: 2,
       }
     })
 
     graph.addNode('postprocess', (state) => {
       return {
         messages: ['completed'],
-        step: 3
+        step: 3,
       }
     })
 

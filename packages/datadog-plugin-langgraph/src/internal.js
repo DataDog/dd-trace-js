@@ -11,7 +11,7 @@ class BaseLanggraphInternalPlugin extends TracingPlugin {
 
     this.startSpan('langgraph.invoke', {
       service: this.config.service,
-      meta
+      meta,
     }, ctx)
 
     return ctx.currentStore
@@ -20,7 +20,7 @@ class BaseLanggraphInternalPlugin extends TracingPlugin {
   getTags (ctx) {
     return {
       component: 'langgraph',
-      'span.kind': 'internal'
+      'span.kind': 'internal',
     }
   }
 
@@ -45,7 +45,7 @@ class PregelStreamPlugin extends BaseLanggraphInternalPlugin {
 
     this.startSpan('langgraph.stream', {
       service: this.config.service,
-      meta
+      meta,
     }, ctx)
 
     return ctx.currentStore
@@ -54,5 +54,5 @@ class PregelStreamPlugin extends BaseLanggraphInternalPlugin {
 
 module.exports = {
   BaseLanggraphInternalPlugin,
-  PregelStreamPlugin
+  PregelStreamPlugin,
 }
