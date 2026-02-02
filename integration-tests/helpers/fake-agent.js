@@ -29,6 +29,8 @@ const noop = () => {}
 
 module.exports = class FakeAgent extends EventEmitter {
   port = 0
+  advertiseDebuggerV2IntakeSupport = true
+  debuggerV2IntakeStatusCode = 202
   /** @type {Set<import('net').Socket>} */
   #sockets = new Set()
   /** @type {Record<string, RemoteConfigFile>} */
@@ -37,10 +39,17 @@ module.exports = class FakeAgent extends EventEmitter {
   /** @type {Set<string>} */
   _rcSeenStates = new Set()
 
-  constructor (port = 0) {
+  constructor (port = 0, options = {}) {
     // Redirect rejections to the error event
     super({ captureRejections: true })
     this.port = port
+
+    if (options.advertiseDebuggerV2IntakeSupport !== undefined) {
+      this.advertiseDebuggerV2IntakeSupport = options.advertiseDebuggerV2IntakeSupport
+    }
+    if (options.debuggerV2IntakeStatusCode !== undefined) {
+      this.debuggerV2IntakeStatusCode = options.debuggerV2IntakeStatusCode
+    }
   }
 
   start () {
@@ -313,9 +322,11 @@ function buildExpressServer (agent) {
   app.use(bodyParser.json({ limit: Infinity, type: 'application/json' }))
 
   app.get('/info', (req, res) => {
-    res.json({
-      endpoints: ['/evp_proxy/v2'],
-    })
+    const endpoints = ['/evp_proxy/v2', '/debugger/v1/input']
+    if (agent.advertiseDebuggerV2IntakeSupport) {
+      endpoints.push('/debugger/v2/input')
+    }
+    res.json({ endpoints })
   })
 
   app.put('/v0.4/traces', (req, res) => {
@@ -408,8 +419,31 @@ function buildExpressServer (agent) {
   })
 
   app.post('/debugger/v1/input', (req, res) => {
-    res.status(200).send()
+    res.status(202).send()
     agent.emit('debugger-input', {
+      headers: req.headers,
+      query: req.query,
+      payload: req.body,
+    })
+    agent.emit('debugger-input-v1', {
+      headers: req.headers,
+      query: req.query,
+      payload: req.body,
+    })
+  })
+
+  app.post('/debugger/v2/input', (req, res) => {
+    res.status(agent.debuggerV2IntakeStatusCode).send()
+    if (agent.debuggerV2IntakeStatusCode === 404) {
+      agent.emit('debugger-input-v2-404')
+      return
+    }
+    agent.emit('debugger-input', {
+      headers: req.headers,
+      query: req.query,
+      payload: req.body,
+    })
+    agent.emit('debugger-input-v2', {
       headers: req.headers,
       query: req.query,
       payload: req.body,
@@ -417,11 +451,23 @@ function buildExpressServer (agent) {
   })
 
   app.post('/debugger/v1/diagnostics', upload.any(), (req, res) => {
-    res.status(200).send()
-    agent.emit('debugger-diagnostics', {
-      headers: req.headers,
-      payload: JSON.parse((/** @type {Express.Multer.File[]} */ (req.files))[0].buffer.toString()),
-    })
+    res.status(200).send() // TODO: Should we send a 202 here instead?
+    // The diagnostics endpoint can receive both probe results and status messages
+    // Emit the appropriate events based on payload structure
+    const isProbeResult = req.body[0]?.debugger?.snapshot !== undefined
+    if (isProbeResult) {
+      const event = {
+        headers: req.headers,
+        payload: req.body,
+      }
+      agent.emit('debugger-input', event)
+      agent.emit('debugger-diagnostics-input', event)
+    } else {
+      agent.emit('debugger-diagnostics', {
+        headers: req.headers,
+        payload: JSON.parse((/** @type {Express.Multer.File[]} */ (req.files))[0].buffer.toString()),
+      })
+    }
   })
 
   app.post('/profiling/v1/input', upload.any(), (req, res) => {
