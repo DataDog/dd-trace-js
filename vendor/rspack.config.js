@@ -1,7 +1,5 @@
 'use strict'
 
-// TODO: Stop depending on `@opentelemetry/api` and instead intercept the user
-//       version with an instrumentation.
 // TODO: Stop depending on `@openfeature/server-sdk` and `@openfeature/core` and
 //       instead intercept the user version with an instrumentation.
 // TODO: Vendor `@datadog/openfeature-node-server` when the above has been
@@ -44,10 +42,6 @@ module.exports = {
     checkIds: 'named',
     moduleIds: 'named',
   },
-  // These are shared between dd-trace and users, so they need to be external.
-  externals: {
-    '@opentelemetry/api': '@opentelemetry/api'
-  },
   plugins: [
     new LicenseWebpackPlugin({
       outputFilename: '[name]/LICENSE',
@@ -59,14 +53,25 @@ module.exports = {
     }),
     new CopyRspackPlugin({
       patterns: [
-        // The OpenTracing types are exposed in the public API of dd-trace so
-        // they need to be available in the package.
+        // Types that are exposed in the public API of dd-trace and that need to
+        // be available in the package.
+        {
+          from: '**/*.d.ts',
+          context: join(__dirname, 'node_modules', '@opentelemetry', 'api', 'build', 'src'),
+          to: '@opentelemetry/api'
+        },
+        {
+          from: '**/*.d.ts',
+          context: join(__dirname, 'node_modules', '@opentelemetry', 'api-logs', 'build', 'src'),
+          to: '@opentelemetry/api-logs'
+        },
         {
           from: '**/*.d.ts',
           context: join(__dirname, 'node_modules', 'opentracing', 'lib'),
           to: 'opentracing'
         },
-        // Binaries need to be copied manually.
+
+        // Binaries that need to be copied manually.
         {
           from: 'source-map/lib/mappings.wasm',
           to: 'source-map'

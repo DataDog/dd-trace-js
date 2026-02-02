@@ -7,6 +7,8 @@
     "@datadog/sketches-js": "2.1.1",
     "@datadog/source-map": "npm:source-map@^0.6.0",
     "@isaacs/ttlcache": "^2.1.4",
+    "@opentelemetry/api": ">=1.0.0 <1.10.0",
+    "@opentelemetry/api-logs": "<1.0.0",
     "@opentelemetry/core": ">=1.14.0 <1.31.0",
     "@opentelemetry/resources": ">=1.0.0 <1.31.0",
     "astring": "^1.9.0",

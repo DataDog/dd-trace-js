@@ -1,6 +1,6 @@
 'use strict'
 
-const { trace, context, propagation } = require('@opentelemetry/api')
+const { trace, context, propagation } = require('../../../../vendor/dist/@opentelemetry/api')
 const { W3CTraceContextPropagator } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const tracer = require('../../')

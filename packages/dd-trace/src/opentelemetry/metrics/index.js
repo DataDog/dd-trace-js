@@ -28,7 +28,7 @@ const os = require('os')
  * @package
  */
 
-const { metrics } = require('@opentelemetry/api')
+const { metrics } = require('../../../../../vendor/dist/@opentelemetry/api')
 const MeterProvider = require('./meter_provider')
 const PeriodicMetricReader = require('./periodic_metric_reader')
 const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')

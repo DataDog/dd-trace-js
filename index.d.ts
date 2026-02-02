@@ -1,7 +1,7 @@
 import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from "http";
 import { LookupFunction } from 'net';
 import * as opentracing from "./vendor/dist/opentracing";
-import * as otel from "@opentelemetry/api";
+import * as otel from "./vendor/dist/@opentelemetry/api";
 
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.

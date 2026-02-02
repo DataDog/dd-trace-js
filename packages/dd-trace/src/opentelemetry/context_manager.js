@@ -1,6 +1,6 @@
 'use strict'
 
-const { trace, ROOT_CONTEXT, propagation } = require('@opentelemetry/api')
+const { trace, ROOT_CONTEXT, propagation } = require('../../../../vendor/dist/@opentelemetry/api')
 const { storage } = require('../../../datadog-core')
 
 const tracer = require('../../')

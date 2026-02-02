@@ -1,7 +1,7 @@
 'use strict'
 
 const { performance } = require('perf_hooks')
-const api = require('@opentelemetry/api')
+const api = require('../../../../vendor/dist/@opentelemetry/api')
 
 const { timeOrigin } = performance
 

@@ -1,6 +1,6 @@
 'use strict'
 
-const api = require('@opentelemetry/api')
+const api = require('../../../../vendor/dist/@opentelemetry/api')
 const { sanitizeAttributes } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const id = require('../id')

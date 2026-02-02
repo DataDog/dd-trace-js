@@ -1,6 +1,6 @@
 'use strict'
-const { logs } = require('@opentelemetry/api-logs')
-const { context } = require('@opentelemetry/api')
+const { logs } = require('../../../../../vendor/dist/@opentelemetry/api')
+const { context } = require('../../../../../vendor/dist/@opentelemetry/api')
 const log = require('../../log')
 const ContextManager = require('../context_manager')
 const Logger = require('./logger')
