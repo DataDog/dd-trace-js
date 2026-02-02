@@ -24,8 +24,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this._tracer = tracer
     this._config = config
 
-    log.debug(this.constructor.name + ' created with timeout: ' +
-      config.experimental.flaggingProvider.initializationTimeoutMs + 'ms')
+    log.debug('%s created with timeout: %dms', this.constructor.name,
+      config.experimental.flaggingProvider.initializationTimeoutMs)
   }
 
   /**
@@ -40,7 +40,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     if (typeof this.setConfiguration === 'function') {
       this.setConfiguration(ufc)
     }
-    log.debug(this.constructor.name + ' provider configuration updated')
+    log.debug('%s provider configuration updated', this.constructor.name)
   }
 }
 
