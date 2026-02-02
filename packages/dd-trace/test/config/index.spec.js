@@ -59,7 +59,7 @@ describe('Config', () => {
         '../log': log,
         '../telemetry': { updateConfig },
         '../serverless': serverless,
-        fs,
+        'node:fs': fs,
         './helper': configHelper,
       })(options)
     }
