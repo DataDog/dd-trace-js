@@ -657,20 +657,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const isEfdEnabled = this.isEarlyFlakeDetectionEnabled
       const isEfdActive = isEfdEnabled && (isNewTest || isModifiedTest)
       const isLastEfdRetry = isEfdRetry && numberOfExecutedRetries >= (earlyFlakeDetectionNumRetries + 1)
-      const isFinalEfdTestExecution = isEfdEnabled && (!isEfdActive || isLastEfdRetry)
+      const isFinalEfdTestExecution = isEfdActive && isLastEfdRetry
 
       let finalStatus
       if (isEfdActive && isFinalEfdTestExecution) {
         // For EFD: The framework reports 'pass' if ANY attempt passed (flaky but not failing)
         const testStatuses = newTestsTestStatuses.get(testName)
-        if (testStatuses && testStatuses.includes('pass')) {
-          finalStatus = 'pass'
-        } else {
-          finalStatus = 'fail'
-        }
+        finalStatus = testStatuses && testStatuses.includes('pass') ? 'pass' : 'fail'
       }
 
-      return { isEfdEnabled, isFinalEfdTestExecution, finalStatus }
+      return { isEfdEnabled, isEfdActive, isFinalEfdTestExecution, finalStatus }
     }
 
     getAtrResult ({ status, isEfdRetry, isAttemptToFix, numberOfTestInvocations }) {
@@ -699,11 +695,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (isAttemptToFixEnabled && isFinalAttemptToFixExecution) {
         // For Attempt to Fix: 'pass' only if ALL attempts passed, 'fail' if ANY failed
         const testStatuses = attemptToFixRetriedTestsStatuses.get(testName)
-        if (testStatuses && testStatuses.every(status => status === 'pass')) {
-          finalStatus = 'pass'
-        } else {
-          finalStatus = 'fail'
-        }
+        finalStatus = testStatuses && testStatuses.every(status => status === 'pass') ? 'pass' : 'fail'
       }
 
       return { isAttemptToFixEnabled, isFinalAttemptToFixExecution, finalStatus }
@@ -727,7 +719,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       })
 
       // When no retry features are active, every test execution is final
-      const noRetryFeaturesActive = !efdResult.isEfdEnabled && !atrResult.isAtrEnabled && !attemptToFixResult.isAttemptToFixEnabled
+      const noRetryFeaturesActive =
+        !efdResult.isEfdActive &&
+        !atrResult.isAtrEnabled &&
+        !attemptToFixResult.isAttemptToFixEnabled
       const isFinalTestExecution = noRetryFeaturesActive ||
         efdResult.isFinalEfdTestExecution ||
         atrResult.isFinalAtrTestExecution ||
