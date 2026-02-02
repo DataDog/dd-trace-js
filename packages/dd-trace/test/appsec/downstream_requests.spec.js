@@ -18,9 +18,9 @@ describe('appsec downstream_requests', () => {
         apiSecurity: {
           enabled: true,
           downstreamRequestBodyAnalysisSampleRate: 1,
-          maxDownstreamRequestBodyAnalysis: 1
-        }
-      }
+          maxDownstreamRequestBodyAnalysis: 1,
+        },
+      },
     }
 
     logWarnStub = sinon.stub(log, 'warn')
@@ -123,7 +123,7 @@ describe('appsec downstream_requests', () => {
     it('detects redirect with location header', () => {
       const res = {
         statusCode: 302,
-        headers: { location: 'http://example.com/redirect' }
+        headers: { location: 'http://example.com/redirect' },
       }
 
       const isRedirect = downstream.handleRedirectResponse(req, res, true)
@@ -134,7 +134,7 @@ describe('appsec downstream_requests', () => {
     it('returns false for non redirect status codes', () => {
       const res = {
         statusCode: 200,
-        headers: {}
+        headers: {},
       }
 
       const isRedirect = downstream.handleRedirectResponse(req, res, true)
@@ -145,7 +145,7 @@ describe('appsec downstream_requests', () => {
     it('returns false for redirect without location header', () => {
       const res = {
         statusCode: 302,
-        headers: {}
+        headers: {},
       }
 
       const isRedirect = downstream.handleRedirectResponse(req, res, true)
@@ -156,7 +156,7 @@ describe('appsec downstream_requests', () => {
     it('stores body collection decision for redirect', () => {
       const res = {
         statusCode: 302,
-        headers: { location: 'http://example.com/target' }
+        headers: { location: 'http://example.com/target' },
       }
 
       downstream.handleRedirectResponse(req, res)
@@ -176,10 +176,10 @@ describe('appsec downstream_requests', () => {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-Custom': ['a', 'b']
-            }
-          }
-        }
+              'X-Custom': ['a', 'b'],
+            },
+          },
+        },
       }
     })
 
@@ -189,7 +189,7 @@ describe('appsec downstream_requests', () => {
       assert.strictEqual(addressesMap[addresses.HTTP_OUTGOING_METHOD], 'POST')
       assert.deepStrictEqual(addressesMap[addresses.HTTP_OUTGOING_HEADERS], {
         'Content-Type': 'application/json',
-        'X-Custom': ['a', 'b']
+        'X-Custom': ['a', 'b'],
       })
     })
 
@@ -218,8 +218,8 @@ describe('appsec downstream_requests', () => {
         statusCode: 201,
         headers: {
           'content-type': 'application/json',
-          'set-cookie': ['a=1', 'b=2']
-        }
+          'set-cookie': ['a=1', 'b=2'],
+        },
       }
     })
 
@@ -229,7 +229,7 @@ describe('appsec downstream_requests', () => {
       assert.strictEqual(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_STATUS], '201')
       assert.deepStrictEqual(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_HEADERS], {
         'content-type': 'application/json',
-        'set-cookie': ['a=1', 'b=2']
+        'set-cookie': ['a=1', 'b=2'],
       })
     })
 
@@ -361,7 +361,7 @@ describe('appsec downstream_requests', () => {
     beforeEach(() => {
       web = require('../../src/plugins/util/web')
       span = {
-        setTag: require('sinon').stub()
+        setTag: require('sinon').stub(),
       }
     })
 

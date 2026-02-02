@@ -7,7 +7,7 @@ const {
   HTTP_OUTGOING_HEADERS,
   HTTP_OUTGOING_RESPONSE_STATUS,
   HTTP_OUTGOING_RESPONSE_HEADERS,
-  HTTP_OUTGOING_RESPONSE_BODY
+  HTTP_OUTGOING_RESPONSE_BODY,
 } = require('./addresses')
 
 const KNUTH_FACTOR = 11400714819323199488n // eslint-disable-line unicorn/numeric-separators-style
@@ -288,5 +288,5 @@ module.exports = {
   // exports for tests
   parseBody,
   getMethod,
-  storeRedirectBodyCollectionDecision
+  storeRedirectBodyCollectionDecision,
 }

@@ -1,7 +1,7 @@
 'use strict'
 
 require('dd-trace').init({
-  flushInterval: 0
+  flushInterval: 0,
 })
 
 const http = require('http')

@@ -1,9 +1,9 @@
 'use strict'
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
 describe('RASP - downstream request integration', () => {
   let cwd, appFile
@@ -28,8 +28,8 @@ describe('RASP - downstream request integration', () => {
         DD_APPSEC_RASP_ENABLED: 'true',
         DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp_downstream_request.json'),
         DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-        ...envOverrides
-      }
+        ...envOverrides,
+      },
     })
     const axios = Axios.create({ baseURL: proc.url })
     return { agent, proc, axios }
@@ -109,7 +109,7 @@ describe('RASP - downstream request integration', () => {
         this.timeout(60000)
         const setup = await setupTest({
           DD_API_SECURITY_DOWNSTREAM_REQUEST_BODY_ANALYSIS_SAMPLE_RATE: '1.0',
-          DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: '10'
+          DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: '10',
         })
         agent = setup.agent
         proc = setup.proc
@@ -170,7 +170,7 @@ describe('RASP - downstream request integration', () => {
         this.timeout(60000)
         const setup = await setupTest({
           DD_API_SECURITY_DOWNSTREAM_REQUEST_BODY_ANALYSIS_SAMPLE_RATE: '0.0',
-          DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: '10'
+          DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: '10',
         })
         agent = setup.agent
         proc = setup.proc
@@ -195,7 +195,7 @@ describe('RASP - downstream request integration', () => {
         this.timeout(60000)
         const setup = await setupTest({
           DD_API_SECURITY_DOWNSTREAM_REQUEST_BODY_ANALYSIS_SAMPLE_RATE: '1.0',
-          DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: '0'
+          DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: '0',
         })
         agent = setup.agent
         proc = setup.proc
