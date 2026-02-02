@@ -229,7 +229,9 @@ class DataStreamsProcessor {
         closestOppositeDirectionEdgeStart = edgeStartNs
       }
       log.debug(
-        () => `Setting DSM Checkpoint from extracted parent context with hash: ${parentHash} and edge tags: ${edgeTags}`
+        'Setting DSM Checkpoint from extracted parent context with hash: %s and edge tags: %s',
+        parentHash,
+        edgeTags
       )
     }
     const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
