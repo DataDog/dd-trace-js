@@ -355,7 +355,17 @@ function insertVersionDep (dir, pkgName, version) {
   })
 }
 
+const ORIGINAL_PROCESS_EXIT = process.exit
+
 exports.mochaHooks = {
+  beforeAll () {
+    process.exit = (code) => {
+      throw new Error(`process.exit(${code}) was called during tests`)
+    }
+  },
+  afterAll () {
+    process.exit = ORIGINAL_PROCESS_EXIT
+  },
   afterEach () {
     agent.reset()
     runtimeMetrics.stop()
