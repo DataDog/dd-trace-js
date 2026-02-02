@@ -15,18 +15,13 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
     })
 
     it('should use diagnostics endpoint when agent does not advertise v2 support', async function () {
-      const diagnosticsPromise = new Promise(/** @type {() => void} */ (resolve) => {
+      const diagnosticsPromise = new Promise((resolve) => {
         t.agent.once('debugger-diagnostics-input', ({ payload }) => {
-          assertObjectContains(payload[0], {
-            ddsource: 'dd_debugger',
-            service: 'node',
-            debugger: { snapshot: {} },
-          })
-          resolve()
+          resolve(payload[0])
         })
       })
 
-      t.agent.on('debugger-input-v2', () => {
+      t.agent.once('debugger-input-v2', () => {
         assert.fail('v2 endpoint should not be called')
       })
 
@@ -35,7 +30,11 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       assert.strictEqual(response.status, 200)
       assert.deepStrictEqual(response.data, { hello: 'bar' })
 
-      await diagnosticsPromise
+      assertObjectContains(await diagnosticsPromise, {
+        ddsource: 'dd_debugger',
+        service: 'node',
+        debugger: { snapshot: {} },
+      })
     })
 
     it('should continue using diagnostics endpoint for multiple requests', async function () {

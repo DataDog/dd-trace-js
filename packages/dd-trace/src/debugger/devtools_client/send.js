@@ -87,11 +87,7 @@ function onFlush (payload) {
   log.debug('[debugger:devtools_client] Flushing probe payload buffer')
 
   request(payload, buildRequestOpts(), (err, res, statusCode) => {
-    if (handleV2FallbackIfNeeded(statusCode, payload)) {
-      return
-    }
-
-    if (err) {
+    if (!handleV2FallbackIfNeeded(statusCode, payload) && err) {
       log.error('[debugger:devtools_client] Error sending probe payload', err)
     }
   })
