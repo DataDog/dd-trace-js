@@ -40,7 +40,6 @@ async function run () {
 async function assertPrerequisites () {
   const filter = process.env.PLUGINS?.split('|')
 
-  const moduleNames = (await readdir(join(__dirname, '..', 'packages', 'datadog-instrumentations', 'src')))
   const instrumentationFiles = await readdir(join(__dirname, '..', 'packages', 'datadog-instrumentations', 'src'))
   
   const moduleNames = instrumentationFiles.filter(file => file.endsWith('.js'))
