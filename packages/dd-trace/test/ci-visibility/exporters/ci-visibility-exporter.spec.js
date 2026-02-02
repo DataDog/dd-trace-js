@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const cp = require('node:child_process')
 const fs = require('node:fs')
+const { URL } = require('node:url')
 const zlib = require('node:zlib')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
@@ -15,8 +16,7 @@ require('../../../../dd-trace/test/setup/core')
 const CiVisibilityExporter = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
 
 describe('CI Visibility Exporter', () => {
-  const port = 8126
-  const url = `http://127.0.0.1:${port}`
+  const url = new URL('http://127.0.0.1:8126')
 
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
@@ -40,8 +40,7 @@ describe('CI Visibility Exporter', () => {
         .post('/api/v2/git/repository/packfile')
         .reply(202, '')
 
-      const urlObj = new URL(url)
-      const ciVisibilityExporter = new CiVisibilityExporter({ url: urlObj, isGitUploadEnabled: true })
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
         assert.ok(err == null)
@@ -57,8 +56,7 @@ describe('CI Visibility Exporter', () => {
         .post('/api/v2/git/repository/search_commits')
         .reply(404)
 
-      const urlObj = new URL(url)
-      const ciVisibilityExporter = new CiVisibilityExporter({ url: urlObj, isGitUploadEnabled: true })
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
         assert.match(err.message, /Error fetching commits to exclude/)
@@ -80,8 +78,7 @@ describe('CI Visibility Exporter', () => {
         .post('/api/v2/git/repository/packfile')
         .reply(202, '')
 
-      const urlObj = new URL(url)
-      const ciVisibilityExporter = new CiVisibilityExporter({ url: urlObj, isGitUploadEnabled: true })
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
 
       ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       ciVisibilityExporter.sendGitMetadata('https://custom-git@datadog.com')
@@ -98,7 +95,7 @@ describe('CI Visibility Exporter', () => {
         .post('/api/v2/git/repository/packfile')
         .reply(202, '')
 
-      const ciVisibilityExporter = new CiVisibilityExporter({ port, isGitUploadEnabled: true })
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
       ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       ciVisibilityExporter.getLibraryConfiguration({}, () => {})
       ciVisibilityExporter._gitUploadPromise.then(() => {
@@ -126,7 +123,7 @@ describe('CI Visibility Exporter', () => {
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({
-          port,
+          url,
           isIntelligentTestRunnerEnabled: true,
           tags: {
             'test.configuration.my_custom_config': 'my_custom_config_value',
@@ -160,7 +157,7 @@ describe('CI Visibility Exporter', () => {
             },
           }))
         const ciVisibilityExporter = new CiVisibilityExporter({
-          port,
+          url,
           isIntelligentTestRunnerEnabled: true,
         })
         const testConfiguration = {
@@ -195,7 +192,7 @@ describe('CI Visibility Exporter', () => {
             },
           }))
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ port, isIntelligentTestRunnerEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, isIntelligentTestRunnerEnabled: true })
 
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
           assertObjectContains(libraryConfig, {
@@ -225,7 +222,7 @@ describe('CI Visibility Exporter', () => {
             },
           }))
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ port, isIntelligentTestRunnerEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, isIntelligentTestRunnerEnabled: true })
         assert.strictEqual(ciVisibilityExporter.shouldRequestSkippableSuites(), false)
 
         ciVisibilityExporter.getLibraryConfiguration({}, () => {
@@ -260,7 +257,7 @@ describe('CI Visibility Exporter', () => {
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({
-          port, isIntelligentTestRunnerEnabled: true,
+          url, isIntelligentTestRunnerEnabled: true,
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
@@ -301,7 +298,7 @@ describe('CI Visibility Exporter', () => {
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({
-          port, isIntelligentTestRunnerEnabled: true,
+          url, isIntelligentTestRunnerEnabled: true,
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
@@ -323,7 +320,7 @@ describe('CI Visibility Exporter', () => {
           .post('/api/v2/ci/tests/skippable')
           .reply(200)
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
         ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites) => {
           assert.strictEqual(err, null)
           assert.deepStrictEqual(skippableSuites, [])
@@ -338,7 +335,7 @@ describe('CI Visibility Exporter', () => {
           .post('/api/v2/ci/tests/skippable')
           .reply(200)
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ port, isIntelligentTestRunnerEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, isIntelligentTestRunnerEnabled: true })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(false)
         ciVisibilityExporter._resolveGit()
@@ -378,7 +375,7 @@ describe('CI Visibility Exporter', () => {
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({
-          port,
+          url,
           isIntelligentTestRunnerEnabled: true,
           isGitUploadEnabled: true,
           tags: {
@@ -422,7 +419,7 @@ describe('CI Visibility Exporter', () => {
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({
-          port,
+          url,
           isIntelligentTestRunnerEnabled: true,
           isGitUploadEnabled: true,
         })
@@ -445,7 +442,7 @@ describe('CI Visibility Exporter', () => {
           .post('/api/v2/ci/tests/skippable')
           .reply(200)
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ port, isIntelligentTestRunnerEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, isIntelligentTestRunnerEnabled: true })
 
         ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
@@ -492,7 +489,7 @@ describe('CI Visibility Exporter', () => {
             'content-encoding': 'gzip',
           })
         const ciVisibilityExporter = new CiVisibilityExporter({
-          port,
+          url,
           isIntelligentTestRunnerEnabled: true,
           isGitUploadEnabled: true,
         })
@@ -539,7 +536,7 @@ describe('CI Visibility Exporter', () => {
             })
           })
         const ciVisibilityExporter = new CiVisibilityExporter({
-          port,
+          url,
           isIntelligentTestRunnerEnabled: true,
           isGitUploadEnabled: true,
         })
@@ -563,7 +560,7 @@ describe('CI Visibility Exporter', () => {
     context('is not initialized', () => {
       it('should store traces in a buffer', () => {
         const trace = []
-        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
         ciVisibilityExporter.export(trace)
         ciVisibilityExporter._export = sinon.spy()
         assertObjectContains(ciVisibilityExporter._traceBuffer, trace)
@@ -578,7 +575,7 @@ describe('CI Visibility Exporter', () => {
           setUrl: sinon.spy(),
         }
         const trace = []
-        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter.export(trace)
@@ -596,7 +593,7 @@ describe('CI Visibility Exporter', () => {
         const trace = [{
           type: 'test_session_end',
         }]
-        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter.export(trace)
@@ -614,7 +611,7 @@ describe('CI Visibility Exporter', () => {
         const trace = [{
           type: 'test_session_end',
         }]
-        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter._canUseCiVisProtocol = true
@@ -629,7 +626,7 @@ describe('CI Visibility Exporter', () => {
     context('is not initialized', () => {
       it('should store coverages in a buffer', () => {
         const coverage = {}
-        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
         ciVisibilityExporter.exportCoverage(coverage)
         ciVisibilityExporter._export = sinon.spy()
         assertObjectContains(ciVisibilityExporter._coverageBuffer, [coverage])
@@ -644,7 +641,7 @@ describe('CI Visibility Exporter', () => {
           setUrl: sinon.spy(),
         }
         const coverage = {}
-        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._coverageWriter = writer
         ciVisibilityExporter.exportCoverage(coverage)
@@ -664,7 +661,7 @@ describe('CI Visibility Exporter', () => {
           spanId: '2',
           files: ['example.js'],
         }
-        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._coverageWriter = writer
         ciVisibilityExporter._canUseCiVisProtocol = true
@@ -684,7 +681,7 @@ describe('CI Visibility Exporter', () => {
           .reply(200)
 
         const ciVisibilityExporter = new CiVisibilityExporter({
-          port,
+          url,
         })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
@@ -705,7 +702,7 @@ describe('CI Visibility Exporter', () => {
           .post('/api/v2/ci/libraries/tests')
           .reply(200)
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(false)
         ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
@@ -735,7 +732,7 @@ describe('CI Visibility Exporter', () => {
             },
           }))
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
         ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
@@ -756,7 +753,7 @@ describe('CI Visibility Exporter', () => {
         const scope = nock(url)
           .post('/api/v2/ci/libraries/tests')
           .reply(500)
-        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
         ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
@@ -790,7 +787,7 @@ describe('CI Visibility Exporter', () => {
             'content-encoding': 'gzip',
           })
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
         ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
@@ -830,7 +827,7 @@ describe('CI Visibility Exporter', () => {
             })
           })
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
         ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
@@ -856,7 +853,7 @@ describe('CI Visibility Exporter', () => {
     context('is not initialized', () => {
       it('should do nothing', () => {
         const log = { message: 'log' }
-        const ciVisibilityExporter = new CiVisibilityExporter({ port, isTestDynamicInstrumentationEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, isTestDynamicInstrumentationEnabled: true })
         ciVisibilityExporter.exportDiLogs(log)
         ciVisibilityExporter._export = sinon.spy()
         sinon.assert.notCalled(ciVisibilityExporter._export)
@@ -871,7 +868,7 @@ describe('CI Visibility Exporter', () => {
           setUrl: sinon.spy(),
         }
         const log = { message: 'log' }
-        const ciVisibilityExporter = new CiVisibilityExporter({ port, isTestDynamicInstrumentationEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, isTestDynamicInstrumentationEnabled: true })
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._logsWriter = writer
         ciVisibilityExporter._canForwardLogs = false
@@ -915,7 +912,7 @@ describe('CI Visibility Exporter', () => {
         const ciVisibilityExporter = new CiVisibilityExporter({
           env: 'ci',
           version: '1.0.0',
-          port,
+          url,
           isTestDynamicInstrumentationEnabled: true,
           service: 'my-service',
         })

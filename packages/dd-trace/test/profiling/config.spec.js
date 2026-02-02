@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const os = require('node:os')
 const path = require('node:path')
+const { URL } = require('node:url')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const satisfies = require('semifies')
@@ -20,6 +21,7 @@ const samplingContextsAvailable = process.platform !== 'win32'
 const oomMonitoringSupported = process.platform !== 'win32'
 const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
 const zstdOrGzip = isAtLeast24 ? 'zstd' : 'gzip'
+const DEFAULT_AGENT_URL = new URL('http://127.0.0.1:8126')
 
 describe('config', () => {
   let Config
@@ -32,26 +34,7 @@ describe('config', () => {
   }
 
   beforeEach(() => {
-    const ProfilingConfig = require('../../src/profiling/config').Config
-    // Wrap the real profiling Config so tests see a valid default URL when none
-    // is provided, matching what the tracer Config singleton would provide at runtime.
-    Config = class TestConfig extends ProfilingConfig {
-      constructor (options = {}) {
-        const hasAddress =
-          options.url !== undefined ||
-          options.hostname !== undefined ||
-          options.port !== undefined
-
-        if (hasAddress) {
-          super(options)
-        } else {
-          super({
-            url: 'http://127.0.0.1:8126',
-            ...options,
-          })
-        }
-      }
-    }
+    Config = require('../../src/profiling/config').Config
     env = process.env
     process.env = {}
   })
@@ -61,7 +44,7 @@ describe('config', () => {
   })
 
   it('should have the correct defaults', () => {
-    const config = new Config()
+    const config = new Config({ url: DEFAULT_AGENT_URL })
 
     assertObjectContains(config, {
       service: 'node',
@@ -123,6 +106,7 @@ describe('config', () => {
   it('should filter out invalid profilers', () => {
     const errors = []
     const options = {
+      url: DEFAULT_AGENT_URL,
       logger: {
         debug () {},
         info () {},
@@ -149,6 +133,7 @@ describe('config', () => {
       DD_PROFILING_PROFILERS: '',
     }
     const options = {
+      url: DEFAULT_AGENT_URL,
       logger: nullLogger,
     }
 
@@ -167,6 +152,7 @@ describe('config', () => {
       process.env.DD_PROFILING_EXPERIMENTAL_CPU_ENABLED = '1'
     }
     const options = {
+      url: DEFAULT_AGENT_URL,
       logger: nullLogger,
     }
 
@@ -190,6 +176,7 @@ describe('config', () => {
       DD_PROFILING_HEAP_ENABLED: '1',
     }
     const options = {
+      url: DEFAULT_AGENT_URL,
       logger: nullLogger,
     }
 
@@ -206,6 +193,7 @@ describe('config', () => {
       DD_PROFILING_HEAP_ENABLED: '1',
     }
     const options = {
+      url: DEFAULT_AGENT_URL,
       logger: nullLogger,
     }
 
@@ -223,6 +211,7 @@ describe('config', () => {
       DD_PROFILING_HEAP_ENABLED: '1',
     }
     const options = {
+      url: DEFAULT_AGENT_URL,
       logger: nullLogger,
     }
 
@@ -245,6 +234,7 @@ describe('config', () => {
     }
 
     const options = {
+      url: DEFAULT_AGENT_URL,
       logger: nullLogger,
     }
 
@@ -264,6 +254,7 @@ describe('config', () => {
       DD_PROFILING_WALLTIME_ENABLED: '1',
     }
     const options = {
+      url: DEFAULT_AGENT_URL,
       logger: nullLogger,
     }
 
@@ -287,6 +278,7 @@ describe('config', () => {
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '1',
     }
     const options = {
+      url: DEFAULT_AGENT_URL,
       logger: nullLogger,
       profilers: ['wall'],
       codeHotspotsEnabled: false,
@@ -317,6 +309,7 @@ describe('config', () => {
     }
     const warnings = []
     const options = {
+      url: DEFAULT_AGENT_URL,
       logger: {
         debug () {},
         info () {},
@@ -339,6 +332,7 @@ describe('config', () => {
 
   function optionOnlyWorksWithGivenCondition (property, name, condition) {
     const options = {
+      url: DEFAULT_AGENT_URL,
       [property]: true,
     }
 
@@ -382,7 +376,7 @@ describe('config', () => {
       env: 'dev',
     }
 
-    const config = new Config({ tags })
+    const config = new Config({ url: DEFAULT_AGENT_URL, tags })
 
     assertObjectContains(config.tags, tags)
   })
@@ -397,7 +391,7 @@ describe('config', () => {
       version: '3.2.1',
     }
 
-    const config = new Config({ env, service, version, tags })
+    const config = new Config({ url: DEFAULT_AGENT_URL, env, service, version, tags })
 
     assertObjectContains(config.tags, { env, service, version })
   })
@@ -407,6 +401,7 @@ describe('config', () => {
     const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/sci_git_example.git'
 
     const config = new Config({
+      url: DEFAULT_AGENT_URL,
       repositoryUrl: DUMMY_REPOSITORY_URL,
       commitSHA: DUMMY_GIT_SHA,
     })
@@ -416,8 +411,7 @@ describe('config', () => {
 
   it('should support IPv6 hostname', () => {
     const options = {
-      hostname: '::1',
-      port: '8126',
+      url: new URL('http://[::1]:8126'),
     }
 
     const config = new Config(options)
@@ -431,7 +425,7 @@ describe('config', () => {
     process.env = {
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: 'false',
     }
-    const config = new Config({})
+    const config = new Config({ url: DEFAULT_AGENT_URL })
 
     assert.deepStrictEqual(config.oomMonitoring, {
       enabled: false,
@@ -443,7 +437,7 @@ describe('config', () => {
   })
 
   it('should enable OOM heap profiler by default and use process as default strategy', () => {
-    const config = new Config()
+    const config = new Config({ url: DEFAULT_AGENT_URL })
 
     if (oomMonitoringSupported) {
       assert.deepStrictEqual(config.oomMonitoring, {
@@ -472,6 +466,7 @@ describe('config', () => {
 
     for (const exporters of checks) {
       const config = new Config({
+        url: DEFAULT_AGENT_URL,
         sourceMap: false,
         exporters,
       })
@@ -492,6 +487,7 @@ describe('config', () => {
 
     for (const [profilers, ...expected] of checks) {
       const config = new Config({
+        url: DEFAULT_AGENT_URL,
         sourceMap: false,
         profilers,
       })
@@ -512,7 +508,7 @@ describe('config', () => {
         DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process,async,process',
       }
 
-      const config = new Config({})
+      const config = new Config({ url: DEFAULT_AGENT_URL })
 
       assert.deepStrictEqual(config.oomMonitoring, {
         enabled: true,
@@ -537,7 +533,7 @@ describe('config', () => {
         if (!isSupported) {
           this.skip()
         } else {
-          const config = new Config({})
+          const config = new Config({ url: DEFAULT_AGENT_URL })
           assert.strictEqual(config.asyncContextFrameEnabled, true)
         }
       })
@@ -550,7 +546,7 @@ describe('config', () => {
           try {
             const config = new Config({
               // In production this comes from the tracer Config singleton; we mimic it here.
-              url: 'http://127.0.0.1:8126',
+              url: DEFAULT_AGENT_URL,
             })
             assert.strictEqual(config.asyncContextFrameEnabled, false)
           } finally {
@@ -565,7 +561,7 @@ describe('config', () => {
         if (isSupported) {
           this.skip()
         } else {
-          const config = new Config({})
+          const config = new Config({ url: DEFAULT_AGENT_URL })
           assert.strictEqual(config.asyncContextFrameEnabled, false)
         }
       })
@@ -576,7 +572,7 @@ describe('config', () => {
         } else {
           process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = '1'
           try {
-            const config = new Config()
+            const config = new Config({ url: DEFAULT_AGENT_URL })
             assert.strictEqual(config.asyncContextFrameEnabled, false)
           } finally {
             delete process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
@@ -604,7 +600,7 @@ describe('config', () => {
       const config = new Config({
         logger,
         // In production this comes from the tracer Config singleton; we mimic it here.
-        url: 'http://127.0.0.1:8126',
+        url: DEFAULT_AGENT_URL,
       })
 
       if (warning) {

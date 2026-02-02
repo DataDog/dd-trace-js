@@ -807,13 +807,14 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_METRIC_EXPORT_TIMEOUT: '0',
         OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '0',
       }, false)
-      assert(warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_BSP_SCHEDULE_DELAY/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_METRIC_EXPORT_INTERVAL/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_BSP_MAX_QUEUE_SIZE/)))
-      assert(!warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_EXPORTER_OTLP_TIMEOUT/)))
-      assert(!warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_METRIC_EXPORT_TIMEOUT/)))
-      assert(!warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/)))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', 0, 'OTEL_BSP_SCHEDULE_DELAY'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', 0, 'OTEL_METRIC_EXPORT_INTERVAL'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', 0, 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', 0, 'OTEL_BSP_MAX_QUEUE_SIZE'))
+      assert(!warnSpy.calledWith('Invalid value %s for %s. Using default value.', 0, 'OTEL_EXPORTER_OTLP_TIMEOUT'))
+      assert(!warnSpy.calledWith('Invalid value %s for %s. Using default value.', 0, 'OTEL_METRIC_EXPORT_TIMEOUT'))
+      assert(!warnSpy.calledWith('Invalid value %s for %s. Using default value.', 0,
+        'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT'))
     })
 
     it('rejects negative values for all configs', () => {
@@ -827,14 +828,15 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '-1',
         OTEL_BSP_MAX_QUEUE_SIZE: '-1',
       }, false)
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_EXPORTER_OTLP_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_METRIC_EXPORT_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_METRIC_EXPORT_INTERVAL/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_BSP_SCHEDULE_DELAY/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_BSP_MAX_QUEUE_SIZE/)))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', -1, 'OTEL_EXPORTER_OTLP_TIMEOUT'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', -1, 'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', -1,
+        'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', -1, 'OTEL_METRIC_EXPORT_TIMEOUT'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', -1, 'OTEL_METRIC_EXPORT_INTERVAL'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', -1, 'OTEL_BSP_SCHEDULE_DELAY'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', -1, 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', -1, 'OTEL_BSP_MAX_QUEUE_SIZE'))
     })
 
     it('rejects values that are not numbers for all configs', () => {
@@ -848,14 +850,16 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_BSP_MAX_EXPORT_BATCH_SIZE: 'abc',
         OTEL_BSP_MAX_QUEUE_SIZE: 'xyz',
       }, false)
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_EXPORTER_OTLP_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_METRIC_EXPORT_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_METRIC_EXPORT_INTERVAL/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_BSP_SCHEDULE_DELAY/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_BSP_MAX_QUEUE_SIZE/)))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN, 'OTEL_EXPORTER_OTLP_TIMEOUT'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN,
+        'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN,
+        'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN, 'OTEL_METRIC_EXPORT_TIMEOUT'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN, 'OTEL_METRIC_EXPORT_INTERVAL'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN, 'OTEL_BSP_SCHEDULE_DELAY'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN, 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE'))
+      assert(warnSpy.calledWith('Invalid value %s for %s. Using default value.', NaN, 'OTEL_BSP_MAX_QUEUE_SIZE'))
     })
   })
 

@@ -2478,7 +2478,9 @@ describe('Config', () => {
       it('should not be used', () => {
         const config = getConfig()
 
-        assert.strictEqual(config.url, undefined)
+        // Should fall back to HTTP URL
+        assert.ok(config.url instanceof URL)
+        assert.strictEqual(config.url.protocol, 'http:')
       })
     })
 
@@ -2492,7 +2494,9 @@ describe('Config', () => {
 
         if (os.type() === 'Windows_NT') {
           assert.strictEqual(existsSyncParam, undefined)
-          assert.strictEqual(config.url, undefined)
+          // Windows falls back to HTTP URL
+          assert.ok(config.url instanceof URL)
+          assert.strictEqual(config.url.protocol, 'http:')
         } else {
           assert.strictEqual(existsSyncParam, '/var/run/datadog/apm.socket')
           assert.strictEqual(config.url.toString(), 'unix:///var/run/datadog/apm.socket')
@@ -2526,13 +2530,19 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, undefined)
+        // Should use HTTP URL with the specified port
+        assert.ok(config.url instanceof URL)
+        assert.strictEqual(config.url.protocol, 'http:')
+        assert.strictEqual(config.url.port, '12345')
       })
 
       it('should not be used when options.port provided', () => {
         const config = getConfig({ port: 12345 })
 
-        assert.strictEqual(config.url, undefined)
+        // Should use HTTP URL with the specified port
+        assert.ok(config.url instanceof URL)
+        assert.strictEqual(config.url.protocol, 'http:')
+        assert.strictEqual(config.url.port, '12345')
       })
 
       it('should not be used when DD_TRACE_AGENT_HOSTNAME provided', () => {
@@ -2540,7 +2550,10 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, undefined)
+        // Should use HTTP URL with the specified hostname
+        assert.ok(config.url instanceof URL)
+        assert.strictEqual(config.url.protocol, 'http:')
+        assert.strictEqual(config.url.hostname, 'example.com')
       })
 
       it('should not be used when DD_AGENT_HOST provided', () => {
@@ -2548,13 +2561,19 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, undefined)
+        // Should use HTTP URL with the specified hostname
+        assert.ok(config.url instanceof URL)
+        assert.strictEqual(config.url.protocol, 'http:')
+        assert.strictEqual(config.url.hostname, 'example.com')
       })
 
       it('should not be used when options.hostname provided', () => {
         const config = getConfig({ hostname: 'example.com' })
 
-        assert.strictEqual(config.url, undefined)
+        // Should use HTTP URL with the specified hostname
+        assert.ok(config.url instanceof URL)
+        assert.strictEqual(config.url.protocol, 'http:')
+        assert.strictEqual(config.url.hostname, 'example.com')
       })
     })
   })
@@ -3790,6 +3809,123 @@ rules:
       assert.strictEqual(config.tracing, false)
       assert.strictEqual(config.logInjection, true)
       assert.strictEqual(config.sampleRate, undefined)
+    })
+  })
+
+  describe('config.url calculation', () => {
+    let config
+    const { URL } = require('url')
+
+    beforeEach(() => {
+      // Ensure Unix socket doesn't exist for these tests
+      existsSyncReturn = false
+    })
+
+    afterEach(() => {
+      delete process.env.DD_CIVISIBILITY_AGENTLESS_URL
+      delete process.env.DD_TRACE_AGENT_URL
+      delete process.env.DD_AGENT_HOST
+      delete process.env.DD_TRACE_AGENT_PORT
+    })
+
+    it('should always set config.url during initialization', () => {
+      config = getConfig()
+      assert.ok(config.url instanceof URL)
+    })
+
+    it('should set ciVisibilityAgentlessUrl independently when DD_CIVISIBILITY_AGENTLESS_URL is set', () => {
+      process.env.DD_CIVISIBILITY_AGENTLESS_URL = 'http://ci-agentless:9999'
+      config = getConfig({ isCiVisibility: true })
+      // config.url should use defaults (not overridden by DD_CIVISIBILITY_AGENTLESS_URL)
+      assert.ok(config.url instanceof URL)
+      assert.strictEqual(config.url.hostname, '127.0.0.1')
+      assert.strictEqual(config.url.port, '8126')
+      // ciVisibilityAgentlessUrl is set separately for agentless mode
+      assert.ok(config.ciVisibilityAgentlessUrl instanceof URL)
+      assert.strictEqual(config.ciVisibilityAgentlessUrl.hostname, 'ci-agentless')
+      assert.strictEqual(config.ciVisibilityAgentlessUrl.port, '9999')
+    })
+
+    it('should use explicit DD_TRACE_AGENT_URL', () => {
+      process.env.DD_TRACE_AGENT_URL = 'http://explicit:7777'
+      config = getConfig()
+      assert.strictEqual(config.url.hostname, 'explicit')
+      assert.strictEqual(config.url.port, '7777')
+    })
+
+    it('should use explicit options.url', () => {
+      config = getConfig({ url: 'http://options-url:6666' })
+      assert.strictEqual(config.url.hostname, 'options-url')
+      assert.strictEqual(config.url.port, '6666')
+    })
+
+    it('should fallback to hostname and port from options', () => {
+      config = getConfig({ hostname: 'custom', port: '1234' })
+      assert.strictEqual(config.url.hostname, 'custom')
+      assert.strictEqual(config.url.port, '1234')
+    })
+
+    it('should fallback to hostname and port from env vars', () => {
+      process.env.DD_AGENT_HOST = 'env-host'
+      process.env.DD_TRACE_AGENT_PORT = '5678'
+      config = getConfig()
+      assert.strictEqual(config.url.hostname, 'env-host')
+      assert.strictEqual(config.url.port, '5678')
+    })
+
+    it('should use defaults when nothing specified', () => {
+      config = getConfig()
+      // Should use default hostname and port (127.0.0.1:8126)
+      assert.ok(config.url instanceof URL)
+      assert.strictEqual(config.url.protocol, 'http:')
+      assert.ok(config.url.hostname) // Just check it's set
+      assert.ok(config.url.port) // Just check it's set
+    })
+
+    it('should keep url and ciVisibilityAgentlessUrl separate when both are set', () => {
+      process.env.DD_CIVISIBILITY_AGENTLESS_URL = 'http://ci-vis:1111'
+      process.env.DD_TRACE_AGENT_URL = 'http://explicit:2222'
+      config = getConfig({ isCiVisibility: true })
+      // config.url uses DD_TRACE_AGENT_URL (for agent/agent-proxy mode)
+      assert.ok(config.url instanceof URL)
+      assert.strictEqual(config.url.hostname, 'explicit')
+      assert.strictEqual(config.url.port, '2222')
+      // ciVisibilityAgentlessUrl uses DD_CIVISIBILITY_AGENTLESS_URL (for agentless mode)
+      assert.ok(config.ciVisibilityAgentlessUrl instanceof URL)
+      assert.strictEqual(config.ciVisibilityAgentlessUrl.hostname, 'ci-vis')
+      assert.strictEqual(config.ciVisibilityAgentlessUrl.port, '1111')
+    })
+
+    it('should prioritize explicit URL over hostname/port', () => {
+      process.env.DD_TRACE_AGENT_URL = 'http://explicit:3333'
+      process.env.DD_AGENT_HOST = 'ignored-host'
+      process.env.DD_TRACE_AGENT_PORT = '4444'
+      config = getConfig()
+      assert.strictEqual(config.url.hostname, 'explicit')
+      assert.strictEqual(config.url.port, '3333')
+    })
+
+    it('should fall back to defaults when explicit URL is invalid', () => {
+      process.env.DD_TRACE_AGENT_URL = 'not a valid url'
+      config = getConfig()
+      // Should use defaults instead of crashing
+      assert.ok(config.url instanceof URL)
+      assert.strictEqual(config.url.protocol, 'http:')
+      assert.strictEqual(config.url.hostname, '127.0.0.1')
+      assert.strictEqual(config.url.port, '8126')
+      // Should have logged an error
+      sinon.assert.calledWithMatch(log.error, /Invalid agent URL/)
+    })
+
+    it('should fall back to defaults when options.url is invalid', () => {
+      config = getConfig({ url: '= invalid = url' })
+      // Should use defaults instead of crashing
+      assert.ok(config.url instanceof URL)
+      assert.strictEqual(config.url.protocol, 'http:')
+      assert.strictEqual(config.url.hostname, '127.0.0.1')
+      assert.strictEqual(config.url.port, '8126')
+      // Should have logged an error
+      sinon.assert.calledWithMatch(log.error, /Invalid agent URL/)
     })
   })
 })

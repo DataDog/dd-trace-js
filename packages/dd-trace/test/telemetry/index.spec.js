@@ -88,60 +88,61 @@ describe('telemetry', () => {
         traceAgent.reqs.push(req)
         traceAgent.emit('handled-req')
         res.end()
-      }).listen(0, done)
-    })
+      }).listen(0, () => {
+        traceAgent.reqs = []
 
-    traceAgent.reqs = []
+        telemetry = proxyquire('../../src/telemetry/telemetry', {
+          '../exporters/common/docker': {
+            id () {
+              return 'test docker id'
+            },
+          },
+        })
 
-    telemetry = proxyquire('../../src/telemetry/telemetry', {
-      '../exporters/common/docker': {
-        id () {
-          return 'test docker id'
-        },
-      },
-    })
+        pluginsByName = {
+          foo2: { _enabled: true },
+          bar2: { _enabled: false },
+        }
+        /**
+         * @type {object} CircularObject
+         * @property {string} field
+         * @property {object} child
+         * @property {string} child.field
+         * @property {CircularObject | null} child.parent
+         */
+        const circularObject = {
+          child: { parent: null, field: 'child_value' },
+          field: 'parent_value',
+        }
+        circularObject.child.parent = circularObject
 
-    pluginsByName = {
-      foo2: { _enabled: true },
-      bar2: { _enabled: false },
-    }
-    /**
-     * @type {object} CircularObject
-     * @property {string} field
-     * @property {object} child
-     * @property {string} child.field
-     * @property {CircularObject | null} child.parent
-     */
-    const circularObject = {
-      child: { parent: null, field: 'child_value' },
-      field: 'parent_value',
-    }
-    circularObject.child.parent = circularObject
-
-    telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL },
-      hostname: 'localhost',
-      port: traceAgent.address().port,
-      service: 'test service',
-      version: '1.2.3-beta4',
-      env: 'preprod',
-      tags: {
-        'runtime-id': '1a2b3c',
-      },
-      circularObject,
-      appsec: { enabled: true },
-      profiling: { enabled: 'true' },
-      peerServiceMapping: {
-        service_1: 'remapped_service_1',
-        service_2: 'remapped_service_2',
-      },
-      installSignature: {
-        id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
-        type: 'k8s_single_step',
-        time: '1703188212',
-      },
-    }, {
-      _pluginsByName: pluginsByName,
+        telemetry.start({
+          telemetry: { enabled: true, heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL },
+          hostname: 'localhost',
+          port: traceAgent.address().port,
+          service: 'test service',
+          version: '1.2.3-beta4',
+          env: 'preprod',
+          tags: {
+            'runtime-id': '1a2b3c',
+          },
+          circularObject,
+          appsec: { enabled: true },
+          profiling: { enabled: 'true' },
+          peerServiceMapping: {
+            service_1: 'remapped_service_1',
+            service_2: 'remapped_service_2',
+          },
+          installSignature: {
+            id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
+            type: 'k8s_single_step',
+            time: '1703188212',
+          },
+        }, {
+          _pluginsByName: pluginsByName,
+        })
+        done()
+      })
     })
   })
 
@@ -965,28 +966,29 @@ describe('AVM OSS', () => {
               traceAgent.reqs.push(req)
               traceAgent.emit('handled-req')
               res.end()
-            }).listen(0, done)
+            }).listen(0, () => {
+              traceAgent.reqs = []
+
+              delete require.cache[require.resolve('../../src/telemetry/send-data')]
+              delete require.cache[require.resolve('../../src/telemetry/telemetry')]
+              telemetry = require('../../src/telemetry/telemetry')
+
+              telemetryConfig = {
+                telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+                hostname: 'localhost',
+                port: traceAgent.address().port,
+                service: 'test service',
+                version: '1.2.3-beta4',
+                env: 'preprod',
+                tags: {
+                  'runtime-id': '1a2b3c',
+                },
+                appsec: { enabled: false },
+                profiling: { enabled: false },
+              }
+              done()
+            })
           })
-
-          traceAgent.reqs = []
-
-          delete require.cache[require.resolve('../../src/telemetry/send-data')]
-          delete require.cache[require.resolve('../../src/telemetry/telemetry')]
-          telemetry = require('../../src/telemetry/telemetry')
-
-          telemetryConfig = {
-            telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
-            hostname: 'localhost',
-            port: traceAgent.address().port,
-            service: 'test service',
-            version: '1.2.3-beta4',
-            env: 'preprod',
-            tags: {
-              'runtime-id': '1a2b3c',
-            },
-            appsec: { enabled: false },
-            profiling: { enabled: false },
-          }
         })
 
         before(() => {

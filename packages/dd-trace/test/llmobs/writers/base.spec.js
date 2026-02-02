@@ -42,8 +42,7 @@ describe('BaseLLMObsWriter', () => {
       intake: 'intake',
       config: {
         site: 'site.com',
-        hostname: 'localhost',
-        port: 8126,
+        url: new URL('http://localhost:8126'),
         apiKey: 'test',
       },
     }

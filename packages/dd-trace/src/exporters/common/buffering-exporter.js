@@ -1,7 +1,6 @@
 'use strict'
 
 const { incrementCountMetric, TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION } = require('../../ci-visibility/telemetry')
-const { getAgentUrl } = require('../../agent/url')
 
 /**
  * Base exporter that buffers traces until a writer is initialized.
@@ -14,7 +13,7 @@ class BufferingExporter {
 
   constructor (tracerConfig) {
     this._config = tracerConfig
-    this._url = getAgentUrl(tracerConfig)
+    this._url = tracerConfig.url
   }
 
   export (trace) {

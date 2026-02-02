@@ -3,15 +3,14 @@
 const logger = require('../../log')
 const { EVP_PROXY_AGENT_BASE_PATH } = require('../constants/constants')
 const { fetchAgentInfo } = require('../../agent/info')
-const { getAgentUrl } = require('../../agent/url')
 
 /**
  * Determines if the agent supports EVP proxy and sets the writer enabled state accordingly
- * @param {import('../../config')} config - Tracer configuration object
+ * @param {ReturnType<import('../../config')>} config - Tracer configuration object
  * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
  */
 function setAgentStrategy (config, setWriterEnabledValue) {
-  fetchAgentInfo(getAgentUrl(config), (err, agentInfo) => {
+  fetchAgentInfo(config.url, (err, agentInfo) => {
     if (err) {
       logger.debug('FFE Writer disabled - error getting agent info:', err.message)
       setWriterEnabledValue(false)

@@ -13,7 +13,7 @@ const AgentlessCiVisibilityExporter = require('../../../../src/ci-visibility/exp
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 
 describe('CI Visibility Agentless Exporter', () => {
-  const url = new URL('http://www.example.com')
+  const ciVisibilityAgentlessUrl = new URL('http://www.example.com')
 
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
@@ -34,7 +34,11 @@ describe('CI Visibility Agentless Exporter', () => {
   })
 
   it('can use CI Vis protocol right away', () => {
-    const agentlessExporter = new AgentlessCiVisibilityExporter({ url, isGitUploadEnabled: true, tags: {} })
+    const agentlessExporter = new AgentlessCiVisibilityExporter({
+      ciVisibilityAgentlessUrl,
+      isGitUploadEnabled: true,
+      tags: {},
+    })
     assert.strictEqual(agentlessExporter.canReportSessionTraces(), true)
   })
 
@@ -110,7 +114,7 @@ describe('CI Visibility Agentless Exporter', () => {
           },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
+        ciVisibilityAgentlessUrl, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
         assert.strictEqual(scope.isDone(), true)
@@ -133,7 +137,7 @@ describe('CI Visibility Agentless Exporter', () => {
           },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
+        ciVisibilityAgentlessUrl, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
         assert.strictEqual(scope.isDone(), true)
@@ -159,7 +163,7 @@ describe('CI Visibility Agentless Exporter', () => {
         }))
 
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
+        ciVisibilityAgentlessUrl, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.sendGitMetadata = () => {
         return new Promise(resolve => {
