@@ -58,45 +58,46 @@ function start (config, rcInstance) {
 
   log.debug('[debugger] Starting Dynamic Instrumentation client...')
 
+  rc = rcInstance
+  rcAckCallbacks = new Map()
+  const probeChannel = new MessageChannel()
+  const logChannel = new MessageChannel()
+  configChannel = new MessageChannel()
+
+  globalThis[Symbol.for('dd-trace')].utilTypes = types
+
+  readProbeFile(config.dynamicInstrumentation.probeFile, (probes) => {
+    const action = 'apply'
+    for (const probe of probes) {
+      probeChannel.port2.postMessage({ action, probe })
+    }
+  })
+
+  rc.setProductHandler('LIVE_DEBUGGING', (action, probe, id, ack) => {
+    rcAckCallbacks.set(++ackId, ack)
+    probeChannel.port2.postMessage({ action, probe, ackId })
+  })
+
+  probeChannel.port2.on('message', ({ ackId, error }) => {
+    const ack = rcAckCallbacks.get(ackId)
+    if (ack === undefined) {
+      // This should never happen, but just in case something changes in the future, we should guard against it
+      log.error('[debugger] Received an unknown ackId: %s', ackId)
+      if (error) log.error('[debugger] Error starting Dynamic Instrumentation client', error)
+      return
+    }
+    ack(error)
+    rcAckCallbacks.delete(ackId)
+  })
+  probeChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on probe port', err))
+
+  logChannel.port2.on('message', ({ level, args }) => {
+    log[level](...args)
+  })
+  logChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on log port', err))
+
   detectDebuggerEndpoint(config, (_inputPath) => {
-    rc = rcInstance
     inputPath = _inputPath
-    rcAckCallbacks = new Map()
-    const probeChannel = new MessageChannel()
-    const logChannel = new MessageChannel()
-    configChannel = new MessageChannel()
-
-    globalThis[Symbol.for('dd-trace')].utilTypes = types
-
-    readProbeFile(config.dynamicInstrumentation.probeFile, (probes) => {
-      const action = 'apply'
-      for (const probe of probes) {
-        probeChannel.port2.postMessage({ action, probe })
-      }
-    })
-
-    rc.setProductHandler('LIVE_DEBUGGING', (action, probe, id, ack) => {
-      rcAckCallbacks.set(++ackId, ack)
-      probeChannel.port2.postMessage({ action, probe, ackId })
-    })
-
-    probeChannel.port2.on('message', ({ ackId, error }) => {
-      const ack = rcAckCallbacks.get(ackId)
-      if (ack === undefined) {
-        // This should never happen, but just in case something changes in the future, we should guard against it
-        log.error('[debugger] Received an unknown ackId: %s', ackId)
-        if (error) log.error('[debugger] Error starting Dynamic Instrumentation client', error)
-        return
-      }
-      ack(error)
-      rcAckCallbacks.delete(ackId)
-    })
-    probeChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on probe port', err))
-
-    logChannel.port2.on('message', ({ level, args }) => {
-      log[level](...args)
-    })
-    logChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on log port', err))
 
     worker = new Worker(
       join(__dirname, 'devtools_client', 'index.js'),
