@@ -2155,72 +2155,74 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       ])
     })
 
-    it('sets final_status tag only on last ATR retry when EFD is enabled but not active and ATR is active', async () => {
-      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+    it(
+      'sets final_status tag only on last ATR retry when EFD is enabled but not active and ATR is active',
+      async () => {
+        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
 
-      // All tests are known, so EFD will not be active
-      receiver.setKnownTests({
-        jest: {
-          'ci-visibility/jest-flaky/flaky-passes.js': [
-            'test-flaky-test-retries can retry flaky tests',
-            'test-flaky-test-retries will not retry passed tests'
-          ]
-        }
-      })
-
-      receiver.setSettings({
-        early_flake_detection: {
-          enabled: true,
-          slow_test_retries: {
-            '5s': 2
+        // All tests are known, so EFD will not be active
+        receiver.setKnownTests({
+          jest: {
+            'ci-visibility/jest-flaky/flaky-passes.js': [
+              'test-flaky-test-retries can retry flaky tests',
+              'test-flaky-test-retries will not retry passed tests',
+            ],
           },
-          faulty_session_threshold: 100
-        },
-        known_tests_enabled: true,
-        flaky_test_retries_enabled: true
-      })
-
-      const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const tests = events
-            .filter(event => event.type === 'test')
-            .map(event => event.content)
-            .filter(test => test.meta[TEST_NAME] === 'test-flaky-test-retries can retry flaky tests')
-
-          // We expect 2 executions: the failed (retry) and the passed (last one)
-          assert.strictEqual(tests.length, 3)
-
-          // Only the last execution (the one with status 'pass') should have TEST_FINAL_STATUS tag
-          tests.sort((a, b) => a.meta.start - b.meta.start).forEach((test, idx) => {
-            if (idx < tests.length - 1) {
-              assert.ok(!(TEST_FINAL_STATUS in test.meta),
-                'TEST_FINAL_STATUS should not be set on previous runs'
-              )
-            } else {
-              assert.strictEqual(test.meta[TEST_FINAL_STATUS], test.meta[TEST_STATUS])
-              assert.strictEqual(test.meta[TEST_STATUS], 'pass')
-            }
-          })
         })
 
-      childProcess = exec(
-        runTestsCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'jest-flaky/flaky-passes.js',
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5'
-          }
-        }
-      )
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+          flaky_test_retries_enabled: true,
+        })
 
-      await Promise.all([
-        once(childProcess, 'exit'),
-        eventsPromise,
-      ])
-    })
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === 'test-flaky-test-retries can retry flaky tests')
+
+            // We expect 2 executions: the failed (retry) and the passed (last one)
+            assert.strictEqual(tests.length, 3)
+
+            // Only the last execution (the one with status 'pass') should have TEST_FINAL_STATUS tag
+            tests.sort((a, b) => a.meta.start - b.meta.start).forEach((test, idx) => {
+              if (idx < tests.length - 1) {
+                assert.ok(!(TEST_FINAL_STATUS in test.meta),
+                  'TEST_FINAL_STATUS should not be set on previous runs'
+                )
+              } else {
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], test.meta[TEST_STATUS])
+                assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+              }
+            })
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'jest-flaky/flaky-passes.js',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+      })
 
     it('sets final_status tag to test status reported to test framework on last retry', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
