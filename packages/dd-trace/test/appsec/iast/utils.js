@@ -300,7 +300,12 @@ function prepareTestServerForIast (description, tests, iastConfig, pluginsToConf
       description,
       matchLocation = true
     ) {
+      afterEach(() => {
+        console.log(`should have ${vulnerability} vulnerability`)
+        console.timeEnd('testThatRequestHasVulnerability')
+      })
       it(description || `should have ${vulnerability} vulnerability`, function (done) {
+        console.time('testThatRequestHasVulnerability')
         this.timeout(5000)
         app = fn
         checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done, matchLocation)
