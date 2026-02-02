@@ -29,6 +29,7 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       assert.deepStrictEqual(response.data, { hello: 'bar' })
 
       const [{ payload }] = await diagnosticsInput
+
       assertObjectContains(payload[0], {
         ddsource: 'dd_debugger',
         service: 'node',
@@ -90,6 +91,7 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       assert.deepStrictEqual(response.data, { hello: 'bar' })
 
       const [{ payload }] = await v2Input
+
       assertObjectContains(payload[0], {
         ddsource: 'dd_debugger',
         service: 'node',
@@ -120,6 +122,7 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       assert.deepStrictEqual(response.data, { hello: 'bar' })
 
       const [, [{ payload }]] = await Promise.all([v2404Event, diagnosticsInput])
+
       assertObjectContains(payload[0], {
         ddsource: 'dd_debugger',
         service: 'node',
