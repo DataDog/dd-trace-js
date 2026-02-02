@@ -2,7 +2,7 @@
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
-const { syncToStore } = require('../../dd-trace/src/datastreams/context')
+const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
 const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
@@ -115,7 +115,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     }
 
     if (hasDsmContext) {
-      syncToStore(ctx)
+      DataStreamsContext.syncToStore(ctx)
     }
 
     return ctx.currentStore

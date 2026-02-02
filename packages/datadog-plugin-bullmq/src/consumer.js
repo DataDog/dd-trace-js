@@ -2,7 +2,7 @@
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getMessageSize } = require('../../dd-trace/src/datastreams')
-const { syncToStore } = require('../../dd-trace/src/datastreams/context')
+const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 
 class BullmqConsumerPlugin extends ConsumerPlugin {
   static id = 'bullmq'
@@ -36,7 +36,7 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
 
     if (this.config.dsmEnabled) {
       this.setConsumerCheckpoint(span, ctx)
-      syncToStore(ctx)
+      DataStreamsContext.syncToStore(ctx)
     }
 
     return ctx.currentStore

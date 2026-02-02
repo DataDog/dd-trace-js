@@ -1,6 +1,6 @@
 'use strict'
 const { DsmPathwayCodec, getSizeOrZero } = require('../../../dd-trace/src/datastreams')
-const { syncToStore } = require('../../../dd-trace/src/datastreams/context')
+const DataStreamsContext = require('../../../dd-trace/src/datastreams/context')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 
@@ -55,7 +55,7 @@ class Kinesis extends BaseAwsSdkPlugin {
 
         if (this.config.dsmEnabled) {
           const storeCtx = { currentStore: store }
-          syncToStore(storeCtx)
+          DataStreamsContext.syncToStore(storeCtx)
           store = storeCtx.currentStore
         }
       }
