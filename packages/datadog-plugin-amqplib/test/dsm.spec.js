@@ -4,7 +4,9 @@ const assert = require('node:assert/strict')
 const { Buffer } = require('node:buffer')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
+const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const id = require('../../dd-trace/src/id')
@@ -272,6 +274,42 @@ describe('Plugin', () => {
                   'pathway.hash': expectedConsumerHash,
                 })
               }, { timeoutMs: 10000 }).then(done, done)
+            })
+          })
+        })
+
+        describe('syncToStore', () => {
+          let syncToStoreSpy
+
+          beforeEach(() => {
+            syncToStoreSpy = sinon.spy(DataStreamsContext, 'syncToStore')
+          })
+
+          afterEach(() => {
+            syncToStoreSpy.restore()
+          })
+
+          it('Should call syncToStore after producing', (done) => {
+            channel.assertQueue(queue, {}, (err, ok) => {
+              if (err) return done(err)
+
+              channel.sendToQueue(ok.queue, Buffer.from('syncToStore test'))
+              assert.ok(syncToStoreSpy.called, 'syncToStore should be called on produce')
+              done()
+            })
+          })
+
+          it('Should call syncToStore after consuming', (done) => {
+            channel.assertQueue(queue, {}, (err, ok) => {
+              if (err) return done(err)
+
+              channel.sendToQueue(ok.queue, Buffer.from('syncToStore test'))
+              channel.consume(ok.queue, () => {
+                assert.ok(syncToStoreSpy.called, 'syncToStore should be called on consume')
+                done()
+              }, {}, (err) => {
+                if (err) done(err)
+              })
             })
           })
         })
