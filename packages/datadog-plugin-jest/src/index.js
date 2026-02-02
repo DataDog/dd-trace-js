@@ -369,7 +369,7 @@ class JestPlugin extends CiPlugin {
       failedAllTests,
       attemptToFixFailed,
       isAtrRetry,
-      finalStatus
+      finalStatus,
     }) => {
       span.setTag(TEST_STATUS, status)
       if (finalStatus) {

@@ -74,6 +74,8 @@ const {
   TEST_MODULE,
   TEST_COMMAND,
   TEST_FINAL_STATUS,
+  GIT_COMMIT_SHA,
+  GIT_REPOSITORY_URL,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE, ERROR_TYPE, ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')

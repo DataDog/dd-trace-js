@@ -597,7 +597,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             error: formatJestError(event.test.errors[0]),
             shouldSetProbe,
             promises,
-            finalStatus
+            finalStatus,
           })
         }
 
@@ -624,7 +624,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           failedAllTests,
           attemptToFixFailed,
           isAtrRetry,
-          finalStatus
+          finalStatus,
         })
 
         if (promises.isProbeReady) {
