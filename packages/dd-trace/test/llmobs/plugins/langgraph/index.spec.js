@@ -7,19 +7,18 @@ const { withVersions } = require('../../../setup/mocha')
 const {
   assertLlmObsSpanEvent,
   MOCK_STRING,
-  useLlmObs
+  useLlmObs,
 } = require('../../util')
 
 describe('integrations', () => {
   let StateGraph
   let Annotation
-  let llmobs
 
   describe('langgraph', () => {
     const { getEvents } = useLlmObs({ plugin: 'langgraph' })
 
     before(async () => {
-      llmobs = require('../../../../../..').llmobs
+      // Load langgraph modules
     })
 
     withVersions('langgraph', '@langchain/langgraph', (version) => {
@@ -35,8 +34,8 @@ describe('integrations', () => {
           const StateAnnotation = Annotation.Root({
             messages: Annotation({
               reducer: (x, y) => x.concat(y),
-              default: () => []
-            })
+              default: () => [],
+            }),
           })
 
           // Pure function node - no API calls
@@ -44,8 +43,8 @@ describe('integrations', () => {
             return {
               messages: [{
                 role: 'assistant',
-                content: 'Hello! This is a mock response.'
-              }]
+                content: 'Hello! This is a mock response.',
+              }],
             }
           }
 
@@ -58,7 +57,7 @@ describe('integrations', () => {
           const app = workflow.compile()
 
           const result = await app.invoke({
-            messages: [{ role: 'user', content: 'Hello!' }]
+            messages: [{ role: 'user', content: 'Hello!' }],
           })
 
           assert.ok(result)
@@ -73,17 +72,17 @@ describe('integrations', () => {
             spanKind: 'workflow',
             name: 'langgraph.workflow',
             inputValue: JSON.stringify({
-              messages: [{ role: 'user', content: 'Hello!' }]
+              messages: [{ role: 'user', content: 'Hello!' }],
             }),
             outputValue: JSON.stringify(result),
-            tags: { ml_app: 'test', integration: 'langgraph' }
+            tags: { ml_app: 'test', integration: 'langgraph' },
           })
         })
 
         it('creates a workflow span with simple state transformation', async () => {
           const StateAnnotation = Annotation.Root({
             input: Annotation({ default: () => '' }),
-            result: Annotation({ default: () => '' })
+            result: Annotation({ default: () => '' }),
           })
 
           // Pure function - deterministic, no side effects
@@ -111,7 +110,7 @@ describe('integrations', () => {
             name: 'langgraph.workflow',
             inputValue: JSON.stringify({ input: 'test data' }),
             outputValue: JSON.stringify(result),
-            tags: { ml_app: 'test', integration: 'langgraph' }
+            tags: { ml_app: 'test', integration: 'langgraph' },
           })
         })
 
@@ -119,8 +118,8 @@ describe('integrations', () => {
           const StateAnnotation = Annotation.Root({
             value: Annotation({
               reducer: (x, y) => x + y,
-              default: () => 0
-            })
+              default: () => 0,
+            }),
           })
 
           // Multiple pure function nodes
@@ -159,14 +158,14 @@ describe('integrations', () => {
             name: 'langgraph.workflow',
             inputValue: JSON.stringify({ value: 0 }),
             outputValue: JSON.stringify(result),
-            tags: { ml_app: 'test', integration: 'langgraph' }
+            tags: { ml_app: 'test', integration: 'langgraph' },
           })
         })
 
         it('creates a workflow span with conditional routing', async () => {
           const StateAnnotation = Annotation.Root({
             value: Annotation({ default: () => 0 }),
-            path: Annotation({ default: () => '' })
+            path: Annotation({ default: () => '' }),
           })
 
           function routeNode (state) {
@@ -197,7 +196,7 @@ describe('integrations', () => {
             .addEdge('__start__', 'router')
             .addConditionalEdges('router', routeDecision, {
               high: 'high',
-              low: 'low'
+              low: 'low',
             })
             .addEdge('high', '__end__')
             .addEdge('low', '__end__')
@@ -217,7 +216,7 @@ describe('integrations', () => {
             name: 'langgraph.workflow',
             inputValue: JSON.stringify({ value: 3 }),
             outputValue: JSON.stringify(result),
-            tags: { ml_app: 'test', integration: 'langgraph' }
+            tags: { ml_app: 'test', integration: 'langgraph' },
           })
         })
 
@@ -225,13 +224,13 @@ describe('integrations', () => {
           const StateAnnotation = Annotation.Root({
             items: Annotation({
               reducer: (x, y) => x.concat(y),
-              default: () => []
-            })
+              default: () => [],
+            }),
           })
 
           function addItems (state) {
             return {
-              items: ['item1', 'item2', 'item3']
+              items: ['item1', 'item2', 'item3'],
             }
           }
 
@@ -255,13 +254,13 @@ describe('integrations', () => {
             name: 'langgraph.workflow',
             inputValue: JSON.stringify({ items: [] }),
             outputValue: JSON.stringify(result),
-            tags: { ml_app: 'test', integration: 'langgraph' }
+            tags: { ml_app: 'test', integration: 'langgraph' },
           })
         })
 
         it('does not tag output if there is an error', async () => {
           const StateAnnotation = Annotation.Root({
-            input: Annotation({ default: () => '' })
+            input: Annotation({ default: () => '' }),
           })
 
           function errorNode () {
@@ -294,22 +293,22 @@ describe('integrations', () => {
             error: {
               type: 'Error',
               message: 'Test error in node',
-              stack: MOCK_STRING
+              stack: MOCK_STRING,
             },
-            tags: { ml_app: 'test', integration: 'langgraph' }
+            tags: { ml_app: 'test', integration: 'langgraph' },
           })
         })
 
         it('handles complex nested state objects', async () => {
           const StateAnnotation = Annotation.Root({
             config: Annotation({ default: () => ({}) }),
-            data: Annotation({ default: () => ({}) })
+            data: Annotation({ default: () => ({}) }),
           })
 
           function processConfig (state) {
             return {
               config: { processed: true, timestamp: Date.now() },
-              data: { result: 'success', count: 42 }
+              data: { result: 'success', count: 42 },
             }
           }
 
@@ -322,7 +321,7 @@ describe('integrations', () => {
 
           const result = await app.invoke({
             config: { raw: true },
-            data: { initial: 'value' }
+            data: { initial: 'value' },
           })
 
           assert.ok(result.config.processed)
@@ -336,7 +335,7 @@ describe('integrations', () => {
             name: 'langgraph.workflow',
             inputValue: MOCK_STRING, // Complex input
             outputValue: MOCK_STRING, // Complex output
-            tags: { ml_app: 'test', integration: 'langgraph' }
+            tags: { ml_app: 'test', integration: 'langgraph' },
           })
         })
       })
@@ -346,13 +345,13 @@ describe('integrations', () => {
           const StateAnnotation = Annotation.Root({
             messages: Annotation({
               reducer: (x, y) => x.concat(y),
-              default: () => []
-            })
+              default: () => [],
+            }),
           })
 
           function chatNode (state) {
             return {
-              messages: [{ role: 'assistant', content: 'Streaming response' }]
+              messages: [{ role: 'assistant', content: 'Streaming response' }],
             }
           }
 
@@ -366,7 +365,7 @@ describe('integrations', () => {
           // Stream execution
           const chunks = []
           for await (const chunk of await app.stream({
-            messages: [{ role: 'user', content: 'Stream test' }]
+            messages: [{ role: 'user', content: 'Stream test' }],
           })) {
             chunks.push(chunk)
           }
@@ -380,10 +379,10 @@ describe('integrations', () => {
             spanKind: 'workflow',
             name: 'langgraph.workflow',
             inputValue: JSON.stringify({
-              messages: [{ role: 'user', content: 'Stream test' }]
+              messages: [{ role: 'user', content: 'Stream test' }],
             }),
             outputValue: MOCK_STRING, // Final streamed output
-            tags: { ml_app: 'test', integration: 'langgraph' }
+            tags: { ml_app: 'test', integration: 'langgraph' },
           })
         })
 
@@ -391,8 +390,8 @@ describe('integrations', () => {
           const StateAnnotation = Annotation.Root({
             count: Annotation({
               reducer: (x, y) => x + y,
-              default: () => 0
-            })
+              default: () => 0,
+            }),
           })
 
           function increment (state) {
@@ -425,7 +424,7 @@ describe('integrations', () => {
             name: 'langgraph.workflow',
             inputValue: JSON.stringify({ count: 0 }),
             outputValue: MOCK_STRING,
-            tags: { ml_app: 'test', integration: 'langgraph' }
+            tags: { ml_app: 'test', integration: 'langgraph' },
           })
         })
 
@@ -433,8 +432,8 @@ describe('integrations', () => {
           const StateAnnotation = Annotation.Root({
             text: Annotation({
               reducer: (x, y) => x + y,
-              default: () => ''
-            })
+              default: () => '',
+            }),
           })
 
           function addText (state) {
@@ -466,13 +465,13 @@ describe('integrations', () => {
             name: 'langgraph.workflow',
             inputValue: JSON.stringify({ text: '' }),
             outputValue: MOCK_STRING,
-            tags: { ml_app: 'test', integration: 'langgraph' }
+            tags: { ml_app: 'test', integration: 'langgraph' },
           })
         })
 
         it('does not tag output if streaming encounters an error', async () => {
           const StateAnnotation = Annotation.Root({
-            value: Annotation({ default: () => 0 })
+            value: Annotation({ default: () => 0 }),
           })
 
           function normalNode (state) {
@@ -514,9 +513,9 @@ describe('integrations', () => {
             error: {
               type: 'Error',
               message: 'Streaming error',
-              stack: MOCK_STRING
+              stack: MOCK_STRING,
             },
-            tags: { ml_app: 'test', integration: 'langgraph' }
+            tags: { ml_app: 'test', integration: 'langgraph' },
           })
         })
       })
