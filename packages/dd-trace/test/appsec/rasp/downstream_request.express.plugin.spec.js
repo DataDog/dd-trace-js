@@ -1,8 +1,8 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const path = require('path')
 const Axios = require('axios')
-const sinon = require('sinon')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
 describe('RASP - downstream request integration', () => {
@@ -43,21 +43,21 @@ describe('RASP - downstream request integration', () => {
   function assertMessage (agent, withRequestHeaders = true, withResponseBody = true, numberOfRequests = 1) {
     return agent.assertMessageReceived(({ payload }) => {
       const [span] = payload[0]
-      sinon.assert.strictEqual(span.metrics['_dd.appsec.downstream_request'], numberOfRequests)
+      assert.strictEqual(span.metrics['_dd.appsec.downstream_request'], numberOfRequests)
 
-      sinon.assert.exists(span.meta['_dd.appsec.trace.req_method'])
-      sinon.assert.exists(span.meta['_dd.appsec.trace.res_status'])
-      sinon.assert.exists(span.meta['_dd.appsec.trace.res_headers'])
+      assert.ok(span.meta['_dd.appsec.trace.req_method'])
+      assert.ok(span.meta['_dd.appsec.trace.res_status'])
+      assert.ok(span.meta['_dd.appsec.trace.res_headers'])
 
       if (withRequestHeaders) {
-        sinon.assert.exists(span.meta['_dd.appsec.trace.req_headers'])
+        assert.ok(span.meta['_dd.appsec.trace.req_headers'])
       } else {
-        sinon.assert.notExists(span.meta['_dd.appsec.trace.req_headers'])
+        assert.strictEqual(span.meta['_dd.appsec.trace.req_headers'], undefined)
       }
       if (withResponseBody) {
-        sinon.assert.exists(span.meta['_dd.appsec.trace.res_body'])
+        assert.ok(span.meta['_dd.appsec.trace.res_body'])
       } else {
-        sinon.assert.notExists(span.meta['_dd.appsec.trace.res_body'])
+        assert.strictEqual(span.meta['_dd.appsec.trace.res_body'], undefined)
       }
     })
   }
@@ -74,30 +74,30 @@ describe('RASP - downstream request integration', () => {
         const hasTag = (serie, tag) => Array.isArray(serie.tags) && serie.tags.includes(tag)
 
         const evalSeries = series.filter(s => s.metric === 'rasp.rule.eval')
-        sinon.assert.exists(evalSeries, 'Rasp rule eval series should exist')
+        assert.ok(evalSeries, 'Rasp rule eval series should exist')
 
         const evalVariants = new Set()
         for (const s of evalSeries) {
           if (hasTag(s, 'rule_variant:request')) evalVariants.add('request')
           if (hasTag(s, 'rule_variant:response')) evalVariants.add('response')
         }
-        sinon.assert.isTrue(evalVariants.has('request'), 'rasp.rule.eval should include request variant')
-        sinon.assert.isTrue(evalVariants.has('response'), 'rasp.rule.eval should include response variant')
+        assert.strictEqual(evalVariants.has('request'), true, 'rasp.rule.eval should include request variant')
+        assert.strictEqual(evalVariants.has('response'), true, 'rasp.rule.eval should include response variant')
 
         const matchSeries = series.filter(s => s.metric === 'rasp.rule.match')
-        sinon.assert.exists(matchSeries, 'Rasp match eval series should exist')
+        assert.ok(matchSeries, 'Rasp match eval series should exist')
 
         const matchVariants = new Set()
         for (const s of matchSeries) {
           if (hasTag(s, 'rule_variant:request')) matchVariants.add('request')
           if (hasTag(s, 'rule_variant:response')) matchVariants.add('response')
         }
-        sinon.assert.isTrue(matchVariants.has('request'), 'rasp.rule.match should include request variant')
-        sinon.assert.isTrue(matchVariants.has('response'), 'rasp.rule.match should include response variant')
+        assert.strictEqual(matchVariants.has('request'), true, 'rasp.rule.match should include request variant')
+        assert.strictEqual(matchVariants.has('response'), true, 'rasp.rule.match should include response variant')
       }
     }, 'generate-metrics', 30_000, 2).then(
       () => {
-        sinon.assert.equal(appsecTelemetryReceived, true)
+        assert.strictEqual(appsecTelemetryReceived, true)
       })
   }
 
