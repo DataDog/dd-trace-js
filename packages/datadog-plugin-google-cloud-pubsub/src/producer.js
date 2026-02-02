@@ -2,6 +2,7 @@
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec, getHeadersSize } = require('../../dd-trace/src/datastreams')
+const { syncToStore } = require('../../dd-trace/src/datastreams/context')
 const id = require('../../dd-trace/src/id')
 
 class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
@@ -137,6 +138,10 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         )
         DsmPathwayCodec.encode(dataStreamsContext, msg.attributes)
       }
+    }
+
+    if (this.config.dsmEnabled) {
+      syncToStore(ctx)
     }
 
     ctx.batchSpan = batchSpan

@@ -4,6 +4,7 @@ const { TEXT_MAP } = require('../../../ext/formats')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec, getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
+const { syncToStore } = require('../../dd-trace/src/datastreams/context')
 const { getResourceName } = require('./util')
 
 class AmqplibProducerPlugin extends ProducerPlugin {
@@ -50,6 +51,7 @@ class AmqplibProducerPlugin extends ProducerPlugin {
           ['direction:out', exchangeOrTopicTag, `has_routing_key:${hasRoutingKey}`, 'type:rabbitmq']
           , span, payloadSize)
       DsmPathwayCodec.encode(dataStreamsContext, fields.headers)
+      syncToStore(ctx)
     }
 
     return ctx.currentStore

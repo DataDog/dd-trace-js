@@ -2,7 +2,7 @@
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
-const { getDataStreamsContext } = require('../../dd-trace/src/datastreams/context')
+const { syncToStore } = require('../../dd-trace/src/datastreams/context')
 
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
 const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
@@ -114,11 +114,8 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       }
     }
 
-    // Sync DSM context to currentStore to ensure it's properly scoped
-    // to this handler's async continuations (fixes context leaking between
-    // concurrent handlers)
     if (hasDsmContext) {
-      ctx.currentStore = { ...ctx.currentStore, dataStreamsContext: getDataStreamsContext() }
+      syncToStore(ctx)
     }
 
     return ctx.currentStore

@@ -2,6 +2,7 @@
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
+const { syncToStore } = require('../../dd-trace/src/datastreams/context')
 
 class BaseBullmqProducerPlugin extends ProducerPlugin {
   static id = 'bullmq'
@@ -27,6 +28,7 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
 
     if (this.config.dsmEnabled) {
       this.setProducerCheckpoint(span, ctx)
+      syncToStore(ctx)
     }
 
     return ctx.currentStore
