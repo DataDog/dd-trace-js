@@ -43,6 +43,7 @@ variables:
   AGENT_REPO_PRODUCT_NAME: auto_inject-node
   SYSTEM_TESTS_LIBRARY: nodejs
   REPO_NOTIFICATION_CHANNEL: "#notifications-apm-js"
+  APM_SDKS_BENCHMARKS_BRANCH: 'pabloerhard/node-benchmarks'
 
 configure_system_tests:
   variables:
