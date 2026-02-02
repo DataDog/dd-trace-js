@@ -250,8 +250,6 @@ describe('Kinesis', function () {
           syncToStoreSpy.restore()
         })
 
-        // Note: syncToStore is only called on the consumer path (getRecords), not on putRecord
-        // because putRecord uses requestInject which doesn't need context synchronization
         it('Should call syncToStore after getRecord', done => {
           helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
             if (err) return done(err)
