@@ -27,31 +27,32 @@ const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOrigi
 const { getEnvironmentVariable: getEnv, getEnvironmentVariables, getStableConfigSources } = require('./helper')
 const defaults = require('./defaults')
 
-const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
-const changeTracker = {}
-const telemetryCounters = {
-  'otel.env.hiding': {},
-  'otel.env.invalid': {},
-}
-const otelDdEnvMapping = {
-  OTEL_LOG_LEVEL: 'DD_TRACE_LOG_LEVEL',
-  OTEL_PROPAGATORS: 'DD_TRACE_PROPAGATION_STYLE',
-  OTEL_SERVICE_NAME: 'DD_SERVICE',
-  OTEL_TRACES_SAMPLER: 'DD_TRACE_SAMPLE_RATE',
-  OTEL_TRACES_SAMPLER_ARG: 'DD_TRACE_SAMPLE_RATE',
-  OTEL_TRACES_EXPORTER: 'DD_TRACE_ENABLED',
-  OTEL_METRICS_EXPORTER: 'DD_RUNTIME_METRICS_ENABLED',
-  OTEL_RESOURCE_ATTRIBUTES: 'DD_TAGS',
-  OTEL_SDK_DISABLED: 'DD_TRACE_OTEL_ENABLED',
-  OTEL_LOGS_EXPORTER: undefined,
-}
+const TELEMETRY_COUNTERS = new Map([
+  ['otel.env.hiding', {}],
+  ['otel.env.invalid', {}],
+])
+const OTEL_DD_ENV_MAPPING = new Map([
+  ['OTEL_LOG_LEVEL', 'DD_TRACE_LOG_LEVEL'],
+  ['OTEL_PROPAGATORS', 'DD_TRACE_PROPAGATION_STYLE'],
+  ['OTEL_SERVICE_NAME', 'DD_SERVICE'],
+  ['OTEL_TRACES_SAMPLER', 'DD_TRACE_SAMPLE_RATE'],
+  ['OTEL_TRACES_SAMPLER_ARG', 'DD_TRACE_SAMPLE_RATE'],
+  ['OTEL_TRACES_EXPORTER', 'DD_TRACE_ENABLED'],
+  ['OTEL_METRICS_EXPORTER', 'DD_RUNTIME_METRICS_ENABLED'],
+  ['OTEL_RESOURCE_ATTRIBUTES', 'DD_TAGS'],
+  ['OTEL_SDK_DISABLED', 'DD_TRACE_OTEL_ENABLED'],
+  ['OTEL_LOGS_EXPORTER', undefined],
+])
 const VALID_PROPAGATION_STYLES = new Set(['datadog', 'tracecontext', 'b3', 'b3 single header', 'none'])
 const VALID_PROPAGATION_BEHAVIOR_EXTRACT = new Set(['continue', 'restart', 'ignore'])
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
 const DEFAULT_OTLP_PORT = 4318
-const runtimeId = uuid()
-const namingVersions = new Set(['v0', 'v1'])
-const defaultNamingVersion = 'v0'
+const RUNTIME_ID = uuid()
+const NAMING_VERSIONS = new Set(['v0', 'v1'])
+const DEFAULT_NAMING_VERSION = 'v0'
+
+const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+const changeTracker = {}
 
 module.exports = getConfig
 
@@ -136,7 +137,7 @@ class Config {
       service: this.service,
       env: this.env,
       version: this.version,
-      'runtime-id': runtimeId,
+      'runtime-id': RUNTIME_ID,
     })
 
     if (this.isCiVisibility) {
@@ -1166,7 +1167,7 @@ class Config {
 
     const tags = {}
     tagger.add(tags, options.tracing_tags)
-    if (Object.keys(tags).length) tags['runtime-id'] = runtimeId
+    if (Object.keys(tags).length) tags['runtime-id'] = RUNTIME_ID
     setTags(opts, 'tags', tags)
   }
 
@@ -1276,7 +1277,7 @@ class Config {
 }
 
 function getCounter (event, ddVar, otelVar) {
-  const counters = telemetryCounters[event]
+  const counters = TELEMETRY_COUNTERS.get(event)
   const tags = []
   const ddVarPrefix = 'config_datadog:'
   const otelVarPrefix = 'config_opentelemetry:'
@@ -1341,7 +1342,7 @@ function isInvalidOtelEnvironmentVariable (envVar, value) {
 }
 
 function checkIfBothOtelAndDdEnvVarSet () {
-  for (const [otelEnvVar, ddEnvVar] of Object.entries(otelDdEnvMapping)) {
+  for (const [otelEnvVar, ddEnvVar] of OTEL_DD_ENV_MAPPING) {
     const otelValue = getEnv(otelEnvVar)
 
     if (ddEnvVar && getEnv(ddEnvVar) && otelValue) {
@@ -1383,11 +1384,11 @@ function safeJsonParse (input) {
 
 function validateNamingVersion (versionString) {
   if (!versionString) {
-    return defaultNamingVersion
+    return DEFAULT_NAMING_VERSION
   }
-  if (!namingVersions.has(versionString)) {
-    log.warn('Unexpected input for config.spanAttributeSchema, picked default', defaultNamingVersion)
-    return defaultNamingVersion
+  if (!NAMING_VERSIONS.has(versionString)) {
+    log.warn('Unexpected input for config.spanAttributeSchema, picked default', DEFAULT_NAMING_VERSION)
+    return DEFAULT_NAMING_VERSION
   }
   return versionString
 }
