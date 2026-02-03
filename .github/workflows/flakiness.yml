@@ -20,11 +20,13 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             .github
+            package.json
             scripts
+            yarn.lock
       - uses: ./.github/actions/node
         with:
-          version: ''
-      - run: npm install octokit
+          version: active
+      - run: yarn install --frozen-lockfile --ignore-scripts
       - run: node scripts/flakiness.mjs
       - run: cat flakiness.md >> $GITHUB_STEP_SUMMARY
       - id: slack

@@ -9,7 +9,7 @@ const util = require('util')
 const { execSync } = require('child_process')
 const Module = require('module')
 const yaml = require('yaml')
-const semver = require('semver')
+const satisfies = require('semifies')
 const { getAllInstrumentations } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 
 function errorMsg (title, ...message) {
@@ -58,14 +58,14 @@ function checkPlugins (yamlPath) {
       }
       rangesFromYaml.forEach(range => rangesPerPluginFromYaml[pluginName].add(range))
       const plugin = instrumentations[pluginName]
-      const allRangesForPlugin = new Set(plugin.map(x => x.versions).flat())
+      const allRangesForPlugin = new Set(plugin.flatMap(x => x.versions))
       rangesPerPluginFromInst[pluginName] = allRangesForPlugin
     }
   }
 
   for (const pluginName in rangesPerPluginFromYaml) {
-    const yamlRanges = Array.from(rangesPerPluginFromYaml[pluginName])
-    const instRanges = Array.from(rangesPerPluginFromInst[pluginName])
+    const yamlRanges = [...rangesPerPluginFromYaml[pluginName]]
+    const instRanges = [...rangesPerPluginFromInst[pluginName]]
     const yamlVersions = getMatchingVersions(pluginName, yamlRanges)
     const instVersions = getMatchingVersions(pluginName, instRanges)
     if (pluginName !== 'next' && !util.isDeepStrictEqual(yamlVersions, instVersions)) {
@@ -108,7 +108,7 @@ function getMatchingVersions (name, ranges) {
   if (!versions[name]) {
     versions[name] = JSON.parse(execSync('npm show ' + name + ' versions --json').toString())
   }
-  return versions[name].filter(version => ranges.some(range => semver.satisfies(version, range)))
+  return versions[name].filter(version => ranges.some(range => satisfies(version, range)))
 }
 
 function mismatching (yamlVersions, instVersions) {

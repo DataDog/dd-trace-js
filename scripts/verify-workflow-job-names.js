@@ -20,7 +20,7 @@ const githubWorkflowExpressionText = '$' + '{{ github.workflow }}'
  * @returns {string}
  */
 function resolveWorkflowNameExpression (checkName, workflowName) {
-  return checkName.replace(githubWorkflowExpressionPattern, workflowName)
+  return checkName.replaceAll(githubWorkflowExpressionPattern, workflowName)
 }
 
 /**
@@ -28,7 +28,7 @@ function resolveWorkflowNameExpression (checkName, workflowName) {
  * @returns {string}
  */
 function normalizeWhitespace (value) {
-  return String(value).trim().replace(/\s+/g, ' ')
+  return String(value).trim().replaceAll(/\s+/g, ' ')
 }
 
 /**
