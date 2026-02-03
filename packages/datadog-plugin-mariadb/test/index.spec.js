@@ -359,7 +359,6 @@ describe('Plugin', () => {
               queryPromise,
             ])
           })
-
         })
       }
 
