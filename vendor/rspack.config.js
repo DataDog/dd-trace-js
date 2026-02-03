@@ -8,7 +8,7 @@
 //       object or switch to our own internal loader and remove the dependency.
 // TODO: Vendor `dc-polyfill` and figure out why it fails the tests.
 
-const { CopyRspackPlugin } = require('@rspack/core')
+const { CopyRspackPlugin, SwcJsMinimizerRspackPlugin } = require('@rspack/core')
 const { LicenseWebpackPlugin } = require('license-webpack-plugin')
 const { join } = require('path')
 const { dependencies } = require('./package.json')
@@ -41,6 +41,20 @@ module.exports = {
     // unnecessary noise.
     checkIds: 'named',
     moduleIds: 'named',
+    minimizer: [
+      new SwcJsMinimizerRspackPlugin({
+        minimizerOptions: {
+          mangle: {
+            // Similar to the above, we configure the minimizer to keep the
+            // original names. In this case it's also useful at runtime when
+            // checking the value of the name, or for stack traces when the
+            // source maps are not used.
+            keepClassNames: true,
+            keepFnNames: true,
+          },
+        },
+      }),
+    ],
   },
   plugins: [
     new LicenseWebpackPlugin({

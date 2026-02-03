@@ -189,6 +189,7 @@ describe('OpenTelemetry Logs', () => {
       })
 
       const { logs, loggerProvider } = setupTracer(true, '2')
+      console.log(loggerProvider._delegate)
       const logger1 = logs.getLogger('test-logger')
 
       // Emit before shutdown - should work

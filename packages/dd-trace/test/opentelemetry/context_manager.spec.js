@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { describe, it, beforeEach } = require('mocha')
-const { context, propagation, trace, ROOT_CONTEXT } = require('@opentelemetry/api')
+const { context, propagation, trace } = require('@opentelemetry/api')
 const api = require('@opentelemetry/api')
 
 require('../setup/core')
@@ -69,7 +69,7 @@ describe('OTel Context Manager', () => {
 
   it('should return root context', () => {
     const ctx = api.context.active()
-    assert.ok(ctx instanceof ROOT_CONTEXT.constructor)
+    assert.ok(ctx.constructor.name === 'BaseContext')
   })
 
   it('should set active context', () => {
@@ -111,7 +111,7 @@ describe('OTel Context Manager', () => {
 
     const ctx2 = ctx.setValue(key, 'context 2')
     assert.strictEqual(ctx.getValue(key), undefined)
-    assert.ok(ctx instanceof ROOT_CONTEXT.constructor)
+    assert.ok(ctx.constructor.name === 'BaseContext')
     assert.strictEqual(ctx2.getValue(key), 'context 2')
 
     const ret = api.context.with(ctx2, () => {
