@@ -95,7 +95,7 @@ class Tracer extends NoopProxy {
    * @override
    */
   init (options) {
-    log.debug('hi from dd-trace - OLIVIER')
+    log.debug('in ddtrace.init')
     if (this._initialized) return this
 
     this._initialized = true
