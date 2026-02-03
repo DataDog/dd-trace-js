@@ -95,6 +95,26 @@ describe('Plugin', () => {
           })
         })
 
+        it('should handle removing a listener that was never added', (done) => {
+          wsServer.on('connection', (ws) => {
+            connectionReceived = true
+            ws.send('test message')
+          })
+
+          const neverAddedHandler = () => {
+            throw new Error('this should never be called')
+          }
+
+          client.on('message', (msg) => {
+            assert.strictEqual(msg.toString(), 'test message')
+            done()
+          })
+
+          assert.doesNotThrow(() => {
+            client.off('message', neverAddedHandler)
+          })
+        })
+
         it('should do automatic instrumentation for server connections', done => {
           connectionReceived = false
 
