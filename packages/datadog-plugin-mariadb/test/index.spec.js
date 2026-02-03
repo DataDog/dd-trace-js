@@ -359,6 +359,49 @@ describe('Plugin', () => {
               queryPromise,
             ])
           })
+
+        })
+      }
+
+      if (semver.intersects(version, '>=2.5.2 <3')) {
+        describe('without configuration - promise rejection tagging (<3)', () => {
+          let mariadb
+          let connection
+
+          afterEach(async () => {
+            await connection.end()
+            await agent.close({ ritmReset: false })
+          })
+
+          beforeEach(async () => {
+            await agent.load('mariadb')
+            mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
+            connection = await mariadb.createConnection({
+              host: 'localhost',
+              user: 'root',
+              database: 'db',
+            })
+          })
+
+          it('should tag promise rejections with error details', async () => {
+            let error
+
+            const assertion = agent.assertSomeTraces(traces => {
+              if (!error) throw new Error('Expected error to be set')
+
+              assertObjectContains(traces[0][0].meta, {
+                [ERROR_TYPE]: error.name,
+                [ERROR_MESSAGE]: error.message,
+                [ERROR_STACK]: error.stack,
+                component: 'mariadb',
+              })
+            }, { spanResourceMatch: /definitely_missing_table/ })
+
+            // For >=2.5.2 <3, mariadb uses `_queryPromise` internally for promise queries.
+            await connection._queryPromise('SELECT * FROM definitely_missing_table').catch((e) => { error = e })
+
+            await assertion
+          })
         })
       }
 

@@ -5,10 +5,10 @@ const assert = require('node:assert/strict')
 const { spawn } = require('child_process')
 const {
   FakeAgent,
+  assertObjectContains,
   hookFile,
   sandboxCwd,
   useSandbox,
-  curlAndAssertMessage,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
@@ -23,7 +23,7 @@ describe('esm', () => {
     ],
     false,
     ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
-      './packages/datadog-plugin-azure-functions/test/integration-test/http-test/*'])
+      './packages/datadog-plugin-azure-functions/test/integration-test/timer-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -34,37 +34,26 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    // TODO(bengl): The `varySandbox` helper function isn't well set-up for dealing
-    // with Azure Functions and the way the `func` command expects to find files. I
-    // have manually tested that all the usual import variants work, but really we ought
-    // to figure out a way of automating this.
-    it('is instrumented', async () => {
+    it('creates a root span for non-http triggers (extractTraceContext returns null)', async () => {
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
-      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
-        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+      await agent.assertMessageReceived(({ payload }) => {
         assert.ok(Array.isArray(payload))
         assert.strictEqual(payload.length, 1)
         assert.ok(Array.isArray(payload[0]))
         assert.strictEqual(payload[0].length, 1)
-        assert.strictEqual(payload[0][0].name, 'azure.functions.invoke')
-      })
+
+        const span = payload[0][0]
+        assert.strictEqual(span.name, 'azure.functions.invoke')
+        assert.ok(!span.parent_id)
+        assertObjectContains(span.meta, {
+          'aas.function.trigger': 'Unknown',
+        })
+      }, 60_000)
     }).timeout(60_000)
-
-    it('propagates context to child http requests', async () => {
-      const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-      }
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
-
-      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest2', ({ headers, payload }) => {
-        assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].span_id, payload[1][1].parent_id)
-      })
-    }).timeout(50000)
   })
 })
 
@@ -89,7 +78,7 @@ function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
         if (code !== 0) {
           reject(new Error(`Process exited with status code ${code}.`))
         }
-        resolve()
+        resolve(undefined)
       })
 
     proc.stdout.on('data', data => {
@@ -113,3 +102,4 @@ function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
     })
   })
 }
+
