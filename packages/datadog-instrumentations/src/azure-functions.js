@@ -33,9 +33,8 @@ addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (a
 // The http methods are overloaded so we need to check which type of argument was passed in order to wrap the handler
 // The arguments are either an object with a handler property or the handler function itself
 function wrapHandler (method) {
-  log.debug('hi from Olivier')
   return function (name, arg) {
-    log.debug('hi again from Olivier')
+    log.debug('in sub wrap handler for method: ', method)
     // check if this is either a handlerOptions or the handler itself
     if (arg !== null && typeof arg === 'object' && arg.hasOwnProperty('handler')) {
       // if this is a handlerOptions: first, assign to a variable options

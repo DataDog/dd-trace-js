@@ -6,7 +6,7 @@ const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 
 const {
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 /**
@@ -15,7 +15,6 @@ const {
 const azureDurableFunctionsChannel = dc.TracingChannel('datadog:azure:durable-functions:invoke')
 
 addHook({ name: 'durable-functions', versions: ['>=3'], patchDefault: false }, (df) => {
-  /* eslint-disable no-console */
   log.debug('adding durable functions hook')
   // TODO implement v3
   const { app } = df
@@ -28,6 +27,7 @@ addHook({ name: 'durable-functions', versions: ['>=3'], patchDefault: false }, (
 })
 
 function wrapOrchestrationHandler (method) {
+  log.debug('in wrap orchestration handler')
   return function (orchestrationName, arg) {
     // argument can either be the handler itself, or options describing the handler
     if (arg !== null && typeof arg === 'object' && arg.hasOwnProperty('handler')) {
@@ -40,7 +40,11 @@ function wrapOrchestrationHandler (method) {
 }
 
 function orchestrationHandler (handler, orchestrationName, methodName) {
+  log.debug('in orchestration handler. ochestrationName: ', orchestrationName, 'method name: ', methodName)
+
   return function () {
+    log.debug('in nested orchestration function')
+
     const orchestrationContext = arguments[0]
     return azureDurableFunctionsChannel.traceSync(
       handler,
@@ -71,7 +75,11 @@ function entityHandler (handler, entityName, methodName) {
 }
 
 function activityHandler (method) {
+  log.debug('in activity handler. method name:', method.name)
+
   return function (activityName, activityOptions) {
+    log.debug('in nested activity handler. activity name:', activityName)
+
     shimmer.wrap(activityOptions, 'handler', handler => {
       const isAsync =
         handler && handler.constructor && handler.constructor.name === 'AsyncFunction'
