@@ -1540,7 +1540,7 @@ function setIntegerRangeSet (obj, name, value) {
   value = value.split(',')
   const result = []
 
-  value.forEach(val => {
+  for (const val of value) {
     if (val.includes('-')) {
       const [start, end] = val.split('-').map(Number)
       for (let i = start; i <= end; i++) {
@@ -1549,7 +1549,7 @@ function setIntegerRangeSet (obj, name, value) {
     } else {
       result.push(Number(val))
     }
-  })
+  }
   obj[name] = result
 }
 
