@@ -112,9 +112,9 @@ const prismaConfigs = [
   { name: '@prisma/client', versions: ['>=7.0.0'], filePattern: 'runtime/client.*' },
 ]
 
-prismaConfigs.forEach(config => {
+for (const config of prismaConfigs) {
   addHook(config, prismaHook)
-})
+}
 
 function parseDBString (dbString) {
   const url = new URL(dbString)

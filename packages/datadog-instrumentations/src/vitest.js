@@ -483,8 +483,10 @@ function threadHandler (thread) {
 function wrapTinyPoolRun (TinyPool) {
   shimmer.wrap(TinyPool.prototype, 'run', run => async function () {
     // We have to do this before and after because the threads list gets recycled, that is, the processes are re-created
+    // eslint-disable-next-line unicorn/no-array-for-each
     this.threads.forEach(threadHandler)
     const runResult = await run.apply(this, arguments)
+    // eslint-disable-next-line unicorn/no-array-for-each
     this.threads.forEach(threadHandler)
     return runResult
   })
@@ -1007,7 +1009,7 @@ addHook({
     const testTasks = getTypeTasks(startTestsResponse[0].tasks)
 
     // Only one test task per test, even if there are retries
-    testTasks.forEach(task => {
+    for (const task of testTasks) {
       const testCtx = taskToCtx.get(task)
       const { result } = task
       // We have to trick vitest into thinking that the test has passed
@@ -1069,7 +1071,7 @@ addHook({
           isDisabled: disabledTasks.has(task),
         })
       }
-    })
+    }
 
     const testSuiteResult = startTestsResponse[0].result
 

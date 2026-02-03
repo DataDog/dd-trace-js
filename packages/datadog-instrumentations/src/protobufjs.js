@@ -73,7 +73,7 @@ function wrapReflection (protobuf) {
     },
   ]
 
-  reflectionMethods.forEach(method => {
+  for (const method of reflectionMethods) {
     shimmer.wrap(method.target, method.name, original => function () {
       const result = original.apply(this, arguments)
       if (result.nested) {
@@ -86,7 +86,7 @@ function wrapReflection (protobuf) {
       }
       return result
     })
-  })
+  }
 }
 
 function isPromise (obj) {

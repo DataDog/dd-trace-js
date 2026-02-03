@@ -144,13 +144,13 @@ function addResponseHeaders (res, span, config) {
     ? Object.fromEntries(res.headers.entries())
     : res.headers
 
-  config.headers.forEach(([key, tag]) => {
+  for (const [key, tag] of config.headers) {
     const value = headers[key]
 
     if (value) {
       span.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, value)
     }
-  })
+  }
 }
 
 function addRequestHeaders (req, span, config) {
@@ -158,13 +158,13 @@ function addRequestHeaders (req, span, config) {
     ? Object.fromEntries(req.headers.entries())
     : req.headers || req.getHeaders()
 
-  config.headers.forEach(([key, tag]) => {
+  for (const [key, tag] of config.headers) {
     const value = Array.isArray(headers[key]) ? headers[key].toString() : headers[key]
 
     if (value) {
       span.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, value)
     }
-  })
+  }
 }
 
 function normalizeClientConfig (config) {

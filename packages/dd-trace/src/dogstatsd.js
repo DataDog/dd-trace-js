@@ -109,10 +109,10 @@ class DogStatsDClient {
   _sendUdpFromQueue (queue, address, family) {
     const socket = family === 6 ? this._udp6 : this._udp4
 
-    queue.forEach((buffer) => {
+    for (const buffer of queue) {
       log.debug('Sending to DogStatsD: %s', buffer)
       socket.send(buffer, 0, buffer.length, this._port, address)
-    })
+    }
   }
 
   _add (stat, value, type, tags) {

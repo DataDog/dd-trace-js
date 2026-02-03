@@ -85,7 +85,7 @@ const paramsByFileHandleMethods = {
   writev: ['buffers', 'position'],
 }
 const names = ['fs', 'node:fs']
-names.forEach(name => {
+for (const name of names) {
   addHook({ name }, fs => {
     const asyncMethods = Object.keys(paramsByMethod)
     const syncMethods = asyncMethods.map(name => `${name}Sync`)
@@ -114,7 +114,7 @@ names.forEach(name => {
 
     return fs
   })
-})
+}
 function isFirstMethodReturningFileHandle (original) {
   return !kHandle && original.name === 'open'
 }

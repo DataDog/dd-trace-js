@@ -533,11 +533,11 @@ function getTestTypeFromFramework (testFramework) {
 }
 
 function finishAllTraceSpans (span) {
-  span.context()._trace.started.forEach(traceSpan => {
+  for (const traceSpan of span.context()._trace.started) {
     if (traceSpan !== span) {
       traceSpan.finish()
     }
-  })
+  }
 }
 
 function getTestParentSpan (tracer) {
@@ -757,6 +757,7 @@ function resetCoverage (coverage) {
 
   return coverageMap
     .files()
+    // eslint-disable-next-line unicorn/no-array-for-each
     .forEach(filename => {
       const fileCoverage = coverageMap.fileCoverageFor(filename)
       fileCoverage.resetHits()
@@ -767,6 +768,7 @@ function mergeCoverage (coverage, targetCoverage) {
   const coverageMap = istanbul.createCoverageMap(coverage)
   return coverageMap
     .files()
+    // eslint-disable-next-line unicorn/no-array-for-each
     .forEach(filename => {
       const fileCoverage = coverageMap.fileCoverageFor(filename)
 
@@ -780,9 +782,9 @@ function mergeCoverage (coverage, targetCoverage) {
       const targetFileCoverage = targetCoverage.fileCoverageFor(filename)
 
       // branches (.b) are copied by reference, so `resetHits` affects the copy, so we need to copy it manually
-      Object.entries(targetFileCoverage.data.b).forEach(([key, value]) => {
+      for (const [key, value] of Object.entries(targetFileCoverage.data.b)) {
         targetFileCoverage.data.b[key] = [...value]
-      })
+      }
     })
 }
 

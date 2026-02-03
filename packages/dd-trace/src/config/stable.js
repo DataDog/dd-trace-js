@@ -43,13 +43,13 @@ class StableConfig {
       // eslint-disable-next-line eslint-rules/eslint-process-env
       configurator.set_envp(Object.entries(process.env).map(([key, value]) => `${key}=${value}`))
       configurator.set_args(process.argv)
-      configurator.get_configuration(localConfig, fleetConfig).forEach((entry) => {
+      for (const entry of configurator.get_configuration(localConfig, fleetConfig)) {
         if (entry.source === 'local_stable_config') {
           this.localEntries[entry.name] = entry.value
         } else if (entry.source === 'fleet_stable_config') {
           this.fleetEntries[entry.name] = entry.value
         }
-      })
+      }
     } catch (e) {
       this.warnings.push(`Error parsing configuration from file: ${e.message}`)
     }
