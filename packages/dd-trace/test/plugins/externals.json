@@ -136,7 +136,11 @@
     },
     {
       "name": "express",
-      "versions": [">=4", ">=4.0.0 <4.3.0", ">=4.0.0 <5.0.0", ">=4.3.0 <5.0.0"]
+      "versions": [
+        ">=4 <5",
+        ">=4.0.0 <4.3.0",
+        ">=4.3.0 <5"
+      ]
     },
     {
       "name": "body-parser",
@@ -304,7 +308,9 @@
   "knex": [
     {
       "name": "pg",
-      "versions": ["8.7.3"]
+      "versions": [
+        "8.7.3"
+      ]
     }
   ],
   "koa": [
@@ -527,6 +533,10 @@
     {
       "name": "express",
       "versions": [">=4"]
+    },
+    {
+      "name": "mysql2",
+      "dep": true
     },
     {
       "name": "sqlite3",

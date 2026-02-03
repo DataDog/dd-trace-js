@@ -10,6 +10,33 @@ const { globSync } = require('glob')
 
 const multiMochaRc = require('../.mochamultireporterrc')
 
+function getTestsuiteAttr (openTag, name) {
+  const m = openTag.match(new RegExp(`${name}="([^"]*)"`))
+  return m ? Number(m[1]) : 0
+}
+
+function isFailureStartLine (line) {
+  return /\b\d+\s+failing\b/.test(stripAnsi(line))
+}
+
+function isWarningLine (line) {
+  const plain = stripAnsi(line)
+  return (
+    plain.includes('DeprecationWarning:') ||
+    plain.includes('MaxListenersExceededWarning:') ||
+    plain.includes('ExperimentalWarning:') ||
+    plain.includes('Warning: ') ||
+    plain.includes('Use `node --trace-warnings') ||
+    plain.includes('Use `node --trace-deprecation')
+  )
+}
+
+function splitLines (carry, chunk) {
+  const next = carry + chunk
+  const parts = next.split('\n')
+  return { lines: parts.slice(0, -1).map(l => l + '\n'), carry: parts.at(-1) ?? '' }
+}
+
 /**
  * @typedef {{
  *   reporterEnabled: string[],
@@ -121,16 +148,11 @@ function mergeXunitFilesToSingleTestsuite (inputFiles, outputFile) {
 
     const inner = xml.slice(openIdx + openTag.length, closeIdx)
 
-    const attr = (name) => {
-      const m = openTag.match(new RegExp(`${name}="([^"]*)"`))
-      return m ? Number(m[1]) : 0
-    }
-
-    totalTests += attr('tests')
-    totalFailures += attr('failures')
-    totalErrors += attr('errors')
-    totalSkipped += attr('skipped')
-    totalTime += attr('time')
+    totalTests += getTestsuiteAttr(openTag, 'tests')
+    totalFailures += getTestsuiteAttr(openTag, 'failures')
+    totalErrors += getTestsuiteAttr(openTag, 'errors')
+    totalSkipped += getTestsuiteAttr(openTag, 'skipped')
+    totalTime += getTestsuiteAttr(openTag, 'time')
 
     testcases.push(inner.trim())
   }
@@ -215,25 +237,6 @@ async function main () {
   let failures = 0
   /** @type {{file: string, code: number|null, signal: NodeJS.Signals|null}[]} */
   const failed = []
-
-  const isFailureStartLine = (line) => /\b\d+\s+failing\b/.test(stripAnsi(line))
-  const isWarningLine = (line) => {
-    const plain = stripAnsi(line)
-    return (
-      plain.includes('DeprecationWarning:') ||
-      plain.includes('MaxListenersExceededWarning:') ||
-      plain.includes('ExperimentalWarning:') ||
-      plain.includes('Warning: ') ||
-      plain.includes('Use `node --trace-warnings') ||
-      plain.includes('Use `node --trace-deprecation')
-    )
-  }
-
-  const splitLines = (carry, chunk) => {
-    const next = carry + chunk
-    const parts = next.split('\n')
-    return { lines: parts.slice(0, -1).map(l => l + '\n'), carry: parts.at(-1) ?? '' }
-  }
 
   const entries = expandedFiles.map((file) => ({
     file,
@@ -324,6 +327,7 @@ async function main () {
     for (const line of lines) handleStderrLine(entryIndex, line)
   }
 
+  /** @type {Promise<void>} */
   const runPromise = new Promise((resolve) => {
     const launchNext = () => {
       while (running < jobs && idx < expandedFiles.length) {
@@ -336,7 +340,7 @@ async function main () {
           ? (jobs > 1
               ? path.join(junitTmpDir, `node-${process.versions.node}-${process.pid}-${idx}.xml`)
               : junitOutFile)
-          : undefined
+          : null
 
         if (junitShard) junitTmpFiles.push(junitShard)
 
@@ -344,7 +348,7 @@ async function main () {
         const reporterOptions = emitJunit
           ? {
               reporterEnabled: ['spec', 'xunit'],
-              xunitReporterOptions: { output: junitShard },
+              xunitReporterOptions: { output: /** @type {string} */ (junitShard) },
             }
           : {
               reporterEnabled: ['spec'],
@@ -447,7 +451,7 @@ async function main () {
           entry.signal = signal
 
           if (idx >= expandedFiles.length && running === 0) {
-            resolve(undefined)
+            resolve()
           } else {
             launchNext()
           }
@@ -497,7 +501,7 @@ async function main () {
           const base = hasNewline ? out.slice(0, -1) : out
           // Ensure `in <file>` is not red by resetting ANSI styles before printing the filename.
           // Avoid double-resetting if the line already ends with a reset.
-          const reset = '\u001b[0m'
+          const reset = '\u001B[0m'
           out = (base.endsWith(reset) ? base : base + reset) + ' in ' + entry.file + (hasNewline ? '\n' : '')
         }
 
@@ -515,11 +519,9 @@ async function main () {
     }
   }
 
-  if (emitJunit) {
-    // Merge xunit shards (one per file) into the historical output file name expected by CI tooling.
-    if (jobs > 1) {
-      mergeXunitFilesToSingleTestsuite(junitTmpFiles.filter(f => fs.existsSync(f)), junitOutFile)
-    }
+  if (emitJunit && // Merge xunit shards (one per file) into the historical output file name expected by CI tooling.
+    jobs > 1) {
+    mergeXunitFilesToSingleTestsuite(junitTmpFiles.filter(f => fs.existsSync(f)), junitOutFile)
   }
 
   // Summary (always at the very end)

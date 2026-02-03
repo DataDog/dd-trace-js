@@ -16,6 +16,7 @@ describe('Instrumentation', () => {
   describe('knex', () => {
     withVersions('knex', 'knex', version => {
       describe('without configuration', () => {
+        // TODO: This test fails installing sqlite3 in the CI but the test is green!
         /**
          * TODO (Pablo Erhard): Implement a single mechanism to automatically trigger hook loading
          * across all tests. This should allow test hooks to initialize programmatically

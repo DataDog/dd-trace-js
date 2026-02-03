@@ -6,14 +6,14 @@ const { params, flags } = parse()
 
 const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
-const BOLD = '\x1b[1m'
-const CYAN = '\x1b[36m'
-const ERASE = '\x1b[0K'
-const GRAY = '\x1b[90m'
-const GREEN = '\x1b[32m'
-const PREVIOUS = '\x1b[1A'
-const RED = '\x1b[31m'
-const RESET = '\x1b[0m'
+const BOLD = '\x1B[1m'
+const CYAN = '\x1B[36m'
+const ERASE = '\x1B[0K'
+const GRAY = '\x1B[90m'
+const GREEN = '\x1B[32m'
+const PREVIOUS = '\x1B[1A'
+const RED = '\x1B[31m'
+const RESET = '\x1B[0m'
 
 const print = (...msgs) => msgs.forEach(msg => process.stdout.write(msg))
 const log = (...msgs) => msgs.forEach(msg => print(`${msg}\n`))
