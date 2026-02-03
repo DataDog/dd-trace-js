@@ -307,6 +307,10 @@
   ],
   "knex": [
     {
+      "name": "sqlite3",
+      "versions": ["^5.0.8"]
+    },
+    {
       "name": "pg",
       "versions": [
         "8.7.3"
