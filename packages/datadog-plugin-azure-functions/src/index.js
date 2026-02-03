@@ -113,12 +113,11 @@ function mapTriggerTag (methodName) {
 }
 
 function extractTraceContext (tracer, ctx) {
-  switch (String(triggerMap[ctx.methodName])) {
-    case 'Http':
-      return tracer.extract('http_headers', Object.fromEntries(ctx.httpRequest.headers))
-    default:
-      return null
+  if (triggerMap[ctx.methodName] === 'Http') {
+    return tracer.extract('http_headers', Object.fromEntries(ctx.httpRequest.headers))
   }
+  // Returning null indicates that the span is a root span
+  return null
 }
 
 // message & messages & batch with cardinality of 1 == applicationProperties
