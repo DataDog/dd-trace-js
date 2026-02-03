@@ -24,6 +24,8 @@ const SRC_FILES = [
   'ext/**/*.mjs',
   'ci/**/*.js',
   'ci/**/*.mjs',
+  'scripts/**/*.js',
+  'scripts/**/*.mjs',
   'packages/*/src/**/*.js',
   'packages/*/src/**/*.mjs',
 ]
@@ -502,6 +504,18 @@ export default [
       'unicorn/prefer-switch': 'off', // Questionable benefit
       'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
       'unicorn/switch-case-braces': 'off', // Questionable benefit
+    },
+  },
+  {
+    name: 'dd-trace/scripts',
+    files: [
+      'scripts/**/*.js',
+      'scripts/**/*.mjs',
+    ],
+    rules: {
+      'eslint-rules/eslint-process-env': 'off',
+      // Scripts are CLI/dev tooling where process.exit is acceptable.
+      'unicorn/no-process-exit': 'off',
     },
   },
   {
