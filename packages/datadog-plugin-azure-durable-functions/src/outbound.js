@@ -14,7 +14,7 @@ class AzureDurableFunctionsOutboundPlugin extends OutboundPlugin {
 
   bindStart (ctx) {
     /* eslint-disable no-console */
-    
+
     log.debug('logging context:\n')
     for (const key in ctx) {
       /* eslint-disable-next-line */

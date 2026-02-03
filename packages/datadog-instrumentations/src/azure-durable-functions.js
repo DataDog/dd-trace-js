@@ -15,7 +15,7 @@ const {
 const azureDurableFunctionsChannel = dc.TracingChannel('datadog:azure:durable-functions:invoke')
 
 addHook({ name: 'durable-functions', versions: ['>=3'], patchDefault: false }, (df) => {
-  log.debug('adding durable functions hook')
+  log.debug('adding durable functions hook OLIVIER')
   // TODO implement v3
   const { app } = df
 
