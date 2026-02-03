@@ -76,7 +76,7 @@ function tagsFromObject (object, opts) {
       result[prefix] = object.slice(0, 5000)
     }
 
-    if (typeof object === 'object') { // eslint-disable-line eslint-rules/eslint-safe-typeof-object
+    if (typeof object === 'object') {
       for (const [key, value] of Object.entries(object)) {
         if (redactedKeys.has(key.toLowerCase())) {
           tagCount += 1
