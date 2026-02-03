@@ -71,6 +71,10 @@ class PregelInvokeLLMObsPlugin extends BaseLangGraphLLMObsPlugin {
 class PregelStreamLLMObsPlugin extends BaseLangGraphLLMObsPlugin {
   static id = 'llmobs_langgraph_pregel_stream'
   static prefix = 'tracing:orchestrion:@langchain/langgraph:Pregel_stream'
+
+  setLLMObsTags (ctx) {
+    super.setLLMObsTags(ctx)
+  }
 }
 
 module.exports = [
