@@ -49,14 +49,14 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   addMetadataTags (tags) {
-    ALLOWED_CONTENT_TYPES.forEach(type => {
+    for (const type of ALLOWED_CONTENT_TYPES) {
       if (tags[type]) {
         this.metadataTags[type] = {
           ...this.metadataTags[type],
           ...tags[type],
         }
       }
-    })
+    }
   }
 
   _encodeTestSuite (bytes, content) {

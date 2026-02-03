@@ -197,13 +197,13 @@ function getFilter (config) {
 function addHeaderTags (span, headers, prefix, config) {
   if (!headers) return
 
-  config.headers.forEach(key => {
+  for (const key of config.headers) {
     const value = headers[key]
 
     if (value) {
       span.setTag(`${prefix}.${key}`, value)
     }
-  })
+  }
 }
 
 function getHeaders (config) {

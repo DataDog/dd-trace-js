@@ -202,8 +202,8 @@ function wrapRouteMethodsAndPublish (route, paths, publish) {
 
   const uniquePaths = new Set(filteredPaths)
 
-  METHODS.forEach(method => {
-    if (typeof route[method] !== 'function') return
+  for (const method of METHODS) {
+    if (typeof route[method] !== 'function') continue
 
     shimmer.wrap(route, method, (originalMethod) => function wrappedRouteMethod (...args) {
       const normalizedMethod = normalizeMethodName(method)
@@ -217,7 +217,7 @@ function wrapRouteMethodsAndPublish (route, paths, publish) {
 
       return originalMethod.apply(this, args)
     })
-  })
+  }
 }
 
 module.exports = {

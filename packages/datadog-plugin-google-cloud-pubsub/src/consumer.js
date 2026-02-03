@@ -68,7 +68,9 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       }
 
       if (api === 'acknowledge') {
-        ackIds.forEach(ackId => ackIdToMessage.delete(ackId))
+        for (const ackId of ackIds) {
+          ackIdToMessage.delete(ackId)
+        }
       }
     })
   }

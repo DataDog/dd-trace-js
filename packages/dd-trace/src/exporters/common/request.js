@@ -163,7 +163,7 @@ function request (data, options, callback) {
     if (isReadable) {
       data.pipe(req) // TODO: Validate whether this is actually retriable.
     } else {
-      dataArray.forEach(buffer => req.write(buffer))
+      for (const buffer of dataArray) req.write(buffer)
       req.end()
     }
 

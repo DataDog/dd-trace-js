@@ -176,7 +176,7 @@ class JestPlugin extends CiPlugin {
     // This subscriber changes the configuration objects from jest to inject the trace id
     // of the test session to the processes that run the test suites, and other data.
     this.addSub('ci:jest:session:configuration', configs => {
-      configs.forEach(config => {
+      for (const config of configs) {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
         config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
@@ -191,7 +191,7 @@ class JestPlugin extends CiPlugin {
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
         config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
         config._ddIsImpactedTestsEnabled = this.libraryConfig?.isImpactedTestsEnabled ?? false
-      })
+      }
     })
 
     this.addSub('ci:jest:test-suite:start', ({
@@ -272,9 +272,9 @@ class JestPlugin extends CiPlugin {
         suiteId: id(coverage.suiteId),
         files: coverage.files,
       }))
-      formattedCoverages.forEach(formattedCoverage => {
+      for (const formattedCoverage of formattedCoverages) {
         this.tracer._exporter.exportCoverage(formattedCoverage)
-      })
+      }
     })
 
     this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage, error, testSuiteAbsolutePath }) => {

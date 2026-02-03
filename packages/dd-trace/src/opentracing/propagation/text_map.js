@@ -656,13 +656,13 @@ class TextMapPropagator {
 
   _extractLegacyBaggageItems (carrier, spanContext) {
     if (this._config.legacyBaggageEnabled) {
-      Object.keys(carrier).forEach(key => {
+      for (const key of Object.keys(carrier)) {
         const match = key.match(baggageExpr)
 
         if (match) {
           spanContext._baggageItems[match[1]] = carrier[key]
         }
-      })
+      }
     }
   }
 
