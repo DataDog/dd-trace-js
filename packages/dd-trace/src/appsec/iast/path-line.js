@@ -93,10 +93,10 @@ function isExcluded (callsite, externallyExcludedPaths) {
 function getNodeModulesPaths (...paths) {
   const nodeModulesPaths = []
 
-  paths.forEach(p => {
+  for (const p of paths) {
     const pathParts = p.split('/')
     nodeModulesPaths.push(path.join('node_modules', ...pathParts))
-  })
+  }
 
   return nodeModulesPaths
 }

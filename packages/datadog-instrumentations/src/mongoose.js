@@ -61,9 +61,9 @@ addHook({
   versions: ['>=4.6.4 <5', '5', '6', '>=7'],
   file: 'lib/model.js',
 }, Model => {
-  [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters].forEach(methodName => {
+  for (const methodName of [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters]) {
     const useTwoArguments = collectionMethodsWithTwoFilters.includes(methodName)
-    if (!(methodName in Model)) return
+    if (!(methodName in Model)) continue
 
     shimmer.wrap(Model, methodName, method => {
       return function wrappedModelMethod () {
@@ -153,7 +153,7 @@ addHook({
         })
       }
     })
-  })
+  }
 
   return Model
 })

@@ -15,9 +15,21 @@ const PREVIOUS = '\x1B[1A'
 const RED = '\x1B[31m'
 const RESET = '\x1B[0m'
 
-const print = (...msgs) => msgs.forEach(msg => process.stdout.write(msg))
-const log = (...msgs) => msgs.forEach(msg => print(`${msg}\n`))
-const fatal = (...msgs) => fail() || log(...msgs) || process.exit(1)
+const print = (...msgs) => {
+  for (const msg of msgs) {
+    process.stdout.write(msg)
+  }
+}
+const log = (...msgs) => {
+  for (const msg of msgs) {
+    print(`${msg}\n`)
+  }
+}
+const fatal = (...msgs) => {
+  fail()
+  log(...msgs)
+  process.exit(1)
+}
 
 let timer
 let current

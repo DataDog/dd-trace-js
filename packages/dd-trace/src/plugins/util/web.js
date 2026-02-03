@@ -518,7 +518,7 @@ function addResourceTag (context) {
 function addHeaders (context) {
   const { req, res, config, span, inferredProxySpan } = context
 
-  config.headers.forEach(([key, tag]) => {
+  for (const [key, tag] of config.headers) {
     const reqHeader = req.headers[key]
     const resHeader = res.getHeader(key)
 
@@ -531,7 +531,7 @@ function addHeaders (context) {
       span.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
       inferredProxySpan?.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
     }
-  })
+  }
 }
 
 function getHeadersToRecord (config) {

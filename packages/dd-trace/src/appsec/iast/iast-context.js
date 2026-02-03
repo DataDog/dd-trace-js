@@ -55,7 +55,10 @@ function cleanIastContext (store, context, iastContext) {
   }
   if (iastContext) {
     if (typeof iastContext === 'object') {
-      Object.keys(iastContext).forEach(key => delete iastContext[key])
+      for (const key of Object.keys(iastContext)) {
+        // TODO: Consider using a (weak)map instead of an object to avoid the need to delete the keys.
+        delete iastContext[key]
+      }
     }
     return true
   }

@@ -474,7 +474,6 @@ export default [
       'unicorn/expiring-todo-comments': 'off',
       'unicorn/explicit-length-check': 'off', // 68 errors
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
-      'unicorn/no-array-for-each': 'off', // 122 errors
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
       'unicorn/prevent-abbreviations': 'off', // too strict
 

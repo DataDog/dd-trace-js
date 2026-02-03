@@ -57,7 +57,9 @@ function wrapRouterUse (use) {
   return function useWithTrace () {
     const router = use.apply(this, arguments)
 
-    router.stack.forEach(wrapStack)
+    for (const layer of router.stack) {
+      wrapStack(layer)
+    }
 
     return router
   }

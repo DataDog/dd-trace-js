@@ -117,7 +117,7 @@ function instrumentBaseModule (module) {
               if (typeof callback === 'function') {
                 return consume.call(this, numMessages, function wrappedCallback (err, messages) {
                   if (messages && messages.length > 0) {
-                    messages.forEach(message => {
+                    for (const message of messages) {
                       ctx.topic = message?.topic
                       ctx.partition = message?.partition
                       ctx.message = message
@@ -125,7 +125,7 @@ function instrumentBaseModule (module) {
                       // TODO: We should be using publish here instead of runStores but we need bindStart to be called
                       channels.consumerStart.runStores(ctx, () => {})
                       updateLatestOffset(message?.topic, message?.partition, message?.offset, groupId)
-                    })
+                    }
                   }
 
                   if (err) {

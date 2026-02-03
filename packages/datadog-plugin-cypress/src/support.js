@@ -52,11 +52,11 @@ function getRetriedTests (test, numRetries, tags) {
     // TODO: signal in framework logs that this is a retry.
     // TODO: Change it so these tests are allowed to fail.
     const clonedTest = test.clone()
-    tags.forEach(tag => {
+    for (const tag of tags) {
       if (tag) {
         clonedTest[tag] = true
       }
-    })
+    }
     retriedTests.push(clonedTest)
   }
   return retriedTests

@@ -543,12 +543,14 @@ class CypressPlugin {
     }
 
     // `details.specs` are test files
-    details.specs?.forEach(({ absolute, relative }) => {
-      const isUnskippableSuite = isMarkedAsUnskippable({ path: absolute })
-      if (isUnskippableSuite) {
-        this.unskippableSuites.push(relative)
+    if (details.specs) {
+      for (const { absolute, relative } of details.specs) {
+        const isUnskippableSuite = isMarkedAsUnskippable({ path: absolute })
+        if (isUnskippableSuite) {
+          this.unskippableSuites.push(relative)
+        }
       }
-    })
+    }
 
     const childOf = getTestParentSpan(this.tracer)
 
@@ -686,13 +688,14 @@ class CypressPlugin {
 
     // Get tests that didn't go through `dd:afterEach`
     // and create a skipped test span for each of them
-    cypressTests.filter(({ title }) => {
+    for (const { title } of cypressTests) {
       const cypressTestName = title.join(' ')
       const isTestFinished = finishedTests.find(({ testName }) => cypressTestName === testName)
 
-      return !isTestFinished
-    }).forEach(({ title }) => {
-      const cypressTestName = title.join(' ')
+      if (isTestFinished) {
+        continue
+      }
+
       const isSkippedByItr = this.testsToSkip.find(test =>
         cypressTestName === test.name && spec.relative === test.suite
       )
@@ -719,7 +722,7 @@ class CypressPlugin {
       }
 
       skippedTestSpan.finish()
-    })
+    }
 
     // Make sure that reported test statuses are the same as Cypress reports.
     // This is not always the case, such as when an `after` hook fails:
@@ -734,13 +737,13 @@ class CypressPlugin {
       return acc
     }, {})
 
-    Object.entries(finishedTestsByTestName).forEach(([testName, finishedTestAttempts]) => {
-      finishedTestAttempts.forEach((finishedTest, attemptIndex) => {
+    for (const [testName, finishedTestAttempts] of Object.entries(finishedTestsByTestName)) {
+      for (const [attemptIndex, finishedTest] of finishedTestAttempts.entries()) {
         // TODO: there could be multiple if there have been retries!
         // potentially we need to match the test status!
         const cypressTest = cypressTests.find(test => test.title.join(' ') === testName)
         if (!cypressTest) {
-          return
+          continue
         }
         // finishedTests can include multiple tests with the same name if they have been retried
         // by early flake detection. Cypress is unaware of this so .attempts does not necessarily have
@@ -787,8 +790,8 @@ class CypressPlugin {
         }
 
         finishedTest.testSpan.finish(finishedTest.finishTime)
-      })
-    })
+      }
+    }
 
     if (this.testSuiteSpan) {
       const status = getSuiteStatus(stats)
