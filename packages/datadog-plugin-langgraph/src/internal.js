@@ -27,28 +27,69 @@ class BaseLanggraphInternalPlugin extends TracingPlugin {
   asyncEnd (ctx) {
     this.finish(ctx)
   }
-
-  // You may modify this method, but the guard below is REQUIRED and MUST NOT be removed!
-  finish (ctx) {
-    // CRITICAL GUARD - DO NOT REMOVE: Ensures span only finishes when operation completes
-    if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
-
-    super.finish(ctx)
-  }
 }
 
-class PregelStreamPlugin extends BaseLanggraphInternalPlugin {
+class PregelStreamPlugin extends TracingPlugin {
   static prefix = 'tracing:orchestrion:@langchain/langgraph:Pregel_stream'
 
   bindStart (ctx) {
-    const meta = this.getTags(ctx)
-
     this.startSpan('langgraph.stream', {
       service: this.config.service,
-      meta,
+      component: 'langgraph',
+      'span.kind': 'internal',
     }, ctx)
 
     return ctx.currentStore
+  }
+
+  asyncStart (ctx) {
+    const span = ctx.currentStore?.span
+    if (!span) {
+      return
+    }
+
+    const asyncIterable = ctx.result
+
+    const originalAsyncIterator = asyncIterable[Symbol.asyncIterator].bind(asyncIterable)
+
+    asyncIterable[Symbol.asyncIterator] = function () {
+      const originalIterator = originalAsyncIterator()
+
+      return {
+        async next (...args) {
+          try {
+            const result = await originalIterator.next(...args)
+
+            if (result.done) span.finish()
+
+            return result
+          } catch (error) {
+            span.setTag('error', error)
+            span.finish()
+            throw error
+          }
+        },
+
+        async return (...args) {
+          span.finish()
+
+          if (originalIterator.return) {
+            return await originalIterator.return(...args)
+          }
+          return { done: true, value: undefined }
+        },
+
+        async throw (error) {
+          span.setTag('error', error)
+          span.finish()
+
+          if (originalIterator.throw) {
+            return await originalIterator.throw(error)
+          }
+          throw error
+        },
+      }
+    }
   }
 }
 
