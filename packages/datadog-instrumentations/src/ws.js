@@ -95,7 +95,7 @@ function wrapListener (originalOn) {
 function removeListener (originalOff) {
   return function (eventName, handler) {
     if (eventName === 'message') {
-      const wrappedHandler = eventHandlerMap.get(handler)
+      const wrappedHandler = eventHandlerMap.get(handler) || handler
       return originalOff.call(this, eventName, wrappedHandler)
     }
     return originalOff.apply(this, arguments)
