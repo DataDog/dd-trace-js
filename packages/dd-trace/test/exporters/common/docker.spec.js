@@ -47,6 +47,7 @@ describe('docker', () => {
 
     assert.strictEqual(carrier['Datadog-Container-Id'], id)
     assert.strictEqual(carrier['Datadog-Entity-ID'], `ci-${id}`)
+    assert.strictEqual(docker.entityId, `ci-${id}`)
   })
 
   it('should support IDs with UUID format', () => {
@@ -61,6 +62,7 @@ describe('docker', () => {
 
     assert.strictEqual(carrier['Datadog-Container-Id'], id)
     assert.strictEqual(carrier['Datadog-Entity-ID'], `ci-${id}`)
+    assert.strictEqual(docker.entityId, `ci-${id}`)
   })
 
   it('should support IDs with ECS task format', () => {
@@ -75,6 +77,7 @@ describe('docker', () => {
 
     assert.strictEqual(carrier['Datadog-Container-Id'], id)
     assert.strictEqual(carrier['Datadog-Entity-ID'], `ci-${id}`)
+    assert.strictEqual(docker.entityId, `ci-${id}`)
   })
 
   it('should support IDs with Kubernetes format', () => {
@@ -89,6 +92,7 @@ describe('docker', () => {
 
     assert.strictEqual(carrier['Datadog-Container-Id'], id)
     assert.strictEqual(carrier['Datadog-Entity-ID'], `ci-${id}`)
+    assert.strictEqual(docker.entityId, `ci-${id}`)
   })
 
   it('should support finding IDs on any line of the cgroup', () => {
@@ -105,6 +109,7 @@ describe('docker', () => {
 
     assert.strictEqual(carrier['Datadog-Container-Id'], id)
     assert.strictEqual(carrier['Datadog-Entity-ID'], `ci-${id}`)
+    assert.strictEqual(docker.entityId, `ci-${id}`)
   })
 
   it('should support Control Group v2', () => {
@@ -119,6 +124,7 @@ describe('docker', () => {
 
     assert.strictEqual(carrier['Datadog-Container-Id'], id)
     assert.strictEqual(carrier['Datadog-Entity-ID'], `ci-${id}`)
+    assert.strictEqual(docker.entityId, `ci-${id}`)
   })
 
   it('should support Cloud Foundry', () => {
@@ -133,6 +139,7 @@ describe('docker', () => {
 
     assert.strictEqual(carrier['Datadog-Container-Id'], id)
     assert.strictEqual(carrier['Datadog-Entity-ID'], `ci-${id}`)
+    assert.strictEqual(docker.entityId, `ci-${id}`)
   })
 
   it('should support inode when the ID is not available', () => {
@@ -148,6 +155,7 @@ describe('docker', () => {
 
     assert.strictEqual(carrier['Datadog-Container-Id'], undefined)
     assert.strictEqual(carrier['Datadog-Entity-ID'], `in-${ino}`)
+    assert.strictEqual(docker.entityId, `in-${ino}`)
   })
 
   it('should support inode when the ID is not available (any line)', () => {
@@ -164,6 +172,7 @@ describe('docker', () => {
 
     assert.strictEqual(carrier['Datadog-Container-Id'], undefined)
     assert.strictEqual(carrier['Datadog-Entity-ID'], `in-${ino}`)
+    assert.strictEqual(docker.entityId, `in-${ino}`)
   })
 
   it('should support external env', () => {
