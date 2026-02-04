@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
 const {
   FakeAgent,
   sandboxCwd,
@@ -11,6 +10,7 @@ const {
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+
 describe('esm', () => {
   let agent
   let proc
