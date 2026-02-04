@@ -42,8 +42,8 @@ function getProdDeps () {
   // Add root package (dd-trace) to the set of dependencies manually as it is not included in the yarn list output.
   const deps = new Set([normalizeDepName(rootPackageName)])
 
-  addProdDeps(deps, process.cwd())
-  addProdDeps(deps, join(process.cwd(), 'vendor'))
+  addYarnProdDeps(deps, process.cwd())
+  addNpmProdDeps(deps, join(process.cwd(), 'vendor'))
 
   // Add vendored dependencies
   addVendoredDeps(deps)
@@ -51,7 +51,7 @@ function getProdDeps () {
   return deps
 }
 
-function addProdDeps (deps, cwd) {
+function addYarnProdDeps (deps, cwd) {
   // Use yarn to get full tree of production (non-dev) dependencies (format is ndjson)
   const stdout = execSync('yarn list --production --json', {
     encoding: 'utf8',
@@ -65,6 +65,36 @@ function addProdDeps (deps, cwd) {
     if (parsed.type === 'tree' && Array.isArray(parsed.data?.trees)) {
       collectFromTrees(parsed.data.trees, deps)
     }
+  }
+}
+
+function addNpmProdDeps (deps, cwd) {
+  // Use npm to get full tree of production (non-dev) dependencies
+  const stdout = execSync('npm list --omit=dev --json --depth=10', {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'inherit'],
+    cwd,
+  })
+
+  const parsed = JSON.parse(stdout)
+
+  collectDependencies(deps, parsed)
+}
+
+function collectDependencies (deps, obj) {
+  if (!obj.dependencies) return
+
+  for (const dep in obj.dependencies) {
+    const resolved = obj.dependencies[dep].resolved
+
+    if (!resolved) continue
+
+    // Get the actual dependency name even when aliased in the package.json
+    const name = resolved.split('/-')[0].split('npmjs.org/').reverse()[0]
+
+    deps.add(name)
+
+    collectDependencies(deps, obj.dependencies[dep])
   }
 }
 
