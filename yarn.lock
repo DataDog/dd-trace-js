@@ -615,60 +615,60 @@
   resolved "https://registry.yarnpkg.com/@opentelemetry/api/-/api-1.9.0.tgz#d03eba68273dc0f7509e2a3d5cba21eae10379fe"
   integrity sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==
 
-"@oven/bun-darwin-aarch64@1.3.6":
-  version "1.3.6"
-  resolved "https://registry.yarnpkg.com/@oven/bun-darwin-aarch64/-/bun-darwin-aarch64-1.3.6.tgz#fa4e055a17386c39c63679014a423dc31ee56aab"
-  integrity sha512-27rypIapNkYboOSylkf1tD9UW9Ado2I+P1NBL46Qz29KmOjTL6WuJ7mHDC5O66CYxlOkF5r93NPDAC3lFHYBXw==
+"@oven/bun-darwin-aarch64@1.3.8":
+  version "1.3.8"
+  resolved "https://registry.yarnpkg.com/@oven/bun-darwin-aarch64/-/bun-darwin-aarch64-1.3.8.tgz#f51204217c98e58cd66adc5bb6bf811f69d86657"
+  integrity sha512-hPERz4IgXCM6Y6GdEEsJAFceyJMt29f3HlFzsvE/k+TQjChRhar6S+JggL35b9VmFfsdxyCOOTPqgnSrdV0etA==
 
-"@oven/bun-darwin-x64-baseline@1.3.6":
-  version "1.3.6"
-  resolved "https://registry.yarnpkg.com/@oven/bun-darwin-x64-baseline/-/bun-darwin-x64-baseline-1.3.6.tgz#7cbb9bb1e59438421cc1d694da49771b4dd618df"
-  integrity sha512-nqtr+pTsHqusYpG2OZc6s+AmpWDB/FmBvstrK0y5zkti4OqnCuu7Ev2xNjS7uyb47NrAFF40pWqkpaio5XEd7w==
+"@oven/bun-darwin-x64-baseline@1.3.8":
+  version "1.3.8"
+  resolved "https://registry.yarnpkg.com/@oven/bun-darwin-x64-baseline/-/bun-darwin-x64-baseline-1.3.8.tgz#6e0059838195a64ac3b8268109840ce42b5d83f0"
+  integrity sha512-ArHVWpCRZI3vGLoN2/8ud8Kzqlgn1Gv+fNw+pMB9x18IzgAEhKxFxsWffnoaH21amam4tAOhpeewRIgdNtB0Cw==
 
-"@oven/bun-darwin-x64@1.3.6":
-  version "1.3.6"
-  resolved "https://registry.yarnpkg.com/@oven/bun-darwin-x64/-/bun-darwin-x64-1.3.6.tgz#627756fabaa340c74bf512c3395a3d8c0aa3fcb9"
-  integrity sha512-I82xGzPkBxzBKgbl8DsA0RfMQCWTWjNmLjIEkW1ECiv3qK02kHGQ5FGUr/29L/SuvnGsULW4tBTRNZiMzL37nA==
+"@oven/bun-darwin-x64@1.3.8":
+  version "1.3.8"
+  resolved "https://registry.yarnpkg.com/@oven/bun-darwin-x64/-/bun-darwin-x64-1.3.8.tgz#4a48273eb92827fa4a53bbf9f6f7d38d2d83c4ea"
+  integrity sha512-SaWIxsRQYiT/eA60bqA4l8iNO7cJ6YD8ie82RerRp9voceBxPIZiwX4y20cTKy5qNaSGr9LxfYq7vDywTipiog==
 
-"@oven/bun-linux-aarch64-musl@1.3.6":
-  version "1.3.6"
-  resolved "https://registry.yarnpkg.com/@oven/bun-linux-aarch64-musl/-/bun-linux-aarch64-musl-1.3.6.tgz#68b8f51ef85bd0373f79771c211ae024d6fb9461"
-  integrity sha512-FR+iJt17rfFgYgpxL3M67AUwujOgjw52ZJzB9vElI5jQXNjTyOKf8eH4meSk4vjlYF3h/AjKYd6pmN0OIUlVKQ==
+"@oven/bun-linux-aarch64-musl@1.3.8":
+  version "1.3.8"
+  resolved "https://registry.yarnpkg.com/@oven/bun-linux-aarch64-musl/-/bun-linux-aarch64-musl-1.3.8.tgz#40f2895c32bad04c0b2eacb329dd934cb0f9ca54"
+  integrity sha512-HvJmhrfipL7GtuqFz6xNpmf27NGcCOMwCalPjNR6fvkLpe8A7Z1+QbxKKjOglelmlmZc3Vi2TgDUtxSqfqOToQ==
 
-"@oven/bun-linux-aarch64@1.3.6":
-  version "1.3.6"
-  resolved "https://registry.yarnpkg.com/@oven/bun-linux-aarch64/-/bun-linux-aarch64-1.3.6.tgz#36a7c504a94f1aa04a8666f819ae69a3ef0f6c4c"
-  integrity sha512-YaQEAYjBanoOOtpqk/c5GGcfZIyxIIkQ2m1TbHjedRmJNwxzWBhGinSARFkrRIc3F8pRIGAopXKvJ/2rjN1LzQ==
+"@oven/bun-linux-aarch64@1.3.8":
+  version "1.3.8"
+  resolved "https://registry.yarnpkg.com/@oven/bun-linux-aarch64/-/bun-linux-aarch64-1.3.8.tgz#d731dc7322b95a8a9fd50572c6346a7a1f3051b9"
+  integrity sha512-rq0nNckobtS+ONoB95/Frfqr8jCtmSjjjEZlN4oyUx0KEBV11Vj4v3cDVaWzuI34ryL8FCog3HaqjfKn8R82Tw==
 
-"@oven/bun-linux-x64-baseline@1.3.6":
-  version "1.3.6"
-  resolved "https://registry.yarnpkg.com/@oven/bun-linux-x64-baseline/-/bun-linux-x64-baseline-1.3.6.tgz#805f1c998bf07dbb4b2dc537ad7e151ef407dad4"
-  integrity sha512-jRmnX18ak8WzqLrex3siw0PoVKyIeI5AiCv4wJLgSs7VKfOqrPycfHIWfIX2jdn7ngqbHFPzI09VBKANZ4Pckg==
+"@oven/bun-linux-x64-baseline@1.3.8":
+  version "1.3.8"
+  resolved "https://registry.yarnpkg.com/@oven/bun-linux-x64-baseline/-/bun-linux-x64-baseline-1.3.8.tgz#3529175b544d47f3697a8990a225eb4e8c7f5350"
+  integrity sha512-3IkS3TuVOzMqPW6Gg9/8FEoKF/rpKZ9DZUfNy9GQ54+k4PGcXpptU3+dy8D4iDFCt4qe6bvoiAOdM44OOsZ+Wg==
 
-"@oven/bun-linux-x64-musl-baseline@1.3.6":
-  version "1.3.6"
-  resolved "https://registry.yarnpkg.com/@oven/bun-linux-x64-musl-baseline/-/bun-linux-x64-musl-baseline-1.3.6.tgz#3caba8f49dbb73028edf62d797985bfaec570fd8"
-  integrity sha512-7FjVnxnRTp/AgWqSQRT/Vt9TYmvnZ+4M+d9QOKh/Lf++wIFXFGSeAgD6bV1X/yr2UPVmZDk+xdhr2XkU7l2v3w==
+"@oven/bun-linux-x64-musl-baseline@1.3.8":
+  version "1.3.8"
+  resolved "https://registry.yarnpkg.com/@oven/bun-linux-x64-musl-baseline/-/bun-linux-x64-musl-baseline-1.3.8.tgz#119501b08ef9e77317627ac54e1e21249dc77d4e"
+  integrity sha512-5g8XJwHhcTh8SGoKO7pR54ILYDbuFkGo+68DOMTiVB5eLxuLET+Or/camHgk4QWp3nUS5kNjip4G8BE8i0rHVQ==
 
-"@oven/bun-linux-x64-musl@1.3.6":
-  version "1.3.6"
-  resolved "https://registry.yarnpkg.com/@oven/bun-linux-x64-musl/-/bun-linux-x64-musl-1.3.6.tgz#dc4fc1873eb5a79fe93c46fe71b92ba4f8020601"
-  integrity sha512-YeXcJ9K6vJAt1zSkeA21J6pTe7PgDMLTHKGI3nQBiMYnYf7Ob3K+b/ChSCznrJG7No5PCPiQPg4zTgA+BOTmSA==
+"@oven/bun-linux-x64-musl@1.3.8":
+  version "1.3.8"
+  resolved "https://registry.yarnpkg.com/@oven/bun-linux-x64-musl/-/bun-linux-x64-musl-1.3.8.tgz#4cf182843df43660de982177d5a7ea26726c351b"
+  integrity sha512-o7Jm5zL4aw9UBs3BcZLVbgGm2V4F10MzAQAV+ziKzoEfYmYtvDqRVxgKEq7BzUOVy4LgfrfwzEXw5gAQGRrhQQ==
 
-"@oven/bun-linux-x64@1.3.6":
-  version "1.3.6"
-  resolved "https://registry.yarnpkg.com/@oven/bun-linux-x64/-/bun-linux-x64-1.3.6.tgz#d593c5585ce5ad87cf31f202fc4603c6e64994d0"
-  integrity sha512-egfngj0dfJ868cf30E7B+ye9KUWSebYxOG4l9YP5eWeMXCtenpenx0zdKtAn9qxJgEJym5AN6trtlk+J6x8Lig==
+"@oven/bun-linux-x64@1.3.8":
+  version "1.3.8"
+  resolved "https://registry.yarnpkg.com/@oven/bun-linux-x64/-/bun-linux-x64-1.3.8.tgz#8d9f5832521d9b7921efc86cab88b6c4e76ee660"
+  integrity sha512-YDgqVx1MI8E0oDbCEUSkAMBKKGnUKfaRtMdLh9Bjhu7JQacQ/ZCpxwi4HPf5Q0O1TbWRrdxGw2tA2Ytxkn7s1Q==
 
-"@oven/bun-windows-x64-baseline@1.3.6":
-  version "1.3.6"
-  resolved "https://registry.yarnpkg.com/@oven/bun-windows-x64-baseline/-/bun-windows-x64-baseline-1.3.6.tgz#a0feb1f4cc0d3271d22166e8bf29ad77a68d5b55"
-  integrity sha512-PFUa7JL4lGoyyppeS4zqfuoXXih+gSE0XxhDMrCPVEUev0yhGNd/tbWBvcdpYnUth80owENoGjc8s5Knopv9wA==
+"@oven/bun-windows-x64-baseline@1.3.8":
+  version "1.3.8"
+  resolved "https://registry.yarnpkg.com/@oven/bun-windows-x64-baseline/-/bun-windows-x64-baseline-1.3.8.tgz#8a59d9fde6413e9750a31351be59782815ff1e06"
+  integrity sha512-K6qBUKAZLXsjAwFxGTG87dsWlDjyDl2fqjJr7+x7lmv2m+aSEzmLOK+Z5pSvGkpjBp3LXV35UUgj8G0UTd0pPg==
 
-"@oven/bun-windows-x64@1.3.6":
-  version "1.3.6"
-  resolved "https://registry.yarnpkg.com/@oven/bun-windows-x64/-/bun-windows-x64-1.3.6.tgz#62a21c92689403ec7528b27340bd78f8173ea0c4"
-  integrity sha512-Sr1KwUcbB0SEpnSPO22tNJppku2khjFluEst+mTGhxHzAGQTQncNeJxDnt3F15n+p9Q+mlcorxehd68n1siikQ==
+"@oven/bun-windows-x64@1.3.8":
+  version "1.3.8"
+  resolved "https://registry.yarnpkg.com/@oven/bun-windows-x64/-/bun-windows-x64-1.3.8.tgz#dce8054ce006983b1088b67c4920fde3ec6f2afa"
+  integrity sha512-UDI3rowMm/tI6DIynpE4XqrOhr+1Ztk1NG707Wxv2nygup+anTswgCwjfjgmIe78LdoRNFrux2GpeolhQGW6vQ==
 
 "@pkgjs/parseargs@^0.11.0":
   version "0.11.0"
@@ -955,10 +955,10 @@ available-typed-arrays@^1.0.7:
   dependencies:
     possible-typed-array-names "^1.0.0"
 
-axios@^1.12.2:
-  version "1.13.2"
-  resolved "https://registry.yarnpkg.com/axios/-/axios-1.13.2.tgz#9ada120b7b5ab24509553ec3e40123521117f687"
-  integrity sha512-VPk9ebNqPcy5lRGuSlKx752IlDatOjT9paPlm8A7yOuW2Fbvp4X3JznJtT4f0GzGLLiWE9W8onz51SqLYwzGaA==
+axios@^1.13.4:
+  version "1.13.4"
+  resolved "https://registry.yarnpkg.com/axios/-/axios-1.13.4.tgz#15d109a4817fb82f73aea910d41a2c85606076bc"
+  integrity sha512-1wVkUaAO6WyaYtCkcYCOx12ZgpGf9Zif+qXa4n+oYzK558YryKqiL6UWwd5DqiH3VRW0GYhTZQ/vlgJrCoNQlg==
   dependencies:
     follow-redirects "^1.15.6"
     form-data "^4.0.4"
@@ -1048,22 +1048,22 @@ builtin-modules@^5.0.0:
   resolved "https://registry.yarnpkg.com/builtin-modules/-/builtin-modules-5.0.0.tgz#9be95686dedad2e9eed05592b07733db87dcff1a"
   integrity sha512-bkXY9WsVpY7CvMhKSR6pZilZu9Ln5WDrKVBUXf2S443etkmEO4V58heTecXcUIsNsi4Rx8JUO4NfX1IcQl4deg==
 
-bun@1.3.6:
-  version "1.3.6"
-  resolved "https://registry.yarnpkg.com/bun/-/bun-1.3.6.tgz#d8c19f8f65de10c0104530ba33aafc8e55d516c2"
-  integrity sha512-Tn98GlZVN2WM7+lg/uGn5DzUao37Yc0PUz7yzYHdeF5hd+SmHQGbCUIKE4Sspdgtxn49LunK3mDNBC2Qn6GJjw==
+bun@1.3.8:
+  version "1.3.8"
+  resolved "https://registry.yarnpkg.com/bun/-/bun-1.3.8.tgz#cb0c17aec119c34d821717dff1a01f5063eacf95"
+  integrity sha512-TmmtMGQSXY3o0enSMMkvR5g7Dw/2n2oylAUprLVdqA8pDPBoKbzgOmmgHOtvnfRznFppl+Gu2cid3vgAjcNoSg==
   optionalDependencies:
-    "@oven/bun-darwin-aarch64" "1.3.6"
-    "@oven/bun-darwin-x64" "1.3.6"
-    "@oven/bun-darwin-x64-baseline" "1.3.6"
-    "@oven/bun-linux-aarch64" "1.3.6"
-    "@oven/bun-linux-aarch64-musl" "1.3.6"
-    "@oven/bun-linux-x64" "1.3.6"
-    "@oven/bun-linux-x64-baseline" "1.3.6"
-    "@oven/bun-linux-x64-musl" "1.3.6"
-    "@oven/bun-linux-x64-musl-baseline" "1.3.6"
-    "@oven/bun-windows-x64" "1.3.6"
-    "@oven/bun-windows-x64-baseline" "1.3.6"
+    "@oven/bun-darwin-aarch64" "1.3.8"
+    "@oven/bun-darwin-x64" "1.3.8"
+    "@oven/bun-darwin-x64-baseline" "1.3.8"
+    "@oven/bun-linux-aarch64" "1.3.8"
+    "@oven/bun-linux-aarch64-musl" "1.3.8"
+    "@oven/bun-linux-x64" "1.3.8"
+    "@oven/bun-linux-x64-baseline" "1.3.8"
+    "@oven/bun-linux-x64-musl" "1.3.8"
+    "@oven/bun-linux-x64-musl-baseline" "1.3.8"
+    "@oven/bun-windows-x64" "1.3.8"
+    "@oven/bun-windows-x64-baseline" "1.3.8"
 
 busboy@^1.6.0:
   version "1.6.0"
@@ -1660,10 +1660,10 @@ eslint-plugin-import@^2.32.0:
     string.prototype.trimend "^1.0.9"
     tsconfig-paths "^3.15.0"
 
-eslint-plugin-jsdoc@^62.4.1:
-  version "62.4.1"
-  resolved "https://registry.yarnpkg.com/eslint-plugin-jsdoc/-/eslint-plugin-jsdoc-62.4.1.tgz#6ad51350c364597dadf820e690f846d5b43b4e07"
-  integrity sha512-HgX2iN4j104D/mCUqRbhtzSZbph+KO9jfMHiIJjJ19Q+IwLQ5Na2IqvOJYq4S+4kgvEk1w6KYF4vVus6H2wcHg==
+eslint-plugin-jsdoc@^62.5.0:
+  version "62.5.0"
+  resolved "https://registry.yarnpkg.com/eslint-plugin-jsdoc/-/eslint-plugin-jsdoc-62.5.0.tgz#c6c466a55cc17072c702a72ae03c227af32257ac"
+  integrity sha512-D+1haMVDzW/ZMoPwOnsbXCK07rJtsq98Z1v+ApvDKxSzYTTcPgmFc/nyUDCGmxm2cP7g7hszyjYHO7Zodl/43w==
   dependencies:
     "@es-joy/jsdoccomment" "~0.83.0"
     "@es-joy/resolve.exports" "1.2.0"
@@ -2165,10 +2165,10 @@ globals@^16.2.0, globals@^16.4.0:
   resolved "https://registry.yarnpkg.com/globals/-/globals-16.5.0.tgz#ccf1594a437b97653b2be13ed4d8f5c9f850cac1"
   integrity sha512-c/c15i26VrJ4IRt5Z89DnIzCGDn9EcebibhAOjw5ibqEHsE1wLUgkPn9RDmNcUKyU87GeaL633nyJ+pplFR2ZQ==
 
-globals@^17.1.0:
-  version "17.1.0"
-  resolved "https://registry.yarnpkg.com/globals/-/globals-17.1.0.tgz#03448e667caa3914312a7937eef48c4a59dc6859"
-  integrity sha512-8HoIcWI5fCvG5NADj4bDav+er9B9JMj2vyL2pI8D0eismKyUvPLTSs+Ln3wqhwcp306i73iyVnEKx3F6T47TGw==
+globals@^17.2.0:
+  version "17.2.0"
+  resolved "https://registry.yarnpkg.com/globals/-/globals-17.2.0.tgz#41d29408d6f5408457d2ef965d29215e3026779f"
+  integrity sha512-tovnCz/fEq+Ripoq+p/gN1u7l6A7wwkoBT9pRCzTHzsD/LvADIzXZdjmRymh5Ztf0DYC3Rwg5cZRYjxzBmzbWg==
 
 globalthis@^1.0.4:
   version "1.0.4"
