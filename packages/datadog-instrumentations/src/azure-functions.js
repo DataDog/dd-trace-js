@@ -35,7 +35,6 @@ addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (a
 // The arguments are either an object with a handler property or the handler function itself
 function wrapHandler (method) {
   return function (name, arg) {
-    log.debug('in sub wrap handler for method: ', name)
     // check if this is either a handlerOptions or the handler itself
     if (arg !== null && typeof arg === 'object' && arg.hasOwnProperty('handler')) {
       // if this is a handlerOptions: first, assign to a variable options

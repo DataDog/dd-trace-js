@@ -13,11 +13,13 @@ class AzureDurableFunctionsOutboundPlugin extends OutboundPlugin {
   static get prefix () { return 'tracing:datadog:azure:durable-functions:invoke' }
 
   bindStart (ctx) {
-    log.debug('logging context:\n')
-    for (const key in ctx) {
-      /* eslint-disable-next-line */
-      log.debug(`key: ${key}, val: ${ctx[key]}\n`)
-    }
+    log.debug('in durable-functions plugin for method: %s', ctx.methodName)
+    // const span =
+    this.startSpan(this.operationName(), {
+      meta: {
+        component: 'azure-durable-functions',
+      },
+    })
   }
 
   asyncEnd (ctx) {
