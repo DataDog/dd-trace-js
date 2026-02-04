@@ -4,6 +4,12 @@ const assert = require('node:assert')
 const { join, basename } = require('node:path')
 
 const proxyquire = require('proxyquire')
+const {
+  DEFAULT_MAX_REFERENCE_DEPTH,
+  DEFAULT_MAX_COLLECTION_SIZE,
+  DEFAULT_MAX_FIELD_COUNT,
+  DEFAULT_MAX_LENGTH,
+} = require('../../../../src/debugger/devtools_client/snapshot/constants')
 const session = require('./stub-session')
 
 const collectorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/collector', {
@@ -22,10 +28,19 @@ const processorWithStub = proxyquire('../../../../src/debugger/devtools_client/s
   './redaction': redactionWithStub,
 })
 
-const { getLocalStateForCallFrame } = proxyquire('../../../../src/debugger/devtools_client/snapshot', {
-  './collector': collectorWithStub,
-  './processor': processorWithStub,
-})
+const { getLocalStateForCallFrame, evaluateCaptureExpressions } =
+  proxyquire('../../../../src/debugger/devtools_client/snapshot', {
+    './collector': collectorWithStub,
+    './processor': processorWithStub,
+    '../session': session,
+  })
+
+const DEFAULT_CAPTURE_LIMITS = {
+  maxReferenceDepth: DEFAULT_MAX_REFERENCE_DEPTH,
+  maxCollectionSize: DEFAULT_MAX_COLLECTION_SIZE,
+  maxFieldCount: DEFAULT_MAX_FIELD_COUNT,
+  maxLength: DEFAULT_MAX_LENGTH,
+}
 
 module.exports = {
   session,
@@ -35,6 +50,8 @@ module.exports = {
   setAndTriggerBreakpoint,
   assertOnBreakpoint,
   getLocalStateForCallFrame,
+  evaluateCaptureExpressions,
+  DEFAULT_CAPTURE_LIMITS,
 }
 
 /**
@@ -97,7 +114,7 @@ async function setAndTriggerBreakpoint (path, line) {
 function assertOnBreakpoint (done, snapshotConfig, callback) {
   if (typeof snapshotConfig === 'function') {
     callback = snapshotConfig
-    snapshotConfig = undefined
+    snapshotConfig = DEFAULT_CAPTURE_LIMITS
   }
 
   session.once('Debugger.paused', ({ params }) => {
