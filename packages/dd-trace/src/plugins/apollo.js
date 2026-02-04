@@ -10,7 +10,7 @@ class ApolloBasePlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const store = storage('legacy').getStore()
-    const childOf = store ? store.span : null
+    const childOf = store ? /** @type {import('../opentracing/span') | undefined} */ (store.span) : null
 
     const span = this.startSpan(this.getOperationName(), {
       childOf,
