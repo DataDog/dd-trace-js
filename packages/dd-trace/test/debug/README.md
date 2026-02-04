@@ -130,15 +130,15 @@ NO_COLOR=1 TEST_CHANNEL_DEBUG=true PLUGINS=bullmq yarn test:plugins
 ## Files
 
 - `packages/dd-trace/test/debug/channel-patch.js` - Main debug patch
-- `packages/dd-trace/test/debug/channel-patch.mjs` - ESM wrapper
 - `packages/dd-trace/test/setup/core.js` - Loads patch when `TEST_CHANNEL_DEBUG` is set
-- `integration-tests/helpers/index.js` - Loads patch for ESM subprocess tests
+- `integration-tests/helpers/index.js` - Loads patch for subprocess tests via `--require`
 
 ## How It Works
 
-1. **Channel patching**: Patches `diagnostics_channel.Channel.prototype` to log subscribe/publish/runStores
-2. **TracingChannel hooking**: Uses ritm to hook `dc-polyfill` and patch `tracingChannel()`
-3. **Shimmer hooking**: Uses ritm to hook `shimmer`/`datadog-shimmer` and patch `wrap()`/`massWrap()`
-4. **Rewriter patching**: Patches the orchestrion rewriter to log code transforms
-5. **Span patching**: Patches `tracer.startSpan()` and `span.finish()` via test agent integration
-6. **ESM support**: Loaded via `--require` in subprocess NODE_OPTIONS
+1. **Channel patching**: Wraps `Channel.prototype.subscribe` to log subscriptions and wrap subscriber functions
+2. **Subscriber wrapping**: Wraps each subscriber to log publish events (needed because Node.js uses a native C++ fast path that bypasses JS-level publish when there are subscribers)
+3. **TracingChannel hooking**: Uses ritm to hook `dc-polyfill` and patch `tracingChannel()`
+4. **Shimmer hooking**: Uses ritm to hook `shimmer`/`datadog-shimmer` and patch `wrap()`/`massWrap()`
+5. **Rewriter patching**: Patches the orchestrion rewriter to log code transforms
+6. **Span lifecycle**: Subscribes to `dd-trace:span:start` and `dd-trace:span:finish` diagnostic channels
+7. **Subprocess support**: Loaded via `--require` in NODE_OPTIONS for integration tests
