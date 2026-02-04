@@ -99,20 +99,61 @@ function formatDuration (start) {
 // Channel Prototype Patching
 // ============================================================
 
-const { subscribe, publish } = dc.Channel.prototype
+// Node.js optimizes diagnostics_channel - when channels HAVE subscribers,
+// publish() uses a native C++ fast path that bypasses JS-level prototype methods.
+// Our Channel.prototype.publish patch only runs when there are NO subscribers.
+// To log all publishes, we wrap subscriber functions to log when they're called.
+// WeakMap tracks original→wrapped mapping for proper unsubscribe support.
+
+const { subscribe, unsubscribe, publish } = dc.Channel.prototype
+const subscriberWrappers = new WeakMap()
+
+/**
+ * Creates a logging wrapper around a subscriber function.
+ * The wrapper logs the publish event before calling the original subscriber.
+ * @param {Function} fn - The original subscriber function
+ * @param {string} channelName - The channel name for logging
+ * @returns {Function} The wrapped subscriber function
+ */
+function wrapSubscriber (fn, channelName) {
+  const wrapped = function (msg) {
+    if (match(channelName)) {
+      let output = `${formatTimestamp()} ${colors.yellow('[PUB]')} ${colors.cyan(channelName)}`
+      if (showData && msg) output += ` ${colors.gray(JSON.stringify(msg).slice(0, 80))}`
+      log(output)
+    }
+    return fn.apply(this, arguments)
+  }
+  // Store mapping for unsubscribe lookup
+  subscriberWrappers.set(fn, wrapped)
+  return wrapped
+}
 
 dc.Channel.prototype.subscribe = function (fn) {
   if (match(this.name)) {
     const handler = colors.gray(`← ${fn.name || 'anon'}`)
     log(`${formatTimestamp()} ${colors.blue('[SUB]')} ${colors.cyan(this.name)} ${handler}`)
   }
-  return subscribe.call(this, fn)
+  // Wrap subscriber to log publishes (needed because native fast path bypasses JS publish)
+  const wrapped = wrapSubscriber(fn, this.name)
+  return subscribe.call(this, wrapped)
+}
+
+dc.Channel.prototype.unsubscribe = function (fn) {
+  // Look up the wrapped version we created during subscribe
+  const wrapped = subscriberWrappers.get(fn) || fn
+  if (match(this.name)) {
+    const handler = colors.gray(`← ${fn.name || 'anon'}`)
+    log(`${formatTimestamp()} ${colors.gray('[UNSUB]')} ${colors.cyan(this.name)} ${handler}`)
+  }
+  return unsubscribe.call(this, wrapped)
 }
 
 dc.Channel.prototype.publish = function (msg) {
+  // This only runs when there are NO subscribers (native fast path bypasses this otherwise)
   if (match(this.name)) {
     let output = `${formatTimestamp()} ${colors.yellow('[PUB]')} ${colors.cyan(this.name)}`
-    if (!this.hasSubscribers) output += colors.red(' (no subscribers)')
+    output += colors.red(' (no subscribers)')
     if (showData && msg) output += ` ${colors.gray(JSON.stringify(msg).slice(0, 80))}`
     log(output)
   }
@@ -129,18 +170,22 @@ if (dc.subscribe) {
       const handler = colors.gray(`← ${fn.name || 'anon'}`)
       log(`${formatTimestamp()} ${colors.blue('[SUB]')} ${colors.cyan(name)} ${handler}`)
     }
-    return origDcSubscribe.call(this, name, fn)
+    // Wrap subscriber to log publishes (needed because native fast path bypasses JS publish)
+    const wrapped = wrapSubscriber(fn, name)
+    return origDcSubscribe.call(this, name, wrapped)
   }
 }
 
 if (dc.unsubscribe) {
   const origDcUnsubscribe = dc.unsubscribe
   dc.unsubscribe = function (name, fn) {
+    // Look up the wrapped version we created during subscribe
+    const wrapped = subscriberWrappers.get(fn) || fn
     if (match(name)) {
       const handler = colors.gray(`← ${fn.name || 'anon'}`)
       log(`${formatTimestamp()} ${colors.gray('[UNSUB]')} ${colors.cyan(name)} ${handler}`)
     }
-    return origDcUnsubscribe.call(this, name, fn)
+    return origDcUnsubscribe.call(this, name, wrapped)
   }
 }
 /* eslint-enable n/no-unsupported-features/node-builtins */
@@ -298,35 +343,8 @@ Module._load = function (request, parent, isMain) {
 }
 
 // ============================================================
-// Span Lifecycle Patching
+// Span Lifecycle Logging (via diagnostic channels)
 // ============================================================
-
-/**
- * Patches the dd-trace module to enable span lifecycle logging.
- * Guard against re-patching since ritm hooks can fire multiple times.
- * @param {object} exports - The dd-trace module exports
- * @returns {object} The patched exports
- */
-function patchDdTrace (exports) {
-  if (exports._channelDebugPatched) return exports
-  exports._channelDebugPatched = true
-
-  if (exports._tracer) {
-    patchTracer(exports)
-  }
-
-  const origInit = exports.init
-  if (origInit) {
-    exports.init = function (...args) {
-      const tracer = origInit.apply(this, args)
-      patchTracer(tracer || exports)
-      return tracer
-    }
-  }
-  return exports
-}
-
-Hook(['dd-trace'], patchDdTrace)
 
 const skipTags = new Set([
   'runtime-id', 'process_id',
@@ -384,14 +402,15 @@ function formatSpanMeta (tags) {
 
 const separator = noColor ? '────────────────────' : '\x1b[90m────────────────────\x1b[0m'
 
-/**
- * Logs span start event with service, resource, kind, and metadata.
- * @param {string} name - The span name
- * @param {object} span - The span object
- * @param {object} options - The span options containing tags
- */
-function logSpanStart (name, span, options) {
-  const tags = span?._spanContext?._tags || options.tags || {}
+// Subscribe to tracer's built-in span lifecycle channels using Channel API
+// for more reliable subscription timing across CJS/ESM loading scenarios.
+const spanStartCh = dc.channel('dd-trace:span:start')
+const spanFinishCh = dc.channel('dd-trace:span:finish')
+
+spanStartCh.subscribe(({ span, fields }) => {
+  const name = fields.operationName
+  if (!match(name)) return
+  const tags = span?._spanContext?._tags || fields.tags || {}
   const service = tags['service.name'] || ''
   const resource = tags['resource.name'] || ''
   const kind = tags['span.kind'] || ''
@@ -402,75 +421,32 @@ function logSpanStart (name, span, options) {
   const tag = colors.green('[SPAN:START]')
   const spanInfo = `${colors.white(name)} ${spanIdPart} ${colors.cyan(service)}${resourcePart}${kindPart}`
   log(`${separator}\n${formatTimestamp()} ${tag} ${spanInfo}${meta}`)
-}
+})
 
-/**
- * Patches the startSpan method on a target object to enable span logging.
- * We patch instances rather than prototypes because the tracer has a complex
- * structure where the public tracer wraps an internal _tracer, and both need
- * patching to capture all spans regardless of which interface is used.
- * @param {object} target - The object containing startSpan method
- * @param {object} [bindTarget] - Object to bind startSpan to (preserves `this` context)
- */
-function patchStartSpan (target, bindTarget) {
-  if (!target.startSpan || target._startSpanPatched) return
-  target._startSpanPatched = true
-  const origStartSpan = target.startSpan.bind(bindTarget || target)
-  target.startSpan = function (name, options = {}) {
-    const span = origStartSpan(name, options)
-    if (match(name)) logSpanStart(name, span, options)
-    patchSpanFinish(span, name)
-    return span
-  }
-}
-
-/**
- * Patches the tracer's startSpan method and its internal tracer if present.
- * @param {object} tracer - The tracer object to patch
- */
-function patchTracer (tracer) {
-  if (!tracer) return
-  patchStartSpan(tracer, tracer)
-  if (tracer._tracer) {
-    patchStartSpan(tracer._tracer)
-  }
-}
-
-/**
- * Patches a span's finish method to log span end events.
- * @param {object} span - The span object to patch
- * @param {string} name - The span name for logging
- */
-function patchSpanFinish (span, name) {
-  if (!span || span._finishPatched) return
-  span._finishPatched = true
-  const origFinish = span.finish.bind(span)
-  span.finish = function (finishTime) {
-    if (match(name)) {
-      const tags = span._spanContext?._tags || {}
-      const error = tags.error
-      let errorMsg = ''
-      if (error) {
-        let msg
-        try {
-          msg = error.message || (typeof error === 'string' ? error : error.name || 'error')
-          // Truncate multiline errors to first line
-          if (typeof msg === 'string' && msg.includes('\n')) {
-            msg = msg.split('\n')[0] + '...'
-          }
-        } catch {
-          msg = '[circular or unserializable error]'
-        }
-        errorMsg = colors.red(` error=${msg}`)
+spanFinishCh.subscribe((span) => {
+  const name = span._name
+  if (!match(name)) return
+  const tags = span._spanContext?._tags || {}
+  const error = tags.error
+  let errorMsg = ''
+  if (error) {
+    let msg
+    try {
+      msg = error.message || (typeof error === 'string' ? error : error.name || 'error')
+      // Truncate multiline errors to first line
+      if (typeof msg === 'string' && msg.includes('\n')) {
+        msg = msg.split('\n')[0] + '...'
       }
-      const meta = formatSpanMeta(tags)
-      const spanIdPart = formatSpanId(span)
-      const tag = colors.yellow('[SPAN:END]')
-      log(`${formatTimestamp()} ${tag} ${colors.white(name)} ${spanIdPart}${errorMsg}${meta}\n${separator}`)
+    } catch {
+      msg = '[circular or unserializable error]'
     }
-    return origFinish(finishTime)
+    errorMsg = colors.red(` error=${msg}`)
   }
-}
+  const meta = formatSpanMeta(tags)
+  const spanIdPart = formatSpanId(span)
+  const tag = colors.red('[SPAN:END]')
+  log(`${formatTimestamp()} ${tag} ${colors.white(name)} ${spanIdPart}${errorMsg}${meta}\n${separator}`)
+})
 
 log(`${colors.green('[channel-debug]')} Filter: ${filter || '(all)'} | Verbose: ${verbose}`)
 log(separator)
@@ -492,6 +468,5 @@ process.stdout.write = function (chunk, encoding, callback) {
 }
 
 module.exports = {
-  patchTracer,
   patchShimmer,
 }

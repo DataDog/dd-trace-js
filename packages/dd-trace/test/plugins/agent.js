@@ -430,9 +430,8 @@ module.exports = {
       './src': TracerProxy,
     })
 
-    // Apply channel debug patches to tracer and shimmer
+    // Apply channel debug patch to shimmer (span logging uses DC subscriptions)
     if (channelDebug) {
-      channelDebug.patchTracer(tracer)
       try {
         channelDebug.patchShimmer(require('../../../datadog-shimmer'))
       } catch (e) {}
@@ -522,11 +521,6 @@ module.exports = {
           flushInterval: 0,
           plugins: false,
         }, tracerConfig))
-
-        // Apply channel debug patch to tracer after init (when _tracer is available)
-        if (channelDebug) {
-          channelDebug.patchTracer(tracer)
-        }
 
         tracer.setUrl(`http://127.0.0.1:${port}`)
 
