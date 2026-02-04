@@ -55,7 +55,7 @@ jobs:
           echo "version=$PLAYWRIGHT_VERSION" >> $GITHUB_OUTPUT
           echo "Latest Playwright version: $PLAYWRIGHT_VERSION"
       - name: Cache Playwright browsers
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           path: ~/.cache/ms-playwright
           key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
@@ -97,7 +97,7 @@ jobs:
           echo "dd-trace major version: $MAJOR"
       - name: Cache Playwright browsers
         if: matrix.playwright-version == 'oldest'
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           path: /github/home/.cache/ms-playwright
           key: playwright-browsers-oldest-dd${{ steps.dd-version.outputs.major }}
@@ -230,7 +230,7 @@ jobs:
       # as that changes frequently and would have a low cache hit rate
       - name: Cache Cypress binary
         if: matrix.cypress-version != 'latest'
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           path: ~/.cache/Cypress
           key: cypress-binary-${{ matrix.cypress-version }}
