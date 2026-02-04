@@ -290,6 +290,19 @@ const skipTags = new Set([
 ])
 
 /**
+ * Formats a short span ID for display (last 8 hex characters).
+ * Helps correlate span start/end events when multiple spans run in parallel.
+ * @param {object} span - The span object
+ * @returns {string} Formatted span ID or empty string if unavailable
+ */
+function formatSpanId (span) {
+  const spanId = span?._spanContext?._spanId
+  if (!spanId) return ''
+  const hex = spanId.toString(16).padStart(16, '0')
+  return colors.gray(`[${hex.slice(-8)}]`)
+}
+
+/**
  * Formats span tags for display, filtering out common/internal tags.
  * Groups tags on indented lines (3 per line) for readability.
  * Only outputs tags when DD_CHANNEL_VERBOSE=true.
@@ -340,8 +353,9 @@ function logSpanStart (name, span, options) {
   const meta = formatSpanMeta(tags)
   const resourcePart = resource ? colors.blue(` ${resource}`) : ''
   const kindPart = kind ? colors.magenta(` ${kind}`) : ''
+  const spanIdPart = formatSpanId(span)
   const tag = colors.green('[SPAN:START]')
-  const spanInfo = `${colors.white(name)} ${colors.cyan(service)}${resourcePart}${kindPart}`
+  const spanInfo = `${colors.white(name)} ${spanIdPart} ${colors.cyan(service)}${resourcePart}${kindPart}`
   log(`${separator}\n${formatTimestamp()} ${tag} ${spanInfo}${meta}`)
 }
 
@@ -402,7 +416,9 @@ function patchSpanFinish (span, name) {
         errorMsg = colors.red(` error=${msg}`)
       }
       const meta = formatSpanMeta(tags)
-      log(`${formatTimestamp()} ${colors.yellow('[SPAN:END]')} ${colors.white(name)}${errorMsg}${meta}\n${separator}`)
+      const spanIdPart = formatSpanId(span)
+      const tag = colors.yellow('[SPAN:END]')
+      log(`${formatTimestamp()} ${tag} ${colors.white(name)} ${spanIdPart}${errorMsg}${meta}\n${separator}`)
     }
     return origFinish(finishTime)
   }

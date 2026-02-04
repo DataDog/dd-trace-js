@@ -66,11 +66,11 @@ Logged when the orchestrion-style rewriter transforms code.
 Format: `[REWRITE] <module> <Class.method> <operator> <filePath>`
 
 ### `[SPAN:START]` / `[SPAN:END]` - Span Lifecycle
-Logged when spans are created and finished.
+Logged when spans are created and finished. Includes a short span ID (last 8 hex chars) for correlating parallel spans.
 ```
-[+592ms] [SPAN:START] bullmq.add service=test-bullmq resource=test-queue
-[+601ms] [SPAN:END] bullmq.add
-[+605ms] [SPAN:END] bullmq.processJob error=Connection refused
+[+592ms] [SPAN:START] bullmq.add [a1b2c3d4] service=test-bullmq resource=test-queue
+[+601ms] [SPAN:END] bullmq.add [a1b2c3d4]
+[+605ms] [SPAN:END] bullmq.processJob [e5f6a7b8] error=Connection refused
 ```
 
 ## Filter Patterns
@@ -118,13 +118,13 @@ NO_COLOR=1 DD_CHANNEL_DEBUG=true PLUGINS=bullmq yarn test:plugins
 [+493ms] [SUB] tracing:orchestrion:bullmq:Queue_add:asyncEnd ← anon
 [+493ms] [SUB] tracing:orchestrion:bullmq:Queue_add:error ← anon
 [+493ms] [SUB] tracing:orchestrion:bullmq:Queue_add:finish ← anon
-[+592ms] [SPAN:START] bullmq.add service=test-bullmq resource=test-queue
-[+601ms] [SPAN:END] bullmq.add
-[+605ms] [SPAN:START] bullmq.processJob service=test-bullmq resource=test-queue
-[+605ms] [SPAN:END] bullmq.processJob
+[+592ms] [SPAN:START] bullmq.add [a1b2c3d4] service=test-bullmq resource=test-queue
+[+601ms] [SPAN:END] bullmq.add [a1b2c3d4]
+[+605ms] [SPAN:START] bullmq.processJob [e5f6a7b8] service=test-bullmq resource=test-queue
+[+605ms] [SPAN:END] bullmq.processJob [e5f6a7b8]
 [+621ms] [TRACEPROMISE] orchestrion:bullmq:Queue_add 3.55ms
 [+644ms] [PUB] tracing:orchestrion:bullmq:Queue_add:end (no subscribers)
-[+1089ms] [SPAN:END] bullmq.add error=Validation error, cannot resolve alias "inv"
+[+1089ms] [SPAN:END] bullmq.add [a1b2c3d4] error=Validation error, cannot resolve alias "inv"
 ```
 
 ## Files
