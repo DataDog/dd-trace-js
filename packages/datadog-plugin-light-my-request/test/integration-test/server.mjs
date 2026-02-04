@@ -13,7 +13,7 @@ const dispatch = function (req, res) {
   const reply = JSON.stringify({ counter })
   res.writeHead(200, {
     'Content-Type': 'application/json',
-    'Content-Length': reply.length
+    'Content-Length': reply.length,
   })
   res.end(reply)
 }
