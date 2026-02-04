@@ -27,6 +27,7 @@ describe('dogstatsd', () => {
   let statusCode
   let sockets
   let assertData
+  let docker
 
   beforeEach((done) => {
     udp6 = {
@@ -67,9 +68,12 @@ describe('dogstatsd', () => {
       callback(null, hostname, 6)
     })
 
+    docker = {}
+
     const dogstatsd = proxyquire.noPreserveCache()('../src/dogstatsd', {
       dgram,
       dns,
+      './exporters/common/docker': docker,
     })
     DogStatsDClient = dogstatsd.DogStatsDClient
     CustomMetrics = dogstatsd.CustomMetrics
@@ -611,6 +615,24 @@ describe('dogstatsd', () => {
 
       sinon.assert.called(udp4.send)
       assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#foo:bar\n')
+    })
+
+    it('should send the Docker entity ID when available', () => {
+      docker.entityId = 'ci-1234'
+
+      const { CustomMetrics } = proxyquire.noPreserveCache()('../src/dogstatsd', {
+        dgram,
+        dns,
+        './exporters/common/docker': docker,
+      })
+
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.gauge('test.avg', 10, { foo: 'bar' })
+      client.flush()
+
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#foo:bar|c:ci-1234\n')
     })
   })
 })
