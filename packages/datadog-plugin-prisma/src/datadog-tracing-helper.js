@@ -44,18 +44,15 @@ class DatadogTracingHelper {
     const span = store?.span
     if (span?._spanContext) {
       const context = span._spanContext
-      const priority = context._sampling.priority
-
-      // Option 2: Check parent sampling - if priority >= 1 (AUTO_KEEP), it's sampled
-      // Option 3: Optimistic sampling - if priority is undefined/not set, assume sampled
-      // Only use '00' if explicitly not sampled (priority < 1)
-      const flags = (priority === undefined || priority >= 1) ? '01' : '00'
 
       const traceId = context.toTraceId(true)
       const spanId = context.toSpanId(true)
       const version = (context._traceparent && context._traceparent.version) || '00'
 
-      return `${version}-${traceId}-${spanId}-${flags}`
+      // always sampled a sampled traceparent due to the following reasons:
+      // 1. Datadog spans are sampled on span.finish
+      // 2. Prisma engine spans only generate spans when the trace is sampled
+      return `${version}-${traceId}-${spanId}-01`
     }
 
     // No active span - be optimistic and return sampled
