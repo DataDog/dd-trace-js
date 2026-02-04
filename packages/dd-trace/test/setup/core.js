@@ -1,6 +1,6 @@
 'use strict'
 
-if (process.env.DD_CHANNEL_DEBUG) require('../debug/channel-patch')
+if (process.env.TEST_CHANNEL_DEBUG) require('../debug/channel-patch')
 
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 

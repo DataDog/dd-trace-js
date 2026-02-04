@@ -15,8 +15,8 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 const { storage } = require('../../../datadog-core')
 const ritm = require('../../src/ritm')
 
-// Channel debug patching (enabled via DD_CHANNEL_DEBUG env var)
-const channelDebug = process.env.DD_CHANNEL_DEBUG ? require('../debug/channel-patch') : null
+// Channel debug patching (enabled via TEST_CHANNEL_DEBUG env var)
+const channelDebug = process.env.TEST_CHANNEL_DEBUG ? require('../debug/channel-patch') : null
 const traceHandlers = new Set()
 const statsHandlers = new Set()
 let llmobsSpanEventsRequests = []

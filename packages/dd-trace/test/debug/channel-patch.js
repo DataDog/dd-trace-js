@@ -1,5 +1,7 @@
 'use strict'
 
+// Guard against double-patching when this file is loaded multiple times
+// (e.g., via both --require and ritm hooks, or in test setup and subprocess).
 if (globalThis._ddChannelDebugPatched) return
 globalThis._ddChannelDebugPatched = true
 
@@ -9,9 +11,10 @@ const Module = require('node:module')
 
 const Hook = require('../../src/ritm')
 
-const filter = process.env.DD_CHANNEL_FILTER || ''
-const showData = process.env.DD_CHANNEL_SHOW_DATA === 'true'
-const verbose = process.env.DD_CHANNEL_VERBOSE === 'true'
+// Use TEST_ prefix to avoid confusion with production DD_ config variables
+const filter = process.env.TEST_CHANNEL_FILTER || ''
+const showData = process.env.TEST_CHANNEL_SHOW_DATA === 'true'
+const verbose = process.env.TEST_CHANNEL_VERBOSE === 'true'
 const forceColor = process.env.FORCE_COLOR === '1'
 const noColor = (!process.stderr.isTTY && !forceColor) || process.env.NO_COLOR
 const startTime = performance.now()
@@ -26,7 +29,7 @@ const colors = noColor
       blue: identity,
       red: identity,
       magenta: identity,
-      white: identity
+      white: identity,
     }
   : {
       cyan: s => `\x1b[36m${s}\x1b[0m`,
@@ -36,19 +39,33 @@ const colors = noColor
       blue: s => `\x1b[34m${s}\x1b[0m`,
       red: s => `\x1b[31m${s}\x1b[0m`,
       magenta: s => `\x1b[35m${s}\x1b[0m`,
-      white: s => `\x1b[37m${s}\x1b[0m`
+      white: s => `\x1b[37m${s}\x1b[0m`,
     }
 
 const indent = '                    ' // 20 spaces - well past mocha's indentation
 
 /**
- * Writes a line to stderr synchronously to prevent interleaving with stdout.
- * @param {string} line - The line to write (can contain newlines)
+ * Writes content to stderr synchronously to prevent interleaving with stdout.
+ * @param {string} content - The content to write (can contain newlines)
  */
-function log (line) {
-  const indented = line.split('\n').map(l => indent + l).join('\n')
+function log (content) {
+  const indented = content.split('\n').map(line => indent + line).join('\n')
   process.stderr.write(indented + '\n')
 }
+
+/**
+ * Converts a wildcard pattern to a RegExp.
+ * @param {string} pattern - Wildcard pattern (e.g., `*foo*`, `foo*`, `*foo`)
+ * @returns {RegExp} Compiled regular expression
+ */
+function wildcardToRegex (pattern) {
+  // Escape regex special chars except *, then convert * to .*
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')
+  return new RegExp(`^${escaped}$`)
+}
+
+// Pre-compile filter regex for performance (null if no filter)
+const filterRegex = filter ? wildcardToRegex(filter) : null
 
 /**
  * Checks if a channel name matches the configured filter pattern.
@@ -57,14 +74,8 @@ function log (line) {
  * @returns {boolean} True if the name matches the filter or no filter is set
  */
 function match (name) {
-  if (!filter) return true
-  const startsWild = filter.startsWith('*')
-  const endsWild = filter.endsWith('*')
-  const pattern = filter.slice(startsWild ? 1 : 0, endsWild ? -1 : undefined)
-  if (startsWild && endsWild) return name.includes(pattern)
-  if (startsWild) return name.endsWith(pattern)
-  if (endsWild) return name.startsWith(pattern)
-  return name.includes(filter)
+  if (!filterRegex) return true
+  return filterRegex.test(name)
 }
 
 /**
@@ -100,13 +111,39 @@ dc.Channel.prototype.subscribe = function (fn) {
 
 dc.Channel.prototype.publish = function (msg) {
   if (match(this.name)) {
-    let line = `${formatTimestamp()} ${colors.yellow('[PUB]')} ${colors.cyan(this.name)}`
-    if (!this.hasSubscribers) line += colors.red(' (no subscribers)')
-    if (showData && msg) line += ` ${colors.gray(JSON.stringify(msg).slice(0, 80))}`
-    log(line)
+    let output = `${formatTimestamp()} ${colors.yellow('[PUB]')} ${colors.cyan(this.name)}`
+    if (!this.hasSubscribers) output += colors.red(' (no subscribers)')
+    if (showData && msg) output += ` ${colors.gray(JSON.stringify(msg).slice(0, 80))}`
+    log(output)
   }
   return publish.call(this, msg)
 }
+
+// Wrap module-level dc.subscribe/dc.unsubscribe as they don't go through prototype.
+// These APIs are available from Node.js 18.7.0+ (test-only code, so acceptable).
+/* eslint-disable n/no-unsupported-features/node-builtins */
+if (dc.subscribe) {
+  const origDcSubscribe = dc.subscribe
+  dc.subscribe = function (name, fn) {
+    if (match(name)) {
+      const handler = colors.gray(`← ${fn.name || 'anon'}`)
+      log(`${formatTimestamp()} ${colors.blue('[SUB]')} ${colors.cyan(name)} ${handler}`)
+    }
+    return origDcSubscribe.call(this, name, fn)
+  }
+}
+
+if (dc.unsubscribe) {
+  const origDcUnsubscribe = dc.unsubscribe
+  dc.unsubscribe = function (name, fn) {
+    if (match(name)) {
+      const handler = colors.gray(`← ${fn.name || 'anon'}`)
+      log(`${formatTimestamp()} ${colors.gray('[UNSUB]')} ${colors.cyan(name)} ${handler}`)
+    }
+    return origDcUnsubscribe.call(this, name, fn)
+  }
+}
+/* eslint-enable n/no-unsupported-features/node-builtins */
 
 // NOTE: runStores patching was removed because it causes test timeouts.
 // TracingChannel caches runStores at creation time, and wrapping dc.channel()
@@ -117,12 +154,17 @@ dc.Channel.prototype.publish = function (msg) {
 // TracingChannel Patching (dc-polyfill)
 // ============================================================
 
+// ritm hooks can fire multiple times for the same module (e.g., when required
+// from different paths or when module cache is cleared in tests). The
+// _channelDebugPatched guard prevents re-wrapping already-patched exports.
 Hook(['dc-polyfill'], exports => {
   if (exports._channelDebugPatched) return exports
   exports._channelDebugPatched = true
   const orig = exports.tracingChannel
   exports.tracingChannel = function (name) {
     const tracingChannel = orig.call(this, name)
+    // TracingChannels are cached by name, so the same object can be returned
+    // on repeated calls - guard against re-patching the same instance.
     if (tracingChannel._channelDebugPatched) return tracingChannel
     tracingChannel._channelDebugPatched = true
     for (const method of ['traceSync', 'tracePromise', 'traceCallback']) {
@@ -149,6 +191,7 @@ Hook(['dc-polyfill'], exports => {
 
 /**
  * Patches shimmer's wrap/massWrap functions to log method wrapping operations.
+ * Guard against re-patching since ritm hooks can fire multiple times.
  * @param {object} exports - The shimmer module exports
  * @returns {object} The patched exports
  */
@@ -204,6 +247,7 @@ function getOperator (kind) {
 
 /**
  * Patches the rewriter module to log code rewrite operations.
+ * Called from both direct require and Module._load hook, so guard against re-patching.
  * @param {object} exports - The rewriter module exports
  */
 function patchRewriter (exports) {
@@ -226,7 +270,7 @@ function patchRewriter (exports) {
             const parts = [
               separator,
               `${formatTimestamp()} ${colors.magenta('[REWRITE]')} ${colors.cyan(mod.name)}`,
-              `${colors.yellow(target)} ${colors.blue(operator)} ${colors.gray(mod.filePath)}`
+              `${colors.yellow(target)} ${colors.blue(operator)} ${colors.gray(mod.filePath)}`,
             ]
             log(parts.join('\n'))
           }
@@ -259,6 +303,7 @@ Module._load = function (request, parent, isMain) {
 
 /**
  * Patches the dd-trace module to enable span lifecycle logging.
+ * Guard against re-patching since ritm hooks can fire multiple times.
  * @param {object} exports - The dd-trace module exports
  * @returns {object} The patched exports
  */
@@ -286,7 +331,7 @@ Hook(['dd-trace'], patchDdTrace)
 const skipTags = new Set([
   'runtime-id', 'process_id',
   // Already displayed on main span line
-  'service.name', 'resource.name', 'span.kind', 'error'
+  'service.name', 'resource.name', 'span.kind', 'error',
 ])
 
 /**
@@ -305,7 +350,7 @@ function formatSpanId (span) {
 /**
  * Formats span tags for display, filtering out common/internal tags.
  * Groups tags on indented lines (3 per line) for readability.
- * Only outputs tags when DD_CHANNEL_VERBOSE=true.
+ * Only outputs tags when TEST_CHANNEL_VERBOSE=true.
  * @param {object} tags - The span tags object
  * @returns {string} Formatted tag string or empty string if no relevant tags
  */
@@ -361,8 +406,11 @@ function logSpanStart (name, span, options) {
 
 /**
  * Patches the startSpan method on a target object to enable span logging.
+ * We patch instances rather than prototypes because the tracer has a complex
+ * structure where the public tracer wraps an internal _tracer, and both need
+ * patching to capture all spans regardless of which interface is used.
  * @param {object} target - The object containing startSpan method
- * @param {object} [bindTarget] - Optional object to bind startSpan to
+ * @param {object} [bindTarget] - Object to bind startSpan to (preserves `this` context)
  */
 function patchStartSpan (target, bindTarget) {
   if (!target.startSpan || target._startSpanPatched) return
@@ -445,5 +493,5 @@ process.stdout.write = function (chunk, encoding, callback) {
 
 module.exports = {
   patchTracer,
-  patchShimmer
+  patchShimmer,
 }

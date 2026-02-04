@@ -730,7 +730,7 @@ function buildDebugNodeOptions (envArgs) {
   const result = { ...envArgs }
   let nodeOptions = `--loader=${hookFile}`
 
-  if (process.env.DD_CHANNEL_DEBUG) {
+  if (process.env.TEST_CHANNEL_DEBUG) {
     const channelPatchPath = path.join(__dirname, '../../packages/dd-trace/test/debug/channel-patch.js')
     nodeOptions = `--require=${channelPatchPath} ${nodeOptions}`
     if (!process.env.NO_COLOR) {

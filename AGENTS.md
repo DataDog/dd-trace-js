@@ -200,16 +200,16 @@ Levels: `trace`, `debug`, `info`, `warn`, `error`
 
 **Channel Debug Mode (Integration Tests):**
 
-Set `DD_CHANNEL_DEBUG=true` to enable detailed logging of diagnostic channel activity, span lifecycle, and instrumentation hooks.
+Set `TEST_CHANNEL_DEBUG=true` to enable detailed logging of diagnostic channel activity, span lifecycle, and instrumentation hooks.
 
 ```bash
-DD_CHANNEL_DEBUG=true DD_CHANNEL_FILTER="*bullmq*" PLUGINS=bullmq yarn test:plugins
+TEST_CHANNEL_DEBUG=true TEST_CHANNEL_FILTER="*bullmq*" PLUGINS=bullmq yarn test:plugins
 ```
 
 Additional options:
-- `DD_CHANNEL_FILTER="*http*"` - Filter output by pattern (supports `*` wildcards)
-- `DD_CHANNEL_VERBOSE=true` - Show span tags on indented lines (3 per line)
-- `DD_CHANNEL_SHOW_DATA=true` - Include message data in publish logs
+- `TEST_CHANNEL_FILTER="*http*"` - Filter output by pattern (supports `*` wildcards)
+- `TEST_CHANNEL_VERBOSE=true` - Show span tags on indented lines (3 per line)
+- `TEST_CHANNEL_SHOW_DATA=true` - Include message data in publish logs
 
 Output includes:
 - `[SUB]` - Channel subscriptions
