@@ -30,7 +30,6 @@ class DatadogTracingHelper {
   constructor (dbConfig, prismaClient) {
     this.#dbConfig = dbConfig
     this.#prismaClient = prismaClient
-    // this.#prismaEngine = new PrismaEngine()
   }
 
   isEnabled () {
@@ -54,12 +53,11 @@ class DatadogTracingHelper {
       return `${version}-${traceId}-${spanId}-01`
     }
 
-    // No active span - be optimistic and return sampled
+    // No active span - return sampled
     return '00-00000000000000000000000000000000-0000000000000000-01'
   }
 
   dispatchEngineSpans (spans) {
-    // console.log('dispatching engine spans', spans)
     for (const span of spans) {
       if (span.parentId === null) {
         this.#prismaClient.startEngineSpan({ engineSpan: span, allEngineSpans: spans, dbConfig: this.#dbConfig })
