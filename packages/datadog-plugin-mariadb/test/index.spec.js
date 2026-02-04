@@ -261,7 +261,7 @@ describe('Plugin', () => {
           })
 
           it('should run event listeners in the parent context', done => {
-            if (typeof connection.queryStream !== 'function') return done()
+            if (typeof connection.queryStream !== 'function') return this.skip()
 
             const stream = connection.queryStream('SELECT 1 + 1 AS solution')
 
