@@ -6,6 +6,7 @@ const plugins = {
   get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@azure/event-hubs' () { return require('../../../datadog-plugin-azure-event-hubs/src') },
   get '@azure/functions' () { return require('../../../datadog-plugin-azure-functions/src') },
+  get 'durable-functions' () { return require('../../../datadog-plugin-azure-durable-functions/src') },
   get '@azure/service-bus' () { return require('../../../datadog-plugin-azure-service-bus/src') },
   get '@cucumber/cucumber' () { return require('../../../datadog-plugin-cucumber/src') },
   get '@playwright/test' () { return require('../../../datadog-plugin-playwright/src') },
