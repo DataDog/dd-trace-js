@@ -70,7 +70,7 @@ describe('dogstatsd', () => {
 
     docker = {}
 
-    const dogstatsd = proxyquire.noPreserveCache()('../src/dogstatsd', {
+    const dogstatsd = proxyquire.noPreserveCache().noCallThru()('../src/dogstatsd', {
       dgram,
       dns,
       './exporters/common/docker': docker,
