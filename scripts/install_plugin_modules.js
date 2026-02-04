@@ -25,7 +25,11 @@ for (const external of Object.keys(externals)) {
   for (const thing of externals[external]) {
     if (thing.dep) {
       const depsArr = externalDeps.get(external)
-      depsArr ? depsArr.push(thing) : externalDeps.set(external, [thing])
+      if (depsArr) {
+        depsArr.push(thing)
+      } else {
+        externalDeps.set(external, [thing])
+      }
     }
   }
 }
