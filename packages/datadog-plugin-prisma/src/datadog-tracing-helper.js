@@ -8,7 +8,7 @@ const { storage } = require('../../datadog-core')
 const allowedClientSpanOperations = new Set([
   'operation',
   'serialize',
-  'transaction'
+  'transaction',
 ])
 
 /**
@@ -76,13 +76,13 @@ class DatadogTracingHelper {
   runInChildSpan (options, callback) {
     if (typeof options === 'string') {
       options = {
-        name: options
+        name: options,
       }
     }
     if (allowedClientSpanOperations.has(options.name)) {
       const ctx = {
         resourceName: options.name,
-        attributes: options.attributes || {}
+        attributes: options.attributes || {},
       }
 
       if (options.name !== 'serialize') {

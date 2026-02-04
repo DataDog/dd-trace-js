@@ -100,13 +100,13 @@ describe('Plugin', () => {
     function getHelperClass (spies = {}) {
       const channel = {
         tracePromise: spies.tracePromise || ((fn) => fn()),
-        traceSync: spies.traceSync || ((fn) => fn())
+        traceSync: spies.traceSync || ((fn) => fn()),
       }
 
       return proxyquire.noPreserveCache()('../src/datadog-tracing-helper', {
         'dc-polyfill': {
-          tracingChannel: () => channel
-        }
+          tracingChannel: () => channel,
+        },
       })
     }
 
@@ -131,8 +131,8 @@ describe('Plugin', () => {
           _sampling: { priority: 0 },
           _traceparent: { version: 'ff' },
           toTraceId: () => '00000000000000000000000000000001',
-          toSpanId: () => '0000000000000001'
-        }
+          toSpanId: () => '0000000000000001',
+        },
       }
 
       storage('legacy').enterWith({ span })
@@ -168,14 +168,14 @@ describe('Plugin', () => {
       const started = []
 
       const prismaClient = {
-        startEngineSpan: (ctx) => started.push(ctx)
+        startEngineSpan: (ctx) => started.push(ctx),
       }
       const helper = new DatadogTracingHelper({ database: 'db' }, prismaClient)
 
       helper.dispatchEngineSpans([
         { id: '1', parentId: null, name: 'prisma:engine:query' },
         { id: '2', parentId: '1', name: 'prisma:engine:db_query' },
-        { id: '3', parentId: null, name: 'prisma:engine:connect' }
+        { id: '3', parentId: null, name: 'prisma:engine:connect' },
       ])
 
       assert.strictEqual(started.length, 2)
@@ -194,7 +194,7 @@ describe('Plugin', () => {
         },
         traceSync: () => {
           calls.push({ type: 'sync' })
-        }
+        },
       })
 
       const helper = new DatadogTracingHelper(undefined, {})
@@ -208,7 +208,7 @@ describe('Plugin', () => {
       assert.strictEqual(calls[0].type, 'promise')
       assert.strictEqual(calls[0].ctx.resourceName, 'operation')
       assertObjectContains(calls[0].ctx, {
-        attributes: { method: 'findMany', model: 'users' }
+        attributes: { method: 'findMany', model: 'users' },
       })
     })
 
@@ -220,7 +220,7 @@ describe('Plugin', () => {
         traceSync: (fn, ctx) => {
           calls.push({ type: 'sync', ctx })
           return fn()
-        }
+        },
       })
 
       const helper = new DatadogTracingHelper(undefined, {})
@@ -240,7 +240,7 @@ describe('Plugin', () => {
       const calls = []
       const DatadogTracingHelper = getHelperClass({
         tracePromise: () => { calls.push({ type: 'promise' }) },
-        traceSync: () => { calls.push({ type: 'sync' }) }
+        traceSync: () => { calls.push({ type: 'sync' }) },
       })
 
       const helper = new DatadogTracingHelper(undefined, {})
@@ -502,90 +502,6 @@ describe('Plugin', () => {
               ])
             })
           })
-
-          // describe('with prisma client disabled', () => {
-          //   before(async function () {
-          //     this.timeout(10000)
-          //     clearPrismaEnv()
-          //     if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
-
-          //     const cwd = await copySchemaToVersionDir(config.schema, range)
-
-          //     execPrismaGenerate(config, cwd)
-
-          //     const pluginConfig = {
-          //       client: false
-          //     }
-          //     return agent.load(['prisma', 'pg'], pluginConfig)
-          //   })
-
-          //   after(() => { return agent.close({ ritmReset: false }) })
-
-          //   beforeEach(() => {
-          //     prisma = loadPrismaModule(config, range)
-          //     prismaClient = createPrismaClient(prisma, config)
-          //   })
-
-          //   it('should disable prisma client', async () => {
-          //     const tracingPromise = agent.assertSomeTraces(traces => {
-          //       const clientSpans = traces[0].find(span => span.meta['prisma.type'] === 'client')
-          //       assert.ok(clientSpans == null)
-          //     })
-
-          //     await Promise.all([
-          //       prismaClient.$queryRaw`SELECT 1`,
-          //       tracingPromise
-          //     ])
-          //   })
-
-          //   withNamingSchema(
-          //     done => prismaClient.$queryRaw`SELECT 1`.catch(done),
-          //     config.v7 ? 'pg.query' : rawExpectedSchema.engine,
-          //     { desc: 'Prisma Engine' }
-          //   )
-          // })
-
-          // describe('with prisma engine disabled', () => {
-          //   before(async function () {
-          //     this.timeout(10000)
-          //     clearPrismaEnv()
-          //     if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
-
-          //     const cwd = await copySchemaToVersionDir(config.schema, range)
-
-          //     execPrismaGenerate(config, cwd)
-
-          //     const pluginConfig = {
-          //       engine: false
-          //     }
-          //     return agent.load(['prisma', 'pg'], pluginConfig)
-          //   })
-
-          //   after(() => { return agent.close({ ritmReset: false }) })
-
-          //   beforeEach(() => {
-          //     prisma = loadPrismaModule(config, range)
-          //     prismaClient = createPrismaClient(prisma, config)
-          //   })
-
-          //   it('should disable prisma engine', async () => {
-          //     const tracingPromise = agent.assertSomeTraces(traces => {
-          //       const engineSpans = traces[0].find(span => span.meta['prisma.type'] === 'engine')
-          //       assert.ok(engineSpans == null)
-          //     })
-
-          //     await Promise.all([
-          //       prismaClient.$queryRaw`SELECT 1`,
-          //       tracingPromise
-          //     ])
-          //   })
-
-          //   withNamingSchema(
-          //     done => prismaClient.$queryRaw`SELECT 1`.catch(done),
-          //     rawExpectedSchema.client,
-          //     { desc: 'Prisma Client' }
-          //   )
-          // })
         })
       })
     })
