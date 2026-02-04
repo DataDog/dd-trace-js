@@ -15,7 +15,7 @@ withVersions('passport-http', 'passport-http', version => {
       ['./packages/datadog-plugin-passport-http/test/integration-test/*'])
 
     before(function () {
-      variants = varySandbox('server.mjs', 'passport-http, BasicStrategy')
+      variants = varySandbox('server.mjs', 'passportHttp', 'BasicStrategy', 'passport-http')
     })
 
     beforeEach(async () => {
