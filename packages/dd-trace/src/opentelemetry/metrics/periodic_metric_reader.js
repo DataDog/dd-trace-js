@@ -138,7 +138,7 @@ class PeriodicMetricReader {
    */
   forceFlush () {
     if (this.#isShutdown) {
-      log.warn(`PeriodicMetricReader is shutdown. ${this.#droppedCount} measurement(s) were dropped`)
+      log.warn('PeriodicMetricReader is shutdown. %d measurement(s) were dropped', this.#droppedCount)
       return
     }
     this.#collectAndExport()
@@ -210,10 +210,8 @@ class PeriodicMetricReader {
     }
 
     if (this.#droppedCount > 0) {
-      log.warn(
-        `Metric queue exceeded limit (max: ${DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE}). ` +
-        `Dropping ${this.#droppedCount} measurements. `
-      )
+      log.warn('Metric queue exceeded limit (max: %d). Dropping %d measurements.',
+        DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE, this.#droppedCount)
       this.#droppedCount = 0
     }
 
@@ -308,9 +306,11 @@ class MetricAggregator {
       if (!metric) {
         if (metricsMap.size >= this.#maxBatchedQueueSize) {
           log.warn(
-            `Metric queue exceeded limit (max: ${this.#maxBatchedQueueSize}). ` +
-            `Dropping metric: ${metricKey}, value: ${value}. ` +
-            'Consider increasing OTEL_BSP_MAX_QUEUE_SIZE or decreasing OTEL_METRIC_EXPORT_INTERVAL.'
+            // eslint-disable-next-line @stylistic/max-len
+            'Metric queue exceeded limit (max: %d). Dropping metric: %s, value: %s. Consider increasing OTEL_BSP_MAX_QUEUE_SIZE or decreasing OTEL_METRIC_EXPORT_INTERVAL.',
+            this.#maxBatchedQueueSize,
+            metricKey,
+            value
           )
           continue
         }

@@ -220,9 +220,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
 
     isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
 
-    log.debug(
-      () => `${suitesToRun.length} out of ${runner.suite.suites.length} suites are going to run.`
-    )
+    log.debug('%d out of %d suites are going to run.', suitesToRun.length, runner.suite.suites.length)
 
     runner.suite.suites = suitesToRun
 
@@ -357,7 +355,8 @@ addHook({
 
     const runner = run.apply(this, arguments)
 
-    this.files.forEach(path => {
+    // eslint-disable-next-line unicorn/no-array-for-each
+    this.files.forEach((path) => {
       const isUnskippable = isMarkedAsUnskippable({ path })
       if (isUnskippable) {
         unskippableSuites.push(path)
@@ -496,6 +495,7 @@ addHook({
         status = 'skip'
       } else {
         // has to check every test in the test file
+        // eslint-disable-next-line unicorn/no-array-for-each
         suitesInTestFile.forEach(suite => {
           suite.eachTest(test => {
             if (test.state === 'failed' || test.timedOut) {

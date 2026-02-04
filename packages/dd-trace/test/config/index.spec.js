@@ -53,11 +53,13 @@ describe('Config', () => {
     // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
     getConfig = (options) => {
       const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {})
+      const serverless = proxyquire.noPreserveCache()('../../src/serverless', {})
       return proxyquire.noPreserveCache()('../../src/config', {
         './defaults': configDefaults,
         '../log': log,
         '../telemetry': { updateConfig },
-        fs,
+        '../serverless': serverless,
+        'node:fs': fs,
         './helper': configHelper,
       })(options)
     }

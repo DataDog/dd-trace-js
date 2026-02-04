@@ -117,7 +117,7 @@ function instrumentBaseModule (module) {
               if (typeof callback === 'function') {
                 return consume.call(this, numMessages, function wrappedCallback (err, messages) {
                   if (messages && messages.length > 0) {
-                    messages.forEach(message => {
+                    for (const message of messages) {
                       ctx.topic = message?.topic
                       ctx.partition = message?.partition
                       ctx.message = message
@@ -125,7 +125,7 @@ function instrumentBaseModule (module) {
                       // TODO: We should be using publish here instead of runStores but we need bindStart to be called
                       channels.consumerStart.runStores(ctx, () => {})
                       updateLatestOffset(message?.topic, message?.partition, message?.offset, groupId)
-                    })
+                    }
                   }
 
                   if (err) {
@@ -234,9 +234,10 @@ function instrumentKafkaJS (kafkaJS) {
                             // This approach is implemented by other tracers as well.
                             if (err.name === 'KafkaJSError' && err.type === 'ERR_UNKNOWN') {
                               disabledHeaderWeakSet.add(producer)
-                              log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). ' +
-                                'Please look at broker logs for more information. ' +
-                                'Tracer message header injection for Kafka is disabled.')
+                              log.error(
+                                // eslint-disable-next-line @stylistic/max-len
+                                'Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.'
+                              )
                             }
                             ctx.error = err
                             channels.producerError.publish(ctx)

@@ -5,7 +5,7 @@ const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { storage } = require('../../../datadog-core')
-const { isInServerlessEnvironment } = require('../serverless')
+const { IS_SERVERLESS } = require('../serverless')
 const RuleManager = require('./rule_manager')
 const appsecRemoteConfig = require('./remote_config')
 const {
@@ -96,7 +96,7 @@ function enable (_config) {
     isEnabled = true
     config = _config
   } catch (err) {
-    if (!isInServerlessEnvironment()) {
+    if (!IS_SERVERLESS) {
       log.error('[ASM] Unable to start AppSec', err)
     }
 
@@ -122,7 +122,6 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
     storedBodies.set(req, body)
   }
 
-  // eslint-disable-next-line eslint-rules/eslint-safe-typeof-object
   if (typeof body === 'object') {
     if (isEmptyObject(body)) return
     analyzedBodies.add(body)
@@ -192,7 +191,6 @@ function incomingHttpEndTranslator ({ req, res }) {
 
   // we need to keep this to support other body parsers
   if (req.body !== undefined && req.body !== null) {
-    // eslint-disable-next-line eslint-rules/eslint-safe-typeof-object
     if (typeof req.body === 'object') {
       if (!isEmptyObject(req.body) && !analyzedBodies.has(req.body)) {
         persistent[addresses.HTTP_INCOMING_BODY] = req.body

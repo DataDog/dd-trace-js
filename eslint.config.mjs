@@ -13,6 +13,7 @@ import globals from 'globals'
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
+import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
 
@@ -23,6 +24,8 @@ const SRC_FILES = [
   'ext/**/*.mjs',
   'ci/**/*.js',
   'ci/**/*.mjs',
+  'scripts/**/*.js',
+  'scripts/**/*.mjs',
   'packages/*/src/**/*.js',
   'packages/*/src/**/*.mjs',
 ]
@@ -402,6 +405,7 @@ export default [
           'eslint-process-env': eslintProcessEnv,
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
+          'eslint-log-printf-style': eslintLogPrintfStyle,
         },
       },
       n: eslintPluginN,
@@ -411,6 +415,7 @@ export default [
       'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-safe-typeof-object': 'error',
+      'eslint-rules/eslint-log-printf-style': 'error',
       'n/no-restricted-require': ['error', [
         {
           name: 'diagnostics_channel',
@@ -463,8 +468,8 @@ export default [
       'unicorn/expiring-todo-comments': 'off',
       'unicorn/explicit-length-check': 'off', // 68 errors
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
-      'unicorn/no-array-for-each': 'off', // 122 errors
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
+      'unicorn/prefer-export-from': ['error', { ignoreUsedVariables: true }],
       'unicorn/prevent-abbreviations': 'off', // too strict
 
       // These rules require a newer Node.js version than we support
@@ -493,6 +498,18 @@ export default [
       'unicorn/prefer-switch': 'off', // Questionable benefit
       'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
       'unicorn/switch-case-braces': 'off', // Questionable benefit
+    },
+  },
+  {
+    name: 'dd-trace/scripts',
+    files: [
+      'scripts/**/*.js',
+      'scripts/**/*.mjs',
+    ],
+    rules: {
+      'eslint-rules/eslint-process-env': 'off',
+      // Scripts are CLI/dev tooling where process.exit is acceptable.
+      'unicorn/no-process-exit': 'off',
     },
   },
   {

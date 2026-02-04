@@ -2,7 +2,7 @@
 
 // File to spin an HTTP server that returns an HTML for playwright to visit
 const http = require('http')
-const coverage = require('../ci-visibility/fixtures/coverage.json')
+const coverage = require('../ci-visibility/fixtures/istanbul-map-fixture.json')
 
 function createWebAppServer () {
   const server = http.createServer((req, res) => {

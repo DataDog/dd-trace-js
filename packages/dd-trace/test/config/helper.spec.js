@@ -8,11 +8,9 @@ const proxyquire = require('proxyquire')
 require('../setup/core')
 
 describe('config-helper stable config sources', () => {
-  let isInServerlessEnvironmentStub
   let StableConfigStub
 
   beforeEach(() => {
-    isInServerlessEnvironmentStub = sinon.stub()
     StableConfigStub = sinon.stub()
   })
 
@@ -21,8 +19,6 @@ describe('config-helper stable config sources', () => {
   })
 
   it('loads stable config when not in serverless environment', () => {
-    isInServerlessEnvironmentStub.returns(false)
-
     StableConfigStub.callsFake(function () {
       this.localEntries = {
         DD_SERVICE: 'local-service',
@@ -38,7 +34,7 @@ describe('config-helper stable config sources', () => {
 
     const { getStableConfigSources } = proxyquire('../../src/config/helper', {
       '../serverless': {
-        isInServerlessEnvironment: isInServerlessEnvironmentStub,
+        IS_SERVERLESS: false,
       },
       './stable': StableConfigStub,
     })
@@ -59,11 +55,9 @@ describe('config-helper stable config sources', () => {
   })
 
   it('does not load stable config in serverless environment', () => {
-    isInServerlessEnvironmentStub.returns(true)
-
     const { getStableConfigSources } = proxyquire('../../src/config/helper', {
       '../serverless': {
-        isInServerlessEnvironment: isInServerlessEnvironmentStub,
+        IS_SERVERLESS: true,
       },
       './stable': StableConfigStub,
     })
@@ -89,7 +83,6 @@ describe('config-helper env resolution', () => {
   let getValueFromEnvSources
   let getEnvironmentVariable
   let resetModule
-  let isInServerlessEnvironmentStub
   let originalEnv
 
   function loadModule (overrides = {}) {
@@ -103,11 +96,10 @@ describe('config-helper env resolution', () => {
   beforeEach(() => {
     originalEnv = process.env
     process.env = { ...originalEnv }
-    isInServerlessEnvironmentStub = sinon.stub().returns(true)
 
     loadModule({
       '../serverless': {
-        isInServerlessEnvironment: isInServerlessEnvironmentStub,
+        IS_SERVERLESS: true,
       },
     })
   })
@@ -174,15 +166,6 @@ describe('config-helper env resolution', () => {
     assert.strictEqual(value, 'production')
   })
 
-  it('calls serverless detection only once when resolving multiple envs', () => {
-    process.env.DD_SERVICE = 'my-service'
-
-    getValueFromEnvSources('DD_SERVICE')
-    getValueFromEnvSources('DD_ENV')
-
-    assert.strictEqual(isInServerlessEnvironmentStub.callCount, 1)
-  })
-
   describe('with stable config and env vars', () => {
     beforeEach(() => {
       // Re-load module with stable config enabled (non-serverless)
@@ -198,11 +181,9 @@ describe('config-helper env resolution', () => {
         this.warnings = []
       })
 
-      const isInServerlessStub = sinon.stub().returns(false)
-
       const mod = proxyquire('../../src/config/helper', {
         '../serverless': {
-          isInServerlessEnvironment: isInServerlessStub,
+          IS_SERVERLESS: false,
         },
         './stable': StableConfigStub,
       })
@@ -229,11 +210,9 @@ describe('config-helper env resolution', () => {
         this.warnings = []
       })
 
-      const isInServerlessStub = sinon.stub().returns(false)
-
       const mod = proxyquire('../../src/config/helper', {
         '../serverless': {
-          isInServerlessEnvironment: isInServerlessStub,
+          IS_SERVERLESS: false,
         },
         './stable': StableConfigStub,
       })
@@ -257,11 +236,9 @@ describe('config-helper env resolution', () => {
         this.warnings = []
       })
 
-      const isInServerlessStub = sinon.stub().returns(false)
-
       const mod = proxyquire('../../src/config/helper', {
         '../serverless': {
-          isInServerlessEnvironment: isInServerlessStub,
+          IS_SERVERLESS: false,
         },
         './stable': StableConfigStub,
       })

@@ -14,7 +14,7 @@ const KEYS_REGEX_WITHOUT_SENSITIVE_RANGES = new RegExp(String.raw`"(${STRINGIFY_
 const sensitiveValueRegex = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN, 'gmi')
 
 function iterateObject (target, fn, levelKeys = [], depth = 10, visited = new Set()) {
-  Object.keys(target).forEach((key) => {
+  for (const key of Object.keys(target)) {
     const nextLevelKeys = [...levelKeys, key]
     const val = target[key]
 
@@ -26,7 +26,7 @@ function iterateObject (target, fn, levelKeys = [], depth = 10, visited = new Se
         iterateObject(val, fn, nextLevelKeys, depth - 1, visited)
       }
     }
-  })
+  }
 }
 
 function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {

@@ -221,7 +221,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {
       const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
-      skippedSuites.forEach((testSuite) => {
+      for (const testSuite of skippedSuites) {
         const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id)
         if (this.itrCorrelationId) {
           testSuiteMetadata[ITR_CORRELATION_ID] = this.itrCorrelationId
@@ -238,7 +238,7 @@ module.exports = class CiPlugin extends Plugin {
           },
           integrationName: this.constructor.id,
         }).finish()
-      })
+      }
       this.telemetry.count(TELEMETRY_ITR_SKIPPED, { testLevel: 'suite' }, skippedSuites.length)
     })
 
@@ -330,7 +330,7 @@ module.exports = class CiPlugin extends Plugin {
             const testSuite = span.meta[TEST_SUITE]
             const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuite)
             if (!testSuiteSpan) {
-              log.warn(`Test suite span not found for test span with test suite ${testSuite}`)
+              log.warn('Test suite span not found for test span with test suite %s', testSuite)
               continue
             }
 
@@ -346,9 +346,9 @@ module.exports = class CiPlugin extends Plugin {
     })
 
     this.addSub(`ci:${this.constructor.id}:worker-report:logs`, (logsPayloads) => {
-      JSON.parse(logsPayloads).forEach(({ logMessage }) => {
+      for (const { logMessage } of JSON.parse(logsPayloads)) {
         this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, logMessage)
-      })
+      }
     })
   }
 
