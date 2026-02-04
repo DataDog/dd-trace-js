@@ -10,11 +10,9 @@ const log = require('../../dd-trace/src/log')
 class AzureDurableFunctionsOutboundPlugin extends OutboundPlugin {
   static get id () { return 'azure-durable-functions' }
   static get operation () { return 'invoke' }
-  static get prefix () { return 'tracing:apm:azure-durable-functions:invoke' }
+  static get prefix () { return 'tracing:datadog:azure:durable-functions:invoke' }
 
   bindStart (ctx) {
-    /* eslint-disable no-console */
-
     log.debug('logging context:\n')
     for (const key in ctx) {
       /* eslint-disable-next-line */
