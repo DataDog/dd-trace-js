@@ -1417,6 +1417,49 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with filter configuration', () => {
+        let config
+
+        beforeEach(() => {
+          config = {
+            server: false,
+            client: {
+              filter: (url) => !url.includes('/health')
+            }
+          }
+
+          return agent.load('http', config)
+            .then(() => {
+              http = require(pluginToBeLoaded)
+              express = require('express')
+            })
+        })
+
+        it('should skip recording if the filter function returns false', done => {
+          const app = express()
+
+          app.get('/health', (req, res) => {
+            res.status(200).send()
+          })
+
+          const timer = setTimeout(done, 100)
+
+          agent
+            .assertSomeTraces(() => {
+              clearTimeout(timer)
+              done(new Error('Filtered requests should not be recorded.'))
+            })
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/health`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+      })
     })
   })
 })

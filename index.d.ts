@@ -1716,6 +1716,20 @@ declare namespace tracer {
        * @default code => code < 500
        */
       validateStatus?: (code: number) => boolean;
+      /**
+       * Whether (or how) to obfuscate querystring values in `http.url`.
+       *
+       * - `true`: obfuscate all values
+       * - `false`: disable obfuscation
+       * - `string`: regex string used to obfuscate matching values (empty string disables)
+       * - `RegExp`: regex used to obfuscate matching values
+       */
+      queryStringObfuscation?: boolean | string | RegExp;
+
+      /**
+       * Whether to enable resource renaming when the framework route is unavailable.
+       */
+      resourceRenamingEnabled?: boolean;
     }
 
     /** @hidden */
@@ -1852,7 +1866,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * @azure/functions module.
     */
-    interface azure_functions extends Instrumentation {}
+    interface azure_functions extends Instrumentation {
+      /**
+       * Whether to enable resource renaming when the framework route is unavailable.
+       */
+      resourceRenamingEnabled?: boolean;
+    }
 
     /**
      * This plugin automatically instruments the

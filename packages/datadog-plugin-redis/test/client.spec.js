@@ -244,6 +244,35 @@ describe('Plugin', () => {
           await promise
         })
       })
+
+      describe('with filter', () => {
+        before(() => {
+          return agent.load('redis', {
+            filter: (command) => command !== 'SET'
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          redis = require(`../../../versions/${moduleName}@${version}`).get()
+          client = redis.createClient()
+
+          await client.connect()
+        })
+
+        it('should be able to filter commands', async () => {
+          const promise = agent.assertSomeTraces(traces => {
+            assert.strictEqual(traces[0][0].resource, 'GET')
+          })
+
+          await client.set('turtle', 'like')
+          await client.get('turtle')
+          await promise
+        })
+      })
     })
   })
 })

@@ -947,6 +947,51 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with filter configuration', () => {
+        let config
+
+        beforeEach(() => {
+          config = {
+            server: false,
+            client: {
+              filter: (url) => !url.includes('/health')
+            }
+          }
+
+          return agent.load('http2', config)
+            .then(() => {
+              http2 = require(loadPlugin)
+            })
+        })
+
+        it('should skip recording if the url is filtered out', done => {
+          const app = (stream, headers) => {
+            stream.respond({
+              ':status': 200
+            })
+            stream.end()
+          }
+
+          appListener = server(app, port => {
+            const timer = setTimeout(done, 100)
+
+            agent
+              .assertSomeTraces(() => {
+                clearTimeout(timer)
+                done(new Error('filtered requests should not be recorded.'))
+              })
+              .catch(done)
+
+            const client = http2.connect(`${protocol}://localhost:${port}`)
+              .on('error', done)
+
+            client.request({ ':path': '/health' })
+              .on('error', done)
+              .end()
+          })
+        })
+      })
     })
   })
 })
