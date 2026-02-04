@@ -3,7 +3,7 @@
 const { VERSION: packageVersion } = require('../../../../../version')
 const log = require('../../log')
 const {
-  Counter, UpDownCounter, Histogram, Gauge, ObservableGauge, ObservableCounter, ObservableUpDownCounter
+  Counter, UpDownCounter, Histogram, Gauge, ObservableGauge, ObservableCounter, ObservableUpDownCounter,
 } = require('./instruments')
 const { METRIC_TYPES } = require('./constants')
 

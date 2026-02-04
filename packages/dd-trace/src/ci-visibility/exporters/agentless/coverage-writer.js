@@ -13,7 +13,7 @@ const {
   TELEMETRY_ENDPOINT_PAYLOAD_BYTES,
   TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_MS,
   TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
-  TELEMETRY_ENDPOINT_PAYLOAD_DROPPED
+  TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
 } = require('../../../ci-visibility/telemetry')
 
 class Writer extends BaseWriter {
@@ -30,10 +30,10 @@ class Writer extends BaseWriter {
       method: 'POST',
       headers: {
         'dd-api-key': getValueFromEnvSources('DD_API_KEY'),
-        ...form.getHeaders()
+        ...form.getHeaders(),
       },
       timeout: 15_000,
-      url: this._url
+      url: this._url,
     }
 
     if (this._evpProxyPrefix) {
@@ -42,6 +42,7 @@ class Writer extends BaseWriter {
       options.headers['X-Datadog-EVP-Subdomain'] = 'citestcov-intake'
     }
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
 
     const startRequestTime = Date.now()

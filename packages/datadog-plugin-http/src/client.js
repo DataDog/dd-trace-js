@@ -48,11 +48,11 @@ class HttpClientPlugin extends ClientPlugin {
         'span.type': 'http',
         'http.method': method,
         'http.url': uri,
-        'out.host': hostname
+        'out.host': hostname,
       },
       metrics: {
-        [CLIENT_PORT_KEY]: Number.parseInt(options.port)
-      }
+        [CLIENT_PORT_KEY]: Number.parseInt(options.port),
+      },
     }, false)
 
     // TODO: Figure out a better way to do this for any span.
@@ -120,7 +120,7 @@ class HttpClientPlugin extends ClientPlugin {
       span.addTags({
         [ERROR_TYPE]: error.name,
         [ERROR_MESSAGE]: error.message || error.code,
-        [ERROR_STACK]: error.stack
+        [ERROR_STACK]: error.stack,
       })
     } else {
       // conditions for no error:
@@ -144,13 +144,13 @@ function addResponseHeaders (res, span, config) {
     ? Object.fromEntries(res.headers.entries())
     : res.headers
 
-  config.headers.forEach(([key, tag]) => {
+  for (const [key, tag] of config.headers) {
     const value = headers[key]
 
     if (value) {
       span.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, value)
     }
-  })
+  }
 }
 
 function addRequestHeaders (req, span, config) {
@@ -158,13 +158,13 @@ function addRequestHeaders (req, span, config) {
     ? Object.fromEntries(req.headers.entries())
     : req.headers || req.getHeaders()
 
-  config.headers.forEach(([key, tag]) => {
+  for (const [key, tag] of config.headers) {
     const value = Array.isArray(headers[key]) ? headers[key].toString() : headers[key]
 
     if (value) {
       span.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, value)
     }
-  })
+  }
 }
 
 function normalizeClientConfig (config) {
@@ -180,7 +180,7 @@ function normalizeClientConfig (config) {
     filter,
     propagationFilter,
     headers,
-    hooks
+    hooks,
   }
 }
 
@@ -214,7 +214,7 @@ function getHeaders (config) {
         ? [header, undefined]
         : [
             header.slice(0, separatorIndex).toLowerCase(),
-            header.slice(separatorIndex + 1)
+            header.slice(separatorIndex + 1),
           ]
       )
     }

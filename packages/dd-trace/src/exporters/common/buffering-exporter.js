@@ -48,9 +48,9 @@ class BufferingExporter {
   }
 
   exportUncodedTraces () {
-    this.getUncodedTraces().forEach(uncodedTrace => {
+    for (const uncodedTrace of this.getUncodedTraces()) {
       this.export(uncodedTrace)
-    })
+    }
     this.resetUncodedTraces()
   }
 

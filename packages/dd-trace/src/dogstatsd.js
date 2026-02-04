@@ -26,7 +26,7 @@ class DogStatsDClient {
     if (options.metricsProxyUrl) {
       this._httpOptions = {
         url: options.metricsProxyUrl.toString(),
-        path: '/dogstatsd/v2/proxy'
+        path: '/dogstatsd/v2/proxy',
       }
     }
 
@@ -109,10 +109,10 @@ class DogStatsDClient {
   _sendUdpFromQueue (queue, address, family) {
     const socket = family === 6 ? this._udp6 : this._udp4
 
-    queue.forEach((buffer) => {
+    for (const buffer of queue) {
       log.debug('Sending to DogStatsD: %s', buffer)
       socket.send(buffer, 0, buffer.length, this._port, address)
-    })
+    }
   }
 
   _add (stat, value, type, tags) {
@@ -176,7 +176,7 @@ class DogStatsDClient {
     const clientConfig = {
       host: config.dogstatsd.hostname,
       port: config.dogstatsd.port,
-      tags
+      tags,
     }
 
     if (config.url || config.port) {
@@ -403,5 +403,5 @@ class CustomMetrics {
 module.exports = {
   DogStatsDClient,
   CustomMetrics,
-  MetricsAggregationClient
+  MetricsAggregationClient,
 }

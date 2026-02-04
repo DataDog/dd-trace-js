@@ -5,7 +5,7 @@ const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const {
   addHook,
-  channel
+  channel,
 } = require('./helpers/instrument')
 
 // Create channels for Confluent Kafka JavaScript
@@ -23,7 +23,7 @@ const channels = {
   batchConsumerStart: channel('apm:confluentinc-kafka-javascript:consume-batch:start'),
   batchConsumerFinish: channel('apm:confluentinc-kafka-javascript:consume-batch:finish'),
   batchConsumerError: channel('apm:confluentinc-kafka-javascript:consume-batch:error'),
-  batchConsumerCommit: channel('apm:confluentinc-kafka-javascript:consume-batch:commit')
+  batchConsumerCommit: channel('apm:confluentinc-kafka-javascript:consume-batch:commit'),
 }
 
 const disabledHeaderWeakSet = new WeakSet()
@@ -63,7 +63,7 @@ function instrumentBaseModule (module) {
               const ctx = {
                 topic,
                 messages: [{ key, value: message }],
-                bootstrapServers: brokers
+                bootstrapServers: brokers,
               }
 
               return channels.producerStart.runStores(ctx, () => {
@@ -111,13 +111,13 @@ function instrumentBaseModule (module) {
               }
 
               const ctx = {
-                groupId
+                groupId,
               }
               // Handle callback-based consumption
               if (typeof callback === 'function') {
                 return consume.call(this, numMessages, function wrappedCallback (err, messages) {
                   if (messages && messages.length > 0) {
-                    messages.forEach(message => {
+                    for (const message of messages) {
                       ctx.topic = message?.topic
                       ctx.partition = message?.partition
                       ctx.message = message
@@ -125,7 +125,7 @@ function instrumentBaseModule (module) {
                       // TODO: We should be using publish here instead of runStores but we need bindStart to be called
                       channels.consumerStart.runStores(ctx, () => {})
                       updateLatestOffset(message?.topic, message?.partition, message?.offset, groupId)
-                    })
+                    }
                   }
 
                   if (err) {
@@ -215,7 +215,7 @@ function instrumentKafkaJS (kafkaJS) {
                       topic: payload?.topic,
                       messages: payload?.messages || [],
                       bootstrapServers: kafka._ddBrokers,
-                      disableHeaderInjection: disabledHeaderWeakSet.has(producer)
+                      disableHeaderInjection: disabledHeaderWeakSet.has(producer),
                     }
 
                     return channels.producerStart.runStores(ctx, () => {
@@ -234,9 +234,10 @@ function instrumentKafkaJS (kafkaJS) {
                             // This approach is implemented by other tracers as well.
                             if (err.name === 'KafkaJSError' && err.type === 'ERR_UNKNOWN') {
                               disabledHeaderWeakSet.add(producer)
-                              log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). ' +
-                                'Please look at broker logs for more information. ' +
-                                'Tracer message header injection for Kafka is disabled.')
+                              log.error(
+                                // eslint-disable-next-line @stylistic/max-len
+                                'Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.'
+                              )
                             }
                             ctx.error = err
                             channels.producerError.publish(ctx)
@@ -285,7 +286,7 @@ function instrumentKafkaJS (kafkaJS) {
                           startCh: channels.consumerStart,
                           commitCh: channels.consumerCommit,
                           finishCh: channels.consumerFinish,
-                          errorCh: channels.consumerError
+                          errorCh: channels.consumerError,
                         },
                         (payload) => {
                           return {
@@ -293,7 +294,7 @@ function instrumentKafkaJS (kafkaJS) {
                             partition: payload?.partition,
                             offset: payload?.message?.offset,
                             message: payload?.message,
-                            groupId
+                            groupId,
                           }
                         })
                     } else if (eachBatch) {
@@ -303,7 +304,7 @@ function instrumentKafkaJS (kafkaJS) {
                           startCh: channels.batchConsumerStart,
                           commitCh: channels.batchConsumerCommit,
                           finishCh: channels.batchConsumerFinish,
-                          errorCh: channels.batchConsumerError
+                          errorCh: channels.batchConsumerError,
                         },
                         (payload) => {
                           const { batch } = payload
@@ -312,7 +313,7 @@ function instrumentKafkaJS (kafkaJS) {
                             partition: batch?.partition,
                             offset: batch?.messages[batch?.messages?.length - 1]?.offset,
                             messages: batch?.messages,
-                            groupId
+                            groupId,
                           }
                         }
                       )
@@ -357,7 +358,7 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
     const commitPayload = getPayload(payload)
 
     const ctx = {
-      extractedArgs: commitPayload
+      extractedArgs: commitPayload,
     }
 
     return startCh.runStores(ctx, () => {
@@ -406,7 +407,7 @@ function updateLatestOffset (topic, partition, offset, groupId) {
     topic,
     partition,
     offset,
-    groupId
+    groupId,
   })
 }
 

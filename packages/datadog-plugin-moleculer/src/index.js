@@ -11,7 +11,7 @@ class MoleculerPlugin extends CompositePlugin {
   static get plugins () {
     return {
       server: MoleculerServerPlugin,
-      client: MoleculerClientPlugin
+      client: MoleculerClientPlugin,
     }
   }
 }

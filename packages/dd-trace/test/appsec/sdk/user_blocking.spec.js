@@ -13,9 +13,9 @@ const resultActions = {
     block_request: {
       status_code: 401,
       type: 'auto',
-      grpc_status_code: 10
-    }
-  }
+      grpc_status_code: 10,
+    },
+  },
 }
 
 describe('user_blocking - Internal API', () => {
@@ -36,25 +36,25 @@ describe('user_blocking - Internal API', () => {
       context: () => {
         return { _tags: {} }
       },
-      setTag: sinon.stub()
+      setTag: sinon.stub(),
     }
     getRootSpan = sinon.stub().returns(rootSpan)
 
     block = sinon.stub().returns(true)
 
     legacyStorage = {
-      getStore: sinon.stub().returns({ req, res })
+      getStore: sinon.stub().returns({ req, res }),
     }
 
     log = {
-      warn: sinon.stub()
+      warn: sinon.stub(),
     }
 
     userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
       './utils': { getRootSpan },
       '../blocking': { block },
       '../../../../datadog-core': { storage: () => legacyStorage },
-      '../../log': log
+      '../../log': log,
     })
   })
 

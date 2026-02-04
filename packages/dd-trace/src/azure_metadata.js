@@ -6,7 +6,7 @@ const os = require('os')
 const {
   getEnvironmentVariable,
   getEnvironmentVariables,
-  getValueFromEnvSources
+  getValueFromEnvSources,
 } = require('./config/helper')
 const { getIsAzureFunction, getIsFlexConsumptionAzureFunction } = require('./serverless')
 
@@ -31,11 +31,18 @@ function buildResourceID (subscriptionID, siteName, resourceGroup) {
     .toLowerCase()
 }
 
+/**
+ * @param {Record<string | symbol, unknown>} obj
+ * @returns {Partial<Record<string | symbol, unknown>>}
+ */
 function trimObject (obj) {
-  Object.entries(obj)
-    .filter(([_, value]) => value === undefined)
-    .forEach(([key, _]) => { delete obj[key] })
-  return obj
+  const cleanedObj = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      cleanedObj[key] = value
+    }
+  }
+  return cleanedObj
 }
 
 function buildMetadata () {
@@ -48,7 +55,7 @@ function buildMetadata () {
     WEBSITE_OWNER_NAME,
     WEBSITE_OS,
     WEBSITE_RESOURCE_GROUP,
-    WEBSITE_SITE_NAME
+    WEBSITE_SITE_NAME,
   } = getEnvironmentVariables()
 
   const DD_AAS_DOTNET_EXTENSION_VERSION = getValueFromEnvSources('DD_AAS_DOTNET_EXTENSION_VERSION')
@@ -82,7 +89,7 @@ function buildMetadata () {
     siteKind,
     siteName,
     siteType,
-    subscriptionID
+    subscriptionID,
   })
 }
 
@@ -121,12 +128,12 @@ function getAzureTagsFromMetadata (metadata) {
     'aas.site.kind': metadata.siteKind,
     'aas.site.name': metadata.siteName,
     'aas.site.type': metadata.siteType,
-    'aas.subscription.id': metadata.subscriptionID
+    'aas.subscription.id': metadata.subscriptionID,
   })
 }
 
 module.exports = {
   getAzureAppMetadata,
   getAzureFunctionMetadata,
-  getAzureTagsFromMetadata
+  getAzureTagsFromMetadata,
 }

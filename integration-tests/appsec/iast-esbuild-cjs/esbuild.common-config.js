@@ -12,6 +12,7 @@ module.exports = {
   target: ['node18'],
   external: [
     '@datadog/native-iast-taint-tracking',
-    '@datadog/wasm-js-rewriter'
-  ]
+    '@datadog/wasm-js-rewriter',
+    '@openfeature/server-sdk',
+  ],
 }

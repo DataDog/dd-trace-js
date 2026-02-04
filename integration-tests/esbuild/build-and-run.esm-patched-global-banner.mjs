@@ -13,8 +13,8 @@ import { fileURLToPath  } from 'url';
 import { dirname } from 'path';
 globalThis.require ??= createRequire(import.meta.url);
 globalThis.__filename ??= fileURLToPath(import.meta.url);
-globalThis.__dirname ??= dirname(globalThis.__filename);`
-  }
+globalThis.__dirname ??= dirname(globalThis.__filename);`,
+  },
 })
 
 const { status, stdout, stderr } = spawnSync('node', ['out.mjs'])

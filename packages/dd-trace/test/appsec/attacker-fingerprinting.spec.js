@@ -23,7 +23,7 @@ describe('Attacker fingerprinting', () => {
 
     before(() => {
       appsec.enable(getConfigFresh({
-        enabled: true
+        enabled: true,
       }))
     })
 
@@ -50,7 +50,7 @@ describe('Attacker fingerprinting', () => {
     it('should provide fingerprinting on successful user login track', (done) => {
       controller = (req, res) => {
         tracer.appsec.trackUserLoginSuccessEvent({
-          id: 'test_user_id'
+          id: 'test_user_id',
         }, { metakey: 'metaValue' })
         res.end()
       }
@@ -64,8 +64,8 @@ describe('Attacker fingerprinting', () => {
 
       axios.get(`http://localhost:${port}/`, {
         headers: {
-          'User-Agent': 'test-user-agent'
-        }
+          'User-Agent': 'test-user-agent',
+        },
       })
     })
 
@@ -84,8 +84,8 @@ describe('Attacker fingerprinting', () => {
 
       axios.get(`http://localhost:${port}/`, {
         headers: {
-          'User-Agent': 'test-user-agent'
-        }
+          'User-Agent': 'test-user-agent',
+        },
       })
     })
   })

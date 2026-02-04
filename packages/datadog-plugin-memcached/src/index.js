@@ -13,7 +13,7 @@ class MemcachedPlugin extends CachePlugin {
 
     const meta = {
       'out.host': address[0],
-      [CLIENT_PORT_KEY]: address[1]
+      [CLIENT_PORT_KEY]: address[1],
     }
 
     if (this.config.memcachedCommandEnabled) {
@@ -24,7 +24,7 @@ class MemcachedPlugin extends CachePlugin {
       service: this.serviceName({ pluginConfig: this.config, system: this.system }),
       resource: query.type,
       type: 'memcached',
-      meta
+      meta,
     }, ctx)
 
     return ctx.currentStore

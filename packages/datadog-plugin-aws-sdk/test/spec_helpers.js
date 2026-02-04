@@ -17,7 +17,7 @@ const helpers = {
       delete process.env.AWS_ACCESS_KEY_ID
       delete process.env.DD_DATA_STREAMS_ENABLED
     })
-  }
+  },
 }
 
 module.exports = helpers

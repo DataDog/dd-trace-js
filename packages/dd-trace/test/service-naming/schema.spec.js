@@ -54,7 +54,7 @@ describe('Service naming', () => {
           'redis',
           {
             tracerService: 'test-service',
-            ...extra
+            ...extra,
           }
         )
       })
@@ -67,10 +67,10 @@ describe('Service naming', () => {
         inbound: {
           kafka: {
             opName: sinon.spy(),
-            serviceName: sinon.spy()
-          }
-        }
-      }
+            serviceName: sinon.spy(),
+          },
+        },
+      },
     }
 
     const resolver = new SchemaDefinition(dummySchema)

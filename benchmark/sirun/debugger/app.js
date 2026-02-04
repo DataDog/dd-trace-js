@@ -33,7 +33,7 @@ function getSomeData () {
     foo: 'bar',
     nil: null,
     undef: undefined,
-    bool: true
+    bool: true,
   }
   data.recursive = data
 

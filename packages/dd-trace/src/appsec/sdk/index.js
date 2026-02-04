@@ -6,7 +6,7 @@ const {
   trackUserLoginFailureEvent,
   trackCustomEvent,
   trackUserLoginSuccessV2,
-  trackUserLoginFailureV2
+  trackUserLoginFailureV2,
 } = require('./track_event')
 const { checkUserAndSetUser, blockRequest } = require('./user_blocking')
 const { setUser } = require('./set_user')

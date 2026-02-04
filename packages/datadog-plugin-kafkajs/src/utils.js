@@ -23,5 +23,5 @@ function convertToTextMap (bufferMap) {
 }
 
 module.exports = {
-  convertToTextMap
+  convertToTextMap,
 }

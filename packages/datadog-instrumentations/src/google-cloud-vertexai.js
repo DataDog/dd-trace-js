@@ -13,7 +13,7 @@ function wrapGenerate (generate) {
     const ctx = {
       request,
       instance: this,
-      resource: [this.constructor.name, generate.name].join('.')
+      resource: [this.constructor.name, generate.name].join('.'),
     }
 
     return vertexaiTracingChannel.tracePromise(generate, ctx, this, ...arguments)
@@ -30,7 +30,7 @@ function wrapGenerateStream (generateStream) {
       request,
       instance: this,
       resource: [this.constructor.name, generateStream.name].join('.'),
-      stream: true
+      stream: true,
     }
 
     return vertexaiTracingChannel.start.runStores(ctx, () => {
@@ -77,7 +77,7 @@ function finish (ctx, response, err, publishEndEvent = false) {
 addHook({
   name: '@google-cloud/vertexai',
   file: 'build/src/models/generative_models.js',
-  versions: ['>=1']
+  versions: ['>=1'],
 }, exports => {
   const GenerativeModel = exports.GenerativeModel
 
@@ -90,7 +90,7 @@ addHook({
 addHook({
   name: '@google-cloud/vertexai',
   file: 'build/src/models/chat_session.js',
-  versions: ['>=1']
+  versions: ['>=1'],
 }, exports => {
   const ChatSession = exports.ChatSession
 

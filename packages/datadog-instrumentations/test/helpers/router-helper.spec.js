@@ -19,7 +19,7 @@ const {
   hasRouterCycle,
   collectRoutesFromRouter,
   setLayerMatchers,
-  isAppMounted
+  isAppMounted,
 } = require('../../src/helpers/router-helper')
 
 describe('helpers/router-helper', () => {
@@ -218,17 +218,17 @@ describe('helpers/router-helper', () => {
             methods: {
               get: true,
               post: true,
-              delete: false
-            }
-          }
-        }]
+              delete: false,
+            },
+          },
+        }],
       }
 
       collectRoutesFromRouter(router, '/api')
 
       assert.deepStrictEqual(published, [
         { method: 'get', path: '/api' },
-        { method: 'post', path: '/api' }
+        { method: 'post', path: '/api' },
       ])
     })
 
@@ -237,22 +237,22 @@ describe('helpers/router-helper', () => {
         stack: [{
           route: {
             path: '/nested',
-            methods: { get: true }
-          }
-        }]
+            methods: { get: true },
+          },
+        }],
       }
 
       const parentRouter = {
         stack: [{
           handle: childRouter,
-          path: '/sub'
-        }]
+          path: '/sub',
+        }],
       }
 
       collectRoutesFromRouter(parentRouter, '/api')
 
       assert.deepStrictEqual(published, [
-        { method: 'get', path: '/api/sub/nested' }
+        { method: 'get', path: '/api/sub/nested' },
       ])
       assert.deepStrictEqual(getRouterMountPaths(childRouter), ['/api/sub'])
       assert.strictEqual(isAppMounted(childRouter), true)
@@ -263,26 +263,26 @@ describe('helpers/router-helper', () => {
         stack: [{
           route: {
             path: '/details',
-            methods: { all: true }
-          }
-        }]
+            methods: { all: true },
+          },
+        }],
       }
 
       const layer = {
         handle: childRouter,
-        path: undefined
+        path: undefined,
       }
 
       setLayerMatchers(layer, [{ path: '/dynamic' }])
 
       const parentRouter = {
-        stack: [layer]
+        stack: [layer],
       }
 
       collectRoutesFromRouter(parentRouter, '/root')
 
       assert.deepStrictEqual(published, [
-        { method: '*', path: '/root/dynamic/details' }
+        { method: '*', path: '/root/dynamic/details' },
       ])
       assert.deepStrictEqual(getRouterMountPaths(childRouter), ['/root/dynamic'])
     })
@@ -296,7 +296,7 @@ describe('helpers/router-helper', () => {
         get (...args) {
           calls.push({ args, context: this })
           return 'result'
-        }
+        },
       }
 
       wrapRouteMethodsAndPublish(route, ['/path-a', '/path-b'], (payload) => {
@@ -312,14 +312,14 @@ describe('helpers/router-helper', () => {
       assert.deepStrictEqual(calls[0].args, ['arg1', 'arg2'])
       assert.deepStrictEqual(published, [
         { method: 'get', path: '/path-a' },
-        { method: 'get', path: '/path-b' }
+        { method: 'get', path: '/path-b' },
       ])
     })
 
     it('should publish once per unique path', () => {
       const published = []
       const route = {
-        get () {}
+        get () {},
       }
 
       wrapRouteMethodsAndPublish(route, ['/dup', '/dup'], published.push.bind(published))
@@ -331,7 +331,7 @@ describe('helpers/router-helper', () => {
     it('should normalise method names for all()', () => {
       const published = []
       const route = {
-        all () {}
+        all () {},
       }
 
       wrapRouteMethodsAndPublish(route, ['/test'], published.push.bind(published))

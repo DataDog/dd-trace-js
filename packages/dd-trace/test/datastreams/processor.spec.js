@@ -21,7 +21,7 @@ const DEFAULT_CURRENT_HASH = Buffer.from('e858212fd11a41e5', 'hex')
 const ANOTHER_CURRENT_HASH = Buffer.from('e851212fd11a21e9', 'hex')
 
 const writer = {
-  flush: sinon.stub()
+  flush: sinon.stub(),
 }
 const DataStreamsWriter = sinon.stub().returns(writer)
 const {
@@ -32,9 +32,9 @@ const {
   DataStreamsProcessor,
   getHeadersSize,
   getMessageSize,
-  getSizeOrZero
+  getSizeOrZero,
 } = proxyquire('../../src/datastreams/processor', {
-  './writer': { DataStreamsWriter }
+  './writer': { DataStreamsWriter },
 })
 
 const mockCheckpoint = {
@@ -44,7 +44,7 @@ const mockCheckpoint = {
   edgeTags: ['service:service-name', 'env:env-name', 'topic:test-topic'],
   edgeLatencyNs: DEFAULT_LATENCY,
   pathwayLatencyNs: DEFAULT_LATENCY,
-  payloadSize: 100
+  payloadSize: 100,
 }
 
 const anotherMockCheckpoint = {
@@ -54,7 +54,7 @@ const anotherMockCheckpoint = {
   edgeTags: ['service:service-name', 'env:env-name', 'topic:test-topic'],
   edgeLatencyNs: DEFAULT_LATENCY,
   pathwayLatencyNs: DEFAULT_LATENCY,
-  payloadSize: 100
+  payloadSize: 100,
 }
 
 describe('StatsPoint', () => {
@@ -118,7 +118,7 @@ describe('StatsBucket', () => {
       type: 'kafka_consume',
       consumer_group: 'test-consumer',
       partition: 0,
-      topic: 'test-topic'
+      topic: 'test-topic',
     }
 
     beforeEach(() => {
@@ -143,7 +143,7 @@ describe('StatsBucket', () => {
         type: 'kafka_consume',
         consumer_group: 'test-consumer',
         partition: 1,
-        topic: 'test-topic'
+        topic: 'test-topic',
       }
 
       backlogBuckets.forBacklog(mockBacklog)
@@ -157,7 +157,7 @@ describe('StatsBucket', () => {
         type: 'kafka_consume',
         consumer_group: 'test-consumer',
         partition: 0,
-        topic: 'test-topic'
+        topic: 'test-topic',
       }
 
       backlogBuckets.forBacklog(mockBacklog)
@@ -172,7 +172,7 @@ describe('StatsBucket', () => {
         type: 'kafka_consume',
         consumer_group: 'test-consumer',
         partition: 0,
-        topic: 'test-topic'
+        topic: 'test-topic',
       }
 
       backlogBuckets.forBacklog(mockBacklog)
@@ -207,7 +207,7 @@ describe('DataStreamsProcessor', () => {
     env: 'test',
     version: 'v1',
     service: 'service1',
-    tags: { foo: 'foovalue', bar: 'barvalue' }
+    tags: { foo: 'foovalue', bar: 'barvalue' },
   }
 
   beforeEach(() => {
@@ -222,7 +222,7 @@ describe('DataStreamsProcessor', () => {
     sinon.assert.calledWith(DataStreamsWriter, {
       hostname: config.hostname,
       port: config.port,
-      url: config.url
+      url: config.url,
     })
     assert.ok(processor.buckets instanceof TimeBuckets)
     assert.strictEqual(processor.hostname, hostname())
@@ -237,7 +237,7 @@ describe('DataStreamsProcessor', () => {
       type: 'kafka_consume',
       consumer_group: 'test-consumer',
       partition: 0,
-      topic: 'test-topic'
+      topic: 'test-topic',
     }
     assert.strictEqual(processor.buckets.size, 0)
     processor.recordOffset({ timestamp: DEFAULT_TIMESTAMP, ...mockBacklog })
@@ -254,9 +254,9 @@ describe('DataStreamsProcessor', () => {
     const encoded = backlog.encode()
     assert.deepStrictEqual(encoded, {
       Tags: [
-        'consumer_group:test-consumer', 'partition:0', 'topic:test-topic', 'type:kafka_consume'
+        'consumer_group:test-consumer', 'partition:0', 'topic:test-topic', 'type:kafka_consume',
       ],
-      Value: 12
+      Value: 12,
     })
   })
 
@@ -305,13 +305,13 @@ describe('DataStreamsProcessor', () => {
           EdgeTags: mockCheckpoint.edgeTags,
           EdgeLatency: edgeLatency.toProto(),
           PathwayLatency: pathwayLatency.toProto(),
-          PayloadSize: payloadSize.toProto()
+          PayloadSize: payloadSize.toProto(),
         }],
-        Backlogs: []
+        Backlogs: [],
       }],
       TracerVersion: pkg.version,
       Lang: 'javascript',
-      Tags: ['foo:foovalue', 'bar:barvalue']
+      Tags: ['foo:foovalue', 'bar:barvalue'],
     })
   })
 })
@@ -346,7 +346,7 @@ describe('getHeadersSize', () => {
   it('should return the total size of all headers', () => {
     const headers = {
       'Content-Type': 'application/json',
-      'Content-Length': '100'
+      'Content-Length': '100',
     }
     assert.strictEqual(getHeadersSize(headers), 45)
   })
@@ -359,8 +359,8 @@ describe('getMessageSize', () => {
       value: 'value',
       headers: {
         'Content-Type': 'application/json',
-        'Content-Length': '100'
-      }
+        'Content-Length': '100',
+      },
     }
     assert.strictEqual(getMessageSize(message), 53)
   })

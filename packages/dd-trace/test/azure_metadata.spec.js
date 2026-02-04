@@ -21,7 +21,7 @@ describe('Azure metadata', () => {
     'WEBSITE_OS',
     'WEBSITE_RESOURCE_GROUP',
     'WEBSITE_SITE_NAME',
-    'WEBSITE_SKU'
+    'WEBSITE_SKU',
   ]
 
   const initialAzureEnv = Object.fromEntries(AZURE_ENV_KEYS.map(key => [key, process.env[key]]))
@@ -47,7 +47,7 @@ describe('Azure metadata', () => {
       delete process.env.COMPUTERNAME // actually defined on Windows
       process.env.WEBSITE_SITE_NAME = 'website_name'
       assert.deepStrictEqual(getAzureAppMetadata(), {
-        operatingSystem: os.platform(), siteKind: 'app', siteName: 'website_name', siteType: 'app'
+        operatingSystem: os.platform(), siteKind: 'app', siteName: 'website_name', siteType: 'app',
       })
     })
   })
@@ -69,7 +69,7 @@ describe('Azure metadata', () => {
       siteKind: 'app',
       siteName: 'website_name',
       siteType: 'app',
-      subscriptionID: 'subscription_id'
+      subscriptionID: 'subscription_id',
     }
     assert.deepStrictEqual(getAzureAppMetadata(), expected)
   })
@@ -99,7 +99,7 @@ describe('Azure metadata', () => {
       siteKind: 'functionapp',
       siteName: 'website_name',
       siteType: 'function',
-      subscriptionID: 'subscription_id'
+      subscriptionID: 'subscription_id',
     }
     assert.deepStrictEqual(getAzureAppMetadata(), expected)
   })
@@ -121,7 +121,7 @@ describe('Azure metadata', () => {
       'aas.site.kind': 'app',
       'aas.site.name': 'website_name',
       'aas.site.type': 'app',
-      'aas.subscription.id': 'subscription_id'
+      'aas.subscription.id': 'subscription_id',
     }
     assert.deepStrictEqual(getAzureTagsFromMetadata(getAzureAppMetadata()), expected)
   })
@@ -148,7 +148,7 @@ describe('Azure metadata', () => {
       siteKind: 'functionapp',
       siteName: 'flex_function_app',
       siteType: 'function',
-      subscriptionID: 'subscription_id'
+      subscriptionID: 'subscription_id',
     }
     assert.deepStrictEqual(getAzureFunctionMetadata(), expected)
   })

@@ -16,9 +16,9 @@ const csiMethods = [
   { src: 'trim' },
   { src: 'trimEnd' },
   { src: 'trimStart', dst: 'trim' },
-  { src: 'eval', allowedWithoutCallee: true }
+  { src: 'eval', allowedWithoutCallee: true },
 ]
 
 module.exports = {
-  csiMethods
+  csiMethods,
 }

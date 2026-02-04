@@ -54,8 +54,8 @@ describe('Plugin', () => {
                 responsesEnabled: true,
                 request: '$.Item.name',
                 response: '$.Attributes,$.Item.data',
-                maxDepth: 5
-              }
+                maxDepth: 5,
+              },
             }
           )
           AWS = require(`../../../versions/${dynamoClientName}@${version}`).get()
@@ -111,7 +111,7 @@ describe('Plugin', () => {
           // Delete existing tables
           await Promise.all([
             deleteTable(oneKeyTableName),
-            deleteTable(twoKeyTableName)
+            deleteTable(twoKeyTableName),
           ])
 
           // Create tables
@@ -120,20 +120,20 @@ describe('Plugin', () => {
               TableName: oneKeyTableName,
               KeySchema: [{ AttributeName: 'name', KeyType: 'HASH' }],
               AttributeDefinitions: [{ AttributeName: 'name', AttributeType: 'S' }],
-              ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+              ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 },
             }),
             createTable({
               TableName: twoKeyTableName,
               KeySchema: [
                 { AttributeName: 'id', KeyType: 'HASH' },
-                { AttributeName: 'binary', KeyType: 'RANGE' }
+                { AttributeName: 'binary', KeyType: 'RANGE' },
               ],
               AttributeDefinitions: [
                 { AttributeName: 'id', AttributeType: 'N' },
-                { AttributeName: 'binary', AttributeType: 'B' }
+                { AttributeName: 'binary', AttributeType: 'B' },
               ],
-              ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
-            })
+              ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 },
+            }),
           ])
         })
 
@@ -166,16 +166,16 @@ describe('Plugin', () => {
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
                 'aws.request.body.Item.name': 'redacted',
-                'aws.request.body.Item.data.S': 'test-data'
-              }
+                'aws.request.body.Item.data.S': 'test-data',
+              },
             })
 
             const operation = () => promisify(dynamo.putItem)({
               TableName: oneKeyTableName,
               Item: {
                 name: { S: 'test-name' },
-                data: { S: 'test-data' }
-              }
+                data: { S: 'test-data' },
+              },
             })
 
             await Promise.all([agentPromise, operation()])
@@ -190,21 +190,21 @@ describe('Plugin', () => {
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
                 'aws.request.body.Key.name.S': 'test-name',
-                'aws.request.body.AttributeUpdates.data.Value.S': 'updated-data'
-              }
+                'aws.request.body.AttributeUpdates.data.Value.S': 'updated-data',
+              },
             })
 
             const operation = () => promisify(dynamo.updateItem)({
               TableName: oneKeyTableName,
               Key: {
-                name: { S: 'test-name' }
+                name: { S: 'test-name' },
               },
               AttributeUpdates: {
                 data: {
                   Action: 'PUT',
-                  Value: { S: 'updated-data' }
-                }
-              }
+                  Value: { S: 'updated-data' },
+                },
+              },
             })
 
             await Promise.all([agentPromise, operation()])
@@ -218,15 +218,15 @@ describe('Plugin', () => {
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
-                'aws.request.body.Key.name.S': 'test-name'
-              }
+                'aws.request.body.Key.name.S': 'test-name',
+              },
             })
 
             const operation = () => promisify(dynamo.deleteItem)({
               TableName: oneKeyTableName,
               Key: {
-                name: { S: 'test-name' }
-              }
+                name: { S: 'test-name' },
+              },
             })
 
             await Promise.all([agentPromise, operation()])
@@ -238,8 +238,8 @@ describe('Plugin', () => {
               TableName: oneKeyTableName,
               Item: {
                 name: { S: 'test-get-name' },
-                data: { S: 'test-get-data' }
-              }
+                data: { S: 'test-get-data' },
+              },
             })
 
             // Wait a bit to ensure the put completes
@@ -254,15 +254,15 @@ describe('Plugin', () => {
                 'aws.request.body.TableName': oneKeyTableName,
                 'aws.request.body.Key.name.S': 'test-get-name',
                 'aws.response.body.Item.name.S': 'test-get-name',
-                'aws.response.body.Item.data': 'redacted'
-              }
+                'aws.response.body.Item.data': 'redacted',
+              },
             })
 
             const operation = () => promisify(dynamo.getItem)({
               TableName: oneKeyTableName,
               Key: {
-                name: { S: 'test-get-name' }
-              }
+                name: { S: 'test-get-name' },
+              },
             })
 
             await Promise.all([agentPromise, operation()])
@@ -305,7 +305,7 @@ describe('Plugin', () => {
                     'ptr.kind': DYNAMODB_PTR_KIND,
                     'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
                     'ptr.hash': expectedHashes,
-                    'link.kind': 'span-pointer'
+                    'link.kind': 'span-pointer',
                   })
                 }
               }
@@ -326,10 +326,10 @@ describe('Plugin', () => {
                     TableName: oneKeyTableName,
                     Item: {
                       name: { S: 'test1' },
-                      foo: { S: 'bar1' }
-                    }
+                      foo: { S: 'bar1' },
+                    },
                   })
-                }
+                },
               })
             })
 
@@ -341,10 +341,10 @@ describe('Plugin', () => {
                     TableName: oneKeyTableName,
                     Item: {
                       name: { S: 'test2' },
-                      foo: { S: 'bar2' }
-                    }
+                      foo: { S: 'bar2' },
+                    },
                   })
-                }
+                },
               })
             })
 
@@ -356,10 +356,10 @@ describe('Plugin', () => {
                     TableName: oneKeyTableName,
                     Item: {
                       name: { S: 'test3' },
-                      foo: { S: 'bar3' }
-                    }
+                      foo: { S: 'bar3' },
+                    },
                   })
-                }
+                },
               })
             })
 
@@ -373,11 +373,11 @@ describe('Plugin', () => {
                     AttributeUpdates: {
                       foo: {
                         Action: 'PUT',
-                        Value: { S: 'bar4' }
-                      }
-                    }
+                        Value: { S: 'bar4' },
+                      },
+                    },
                   })
-                }
+                },
               })
             })
 
@@ -387,9 +387,9 @@ describe('Plugin', () => {
                 operation () {
                   return promisify(dynamo.deleteItem)({
                     TableName: oneKeyTableName,
-                    Key: { name: { S: 'test1' } }
+                    Key: { name: { S: 'test1' } },
                   })
-                }
+                },
               })
             })
 
@@ -404,7 +404,7 @@ describe('Plugin', () => {
                 expectedHashes: [
                   '955ab85fc7d1d63fe4faf18696514f13',
                   '856c95a173d9952008a70283175041fc',
-                  '9682c132f1900106a792f166d0619e0b'
+                  '9682c132f1900106a792f166d0619e0b',
                 ],
                 operation () {
                   return promisify(dynamo.transactWriteItems)({
@@ -414,9 +414,9 @@ describe('Plugin', () => {
                           TableName: oneKeyTableName,
                           Item: {
                             name: { S: 'test4' },
-                            foo: { S: 'bar4' }
-                          }
-                        }
+                            foo: { S: 'bar4' },
+                          },
+                        },
                       },
                       {
                         Update: {
@@ -424,19 +424,19 @@ describe('Plugin', () => {
                           Key: { name: { S: 'test2' } },
                           UpdateExpression: 'SET foo = :newfoo',
                           ExpressionAttributeValues: {
-                            ':newfoo': { S: 'bar5' }
-                          }
-                        }
+                            ':newfoo': { S: 'bar5' },
+                          },
+                        },
                       },
                       {
                         Delete: {
                           TableName: oneKeyTableName,
-                          Key: { name: { S: 'test3' } }
-                        }
-                      }
-                    ]
+                          Key: { name: { S: 'test3' } },
+                        },
+                      },
+                    ],
                   })
-                }
+                },
               })
             })
 
@@ -450,7 +450,7 @@ describe('Plugin', () => {
                 env: '{"OneKeyTable": ["name"]}',
                 expectedHashes: [
                   '955ab85fc7d1d63fe4faf18696514f13',
-                  '9682c132f1900106a792f166d0619e0b'
+                  '9682c132f1900106a792f166d0619e0b',
                 ],
                 operation () {
                   return promisify(dynamo.batchWriteItem)({
@@ -460,21 +460,21 @@ describe('Plugin', () => {
                           PutRequest: {
                             Item: {
                               name: { S: 'test4' },
-                              foo: { S: 'bar4' }
-                            }
-                          }
+                              foo: { S: 'bar4' },
+                            },
+                          },
                         },
                         {
                           DeleteRequest: {
                             Key: {
-                              name: { S: 'test3' }
-                            }
-                          }
-                        }
-                      ]
-                    }
+                              name: { S: 'test3' },
+                            },
+                          },
+                        },
+                      ],
+                    },
                   })
-                }
+                },
               })
             })
           })
@@ -489,10 +489,10 @@ describe('Plugin', () => {
                     TableName: twoKeyTableName,
                     Item: {
                       id: { N: '1' },
-                      binary: { B: Buffer.from('Hello world 1') }
-                    }
+                      binary: { B: Buffer.from('Hello world 1') },
+                    },
                   })
-                }
+                },
               })
             })
 
@@ -504,10 +504,10 @@ describe('Plugin', () => {
                     TableName: twoKeyTableName,
                     Item: {
                       id: { N: '2' },
-                      binary: { B: Buffer.from('Hello world 2') }
-                    }
+                      binary: { B: Buffer.from('Hello world 2') },
+                    },
                   })
-                }
+                },
               })
             })
 
@@ -518,10 +518,10 @@ describe('Plugin', () => {
                     TableName: twoKeyTableName,
                     Item: {
                       id: { N: '3' },
-                      binary: { B: Buffer.from('Hello world 3') }
-                    }
+                      binary: { B: Buffer.from('Hello world 3') },
+                    },
                   })
-                }
+                },
               })
             })
 
@@ -530,8 +530,8 @@ describe('Plugin', () => {
                 TableName: twoKeyTableName,
                 Item: {
                   id: { N: '100' },
-                  binary: { B: Buffer.from('abc') }
-                }
+                  binary: { B: Buffer.from('abc') },
+                },
               })
               await wait(100)
               return testSpanPointers({
@@ -542,16 +542,16 @@ describe('Plugin', () => {
                     TableName: twoKeyTableName,
                     Key: {
                       id: { N: '100' },
-                      binary: { B: Buffer.from('abc') }
+                      binary: { B: Buffer.from('abc') },
                     },
                     AttributeUpdates: {
                       someOtherField: {
                         Action: 'PUT',
-                        Value: { S: 'new value' }
-                      }
-                    }
+                        Value: { S: 'new value' },
+                      },
+                    },
                   })
-                }
+                },
               })
             })
 
@@ -560,8 +560,8 @@ describe('Plugin', () => {
                 TableName: twoKeyTableName,
                 Item: {
                   id: { N: '200' },
-                  binary: { B: Buffer.from('Hello world') }
-                }
+                  binary: { B: Buffer.from('Hello world') },
+                },
               })
               await wait(100)
               return testSpanPointers({
@@ -572,10 +572,10 @@ describe('Plugin', () => {
                     TableName: twoKeyTableName,
                     Key: {
                       id: { N: '200' },
-                      binary: { B: Buffer.from('Hello world') }
-                    }
+                      binary: { B: Buffer.from('Hello world') },
+                    },
                   })
-                }
+                },
               })
             })
 
@@ -590,7 +590,7 @@ describe('Plugin', () => {
                 expectedHashes: [
                   'dd071963cd90e4b3088043f0b9a9f53c',
                   '7794824f72d673ac7844353bc3ea25d9',
-                  '8a6f801cc4e7d1d5e0dd37e0904e6316'
+                  '8a6f801cc4e7d1d5e0dd37e0904e6316',
                 ],
                 operation () {
                   return promisify(dynamo.transactWriteItems)({
@@ -600,35 +600,35 @@ describe('Plugin', () => {
                           TableName: twoKeyTableName,
                           Item: {
                             id: { N: '4' },
-                            binary: { B: Buffer.from('Hello world 4') }
-                          }
-                        }
+                            binary: { B: Buffer.from('Hello world 4') },
+                          },
+                        },
                       },
                       {
                         Update: {
                           TableName: twoKeyTableName,
                           Key: {
                             id: { N: '2' },
-                            binary: { B: Buffer.from('Hello world 2') }
+                            binary: { B: Buffer.from('Hello world 2') },
                           },
                           UpdateExpression: 'SET someOtherField = :newvalue',
                           ExpressionAttributeValues: {
-                            ':newvalue': { S: 'new value' }
-                          }
-                        }
+                            ':newvalue': { S: 'new value' },
+                          },
+                        },
                       },
                       {
                         Delete: {
                           TableName: twoKeyTableName,
                           Key: {
                             id: { N: '3' },
-                            binary: { B: Buffer.from('Hello world 3') }
-                          }
-                        }
-                      }
-                    ]
+                            binary: { B: Buffer.from('Hello world 3') },
+                          },
+                        },
+                      },
+                    ],
                   })
-                }
+                },
               })
             })
 
@@ -642,7 +642,7 @@ describe('Plugin', () => {
                 env: '{"TwoKeyTable": ["id", "binary"]}',
                 expectedHashes: [
                   '1f64650acbe1ae4d8413049c6bd9bbe8',
-                  '8a6f801cc4e7d1d5e0dd37e0904e6316'
+                  '8a6f801cc4e7d1d5e0dd37e0904e6316',
                 ],
                 operation () {
                   return promisify(dynamo.batchWriteItem)({
@@ -652,22 +652,22 @@ describe('Plugin', () => {
                           PutRequest: {
                             Item: {
                               id: { N: '5' },
-                              binary: { B: Buffer.from('Hello world 5') }
-                            }
-                          }
+                              binary: { B: Buffer.from('Hello world 5') },
+                            },
+                          },
                         },
                         {
                           DeleteRequest: {
                             Key: {
                               id: { N: '3' },
-                              binary: { B: Buffer.from('Hello world 3') }
-                            }
-                          }
-                        }
-                      ]
-                    }
+                              binary: { B: Buffer.from('Hello world 3') },
+                            },
+                          },
+                        },
+                      ],
+                    },
                   })
-                }
+                },
               })
             })
           })
@@ -703,7 +703,7 @@ describe('Plugin', () => {
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         assert.deepStrictEqual(result, {
-          Table1: ['key1', 'key2']
+          Table1: ['key1', 'key2'],
         })
       })
 
@@ -714,7 +714,7 @@ describe('Plugin', () => {
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         assert.deepStrictEqual(result, {
           Table1: ['key1'],
-          Table2: ['key2', 'key3']
+          Table2: ['key2', 'key3'],
         })
       })
 
@@ -724,7 +724,7 @@ describe('Plugin', () => {
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         assert.deepStrictEqual(result, {
-          Table42: ['key1']
+          Table42: ['key1'],
         })
       })
     })
@@ -766,7 +766,7 @@ describe('Plugin', () => {
         const item = {
           userId: { S: 'user123' },
           email: { S: 'test@example.com' },
-          verified: { BOOL: true }
+          verified: { BOOL: true },
         }
         const keyConfig = { UserEmailTable: ['userId', 'email'] }
 
@@ -780,7 +780,7 @@ describe('Plugin', () => {
         const item = {
           userId: { S: 'user123' },
           timestamp: { N: '1234567' },
-          action: { S: 'login' }
+          action: { S: 'login' },
         }
         const keyConfig = { UserActivityTable: ['userId', 'timestamp'] }
 
@@ -796,7 +796,7 @@ describe('Plugin', () => {
         const item = {
           key1: { B: binary1 },
           key2: { B: binary2 },
-          data: { S: 'test' }
+          data: { S: 'test' },
         }
         const keyConfig = { BinaryTable: ['key1', 'key2'] }
 
@@ -809,7 +809,7 @@ describe('Plugin', () => {
         const item = { userId: { S: 'user123' } }
         const keyConfig = {
           Table1: ['userId'],
-          Table2: ['userId']
+          Table2: ['userId'],
         }
 
         const hash1 = DynamoDb.calculatePutItemHash('Table1', item, keyConfig)
@@ -886,7 +886,7 @@ describe('Plugin', () => {
         const tableName = 'UserEmailTable'
         const keys = {
           userId: { S: 'user123' },
-          email: { S: 'test@example.com' }
+          email: { S: 'test@example.com' },
         }
         const actualHash = DynamoDb.calculateHashWithKnownKeys(tableName, keys)
         const expectedHash = generatePointerHash([tableName, 'email', 'test@example.com', 'userId', 'user123'])
@@ -897,7 +897,7 @@ describe('Plugin', () => {
         const tableName = 'UserActivityTable'
         const keys = {
           userId: { S: 'user123' },
-          timestamp: { N: '1234567' }
+          timestamp: { N: '1234567' },
         }
         const actualHash = DynamoDb.calculateHashWithKnownKeys(tableName, keys)
         const expectedHash = generatePointerHash([tableName, 'timestamp', '1234567', 'userId', 'user123'])
@@ -910,7 +910,7 @@ describe('Plugin', () => {
         const binary2 = Buffer.from('1ef230')
         const keys = {
           key1: { B: binary1 },
-          key2: { B: binary2 }
+          key2: { B: binary2 },
         }
         const actualHash = DynamoDb.calculateHashWithKnownKeys(tableName, keys)
         const expectedHash = generatePointerHash([tableName, 'key1', binary1, 'key2', binary2])
@@ -951,7 +951,7 @@ describe('Plugin', () => {
         it('handles mixed valid and invalid key types', () => {
           const keys = {
             validKey: { S: 'test' },
-            invalidKey: { INVALID: 'value' }
+            invalidKey: { INVALID: 'value' },
           }
           const hash = DynamoDb.calculateHashWithKnownKeys('TestTable', keys)
           assert.strictEqual(hash, undefined)

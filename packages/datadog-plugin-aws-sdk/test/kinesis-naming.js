@@ -6,16 +6,16 @@ const rawExpectedSchema = {
   outbound: {
     v0: {
       serviceName: () => 'test-aws-kinesis',
-      opName: () => 'aws.request'
+      opName: () => 'aws.request',
     },
     v1: {
       serviceName: () => 'test',
-      opName: () => 'aws.kinesis.request'
-    }
-  }
+      opName: () => 'aws.kinesis.request',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

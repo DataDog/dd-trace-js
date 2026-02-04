@@ -8,7 +8,7 @@ const {
   sandboxCwd,
   useSandbox,
   FakeAgent,
-  spawnProc
+  spawnProc,
 } = require('../helpers')
 
 describe('ASM Data collection', () => {
@@ -28,7 +28,7 @@ describe('ASM Data collection', () => {
       const env = {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_APPSEC_ENABLED: 'true',
-        DD_APPSEC_RULES: path.join(cwd, 'appsec', 'data-collection', 'data-collection-rules.json')
+        DD_APPSEC_RULES: path.join(cwd, 'appsec', 'data-collection', 'data-collection-rules.json'),
       }
 
       if (extendedDataCollection) {
@@ -77,12 +77,12 @@ describe('ASM Data collection', () => {
         'user-agent',
         'accept',
         'host',
-        'accept-encoding'
+        'accept-encoding',
       ]
 
       const expectedResponseHeaders = [
         'content-type',
-        'content-language'
+        'content-language',
       ]
 
       await axios.get('/', { headers: { 'User-Agent': 'Arachni/v1' } })
@@ -99,7 +99,7 @@ describe('ASM Data collection', () => {
         'accept',
         'host',
         'accept-encoding',
-        'connection'
+        'connection',
       ]
 
       // DD_APPSEC_MAX_COLLECTED_HEADERS is set to 25, so it is expected to collect
@@ -110,7 +110,7 @@ describe('ASM Data collection', () => {
         ),
         'x-powered-by',
         'content-type',
-        'content-language'
+        'content-language',
       ]
 
       await axios.get('/', { headers: { 'User-Agent': 'Arachni/v1' } })

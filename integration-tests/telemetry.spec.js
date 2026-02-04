@@ -27,8 +27,8 @@ describe('telemetry', () => {
         cwd,
         env: {
           AGENT_PORT: agent.port,
-          DD_LOGS_INJECTION: 'true'
-        }
+          DD_LOGS_INJECTION: 'true',
+        },
       })
     })
 
@@ -68,7 +68,7 @@ describe('telemetry', () => {
         assertObjectContains(configuration, [
           { name: 'DD_LOG_INJECTION', value: true, origin: 'default' },
           { name: 'DD_LOG_INJECTION', value: true, origin: 'env_var' },
-          { name: 'DD_LOG_INJECTION', value: false, origin: 'code' }
+          { name: 'DD_LOG_INJECTION', value: false, origin: 'code' },
         ])
       }, 'app-started', 5_000, 1)
     })

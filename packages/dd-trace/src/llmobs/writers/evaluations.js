@@ -3,7 +3,7 @@
 const {
   EVALUATIONS_ENDPOINT,
   EVALUATIONS_EVENT_TYPE,
-  EVALUATIONS_INTAKE
+  EVALUATIONS_INTAKE,
 } = require('../constants/writers')
 const BaseWriter = require('./base')
 
@@ -13,7 +13,7 @@ class LLMObsEvalMetricsWriter extends BaseWriter {
       config,
       intake: EVALUATIONS_INTAKE,
       eventType: EVALUATIONS_EVENT_TYPE,
-      endpoint: EVALUATIONS_ENDPOINT
+      endpoint: EVALUATIONS_ENDPOINT,
     })
   }
 
@@ -22,9 +22,9 @@ class LLMObsEvalMetricsWriter extends BaseWriter {
       data: {
         type: this._eventType,
         attributes: {
-          metrics: events
-        }
-      }
+          metrics: events,
+        },
+      },
     }
   }
 }

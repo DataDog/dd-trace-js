@@ -24,7 +24,7 @@ describe('no SameSite cookie analyzer', () => {
     enabled: true,
     requestSampling: 100,
     maxConcurrentRequests: 1,
-    maxContextOperations: 1
+    maxContextOperations: 1,
   }
   prepareTestServerForIast('no HttpOnly cookie analyzer',
     (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {

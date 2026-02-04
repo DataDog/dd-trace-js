@@ -44,7 +44,7 @@ class EventPlugin extends TracingPlugin {
     const event = {
       entryType: this.#entryType,
       startTime,
-      duration
+      duration,
     }
 
     if (!this.#eventFilter(event)) {

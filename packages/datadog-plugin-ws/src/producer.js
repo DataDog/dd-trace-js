@@ -4,12 +4,12 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 const {
   WEBSOCKET_PTR_KIND,
   SPAN_POINTER_DIRECTION,
-  SPAN_POINTER_DIRECTION_NAME
+  SPAN_POINTER_DIRECTION_NAME,
 } = require('../../dd-trace/src/constants')
 const {
   incrementWebSocketCounter,
   buildWebSocketSpanPointerHash,
-  hasDistributedTracingContext
+  hasDistributedTracingContext,
 } = require('./util')
 
 class WSProducerPlugin extends TracingPlugin {
@@ -36,8 +36,8 @@ class WSProducerPlugin extends TracingPlugin {
 
       },
       metrics: {
-        'websocket.message.length': byteLength
-      }
+        'websocket.message.length': byteLength,
+      },
 
     }, ctx)
 

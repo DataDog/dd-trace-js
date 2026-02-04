@@ -46,7 +46,7 @@ describe('Sns', function () {
 
           sqs.getQueueAttributes({
             QueueUrl,
-            AttributeNames: ['QueueArn']
+            AttributeNames: ['QueueArn'],
           }, (err, data) => {
             if (err) return cb(err)
 
@@ -55,13 +55,13 @@ describe('Sns', function () {
             subParams = {
               Protocol: 'sqs',
               TopicArn,
-              Endpoint: QueueArn
+              Endpoint: QueueArn,
             }
 
             receiveParams = {
               QueueUrl,
               MessageAttributeNames: ['.*'],
-              WaitTimeSeconds: 1
+              WaitTimeSeconds: 1,
             }
 
             cb()
@@ -127,7 +127,7 @@ describe('Sns', function () {
                 }
 
                 assertObjectContains(publishSpanMeta, {
-                  'pathway.hash': expectedProducerHash
+                  'pathway.hash': expectedProducerHash,
                 })
               }).then(done, done)
             })
@@ -158,7 +158,7 @@ describe('Sns', function () {
                 }
 
                 assertObjectContains(consumeSpanMeta, {
-                  'pathway.hash': expectedConsumerHash
+                  'pathway.hash': expectedConsumerHash,
                 })
               }).then(done, done)
             })
@@ -245,17 +245,17 @@ describe('Sns', function () {
                 PublishBatchRequestEntries: [
                   {
                     Id: '1',
-                    Message: 'message DSM 1'
+                    Message: 'message DSM 1',
                   },
                   {
                     Id: '2',
-                    Message: 'message DSM 2'
+                    Message: 'message DSM 2',
                   },
                   {
                     Id: '3',
-                    Message: 'message DSM 3'
-                  }
-                ]
+                    Message: 'message DSM 3',
+                  },
+                ],
               }, () => {
                 nowStub.restore()
               })

@@ -10,7 +10,7 @@ const {
   getBuildNumsFromGithub,
   get,
   artifactsUrl,
-  circleHeaders
+  circleHeaders,
 } = require('./get-results')
 const goalSummary = require('./goal.json')
 

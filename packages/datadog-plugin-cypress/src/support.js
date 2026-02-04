@@ -52,11 +52,11 @@ function getRetriedTests (test, numRetries, tags) {
     // TODO: signal in framework logs that this is a retry.
     // TODO: Change it so these tests are allowed to fail.
     const clonedTest = test.clone()
-    tags.forEach(tag => {
+    for (const tag of tags) {
       if (tag) {
         clonedTest[tag] = true
       }
-    })
+    }
     retriedTests.push(clonedTest)
   }
   return retriedTests
@@ -108,7 +108,7 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
       retriedTests = getRetriedTests(test, earlyFlakeDetectionNumRetries, [
         '_ddIsModified',
         '_ddIsEfdRetry',
-        isKnownTestsEnabled && isNewTest(test) && '_ddIsNew'
+        isKnownTestsEnabled && isNewTest(test) && '_ddIsNew',
       ])
     } else if (isNew && isEarlyFlakeDetectionEnabled) {
       retryMessage = 'to detect flakes because it is new'
@@ -141,7 +141,7 @@ beforeEach(function () {
 
   cy.task('dd:beforeEach', {
     testName,
-    testSuite: Cypress.mocha.getRootSuite().file
+    testSuite: Cypress.mocha.getRootSuite().file,
   }).then(({ traceId, shouldSkip }) => {
     Cypress.env('traceId', traceId)
     if (shouldSkip) {
@@ -156,7 +156,7 @@ beforeEach(function () {
 before(function () {
   cy.task('dd:testSuiteStart', {
     testSuite: Cypress.mocha.getRootSuite().file,
-    testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute
+    testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
   }).then((suiteConfig) => {
     if (suiteConfig) {
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
@@ -194,7 +194,7 @@ afterEach(function () {
     isNew: currentTest._ddIsNew,
     isEfdRetry: currentTest._ddIsEfdRetry,
     isAttemptToFix: currentTest._ddIsAttemptToFix,
-    isModified: currentTest._ddIsModified
+    isModified: currentTest._ddIsModified,
   }
   try {
     testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line

@@ -77,5 +77,5 @@ module.exports = {
   CI_ENV_VARS,
   CI_NODE_NAME,
   CI_NODE_LABELS,
-  PR_NUMBER
+  PR_NUMBER,
 }

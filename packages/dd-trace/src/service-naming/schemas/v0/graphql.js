@@ -6,9 +6,9 @@ const graphql = {
   server: {
     graphql: {
       opName: () => 'graphql.execute',
-      serviceName: identityService
-    }
-  }
+      serviceName: identityService,
+    },
+  },
 }
 
 module.exports = graphql

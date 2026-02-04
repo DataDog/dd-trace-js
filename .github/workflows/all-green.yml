@@ -21,8 +21,39 @@ jobs:
     steps:
       - uses: wechuli/allcheckspassed@b0eaef5be76003932c9520e2b3dd03c85cc43d87 # v2.2.0
         with:
-          delay: ${{ github.run_attempt == 1 && '6' || '0' }} # 6m on first attempt, no delay on reruns
-          retries: 30 # once per minute, some checks take up to 15 min, retries are possible
+          delay: ${{ github.run_attempt == 1 && '7' || '0' }} # 7 minutes on first attempt, no delay on reruns
+          retries: 15
+          polling_interval: 2 # Once every 2 minutes
           checks_exclude: devflow.*
           fail_fast: false
           verbose: true # What checks are still waited for?
+      - name: Require vendor validation when vendor/ changes
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          vendor_changed="$(gh api "repos/${REPO}/compare/${BASE_SHA}...${HEAD_SHA}" --jq 'any(.files[].filename; startswith("vendor/"))')"
+          if [ "$vendor_changed" != "true" ]; then
+            exit 0
+          fi
+
+          # If vendor/ was touched, require *some* vendor validation check to be present:
+          # - For most PRs: `Validate vendored bundle / validate-vendored-bundle`
+          # - For Dependabot vendor PRs: `Dependabot Automation / vendor-validate`
+          check_names="$(gh api "repos/${REPO}/commits/${{ github.event.pull_request.head.sha }}/check-runs" \
+            -H "Accept: application/vnd.github+json" \
+            --paginate \
+            --jq '.check_runs[].name')"
+
+          if echo "$check_names" | grep -Eq '^(validate-vendored-bundle|vendor-validate)$'; then
+            exit 0
+          fi
+
+          echo "vendor/ changed but no vendor validation check was found."
+          echo "Expected a check run named 'validate-vendored-bundle' or 'vendor-validate'."
+          exit 1

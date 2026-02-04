@@ -7,7 +7,7 @@ const {
   curlAndAssertMessage,
   spawnPluginIntegrationTestProc,
   assertObjectContains,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -36,7 +36,7 @@ describe('esm integration test', () => {
     for (const variant of ['destructure', 'star']) {
       it(`is instrumented ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, {
-          VERSION: version
+          VERSION: version,
         })
         proc.url += '/hello'
 
@@ -48,7 +48,7 @@ describe('esm integration test', () => {
 
       it('receives missing route trace', async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, {
-          VERSION: version
+          VERSION: version,
         })
         proc.url += '/missing'
 

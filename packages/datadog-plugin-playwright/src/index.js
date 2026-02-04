@@ -62,7 +62,7 @@ class PlaywrightPlugin extends CiPlugin {
     this.addSub('ci:playwright:test:is-modified', ({
       filePath,
       modifiedFiles,
-      onDone
+      onDone,
     }) => {
       const testSuite = getTestSuitePath(filePath, this.repositoryRoot)
       const isModified = isModifiedTest(testSuite, 0, 0, modifiedFiles, this.constructor.id)
@@ -74,7 +74,7 @@ class PlaywrightPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
-      onDone
+      onDone,
     }) => {
       this.testModuleSpan.setTag(TEST_STATUS, status)
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -106,7 +106,7 @@ class PlaywrightPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
+        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
       })
       appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
@@ -140,8 +140,8 @@ class PlaywrightPlugin extends CiPlugin {
         tags: {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
-          ...testSuiteMetadata
-        }
+          ...testSuiteMetadata,
+        },
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       ctx.parentStore = store
@@ -171,7 +171,7 @@ class PlaywrightPlugin extends CiPlugin {
 
     this.addSub('ci:playwright:test:page-goto', ({
       isRumActive,
-      page
+      page,
     }) => {
       const store = storage('legacy').getStore()
       const span = store && store.span
@@ -196,7 +196,7 @@ class PlaywrightPlugin extends CiPlugin {
             name: 'datadog-ci-visibility-test-execution-id',
             value: span.context().toTraceId(),
             domain,
-            path: '/'
+            path: '/',
           }])
         }
       }
@@ -213,7 +213,7 @@ class PlaywrightPlugin extends CiPlugin {
             ...span,
             span_id: id(span.span_id),
             trace_id: id(span.trace_id),
-            parent_id: id(span.parent_id)
+            parent_id: id(span.parent_id),
           }
           if (span.name === 'playwright.test') {
             // TODO: remove this comment
@@ -246,9 +246,9 @@ class PlaywrightPlugin extends CiPlugin {
         formattedTraces.push(formattedTrace)
       }
 
-      formattedTraces.forEach(trace => {
+      for (const trace of formattedTraces) {
         this.tracer._exporter.export(trace)
-      })
+      }
     })
 
     this.addBind('ci:playwright:test:start', (ctx) => {
@@ -257,7 +257,7 @@ class PlaywrightPlugin extends CiPlugin {
         testSuiteAbsolutePath,
         testSourceLine,
         browserName,
-        isDisabled
+        isDisabled,
       } = ctx
       const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
@@ -299,7 +299,7 @@ class PlaywrightPlugin extends CiPlugin {
       hasFailedAttemptToFixRetries,
       isAtrRetry,
       isModified,
-      onDone
+      onDone,
     }) => {
       if (!span) return
 
@@ -356,7 +356,7 @@ class PlaywrightPlugin extends CiPlugin {
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
       }
-      steps.forEach(step => {
+      for (const step of steps) {
         const stepStartTime = step.startTime.getTime()
         const stepSpan = this.tracer.startSpan('playwright.step', {
           childOf: span,
@@ -364,8 +364,8 @@ class PlaywrightPlugin extends CiPlugin {
           tags: {
             [COMPONENT]: this.constructor.id,
             'playwright.step': step.title,
-            [RESOURCE_NAME]: step.title
-          }
+            [RESOURCE_NAME]: step.title,
+          },
         })
         if (step.error) {
           stepSpan.setTag('error', step.error)
@@ -375,7 +375,7 @@ class PlaywrightPlugin extends CiPlugin {
           stepDuration = 0
         }
         stepSpan.finish(stepStartTime + stepDuration)
-      })
+      }
       if (testStatus === 'fail') {
         this.numFailedTests++
       }
@@ -387,7 +387,7 @@ class PlaywrightPlugin extends CiPlugin {
           hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS],
           isNew,
           isRum: isRUMActive,
-          browserDriver: 'playwright'
+          browserDriver: 'playwright',
         }
       )
       span.finish()
@@ -406,7 +406,7 @@ class PlaywrightPlugin extends CiPlugin {
       isNew,
       isDisabled,
       isModified,
-      isQuarantined
+      isQuarantined,
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
       const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
@@ -443,7 +443,7 @@ class PlaywrightPlugin extends CiPlugin {
     const testSuiteSpan = this._testSuiteSpansByTestSuiteAbsolutePath.get(testSuiteAbsolutePath)
 
     const extraTags = {
-      [TEST_SOURCE_START]: testSourceLine
+      [TEST_SOURCE_START]: testSourceLine,
     }
     if (testSourceFile) {
       extraTags[TEST_SOURCE_FILE] = testSourceFile || testSuite

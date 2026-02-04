@@ -13,6 +13,6 @@ module.exports = {
   sanitizeObject,
 
   nested: {
-    sanitize
-  }
+    sanitize,
+  },
 }

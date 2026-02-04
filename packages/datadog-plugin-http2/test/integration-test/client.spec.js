@@ -8,7 +8,7 @@ const {
   spawnPluginIntegrationTestProc,
   sandboxCwd,
   useSandbox,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 
 describe('esm', () => {
@@ -67,7 +67,7 @@ async function curl (url) {
 
     const req = client.request({
       ':path': urlObject.pathname,
-      ':method': 'GET'
+      ':method': 'GET',
     })
     req.on('error', reject)
 

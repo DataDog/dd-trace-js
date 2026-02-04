@@ -23,7 +23,7 @@ describe('Plugin', () => {
       // to the queue.
       function connect (mongooseVersion) {
         const connectOptions = {
-          bufferCommands: false
+          bufferCommands: false,
         }
 
         // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 6

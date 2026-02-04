@@ -162,7 +162,7 @@ function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
     skippedSuites,
     suitesToRun,
     hasUnskippableSuites,
-    hasForcedToRunSuites
+    hasForcedToRunSuites,
   }
 }
 

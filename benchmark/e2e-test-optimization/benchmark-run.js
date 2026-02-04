@@ -25,7 +25,7 @@ const getCommonHeaders = () => {
     'Content-Type': 'application/json',
     authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
     Accept: 'application/vnd.github.v3+json',
-    'user-agent': 'dd-trace benchmark tests'
+    'user-agent': 'dd-trace benchmark tests',
   }
 }
 
@@ -36,13 +36,13 @@ const triggerWorkflow = () => {
     let response = ''
     const body = JSON.stringify({
       ref: 'main',
-      inputs: { branch: getBranchUnderTest() }
+      inputs: { branch: getBranchUnderTest() },
     })
     const request = https.request(
       DISPATCH_WORKFLOW_URL,
       {
         method: 'POST',
-        headers: getCommonHeaders()
+        headers: getCommonHeaders(),
       }, (res) => {
         res.on('data', (chunk) => {
           response += chunk
@@ -65,7 +65,7 @@ const getWorkflowRunsInProgress = () => {
     const request = https.request(
       `${GET_WORKFLOWS_URL}?event=workflow_dispatch`,
       {
-        headers: getCommonHeaders()
+        headers: getCommonHeaders(),
       },
       (res) => {
         res.on('data', (chunk) => {
@@ -92,7 +92,7 @@ const getCurrentWorkflowJobs = (runId) => {
     const request = https.request(
       `${GET_WORKFLOWS_URL}/${runId}/jobs`,
       {
-        headers: getCommonHeaders()
+        headers: getCommonHeaders(),
       },
       (res) => {
         res.on('data', (chunk) => {

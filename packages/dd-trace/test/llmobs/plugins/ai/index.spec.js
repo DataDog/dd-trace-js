@@ -11,7 +11,7 @@ const {
   MOCK_STRING,
   useLlmObs,
   MOCK_NUMBER,
-  MOCK_OBJECT
+  MOCK_OBJECT,
 } = require('../../util')
 
 // ai<4.0.2 is not supported in CommonJS with Node.js < 22
@@ -23,7 +23,7 @@ function getAiSdkOpenAiPackage (vercelAiVersion) {
 
 describe('Plugin', () => {
   useEnv({
-    OPENAI_API_KEY: '<not-a-real-key>'
+    OPENAI_API_KEY: '<not-a-real-key>',
   })
 
   const { getEvents } = useLlmObs({ plugin: 'ai' })
@@ -41,7 +41,7 @@ describe('Plugin', () => {
       const OpenAI = OpenAIModule.get()
       openai = OpenAI.createOpenAI({
         baseURL: 'http://127.0.0.1:9126/vcr/openai',
-        compatibility: 'strict'
+        compatibility: 'strict',
       })
     })
 
@@ -50,7 +50,7 @@ describe('Plugin', () => {
         model: openai('gpt-4o-mini'),
         system: 'You are a helpful assistant',
         prompt: 'Hello, OpenAI!',
-        temperature: 0.5
+        temperature: 0.5,
       }
 
       if (semifies(realVersion, '>=5.0.0')) {
@@ -89,7 +89,7 @@ describe('Plugin', () => {
         name: 'doGenerate',
         inputMessages: [
           { content: 'You are a helpful assistant', role: 'system' },
-          { content: 'Hello, OpenAI!', role: 'user' }
+          { content: 'Hello, OpenAI!', role: 'user' },
         ],
         outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
         metadata: {
@@ -107,16 +107,16 @@ describe('Plugin', () => {
         properties: {
           name: { type: 'string' },
           age: { type: 'number' },
-          height: { type: 'string' }
+          height: { type: 'string' },
         },
         required: ['name', 'age', 'height'],
-        additionalProperties: false
+        additionalProperties: false,
       })
 
       await ai.generateObject({
         model: openai('gpt-4o-mini'),
         schema,
-        prompt: 'Invent a character for a video game'
+        prompt: 'Invent a character for a video game',
       })
 
       const { apmSpans, llmobsSpans } = await getEvents()
@@ -149,14 +149,14 @@ describe('Plugin', () => {
         inputMessages: [{ content: 'Invent a character for a video game', role: 'user' }],
         outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', integration: 'ai' }
+        tags: { ml_app: 'test', integration: 'ai' },
       })
     })
 
     it('creates a span for embed', async () => {
       await ai.embed({
         model: openai.embedding('text-embedding-ada-002'),
-        value: 'hello world'
+        value: 'hello world',
       })
 
       const { apmSpans, llmobsSpans } = await getEvents()
@@ -167,12 +167,12 @@ describe('Plugin', () => {
         spanKind: 'workflow',
         inputValue: 'hello world',
         outputValue: '[1 embedding(s) returned with size 1536]',
-        tags: { ml_app: 'test', integration: 'ai' }
+        tags: { ml_app: 'test', integration: 'ai' },
       }
 
       if (semifies(realVersion, '>=5.0.0')) {
         expectedWorkflowSpanEvent.metadata = {
-          maxRetries: MOCK_NUMBER
+          maxRetries: MOCK_NUMBER,
         }
       }
 
@@ -188,14 +188,14 @@ describe('Plugin', () => {
         inputDocuments: [{ text: 'hello world' }],
         outputValue: '[1 embedding(s) returned with size 1536]',
         metrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', integration: 'ai' }
+        tags: { ml_app: 'test', integration: 'ai' },
       })
     })
 
     it('creates a span for embedMany', async () => {
       await ai.embedMany({
         model: openai.embedding('text-embedding-ada-002'),
-        values: ['hello world', 'goodbye world']
+        values: ['hello world', 'goodbye world'],
       })
 
       const { apmSpans, llmobsSpans } = await getEvents()
@@ -206,11 +206,11 @@ describe('Plugin', () => {
         spanKind: 'workflow',
         inputValue: JSON.stringify(['hello world', 'goodbye world']),
         outputValue: '[2 embedding(s) returned with size 1536]',
-        tags: { ml_app: 'test', integration: 'ai' }
+        tags: { ml_app: 'test', integration: 'ai' },
       }
       if (semifies(realVersion, '>=5.0.0')) {
         expectedWorkflowSpanEvent.metadata = {
-          maxRetries: MOCK_NUMBER
+          maxRetries: MOCK_NUMBER,
         }
       }
 
@@ -226,7 +226,7 @@ describe('Plugin', () => {
         inputDocuments: [{ text: 'hello world' }, { text: 'goodbye world' }],
         outputValue: '[2 embedding(s) returned with size 1536]',
         metrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', integration: 'ai' }
+        tags: { ml_app: 'test', integration: 'ai' },
       })
     })
 
@@ -236,7 +236,7 @@ describe('Plugin', () => {
         system: 'You are a helpful assistant',
         prompt: 'Hello, OpenAI!',
         maxTokens: 100,
-        temperature: 0.5
+        temperature: 0.5,
       }
       if (semifies(realVersion, '>=5.0.0')) {
         options.maxOutputTokens = 100
@@ -263,7 +263,7 @@ describe('Plugin', () => {
         inputValue: 'Hello, OpenAI!',
         outputValue: 'Hello! How can I assist you today?', // assert text from stream is fully captured
         metadata: expectedMetadata,
-        tags: { ml_app: 'test', integration: 'ai' }
+        tags: { ml_app: 'test', integration: 'ai' },
       })
 
       assertLlmObsSpanEvent(llmobsSpans[1], {
@@ -275,7 +275,7 @@ describe('Plugin', () => {
         name: 'doStream',
         inputMessages: [
           { content: 'You are a helpful assistant', role: 'system' },
-          { content: 'Hello, OpenAI!', role: 'user' }
+          { content: 'Hello, OpenAI!', role: 'user' },
         ],
         outputMessages: [{ content: 'Hello! How can I assist you today?', role: 'assistant' }],
         metadata: {
@@ -283,7 +283,7 @@ describe('Plugin', () => {
           temperature: 0.5,
         },
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', integration: 'ai' }
+        tags: { ml_app: 'test', integration: 'ai' },
       })
     })
 
@@ -293,16 +293,16 @@ describe('Plugin', () => {
         properties: {
           name: { type: 'string' },
           age: { type: 'number' },
-          height: { type: 'string' }
+          height: { type: 'string' },
         },
         required: ['name', 'age', 'height'],
-        additionalProperties: false
+        additionalProperties: false,
       })
 
       const result = await ai.streamObject({
         model: openai('gpt-4o-mini'),
         schema,
-        prompt: 'Invent a character for a video game'
+        prompt: 'Invent a character for a video game',
       })
 
       const partialObjectStream = result.partialObjectStream
@@ -328,7 +328,7 @@ describe('Plugin', () => {
         inputValue: 'Invent a character for a video game',
         outputValue: JSON.stringify(expectedCharacter),
         metadata: expectedWorkflowMetadata,
-        tags: { ml_app: 'test', integration: 'ai' }
+        tags: { ml_app: 'test', integration: 'ai' },
       })
 
       assertLlmObsSpanEvent(llmobsSpans[1], {
@@ -341,10 +341,10 @@ describe('Plugin', () => {
         inputMessages: [{ content: 'Invent a character for a video game', role: 'user' }],
         outputMessages: [{
           content: JSON.stringify(expectedCharacter),
-          role: 'assistant'
+          role: 'assistant',
         }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', integration: 'ai' }
+        tags: { ml_app: 'test', integration: 'ai' },
       })
     })
 
@@ -354,9 +354,9 @@ describe('Plugin', () => {
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
-          location: { type: 'string', description: 'The location to get the weather for' }
+          location: { type: 'string', description: 'The location to get the weather for' },
         },
-        required: ['location']
+        required: ['location'],
       })
 
       if (semifies(realVersion, '>=5.0.0')) {
@@ -366,9 +366,9 @@ describe('Plugin', () => {
             inputSchema: toolSchema,
             execute: async ({ location }) => ({
               location,
-              temperature: 72
-            })
-          })
+              temperature: 72,
+            }),
+          }),
         }
 
         additionalOptions = { stopWhen: ai.stepCountIs(5) }
@@ -379,8 +379,8 @@ describe('Plugin', () => {
           parameters: toolSchema,
           execute: async ({ location }) => ({
             location,
-            temperature: 72
-          })
+            temperature: 72,
+          }),
         })]
 
         additionalOptions = { maxSteps: 5 }
@@ -389,8 +389,8 @@ describe('Plugin', () => {
       if (semifies(openaiVersion, '>=2.0.50')) {
         additionalOptions.providerOptions = {
           openai: {
-            store: false
-          }
+            store: false,
+          },
         }
       }
 
@@ -399,7 +399,7 @@ describe('Plugin', () => {
         system: 'You are a helpful assistant',
         prompt: 'What is the weather in Tokyo?',
         tools,
-        ...additionalOptions
+        ...additionalOptions,
       })
 
       const toolCallId = result.steps[0].toolCalls[0].toolCallId
@@ -432,7 +432,7 @@ describe('Plugin', () => {
         name: 'doGenerate',
         inputMessages: [
           { content: 'You are a helpful assistant', role: 'system' },
-          { content: 'What is the weather in Tokyo?', role: 'user' }
+          { content: 'What is the weather in Tokyo?', role: 'user' },
         ],
         outputMessages: [{
           role: 'assistant',
@@ -440,10 +440,10 @@ describe('Plugin', () => {
             tool_id: toolCallId,
             name: 'weather',
             arguments: {
-              location: 'Tokyo'
+              location: 'Tokyo',
             },
-            type: 'function'
-          }]
+            type: 'function',
+          }],
         }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', integration: 'ai' },
@@ -476,16 +476,16 @@ describe('Plugin', () => {
               tool_id: toolCallId,
               name: 'weather',
               arguments: {
-                location: 'Tokyo'
+                location: 'Tokyo',
               },
-              type: 'function'
-            }]
+              type: 'function',
+            }],
           },
           {
             content: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
             role: 'tool',
-            tool_id: toolCallId
-          }
+            tool_id: toolCallId,
+          },
         ],
         outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
@@ -499,9 +499,9 @@ describe('Plugin', () => {
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
-          location: { type: 'string', description: 'The location to get the weather for' }
+          location: { type: 'string', description: 'The location to get the weather for' },
         },
-        required: ['location']
+        required: ['location'],
       })
 
       if (semifies(realVersion, '>=5.0.0')) {
@@ -511,9 +511,9 @@ describe('Plugin', () => {
             inputSchema: toolSchema,
             execute: async ({ location }) => ({
               location,
-              temperature: 72
-            })
-          })
+              temperature: 72,
+            }),
+          }),
         }
 
         additionalOptions = { stopWhen: ai.stepCountIs(5) }
@@ -524,8 +524,8 @@ describe('Plugin', () => {
           parameters: toolSchema,
           execute: async ({ location }) => ({
             location,
-            temperature: 72
-          })
+            temperature: 72,
+          }),
         })]
 
         additionalOptions = { maxSteps: 5 }
@@ -534,8 +534,8 @@ describe('Plugin', () => {
       if (semifies(openaiVersion, '>=2.0.50')) {
         additionalOptions.providerOptions = {
           openai: {
-            store: false
-          }
+            store: false,
+          },
         }
       }
 
@@ -544,7 +544,7 @@ describe('Plugin', () => {
         system: 'You are a helpful assistant',
         prompt: 'What is the weather in Tokyo?',
         tools,
-        ...additionalOptions
+        ...additionalOptions,
       })
 
       const textStream = result.textStream
@@ -583,7 +583,7 @@ describe('Plugin', () => {
         name: 'doStream',
         inputMessages: [
           { content: 'You are a helpful assistant', role: 'system' },
-          { content: 'What is the weather in Tokyo?', role: 'user' }
+          { content: 'What is the weather in Tokyo?', role: 'user' },
         ],
         outputMessages: [{
           content: MOCK_STRING,
@@ -592,10 +592,10 @@ describe('Plugin', () => {
             tool_id: toolCallId,
             name: 'weather',
             arguments: {
-              location: 'Tokyo'
+              location: 'Tokyo',
             },
-            type: 'function'
-          }]
+            type: 'function',
+          }],
         }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', integration: 'ai' },
@@ -635,16 +635,16 @@ describe('Plugin', () => {
               tool_id: toolCallId,
               name: 'weather',
               arguments: {
-                location: 'Tokyo'
+                location: 'Tokyo',
               },
-              type: 'function'
-            }]
+              type: 'function',
+            }],
           },
           {
             content: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
             role: 'tool',
-            tool_id: toolCallId
-          }
+            tool_id: toolCallId,
+          },
         ],
         outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
@@ -659,8 +659,8 @@ describe('Plugin', () => {
         prompt: 'Hello, OpenAI!',
         temperature: 0.5,
         experimental_telemetry: {
-          functionId: 'test'
-        }
+          functionId: 'test',
+        },
       }
 
       if (semifies(realVersion, '>=5.0.0')) {
@@ -700,7 +700,7 @@ describe('Plugin', () => {
         name: 'test.doGenerate',
         inputMessages: [
           { content: 'You are a helpful assistant', role: 'system' },
-          { content: 'Hello, OpenAI!', role: 'user' }
+          { content: 'Hello, OpenAI!', role: 'user' },
         ],
         outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
         metadata: {

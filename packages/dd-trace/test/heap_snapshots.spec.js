@@ -22,8 +22,8 @@ describe('Heap Snapshots', () => {
       heapSnapshot: {
         count: 3,
         destination,
-        interval: 1
-      }
+        interval: 1,
+      },
     })
 
     clearInterval(interval)

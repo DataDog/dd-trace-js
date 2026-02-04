@@ -45,5 +45,5 @@ module.exports = {
   libuvThreadPoolSize,
   // Only used for testing
   getLibuvThreadPoolSize,
-  getEffectiveLibuvThreadCount
+  getEffectiveLibuvThreadCount,
 }

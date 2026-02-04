@@ -4,7 +4,7 @@ const { errorMonitor } = require('events')
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 function findCallbackIndex (args, lowerbound = 2) {
@@ -20,7 +20,9 @@ function getQueryResource (q) {
 }
 
 function wrapAllNames (names, action) {
-  names.forEach(name => action(name))
+  for (const name of names) {
+    action(name)
+  }
 }
 
 function wrapCallback (callback, ctx, channelPrefix) {
@@ -176,7 +178,7 @@ function wrapWithName (name) {
       return wrapCBandPromise(operation, name, {
         collection: { name: this._name || '_default' },
         bucket: { name: this._scope._bucket._name },
-        seedNodes: this._dd_connStr
+        seedNodes: this._dd_connStr,
       }, this, arguments)
     }
   }

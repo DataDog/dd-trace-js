@@ -28,8 +28,11 @@ class OtlpTransformerBase {
   constructor (resourceAttributes, protocol, signalType) {
     this.#resourceAttributes = this.transformAttributes(resourceAttributes)
     if (protocol === 'grpc') {
-      log.warn(`OTLP gRPC protocol is not supported for ${signalType}. ` +
-        'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.')
+      log.warn(
+        // eslint-disable-next-line @stylistic/max-len
+        'OTLP gRPC protocol is not supported for %s. Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.',
+        signalType
+      )
       protocol = 'http/protobuf'
     }
     this.protocol = protocol
@@ -68,7 +71,7 @@ class OtlpTransformerBase {
   transformResource () {
     return {
       attributes: this.#resourceAttributes,
-      droppedAttributesCount: 0
+      droppedAttributesCount: 0,
     }
   }
 
@@ -81,7 +84,7 @@ class OtlpTransformerBase {
   transformAttributes (attributes) {
     return Object.entries(attributes).map(([key, value]) => ({
       key,
-      value: this.transformAnyValue(value)
+      value: this.transformAnyValue(value),
     }))
   }
 
@@ -96,7 +99,7 @@ class OtlpTransformerBase {
 
     return Object.entries(attributes).map(([key, value]) => ({
       key,
-      value: { stringValue: String(value) }
+      value: { stringValue: String(value) },
     }))
   }
 
@@ -121,8 +124,8 @@ class OtlpTransformerBase {
     } else if (Array.isArray(value)) {
       return {
         arrayValue: {
-          values: value.map(v => this.transformAnyValue(v))
-        }
+          values: value.map(v => this.transformAnyValue(v)),
+        },
       }
     }
     // Fallback for any unexpected types

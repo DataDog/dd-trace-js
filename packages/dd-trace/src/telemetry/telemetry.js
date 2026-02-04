@@ -174,7 +174,7 @@ function getIntegrations () {
         name: pluginName,
         enabled: pluginManager._pluginsByName[pluginName]._enabled,
         auto_enabled: true,
-        [processTags.TELEMETRY_FIELD_NAME]: processTags.tagsObject
+        [processTags.TELEMETRY_FIELD_NAME]: processTags.tagsObject,
       })
       sentIntegrations.add(pluginName)
     }
@@ -188,12 +188,12 @@ function getIntegrations () {
 function getProducts (config) {
   return {
     appsec: {
-      enabled: config.appsec.enabled
+      enabled: config.appsec.enabled,
     },
     profiler: {
       version: tracerVersion,
-      enabled: profilingEnabledToBoolean(config.profiling.enabled)
-    }
+      enabled: profilingEnabledToBoolean(config.profiling.enabled),
+    },
   }
 }
 
@@ -206,7 +206,7 @@ function getInstallSignature (config) {
     return {
       install_id: sig.id,
       install_time: sig.time,
-      install_type: sig.type
+      install_type: sig.type,
     }
   }
 }
@@ -217,7 +217,7 @@ function getInstallSignature (config) {
 function appStarted (config) {
   const app = {
     products: getProducts(config),
-    configuration: [...configWithOrigin.values()]
+    configuration: [...configWithOrigin.values()],
   }
   const installSignature = getInstallSignature(config)
   if (installSignature) {
@@ -255,7 +255,7 @@ function createAppObject (config) {
     tracer_version: tracerVersion,
     language_name: 'nodejs',
     language_version: process.versions.node,
-    process_tags: processTags.tagsObject
+    process_tags: processTags.tagsObject,
   }
 }
 
@@ -292,7 +292,7 @@ function createBatchPayload (payload) {
   return payload.map(item => {
     return {
       request_type: item.reqType,
-      payload: item.payload
+      payload: item.payload,
     }
   })
 }
@@ -510,7 +510,7 @@ function updateConfig (changes, config) {
   if (changed) {
     // update configWithOrigin to contain up-to-date full list of config values for app-extended-heartbeat
     const { reqType, payload } = createPayload('app-client-configuration-change', {
-      configuration: [...configWithOrigin.values()]
+      configuration: [...configWithOrigin.values()],
     })
     sendData(config, application, host, reqType, payload, updateRetryData)
   }
@@ -531,5 +531,5 @@ module.exports = {
   stop,
   updateIntegrations,
   updateConfig,
-  appClosing
+  appClosing,
 }

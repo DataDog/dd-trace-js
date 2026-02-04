@@ -5,5 +5,5 @@ function isRelativeRequire (moduleName) {
 }
 
 module.exports = {
-  isRelativeRequire
+  isRelativeRequire,
 }

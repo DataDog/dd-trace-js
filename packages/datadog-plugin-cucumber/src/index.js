@@ -47,7 +47,7 @@ const {
   TELEMETRY_EVENT_FINISHED,
   TELEMETRY_ITR_FORCED_TO_RUN,
   TELEMETRY_ITR_UNSKIPPABLE,
-  TELEMETRY_TEST_SESSION
+  TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
@@ -73,7 +73,7 @@ class CucumberPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
-      isParallel
+      isParallel,
     }) => {
       const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
       addIntelligentTestRunnerSpanTags(
@@ -87,7 +87,7 @@ class CucumberPlugin extends CiPlugin {
           skippingCount: numSkippedSuites,
           skippingType: 'suite',
           hasUnskippableSuites,
-          hasForcedToRunSuites
+          hasForcedToRunSuites,
         }
       )
       if (isEarlyFlakeDetectionEnabled) {
@@ -112,7 +112,7 @@ class CucumberPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
+        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
       })
 
       this.libraryConfig = null
@@ -123,7 +123,7 @@ class CucumberPlugin extends CiPlugin {
       testFileAbsolutePath,
       isUnskippable,
       isForcedToRun,
-      itrCorrelationId
+      itrCorrelationId,
     }) => {
       const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
       const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
@@ -160,9 +160,9 @@ class CucumberPlugin extends CiPlugin {
         tags: {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
-          ...testSuiteMetadata
+          ...testSuiteMetadata,
         },
-        integrationName: this.constructor.id
+        integrationName: this.constructor.id,
       })
       this._testSuiteSpansByTestSuite.set(testSuitePath, testSuiteSpan)
 
@@ -196,7 +196,7 @@ class CucumberPlugin extends CiPlugin {
       const formattedCoverage = {
         sessionId: testSuiteSpan.context()._traceId,
         suiteId: testSuiteSpan.context()._spanId,
-        files: relativeCoverageFiles
+        files: relativeCoverageFiles,
       }
 
       this.tracer._exporter.exportCoverage(formattedCoverage)
@@ -211,7 +211,7 @@ class CucumberPlugin extends CiPlugin {
 
       const extraTags = {
         [TEST_SOURCE_START]: testSourceLine,
-        [TEST_SOURCE_FILE]: testSourceFile
+        [TEST_SOURCE_FILE]: testSourceFile,
       }
       if (isParallel) {
         extraTags[CUCUMBER_IS_PARALLEL] = 'true'
@@ -272,9 +272,9 @@ class CucumberPlugin extends CiPlugin {
         tags: {
           [COMPONENT]: this.constructor.id,
           'cucumber.step': resource,
-          [RESOURCE_NAME]: resource
+          [RESOURCE_NAME]: resource,
         },
-        integrationName: this.constructor.id
+        integrationName: this.constructor.id,
       })
       ctx.parentStore = store
       ctx.currentStore = { ...store, span }
@@ -299,7 +299,7 @@ class CucumberPlugin extends CiPlugin {
       hasFailedAttemptToFix,
       isDisabled,
       isQuarantined,
-      isModified
+      isModified,
     }) => {
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 
@@ -367,7 +367,7 @@ class CucumberPlugin extends CiPlugin {
         hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
         isNew,
         isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
-        browserDriver: spanTags[TEST_BROWSER_DRIVER]
+        browserDriver: spanTags[TEST_BROWSER_DRIVER],
       }
       span.finish()
       if (!isStep) {
@@ -412,7 +412,7 @@ class CucumberPlugin extends CiPlugin {
       modifiedFiles,
       stepIds,
       stepDefinitions,
-      setIsModified
+      setIsModified,
     }) => {
       const testScenarioPath = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot || process.cwd())
       for (const scenario of scenarios) {

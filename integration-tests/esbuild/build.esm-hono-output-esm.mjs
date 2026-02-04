@@ -22,6 +22,9 @@ const external = [
   '@datadog/native-appsec',
   '@datadog/native-iast-taint-tracking',
   '@datadog/native-iast-rewriter',
+
+  // required if you use OpenFeature (peer dependency)
+  '@openfeature/server-sdk',
 ]
 
 esbuild.build({
@@ -33,5 +36,5 @@ esbuild.build({
   target: 'node22',
   plugins: [ddPlugin],
   format: 'esm',
-  external
+  external,
 })

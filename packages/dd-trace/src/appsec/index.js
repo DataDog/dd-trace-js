@@ -5,7 +5,7 @@ const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { storage } = require('../../../datadog-core')
-const { isInServerlessEnvironment } = require('../serverless')
+const { IS_SERVERLESS } = require('../serverless')
 const RuleManager = require('./rule_manager')
 const appsecRemoteConfig = require('./remote_config')
 const {
@@ -29,7 +29,7 @@ const {
   responseSetHeader,
   routerParam,
   fastifyResponseChannel,
-  fastifyPathParams
+  fastifyPathParams,
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -96,13 +96,15 @@ function enable (_config) {
     isEnabled = true
     config = _config
   } catch (err) {
-    if (!isInServerlessEnvironment()) {
+    if (!IS_SERVERLESS) {
       log.error('[ASM] Unable to start AppSec', err)
     }
 
     disable()
   }
 }
+
+const analyzedBodies = new WeakSet()
 
 function onRequestBodyParsed ({ req, res, body, abortController }) {
   if (body === undefined || body === null) return
@@ -120,14 +122,21 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
     storedBodies.set(req, body)
   }
 
+  if (typeof body === 'object') {
+    if (isEmptyObject(body)) return
+    analyzedBodies.add(body)
+  }
+
   const results = waf.run({
     persistent: {
-      [addresses.HTTP_INCOMING_BODY]: body
-    }
+      [addresses.HTTP_INCOMING_BODY]: body,
+    },
   }, req)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
 }
+
+const analyzedCookies = new WeakSet()
 
 function onRequestCookieParser ({ req, res, abortController, cookies }) {
   if (!cookies || typeof cookies !== 'object') return
@@ -135,10 +144,13 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
+  if (isEmptyObject(cookies)) return
+  analyzedCookies.add(cookies)
+
   const results = waf.run({
     persistent: {
-      [addresses.HTTP_INCOMING_COOKIES]: cookies
-    }
+      [addresses.HTTP_INCOMING_COOKIES]: cookies,
+    },
   }, req)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
@@ -153,7 +165,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
   rootSpan.addTags({
     '_dd.appsec.enabled': 1,
     '_dd.runtime_family': 'nodejs',
-    [HTTP_CLIENT_IP]: clientIp
+    [HTTP_CLIENT_IP]: clientIp,
   })
 
   const requestHeaders = { ...req.headers }
@@ -162,7 +174,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
   const persistent = {
     [addresses.HTTP_INCOMING_URL]: req.url,
     [addresses.HTTP_INCOMING_HEADERS]: requestHeaders,
-    [addresses.HTTP_INCOMING_METHOD]: req.method
+    [addresses.HTTP_INCOMING_METHOD]: req.method,
   }
 
   if (clientIp) {
@@ -178,19 +190,33 @@ function incomingHttpEndTranslator ({ req, res }) {
   const persistent = {}
 
   // we need to keep this to support other body parsers
-  // TODO: no need to analyze it if it was already done by the body-parser hook
   if (req.body !== undefined && req.body !== null) {
-    persistent[addresses.HTTP_INCOMING_BODY] = req.body
+    if (typeof req.body === 'object') {
+      if (!isEmptyObject(req.body) && !analyzedBodies.has(req.body)) {
+        persistent[addresses.HTTP_INCOMING_BODY] = req.body
+      }
+    } else {
+      persistent[addresses.HTTP_INCOMING_BODY] = req.body
+    }
   }
 
   // we need to keep this to support other cookie parsers
-  if (req.cookies !== null && typeof req.cookies === 'object') {
+  if (
+    req.cookies !== null &&
+    typeof req.cookies === 'object' &&
+    !isEmptyObject(req.cookies) &&
+    !analyzedCookies.has(req.cookies)
+  ) {
     persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
   // we need to keep this to support nextjs
   const query = req.query
-  if (query !== null && typeof query === 'object') {
+  if (
+    query !== null &&
+    typeof query === 'object' &&
+    !isEmptyObject(query)
+  ) {
     persistent[addresses.HTTP_INCOMING_QUERY] = query
   }
 
@@ -198,7 +224,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
-  if (Object.keys(persistent).length) {
+  if (!isEmptyObject(persistent)) {
     waf.run({ persistent }, req)
   }
 
@@ -255,8 +281,8 @@ function onExpressSession ({ req, res, sessionId, abortController }) {
 
   const results = waf.run({
     persistent: {
-      [addresses.USER_SESSION_ID]: sessionId
-    }
+      [addresses.USER_SESSION_ID]: sessionId,
+    },
   }, req)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
@@ -273,10 +299,12 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
+  if (isEmptyObject(query)) return
+
   const results = waf.run({
     persistent: {
-      [addresses.HTTP_INCOMING_QUERY]: query
-    }
+      [addresses.HTTP_INCOMING_QUERY]: query,
+    },
   }, req)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
@@ -286,12 +314,12 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (!params || typeof params !== 'object' || !Object.keys(params).length) return
+  if (!params || typeof params !== 'object' || isEmptyObject(params)) return
 
   const results = waf.run({
     persistent: {
-      [addresses.HTTP_INCOMING_PARAMS]: params
-    }
+      [addresses.HTTP_INCOMING_PARAMS]: params,
+    },
   }, req)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
@@ -304,13 +332,13 @@ function onResponseBody ({ req, res, body }) {
   // we don't support blocking at this point, so no results needed
   waf.run({
     persistent: {
-      [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
-    }
+      [addresses.HTTP_INCOMING_RESPONSE_BODY]: body,
+    },
   }, req)
 }
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
-  if (Object.keys(responseHeaders).length) {
+  if (!isEmptyObject(responseHeaders)) {
     storedResponseHeaders.set(req, responseHeaders)
   }
 
@@ -339,8 +367,8 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   const results = waf.run({
     persistent: {
       [addresses.HTTP_INCOMING_RESPONSE_CODE]: String(statusCode),
-      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
-    }
+      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders,
+    },
   }, req)
 
   responseAnalyzedSet.add(res)
@@ -401,9 +429,19 @@ function disable () {
   if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
 }
 
+// this is faster than Object.keys().length === 0
+function isEmptyObject (obj) {
+  // eslint-disable-next-line no-unreachable-loop
+  for (const _ in obj) {
+    return false
+  }
+
+  return true
+}
+
 module.exports = {
   enable,
   disable,
   incomingHttpStartTranslator,
-  incomingHttpEndTranslator
+  incomingHttpEndTranslator,
 }

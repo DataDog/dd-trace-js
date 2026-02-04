@@ -3,7 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   addHook,
-  channel
+  channel,
 } = require('./helpers/instrument')
 
 const ddGlobal = globalThis[Symbol.for('dd-trace')]
@@ -80,7 +80,7 @@ function normalizePositional (args, defaultFieldResolver) {
     contextValue: args[3],
     variableValues: args[4],
     operationName: args[5],
-    fieldResolver: args[6]
+    fieldResolver: args[6],
   }
 }
 
@@ -172,7 +172,7 @@ function wrapExecute (execute) {
         docSource: documentSources.get(document),
         source,
         fields: {},
-        abortController: new AbortController()
+        abortController: new AbortController(),
       }
 
       return startExecuteCh.runStores(ctx, () => {
@@ -281,7 +281,7 @@ function assertField (rootCtx, info, args) {
     startResolveCh.publish(fieldCtx)
     field = fields[pathString] = {
       error: null,
-      ctx: fieldCtx
+      ctx: fieldCtx,
     }
   }
 
@@ -295,12 +295,12 @@ function wrapFields (type) {
 
   patchedTypes.add(type)
 
-  Object.keys(type._fields).forEach(key => {
+  for (const key of Object.keys(type._fields)) {
     const field = type._fields[key]
 
     wrapFieldResolve(field)
     wrapFieldType(field)
-  })
+  }
 }
 
 function wrapFieldResolve (field) {
@@ -321,7 +321,7 @@ function wrapFieldType (field) {
 }
 
 function finishResolvers ({ fields }) {
-  Object.keys(fields).reverse().forEach(key => {
+  for (const key of Object.keys(fields).reverse()) {
     const field = fields[key]
     field.ctx.finishTime = field.finishTime
     field.ctx.field = field
@@ -330,7 +330,7 @@ function finishResolvers ({ fields }) {
       resolveErrorCh.publish(field.ctx)
     }
     finishResolveCh.publish(field.ctx)
-  })
+  }
 }
 
 addHook({ name: '@graphql-tools/executor', versions: ['>=0.0.14'] }, executor => {

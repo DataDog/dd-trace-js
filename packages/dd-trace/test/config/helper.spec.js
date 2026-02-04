@@ -8,11 +8,9 @@ const proxyquire = require('proxyquire')
 require('../setup/core')
 
 describe('config-helper stable config sources', () => {
-  let isInServerlessEnvironmentStub
   let StableConfigStub
 
   beforeEach(() => {
-    isInServerlessEnvironmentStub = sinon.stub()
     StableConfigStub = sinon.stub()
   })
 
@@ -21,26 +19,24 @@ describe('config-helper stable config sources', () => {
   })
 
   it('loads stable config when not in serverless environment', () => {
-    isInServerlessEnvironmentStub.returns(false)
-
     StableConfigStub.callsFake(function () {
       this.localEntries = {
         DD_SERVICE: 'local-service',
         DD_ENV: 'local-env',
-        DD_VERSION: 'local-version'
+        DD_VERSION: 'local-version',
       }
       this.fleetEntries = {
         DD_SERVICE: 'fleet-service',
-        DD_ENV: 'fleet-env'
+        DD_ENV: 'fleet-env',
       }
       this.warnings = []
     })
 
     const { getStableConfigSources } = proxyquire('../../src/config/helper', {
       '../serverless': {
-        isInServerlessEnvironment: isInServerlessEnvironmentStub
+        IS_SERVERLESS: false,
       },
-      './stable': StableConfigStub
+      './stable': StableConfigStub,
     })
 
     const sources = getStableConfigSources()
@@ -49,23 +45,21 @@ describe('config-helper stable config sources', () => {
     assert.deepStrictEqual(sources.localStableConfig, {
       DD_SERVICE: 'local-service',
       DD_ENV: 'local-env',
-      DD_VERSION: 'local-version'
+      DD_VERSION: 'local-version',
     })
     assert.deepStrictEqual(sources.fleetStableConfig, {
       DD_SERVICE: 'fleet-service',
-      DD_ENV: 'fleet-env'
+      DD_ENV: 'fleet-env',
     })
     assert.deepStrictEqual(sources.stableConfigWarnings, [])
   })
 
   it('does not load stable config in serverless environment', () => {
-    isInServerlessEnvironmentStub.returns(true)
-
     const { getStableConfigSources } = proxyquire('../../src/config/helper', {
       '../serverless': {
-        isInServerlessEnvironment: isInServerlessEnvironmentStub
+        IS_SERVERLESS: true,
       },
-      './stable': StableConfigStub
+      './stable': StableConfigStub,
     })
 
     const sources = getStableConfigSources()
@@ -89,7 +83,6 @@ describe('config-helper env resolution', () => {
   let getValueFromEnvSources
   let getEnvironmentVariable
   let resetModule
-  let isInServerlessEnvironmentStub
   let originalEnv
 
   function loadModule (overrides = {}) {
@@ -103,12 +96,11 @@ describe('config-helper env resolution', () => {
   beforeEach(() => {
     originalEnv = process.env
     process.env = { ...originalEnv }
-    isInServerlessEnvironmentStub = sinon.stub().returns(true)
 
     loadModule({
       '../serverless': {
-        isInServerlessEnvironment: isInServerlessEnvironmentStub
-      }
+        IS_SERVERLESS: true,
+      },
     })
   })
 
@@ -174,15 +166,6 @@ describe('config-helper env resolution', () => {
     assert.strictEqual(value, 'production')
   })
 
-  it('calls serverless detection only once when resolving multiple envs', () => {
-    process.env.DD_SERVICE = 'my-service'
-
-    getValueFromEnvSources('DD_SERVICE')
-    getValueFromEnvSources('DD_ENV')
-
-    assert.strictEqual(isInServerlessEnvironmentStub.callCount, 1)
-  })
-
   describe('with stable config and env vars', () => {
     beforeEach(() => {
       // Re-load module with stable config enabled (non-serverless)
@@ -190,21 +173,19 @@ describe('config-helper env resolution', () => {
       StableConfigStub.callsFake(function () {
         this.localEntries = {
           DD_SERVICE: 'local-service',
-          DD_ENV: 'local-env'
+          DD_ENV: 'local-env',
         }
         this.fleetEntries = {
-          DD_SERVICE: 'fleet-service'
+          DD_SERVICE: 'fleet-service',
         }
         this.warnings = []
       })
 
-      const isInServerlessStub = sinon.stub().returns(false)
-
       const mod = proxyquire('../../src/config/helper', {
         '../serverless': {
-          isInServerlessEnvironment: isInServerlessStub
+          IS_SERVERLESS: false,
         },
-        './stable': StableConfigStub
+        './stable': StableConfigStub,
       })
 
       getValueFromEnvSources = mod.getValueFromEnvSources
@@ -220,22 +201,20 @@ describe('config-helper env resolution', () => {
         this.localEntries = {
           DD_TRACE_SAMPLE_RATE: '0.1',
           DD_TRACE_ENABLED: 'false',
-          DD_SERVICE: 'local'
+          DD_SERVICE: 'local',
         }
         this.fleetEntries = {
           DD_TRACE_SAMPLE_RATE: '0.9',
-          DD_SERVICE: 'fleet'
+          DD_SERVICE: 'fleet',
         }
         this.warnings = []
       })
 
-      const isInServerlessStub = sinon.stub().returns(false)
-
       const mod = proxyquire('../../src/config/helper', {
         '../serverless': {
-          isInServerlessEnvironment: isInServerlessStub
+          IS_SERVERLESS: false,
         },
-        './stable': StableConfigStub
+        './stable': StableConfigStub,
       })
 
       getValueFromEnvSources = mod.getValueFromEnvSources
@@ -249,21 +228,19 @@ describe('config-helper env resolution', () => {
       const StableConfigStub = sinon.stub()
       StableConfigStub.callsFake(function () {
         this.localEntries = {
-          DD_SERVICE: 'local-service'
+          DD_SERVICE: 'local-service',
         }
         this.fleetEntries = {
-          DD_SERVICE: undefined
+          DD_SERVICE: undefined,
         }
         this.warnings = []
       })
 
-      const isInServerlessStub = sinon.stub().returns(false)
-
       const mod = proxyquire('../../src/config/helper', {
         '../serverless': {
-          isInServerlessEnvironment: isInServerlessStub
+          IS_SERVERLESS: false,
         },
-        './stable': StableConfigStub
+        './stable': StableConfigStub,
       })
 
       getValueFromEnvSources = mod.getValueFromEnvSources

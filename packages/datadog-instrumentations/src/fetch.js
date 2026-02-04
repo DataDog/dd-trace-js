@@ -1,6 +1,6 @@
 'use strict'
 
-const { isInServerlessEnvironment } = require('../../dd-trace/src/serverless')
+const { IS_SERVERLESS } = require('../../dd-trace/src/serverless')
 
 if (globalThis.fetch) {
   const globalFetch = globalThis.fetch
@@ -23,7 +23,7 @@ if (globalThis.fetch) {
     fetch = wrapFetch(globalFetch)
   }
 
-  if (!isInServerlessEnvironment()) {
+  if (!IS_SERVERLESS) {
     wrapRealFetch()
   }
 

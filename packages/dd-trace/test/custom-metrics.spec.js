@@ -47,8 +47,8 @@ describe('Custom Metrics', () => {
   it('should send metrics before process exit', (done) => {
     exec(`${process.execPath} ${path.join(__dirname, 'custom-metrics-app.js')}`, {
       env: {
-        DD_TRACE_AGENT_URL: `http://127.0.0.1:${httpPort}`
-      }
+        DD_TRACE_AGENT_URL: `http://127.0.0.1:${httpPort}`,
+      },
     }, (err, stdout, stderr) => {
       if (err) return done(err)
       // eslint-disable-next-line no-console

@@ -21,30 +21,30 @@ test.describe('highest-level-describe', () => {
     test.describe(' ', () => {
       test.beforeEach(async ({ page }) => {
         setActiveTestSpanTags({
-          'custom_tag.beforeEach': 'hello beforeEach'
+          'custom_tag.beforeEach': 'hello beforeEach',
         })
       })
       test.afterEach(async ({ page }) => {
         setActiveTestSpanTags({
-          'custom_tag.afterEach': 'hello afterEach'
+          'custom_tag.afterEach': 'hello afterEach',
         })
       })
       test('should work with passing tests', async ({ page }) => {
         setActiveTestSpanTags({
-          'custom_tag.it': 'hello it'
+          'custom_tag.it': 'hello it',
         })
         await expect(page.locator('.hello-world')).toHaveText([
-          'Hello World'
+          'Hello World',
         ])
       })
       test.skip('should work with skipped tests', async ({ page }) => {
         await expect(page.locator('.hello-world')).toHaveText([
-          'Hello World'
+          'Hello World',
         ])
       })
       test.fixme('should work with fixme', async ({ page }) => {
         await expect(page.locator('.hello-world')).toHaveText([
-          'Hello Warld'
+          'Hello Warld',
         ])
       })
       test('should work with annotated tests', async ({ page }) => {
@@ -53,7 +53,7 @@ test.describe('highest-level-describe', () => {
         // this is malformed and should be ignored
         test.info().annotations.push({ type: 'DD_TAGS[test.invalid', description: 'high' })
         await expect(page.locator('.hello-world')).toHaveText([
-          'Hello World'
+          'Hello World',
         ])
       })
     })

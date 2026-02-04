@@ -3,11 +3,12 @@
 const { storage } = require('../../../datadog-core')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
+const { discoverCoverageReports } = require('../ci-visibility/coverage-report-discovery')
 const {
   incrementCountMetric,
   distributionMetric,
   TELEMETRY_EVENT_CREATED,
-  TELEMETRY_ITR_SKIPPED
+  TELEMETRY_ITR_SKIPPED,
 } = require('../ci-visibility/telemetry')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
 const { DD_MAJOR } = require('../../../../version')
@@ -24,7 +25,7 @@ const {
   GIT_PULL_REQUEST_BASE_BRANCH_SHA,
   GIT_COMMIT_HEAD_SHA,
   GIT_PULL_REQUEST_BASE_BRANCH,
-  GIT_COMMIT_HEAD_MESSAGE
+  GIT_COMMIT_HEAD_MESSAGE,
 } = require('./util/tags')
 const Plugin = require('./plugin')
 const { getRepositoryRoot } = require('./util/git')
@@ -62,7 +63,7 @@ const {
   getPullRequestDiff,
   getModifiedFilesFromDiff,
   getPullRequestBaseBranch,
-  TEST_IS_TEST_FRAMEWORK_WORKER
+  TEST_IS_TEST_FRAMEWORK_WORKER,
 } = require('./util/test')
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
@@ -70,7 +71,7 @@ const FRAMEWORK_TO_TRIMMED_COMMAND = {
   mocha: 'mocha',
   cucumber: 'cucumber-js',
   playwright: 'playwright test',
-  jest: 'jest'
+  jest: 'jest',
 }
 
 const WORKER_EXPORTER_TO_TEST_FRAMEWORK = {
@@ -78,7 +79,7 @@ const WORKER_EXPORTER_TO_TEST_FRAMEWORK = {
   jest_worker: 'jest',
   cucumber_worker: 'cucumber',
   mocha_worker: 'mocha',
-  playwright_worker: 'playwright'
+  playwright_worker: 'playwright',
 }
 
 const TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION = new Set([
@@ -95,7 +96,7 @@ function getTestSuiteLevelVisibilityTags (testSuiteSpan, testFramework) {
     [TEST_SUITE_ID]: testSuiteSpanContext.toSpanId(),
     [TEST_SESSION_ID]: testSuiteSpanContext.toTraceId(),
     [TEST_COMMAND]: testSuiteSpanContext._tags[TEST_COMMAND],
-    [TEST_MODULE]: testFramework
+    [TEST_MODULE]: testFramework,
   }
 
   if (testSuiteSpanContext._parentId) {
@@ -129,8 +130,8 @@ module.exports = class CiPlugin extends Plugin {
         const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, isParallel, frameworkVersion)
         const metadataTags = {
           test: {
-            ...libraryCapabilitiesTags
-          }
+            ...libraryCapabilitiesTags,
+          },
         }
         this.tracer._exporter.addMetadataTags(metadataTags)
         onDone({ err, libraryConfig })
@@ -174,7 +175,7 @@ module.exports = class CiPlugin extends Plugin {
       const metadataTags = {}
       for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
         metadataTags[testLevel] = {
-          [TEST_SESSION_NAME]: testSessionName
+          [TEST_SESSION_NAME]: testSessionName,
         }
       }
       // tracer might not be initialized correctly
@@ -187,9 +188,9 @@ module.exports = class CiPlugin extends Plugin {
         tags: {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
-          ...testSessionSpanMetadata
+          ...testSessionSpanMetadata,
         },
-        integrationName: this.constructor.id
+        integrationName: this.constructor.id,
       })
       // TODO: add telemetry tag when we can add `is_agentless_log_submission_enabled` for agentless log submission
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
@@ -199,9 +200,9 @@ module.exports = class CiPlugin extends Plugin {
         tags: {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
-          ...testModuleSpanMetadata
+          ...testModuleSpanMetadata,
         },
-        integrationName: this.constructor.id
+        integrationName: this.constructor.id,
       })
       // only for vitest
       // These are added for the worker threads to use
@@ -220,7 +221,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {
       const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
-      skippedSuites.forEach((testSuite) => {
+      for (const testSuite of skippedSuites) {
         const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id)
         if (this.itrCorrelationId) {
           testSuiteMetadata[ITR_CORRELATION_ID] = this.itrCorrelationId
@@ -233,11 +234,11 @@ module.exports = class CiPlugin extends Plugin {
             ...this.testEnvironmentMetadata,
             ...testSuiteMetadata,
             [TEST_STATUS]: 'skip',
-            [TEST_SKIPPED_BY_ITR]: 'true'
+            [TEST_SKIPPED_BY_ITR]: 'true',
           },
-          integrationName: this.constructor.id
+          integrationName: this.constructor.id,
         }).finish()
-      })
+      }
       this.telemetry.count(TELEMETRY_ITR_SKIPPED, { testLevel: 'suite' }, skippedSuites.length)
     })
 
@@ -284,7 +285,7 @@ module.exports = class CiPlugin extends Plugin {
       const {
         [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
         [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
-        [GIT_COMMIT_HEAD_SHA]: commitHeadSha
+        [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
       } = this.testEnvironmentMetadata
 
       const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch)
@@ -329,14 +330,14 @@ module.exports = class CiPlugin extends Plugin {
             const testSuite = span.meta[TEST_SUITE]
             const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuite)
             if (!testSuiteSpan) {
-              log.warn(`Test suite span not found for test span with test suite ${testSuite}`)
+              log.warn('Test suite span not found for test span with test suite %s', testSuite)
               continue
             }
 
             const testSuiteTags = getTestSuiteLevelVisibilityTags(testSuiteSpan, this.constructor.id)
             span.meta = {
               ...span.meta,
-              ...testSuiteTags
+              ...testSuiteTags,
             }
           }
         }
@@ -345,9 +346,9 @@ module.exports = class CiPlugin extends Plugin {
     })
 
     this.addSub(`ci:${this.constructor.id}:worker-report:logs`, (logsPayloads) => {
-      JSON.parse(logsPayloads).forEach(({ logMessage }) => {
+      for (const { logMessage } of JSON.parse(logsPayloads)) {
         this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, logMessage)
-      })
+      }
     })
   }
 
@@ -359,7 +360,7 @@ module.exports = class CiPlugin extends Plugin {
           testLevel,
           testFramework,
           isUnsupportedCIProvider: !this.ciProviderName,
-          ...tags
+          ...tags,
         })
       },
       count: function (name, tags, value = 1) {
@@ -367,7 +368,7 @@ module.exports = class CiPlugin extends Plugin {
       },
       distribution: function (name, tags, measure) {
         distributionMetric(name, tags, measure)
-      }
+      },
     }
   }
 
@@ -412,7 +413,7 @@ module.exports = class CiPlugin extends Plugin {
       [GIT_TAG]: tag,
       [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
       [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
-      [GIT_COMMIT_HEAD_MESSAGE]: commitHeadMessage
+      [GIT_COMMIT_HEAD_MESSAGE]: commitHeadMessage,
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot || getRepositoryRoot() || process.cwd()
@@ -435,14 +436,14 @@ module.exports = class CiPlugin extends Plugin {
       tag,
       pullRequestBaseSha,
       commitHeadSha,
-      commitHeadMessage
+      commitHeadMessage,
     }
   }
 
   getCodeOwners (tags) {
     const {
       [TEST_SOURCE_FILE]: testSourceFile,
-      [TEST_SUITE]: testSuite
+      [TEST_SUITE]: testSuite,
     } = tags
     // We'll try with the test source file if available (it could be different from the test suite)
     let codeOwners = getCodeOwnersForFilename(testSourceFile, this.codeOwnersEntries)
@@ -463,7 +464,7 @@ module.exports = class CiPlugin extends Plugin {
         this.constructor.id
       ),
       [COMPONENT]: this.constructor.id,
-      ...extraTags
+      ...extraTags,
     }
 
     const codeOwners = this.getCodeOwners(testTags)
@@ -481,7 +482,7 @@ module.exports = class CiPlugin extends Plugin {
         [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
         [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
         [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
-        [TEST_MODULE]: this.constructor.id
+        [TEST_MODULE]: this.constructor.id,
       }
       if (testSuiteSpan.context()._parentId) {
         suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
@@ -489,7 +490,7 @@ module.exports = class CiPlugin extends Plugin {
 
       testTags = {
         ...testTags,
-        ...suiteTags
+        ...suiteTags,
       }
     }
 
@@ -500,9 +501,9 @@ module.exports = class CiPlugin extends Plugin {
         childOf,
         tags: {
           ...this.testEnvironmentMetadata,
-          ...testTags
+          ...testTags,
         },
-        integrationName: this.constructor.id
+        integrationName: this.constructor.id,
       })
 
     testSpan.context()._trace.origin = CI_APP_ORIGIN
@@ -539,8 +540,8 @@ module.exports = class CiPlugin extends Plugin {
       debugger: { snapshot },
       dd: {
         trace_id: activeTestSpanContext.toTraceId(),
-        span_id: activeTestSpanContext.toSpanId()
-      }
+        span_id: activeTestSpanContext.toSpanId(),
+      },
     })
   }
 
@@ -588,7 +589,7 @@ module.exports = class CiPlugin extends Plugin {
         setProbePromise: Promise.resolve(),
         stackIndex,
         file,
-        line
+        line,
       }
     }
 
@@ -601,7 +602,71 @@ module.exports = class CiPlugin extends Plugin {
       setProbePromise,
       stackIndex,
       file,
-      line
+      line,
     }
+  }
+
+  /**
+   * Uploads coverage reports if enabled. This is the common logic used by plugins.
+   * @param {object} options - Upload options
+   * @param {string} options.rootDir - The root directory where coverage reports are located
+   * @param {Function} [options.onDone] - Callback to signal completion
+   */
+  uploadCoverageReports ({ rootDir, onDone }) {
+    const done = onDone || (() => {})
+
+    // Check if the exporter supports coverage report upload
+    if (!this.tracer._exporter?.uploadCoverageReport) {
+      log.debug('Exporter does not support coverage report upload')
+      done()
+      return
+    }
+
+    const coverageReports = discoverCoverageReports(rootDir)
+    if (coverageReports.length === 0) {
+      log.debug('No coverage reports found to upload')
+      done()
+      return
+    }
+
+    log.debug('Coverage report upload is enabled, found %d report(s) to upload', coverageReports.length)
+
+    // Upload reports sequentially (one file per request)
+    let uploadedCount = 0
+    let failedCount = 0
+    let reportIndex = 0
+
+    const uploadNextReport = () => {
+      if (reportIndex >= coverageReports.length) {
+        // All reports processed, log summary
+        if (failedCount > 0) {
+          log.warn('Coverage report upload completed: %d succeeded, %d failed', uploadedCount, failedCount)
+        } else {
+          log.info('Coverage report upload completed: %d report(s) uploaded', uploadedCount)
+        }
+        done()
+        return
+      }
+
+      const { filePath, format } = coverageReports[reportIndex]
+      reportIndex++
+
+      this.tracer._exporter.uploadCoverageReport(
+        { filePath, format, testEnvironmentMetadata: this.testEnvironmentMetadata },
+        (err) => {
+          if (err) {
+            failedCount++
+            log.error('Failed to upload coverage report %s: %s', filePath, err.message)
+          } else {
+            uploadedCount++
+          }
+
+          // Process next report
+          uploadNextReport()
+        }
+      )
+    }
+
+    uploadNextReport()
   }
 }

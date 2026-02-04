@@ -29,7 +29,12 @@ describe('debugger/index', () => {
 
     DynamicInstrumentation = proxyquire('../../src/debugger/index', {
       fs: {
-        readFile: readFileStub
+        readFile: readFileStub,
+      },
+      '../agent/info': {
+        fetchAgentInfo: sinon.stub().callsFake((url, callback) => {
+          callback(null, { endpoints: ['/debugger/v2/input'] })
+        }),
       },
       worker_threads: {
         Worker,
@@ -37,18 +42,18 @@ describe('debugger/index', () => {
           constructor () {
             this.port1 = {
               unref: sinon.stub(),
-              on: sinon.stub()
+              on: sinon.stub(),
             }
             this.port2 = {
               unref: sinon.stub(),
               on: sinon.stub(),
-              postMessage: sinon.stub()
+              postMessage: sinon.stub(),
             }
             messageChannels.push(this)
           }
         },
-        threadId: 0
-      }
+        threadId: 0,
+      },
     })
 
     config = {
@@ -63,14 +68,14 @@ describe('debugger/index', () => {
       repositoryUrl: 'https://github.com/test/repo',
       service: 'test-service',
       tags: {
-        'runtime-id': 'test-runtime-id'
+        'runtime-id': 'test-runtime-id',
       },
-      url: new URL('http://localhost:8126')
+      url: new URL('http://localhost:8126'),
     }
 
     rc = {
       setProductHandler: sinon.stub(),
-      removeProductHandler: sinon.stub()
+      removeProductHandler: sinon.stub(),
     }
   })
 
@@ -218,16 +223,17 @@ describe('debugger/index', () => {
         commitSHA: 'test-sha',
         debug: false,
         dynamicInstrumentation: {
-          enabled: true
+          enabled: true,
         },
         hostname: 'test-host',
+        inputPath: '/debugger/v2/input',
         logLevel: 'info',
         port: 8126,
         propagateProcessTags: undefined,
         repositoryUrl: 'https://github.com/test/repo',
         runtimeId: 'test-runtime-id',
         service: 'test-service',
-        url: 'http://localhost:8126/'
+        url: 'http://localhost:8126/',
       })
     })
   })
@@ -290,7 +296,7 @@ describe('debugger/index', () => {
     it('should read and parse valid probe file', () => {
       const probes = [
         { id: 'probe1', type: 'log' },
-        { id: 'probe2', type: 'metric' }
+        { id: 'probe2', type: 'metric' },
       ]
       const probeFileContent = JSON.stringify(probes)
       config.dynamicInstrumentation.probeFile = '/path/to/probes.json'
@@ -313,11 +319,11 @@ describe('debugger/index', () => {
       assert.strictEqual(postMessageCalls.length, 2)
       assert.deepStrictEqual(postMessageCalls[0].args[0], {
         action: 'apply',
-        probe: probes[0]
+        probe: probes[0],
       })
       assert.deepStrictEqual(postMessageCalls[1].args[0], {
         action: 'apply',
-        probe: probes[1]
+        probe: probes[1],
       })
     })
 

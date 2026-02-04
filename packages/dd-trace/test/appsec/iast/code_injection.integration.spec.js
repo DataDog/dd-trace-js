@@ -74,9 +74,9 @@ describe('IAST - code_injection - integration', () => {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_IAST_ENABLED: 'true',
           DD_IAST_REQUEST_SAMPLING: '100',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1'
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
         },
-        execArgv: ['--experimental-vm-modules']
+        execArgv: ['--experimental-vm-modules'],
       })
       axios = Axios.create({ baseURL: proc.url })
     })
@@ -94,8 +94,8 @@ describe('IAST - code_injection - integration', () => {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_IAST_ENABLED: 'true',
           DD_IAST_REQUEST_SAMPLING: '100',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1'
-        }
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        },
       })
       axios = Axios.create({ baseURL: proc.url })
     })

@@ -48,7 +48,7 @@ describe('end to end sdk integration tests', () => {
       tags: { ml_app: 'test', bar: 'baz' },
       metadata: { foo: 'bar' },
       inputValue: 'hello',
-      outputValue: 'world'
+      outputValue: 'world',
     })
 
     assertLlmObsSpanEvent(llmobsSpans[1], {
@@ -58,7 +58,7 @@ describe('end to end sdk integration tests', () => {
       tags: { ml_app: 'test' },
       name: 'myWorkflow',
       inputValue: 'world',
-      outputValue: 'hello'
+      outputValue: 'hello',
     })
   })
 
@@ -97,7 +97,7 @@ describe('end to end sdk integration tests', () => {
       tags: { ml_app: 'test' },
       inputValue: 'hello',
       outputValue: 'world',
-      metadata: { foo: 'bar' }
+      metadata: { foo: 'bar' },
     })
 
     assertLlmObsSpanEvent(llmobsSpans[1], {
@@ -107,7 +107,7 @@ describe('end to end sdk integration tests', () => {
       tags: { ml_app: 'test' },
       name: 'myWorkflow',
       inputValue: 'my custom input',
-      outputValue: 'custom'
+      outputValue: 'custom',
     })
   })
 
@@ -129,8 +129,8 @@ describe('end to end sdk integration tests', () => {
           metricType: 'categorical',
           value: 'bar',
           tags: {
-            foo: 'bar'
-          }
+            foo: 'bar',
+          },
         })
       })
 
@@ -149,8 +149,8 @@ describe('end to end sdk integration tests', () => {
         mlApp: 'test',
         value: 'bar',
         tags: {
-          foo: 'bar'
-        }
+          foo: 'bar',
+        },
       })
     })
   })
@@ -390,11 +390,11 @@ describe('end to end sdk integration tests', () => {
             template: 'this is a {{user_query}}. please summarize based on {{message_history}}',
             variables: {
               user_query: 'test',
-              message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?'
+              message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?',
             },
             contextVariables: ['message_history'],
             queryVariables: ['user_query'],
-          }
+          },
         })
       })
 
@@ -407,7 +407,7 @@ describe('end to end sdk integration tests', () => {
         template: 'this is a {{user_query}}. please summarize based on {{message_history}}',
         variables: {
           user_query: 'test',
-          message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?'
+          message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?',
         },
         _dd_context_variable_keys: ['message_history'],
         _dd_query_variable_keys: ['user_query'],
@@ -422,7 +422,7 @@ describe('end to end sdk integration tests', () => {
             id: '123',
             version: '1.0.0',
             template: 'this is a {{user_query}}. please summarize based on {{message_history}}',
-          }
+          },
         })
       })
 
@@ -444,7 +444,7 @@ describe('end to end sdk integration tests', () => {
           },
           contextVariables: ['message_history'],
           queryVariables: ['user_query'],
-        }
+        },
       }, () => {
         llmobs.trace({ kind: 'llm', name: 'myLLM' }, () => {})
       })
@@ -457,7 +457,7 @@ describe('end to end sdk integration tests', () => {
         template: 'this is a {{user_query}}. please summarize based on {{message_history}}',
         variables: {
           user_query: 'test',
-          message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?'
+          message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?',
         },
         _dd_context_variable_keys: ['message_history'],
         _dd_query_variable_keys: ['user_query'],

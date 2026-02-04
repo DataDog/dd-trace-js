@@ -80,7 +80,7 @@ describe('Plugin', () => {
 
             assertObjectContains(record.dd, {
               trace_id: span.context().toTraceId(true),
-              span_id: span.context().toSpanId()
+              span_id: span.context().toSpanId(),
             })
           })
         })

@@ -39,20 +39,20 @@ describe('IastContextPlugin', () => {
       '../overhead-controller': {
         acquireRequest,
         initializeRequestContext,
-        releaseRequest
+        releaseRequest,
       },
       '../iast-context': {
         saveIastContext,
         getIastContext,
-        cleanIastContext
+        cleanIastContext,
       },
       '../taint-tracking/operations': {
         createTransaction,
-        removeTransaction
+        removeTransaction,
       },
       '../vulnerability-reporter': {
-        sendVulnerabilities
-      }
+        sendVulnerabilities,
+      },
     })
 
     plugin = new IastContextPlugin()
@@ -109,15 +109,15 @@ describe('IastContextPlugin', () => {
     const rootSpan = {
       context: () => {
         return {
-          toSpanId: () => 'span-id'
+          toSpanId: () => 'span-id',
         }
       },
 
-      addTags: () => {}
+      addTags: () => {},
     }
 
     const store = {
-      span: rootSpan
+      span: rootSpan,
     }
 
     let getStore
@@ -211,7 +211,7 @@ describe('IastContextPlugin', () => {
 
       getIastContext.returns({
         rootSpan: {},
-        vulnerabilities: []
+        vulnerabilities: [],
       })
 
       plugin.finishContext()
@@ -222,7 +222,7 @@ describe('IastContextPlugin', () => {
     it('should remove the taint-tracking transaction', () => {
       const iastContext = {
         rootSpan: {},
-        vulnerabilities: []
+        vulnerabilities: [],
       }
 
       getIastContext.returns(iastContext)
@@ -235,7 +235,7 @@ describe('IastContextPlugin', () => {
     it('should clear iastContext and releaseRequest from OCE', () => {
       const iastContext = {
         rootSpan: {},
-        vulnerabilities: []
+        vulnerabilities: [],
       }
 
       cleanIastContext.returns(true)

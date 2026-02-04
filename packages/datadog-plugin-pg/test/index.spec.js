@@ -14,7 +14,7 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const clients = {
-  pg: pg => pg.Client
+  pg: pg => pg.Client,
 }
 
 if (process.env.PG_TEST_NATIVE === 'true') {
@@ -52,7 +52,7 @@ describe('Plugin', () => {
               user: 'postgres',
               password: 'postgres',
               database: 'postgres',
-              application_name: 'test'
+              application_name: 'test',
             })
 
             client.connect(err => done(err))
@@ -79,11 +79,11 @@ describe('Plugin', () => {
                   'db.user': 'postgres',
                   'db.type': 'postgres',
                   component: 'pg',
-                  '_dd.integration': 'pg'
+                  '_dd.integration': 'pg',
                 },
                 metrics: {
-                  'network.destination.port': 5432
-                }
+                  'network.destination.port': 5432,
+                },
               })
 
               if (implementation !== 'pg.native') {
@@ -132,11 +132,11 @@ describe('Plugin', () => {
                     'db.name': 'postgres',
                     'db.user': 'postgres',
                     'db.type': 'postgres',
-                    component: 'pg'
+                    component: 'pg',
                   },
                   metrics: {
-                    'network.destination.port': 5432
-                  }
+                    'network.destination.port': 5432,
+                  },
                 })
 
                 if (implementation !== 'pg.native') {
@@ -161,11 +161,11 @@ describe('Plugin', () => {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
-                  component: 'pg'
+                  component: 'pg',
                 },
                 metrics: {
-                  'network.destination.port': 5432
-                }
+                  'network.destination.port': 5432,
+                },
               })
             })
               .then(done)
@@ -187,7 +187,7 @@ describe('Plugin', () => {
               assertObjectContains(traces[0][0].meta, {
                 [ERROR_TYPE]: error.name,
                 [ERROR_MESSAGE]: error.message,
-                component: 'pg'
+                component: 'pg',
               })
 
               // pg modifies stacktraces as of v8.11.1
@@ -195,7 +195,7 @@ describe('Plugin', () => {
               const expectedErrorNoStack = error.stack.split('\n')[0]
               assert.deepStrictEqual(actualErrorNoStack, expectedErrorNoStack)
               assertObjectContains(traces[0][0].metrics, {
-                'network.destination.port': 5432
+                'network.destination.port': 5432,
               })
             })
               .then(done)
@@ -261,12 +261,12 @@ describe('Plugin', () => {
                         'span.kind': 'client',
                         'db.name': 'postgres',
                         'db.type': 'postgres',
-                        component: 'pg'
+                        component: 'pg',
                       },
                       metrics: {
                         'db.stream': 1,
-                        'network.destination.port': 5432
-                      }
+                        'network.destination.port': 5432,
+                      },
                     })
                   })
 
@@ -298,12 +298,12 @@ describe('Plugin', () => {
                         'span.kind': 'client',
                         'db.name': 'postgres',
                         'db.type': 'postgres',
-                        component: 'pg'
+                        component: 'pg',
                       },
                       metrics: {
                         'db.stream': 1,
-                        'network.destination.port': 5432
-                      }
+                        'network.destination.port': 5432,
+                      },
                     })
                   })
 
@@ -333,12 +333,12 @@ describe('Plugin', () => {
                         'span.kind': 'client',
                         'db.name': 'postgres',
                         'db.type': 'postgres',
-                        component: 'pg'
+                        component: 'pg',
                       },
                       metrics: {
                         'db.stream': 1,
-                        'network.destination.port': 5432
-                      }
+                        'network.destination.port': 5432,
+                      },
                     })
                   })
 
@@ -354,7 +354,7 @@ describe('Plugin', () => {
                       throw new Error('Test error')
                     }
                   }, {
-                    message: 'Test error'
+                    message: 'Test error',
                   })
 
                   await Promise.all([rejectedRead, agentPromise])
@@ -381,7 +381,7 @@ describe('Plugin', () => {
             host: '127.0.0.1',
             user: 'postgres',
             password: 'postgres',
-            database: 'postgres'
+            database: 'postgres',
           })
 
           client.connect(err => done(err))
@@ -412,12 +412,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'pg.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'postgresql.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })
@@ -438,7 +438,7 @@ describe('Plugin', () => {
             host: '127.0.0.1',
             user: 'postgres',
             password: 'postgres',
-            database: 'postgres'
+            database: 'postgres',
           })
 
           client.connect(err => done(err))
@@ -468,12 +468,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'pg.query',
-              serviceName: '127.0.0.1-postgres'
+              serviceName: '127.0.0.1-postgres',
             },
             v1: {
               opName: 'postgresql.query',
-              serviceName: '127.0.0.1-postgres'
-            }
+              serviceName: '127.0.0.1-postgres',
+            },
           }
         )
       })
@@ -494,7 +494,7 @@ describe('Plugin', () => {
             host: '127.0.0.1',
             user: 'postgres',
             password: 'postgres',
-            database: 'postgres'
+            database: 'postgres',
           })
           client.connect(err => done(err))
         })
@@ -504,7 +504,7 @@ describe('Plugin', () => {
             host: '127.0.0.1',
             user: 'postgres',
             password: 'postgres',
-            database: 'postgres'
+            database: 'postgres',
           })
 
           client.connect(err => done(err))
@@ -561,7 +561,7 @@ describe('Plugin', () => {
             host: '127.0.0.1',
             user: 'postgres',
             password: 'postgres',
-            database: 'postgres'
+            database: 'postgres',
           })
 
           clientDBM.connect(err => done(err))
@@ -617,14 +617,14 @@ describe('Plugin', () => {
 
           tracer.init()
           tracer.use('pg', {
-            dbmPropagationMode: 'full'
+            dbmPropagationMode: 'full',
           })
 
           client = new pg.Client({
             host: '127.0.0.1',
             user: 'postgres',
             password: 'postgres',
-            database: 'postgres'
+            database: 'postgres',
           })
           client.connect(err => done(err))
         })
@@ -654,7 +654,7 @@ describe('Plugin', () => {
         it('query should inject _dd.dbm_trace_injected into span', done => {
           agent.assertSomeTraces(traces => {
             assertObjectContains(traces[0][0].meta, {
-              '_dd.dbm_trace_injected': 'true'
+              '_dd.dbm_trace_injected': 'true',
             })
             done()
           })
@@ -698,14 +698,14 @@ describe('Plugin', () => {
           tracer.init()
           tracer.use('pg', {
             dbmPropagationMode: 'full',
-            service: 'post'
+            service: 'post',
           })
 
           client = new pg.Client({
             host: '127.0.0.1',
             user: 'postgres',
             password: 'postgres',
-            database: 'postgres'
+            database: 'postgres',
           })
 
           queryQueueName = Object.hasOwn(client, '_queryQueue') ? '_queryQueue' : 'queryQueue'
@@ -721,7 +721,7 @@ describe('Plugin', () => {
 
         it('query config objects should be handled', async () => {
           const query = {
-            text: 'SELECT $1::text as message'
+            text: 'SELECT $1::text as message',
           }
 
           const queryPromise = client.query(query, ['Hello world!'])
@@ -743,7 +743,7 @@ describe('Plugin', () => {
         it('query text should contain rejected sampling decision in the traceparent', async () => {
           tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
           const query = {
-            text: 'SELECT $1::text as message'
+            text: 'SELECT $1::text as message',
           }
 
           const queryPromise = client.query(query, ['Hello world!'])
@@ -759,7 +759,7 @@ describe('Plugin', () => {
         it('query config object should persist when comment is injected', done => {
           const query = {
             name: 'pgSelectQuery',
-            text: 'SELECT $1::text as message'
+            text: 'SELECT $1::text as message',
           }
 
           client.query(query, ['Hello world!'], (err) => {
@@ -772,7 +772,7 @@ describe('Plugin', () => {
         it('falls back to service with prepared statements', done => {
           const query = {
             name: 'pgSelectQuery',
-            text: 'SELECT $1::text as message'
+            text: 'SELECT $1::text as message',
           }
 
           client.query(query, ['Hello world!'], (err) => {
@@ -787,7 +787,7 @@ describe('Plugin', () => {
         it('should not fail when using query object with getters', done => {
           const query = {
             name: 'pgSelectQuery',
-            get text () { return 'SELECT $1::text as message' }
+            get text () { return 'SELECT $1::text as message' },
           }
 
           client.query(query, ['Hello world!'], async (err) => {
@@ -842,7 +842,7 @@ describe('Plugin', () => {
             host: '127.0.0.1',
             user: 'postgres',
             password: 'postgres',
-            database: 'postgres'
+            database: 'postgres',
           })
           client.connect(err => done(err))
         })

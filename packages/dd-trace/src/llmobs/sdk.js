@@ -10,7 +10,7 @@ const Span = require('../opentracing/span')
 const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
 const {
   getFunctionArguments,
-  validateKind
+  validateKind,
 } = require('./util')
 const { storage } = require('./storage')
 const telemetry = require('./telemetry')
@@ -58,7 +58,7 @@ class LLMObs extends NoopLLMObs {
 
     const llmobs = {
       mlApp: options.mlApp,
-      agentlessEnabled: options.agentlessEnabled
+      agentlessEnabled: options.agentlessEnabled,
     }
     // TODO: This will update config telemetry with the origin 'code', which is not ideal when `enable()` is called
     // based on `APM_TRACING` RC product updates.
@@ -302,7 +302,7 @@ class LLMObs extends NoopLLMObs {
     try {
       return {
         traceId: span.context().toTraceId(true),
-        spanId: span.context().toSpanId()
+        spanId: span.context().toSpanId(),
       }
     } catch {
       err = 'invalid_span'
@@ -384,7 +384,7 @@ class LLMObs extends NoopLLMObs {
 
       const evaluationTags = {
         'ddtrace.version': tracerVersion,
-        ml_app: mlApp
+        ml_app: mlApp,
       }
 
       if (tags) {
@@ -419,7 +419,7 @@ class LLMObs extends NoopLLMObs {
         ml_app: mlApp,
         [`${metricType}_value`]: value,
         timestamp_ms: timestampMs,
-        tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
+        tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`),
       }
       const currentStore = storage.getStore()
       const routing = currentStore?.routingContext
@@ -438,8 +438,8 @@ class LLMObs extends NoopLLMObs {
       ...currentStore,
       annotationContext: {
         ...currentStore?.annotationContext,
-        ...options
-      }
+        ...options,
+      },
     }
 
     return storage.run(store, fn)
@@ -461,8 +461,8 @@ class LLMObs extends NoopLLMObs {
       ...currentStore,
       routingContext: {
         apiKey: options.ddApiKey,
-        site: options.ddSite
-      }
+        site: options.ddSite,
+      },
     }
     return storage.run(store, fn)
   }
@@ -498,7 +498,7 @@ class LLMObs extends NoopLLMObs {
     if (options) {
       this._tagger.registerLLMObsSpan(span, {
         ...options,
-        parent: parentStore?.span
+        parent: parentStore?.span,
       })
     }
 
@@ -541,7 +541,7 @@ class LLMObs extends NoopLLMObs {
       modelProvider,
       sessionId,
       _decorator,
-      spanOptions
+      spanOptions,
     }
   }
 }

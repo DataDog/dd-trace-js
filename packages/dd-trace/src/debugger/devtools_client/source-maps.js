@@ -31,7 +31,16 @@ const self = module.exports = {
       null,
       (consumer) => consumer.generatedPositionFor({ source, line, column: 0 })
     )
-  }
+  },
+
+  async getOriginalPosition (url, line, column, sourceMapURL) {
+    const dir = dirname(new URL(url).pathname)
+    return SourceMapConsumer.with(
+      await self.loadSourceMap(dir, sourceMapURL),
+      null,
+      (consumer) => consumer.originalPositionFor({ line, column })
+    )
+  },
 }
 
 function cacheIt (key, value) {

@@ -7,11 +7,11 @@ const {
   sandboxCwd,
   useSandbox,
   getCiVisAgentlessConfig,
-  assertObjectContains
+  assertObjectContains,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
-  TEST_STATUS
+  TEST_STATUS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 describe('test-api-manual', () => {
@@ -41,7 +41,7 @@ describe('test-api-manual', () => {
         'ci-visibility/test-api-manual/test.fake.js.second test will fail',
         'ci-visibility/test-api-manual/test.fake.js.first test will pass',
         'ci-visibility/test-api-manual/test.fake.js.async test will pass',
-        'ci-visibility/test-api-manual/test.fake.js.integration test'
+        'ci-visibility/test-api-manual/test.fake.js.integration test',
       ])
 
       assertObjectContains(testEvents.map(test => test.content.meta[TEST_STATUS]), [
@@ -86,7 +86,7 @@ describe('test-api-manual', () => {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
-          DD_CIVISIBILITY_MANUAL_API_ENABLED: 'false'
+          DD_CIVISIBILITY_MANUAL_API_ENABLED: 'false',
         },
       }
     )

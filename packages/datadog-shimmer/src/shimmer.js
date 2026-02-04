@@ -7,7 +7,7 @@ const skipMethods = new Set([
   'caller',
   'arguments',
   'name',
-  'length'
+  'length',
 ])
 const skipMethodSize = skipMethods.size
 
@@ -118,7 +118,7 @@ function wrap (target, name, wrapper, options) {
     value: target[name],
     writable: true,
     configurable: true,
-    enumerable: false
+    enumerable: false,
   }
 
   if (descriptor.set && (!descriptor.get || options?.replaceGetter)) {
@@ -275,5 +275,5 @@ function assertNotClass (target) {
 module.exports = {
   wrap,
   wrapFunction,
-  massWrap
+  massWrap,
 }

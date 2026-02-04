@@ -13,11 +13,11 @@ const {
   useSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
-  assertObjectContains
+  assertObjectContains,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
-const coverageFixture = require('../ci-visibility/fixtures/coverage.json')
+const coverageFixture = require('../ci-visibility/fixtures/istanbul-map-fixture.json')
 const {
   TEST_STATUS,
   TEST_COMMAND,
@@ -61,7 +61,7 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_RETRY_REASON_TYPES,
-  TEST_IS_MODIFIED
+  TEST_IS_MODIFIED,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
@@ -80,12 +80,12 @@ const moduleTypes = [
     testCommand: function commandWithSuffic (version) {
       const commandSuffix = version === '6.7.0' ? '--config-file cypress-config.json --spec "cypress/e2e/*.cy.js"' : ''
       return `./node_modules/.bin/cypress run ${commandSuffix}`
-    }
+    },
   },
   {
     type: 'esm',
-    testCommand: `node --loader=${hookFile} ./cypress-esm-config.mjs`
-  }
+    testCommand: `node --loader=${hookFile} ./cypress-esm-config.mjs`,
+  },
 ].filter(moduleType => !process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === moduleType.type)
 
 function shouldTestsRun (type) {
@@ -115,7 +115,7 @@ function shouldTestsRun (type) {
 
 moduleTypes.forEach(({
   type,
-  testCommand
+  testCommand,
 }) => {
   if (typeof testCommand === 'function') {
     testCommand = testCommand(version)
@@ -235,7 +235,7 @@ moduleTypes.forEach(({
               [TEST_CODE_OWNERS]: JSON.stringify(['@datadog-dd-trace-js']),
               customTag: 'customValue',
               addTagsBeforeEach: 'customBeforeEach',
-              addTagsAfterEach: 'customAfterEach'
+              addTagsAfterEach: 'customAfterEach',
             },
           })
           assert.match(passedTestSpan.meta[TEST_SOURCE_FILE], /cypress\/e2e\/basic-pass\.js/)
@@ -289,14 +289,14 @@ moduleTypes.forEach(({
           env: {
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-            SPEC_PATTERN: specToRun
+            SPEC_PATTERN: specToRun,
           },
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        receiverPromise
+        receiverPromise,
       ])
     })
 
@@ -315,7 +315,7 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...restEnvVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             },
           }
         )
@@ -326,7 +326,7 @@ moduleTypes.forEach(({
 
         await Promise.all([
           once(childProcess, 'exit'),
-          once(childProcess.stdout, 'end')
+          once(childProcess.stdout, 'end'),
         ])
         assert.match(
           stdout,
@@ -358,7 +358,7 @@ moduleTypes.forEach(({
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             DD_SITE: '= invalid = url',
-            SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
+            SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
           },
         }
       )
@@ -373,7 +373,7 @@ moduleTypes.forEach(({
         once(childProcess.stdout, 'end'),
         once(childProcess.stderr, 'end'),
         once(childProcess, 'exit'),
-        eventsPromise
+        eventsPromise,
       ])
 
       assert.strictEqual(hasReceivedEvents, false)
@@ -451,14 +451,14 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...restEnvVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
           },
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        receiverPromise
+        receiverPromise,
       ])
     })
 
@@ -502,12 +502,12 @@ moduleTypes.forEach(({
 
           assertObjectContains(testSuiteEvents.map(suite => suite.content.resource), [
             'test_suite.cypress/e2e/other.cy.js',
-            'test_suite.cypress/e2e/spec.cy.js'
+            'test_suite.cypress/e2e/spec.cy.js',
           ])
 
           assertObjectContains(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
             'pass',
-            'fail'
+            'fail',
           ])
 
           testSuiteEvents.forEach(({
@@ -516,8 +516,8 @@ moduleTypes.forEach(({
               metrics,
               test_suite_id: testSuiteId,
               test_module_id: testModuleId,
-              test_session_id: testSessionId
-            }
+              test_session_id: testSessionId,
+            },
           }) => {
             assert.ok(meta[TEST_COMMAND])
             assert.ok(meta[TEST_MODULE])
@@ -532,13 +532,13 @@ moduleTypes.forEach(({
           assertObjectContains(testEvents.map(test => test.content.resource), [
             'cypress/e2e/other.cy.js.context passes',
             'cypress/e2e/spec.cy.js.context passes',
-            'cypress/e2e/spec.cy.js.other context fails'
+            'cypress/e2e/spec.cy.js.other context fails',
           ])
 
           assertObjectContains(testEvents.map(test => test.content.meta[TEST_STATUS]), [
             'pass',
             'pass',
-            'fail'
+            'fail',
           ])
 
           testEvents.forEach(({
@@ -547,8 +547,8 @@ moduleTypes.forEach(({
               metrics,
               test_suite_id: testSuiteId,
               test_module_id: testModuleId,
-              test_session_id: testSessionId
-            }
+              test_session_id: testSessionId,
+            },
           }) => {
             assert.ok(meta[TEST_COMMAND])
             assert.ok(meta[TEST_MODULE])
@@ -578,14 +578,14 @@ moduleTypes.forEach(({
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
             DD_TEST_SESSION_NAME: 'my-test-session',
-            DD_SERVICE: undefined
+            DD_SERVICE: undefined,
           },
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        receiverPromise
+        receiverPromise,
       ])
     })
 
@@ -622,14 +622,14 @@ moduleTypes.forEach(({
           env: {
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-            SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
+            SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
           },
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        receiverPromise
+        receiverPromise,
       ])
     })
 
@@ -654,7 +654,7 @@ moduleTypes.forEach(({
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
+              SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
             },
           }
         )
@@ -666,7 +666,7 @@ moduleTypes.forEach(({
         const [, searchCommitRequest, packfileRequest] = await Promise.all([
           once(childProcess, 'exit'),
           searchCommitsRequestPromise,
-          packfileRequestPromise
+          packfileRequestPromise,
         ])
         assert.strictEqual(searchCommitRequest.headers['dd-api-key'], '1')
         assert.strictEqual(packfileRequest.headers['dd-api-key'], '1')
@@ -676,7 +676,7 @@ moduleTypes.forEach(({
         let hasReportedCodeCoverage = false
         receiver.setSettings({
           code_coverage: false,
-          tests_skipping: false
+          tests_skipping: false,
         })
 
         receiver.assertPayloadReceived(() => {
@@ -702,14 +702,14 @@ moduleTypes.forEach(({
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
+              SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
         assert.strictEqual(hasReportedCodeCoverage, false)
       })
@@ -719,8 +719,8 @@ moduleTypes.forEach(({
           type: 'test',
           attributes: {
             name: 'context passes',
-            suite: 'cypress/e2e/other.cy.js'
-          }
+            suite: 'cypress/e2e/other.cy.js',
+          },
         }])
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -773,7 +773,7 @@ moduleTypes.forEach(({
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: 'cypress/e2e/{other,spec}.cy.js'
+              SPEC_PATTERN: 'cypress/e2e/{other,spec}.cy.js',
             },
           }
         )
@@ -786,7 +786,7 @@ moduleTypes.forEach(({
           once(childProcess, 'exit'),
           eventsPromise,
           skippableRequestPromise,
-          coverageRequestPromise
+          coverageRequestPromise,
         ])
       })
 
@@ -794,15 +794,15 @@ moduleTypes.forEach(({
         let hasRequestedSkippable = false
         receiver.setSettings({
           code_coverage: true,
-          tests_skipping: false
+          tests_skipping: false,
         })
 
         receiver.setSuitesToSkip([{
           type: 'test',
           attributes: {
             name: 'context passes',
-            suite: 'cypress/e2e/other.cy.js'
-          }
+            suite: 'cypress/e2e/other.cy.js',
+          },
         }])
 
         receiver.assertPayloadReceived(() => {
@@ -831,7 +831,7 @@ moduleTypes.forEach(({
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: 'cypress/e2e/other.cy.js'
+              SPEC_PATTERN: 'cypress/e2e/other.cy.js',
             },
           }
         )
@@ -842,7 +842,7 @@ moduleTypes.forEach(({
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
         assert.strictEqual(hasRequestedSkippable, false)
       })
@@ -850,7 +850,7 @@ moduleTypes.forEach(({
       it('does not skip tests if suite is marked as unskippable', async () => {
         receiver.setSettings({
           code_coverage: true,
-          tests_skipping: true
+          tests_skipping: true,
         })
 
         receiver.setSuitesToSkip([
@@ -858,16 +858,16 @@ moduleTypes.forEach(({
             type: 'test',
             attributes: {
               name: 'context passes',
-              suite: 'cypress/e2e/other.cy.js'
-            }
+              suite: 'cypress/e2e/other.cy.js',
+            },
           },
           {
             type: 'test',
             attributes: {
               name: 'context passes',
-              suite: 'cypress/e2e/spec.cy.js'
-            }
-          }
+              suite: 'cypress/e2e/spec.cy.js',
+            },
+          },
         ])
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -909,7 +909,7 @@ moduleTypes.forEach(({
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: 'cypress/e2e/{other,spec}.cy.js'
+              SPEC_PATTERN: 'cypress/e2e/{other,spec}.cy.js',
             },
           }
         )
@@ -920,14 +920,14 @@ moduleTypes.forEach(({
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
 
       it('only sets forced to run if test was going to be skipped by ITR', async () => {
         receiver.setSettings({
           code_coverage: true,
-          tests_skipping: true
+          tests_skipping: true,
         })
 
         receiver.setSuitesToSkip([
@@ -935,9 +935,9 @@ moduleTypes.forEach(({
             type: 'test',
             attributes: {
               name: 'context passes',
-              suite: 'cypress/e2e/other.cy.js'
-            }
-          }
+              suite: 'cypress/e2e/other.cy.js',
+            },
+          },
         ])
 
         const receiverPromise = receiver
@@ -981,7 +981,7 @@ moduleTypes.forEach(({
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: 'cypress/e2e/{other,spec}.cy.js'
+              SPEC_PATTERN: 'cypress/e2e/{other,spec}.cy.js',
             },
           }
         )
@@ -992,7 +992,7 @@ moduleTypes.forEach(({
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
 
@@ -1001,8 +1001,8 @@ moduleTypes.forEach(({
           type: 'test',
           attributes: {
             name: 'fake name',
-            suite: 'i/dont/exist.spec.js'
-          }
+            suite: 'i/dont/exist.spec.js',
+          },
         }])
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -1037,7 +1037,7 @@ moduleTypes.forEach(({
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
+              SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
             },
           }
         )
@@ -1049,7 +1049,7 @@ moduleTypes.forEach(({
         await Promise.all([
           once(childProcess, 'exit'),
           eventsPromise,
-          skippableRequestPromise
+          skippableRequestPromise,
         ])
       })
 
@@ -1077,14 +1077,14 @@ moduleTypes.forEach(({
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
+              SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          eventsPromise
+          eventsPromise,
         ])
       })
 
@@ -1092,7 +1092,7 @@ moduleTypes.forEach(({
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: true,
-          tests_skipping: false
+          tests_skipping: false,
         })
         let command
 
@@ -1122,7 +1122,7 @@ moduleTypes.forEach(({
               'ci-visibility/subproject/src/utils.tsx',
               'ci-visibility/subproject/src/App.tsx',
               'ci-visibility/subproject/src/index.tsx',
-              'ci-visibility/subproject/cypress/e2e/spec.cy.js'
+              'ci-visibility/subproject/cypress/e2e/spec.cy.js',
             ])
           }, 25000)
 
@@ -1132,7 +1132,7 @@ moduleTypes.forEach(({
             cwd: `${cwd}/ci-visibility/subproject`,
             env: {
               ...restEnvVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             },
           }
         )
@@ -1143,7 +1143,7 @@ moduleTypes.forEach(({
 
         await Promise.all([
           once(childProcess, 'exit'),
-          eventsPromise
+          eventsPromise,
         ])
       })
     })
@@ -1177,14 +1177,14 @@ moduleTypes.forEach(({
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN: '1',
-            SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
+            SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
           },
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        receiverPromise
+        receiverPromise,
       ])
     })
 
@@ -1214,14 +1214,14 @@ moduleTypes.forEach(({
           env: {
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-            CYPRESS_ENABLE_AFTER_RUN_CUSTOM: '1'
+            CYPRESS_ENABLE_AFTER_RUN_CUSTOM: '1',
           },
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        receiverPromise
+        receiverPromise,
       ])
     })
 
@@ -1251,14 +1251,14 @@ moduleTypes.forEach(({
           env: {
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-            CYPRESS_ENABLE_AFTER_SPEC_CUSTOM: '1'
+            CYPRESS_ENABLE_AFTER_SPEC_CUSTOM: '1',
           },
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        receiverPromise
+        receiverPromise,
       ])
     })
 
@@ -1268,19 +1268,19 @@ moduleTypes.forEach(({
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
           cypress: {
             'cypress/e2e/spec.cy.js': [
               // 'context passes', // This test will be considered new
-              'other context fails'
-            ]
-          }
+              'other context fails',
+            ],
+          },
         })
 
         const receiverPromise = receiver
@@ -1325,14 +1325,14 @@ moduleTypes.forEach(({
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: specToRun,
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
 
@@ -1341,19 +1341,19 @@ moduleTypes.forEach(({
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
           cypress: {
             'cypress/e2e/spec.cy.js': [
               // 'context passes', // This test will be considered new
-              'other context fails'
-            ]
-          }
+              'other context fails',
+            ],
+          },
         })
 
         const {
@@ -1387,14 +1387,14 @@ moduleTypes.forEach(({
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
-              DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
+              DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false',
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
 
@@ -1403,14 +1403,14 @@ moduleTypes.forEach(({
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
-          cypress: {}
+          cypress: {},
         })
 
         const {
@@ -1443,14 +1443,14 @@ moduleTypes.forEach(({
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: 'cypress/e2e/skipped-test.js'
+              SPEC_PATTERN: 'cypress/e2e/skipped-test.js',
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
 
@@ -1459,15 +1459,15 @@ moduleTypes.forEach(({
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTestsResponseCode(500)
         receiver.setKnownTests({
-          cypress: {}
+          cypress: {},
         })
 
         const {
@@ -1497,14 +1497,14 @@ moduleTypes.forEach(({
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: specToRun,
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
 
@@ -1513,19 +1513,19 @@ moduleTypes.forEach(({
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: false
+          known_tests_enabled: false,
         })
 
         receiver.setKnownTests({
           cypress: {
             'cypress/e2e/spec.cy.js': [
               // 'context passes', // This test will be considered new
-              'other context fails'
-            ]
-          }
+              'other context fails',
+            ],
+          },
         })
 
         const {
@@ -1559,14 +1559,14 @@ moduleTypes.forEach(({
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
-              DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
+              DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false',
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
 
@@ -1575,18 +1575,18 @@ moduleTypes.forEach(({
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: false
+          known_tests_enabled: false,
         })
 
         receiver.setKnownTests({
           'not-cypress': {
             'cypress/e2e/spec.cy.js': [
-              'other context fails'
-            ]
-          }
+              'other context fails',
+            ],
+          },
         })
 
         const {
@@ -1636,19 +1636,19 @@ moduleTypes.forEach(({
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
           cypress: {
             'cypress/e2e/spec.cy.js': [
               // 'context passes', // This test will be considered new
-              'other context fails'
-            ]
-          }
+              'other context fails',
+            ],
+          },
         })
 
         const receiverPromise = receiver
@@ -1671,7 +1671,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assertObjectContains(testSession.meta, {
-              [TEST_EARLY_FLAKE_ENABLED]: 'true'
+              [TEST_EARLY_FLAKE_ENABLED]: 'true',
             })
           }, 25000)
 
@@ -1690,14 +1690,14 @@ moduleTypes.forEach(({
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
-              CYPRESS_TEST_ISOLATION: 'false'
+              CYPRESS_TEST_ISOLATION: 'false',
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
 
@@ -1708,18 +1708,18 @@ moduleTypes.forEach(({
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
           cypress: {
             'cypress/e2e/spec.cy.js': [
-              'context passes' // This test is known, so only "other context fails" will be retried
-            ]
-          }
+              'context passes', // This test is known, so only "other context fails" will be retried
+            ],
+          },
         })
 
         const receiverPromise = receiver
@@ -1734,7 +1734,7 @@ moduleTypes.forEach(({
             const testExecutionOrder = tests.map(test => ({
               name: test.meta[TEST_NAME],
               isRetry: test.meta[TEST_IS_RETRY] === 'true',
-              isNew: test.meta[TEST_IS_NEW] === 'true'
+              isNew: test.meta[TEST_IS_NEW] === 'true',
             }))
 
             // Expected order:
@@ -1749,12 +1749,12 @@ moduleTypes.forEach(({
               { name: 'other context fails', isRetry: false, isNew: true },
               { name: 'other context fails', isRetry: true, isNew: true },
               { name: 'other context fails', isRetry: true, isNew: true },
-              { name: 'other context fails', isRetry: true, isNew: true }
+              { name: 'other context fails', isRetry: true, isNew: true },
             ])
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assertObjectContains(testSession.meta, {
-              [TEST_EARLY_FLAKE_ENABLED]: 'true'
+              [TEST_EARLY_FLAKE_ENABLED]: 'true',
             })
           }, 25000)
 
@@ -1772,7 +1772,7 @@ moduleTypes.forEach(({
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: specToRun,
             },
           }
         )
@@ -1788,7 +1788,7 @@ moduleTypes.forEach(({
           once(childProcess, 'exit'),
           once(childProcess.stdout, 'end'),
           once(childProcess.stderr, 'end'),
-          receiverPromise
+          receiverPromise,
         ])
         assert.match(testOutput, /Retrying "other context fails" to detect flakes because it is new/)
       })
@@ -1802,8 +1802,8 @@ moduleTypes.forEach(({
           tests_skipping: false,
           flaky_test_retries_enabled: true,
           early_flake_detection: {
-            enabled: false
-          }
+            enabled: false,
+          },
         })
 
         const receiverPromise = receiver
@@ -1829,7 +1829,7 @@ moduleTypes.forEach(({
               // never passes
               'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
               // passes on the first try
-              'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
+              'cypress/e2e/flaky-test-retries.js.flaky test retry always passes',
             ])
 
             const eventuallyPassingTest = tests.filter(
@@ -1869,7 +1869,7 @@ moduleTypes.forEach(({
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: specToRun,
             },
           }
         )
@@ -1880,7 +1880,7 @@ moduleTypes.forEach(({
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
 
@@ -1891,8 +1891,8 @@ moduleTypes.forEach(({
           tests_skipping: false,
           flaky_test_retries_enabled: true,
           early_flake_detection: {
-            enabled: false
-          }
+            enabled: false,
+          },
         })
 
         const receiverPromise = receiver
@@ -1908,7 +1908,7 @@ moduleTypes.forEach(({
             assertObjectContains(tests.map(test => test.resource), [
               'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
               'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
-              'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
+              'cypress/e2e/flaky-test-retries.js.flaky test retry always passes',
             ])
             assert.ok(!tests.some(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
           }, 25000)
@@ -1928,14 +1928,14 @@ moduleTypes.forEach(({
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: specToRun,
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
 
@@ -1946,8 +1946,8 @@ moduleTypes.forEach(({
           tests_skipping: false,
           flaky_test_retries_enabled: true,
           early_flake_detection: {
-            enabled: false
-          }
+            enabled: false,
+          },
         })
 
         const receiverPromise = receiver
@@ -1965,7 +1965,7 @@ moduleTypes.forEach(({
               'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
               'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
               'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
-              'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
+              'cypress/e2e/flaky-test-retries.js.flaky test retry always passes',
             ])
 
             assert.strictEqual(
@@ -1989,14 +1989,14 @@ moduleTypes.forEach(({
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: specToRun,
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
 
@@ -2007,8 +2007,8 @@ moduleTypes.forEach(({
           tests_skipping: false,
           flaky_test_retries_enabled: true,
           early_flake_detection: {
-            enabled: false
-          }
+            enabled: false,
+          },
         })
 
         const receiverPromise = receiver
@@ -2039,14 +2039,14 @@ moduleTypes.forEach(({
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
-              CYPRESS_TEST_ISOLATION: 'false'
+              CYPRESS_TEST_ISOLATION: 'false',
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
 
@@ -2057,8 +2057,8 @@ moduleTypes.forEach(({
           tests_skipping: false,
           flaky_test_retries_enabled: true,
           early_flake_detection: {
-            enabled: false
-          }
+            enabled: false,
+          },
         })
 
         const receiverPromise = receiver
@@ -2070,7 +2070,7 @@ moduleTypes.forEach(({
             // Extract test execution order with names
             const testExecutionOrder = tests.map(test => ({
               name: test.meta[TEST_NAME],
-              isRetry: test.meta[TEST_IS_RETRY] === 'true'
+              isRetry: test.meta[TEST_IS_RETRY] === 'true',
             }))
 
             // Expected order (with native Cypress retries):
@@ -2116,7 +2116,7 @@ moduleTypes.forEach(({
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: specToRun,
             },
           }
         )
@@ -2160,30 +2160,30 @@ moduleTypes.forEach(({
           cwd: `${cwd}/ci-visibility/subproject`,
           env: {
             ...restEnvVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
           },
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        eventsPromise
+        eventsPromise,
       ])
     })
 
     context('known tests without early flake detection', () => {
       it('detects new tests without retrying them', async () => {
         receiver.setSettings({
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
           cypress: {
             'cypress/e2e/spec.cy.js': [
               // 'context passes', // This test will be considered new
-              'other context fails'
-            ]
-          }
+              'other context fails',
+            ],
+          },
         })
 
         const {
@@ -2217,14 +2217,14 @@ moduleTypes.forEach(({
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
-              DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
+              DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false',
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
     })
@@ -2273,7 +2273,7 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               CYPRESS_BASE_URL_SECOND: `http://localhost:${secondWebAppPort}`,
               SPEC_PATTERN: specToRun,
-              DD_TRACE_DEBUG: 'true'
+              DD_TRACE_DEBUG: 'true',
             },
           }
         )
@@ -2282,7 +2282,7 @@ moduleTypes.forEach(({
           once(childProcess, 'exit'),
           once(childProcess.stdout, 'end'),
           once(childProcess.stderr, 'end'),
-          receiverPromise
+          receiverPromise,
         ])
       })
     }
@@ -2311,14 +2311,14 @@ moduleTypes.forEach(({
           env: {
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-            DD_SERVICE: 'my-service'
+            DD_SERVICE: 'my-service',
           },
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        receiverPromise
+        receiverPromise,
       ])
     })
 
@@ -2332,13 +2332,13 @@ moduleTypes.forEach(({
                   tests: {
                     'attempt to fix is attempt to fix': {
                       properties: {
-                        attempt_to_fix: true
-                      }
-                    }
-                  }
-                }
-              }
-            }
+                        attempt_to_fix: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
           })
         })
 
@@ -2347,7 +2347,7 @@ moduleTypes.forEach(({
           shouldAlwaysPass,
           shouldFailSometimes,
           isQuarantined,
-          isDisabled
+          isDisabled,
         }) =>
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -2365,7 +2365,7 @@ moduleTypes.forEach(({
 
               assertObjectContains(resourceNames,
                 [
-                  'cypress/e2e/attempt-to-fix.js.attempt to fix is attempt to fix'
+                  'cypress/e2e/attempt-to-fix.js.attempt to fix is attempt to fix',
                 ]
               )
 
@@ -2437,14 +2437,14 @@ moduleTypes.forEach(({
           shouldFailSometimes,
           isQuarantined,
           isDisabled,
-          extraEnvVars = {}
+          extraEnvVars = {},
         } = {}) => {
           const testAssertionsPromise = getTestAssertions({
             isAttemptToFix,
             shouldAlwaysPass,
             shouldFailSometimes,
             isQuarantined,
-            isDisabled
+            isDisabled,
           })
 
           const {
@@ -2464,7 +2464,7 @@ moduleTypes.forEach(({
                 SPEC_PATTERN: specToRun,
                 ...extraEnvVars,
                 ...(shouldAlwaysPass ? { CYPRESS_SHOULD_ALWAYS_PASS: '1' } : {}),
-                ...(shouldFailSometimes ? { CYPRESS_SHOULD_FAIL_SOMETIMES: '1' } : {})
+                ...(shouldFailSometimes ? { CYPRESS_SHOULD_FAIL_SOMETIMES: '1' } : {}),
               },
             }
           )
@@ -2475,7 +2475,7 @@ moduleTypes.forEach(({
 
           const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
-            testAssertionsPromise
+            testAssertionsPromise,
           ])
 
           if (shouldAlwaysPass) {
@@ -2535,13 +2535,13 @@ moduleTypes.forEach(({
                     'attempt to fix is attempt to fix': {
                       properties: {
                         attempt_to_fix: true,
-                        quarantined: true
-                      }
-                    }
-                  }
-                }
-              }
-            }
+                        quarantined: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
           })
 
           await runAttemptToFixTest({ isAttemptToFix: true, isQuarantined: true })
@@ -2562,13 +2562,13 @@ moduleTypes.forEach(({
                     'attempt to fix is attempt to fix': {
                       properties: {
                         attempt_to_fix: true,
-                        disabled: true
-                      }
-                    }
-                  }
-                }
-              }
-            }
+                        disabled: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
           })
 
           await runAttemptToFixTest({ isAttemptToFix: true, isDisabled: true })
@@ -2584,13 +2584,13 @@ moduleTypes.forEach(({
                   tests: {
                     'disable is disabled': {
                       properties: {
-                        disabled: true
-                      }
-                    }
-                  }
-                }
-              }
-            }
+                        disabled: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
           })
         })
 
@@ -2636,14 +2636,14 @@ moduleTypes.forEach(({
                 ...restEnvVars,
                 CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
                 SPEC_PATTERN: specToRun,
-                ...extraEnvVars
+                ...extraEnvVars,
               },
             }
           )
 
           const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
-            testAssertionsPromise
+            testAssertionsPromise,
           ])
 
           if (isDisabling) {
@@ -2681,13 +2681,13 @@ moduleTypes.forEach(({
                   tests: {
                     'quarantine is quarantined': {
                       properties: {
-                        quarantined: true
-                      }
-                    }
-                  }
-                }
-              }
-            }
+                        quarantined: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
           })
         })
 
@@ -2734,14 +2734,14 @@ moduleTypes.forEach(({
                 ...restEnvVars,
                 CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
                 SPEC_PATTERN: specToRun,
-                ...extraEnvVars
+                ...extraEnvVars,
               },
             }
           )
 
           const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
-            testAssertionsPromise
+            testAssertionsPromise,
           ])
 
           if (isQuarantining) {
@@ -2773,7 +2773,7 @@ moduleTypes.forEach(({
       it('does not crash if the request to get test management tests fails', async () => {
         receiver.setSettings({
           test_management: { enabled: true },
-          flaky_test_retries_enabled: false
+          flaky_test_retries_enabled: false,
         })
         receiver.setTestManagementTestsResponseCode(500)
 
@@ -2802,20 +2802,20 @@ moduleTypes.forEach(({
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
-              DD_TRACE_DEBUG: '1'
+              DD_TRACE_DEBUG: '1',
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          eventsPromise
+          eventsPromise,
         ])
       })
 
       over12It('does not retry attempt to fix tests when testIsolation is false', async () => {
         receiver.setSettings({
-          test_management: { enabled: true }
+          test_management: { enabled: true },
         })
 
         receiver.setTestManagementTests({
@@ -2825,13 +2825,13 @@ moduleTypes.forEach(({
                 tests: {
                   'attempt to fix is attempt to fix': {
                     properties: {
-                      attempt_to_fix: true
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      attempt_to_fix: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         })
 
         const receiverPromise = receiver
@@ -2841,7 +2841,7 @@ moduleTypes.forEach(({
             const testSession = events.find(event => event.type === 'test_session_end').content
 
             assertObjectContains(testSession.meta, {
-              [TEST_MANAGEMENT_ENABLED]: 'true'
+              [TEST_MANAGEMENT_ENABLED]: 'true',
             })
 
             const attemptToFixTests = tests.filter(
@@ -2875,14 +2875,14 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
               CYPRESS_SHOULD_ALWAYS_PASS: '1',
-              CYPRESS_TEST_ISOLATION: 'false'
+              CYPRESS_TEST_ISOLATION: 'false',
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
 
@@ -2891,8 +2891,8 @@ moduleTypes.forEach(({
         receiver.setSettings({
           test_management: {
             enabled: true,
-            attempt_to_fix_retries: 3
-          }
+            attempt_to_fix_retries: 3,
+          },
         })
 
         receiver.setTestManagementTests({
@@ -2902,14 +2902,14 @@ moduleTypes.forEach(({
                 tests: {
                   'attempt to fix order second test': {
                     properties: {
-                      attempt_to_fix: true
-                    }
-                  }
+                      attempt_to_fix: true,
+                    },
+                  },
                   // 'first test' and 'third test' won't be retried
-                }
-              }
-            }
-          }
+                },
+              },
+            },
+          },
         })
 
         const receiverPromise = receiver
@@ -2924,7 +2924,7 @@ moduleTypes.forEach(({
             const testExecutionOrder = tests.map(test => ({
               name: test.meta[TEST_NAME],
               isRetry: test.meta[TEST_IS_RETRY] === 'true',
-              isAttemptToFix: test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
+              isAttemptToFix: test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true',
             }))
 
             // Expected order:
@@ -2941,12 +2941,12 @@ moduleTypes.forEach(({
               { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
               { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
               { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
-              { name: 'attempt to fix order third test', isRetry: false, isAttemptToFix: false }
+              { name: 'attempt to fix order third test', isRetry: false, isAttemptToFix: false },
             ])
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assertObjectContains(testSession.meta, {
-              [TEST_MANAGEMENT_ENABLED]: 'true'
+              [TEST_MANAGEMENT_ENABLED]: 'true',
             })
           }, 25000)
 
@@ -2980,7 +2980,7 @@ moduleTypes.forEach(({
           once(childProcess, 'exit'),
           once(childProcess.stdout, 'end'),
           once(childProcess.stderr, 'end'),
-          receiverPromise
+          receiverPromise,
         ])
 
         assert.match(testOutput, /Retrying "attempt to fix order second test" because it is an attempt to fix/)
@@ -3034,7 +3034,7 @@ moduleTypes.forEach(({
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
     })
@@ -3043,8 +3043,8 @@ moduleTypes.forEach(({
       beforeEach(() => {
         receiver.setKnownTests({
           cypress: {
-            'cypress/e2e/impacted-test.js': ['impacted test is impacted test']
-          }
+            'cypress/e2e/impacted-test.js': ['impacted test is impacted test'],
+          },
         })
       })
 
@@ -3097,7 +3097,7 @@ moduleTypes.forEach(({
 
             assertObjectContains(resourceNames,
               [
-                'cypress/e2e/impacted-test.js.impacted test is impacted test'
+                'cypress/e2e/impacted-test.js.impacted test is impacted test',
               ]
             )
 
@@ -3167,7 +3167,7 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
               GITHUB_BASE_REF: '',
-              ...extraEnvVars
+              ...extraEnvVars,
             },
           }
         )
@@ -3178,7 +3178,7 @@ moduleTypes.forEach(({
 
         await Promise.all([
           once(childProcess, 'exit'),
-          testAssertionsPromise
+          testAssertionsPromise,
         ])
       }
 
@@ -3209,17 +3209,17 @@ moduleTypes.forEach(({
       context('test is new', () => {
         it('should be retried and marked both as new and modified', async () => {
           receiver.setKnownTests({
-            cypress: {}
+            cypress: {},
           })
           receiver.setSettings({
             impacted_tests_enabled: true,
             early_flake_detection: {
               enabled: true,
               slow_test_retries: {
-                '5s': NUM_RETRIES_EFD
-              }
+                '5s': NUM_RETRIES_EFD,
+              },
             },
-            known_tests_enabled: true
+            known_tests_enabled: true,
           })
           await runImpactedTest(
             { isModified: true, isEfd: true, isNew: true }
@@ -3233,10 +3233,10 @@ moduleTypes.forEach(({
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         const receiverPromise = receiver
@@ -3246,7 +3246,7 @@ moduleTypes.forEach(({
             const testSession = events.find(event => event.type === 'test_session_end').content
 
             assertObjectContains(testSession.meta, {
-              [TEST_EARLY_FLAKE_ENABLED]: 'true'
+              [TEST_EARLY_FLAKE_ENABLED]: 'true',
             })
 
             const impactedTests = tests.filter(test =>
@@ -3258,7 +3258,7 @@ moduleTypes.forEach(({
 
             for (const impactedTest of impactedTests) {
               assertObjectContains(impactedTest.meta, {
-                [TEST_IS_MODIFIED]: 'true'
+                [TEST_IS_MODIFIED]: 'true',
               })
             }
 
@@ -3286,14 +3286,14 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
               GITHUB_BASE_REF: '',
-              CYPRESS_TEST_ISOLATION: 'false'
+              CYPRESS_TEST_ISOLATION: 'false',
             },
           }
         )
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise
+          receiverPromise,
         ])
       })
 
@@ -3304,19 +3304,19 @@ moduleTypes.forEach(({
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': 2
-            }
+              '5s': 2,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
           cypress: {
             'cypress/e2e/impacted-test-order.js': [
               'impacted test order first test',
-              'impacted test order second test'
-            ]
-          }
+              'impacted test order second test',
+            ],
+          },
         })
 
         const receiverPromise = receiver
@@ -3354,12 +3354,12 @@ moduleTypes.forEach(({
               { name: 'impacted test order first test', isRetry: true },
               { name: 'impacted test order second test', isRetry: false },
               { name: 'impacted test order second test', isRetry: true },
-              { name: 'impacted test order second test', isRetry: true }
+              { name: 'impacted test order second test', isRetry: true },
             ])
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assertObjectContains(testSession.meta, {
-              [TEST_EARLY_FLAKE_ENABLED]: 'true'
+              [TEST_EARLY_FLAKE_ENABLED]: 'true',
             })
           }, 25000)
 
@@ -3378,7 +3378,7 @@ moduleTypes.forEach(({
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
-              GITHUB_BASE_REF: ''
+              GITHUB_BASE_REF: '',
             },
           }
         )
@@ -3394,7 +3394,7 @@ moduleTypes.forEach(({
           once(childProcess, 'exit'),
           once(childProcess.stdout, 'end'),
           once(childProcess.stderr, 'end'),
-          receiverPromise
+          receiverPromise,
         ])
 
         assert.match(testOutput, /Retrying "impacted test order first test" to detect flakes because it is modified/)

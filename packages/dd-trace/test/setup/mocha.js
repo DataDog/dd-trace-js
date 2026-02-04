@@ -51,7 +51,7 @@ function withNamingSchema (
           Nomenclature.configure({
             spanAttributeSchema: versionName,
             spanRemoveIntegrationFromService: false,
-            service: fullConfig.service // Hack: only way to retrieve the test agent configuration
+            service: fullConfig.service, // Hack: only way to retrieve the test agent configuration
           })
         })
 
@@ -96,7 +96,7 @@ function withNamingSchema (
         Nomenclature.configure({
           spanAttributeSchema: 'v0',
           service: fullConfig.service,
-          spanRemoveIntegrationFromService: true
+          spanRemoveIntegrationFromService: true,
         })
       })
 
@@ -170,7 +170,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
           assert.strictEqual(span.meta['peer.service'], typeof service === 'function' ? service() : service)
           assert.strictEqual(span.meta['_dd.peer.service.source'], serviceSource)
         }),
-        spanGenerationPromise
+        spanGenerationPromise,
       ])
     })
   })
@@ -231,9 +231,11 @@ function withVersions (plugin, modules, range, cb) {
     for (const instrumentation of instrumentations) {
       if (instrumentation.name !== moduleName) continue
 
+      // Some entries coming from `externals.json` are dependency-only (e.g. `dep: true`) and don't have `versions`.
+      // Treat those as "not a test target" instead of crashing.
       const versions = process.env.PACKAGE_VERSION_RANGE
         ? [process.env.PACKAGE_VERSION_RANGE]
-        : instrumentation.versions
+        : normalizeVersions(instrumentation.versions)
 
       for (const version of versions) {
         if (process.env.RANGE && !semver.subset(version, process.env.RANGE)) continue
@@ -286,6 +288,11 @@ function withVersions (plugin, modules, range, cb) {
       })
     }
   }
+}
+
+function normalizeVersions (versions) {
+  if (!versions) return []
+  return Array.isArray(versions) ? versions : [versions]
 }
 
 /**
@@ -355,12 +362,22 @@ function insertVersionDep (dir, pkgName, version) {
   })
 }
 
+const ORIGINAL_PROCESS_EXIT = process.exit
+
 exports.mochaHooks = {
+  beforeAll () {
+    process.exit = (code) => {
+      throw new Error(`process.exit(${code}) was called during tests`)
+    }
+  },
+  afterAll () {
+    process.exit = ORIGINAL_PROCESS_EXIT
+  },
   afterEach () {
     agent.reset()
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
     storage('baggage').enterWith(undefined)
     extraServices.clear()
-  }
+  },
 }

@@ -23,8 +23,8 @@ class RheaProducerPlugin extends ProducerPlugin {
         'amqp.link.target.address': name,
         'amqp.link.role': 'sender',
         'out.host': host,
-        [CLIENT_PORT_KEY]: port
-      }
+        [CLIENT_PORT_KEY]: port,
+      },
     }, ctx)
 
     return ctx.currentStore

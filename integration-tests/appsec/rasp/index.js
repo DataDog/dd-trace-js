@@ -1,7 +1,7 @@
 'use strict'
 const tracer = require('dd-trace')
 tracer.init({
-  flushInterval: 0
+  flushInterval: 0,
 })
 
 const path = require('path')
@@ -185,7 +185,7 @@ app.get('/ssrf/http/unhandled-async-write-G', (req, res) => {
   makeOutgoingRequestAndCbAfterTimeout(req, res, () => {
     const earlyHintsLink = '</styles.css>; rel=preload; as=style'
     res.writeEarlyHints?.({
-      link: earlyHintsLink
+      link: earlyHintsLink,
     })
     res.end()
   })

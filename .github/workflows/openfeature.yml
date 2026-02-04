@@ -19,6 +19,7 @@ jobs:
     strategy:
       matrix:
         version: [oldest, maintenance, active, latest]
+    name: ${{ github.workflow }} / unit (node-${{ matrix.version }})
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -32,7 +33,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: openfeature-${{ github.job }}-${{ matrix.version }}
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: openfeature-unit-${{ matrix.version }}
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
@@ -42,6 +43,7 @@ jobs:
           service: dd-trace-js-tests
 
   macos:
+    name: ${{ github.workflow }} / macos
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -55,6 +57,7 @@ jobs:
           service: dd-trace-js-tests
 
   ubuntu:
+    name: ${{ github.workflow }} / ubuntu
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -74,6 +77,7 @@ jobs:
           service: dd-trace-js-tests
 
   windows:
+    name: ${{ github.workflow }} / windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

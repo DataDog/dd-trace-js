@@ -15,7 +15,7 @@ const {
   APM_TRACING_ENABLED_KEY,
   SAMPLING_MECHANISM_APPSEC,
   DECISION_MAKER_KEY,
-  TRACE_SOURCE_PROPAGATION_KEY
+  TRACE_SOURCE_PROPAGATION_KEY,
 } = require('../../src/constants')
 const { USER_KEEP } = require('../../../../ext/priority')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
@@ -36,8 +36,8 @@ describe('Disabled APM Tracing or Standalone', () => {
 
       tracePropagationStyle: {
         inject: ['datadog', 'tracecontext', 'b3'],
-        extract: ['datadog']
-      }
+        extract: ['datadog'],
+      },
     }
 
     tracer = {}
@@ -95,11 +95,11 @@ describe('Disabled APM Tracing or Standalone', () => {
               unsubscribe: sinon.stub(),
               get hasSubscribers () {
                 return true
-              }
+              },
             }
             return channels[name]
-          }
-        }
+          },
+        },
       })
 
       standalone.configure(config)
@@ -131,7 +131,7 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation'
+        operationName: 'operation',
       })
 
       assert.ok(!(APM_TRACING_ENABLED_KEY in span.context()._tags))
@@ -141,7 +141,7 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation'
+        operationName: 'operation',
       })
 
       assert.ok(Object.hasOwn(span.context()._tags, APM_TRACING_ENABLED_KEY))
@@ -151,14 +151,14 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
 
       const parent = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation'
+        operationName: 'operation',
       })
 
       assert.strictEqual(parent.context()._tags[APM_TRACING_ENABLED_KEY], 0)
 
       const child = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation',
-        parent
+        parent,
       })
 
       assert.ok(!(APM_TRACING_ENABLED_KEY in child.context()._tags))
@@ -168,14 +168,14 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
 
       const parent = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation'
+        operationName: 'operation',
       })
 
       parent._isRemote = true
 
       const child = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation',
-        parent
+        parent,
       })
 
       assert.strictEqual(child.context()._tags[APM_TRACING_ENABLED_KEY], 0)
@@ -189,7 +189,7 @@ describe('Disabled APM Tracing or Standalone', () => {
       const carrier = {
         'x-datadog-trace-id': 123123,
         'x-datadog-parent-id': 345345,
-        'x-datadog-sampling-priority': 2
+        'x-datadog-sampling-priority': 2,
       }
 
       const propagator = new TextMapPropagator(config)
@@ -205,7 +205,7 @@ describe('Disabled APM Tracing or Standalone', () => {
         'x-datadog-trace-id': 123123,
         'x-datadog-parent-id': 345345,
         'x-datadog-sampling-priority': 2,
-        'x-datadog-tags': '_dd.p.dm=-4'
+        'x-datadog-tags': '_dd.p.dm=-4',
       }
 
       const propagator = new TextMapPropagator(config)
@@ -221,7 +221,7 @@ describe('Disabled APM Tracing or Standalone', () => {
         'x-datadog-trace-id': 123123,
         'x-datadog-parent-id': 345345,
         'x-datadog-sampling-priority': 2,
-        'x-datadog-tags': '_dd.p.ts=02,_dd.p.dm=-5'
+        'x-datadog-tags': '_dd.p.ts=02,_dd.p.dm=-5',
       }
 
       const propagator = new TextMapPropagator(config)
@@ -238,7 +238,7 @@ describe('Disabled APM Tracing or Standalone', () => {
         'x-datadog-trace-id': 123123,
         'x-datadog-parent-id': 345345,
         'x-datadog-sampling-priority': 1,
-        'x-datadog-tags': '_dd.p.ts=02'
+        'x-datadog-tags': '_dd.p.ts=02',
       }
 
       const propagator = new TextMapPropagator(config)
@@ -254,7 +254,7 @@ describe('Disabled APM Tracing or Standalone', () => {
       const carrier = {
         'x-datadog-trace-id': 123123,
         'x-datadog-parent-id': 345345,
-        'x-datadog-sampling-priority': 2
+        'x-datadog-sampling-priority': 2,
       }
 
       const propagator = new TextMapPropagator(config)
@@ -269,12 +269,12 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation'
+        operationName: 'operation',
       })
 
       span._spanContext._sampling = {
         priority: USER_KEEP,
-        mechanism: SAMPLING_MECHANISM_APPSEC
+        mechanism: SAMPLING_MECHANISM_APPSEC,
       }
 
       const carrier = {}
@@ -293,12 +293,12 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation'
+        operationName: 'operation',
       })
 
       span._spanContext._sampling = {
         priority: USER_KEEP,
-        mechanism: SAMPLING_MECHANISM_APPSEC
+        mechanism: SAMPLING_MECHANISM_APPSEC,
       }
 
       span._spanContext._trace.tags[TRACE_SOURCE_PROPAGATION_KEY] = '02'
@@ -318,12 +318,12 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation'
+        operationName: 'operation',
       })
 
       span._spanContext._sampling = {
         priority: USER_KEEP,
-        mechanism: SAMPLING_MECHANISM_APPSEC
+        mechanism: SAMPLING_MECHANISM_APPSEC,
       }
 
       const carrier = {}
@@ -342,12 +342,12 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation'
+        operationName: 'operation',
       })
 
       span._spanContext._sampling = {
         priority: USER_KEEP,
-        mechanism: SAMPLING_MECHANISM_APPSEC
+        mechanism: SAMPLING_MECHANISM_APPSEC,
       }
 
       const tracestate = new TraceState()

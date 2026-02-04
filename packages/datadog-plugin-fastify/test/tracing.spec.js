@@ -70,8 +70,8 @@ describe('Plugin', () => {
                       'http.method': 'GET',
                       'http.status_code': '200',
                       component: 'fastify',
-                      '_dd.integration': 'fastify'
-                    }
+                      '_dd.integration': 'fastify',
+                    },
                   })
                 })
                 .then(done)
@@ -89,7 +89,7 @@ describe('Plugin', () => {
               url: '/user/:id',
               handler: (request, reply) => {
                 reply.send()
-              }
+              },
             })
 
             app.listen({ host, port: 0 }, () => {
@@ -109,8 +109,8 @@ describe('Plugin', () => {
                       'http.url': `http://localhost:${port}/user/123`,
                       'http.method': 'GET',
                       'http.status_code': '200',
-                      component: 'fastify'
-                    }
+                      component: 'fastify',
+                    },
                   })
                 })
                 .then(done)
@@ -127,7 +127,7 @@ describe('Plugin', () => {
               app.get('/user/:id', {
                 handler: (request, reply) => {
                   reply.send()
-                }
+                },
               })
 
               app.listen({ host, port: 0 }, () => {
@@ -147,8 +147,8 @@ describe('Plugin', () => {
                         'http.url': `http://localhost:${port}/user/123`,
                         'http.method': 'GET',
                         'http.status_code': '200',
-                        component: 'fastify'
-                      }
+                        component: 'fastify',
+                      },
                     })
                   })
                   .then(done)
@@ -225,7 +225,7 @@ describe('Plugin', () => {
               handler: (request, reply) => {
                 assert.notStrictEqual(tracer.scope().active(), null)
                 reply.send()
-              }
+              },
             })
 
             app.listen({ host, port: 0 }, () => {
@@ -262,7 +262,7 @@ describe('Plugin', () => {
               url: '/user',
               handler: (request, reply) => {
                 reply.send()
-              }
+              },
             })
 
             app.listen({ host, port: 0 }, () => {
@@ -295,8 +295,8 @@ describe('Plugin', () => {
                       [ERROR_TYPE]: error.name,
                       [ERROR_MESSAGE]: error.message,
                       [ERROR_STACK]: error.stack,
-                      component: 'fastify'
-                    }
+                      component: 'fastify',
+                    },
                   })
                 })
                 .then(done)
@@ -379,8 +379,8 @@ describe('Plugin', () => {
                       [ERROR_TYPE]: error.name,
                       [ERROR_MESSAGE]: error.message,
                       [ERROR_STACK]: error.stack,
-                      component: 'fastify'
-                    }
+                      component: 'fastify',
+                    },
                   })
                 })
                 .then(done)
@@ -413,8 +413,8 @@ describe('Plugin', () => {
                       resource: 'GET /user',
                       error: 0,
                       meta: {
-                        component: 'fastify'
-                      }
+                        component: 'fastify',
+                      },
                     })
                   })
                   .then(done)
@@ -450,8 +450,8 @@ describe('Plugin', () => {
                         [ERROR_TYPE]: error.name,
                         [ERROR_MESSAGE]: error.message,
                         [ERROR_STACK]: error.stack,
-                        component: 'fastify'
-                      }
+                        component: 'fastify',
+                      },
                     })
                   })
                   .then(done)
@@ -489,8 +489,8 @@ describe('Plugin', () => {
                         [ERROR_TYPE]: error.name,
                         [ERROR_MESSAGE]: error.message,
                         [ERROR_STACK]: error.stack,
-                        component: 'fastify'
-                      }
+                        component: 'fastify',
+                      },
                     })
                   })
                   .then(done)
@@ -525,7 +525,7 @@ describe('Plugin', () => {
                     assert.ok(!(ERROR_MESSAGE in spans[0].meta))
                     assert.ok(!(ERROR_STACK in spans[0].meta))
                     assertObjectContains(spans[0].meta, {
-                      component: 'fastify'
+                      component: 'fastify',
                     })
                   })
                   .then(done)
@@ -567,8 +567,8 @@ describe('Plugin', () => {
                         [ERROR_TYPE]: error.name,
                         [ERROR_MESSAGE]: error.message,
                         [ERROR_STACK]: error.stack,
-                        component: 'fastify'
-                      }
+                        component: 'fastify',
+                      },
                     })
                   })
                   .then(done)

@@ -32,7 +32,7 @@ function getProcessTags () {
     ['entrypoint.workdir', path.basename(CURRENT_WORKING_DIRECTORY) || undefined],
 
     // the .name field from the application's package.json
-    ['package.json.name', pkg.name || undefined]
+    ['package.json.name', pkg.name || undefined],
   ]
 
   const tagsArray = []
@@ -52,7 +52,7 @@ function getProcessTags () {
     tags,
     serialized,
     tagsObject,
-    tagsArray
+    tagsArray,
   }
 }
 

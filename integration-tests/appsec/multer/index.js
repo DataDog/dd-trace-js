@@ -2,12 +2,12 @@
 
 const options = {
   appsec: {
-    enabled: true
+    enabled: true,
   },
   iast: {
     enabled: true,
-    requestSampling: 100
-  }
+    requestSampling: 100,
+  },
 }
 
 if (process.env.AGENT_PORT) {

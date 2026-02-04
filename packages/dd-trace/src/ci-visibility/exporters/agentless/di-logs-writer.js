@@ -4,6 +4,7 @@ const log = require('../../../log')
 const { safeJSONStringify } = require('../../../exporters/common/util')
 const { JSONEncoder } = require('../../encode/json-encoder')
 const { getValueFromEnvSources } = require('../../../config/helper')
+const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 
 const BaseWriter = require('../../../exporters/common/writer')
 
@@ -11,7 +12,8 @@ const BaseWriter = require('../../../exporters/common/writer')
 // It is used to encode and send logs to both the logs intake directly and the
 // `/debugger/v1/input` endpoint in the agent, which is a proxy to the logs intake.
 class DynamicInstrumentationLogsWriter extends BaseWriter {
-  constructor ({ url, timeout, isAgentProxy = false }) {
+  // TODO: what's a good value for timeout for the logs intake?
+  constructor ({ url, timeout = 15_000, isAgentProxy = false }) {
     super(...arguments)
     this._url = url
     this._encoder = new JSONEncoder()
@@ -25,18 +27,18 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
       method: 'POST',
       headers: {
         'dd-api-key': getValueFromEnvSources('DD_API_KEY'),
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
-      // TODO: what's a good value for timeout for the logs intake?
-      timeout: this.timeout || 15_000,
-      url: this._url
+      timeout: this.timeout,
+      url: this._url,
     }
 
     if (this._isAgentProxy) {
       delete options.headers['dd-api-key']
-      options.path = '/debugger/v1/input'
+      options.path = DEBUGGER_INPUT_V1
     }
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Request to the logs intake: ${safeJSONStringify(options)}`)
 
     request(data, options, (err, res) => {
