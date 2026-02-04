@@ -682,7 +682,7 @@ jobs:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ldapjs:
-    runs-on: 'ubuntu-latest'
+    runs-on: ubuntu-latest
     env:
       PLUGINS: ldapjs
     steps:
@@ -692,7 +692,7 @@ jobs:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
   light-my-request:
-    runs-on: 'ubuntu-latest'
+    runs-on: ubuntu-latest
     env:
       PLUGINS: 'light-my-request'
     steps:
@@ -722,7 +722,7 @@ jobs:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
   lodash:
-    runs-on: 'ubuntu-latest'
+    runs-on: ubuntu-latest
     env:
       PLUGINS: lodash
     steps:
