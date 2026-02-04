@@ -1,5 +1,4 @@
 'use strict'
-require('util').inspect.defaultOptions.depth = null
 
 const tracingChannel = require('dc-polyfill').tracingChannel
 const clientCH = tracingChannel('apm:prisma')
