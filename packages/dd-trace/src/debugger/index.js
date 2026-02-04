@@ -102,6 +102,7 @@ function start (config, rcInstance) {
     worker = new Worker(
       join(__dirname, 'devtools_client', 'index.js'),
       {
+        name: 'dd-debugger',
         execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
         env, // Avoid worker thread inheriting the `NODE_OPTIONS` environment variable (in case it contains `-r`)
         workerData: {
