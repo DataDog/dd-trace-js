@@ -274,6 +274,7 @@ async function assertWorkspaces () {
     private: true,
     workspaces: {
       packages: [...workspaces].sort(),
+      nohoist: ['**/**'],
     },
   }, null, 2) + '\n')
 }

@@ -19,7 +19,6 @@ const range = semver.gte(process.version, '15.0.0') ? '>=2.5.1' : '>=2'
 describe('Plugin', () => {
   describe('mariadb', () => {
     withVersions('mariadb', 'mariadb', range, version => {
-      console.log(range, '///', version)
       let tracer
 
       beforeEach(() => {
