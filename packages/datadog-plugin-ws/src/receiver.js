@@ -27,7 +27,7 @@ class WSReceiverPlugin extends TracingPlugin {
     const { byteLength, socket, binary } = ctx
     if (!socket.spanContext) return
 
-    const spanTags = socket.spanContext.spanTags
+    const spanTags = socket.spanTags
     const path = spanTags['resource.name'].split(' ')[1]
     const opCode = binary ? 'binary' : 'text'
 
@@ -72,13 +72,12 @@ class WSReceiverPlugin extends TracingPlugin {
       const linkAttributes = { 'dd.kind': 'executed_by' }
 
       // Add span pointer for context propagation
-      if (this.config.traceWebsocketMessagesEnabled && ctx.socket.handshakeSpan) {
-        const handshakeSpan = ctx.socket.handshakeSpan
+      if (this.config.traceWebsocketMessagesEnabled && ctx.socket.spanContext) {
+        const handshakeContext = ctx.socket.spanContext
 
         // Only add span pointers if distributed tracing is enabled and handshake has distributed context
-        if (hasDistributedTracingContext(handshakeSpan, ctx.socket)) {
+        if (hasDistributedTracingContext(handshakeContext, ctx.socket)) {
           const counter = incrementWebSocketCounter(ctx.socket, 'receiveCounter')
-          const handshakeContext = handshakeSpan.context()
 
           const ptrHash = buildWebSocketSpanPointerHash(
             handshakeContext._traceId,
