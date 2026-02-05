@@ -506,7 +506,7 @@
     {
       "name": "typescript",
       "dep": true,
-      "versions": [">=5.4.0"]
+      "versions": [">=5.4.2"]
     },
     {
       "name": "@prisma/adapter-pg",
