@@ -31,8 +31,8 @@ withVersions('stripe', 'stripe', version => {
       return axios.post(url, jsonStr, {
         headers: {
           'Content-Type': 'application/json',
-          'Stripe-Signature': `t=${timestamp},v1=${signature}`
-        }
+          'Stripe-Signature': `t=${timestamp},v1=${signature}`,
+        },
       })
     }
 
@@ -44,8 +44,8 @@ withVersions('stripe', 'stripe', version => {
       appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'payment_events_rules.json')
-        }
+          rules: path.join(__dirname, 'payment_events_rules.json'),
+        },
       }))
 
       const Stripe = require(`../../../../versions/stripe@${version}`).get()
@@ -56,7 +56,7 @@ withVersions('stripe', 'stripe', version => {
       app.use(bodyParser.json({
         verify: (req, res, buf) => {
           req.rawBody = buf
-        }
+        },
       }))
       app.use(bodyParser.urlencoded({ extended: true }))
 
@@ -67,23 +67,23 @@ withVersions('stripe', 'stripe', version => {
         let {
           line_items: [{
             price_data: {
-              unit_amount
+              unit_amount,
             },
-            quantity
+            quantity,
           }],
           mode,
           client_reference_id,
           discounts: [{
             coupon,
-            promotion_code
+            promotion_code,
           }],
           shipping_options: [{
             shipping_rate_data: {
               fixed_amount: {
-                amount: amount_shipping
-              }
-            }
-          }]
+                amount: amount_shipping,
+              },
+            },
+          }],
         } = req.body
 
         if (mode === undefined) return res.json({ error: { type: 'api_error', message: 'missing mode field' } })
@@ -113,8 +113,8 @@ withVersions('stripe', 'stripe', version => {
           livemode: true,
           total_details: {
             amount_discount,
-            amount_shipping
-          }
+            amount_shipping,
+          },
         })
       })
 
@@ -185,7 +185,7 @@ withVersions('stripe', 'stripe', version => {
           host: 'localhost',
           port,
           protocol: 'http',
-          telemetry: false
+          telemetry: false,
         })
         done()
       })
@@ -204,27 +204,27 @@ withVersions('stripe', 'stripe', version => {
           price_data: {
             currency: 'eur',
             product_data: {
-              name: 'test'
+              name: 'test',
             },
-            unit_amount: 100
+            unit_amount: 100,
           },
-          quantity: 10
+          quantity: 10,
         }],
         mode: 'payment',
         discounts: [{
           coupon: 'COUPEZ',
-          promotion_code: 'promo_FAKE'
+          promotion_code: 'promo_FAKE',
         }],
         shipping_options: [{
           shipping_rate_data: {
             display_name: 'test',
             fixed_amount: {
               amount: 50,
-              currency: 'eur'
+              currency: 'eur',
             },
-            type: 'fixed_amount'
-          }
-        }]
+            type: 'fixed_amount',
+          },
+        }],
       })
 
       await agent.assertSomeTraces((traces) => {
@@ -251,13 +251,13 @@ withVersions('stripe', 'stripe', version => {
         mode: 'payment',
         discounts: [{
           coupon: 'COUPEZ',
-          promotion_code: 'promo_FAKE'
+          promotion_code: 'promo_FAKE',
         }],
         livemode: true,
         total_details: {
           amount_discount: 100,
-          amount_shipping: 50
-        }
+          amount_shipping: 50,
+        },
       })
     })
 
@@ -268,27 +268,27 @@ withVersions('stripe', 'stripe', version => {
           price_data: {
             currency: 'eur',
             product_data: {
-              name: 'test'
+              name: 'test',
             },
-            unit_amount: 100
+            unit_amount: 100,
           },
-          quantity: 10
+          quantity: 10,
         }],
         mode: 'subscription',
         discounts: [{
           coupon: 'COUPEZ',
-          promotion_code: 'promo_FAKE'
+          promotion_code: 'promo_FAKE',
         }],
         shipping_options: [{
           shipping_rate_data: {
             display_name: 'test',
             fixed_amount: {
               amount: 50,
-              currency: 'eur'
+              currency: 'eur',
             },
-            type: 'fixed_amount'
-          }
-        }]
+            type: 'fixed_amount',
+          },
+        }],
       })
 
       await agent.assertSomeTraces((traces) => {
@@ -316,13 +316,13 @@ withVersions('stripe', 'stripe', version => {
         mode: 'subscription',
         discounts: [{
           coupon: 'COUPEZ',
-          promotion_code: 'promo_FAKE'
+          promotion_code: 'promo_FAKE',
         }],
         livemode: true,
         total_details: {
           amount_discount: 100,
-          amount_shipping: 50
-        }
+          amount_shipping: 50,
+        },
       })
     })
 
@@ -333,27 +333,27 @@ withVersions('stripe', 'stripe', version => {
           price_data: {
             currency: 'eur',
             product_data: {
-              name: 'test'
+              name: 'test',
             },
-            unit_amount: 100
+            unit_amount: 100,
           },
-          quantity: 10
+          quantity: 10,
         }],
         // missing mode
         discounts: [{
           coupon: 'COUPEZ',
-          promotion_code: 'promo_FAKE'
+          promotion_code: 'promo_FAKE',
         }],
         shipping_options: [{
           shipping_rate_data: {
             display_name: 'test',
             fixed_amount: {
               amount: 50,
-              currency: 'eur'
+              currency: 'eur',
             },
-            type: 'fixed_amount'
-          }
-        }]
+            type: 'fixed_amount',
+          },
+        }],
       })
 
       await agent.assertSomeTraces((traces) => {
@@ -400,7 +400,7 @@ withVersions('stripe', 'stripe', version => {
         amount: 6969,
         currency: 'eur',
         livemode: true,
-        payment_method: 'pm_FAKE'
+        payment_method: 'pm_FAKE',
       })
     })
 
@@ -436,9 +436,9 @@ withVersions('stripe', 'stripe', version => {
             amount: 420,
             currency: 'eur',
             livemode: true,
-            payment_method: 'pm_FAKE'
-          }
-        }
+            payment_method: 'pm_FAKE',
+          },
+        },
       })
 
       await agent.assertSomeTraces((traces) => {
@@ -475,12 +475,12 @@ withVersions('stripe', 'stripe', version => {
               decline_code: 'stolen_card',
               payment_method: {
                 id: 'pm_FAKE',
-                type: 'card'
-              }
+                type: 'card',
+              },
             },
-            livemode: true
-          }
-        }
+            livemode: true,
+          },
+        },
       })
 
       await agent.assertSomeTraces((traces) => {
@@ -507,10 +507,10 @@ withVersions('stripe', 'stripe', version => {
           decline_code: 'stolen_card',
           payment_method: {
             id: 'pm_FAKE',
-            type: 'card'
-          }
+            type: 'card',
+          },
         },
-        livemode: true
+        livemode: true,
       })
     })
 
@@ -523,9 +523,9 @@ withVersions('stripe', 'stripe', version => {
             amount: 1337,
             cancellation_reason: 'requested_by_customer',
             currency: 'eur',
-            livemode: true
-          }
-        }
+            livemode: true,
+          },
+        },
       })
 
       await agent.assertSomeTraces((traces) => {
@@ -545,7 +545,7 @@ withVersions('stripe', 'stripe', version => {
         amount: 1337,
         cancellation_reason: 'requested_by_customer',
         currency: 'eur',
-        livemode: true
+        livemode: true,
       })
     })
 
@@ -558,9 +558,9 @@ withVersions('stripe', 'stripe', version => {
             amount: 420,
             currency: 'eur',
             livemode: true,
-            payment_method: 'pm_FAKE'
-          }
-        }
+            payment_method: 'pm_FAKE',
+          },
+        },
       }, 'WRONG_SECRET')
 
       await agent.assertSomeTraces((traces) => {
@@ -588,9 +588,9 @@ withVersions('stripe', 'stripe', version => {
             amount: 420,
             currency: 'eur',
             livemode: true,
-            payment_method: 'pm_FAKE'
-          }
-        }
+            payment_method: 'pm_FAKE',
+          },
+        },
       })
 
       await agent.assertSomeTraces((traces) => {
@@ -619,9 +619,9 @@ withVersions('stripe', 'stripe', version => {
             amount: 420,
             currency: 'eur',
             livemode: true,
-            payment_method: 'pm_FAKE'
-          }
-        }
+            payment_method: 'pm_FAKE',
+          },
+        },
       }, WEBHOOK_SECRET, '/stripe/webhookAsync')
 
       await agent.assertSomeTraces((traces) => {
@@ -654,9 +654,9 @@ withVersions('stripe', 'stripe', version => {
             amount: 420,
             currency: 'eur',
             livemode: true,
-            payment_method: 'pm_FAKE'
-          }
-        }
+            payment_method: 'pm_FAKE',
+          },
+        },
       }, 'WRONG_SECRET', '/stripe/webhookAsync')
 
       await agent.assertSomeTraces((traces) => {

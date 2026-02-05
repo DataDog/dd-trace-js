@@ -403,9 +403,9 @@ function onStripeCheckoutSessionCreate (payload) {
         'discounts.promotion_code': payload.discounts?.[0]?.promotion_code,
         livemode: payload.livemode,
         'total_details.amount_discount': payload.total_details?.amount_discount,
-        'total_details.amount_shipping': payload.total_details?.amount_shipping
-      }
-    }
+        'total_details.amount_shipping': payload.total_details?.amount_shipping,
+      },
+    },
   })
 }
 
@@ -420,9 +420,9 @@ function onStripePaymentIntentCreate (payload) {
         amount: payload.amount,
         currency: payload.currency,
         livemode: payload.livemode,
-        payment_method: payload.payment_method
-      }
-    }
+        payment_method: payload.payment_method,
+      },
+    },
   })
 }
 
@@ -441,8 +441,8 @@ function onStripeConstructEvent (payload) {
           amount: object.amount,
           currency: object.currency,
           livemode: object.livemode,
-          payment_method: object.payment_method
-        }
+          payment_method: object.payment_method,
+        },
       }
       break
 
@@ -457,8 +457,8 @@ function onStripeConstructEvent (payload) {
           'last_payment_error.decline_code': object.last_payment_error?.decline_code,
           'last_payment_error.payment_method.id': object.last_payment_error?.payment_method?.id,
           'last_payment_error.payment_method.type': object.last_payment_error?.payment_method?.type,
-          livemode: object.livemode
-        }
+          livemode: object.livemode,
+        },
       }
       break
 
@@ -470,8 +470,8 @@ function onStripeConstructEvent (payload) {
           amount: object.amount,
           cancellation_reason: object.cancellation_reason,
           currency: object.currency,
-          livemode: object.livemode
-        }
+          livemode: object.livemode,
+        },
       }
       break
 
