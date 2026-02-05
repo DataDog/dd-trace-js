@@ -8,7 +8,7 @@ const {
   useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProcAndExpectExit,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -24,7 +24,6 @@ describe('esm', () => {
     beforeEach(async () => {
       agent = await new FakeAgent().start()
     })
-
 
     afterEach(async () => {
       proc && proc.kill()
