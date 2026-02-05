@@ -6,106 +6,108 @@ const childProcess = require('child_process')
 const path = require('path')
 const Axios = require('axios')
 const { sandboxCwd, useSandbox, spawnProc, FakeAgent } = require('../helpers')
-describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
-  let axios, cwd, appDir, appFile, agent, proc
+for (let i = 0; i < 20; i++) {
+  describe.only('IAST stack traces and vulnerabilities with sourcemaps' + i, () => {
+    let axios, cwd, appDir, appFile, agent, proc
 
-  useSandbox(['@types/node', 'typescript', 'express'])
+    useSandbox(['@types/node', 'typescript', 'express'])
 
-  before(function () {
-    cwd = sandboxCwd()
+    before(function () {
+      cwd = sandboxCwd()
 
-    appDir = path.join(cwd, 'appsec', 'iast-stack-traces-ts-with-sourcemaps')
+      appDir = path.join(cwd, 'appsec', 'iast-stack-traces-ts-with-sourcemaps')
 
-    childProcess.execSync('yarn || yarn', { cwd })
-    childProcess.execSync('npx tsc', {
-      cwd: appDir,
+      childProcess.execSync('yarn || yarn', { cwd })
+      childProcess.execSync('npx tsc', {
+        cwd: appDir,
+      })
+
+      appFile = path.join(appDir, 'index.js')
     })
 
-    appFile = path.join(appDir, 'index.js')
-  })
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
 
-  beforeEach(async () => {
-    agent = await new FakeAgent().start()
+      proc = await spawnProc(appFile, {
+        cwd,
+        env: {
+          DD_TRACE_AGENT_PORT: agent.port,
+          DD_IAST_ENABLED: 'true',
+          DD_IAST_REQUEST_SAMPLING: '100',
+          NODE_OPTIONS: `--enable-source-maps --require ${appDir}/init.js`,
+        },
+      })
 
-    proc = await spawnProc(appFile, {
-      cwd,
-      env: {
-        DD_TRACE_AGENT_PORT: agent.port,
-        DD_IAST_ENABLED: 'true',
-        DD_IAST_REQUEST_SAMPLING: '100',
-        NODE_OPTIONS: `--enable-source-maps --require ${appDir}/init.js`,
-      },
+      axios = Axios.create({ baseURL: proc.url })
     })
 
-    axios = Axios.create({ baseURL: proc.url })
-  })
-
-  afterEach(async () => {
-    proc.kill()
-    await agent.stop()
-  })
-
-  describe('in rewritten file', () => {
-    it('should detect correct stack trace in unnamed function', async () => {
-      const response = await axios.get('/rewritten/stack-trace-from-unnamed-function')
-
-      assert.match(response.data, /\/rewritten-routes\.ts:7:13/)
+    afterEach(async () => {
+      proc.kill()
+      await agent.stop()
     })
 
-    it('should detect correct stack trace in named function', async () => {
-      const response = await axios.get('/rewritten/stack-trace-from-named-function')
+    describe('in rewritten file', () => {
+      it('should detect correct stack trace in unnamed function', async () => {
+        const response = await axios.get('/rewritten/stack-trace-from-unnamed-function')
 
-      assert.match(response.data, /\/rewritten-routes\.ts:11:13/)
-    })
+        assert.match(response.data, /\/rewritten-routes\.ts:7:13/)
+      })
 
-    it('should detect vulnerability in the correct location', async () => {
-      await axios.get('/rewritten/vulnerability')
+      it('should detect correct stack trace in named function', async () => {
+        const response = await axios.get('/rewritten/stack-trace-from-named-function')
 
-      await agent.assertMessageReceived(({ payload }) => {
-        const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
-        spans.forEach(span => {
-          assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
-          const iastJsonObject = JSON.parse(span.meta['_dd.iast.json'])
+        assert.match(response.data, /\/rewritten-routes\.ts:11:13/)
+      })
 
-          assert.strictEqual(iastJsonObject.vulnerabilities.some(vulnerability => {
-            return vulnerability.type === 'WEAK_HASH' &&
+      it('should detect vulnerability in the correct location', async () => {
+        await axios.get('/rewritten/vulnerability')
+
+        await agent.assertMessageReceived(({ payload }) => {
+          const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
+          spans.forEach(span => {
+            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+            const iastJsonObject = JSON.parse(span.meta['_dd.iast.json'])
+
+            assert.strictEqual(iastJsonObject.vulnerabilities.some(vulnerability => {
+              return vulnerability.type === 'WEAK_HASH' &&
               vulnerability.location.path === 'appsec/iast-stack-traces-ts-with-sourcemaps/rewritten-routes.ts' &&
               vulnerability.location.line === 15
-          }), true)
-        })
-      }, null, 1, true)
-    })
-  })
-
-  describe('in not rewritten file', () => {
-    it('should detect correct stack trace in unnamed function', async () => {
-      const response = await axios.get('/not-rewritten/stack-trace-from-unnamed-function')
-
-      assert.match(response.data, /\/not-rewritten-routes\.ts:7:13/)
+            }), true)
+          })
+        }, null, 1, true)
+      })
     })
 
-    it('should detect correct stack trace in named function', async () => {
-      const response = await axios.get('/not-rewritten/stack-trace-from-named-function')
+    describe('in not rewritten file', () => {
+      it('should detect correct stack trace in unnamed function', async () => {
+        const response = await axios.get('/not-rewritten/stack-trace-from-unnamed-function')
 
-      assert.match(response.data, /\/not-rewritten-routes\.ts:11:13/)
-    })
+        assert.match(response.data, /\/not-rewritten-routes\.ts:7:13/)
+      })
 
-    it('should detect vulnerability in the correct location', async () => {
-      await axios.get('/not-rewritten/vulnerability')
+      it('should detect correct stack trace in named function', async () => {
+        const response = await axios.get('/not-rewritten/stack-trace-from-named-function')
 
-      await agent.assertMessageReceived(({ payload }) => {
-        const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
-        spans.forEach(span => {
-          assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
-          const iastJsonObject = JSON.parse(span.meta['_dd.iast.json'])
+        assert.match(response.data, /\/not-rewritten-routes\.ts:11:13/)
+      })
 
-          assert.strictEqual(iastJsonObject.vulnerabilities.some(vulnerability => {
-            return vulnerability.type === 'WEAK_HASH' &&
+      it('should detect vulnerability in the correct location', async () => {
+        await axios.get('/not-rewritten/vulnerability')
+
+        await agent.assertMessageReceived(({ payload }) => {
+          const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
+          spans.forEach(span => {
+            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+            const iastJsonObject = JSON.parse(span.meta['_dd.iast.json'])
+
+            assert.strictEqual(iastJsonObject.vulnerabilities.some(vulnerability => {
+              return vulnerability.type === 'WEAK_HASH' &&
               vulnerability.location.path === 'appsec/iast-stack-traces-ts-with-sourcemaps/not-rewritten-routes.ts' &&
               vulnerability.location.line === 15
-          }), true)
-        })
-      }, null, 1, true)
+            }), true)
+          })
+        }, null, 1, true)
+      })
     })
   })
-})
+}
