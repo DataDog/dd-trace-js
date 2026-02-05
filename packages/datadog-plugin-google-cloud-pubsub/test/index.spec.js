@@ -125,10 +125,10 @@ describe('Plugin', () => {
             })
             const publisher = new v1.PublisherClient({
               projectId: project,
-              grpc: gax.grpc,
+              grpc,
               servicePath: 'localhost',
               port: 8081,
-              sslCreds: gax.grpc.credentials.createInsecure(),
+              sslCreds: grpc.credentials.createInsecure(),
             }, gax)
             const name = `projects/${project}/topics/${topicName}`
             try {
