@@ -205,10 +205,12 @@ describe('Plugin', () => {
 
       assert.strictEqual(result, 'ok')
       assert.strictEqual(calls.length, 1)
-      assert.strictEqual(calls[0].type, 'promise')
-      assert.strictEqual(calls[0].ctx.resourceName, 'operation')
-      assertObjectContains(calls[0].ctx, {
-        attributes: { method: 'findMany', model: 'users' },
+      assertObjectContains(calls[0], {
+        ctx: {
+          resourceName: 'operation',
+          attributes: { method: 'findMany', model: 'users' },
+        },
+        type: 'promise',
       })
     })
 
