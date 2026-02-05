@@ -26,6 +26,8 @@ const SRC_FILES = [
   'ci/**/*.mjs',
   'scripts/**/*.js',
   'scripts/**/*.mjs',
+  'packages/*/*.js',
+  'packages/*/*.mjs',
   'packages/*/src/**/*.js',
   'packages/*/src/**/*.mjs',
 ]
@@ -67,14 +69,6 @@ export default [
   eslintPluginJs.configs.recommended,
   eslintPluginJSDoc.configs['flat/recommended'],
   {
-    // The following config and rules have been inlined from `eslint-config-standard` with the following modifications:
-    // - Rules that were overridden elsewhere in this file have been removed.
-    // - Deprecated rules have been replaced with their official replacements.
-    //
-    // We've inlined these to avoid having to depend on `eslint-config-standard` as:
-    // 1. It's no longer maintained.
-    // 2. It came with an older bundled version of `eslint-plugin-n` which conflicted with our version.
-    //
     // TODO: Move these rules to dd-trace/defaults or where they otherwise belong.
     name: 'standard',
     languageOptions: {
@@ -337,7 +331,7 @@ export default [
       'packages/datadog-plugin-next/test/app/**/*.js',
       'packages/datadog-plugin-next/test/**/pages/**/*.js',
       'packages/datadog-plugin-next/test/middleware.js',
-      '**/*.mjs', // TODO: This shoudln't be required, research why it is
+      '**/*.mjs', // TODO: This shouldn't be required, research why it is
     ],
   },
   {
@@ -458,7 +452,9 @@ export default [
       'no-await-in-loop': 'error',
       'no-else-return': ['error', { allowElseIf: true }],
       'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],
+      'no-unused-expressions': 'error',
       'no-useless-assignment': 'error',
+      'no-void': ['error', { allowAsStatement: true }],
       'operator-assignment': 'error',
       'prefer-exponentiation-operator': 'error',
       'prefer-object-has-own': 'error',

@@ -1,9 +1,11 @@
 'use strict'
 
+const { getEnvironmentVariable } = require('../dd-trace/src/config/helper')
 const { parseUserLandFrames } = require('../dd-trace/src/plugins/util/stacktrace')
 
 const ENTRY_SPAN_STACK_FRAMES_LIMIT = 1
-const EXIT_SPAN_STACK_FRAMES_LIMIT = Number(process.env._DD_CODE_ORIGIN_FOR_SPANS_EXIT_SPAN_MAX_USER_FRAMES) || 8
+const EXIT_SPAN_STACK_FRAMES_LIMIT =
+  Number(getEnvironmentVariable('_DD_CODE_ORIGIN_FOR_SPANS_EXIT_SPAN_MAX_USER_FRAMES')) || 8
 
 module.exports = {
   entryTags,

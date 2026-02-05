@@ -12,6 +12,8 @@ let isModifiedTest = false
 let isTestIsolationEnabled = false
 // Array of test names that have been retried and the reason
 const retryReasonsByTestName = new Map()
+// Track quarantined test errors - we catch them in Cypress.on('fail') but need to report to Datadog
+const quarantinedTestErrors = new Map()
 
 // We need to grab the original window as soon as possible,
 // in case the test changes the origin. If the test does change the origin,
@@ -45,6 +47,30 @@ function getTestProperties (testName) {
 
   return { isAttemptToFix, isDisabled, isQuarantined }
 }
+
+// Catch test failures for quarantined tests and suppress them
+// By not re-throwing the error, Cypress marks the test as passed
+// This allows quarantined tests to run but not affect the exit code
+Cypress.on('fail', (err, runnable) => {
+  if (!isTestManagementEnabled) {
+    throw err
+  }
+
+  const testName = runnable.fullTitle()
+  const { isQuarantined, isAttemptToFix } = getTestProperties(testName)
+
+  // For pure quarantined tests (not attemptToFix), suppress the failure
+  // This makes the test "pass" from Cypress's perspective while we still track the error
+  if (isQuarantined && !isAttemptToFix) {
+    // Store the error so we can report it to Datadog in afterEach
+    quarantinedTestErrors.set(testName, err)
+    // Don't re-throw - this prevents Cypress from marking the test as failed
+    return
+  }
+
+  // For all other tests (including attemptToFix), let the error propagate normally
+  throw err
+})
 
 function getRetriedTests (test, numRetries, tags) {
   const retriedTests = []
@@ -185,16 +211,31 @@ after(() => {
 
 afterEach(function () {
   const currentTest = Cypress.mocha.getRunner().suite.ctx.currentTest
+  const testName = currentTest.fullTitle()
+
+  // Check if this was a quarantined test that we suppressed the failure for
+  const quarantinedError = quarantinedTestErrors.get(testName)
+  const isQuarantinedTestThatFailed = !!quarantinedError
+
+  // For quarantined tests, convert Error to a serializable format for cy.task
+  const errorToReport = isQuarantinedTestThatFailed
+    ? { message: quarantinedError.message, stack: quarantinedError.stack }
+    : currentTest.err
+
   const testInfo = {
-    testName: currentTest.fullTitle(),
+    testName,
     testSuite: Cypress.mocha.getRootSuite().file,
     testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
-    state: currentTest.state,
-    error: currentTest.err,
+    // For quarantined tests, report the actual state (failed) to Datadog, not what Cypress thinks (passed)
+    state: isQuarantinedTestThatFailed ? 'failed' : currentTest.state,
+    // For quarantined tests, include the actual error that was suppressed
+    error: errorToReport,
     isNew: currentTest._ddIsNew,
     isEfdRetry: currentTest._ddIsEfdRetry,
     isAttemptToFix: currentTest._ddIsAttemptToFix,
     isModified: currentTest._ddIsModified,
+    // Mark quarantined tests that failed so the plugin knows to tag them appropriately
+    isQuarantined: isQuarantinedTestThatFailed,
   }
   try {
     testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
@@ -209,5 +250,11 @@ afterEach(function () {
   } catch {
     // ignore error and continue
   }
+
+  // Clean up the quarantined error tracking
+  if (isQuarantinedTestThatFailed) {
+    quarantinedTestErrors.delete(testName)
+  }
+
   cy.task('dd:afterEach', { test: testInfo, coverage })
 })
