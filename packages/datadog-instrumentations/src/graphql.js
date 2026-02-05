@@ -38,13 +38,6 @@ const validateStartCh = channel('apm:graphql:validate:start')
 const validateFinishCh = channel('apm:graphql:validate:finish')
 const validateErrorCh = channel('apm:graphql:validate:error')
 
-class AbortError extends Error {
-  constructor (message) {
-    super(message)
-    this.name = 'AbortError'
-  }
-}
-
 const types = new Set(['query', 'mutation', 'subscription'])
 
 function getOperation (document, operationName) {
@@ -183,7 +176,7 @@ function wrapExecute (execute) {
 
         contexts.set(contextValue, ctx)
 
-        return callInAsyncScope(exe, this, arguments, ctx.abortController, (err, res) => {
+        return callInAsyncScope(exe, this, arguments, ctx.abortController.signal, (err, res) => {
           if (finishResolveCh.hasSubscribers) finishResolvers(ctx)
 
           const error = err || (res && res.errors && res.errors[0])
@@ -213,7 +206,7 @@ function wrapResolve (resolve) {
 
     const field = assertField(ctx, info, args)
 
-    return callInAsyncScope(resolve, this, arguments, ctx.abortController, (err) => {
+    return callInAsyncScope(resolve, this, arguments, ctx.abortController.signal, (err) => {
       field.ctx.error = err
       field.ctx.info = info
       field.ctx.field = field
@@ -226,16 +219,15 @@ function wrapResolve (resolve) {
   return resolveAsync
 }
 
-function callInAsyncScope (fn, thisArg, args, abortController, cb) {
-  cb = cb || (() => {})
-
-  if (abortController?.signal.aborted) {
+function callInAsyncScope (fn, thisArg, args, abortSignal, cb) {
+  if (abortSignal.aborted) {
     cb(null, null)
-    throw new AbortError('Aborted')
+    throw abortSignal.reason
   }
 
+  let result
   try {
-    const result = fn.apply(thisArg, args)
+    result = fn.apply(thisArg, args)
     if (result && typeof result.then === 'function') {
       return result.then(
         res => {
@@ -248,12 +240,12 @@ function callInAsyncScope (fn, thisArg, args, abortController, cb) {
         }
       )
     }
-    cb(null, result)
-    return result
   } catch (err) {
     cb(err)
     throw err
-  }
+  } // else
+  cb(null, result)
+  return result
 }
 
 function pathToArray (path) {
