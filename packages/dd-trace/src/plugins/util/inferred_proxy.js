@@ -100,7 +100,10 @@ function setInferredProxySpanTags (span, proxyContext) {
     // API Gateway v1 (REST): arn:{partition}:apigateway:{region}::/restapis/{api-id}
     // API Gateway v2 (HTTP): arn:{partition}:apigateway:{region}::/apis/{api-id}
     const apiType = proxyContext.proxySystemName === 'aws-httpapi' ? 'apis' : 'restapis'
-    span.setTag('dd_resource_key', `arn:${partition}:apigateway:${proxyContext.region}::/${apiType}/${proxyContext.apiId}`)
+    span.setTag(
+      'dd_resource_key',
+      `arn:${partition}:apigateway:${proxyContext.region}::/${apiType}/${proxyContext.apiId}`
+    )
   }
 
   return span
