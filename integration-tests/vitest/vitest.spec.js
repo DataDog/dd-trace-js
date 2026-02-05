@@ -2301,14 +2301,16 @@ versions.forEach((version) => {
 
               assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
 
-              assert.strictEqual(coverageReport.coverageFile.name, 'coverage')
-              assert.ok(coverageReport.coverageFile.content.includes('SF:')) // LCOV format
+              assert.strictEqual(coverageReport.coverageFiles.length, 1)
+              assert.strictEqual(coverageReport.coverageFiles[0].name, 'coverage1')
+              assert.ok(coverageReport.coverageFiles[0].content.includes('SF:')) // LCOV format
 
-              assert.strictEqual(coverageReport.eventFile.name, 'event')
-              assert.strictEqual(coverageReport.eventFile.content.type, 'coverage_report')
-              assert.strictEqual(coverageReport.eventFile.content.format, 'lcov')
-              assert.strictEqual(coverageReport.eventFile.content[GIT_COMMIT_SHA], gitCommitSha)
-              assert.strictEqual(coverageReport.eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
+              assert.strictEqual(coverageReport.eventFiles.length, 1)
+              assert.strictEqual(coverageReport.eventFiles[0].name, 'event1')
+              assert.strictEqual(coverageReport.eventFiles[0].content.type, 'coverage_report')
+              assert.strictEqual(coverageReport.eventFiles[0].content.format, 'lcov')
+              assert.strictEqual(coverageReport.eventFiles[0].content[GIT_COMMIT_SHA], gitCommitSha)
+              assert.strictEqual(coverageReport.eventFiles[0].content[GIT_REPOSITORY_URL], gitRepositoryUrl)
             })
 
           childProcess = exec(
@@ -2360,6 +2362,63 @@ versions.forEach((version) => {
           await once(childProcess, 'exit')
 
           assert.strictEqual(coverageReportUploaded, false, 'coverage report should not be uploaded')
+        })
+
+        it('uploads coverage reports with batching support', async () => {
+          receiver.setSettings({
+            coverage_report_upload_enabled: true,
+          })
+
+          const coverageReportPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/cicovreprt', (payloads) => {
+              // Should receive at least 1 batch
+              assert.ok(payloads.length >= 1, 'Should receive at least 1 batch')
+
+              // Verify batching format is correct for all batches
+              for (const batch of payloads) {
+                assert.ok(batch.coverageFiles.length >= 1, 'Batch should have at least 1 coverage file')
+                assert.strictEqual(batch.coverageFiles.length, batch.eventFiles.length,
+                  'Each batch should have equal coverage and event files')
+
+                // Verify indexed field names in each batch (indexes should start at 1 for each batch)
+                for (let i = 0; i < batch.coverageFiles.length; i++) {
+                  const index = i + 1
+                  assert.strictEqual(batch.coverageFiles[i].name, `coverage${index}`,
+                    `Coverage file ${i} should be named coverage${index}`)
+                  assert.strictEqual(batch.eventFiles[i].name, `event${index}`,
+                    `Event file ${i} should be named event${index}`)
+                  assert.strictEqual(batch.eventFiles[i].content.type, 'coverage_report')
+                  assert.strictEqual(batch.eventFiles[i].content[GIT_COMMIT_SHA], gitCommitSha)
+                  assert.strictEqual(batch.eventFiles[i].content[GIT_REPOSITORY_URL], gitRepositoryUrl)
+                }
+              }
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --coverage',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                COVERAGE_PROVIDER: 'v8',
+                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
+                DD_GIT_COMMIT_SHA: gitCommitSha,
+                DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+              },
+            }
+          )
+
+          await Promise.all([
+            coverageReportPromise,
+            once(childProcess, 'exit'),
+          ])
+
+          // Cleanup
+          const coverageDir = path.join(cwd, 'coverage')
+          if (fs.existsSync(coverageDir)) {
+            fs.rmSync(coverageDir, { recursive: true, force: true })
+          }
         })
       })
     }
