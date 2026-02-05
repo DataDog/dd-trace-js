@@ -22,7 +22,7 @@ const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
 let rewriter
 
 for (const hook of Object.values(hooks)) {
-  if (typeof hook === 'object') {
+  if (hook !== null && typeof hook === 'object') {
     hook.fn()
   } else {
     hook()
@@ -33,10 +33,10 @@ const modulesOfInterest = new Set()
 
 for (const instrumentation of Object.values(instrumentations)) {
   for (const entry of instrumentation) {
-    if (!entry.file) {
-      modulesOfInterest.add(entry.name) // e.g. "redis"
-    } else {
+    if (entry.file) {
       modulesOfInterest.add(`${entry.name}/${entry.file}`) // e.g. "redis/my/file.js"
+    } else {
+      modulesOfInterest.add(entry.name) // e.g. "redis"
     }
   }
 }
@@ -50,7 +50,9 @@ for (const builtin of RAW_BUILTINS) {
   builtins.add(`node:${builtin}`)
 }
 
+// eslint-disable-next-line eslint-rules/eslint-process-env
 const DEBUG = !!process.env.DD_TRACE_DEBUG
+// eslint-disable-next-line eslint-rules/eslint-process-env
 const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
 
 module.exports.name = 'datadog-esbuild'
@@ -123,22 +125,23 @@ ${build.initialOptions.banner.js}`
   try {
     // eslint-disable-next-line n/no-unpublished-require
     require.resolve('@openfeature/core')
-  } catch (error) {
+  } catch {
     build.initialOptions.external ??= []
     build.initialOptions.external.push('@openfeature/core')
   }
 
   const esmBuild = isESMBuild(build)
-  if (esmBuild) {
-    if (!build.initialOptions.banner.js.includes('import { createRequire as $dd_createRequire } from \'module\'')) {
-      build.initialOptions.banner.js = `import { createRequire as $dd_createRequire } from 'module';
+  if (
+    esmBuild &&
+    !build.initialOptions.banner.js.includes('import { createRequire as $dd_createRequire } from \'module\'')
+  ) {
+    build.initialOptions.banner.js = `import { createRequire as $dd_createRequire } from 'module';
 import { fileURLToPath as $dd_fileURLToPath } from 'url';
 import { dirname as $dd_dirname } from 'path';
 globalThis.require ??= $dd_createRequire(import.meta.url);
 globalThis.__filename ??= $dd_fileURLToPath(import.meta.url);
 globalThis.__dirname ??= $dd_dirname(globalThis.__filename);
 ${build.initialOptions.banner.js}`
-    }
   }
 
   // Get git metadata at build time and add it to the banner for both ESM and CommonJS builds
@@ -185,7 +188,7 @@ ${build.initialOptions.banner.js}`
     let fullPathToModule
     try {
       fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir, args.kind === 'import-statement')
-    } catch (err) {
+    } catch {
       if (DEBUG) {
         console.warn(`Warning: Unable to find "${args.path}".` +
           "Unless it's dead code this could cause a problem at runtime.")
@@ -240,16 +243,13 @@ ${build.initialOptions.banner.js}`
         pathToPackageJson = extractPackageAndModulePath(pathToPackageJson).pkgJson
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
-          if (!internal) {
-            if (DEBUG) {
-              console.warn(`Warning: Unable to find "${extracted.pkg}/package.json".` +
+          if (!internal && DEBUG) {
+            console.warn(`Warning: Unable to find "${extracted.pkg}/package.json".` +
               "Unless it's dead code this could cause a problem at runtime.")
-            }
           }
           return
-        } else {
-          throw err
         }
+        throw err
       }
 
       try {
@@ -302,9 +302,9 @@ ${build.initialOptions.banner.js}`
 
       if (DEBUG) console.log(`LOAD: ${data.pkg}@${data.version}, pkg "${data.path}"`)
 
-      const pkgPath = data.raw !== data.pkg
-        ? `${data.pkg}/${data.path}`
-        : data.pkg
+      const pkgPath = data.raw === data.pkg
+        ? data.pkg
+        : `${data.pkg}/${data.path}`
 
       // Read the content of the module file of interest
       let contents
@@ -335,7 +335,7 @@ const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } });
 const set = {};
 const get = {};
 
-${Array.from(setters.values()).join(';\n')};
+${[...setters.values()].join(';\n')};
 
 register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)});
 `
