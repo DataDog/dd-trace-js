@@ -147,7 +147,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
     'x-dd-proxy-path': '/test',
     'x-dd-proxy-httpmethod': 'GET',
     'x-dd-proxy-domain-name': 'example.com',
-    'x-dd-proxy-stage': 'dev'
+    'x-dd-proxy-stage': 'dev',
   }
 
   const inferredHeadersWithRoute = {
@@ -157,7 +157,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
     'x-dd-proxy-httpmethod': 'GET',
     'x-dd-proxy-domain-name': 'example.com',
     'x-dd-proxy-stage': 'dev',
-    'x-dd-proxy-resource-path': '/users/{id}'
+    'x-dd-proxy-resource-path': '/users/{id}',
   }
 
   const inferredHeadersWithOptionalTags = {
@@ -171,7 +171,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
     'x-dd-proxy-account-id': '123456789012',
     'x-dd-proxy-api-id': 'abc123def4',
     'x-dd-proxy-region': 'us-east-1',
-    'x-dd-proxy-user': 'arn:aws:iam::123456789012:user/testuser'
+    'x-dd-proxy-user': 'arn:aws:iam::123456789012:user/testuser',
   }
 
   afterEach(async () => {
@@ -232,7 +232,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
       await loadTest({})
 
       await httpClient.get(`http://127.0.0.1:${port}/`, {
-        headers: inferredHeadersV2
+        headers: inferredHeadersV2,
       })
 
       await agent.assertSomeTraces(traces => {
@@ -251,11 +251,11 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
             'http.method': 'GET',
             'http.status_code': '200',
             component: 'aws-httpapi',
-            '_dd.integration': 'aws-httpapi'
+            '_dd.integration': 'aws-httpapi',
           },
           metrics: {
-            '_dd.inferred_span': 1
-          }
+            '_dd.inferred_span': 1,
+          },
         })
         assert.strictEqual(spans[0].start.toString(), '1729780025472999936')
 
@@ -271,8 +271,8 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
             'span.kind': 'server',
             'http.url': `http://127.0.0.1:${port}/`,
             'http.method': 'GET',
-            'http.status_code': '200'
-          }
+            'http.status_code': '200',
+          },
         })
       })
     })
@@ -281,7 +281,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
       await loadTest({})
 
       await httpClient.get(`http://127.0.0.1:${port}/`, {
-        headers: inferredHeadersWithRoute
+        headers: inferredHeadersWithRoute,
       })
 
       await agent.assertSomeTraces(traces => {
@@ -300,11 +300,11 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
             'http.method': 'GET',
             'http.route': '/users/{id}',
             'http.status_code': '200',
-            component: 'aws-apigateway'
+            component: 'aws-apigateway',
           },
           metrics: {
-            '_dd.inferred_span': 1
-          }
+            '_dd.inferred_span': 1,
+          },
         })
       })
     })
@@ -313,7 +313,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
       await loadTest({})
 
       await httpClient.get(`http://127.0.0.1:${port}/`, {
-        headers: inferredHeadersWithOptionalTags
+        headers: inferredHeadersWithOptionalTags,
       })
 
       await agent.assertSomeTraces(traces => {
@@ -328,8 +328,8 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
             apiid: 'abc123def4',
             region: 'us-east-1',
             aws_user: 'arn:aws:iam::123456789012:user/testuser',
-            dd_resource_key: 'arn:aws:apigateway:us-east-1::/restapis/abc123def4'
-          }
+            dd_resource_key: 'arn:aws:apigateway:us-east-1::/restapis/abc123def4',
+          },
         })
       })
     })
