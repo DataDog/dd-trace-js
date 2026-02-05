@@ -1,5 +1,5 @@
 import 'dd-trace/init.js'
-import { Queue } from 'bullmq'
+import bullmq from 'bullmq'
 
 const connection = {
   host: '127.0.0.1',
@@ -8,7 +8,7 @@ const connection = {
 
 const queueName = 'esm-test-queue-add'
 
-const queue = new Queue(queueName, { connection })
+const queue = new bullmq.Queue(queueName, { connection })
 await queue.waitUntilReady()
 
 // Test Queue.add() - tests Queue_add channel
