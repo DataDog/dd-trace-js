@@ -21,14 +21,14 @@ withVersions('stripe', 'stripe', version => {
 
     let server, axios
 
-    function webhookRequest (data, secret = WEBHOOK_SECRET) {
+    function webhookRequest (data, secret = WEBHOOK_SECRET, url = '/stripe/webhook') {
       const timestamp = Date.now()
       const jsonStr = JSON.stringify(data)
       const payload = `${timestamp}.${jsonStr}`
 
       const signature = crypto.createHmac('sha256', secret).update(payload).digest('hex')
 
-      return axios.post('/stripe/webhook', jsonStr, {
+      return axios.post(url, jsonStr, {
         headers: {
           'Content-Type': 'application/json',
           'Stripe-Signature': `t=${timestamp},v1=${signature}`
@@ -86,6 +86,8 @@ withVersions('stripe', 'stripe', version => {
           }]
         } = req.body
 
+        if (mode === undefined) return res.json({ error: { type: 'api_error', message: 'missing mode field' } })
+
         const subtotal = unit_amount * quantity
         let amount_discount = 0
 
@@ -120,6 +122,8 @@ withVersions('stripe', 'stripe', version => {
       app.post('/v1/payment_intents', (req, res) => {
         const { amount, currency, payment_method } = req.body
 
+        if (amount === undefined) return res.json({ error: { type: 'api_error', message: 'missing amount field' } })
+
         res.json({
           id: 'pi_FAKE',
           amount: +amount,
@@ -151,6 +155,19 @@ withVersions('stripe', 'stripe', version => {
       app.post('/stripe/webhook', async (req, res) => {
         try {
           const event = stripe.webhooks.constructEvent(
+            req.rawBody,
+            req.headers['stripe-signature'],
+            WEBHOOK_SECRET
+          )
+          res.json(event?.data?.object)
+        } catch (error) {
+          res.status(403).json({ error })
+        }
+      })
+
+      app.post('/stripe/webhookAsync', async (req, res) => {
+        try {
+          const event = await stripe.webhooks.constructEventAsync(
             req.rawBody,
             req.headers['stripe-signature'],
             WEBHOOK_SECRET
@@ -309,6 +326,56 @@ withVersions('stripe', 'stripe', version => {
       })
     })
 
+    it('should not detect checkout session creation when error occurs', async () => {
+      const res = await axios.post('/stripe/create_checkout_session', {
+        client_reference_id: 'GabeN',
+        line_items: [{
+          price_data: {
+            currency: 'eur',
+            product_data: {
+              name: 'test'
+            },
+            unit_amount: 100
+          },
+          quantity: 10
+        }],
+        // missing mode
+        discounts: [{
+          coupon: 'COUPEZ',
+          promotion_code: 'promo_FAKE'
+        }],
+        shipping_options: [{
+          shipping_rate_data: {
+            display_name: 'test',
+            fixed_amount: {
+              amount: 50,
+              currency: 'eur'
+            },
+            type: 'fixed_amount'
+          }
+        }]
+      })
+
+      await agent.assertSomeTraces((traces) => {
+        const span = traces[0][0]
+        assert.equal(span.metrics._sampling_priority_v1, 1)
+
+        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.integration'))
+        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.id'))
+        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.amount_total'))
+        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.client_reference_id'))
+        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.currency'))
+        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.discounts.coupon'))
+        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.discounts.promotion_code'))
+        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.livemode'))
+        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.total_details.amount_discount'))
+        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.total_details.amount_shipping'))
+      })
+
+      assert.equal(res.status, 500)
+      assert.equal(res.data.error.raw.message, 'missing mode field')
+    })
+
     it('should detect payment intent creation', async () => {
       const res = await axios.post('/stripe/create_payment_intent', {
         amount: 6969,
@@ -335,6 +402,29 @@ withVersions('stripe', 'stripe', version => {
         livemode: true,
         payment_method: 'pm_FAKE'
       })
+    })
+
+    it('should not detect payment intent creation when error occurs', async () => {
+      const res = await axios.post('/stripe/create_payment_intent', {
+        // missing amount field
+        currency: 'eur',
+        payment_method: 'pm_FAKE',
+      })
+
+      await agent.assertSomeTraces((traces) => {
+        const span = traces[0][0]
+        assert.equal(span.metrics._sampling_priority_v1, 1)
+
+        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.id'))
+        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.integration'))
+        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.amount'))
+        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.currency'))
+        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.livemode'))
+        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.payment_method'))
+      })
+
+      assert.equal(res.status, 500)
+      assert.equal(res.data.error.raw.message, 'missing amount field')
     })
 
     it('should detect payment success webhook', async () => {
@@ -486,6 +576,7 @@ withVersions('stripe', 'stripe', version => {
       })
 
       assert.equal(res.status, 403)
+      assert.equal(res.data.error.type, 'StripeSignatureVerificationError')
     })
 
     it('should not detect unsupported webhook type', async () => {
@@ -517,6 +608,71 @@ withVersions('stripe', 'stripe', version => {
         livemode: true,
         payment_method: 'pm_FAKE',
       })
+    })
+
+    it('should detect payment success webhook when using async decoder', async () => {
+      const res = await webhookRequest({
+        type: 'payment_intent.succeeded',
+        data: {
+          object: {
+            id: 'pi_FAKE',
+            amount: 420,
+            currency: 'eur',
+            livemode: true,
+            payment_method: 'pm_FAKE'
+          }
+        }
+      }, WEBHOOK_SECRET, '/stripe/webhookAsync')
+
+      await agent.assertSomeTraces((traces) => {
+        const span = traces[0][0]
+        assert.equal(span.metrics._sampling_priority_v1, 1)
+        assert.equal(span.meta['appsec.events.payments.integration'], 'stripe')
+        assert.equal(span.meta['appsec.events.payments.success.id'], 'pi_FAKE')
+        assert.equal(span.metrics['appsec.events.payments.success.amount'], 420)
+        assert.equal(span.meta['appsec.events.payments.success.currency'], 'eur')
+        assert.equal(span.metrics['appsec.events.payments.success.livemode'], 1)
+        assert.equal(span.meta['appsec.events.payments.success.payment_method'], 'pm_FAKE')
+      })
+
+      assert.equal(res.status, 200)
+      assert.deepEqual(res.data, {
+        id: 'pi_FAKE',
+        amount: 420,
+        currency: 'eur',
+        livemode: true,
+        payment_method: 'pm_FAKE',
+      })
+    })
+
+    it('should not detect webhook event with wrong signature when using async decoder', async () => {
+      const res = await webhookRequest({
+        type: 'payment_intent.succeeded',
+        data: {
+          object: {
+            id: 'pi_FAKE',
+            amount: 420,
+            currency: 'eur',
+            livemode: true,
+            payment_method: 'pm_FAKE'
+          }
+        }
+      }, 'WRONG_SECRET', '/stripe/webhookAsync')
+
+      await agent.assertSomeTraces((traces) => {
+        const span = traces[0][0]
+        assert.equal(span.metrics._sampling_priority_v1, 1)
+
+        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.integration'))
+        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.success.id'))
+        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.success.amount'))
+        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.success.currency'))
+        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.success.livemode'))
+        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.success.payment_method'))
+      })
+
+      assert.equal(res.status, 403)
+      assert.equal(res.data.error.type, 'StripeSignatureVerificationError')
     })
   })
 })
