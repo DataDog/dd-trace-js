@@ -1419,44 +1419,90 @@ describe('Plugin', () => {
       })
 
       describe('with filter configuration', () => {
-        let config
+        describe('when filter is only applied to client', () => {
+          beforeEach(() => {
+            const config = {
+              server: false,
+              client: {
+                filter: (url) => !url.includes('/health'),
+              },
+            }
 
-        beforeEach(() => {
-          config = {
-            server: false,
-            client: {
-              filter: (url) => !url.includes('/health'),
-            },
-          }
-
-          return agent.load('http', config)
-            .then(() => {
-              http = require(pluginToBeLoaded)
-              express = require('express')
-            })
-        })
-
-        it('should skip recording if the filter function returns false', done => {
-          const app = express()
-
-          app.get('/health', (req, res) => {
-            res.status(200).send()
+            return agent.load('http', config)
+              .then(() => {
+                http = require(pluginToBeLoaded)
+                express = require('express')
+              })
           })
 
-          const timer = setTimeout(done, 100)
+          it('should skip recording if the filter function returns false', done => {
+            const app = express()
 
-          agent
-            .assertSomeTraces(() => {
+            app.get('/health', (req, res) => {
+              res.status(200).send()
+            })
+
+            const timer = setTimeout(done, 100)
+
+            agent.assertSomeTraces(() => {
               clearTimeout(timer)
               done(new Error('Filtered requests should not be recorded.'))
             })
-            .catch(done)
 
-          appListener = server(app, port => {
-            const req = http.request(`${protocol}://localhost:${port}/health`, res => {
-              res.on('data', () => {})
+            appListener = server(app, port => {
+              const req = http.request(`${protocol}://localhost:${port}/health`, res => {
+                res.on('data', () => {})
+              })
+              req.end()
             })
-            req.end()
+          })
+        })
+
+        // This tests that multiple filters do not conflict
+        describe('when both server and client apply a filter', () => {
+          beforeEach(() => {
+            const config = {
+              server: {
+                filter: (url) => !url.includes('/health'),
+              },
+              client: {
+                filter: () => true,
+              },
+            }
+
+            return agent.load('http', config)
+              .then(() => {
+                http = require(pluginToBeLoaded)
+                express = require('express')
+              })
+          })
+
+          it('should record only the client span', done => {
+            const allSpans = []
+            const app = express()
+
+            app.get('/health', (req, res) => {
+              res.status(200).send()
+            })
+
+            agent
+              .assertSomeTraces(traces => {
+                allSpans.push(...traces.flat())
+                const clientSpans = allSpans.filter(span => span.meta['span.kind'] === 'client')
+                const serverSpans = allSpans.filter(span => span.meta['span.kind'] === 'server')
+
+                assert.strictEqual(clientSpans.length, 1)
+                assert.strictEqual(serverSpans.length, 0)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port => {
+              const req = http.request(`${protocol}://localhost:${port}/health`, res => {
+                res.on('data', () => {})
+              })
+              req.end()
+            })
           })
         })
       })
