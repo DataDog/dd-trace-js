@@ -41,6 +41,6 @@ module.exports = {
   routerMiddlewareError: dc.channel('apm:router:middleware:error'),
   setCookieChannel: dc.channel('datadog:iast:set-cookie'),
   setUncaughtExceptionCaptureCallbackStart: dc.channel('datadog:process:setUncaughtExceptionCaptureCallback:start'),
-  startGraphqlResolve: dc.channel('datadog:graphql:resolver:start'),
+  startGraphqlResolver: dc.channel('datadog:graphql:resolver:start'),
   wafRunFinished: dc.channel('datadog:waf:run:finish'),
 }

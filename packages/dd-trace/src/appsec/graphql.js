@@ -12,7 +12,7 @@ const {
 const waf = require('./waf')
 const addresses = require('./addresses')
 const {
-  startGraphqlResolve,
+  startGraphqlResolver,
   graphqlMiddlewareChannel,
   apolloHttpServerChannel,
   apolloChannel,
@@ -32,7 +32,7 @@ function disable () {
   disableGraphql()
 }
 
-function onGraphqlStartResolve ({ context, resolverInfo }) {
+function onGraphqlStartResolver ({ context, resolverInfo }) {
   const req = storage('legacy').getStore()?.req
 
   if (!req) return
@@ -46,7 +46,7 @@ function onGraphqlStartResolve ({ context, resolverInfo }) {
     if (requestData?.isInGraphqlRequest) {
       requestData.blocked = true
       requestData.wafAction = blockingAction
-      context?.abortController?.abort()
+      context.abortController?.abort()
     }
   }
 }
@@ -153,11 +153,11 @@ function disableApollo () {
 }
 
 function enableGraphql () {
-  startGraphqlResolve.subscribe(onGraphqlStartResolve)
+  startGraphqlResolver.subscribe(onGraphqlStartResolver)
 }
 
 function disableGraphql () {
-  if (startGraphqlResolve.hasSubscribers) startGraphqlResolve.unsubscribe(onGraphqlStartResolve)
+  if (startGraphqlResolver.hasSubscribers) startGraphqlResolver.unsubscribe(onGraphqlStartResolver)
 }
 
 module.exports = {
