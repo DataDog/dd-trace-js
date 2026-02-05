@@ -604,6 +604,7 @@ describe('Plugin', () => {
               assert.strictEqual(friends.name, 'graphql.resolve')
               assert.strictEqual(friends.resource, 'friends:[Human]')
               assert.strictEqual(friends.meta['graphql.field.path'], 'friends')
+              assert.strictEqual(friends.meta['graphql.field.type'], '[Human]')
               assert.strictEqual(friends.parent_id.toString(), execute.span_id.toString())
 
               assert.strictEqual(friendsName.name, 'graphql.resolve')
@@ -614,6 +615,7 @@ describe('Plugin', () => {
               assert.strictEqual(pets.name, 'graphql.resolve')
               assert.strictEqual(pets.resource, 'pets:[Pet!]')
               assert.strictEqual(pets.meta['graphql.field.path'], 'friends.*.pets')
+              assert.strictEqual(pets.meta['graphql.field.type'], '[Pet!]')
               assert.strictEqual(pets.parent_id.toString(), friends.span_id.toString())
 
               assert.strictEqual(petsName.name, 'graphql.resolve')

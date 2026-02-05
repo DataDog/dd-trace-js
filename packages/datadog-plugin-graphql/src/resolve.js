@@ -49,7 +49,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
       meta: {
         'graphql.field.name': info.fieldName,
         'graphql.field.path': computedPathString,
-        'graphql.field.type': info.returnType.name,
+        'graphql.field.type': info.returnType.toString(),
         'graphql.source': source,
       },
     }, fieldCtx)
