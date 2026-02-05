@@ -2700,19 +2700,24 @@ moduleTypes.forEach(({
 
               if (isQuarantining) {
                 assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+                // Session status should be 'pass' because Cypress sees the quarantined test as passed
+                assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
               } else {
                 assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+                assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
               }
 
               assert.strictEqual(failedTest.resource, 'cypress/e2e/quarantine.js.quarantine is quarantined')
 
               if (isQuarantining) {
-                // TODO: run instead of skipping, but ignore its result
-                assert.strictEqual(failedTest.meta[TEST_STATUS], 'skip')
+                // Quarantined tests run normally but their failures are suppressed by Cypress.on('fail')
+                // in support.js. The test actually fails (reports 'fail' to Datadog) but Cypress sees
+                // it as passed, so the exit code is 0.
+                assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail')
                 assert.strictEqual(failedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
               } else {
                 assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail')
-                assert.ok(!('TEST_MANAGEMENT_IS_QUARANTINED' in failedTest.meta))
+                assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in failedTest.meta))
               }
             }, 25000)
 
