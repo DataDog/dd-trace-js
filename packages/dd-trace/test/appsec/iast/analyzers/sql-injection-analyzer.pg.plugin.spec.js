@@ -11,7 +11,7 @@ const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
 
 const clients = {
-  pg: pg => pg.Client
+  pg: pg => pg.Client,
 }
 
 if (process.env.PG_TEST_NATIVE === 'true') {
@@ -48,7 +48,7 @@ describe('sql-injection-analyzer with pg', () => {
                 user: 'postgres',
                 password: 'postgres',
                 database: 'postgres',
-                application_name: 'test'
+                application_name: 'test',
               })
               client.connect(err => done(err))
             })
@@ -66,7 +66,7 @@ describe('sql-injection-analyzer with pg', () => {
               return queryMethods.executeQuery(sql, client)
             }, 'SQL_INJECTION', {
               occurrences: 1,
-              location: { path: 'sql-injection-methods.js' }
+              location: { path: 'sql-injection-methods.js' },
             })
 
             testThatRequestHasNoVulnerability(() => {
@@ -84,7 +84,7 @@ describe('sql-injection-analyzer with pg', () => {
                 user: 'postgres',
                 password: 'postgres',
                 database: 'postgres',
-                application_name: 'test'
+                application_name: 'test',
               })
             })
 
@@ -101,7 +101,7 @@ describe('sql-injection-analyzer with pg', () => {
               return queryMethods.executeQuery(sql, pool)
             }, 'SQL_INJECTION', {
               occurrences: 1,
-              location: { path: 'sql-injection-methods.js' }
+              location: { path: 'sql-injection-methods.js' },
             })
 
             testThatRequestHasVulnerability(() => {
@@ -115,7 +115,7 @@ describe('sql-injection-analyzer with pg', () => {
               })
             }, 'SQL_INJECTION', {
               occurrences: 1,
-              location: { path: 'sql-injection-methods.js' }
+              location: { path: 'sql-injection-methods.js' },
             })
 
             testThatRequestHasNoVulnerability(() => {

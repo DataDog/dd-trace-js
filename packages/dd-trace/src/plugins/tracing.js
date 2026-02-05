@@ -25,7 +25,7 @@ class TracingPlugin extends Plugin {
     const {
       type = this.constructor.type,
       id = this.constructor.id,
-      kind = this.constructor.kind
+      kind = this.constructor.kind,
     } = opts
 
     return this._tracer._nomenclature.serviceName(type, kind, id, opts)
@@ -35,7 +35,7 @@ class TracingPlugin extends Plugin {
     const {
       type = this.constructor.type,
       id = this.constructor.id,
-      kind = this.constructor.kind
+      kind = this.constructor.kind,
     } = opts
 
     return this._tracer._nomenclature.opName(type, kind, id, opts)
@@ -46,8 +46,8 @@ class TracingPlugin extends Plugin {
       ...config,
       hooks: {
         [this.operation]: () => {},
-        ...config.hooks
-      }
+        ...config.hooks,
+      },
     })
   }
 
@@ -102,6 +102,35 @@ class TracingPlugin extends Plugin {
     }
   }
 
+  /**
+   * Start a new span.
+   *
+   * Important: `childOf` can be `null` to indicate that the span is a root span.
+   * This is useful for plugins that need to start a span without a parent, such
+   * as the root span of a serverless function.
+   *
+   * @example
+   * const span = this.startSpan('my.span', {
+   *   childOf: null,
+   * })
+   *
+   * @param {string} name - The name of the span.
+   * @param {object} [options] - The options for the span.
+   * @param {string} [options.component] - The component of the span.
+   * @param {import('../opentracing/span') | null} [options.childOf] - The parent span.
+   * @param {string} [options.integrationName] - The integration name.
+   * @param {string} [options.kind] - The kind of the span.
+   * @param {object} [options.meta] - The meta data for the span.
+   * @param {object} [options.metrics] - The metrics for the span.
+   * @param {string} [options.service] - The service name.
+   * @param {number} [options.startTime] - The start time of the span.
+   * @param {string} [options.resource] - The resource name.
+   * @param {string} [options.type] - The type of the span.
+   * @param {import('../tracer')} [options.tracer] - The tracer.
+   * @param {object} [options.config] - The config for the span.
+   *
+   * @param {boolean} enterOrCtx - Whether to enter the span context into the storage.
+   */
   startSpan (name, options = {}, enterOrCtx = true) {
     // TODO: modularize this code to a helper function
     let {
@@ -114,7 +143,7 @@ class TracingPlugin extends Plugin {
       service,
       startTime,
       resource,
-      type
+      type,
     } = options
 
     const tracer = options.tracer || this.tracer
@@ -122,7 +151,7 @@ class TracingPlugin extends Plugin {
 
     const store = storage('legacy').getStore()
     if (store && childOf === undefined) {
-      childOf = store.span
+      childOf = /** @type {import('../opentracing/span') | undefined} */ (store.span)
     }
 
     const span = tracer.startSpan(name, {
@@ -135,10 +164,10 @@ class TracingPlugin extends Plugin {
         'span.kind': kind,
         'span.type': type,
         ...meta,
-        ...metrics
+        ...metrics,
       },
       integrationName: integrationName || component,
-      links: childOf?._links
+      links: childOf?._links,
     })
 
     analyticsSampler.sample(span, config.measured)

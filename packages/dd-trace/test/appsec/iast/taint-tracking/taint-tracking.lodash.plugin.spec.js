@@ -20,7 +20,7 @@ const commands = [
   ' ls -la  𠆢𠆢𠆢 ',
   ' ls -ls �',
   ' w ',
-  'w'
+  'w',
 ]
 
 const propagationLodashFns = [
@@ -30,7 +30,7 @@ const propagationLodashFns = [
   'trimStartLodash',
   'trimEndLodash',
   'arrayJoinLodashWithoutSeparator',
-  'arrayJoinLodashWithSeparator'
+  'arrayJoinLodashWithSeparator',
 ]
 
 const propagationLodashFunctionsFile = path.join(__dirname, 'resources/propagationLodashFunctions.js')

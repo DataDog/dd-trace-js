@@ -25,7 +25,7 @@ class LangChainLLMObsVectorStoreHandler extends LangChainLLMObsHandler {
         text: document.pageContent,
         id: document.id,
         name: document.metadata?.source,
-        score
+        score,
       })
     }
 

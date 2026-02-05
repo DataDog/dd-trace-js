@@ -47,7 +47,7 @@ class Config {
       DD_PROFILING_UPLOAD_TIMEOUT,
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
       DD_PROFILING_WALLTIME_ENABLED,
-      DD_TAGS
+      DD_TAGS,
     } = getProfilingEnvValues()
 
     const host = os.hostname()
@@ -71,7 +71,7 @@ class Config {
         host,
         service: this.service,
         version: this.version,
-        functionname: AWS_LAMBDA_FUNCTION_NAME
+        functionname: AWS_LAMBDA_FUNCTION_NAME,
       }),
       getAzureTagsFromMetadata(getIsAzureFunction() ? getAzureFunctionMetadata() : getAzureAppMetadata())
     )
@@ -117,7 +117,7 @@ class Config {
     this.libraryInjected = options.libraryInjected
     this.activation = options.activation
     this.exporters = ensureExporters(options.exporters || [
-      new AgentExporter(this)
+      new AgentExporter(this),
     ], this)
 
     // OOM monitoring does not work well on Windows, so it is disabled by default.
@@ -141,13 +141,13 @@ class Config {
       heapLimitExtensionSize,
       maxHeapExtensionCount,
       exportStrategies,
-      exportCommand
+      exportCommand,
     }
 
     const profilers = options.profilers || getProfilers({
       DD_PROFILING_HEAP_ENABLED,
       DD_PROFILING_WALLTIME_ENABLED,
-      DD_PROFILING_PROFILERS
+      DD_PROFILING_PROFILERS,
     })
 
     this.timelineEnabled = isTrue(
@@ -261,7 +261,7 @@ class Config {
       timelineEnabled: this.timelineEnabled,
       timelineSamplingEnabled: this.timelineSamplingEnabled,
       uploadCompression: { ...this.uploadCompression },
-      v8ProfilerBugWorkaroundEnabled: this.v8ProfilerBugWorkaroundEnabled
+      v8ProfilerBugWorkaroundEnabled: this.v8ProfilerBugWorkaroundEnabled,
     }
     delete report.oomMonitoring.exportCommand
     return report
@@ -271,7 +271,7 @@ class Config {
 module.exports = { Config }
 
 function getProfilers ({
-  DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS
+  DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS,
 }) {
   // First consider "legacy" DD_PROFILING_PROFILERS env variable, defaulting to space + wall
   // Use a Set to avoid duplicates
@@ -476,6 +476,6 @@ function getProfilingEnvValues () {
     DD_PROFILING_WALLTIME_ENABLED:
       getValueFromEnvSources('DD_PROFILING_WALLTIME_ENABLED'),
     DD_TAGS:
-      getValueFromEnvSources('DD_TAGS')
+      getValueFromEnvSources('DD_TAGS'),
   }
 }

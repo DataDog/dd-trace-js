@@ -3,7 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 const requestStartCh = channel('apm:google-cloud-pubsub:request:start')
@@ -38,7 +38,7 @@ const publisherMethods = [
   'listTopicSubscriptions',
   'listTopicSnapshots',
   'deleteTopic',
-  'detachSubscription'
+  'detachSubscription',
 ]
 
 const schemaServiceMethods = [
@@ -51,7 +51,7 @@ const schemaServiceMethods = [
   'deleteSchemaRevision',
   'deleteSchema',
   'validateSchema',
-  'validateMessage'
+  'validateMessage',
 ]
 
 const subscriberMethods = [
@@ -70,7 +70,7 @@ const subscriberMethods = [
   'createSnapshot',
   'updateSnapshot',
   'deleteSnapshot',
-  'seek'
+  'seek',
 ]
 
 function wrapMethod (method) {
@@ -91,7 +91,7 @@ function wrapMethod (method) {
       messageAckRetrieveCh.publish({
         ackIds: request.ackIds,
         api,
-        ctx
+        ctx,
       })
     }
 
@@ -171,7 +171,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/su
       if (this.ackId) {
         const ctx = {
           message: this,
-          ackId: this.ackId
+          ackId: this.ackId,
         }
 
         return messageAckStoreCh.runStores(ctx, originalAck, this, ...arguments)
@@ -244,7 +244,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
           messagePublishCh.publish({
             attributes: data.attributes,
             pubsub: this.pubsub,
-            topicName: this.name
+            topicName: this.name,
           })
         }
         return publishMessage.apply(this, arguments)
@@ -263,7 +263,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
         attributes: arguments[1],
         pubsub: this.pubsub,
         topicName: this.name,
-        buffer
+        buffer,
       })
 
       return publish.apply(this, arguments)

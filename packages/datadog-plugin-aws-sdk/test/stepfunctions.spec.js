@@ -15,9 +15,9 @@ const helloWorldSMD = {
     HelloWorld: {
       Type: 'Pass',
       Result: 'Hello World!',
-      End: true
-    }
-  }
+      End: true,
+    },
+  },
 }
 
 describe('Sfn', () => {
@@ -55,7 +55,7 @@ describe('Sfn', () => {
           describeExecution: function () {
             const req = new lib.DescribeExecutionCommand(...arguments)
             return client.send(req)
-          }
+          },
         }
       } else {
         const { StepFunctions } = require(`../../../versions/aws-sdk@${version}`).get()
@@ -67,7 +67,7 @@ describe('Sfn', () => {
             return client.deleteStateMachine(...arguments).promise()
           },
           startExecution: function () { return client.startExecution(...arguments).promise() },
-          describeExecution: function () { return client.describeExecution(...arguments).promise() }
+          describeExecution: function () { return client.describeExecution(...arguments).promise() },
         }
       }
     }
@@ -77,7 +77,7 @@ describe('Sfn', () => {
         definition: JSON.stringify(definition),
         name,
         roleArn: 'arn:aws:iam::123456:role/test',
-        ...xargs
+        ...xargs,
       })
     }
 
@@ -108,7 +108,7 @@ describe('Sfn', () => {
         it('is instrumented', async function () {
           const startExecInput = {
             stateMachineArn,
-            input: JSON.stringify({ moduleName })
+            input: JSON.stringify({ moduleName }),
           }
           const expectSpanPromise = agent.assertSomeTraces(traces => {
             const span = traces[0][0]

@@ -19,7 +19,7 @@ const logger = {
   debug: (msg) => recordLog(msg),
   info: (msg) => recordLog(msg),
   warn: (msg) => recordLog(msg),
-  error: (err) => recordLog(err.stack)
+  error: (err) => recordLog(err.stack),
 }
 
 const flare = {
@@ -80,13 +80,13 @@ const flare = {
       port: tracerConfig.port,
       method: 'POST',
       path: '/tracer_flare/v1',
-      headers: form.getHeaders()
+      headers: form.getHeaders(),
     }, (err) => {
       if (err) {
         log.error('Error sending flare payload', err)
       }
     })
-  }
+  },
 }
 
 function recordLog (msg) {

@@ -8,7 +8,7 @@ const {
   useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProcAndExpectExit,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -21,7 +21,7 @@ describe('esm', () => {
     useSandbox([
       `@google/genai@${version}`,
     ], false, [
-      './packages/datadog-plugin-google-genai/test/integration-test/*'
+      './packages/datadog-plugin-google-genai/test/integration-test/*',
     ])
 
     beforeEach(async () => {
@@ -47,7 +47,7 @@ describe('esm', () => {
 
         proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
           NODE_OPTIONS: '--import dd-trace/initialize.mjs',
-          GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || '<not-a-real-key>'
+          GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || '<not-a-real-key>',
         })
 
         await res

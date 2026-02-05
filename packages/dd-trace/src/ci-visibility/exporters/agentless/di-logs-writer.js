@@ -4,6 +4,7 @@ const log = require('../../../log')
 const { safeJSONStringify } = require('../../../exporters/common/util')
 const { JSONEncoder } = require('../../encode/json-encoder')
 const { getValueFromEnvSources } = require('../../../config/helper')
+const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 
 const BaseWriter = require('../../../exporters/common/writer')
 
@@ -26,17 +27,18 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
       method: 'POST',
       headers: {
         'dd-api-key': getValueFromEnvSources('DD_API_KEY'),
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       timeout: this.timeout,
-      url: this._url
+      url: this._url,
     }
 
     if (this._isAgentProxy) {
       delete options.headers['dd-api-key']
-      options.path = '/debugger/v1/input'
+      options.path = DEBUGGER_INPUT_V1
     }
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Request to the logs intake: ${safeJSONStringify(options)}`)
 
     request(data, options, (err, res) => {

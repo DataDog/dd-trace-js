@@ -65,15 +65,15 @@ function wrapReflection (protobuf) {
   const reflectionMethods = [
     {
       target: protobuf.Root,
-      name: 'fromJSON'
+      name: 'fromJSON',
     },
     {
       target: protobuf.Type.prototype,
-      name: 'fromObject'
-    }
+      name: 'fromObject',
+    },
   ]
 
-  reflectionMethods.forEach(method => {
+  for (const method of reflectionMethods) {
     shimmer.wrap(method.target, method.name, original => function () {
       const result = original.apply(this, arguments)
       if (result.nested) {
@@ -86,7 +86,7 @@ function wrapReflection (protobuf) {
       }
       return result
     })
-  })
+  }
 }
 
 function isPromise (obj) {
@@ -95,7 +95,7 @@ function isPromise (obj) {
 
 addHook({
   name: 'protobufjs',
-  versions: ['>=6.8.0']
+  versions: ['>=6.8.0'],
 }, protobuf => {
   shimmer.wrap(protobuf.Root.prototype, 'load', original => function () {
     const result = original.apply(this, arguments)

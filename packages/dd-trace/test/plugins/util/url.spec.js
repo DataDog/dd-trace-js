@@ -17,10 +17,10 @@ describe('plugins/util/url', () => {
     it('should extract full URL from HTTP/1.x request', () => {
       const req = {
         headers: {
-          host: 'example.com:8080'
+          host: 'example.com:8080',
         },
         url: '/path/to/resource',
-        socket: null
+        socket: null,
       }
 
       const result = url.extractURL(req)
@@ -30,11 +30,11 @@ describe('plugins/util/url', () => {
     it('should extract full URL from HTTP/1.x request with originalUrl', () => {
       const req = {
         headers: {
-          host: 'example.com'
+          host: 'example.com',
         },
         url: '/path',
         originalUrl: '/original/path',
-        socket: null
+        socket: null,
       }
 
       const result = url.extractURL(req)
@@ -44,10 +44,10 @@ describe('plugins/util/url', () => {
     it('should extract full URL from HTTPS request with socket.encrypted', () => {
       const req = {
         headers: {
-          host: 'secure.example.com'
+          host: 'secure.example.com',
         },
         url: '/secure/path',
-        socket: { encrypted: true }
+        socket: { encrypted: true },
       }
 
       const result = url.extractURL(req)
@@ -57,11 +57,11 @@ describe('plugins/util/url', () => {
     it('should extract full URL from HTTPS request with connection.encrypted', () => {
       const req = {
         headers: {
-          host: 'secure.example.com'
+          host: 'secure.example.com',
         },
         url: '/secure/path',
         socket: null,
-        connection: { encrypted: true }
+        connection: { encrypted: true },
       }
 
       const result = url.extractURL(req)
@@ -74,8 +74,8 @@ describe('plugins/util/url', () => {
         headers: {
           ':scheme': 'https',
           ':authority': 'example.com:443',
-          ':path': '/api/v1/users'
-        }
+          ':path': '/api/v1/users',
+        },
       }
 
       const result = url.extractURL(req)
@@ -88,8 +88,8 @@ describe('plugins/util/url', () => {
         headers: {
           ':scheme': 'http',
           ':authority': 'localhost:3000',
-          ':path': '/search?q=test&page=2'
-        }
+          ':path': '/search?q=test&page=2',
+        },
       }
 
       const result = url.extractURL(req)
@@ -105,7 +105,7 @@ describe('plugins/util/url', () => {
 
     beforeEach(() => {
       config = {
-        queryStringObfuscation: /secret/gi
+        queryStringObfuscation: /secret/gi,
       }
     })
 
@@ -311,7 +311,7 @@ describe('plugins/util/url', () => {
         'http://example.com/repository.git',
         'https://datadog.com/repository.git',
         'ssh://host.xz:port/path/to/repo.git/',
-        'git@github.com:DataDog/dd-trace-js.git'
+        'git@github.com:DataDog/dd-trace-js.git',
       ]
       urls.forEach(repoUrl => {
         assert.strictEqual(url.filterSensitiveInfoFromRepository(repoUrl), repoUrl)
@@ -322,7 +322,7 @@ describe('plugins/util/url', () => {
       const sensitiveUrls = [
         'https://username:password@datadog.com/repository.git',
         'ssh://username@host.xz:port/path/to/repo.git/',
-        'https://username@datadog.com/repository.git'
+        'https://username@datadog.com/repository.git',
       ]
       assert.strictEqual(url.filterSensitiveInfoFromRepository(sensitiveUrls[0]), 'https://datadog.com/repository.git')
       assert.strictEqual(url.filterSensitiveInfoFromRepository(sensitiveUrls[1]), 'ssh://host.xz:port/path/to/repo.git/')
@@ -334,7 +334,7 @@ describe('plugins/util/url', () => {
         null,
         '',
         undefined,
-        '1+1=2'
+        '1+1=2',
       ]
       invalidUrls.forEach(repoUrl => {
         assert.strictEqual(url.filterSensitiveInfoFromRepository(repoUrl), '')

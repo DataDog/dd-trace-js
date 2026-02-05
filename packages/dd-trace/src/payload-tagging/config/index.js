@@ -19,7 +19,7 @@ function getSDKRules (sdk, requestInput, responseInput) {
       // the rules to the same object.
       request: [...serviceRules.request, ...requestInput],
       response: [...serviceRules.response, ...responseInput],
-      expand: serviceRules.expand
+      expand: serviceRules.expand,
     }
   }
   return sdkServiceRules

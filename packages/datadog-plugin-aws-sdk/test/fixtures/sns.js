@@ -3,11 +3,11 @@
 const sns = {}
 
 sns.create = {
-  Name: 'example_aws_topic'
+  Name: 'example_aws_topic',
 }
 
 sns.get = {
-  TopicArn: undefined
+  TopicArn: undefined,
 }
 
 module.exports = sns

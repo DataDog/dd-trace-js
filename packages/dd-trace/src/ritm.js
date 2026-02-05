@@ -92,7 +92,7 @@ function Hook (modules, options, onrequire) {
 
     const payload = {
       filename,
-      request
+      request,
     }
 
     if (moduleLoadStartChannel.hasSubscribers) {

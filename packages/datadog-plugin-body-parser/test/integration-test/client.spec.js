@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const axios = require('axios')
 const {
   sandboxCwd, useSandbox, varySandbox,
-  FakeAgent, spawnPluginIntegrationTestProc
+  FakeAgent, spawnPluginIntegrationTestProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 

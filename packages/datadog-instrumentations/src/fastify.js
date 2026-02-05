@@ -297,4 +297,4 @@ function wrapReplyHeader (Reply) {
   return Reply
 }
 
-addHook({ name: 'fastify', file: 'lib/reply.js', versions: ['1', '2', '>=3'] }, wrapReplyHeader)
+addHook({ name: 'fastify', file: 'lib/reply.js', versions: ['>=1'] }, wrapReplyHeader)

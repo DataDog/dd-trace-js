@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const {
   sandboxCwd, useSandbox, varySandbox, curl,
-  FakeAgent, spawnPluginIntegrationTestProc
+  FakeAgent, spawnPluginIntegrationTestProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -15,7 +15,7 @@ withVersions('passport-http', 'passport-http', version => {
       ['./packages/datadog-plugin-passport-http/test/integration-test/*'])
 
     before(function () {
-      variants = varySandbox('server.mjs', 'passport-http, BasicStrategy')
+      variants = varySandbox('server.mjs', 'passportHttp', 'BasicStrategy', 'passport-http')
     })
 
     beforeEach(async () => {

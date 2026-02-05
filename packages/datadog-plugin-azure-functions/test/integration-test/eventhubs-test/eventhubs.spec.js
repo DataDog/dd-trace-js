@@ -12,15 +12,12 @@ const {
   curlAndAssertMessage,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
-const { NODE_MAJOR } = require('../../../../../version')
 
 describe('esm', () => {
   let agent
   let proc
 
-  // TODO: Allow newer versions in Node.js 18 when their breaking change is reverted.
-  // See https://github.com/Azure/azure-functions-nodejs-library/pull/357
-  withVersions('azure-functions', '@azure/functions', NODE_MAJOR < 20 ? '<4.7.3' : '*', version => {
+  withVersions('azure-functions', '@azure/functions', version => {
     useSandbox([
       `@azure/functions@${version}`,
       'azure-functions-core-tools@4',
@@ -41,7 +38,7 @@ describe('esm', () => {
 
     it('propagates eventdata through an event hub with a cardinality of one', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -54,8 +51,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
         assertObjectContains(payload[2][0], {
@@ -65,8 +62,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
@@ -74,7 +71,7 @@ describe('esm', () => {
 
     it('propagates amqp messages through an event hub with a cardinality of one', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -87,8 +84,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
         assertObjectContains(payload[2][0], {
@@ -98,8 +95,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
@@ -107,7 +104,7 @@ describe('esm', () => {
 
     it('propagates a batch through an event hub with a cardinality of one', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -119,8 +116,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
         assertObjectContains(payload[2][0], {
@@ -130,8 +127,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
@@ -139,7 +136,7 @@ describe('esm', () => {
 
     it('propagates eventData through an event hub with a cardinality of many', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -152,8 +149,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh2',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
@@ -161,7 +158,7 @@ describe('esm', () => {
 
     it('propagates amqp messages through an event hub with a cardinality of many', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -174,8 +171,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh2',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
@@ -183,7 +180,7 @@ describe('esm', () => {
 
     it('propagates a batch through an event hub with a cardinality of many', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -196,8 +193,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh2',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
@@ -205,7 +202,7 @@ describe('esm', () => {
 
     it('enqueues a single event to an event hub with a cardinality of one', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -218,8 +215,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
       })
@@ -227,7 +224,7 @@ describe('esm', () => {
 
     it('enqueues events to an event hub with a cardinality of one', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -240,8 +237,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
         assertObjectContains(payload[2][0], {
@@ -251,8 +248,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
@@ -260,7 +257,7 @@ describe('esm', () => {
 
     it('enqueues amqp messages to an event hub with a cardinality of one', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -273,8 +270,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
         assertObjectContains(payload[2][0], {
@@ -284,8 +281,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh1',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
@@ -293,7 +290,7 @@ describe('esm', () => {
 
     it('enqueues a single event to an event hub with a cardinality of many', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -306,8 +303,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh2',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 1)
       })
@@ -315,7 +312,7 @@ describe('esm', () => {
 
     it('enqueues events to an event hub with a cardinality of many', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -332,8 +329,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh2',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
@@ -341,7 +338,7 @@ describe('esm', () => {
 
     it('enqueues amqp messages to an event hub with a cardinality of many', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -358,8 +355,8 @@ describe('esm', () => {
             'messaging.operation': 'receive',
             'messaging.system': 'eventhubs',
             'messaging.destination.name': 'eh2',
-            'span.kind': 'consumer'
-          }
+            'span.kind': 'consumer',
+          },
         })
         assert.strictEqual(parseLinks(payload[1][0]).length, 2)
       })
@@ -368,7 +365,7 @@ describe('esm', () => {
     it('should add span links to non-batched messages when batch links are disabled', async () => {
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: 'false'
+        DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: 'false',
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-eventdata', ({ headers, payload }) => {
@@ -379,7 +376,7 @@ describe('esm', () => {
     it('should not create a tryAdd span or add span links to batches when batch links are disabled', async () => {
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: 'false'
+        DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: 'false',
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-batch', ({ headers, payload }) => {
@@ -399,12 +396,12 @@ async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, st
   let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
-    DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net'
+    DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net',
   }
   env = { ...env, ...additionalEnvArgs }
   return spawnProc(command, args, {
     cwd,
-    env
+    env,
   }, stdioHandler)
 }
 

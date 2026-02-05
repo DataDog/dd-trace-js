@@ -22,7 +22,7 @@ describe('agent/info', () => {
       const scope = nock(url)
         .get('/info')
         .reply(200, JSON.stringify({
-          endpoints: ['/evp_proxy/v2']
+          endpoints: ['/evp_proxy/v2'],
         }))
 
       assert.notStrictEqual(scope.isDone(), true)
@@ -67,7 +67,7 @@ describe('agent/info', () => {
       beforeEach(() => {
         clearCache()
         clock = sinon.useFakeTimers({
-          toFake: ['Date']
+          toFake: ['Date'],
         })
       })
 

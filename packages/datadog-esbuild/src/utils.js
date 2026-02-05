@@ -59,18 +59,22 @@ function resolve (specifier, context) {
     specifier = fileURLToPath(specifier)
   }
 
-  const resolved = require.resolve(specifier, { conditions, paths: [fileURLToPath(context.parentURL)] })
+  const resolved = require.resolve(specifier, {
+    paths: [fileURLToPath(context.parentURL)],
+    // @ts-expect-error - Node.js 22+ unofficially supports a conditions option
+    conditions,
+  })
 
   return {
     url: pathToFileURL(resolved),
-    format: isESMFile(resolved) ? 'module' : 'commonjs'
+    format: isESMFile(resolved) ? 'module' : 'commonjs',
   }
 }
 
 function getSource (url, { format }) {
   return {
     source: fs.readFileSync(fileURLToPath(url), 'utf8'),
-    format
+    format,
   }
 }
 
@@ -79,12 +83,12 @@ function getSource (url, { format }) {
  *
  * @param {object} moduleData
  * @param {string} moduleData.path
- * @param {boolean} moduleData.internal
+ * @param {boolean} [moduleData.internal = false]
  * @param {object} moduleData.context
- * @param {boolean} moduleData.excludeDefault
+ * @param {boolean} [moduleData.excludeDefault = false]
  * @returns {Promise<Map>}
  */
-async function processModule ({ path, internal, context, excludeDefault }) {
+async function processModule ({ path, internal = false, context, excludeDefault = false }) {
   let exportNames, srcUrl
   if (internal) {
     // we can not read and parse of internal modules
@@ -144,7 +148,7 @@ async function processModule ({ path, internal, context, excludeDefault }) {
       const subSetters = await processModule({
         path: fileURLToPath(result.url),
         context: { ...context, format: result.format },
-        excludeDefault: true
+        excludeDefault: true,
       })
 
       for (const [name, setter] of subSetters.entries()) {
@@ -210,5 +214,5 @@ function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
 
 module.exports = {
   processModule,
-  isESMFile
+  isESMFile,
 }

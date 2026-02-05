@@ -29,8 +29,8 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
         'span.kind': 'consumer',
         'messaging.system': 'bullmq',
         'messaging.destination.name': queueName,
-        'messaging.operation': 'process'
-      }
+        'messaging.operation': 'process',
+      },
     }, ctx)
 
     if (this.config.dsmEnabled) {

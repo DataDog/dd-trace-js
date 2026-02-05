@@ -26,12 +26,12 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
 
         assert.ok('deepObj' in state.myNestedObj.fields)
         assert.deepStrictEqual(state.myNestedObj.fields.deepObj, {
-          type: 'Object', notCapturedReason: 'depth'
+          type: 'Object', notCapturedReason: 'depth',
         })
 
         assert.ok('deepArr' in state.myNestedObj.fields)
         assert.deepStrictEqual(state.myNestedObj.fields.deepArr, {
-          type: 'Array', notCapturedReason: 'depth'
+          type: 'Array', notCapturedReason: 'depth',
         })
       })
 
@@ -60,14 +60,14 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
                     foo: {
                       type: 'Object',
                       fields: {
-                        foo: { type: 'Object', notCapturedReason: 'depth' }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
+                        foo: { type: 'Object', notCapturedReason: 'depth' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         })
 
         assert.ok('deepArr' in state.myNestedObj.fields)
@@ -79,10 +79,10 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
               type: 'Array',
               elements: [{
                 type: 'Array',
-                elements: [{ type: 'Array', notCapturedReason: 'depth' }]
-              }]
-            }]
-          }]
+                elements: [{ type: 'Array', notCapturedReason: 'depth' }],
+              }],
+            }],
+          }],
         })
       })
 
@@ -107,11 +107,11 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
               fields: {
                 foo: {
                   type: 'Object',
-                  notCapturedReason: 'depth'
-                }
-              }
-            }
-          }
+                  notCapturedReason: 'depth',
+                },
+              },
+            },
+          },
         })
 
         assert.ok('deepArr' in state.myNestedObj.fields)
@@ -121,9 +121,9 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             type: 'Array',
             elements: [{
               type: 'Array',
-              notCapturedReason: 'depth'
-            }]
-          }]
+              notCapturedReason: 'depth',
+            }],
+          }],
         })
       })
 

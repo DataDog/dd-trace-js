@@ -16,11 +16,11 @@ const entityReg = new RegExp(String.raw`.*(${uuidSource}|${containerSource}|${ta
 
 let inode = 0
 let cgroup = ''
-let entityId
+let containerId
 
 try {
   cgroup = fs.readFileSync('/proc/self/cgroup', 'utf8').trim()
-  entityId = cgroup.match(entityReg)?.[1]
+  containerId = cgroup.match(entityReg)?.[1]
 } catch { /* Ignore error */ }
 
 const inodePath = cgroup.match(lineReg)?.[3]
@@ -32,17 +32,21 @@ if (inodePath) {
   } catch { /* Ignore error */ }
 }
 
+const entityId = containerId ? `ci-${containerId}` : inode && `in-${inode}`
+
 module.exports = {
+  entityId,
+
   inject (carrier) {
-    if (entityId) {
-      carrier['Datadog-Container-Id'] = entityId
-      carrier['Datadog-Entity-ID'] = `ci-${entityId}`
+    if (containerId) {
+      carrier['Datadog-Container-Id'] = containerId
+      carrier['Datadog-Entity-ID'] = entityId
     } else if (inode) {
-      carrier['Datadog-Entity-ID'] = `in-${inode}`
+      carrier['Datadog-Entity-ID'] = entityId
     }
 
     if (DD_EXTERNAL_ENV) {
       carrier['Datadog-External-Env'] = DD_EXTERNAL_ENV
     }
-  }
+  },
 }

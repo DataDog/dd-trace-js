@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
 import express from 'express'
 import passport from 'passport'
-import { BasicStrategy } from 'passport-http'
+import passportHttp from 'passport-http'
 import dc from 'dc-polyfill'
 
 const passportVerifyChannel = dc.channel('datadog:passport:verify:finish')
@@ -14,7 +14,7 @@ passportVerifyChannel.subscribe(() => {
 const app = express()
 
 const users = [
-  { id: 1, username: 'test', password: '1234' }
+  { id: 1, username: 'test', password: '1234' },
 ]
 
 const AUTH_HEADER = `Basic ${Buffer.from('test:1234').toString('base64')}`
@@ -26,10 +26,10 @@ app.use((req, res, next) => {
   next()
 })
 
-passport.use('basic', new BasicStrategy({
+passport.use('basic', new passportHttp.BasicStrategy({
   usernameField: 'username',
   passwordField: 'password',
-  passReqToCallback: false
+  passReqToCallback: false,
 }, (username, password, done) => {
   const user = users.find(u => u.username === username && u.password === password)
   if (!user) {

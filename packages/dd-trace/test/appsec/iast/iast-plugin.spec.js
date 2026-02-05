@@ -48,21 +48,21 @@ describe('IAST Plugin', () => {
       }
 
       legacyStorage = {
-        getStore: () => sinon.stub()
+        getStore: () => sinon.stub(),
       }
 
       const iastPluginMod = proxyquire('../../../src/appsec/iast/iast-plugin', {
         '../../plugins/plugin': PluginClass,
         '../../log': {
-          error: logError
+          error: logError,
         },
         './iast-context': {
-          getIastContext
+          getIastContext,
         },
         './telemetry': {
-          isEnabled: () => false
+          isEnabled: () => false,
         },
-        '../../../../datadog-core': { storage: () => legacyStorage }
+        '../../../../datadog-core': { storage: () => legacyStorage },
       })
       iastPlugin = new iastPluginMod.IastPlugin()
     })
@@ -138,7 +138,7 @@ describe('IAST Plugin', () => {
         const handler = sinon.spy()
 
         iastPlugin._execHandlerAndIncMetric({
-          handler
+          handler,
         })
 
         sinon.assert.calledOnce(handler)
@@ -149,7 +149,7 @@ describe('IAST Plugin', () => {
 
         // Should not throw
         iastPlugin._execHandlerAndIncMetric({
-          handler
+          handler,
         })
         sinon.assert.calledOnce(logError)
       })
@@ -157,12 +157,12 @@ describe('IAST Plugin', () => {
       it('should exec handler and not increase metric', () => {
         const handler = sinon.spy()
         const metric = {
-          increase: sinon.spy()
+          increase: sinon.spy(),
         }
 
         iastPlugin._execHandlerAndIncMetric({
           handler,
-          metric
+          metric,
         })
 
         sinon.assert.calledOnce(handler)
@@ -188,15 +188,15 @@ describe('IAST Plugin', () => {
         }
       }
       iastTelemetry = {
-        isEnabled: () => true
+        isEnabled: () => true,
       }
       const IastPlugin = proxyquire('../../../src/appsec/iast/iast-plugin', {
         '../../plugins/plugin': PluginClass,
         '../../log': {
-          error: logError
+          error: logError,
         },
         './telemetry': iastTelemetry,
-        '../../../../datadog-instrumentations/src/helpers/instrumentations': {}
+        '../../../../datadog-instrumentations/src/helpers/instrumentations': {},
       }).IastPlugin
 
       iastPlugin = new IastPlugin()
@@ -239,7 +239,7 @@ describe('IAST Plugin', () => {
           moduleName: 'sink',
           channelName: 'datadog:sink:start',
           tag: 'injection',
-          tagKey: VULNERABILITY_TYPE
+          tagKey: VULNERABILITY_TYPE,
         }, handler)
         iastPlugin.configure(true)
 
@@ -255,7 +255,7 @@ describe('IAST Plugin', () => {
         iastPlugin.addSub({
           channelName: 'tracing:datadog:sink:start',
           tag: 'injection',
-          tagKey: VULNERABILITY_TYPE
+          tagKey: VULNERABILITY_TYPE,
         }, handler)
         iastPlugin.configure(true)
 
@@ -272,7 +272,7 @@ describe('IAST Plugin', () => {
           moduleName: 'source',
           channelName: 'datadog:source:start',
           tag: 'http.source',
-          tagKey: SOURCE_TYPE
+          tagKey: SOURCE_TYPE,
         }, handler)
         iastPlugin.configure(true)
 
@@ -289,7 +289,7 @@ describe('IAST Plugin', () => {
           moduleName: 'sink',
           channelName: 'datadog:sink:start',
           tag: 'injection',
-          tagKey: VULNERABILITY_TYPE
+          tagKey: VULNERABILITY_TYPE,
         }, handler)
         iastPlugin.configure(true)
 
@@ -307,7 +307,7 @@ describe('IAST Plugin', () => {
           moduleName: 'source',
           channelName: 'datadog:source:start',
           tag: 'http.source',
-          tagKey: SOURCE_TYPE
+          tagKey: SOURCE_TYPE,
         }, handler)
         iastPlugin.configure(true)
 
@@ -325,7 +325,7 @@ describe('IAST Plugin', () => {
           moduleName: 'source',
           channelName: 'datadog:source:start',
           tag: ['http.source', 'http.source2', 'http.source3'],
-          tagKey: SOURCE_TYPE
+          tagKey: SOURCE_TYPE,
         }, handler)
         iastPlugin.configure(true)
 
@@ -347,7 +347,7 @@ describe('IAST Plugin', () => {
         const handler = sinon.spy()
 
         iastPlugin._execHandlerAndIncMetric({
-          handler
+          handler,
         })
 
         sinon.assert.calledOnce(handler)
@@ -358,7 +358,7 @@ describe('IAST Plugin', () => {
 
         // Should not throw
         iastPlugin._execHandlerAndIncMetric({
-          handler
+          handler,
         })
         sinon.assert.calledOnce(logError)
       })
@@ -366,7 +366,7 @@ describe('IAST Plugin', () => {
       it('should exec handler and increase metric', () => {
         const handler = sinon.spy()
         const metric = {
-          inc: sinon.spy()
+          inc: sinon.spy(),
         }
         const tags = 'tag1'
         const iastContext = {}
@@ -374,7 +374,7 @@ describe('IAST Plugin', () => {
           handler,
           metric,
           tags,
-          iastContext
+          iastContext,
         })
 
         sinon.assert.calledOnce(handler)

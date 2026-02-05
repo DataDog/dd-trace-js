@@ -20,7 +20,7 @@ describe('git metadata tagging', () => {
     process.env = {
       ...oldEnv,
       DD_GIT_COMMIT_SHA: DUMMY_GIT_SHA,
-      DD_TAGS: `git.repository_url:${DUMMY_REPOSITORY_URL}`
+      DD_TAGS: `git.repository_url:${DUMMY_REPOSITORY_URL}`,
     }
     tracer = require('../')
     return agent.load()
@@ -37,12 +37,12 @@ describe('git metadata tagging', () => {
   it('should include git metadata when using DD_GIT_* tags and DD_TAGS', async () => {
     const span = tracer.startSpan('hello', {
       tags: {
-        'resource.name': '/hello/:name'
-      }
+        'resource.name': '/hello/:name',
+      },
     })
 
     const childSpan = tracer.startSpan('world', {
-      childOf: span
+      childOf: span,
     })
 
     childSpan.finish()

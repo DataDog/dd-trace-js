@@ -36,7 +36,7 @@ function _handleFlush () {
  */
 function enable (config) {
   if (exposuresWriter) {
-    log.warn(exposuresWriter.constructor.name + ' already enabled')
+    log.warn('%s already enabled', exposuresWriter.constructor.name)
     return
   }
 
@@ -73,5 +73,5 @@ function disable () {
 
 module.exports = {
   enable,
-  disable
+  disable,
 }

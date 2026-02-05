@@ -3,7 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 addHook({ name: 'sequelize', versions: ['>=4'], file: ['lib/sequelize.js'] }, Sequelize => {

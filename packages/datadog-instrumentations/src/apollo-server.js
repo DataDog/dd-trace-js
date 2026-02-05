@@ -32,17 +32,17 @@ function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
         // This method is expected to return response data
         // with headers, status and body
         const headers = new HeaderMap()
-        Object.keys(abortData.headers).forEach(key => {
+        for (const key of Object.keys(abortData.headers)) {
           headers.set(key, abortData.headers[key])
-        })
+        }
 
         resolve({
           headers,
           status: abortData.statusCode,
           body: {
             kind: 'complete',
-            string: abortData.message
-          }
+            string: abortData.message,
+          },
         })
       }, { once: true })
     })

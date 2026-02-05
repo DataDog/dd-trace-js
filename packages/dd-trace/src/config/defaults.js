@@ -217,5 +217,5 @@ module.exports = {
   'vertexai.spanPromptCompletionSampleRate': 1,
   'trace.aws.addSpanPointers': true,
   'trace.dynamoDb.tablePrimaryKeys': undefined,
-  'trace.nativeSpanEvents': false
+  'trace.nativeSpanEvents': false,
 }

@@ -46,10 +46,12 @@ pids
 lib-cov
 
 # Coverage directory used by tools like istanbul
-coverage
+coverage/
+coverage-node-*/
 
 # nyc test coverage
 .nyc_output
+.nyc_output-node-*
 
 # Grunt intermediate storage (http://gruntjs.com/creating-plugins#storing-task-files)
 .grunt
@@ -141,3 +143,6 @@ __queuestorage__/AzuriteConfig
 
 # ignore claude settings
 .claude/
+
+# Husky generates a helper dir under .husky/_ (including husky.sh). Don't commit it.
+.husky/_/

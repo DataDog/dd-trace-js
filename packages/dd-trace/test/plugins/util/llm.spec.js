@@ -44,8 +44,8 @@ describe('llm utils', () => {
       utils = makeUtilities('langchain', {
         langchain: {
           spanCharLimit: 100,
-          spanPromptCompletionSampleRate: 0.6
-        }
+          spanPromptCompletionSampleRate: 0.6,
+        },
       })
     })
 

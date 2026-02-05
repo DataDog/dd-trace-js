@@ -18,7 +18,7 @@ describe('FlaggingProvider', () => {
 
   beforeEach(() => {
     mockTracer = {
-      _config: { service: 'test-service' }
+      _config: { service: 'test-service' },
     }
 
     mockConfig = {
@@ -28,13 +28,13 @@ describe('FlaggingProvider', () => {
       experimental: {
         flaggingProvider: {
           enabled: true,
-          initializationTimeoutMs: 30_000
-        }
-      }
+          initializationTimeoutMs: 30_000,
+        },
+      },
     }
 
     mockChannel = {
-      publish: sinon.spy()
+      publish: sinon.spy(),
     }
 
     channelStub = sinon.stub().returns(mockChannel)
@@ -42,14 +42,14 @@ describe('FlaggingProvider', () => {
     log = {
       debug: sinon.spy(),
       error: sinon.spy(),
-      warn: sinon.spy()
+      warn: sinon.spy(),
     }
 
     FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
-        channel: channelStub
+        channel: channelStub,
       },
-      '../log': log
+      '../log': log,
     })
   })
 

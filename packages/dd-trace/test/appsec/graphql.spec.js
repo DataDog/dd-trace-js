@@ -14,7 +14,7 @@ const {
   startGraphqlResolve,
   graphqlMiddlewareChannel,
   apolloChannel,
-  apolloServerCoreChannel
+  apolloServerCoreChannel,
 } = require('../../src/appsec/channels')
 
 describe('GraphQL', () => {
@@ -25,22 +25,22 @@ describe('GraphQL', () => {
     blocking = {
       getBlockingData,
       setTemplates: sinon.stub(),
-      block: sinon.stub()
+      block: sinon.stub(),
     }
 
     getBlockingData.returns({
       headers: { 'Content-type': 'application/json' },
       body: '{ "message": "blocked" }',
-      statusCode: 403
+      statusCode: 403,
     })
 
     telemetry = {
-      updateBlockFailureMetric: sinon.stub()
+      updateBlockFailureMetric: sinon.stub(),
     }
 
     graphql = proxyquire('../../src/appsec/graphql', {
       './blocking': blocking,
-      './telemetry': telemetry
+      './telemetry': telemetry,
     })
   })
 
@@ -113,7 +113,7 @@ describe('GraphQL', () => {
 
     it('Should not call waf if resolvers is undefined', () => {
       const context = {
-        resolver: undefined
+        resolver: undefined,
       }
 
       startGraphqlResolve.publish({ context })
@@ -123,7 +123,7 @@ describe('GraphQL', () => {
 
     it('Should not call waf if resolvers is not an object', () => {
       const context = {
-        resolver: ''
+        resolver: '',
       }
 
       startGraphqlResolve.publish({ context })
@@ -134,7 +134,7 @@ describe('GraphQL', () => {
     it('Should not call waf if req is unavailable', () => {
       const context = {}
       const resolverInfo = {
-        user: [{ id: '1234' }]
+        user: [{ id: '1234' }],
       }
 
       storage('legacy').getStore().req = undefined
@@ -148,15 +148,15 @@ describe('GraphQL', () => {
       const context = {}
 
       const resolverInfo = {
-        user: [{ id: '1234' }]
+        user: [{ id: '1234' }],
       }
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
-          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
-        }
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo,
+        },
       }, {})
     })
   })
@@ -165,12 +165,12 @@ describe('GraphQL', () => {
     const req = {}
     const res = {}
     const resolverInfo = {
-      user: [{ id: '1234' }]
+      user: [{ id: '1234' }],
     }
     const blockParameters = {
       status_code: 401,
       type: 'auto',
-      grpc_status_code: 10
+      grpc_status_code: 10,
     }
 
     let context, rootSpan
@@ -183,8 +183,8 @@ describe('GraphQL', () => {
       apolloChannel.start.publish()
       context = {
         abortController: {
-          abort: sinon.stub()
-        }
+          abort: sinon.stub(),
+        },
       }
       rootSpan = { setTag: sinon.stub() }
     })
@@ -203,8 +203,8 @@ describe('GraphQL', () => {
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
-          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
-        }
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo,
+        },
       }, {})
 
       sinon.assert.notCalled(context.abortController.abort)
@@ -219,8 +219,8 @@ describe('GraphQL', () => {
 
       sinon.stub(waf, 'run').returns({
         actions: {
-          block_request: blockParameters
-        }
+          block_request: blockParameters,
+        },
       })
 
       sinon.stub(web, 'root').returns(rootSpan)
@@ -229,8 +229,8 @@ describe('GraphQL', () => {
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
-          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
-        }
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo,
+        },
       }, {})
 
       sinon.assert.called(context.abortController.abort)
@@ -251,8 +251,8 @@ describe('GraphQL', () => {
 
       sinon.stub(waf, 'run').returns({
         actions: {
-          block_request: blockParameters
-        }
+          block_request: blockParameters,
+        },
       })
 
       sinon.stub(web, 'root').returns(rootSpan)
@@ -261,8 +261,8 @@ describe('GraphQL', () => {
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
-          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
-        }
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo,
+        },
       }, {})
 
       sinon.assert.calledOnce(abortController.abort)

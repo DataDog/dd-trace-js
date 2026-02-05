@@ -2,7 +2,7 @@ import ddtrace from 'dd-trace'
 import pino from 'pino'
 
 ddtrace.init({
-  logInjection: true
+  logInjection: true,
 })
 
 const logger = pino({ name: 'test-logger' })

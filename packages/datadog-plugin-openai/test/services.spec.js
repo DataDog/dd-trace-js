@@ -15,7 +15,7 @@ describe('Plugin', () => {
           hostname: 'foo',
           service: 'bar',
           apiKey: 'my api key',
-          interval: 1000
+          interval: 1000,
         }))
 
         service.metrics.increment('mykey')
@@ -26,7 +26,7 @@ describe('Plugin', () => {
         const service = services.init(getConfigFresh({
           hostname: 'foo',
           service: 'bar',
-          interval: 1000
+          interval: 1000,
         }))
 
         service.logger.log('hello')

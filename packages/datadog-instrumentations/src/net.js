@@ -89,13 +89,13 @@ function getOptions (args) {
     case 'string':
       if (Number.isNaN(Number.parseFloat(args[0]))) {
         return {
-          path: args[0]
+          path: args[0],
         }
       }
     case 'number': // eslint-disable-line no-fallthrough
       return {
         port: args[0],
-        host: typeof args[1] === 'string' ? args[1] : 'localhost'
+        host: typeof args[1] === 'string' ? args[1] : 'localhost',
       }
   }
 }
@@ -125,9 +125,9 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
 
   const cleanupOtherListeners = function () {
     socket.removeListener('connect', localListener)
-    events.forEach(event => {
+    for (const event of events) {
       socket.removeListener(event, wrapListener)
-    })
+    }
   }
 
   // TODO: Identify why the connect listener should remove the other listeners.
@@ -137,7 +137,7 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
     events.push('connect')
   }
 
-  events.forEach(event => {
+  for (const event of events) {
     socket.once(event, wrapListener)
-  })
+  }
 }

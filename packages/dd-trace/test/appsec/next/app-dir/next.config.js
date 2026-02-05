@@ -5,10 +5,10 @@ const major = Number(majorStr)
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    appDir: true
+    appDir: true,
   },
   output: 'standalone',
-  outputFileTracingRoot: __dirname
+  outputFileTracingRoot: __dirname,
 }
 
 if (major < 16) {

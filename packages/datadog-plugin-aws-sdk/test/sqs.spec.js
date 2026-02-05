@@ -14,8 +14,8 @@ const getQueueParams = (queueName) => {
   return {
     QueueName: queueName,
     Attributes: {
-      MessageRetentionPeriod: '86400'
-    }
+      MessageRetentionPeriod: '86400',
+    },
   }
 }
 
@@ -80,7 +80,7 @@ describe('Plugin', () => {
           'aws-sdk',
           (done) => sqs.sendMessage({
             MessageBody: 'test body',
-            QueueUrl
+            QueueUrl,
           }, done),
           () => queueName,
           'queuename'
@@ -89,29 +89,29 @@ describe('Plugin', () => {
         withNamingSchema(
           () => new Promise((resolve, reject) => sqs.sendMessage({
             MessageBody: 'test body',
-            QueueUrl
+            QueueUrl,
           }, (err) => err ? reject(err) : resolve())),
           rawExpectedSchema.producer,
           {
-            desc: 'producer'
+            desc: 'producer',
           }
         )
 
         withNamingSchema(
           () => new Promise((resolve, reject) => sqs.sendMessage({
             MessageBody: 'test body',
-            QueueUrl
+            QueueUrl,
           }, (err) => {
             if (err) return reject(err)
 
             sqs.receiveMessage({
               QueueUrl,
-              MessageAttributeNames: ['.*']
+              MessageAttributeNames: ['.*'],
             }, (err) => err ? reject(err) : resolve())
           })),
           rawExpectedSchema.consumer,
           {
-            desc: 'consumer'
+            desc: 'consumer',
           }
         )
 
@@ -121,7 +121,7 @@ describe('Plugin', () => {
           }),
           rawExpectedSchema.client,
           {
-            desc: 'client'
+            desc: 'client',
           }
         )
 
@@ -135,7 +135,7 @@ describe('Plugin', () => {
             assert.strictEqual(span.resource.startsWith('sendMessage'), true)
             assertObjectContains(span.meta, {
               queuename: queueName,
-              'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`
+              'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`,
             })
 
             parentId = span.span_id.toString()
@@ -152,13 +152,13 @@ describe('Plugin', () => {
 
           sqs.sendMessage({
             MessageBody: 'test body',
-            QueueUrl
+            QueueUrl,
           }, (err) => {
             if (err) return done(err)
 
             sqs.receiveMessage({
               QueueUrl,
-              MessageAttributeNames: ['.*']
+              MessageAttributeNames: ['.*'],
             }, (err) => {
               if (err) return done(err)
             })
@@ -174,9 +174,9 @@ describe('Plugin', () => {
               Entries: [
                 { Id: '1', MessageBody: 'test batch propagation 1' },
                 { Id: '2', MessageBody: 'test batch propagation 2' },
-                { Id: '3', MessageBody: 'test batch propagation 3' }
+                { Id: '3', MessageBody: 'test batch propagation 3' },
               ],
-              QueueUrl
+              QueueUrl,
             }, (err) => err ? reject(err) : resolve())
           })
 
@@ -186,7 +186,7 @@ describe('Plugin', () => {
             assert.strictEqual(span.resource.startsWith('sendMessageBatch'), true)
             assertObjectContains(span.meta, {
               queuename: queueName,
-              'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`
+              'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`,
             })
 
             parentId = span.span_id.toString()
@@ -207,7 +207,7 @@ describe('Plugin', () => {
             const receiveMessage = new Promise((resolve, reject) => {
               sqs.receiveMessage({
                 QueueUrl,
-                MaxNumberOfMessages: 1
+                MaxNumberOfMessages: 1,
               }, (err, data) => {
                 if (err) return reject(err)
 
@@ -237,7 +237,7 @@ describe('Plugin', () => {
         it('should run the consumer in the context of its span', (done) => {
           sqs.sendMessage({
             MessageBody: 'test body',
-            QueueUrl
+            QueueUrl,
           }, (err) => {
             if (err) return done(err)
 
@@ -245,7 +245,7 @@ describe('Plugin', () => {
 
             sqs.receiveMessage({
               QueueUrl,
-              MessageAttributeNames: ['.*']
+              MessageAttributeNames: ['.*'],
             }, (err) => {
               if (err) return done(err)
               const span = tracer.scope().active()
@@ -261,7 +261,7 @@ describe('Plugin', () => {
         it('should run the consumer in the context of its span, for async functions', (done) => {
           sqs.sendMessage({
             MessageBody: 'test body',
-            QueueUrl
+            QueueUrl,
           }, (err) => {
             if (err) return done(err)
 
@@ -269,7 +269,7 @@ describe('Plugin', () => {
 
             sqs.receiveMessage({
               QueueUrl,
-              MessageAttributeNames: ['.*']
+              MessageAttributeNames: ['.*'],
             }, (err) => {
               if (err) return done(err)
 
@@ -287,7 +287,7 @@ describe('Plugin', () => {
         it('should propagate DSM context from producer to consumer', (done) => {
           sqs.sendMessage({
             MessageBody: 'test DSM',
-            QueueUrl
+            QueueUrl,
           }, (err) => {
             if (err) return done(err)
 
@@ -295,7 +295,7 @@ describe('Plugin', () => {
 
             sqs.receiveMessage({
               QueueUrl,
-              MessageAttributeNames: ['.*']
+              MessageAttributeNames: ['.*'],
             }, (err) => {
               if (err) return done(err)
 
@@ -318,8 +318,8 @@ describe('Plugin', () => {
           return agent.load('aws-sdk', {
             sqs: {
               consumer: false,
-              dsmEnabled: false
-            }
+              dsmEnabled: false,
+            },
           },
           { dsmEnabled: true }
           )
@@ -354,14 +354,14 @@ describe('Plugin', () => {
 
             assertObjectContains(span, {
               name: 'aws.request',
-              resource: `sendMessage ${QueueUrl}`
+              resource: `sendMessage ${QueueUrl}`,
             })
 
             assertObjectContains(span.meta, {
               queuename: queueName,
               'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`,
               aws_service: 'SQS',
-              region: 'us-east-1'
+              region: 'us-east-1',
             })
             total++
           }).catch(() => {}, { timeoutMs: 100 })
@@ -371,7 +371,7 @@ describe('Plugin', () => {
 
             assertObjectContains(span, {
               name: 'aws.request',
-              resource: `receiveMessage ${QueueUrl}`
+              resource: `receiveMessage ${QueueUrl}`,
             })
 
             total++
@@ -379,12 +379,12 @@ describe('Plugin', () => {
 
           sqs.sendMessage({
             MessageBody: 'test body',
-            QueueUrl
+            QueueUrl,
           }, () => {})
 
           sqs.receiveMessage({
             QueueUrl,
-            MessageAttributeNames: ['.*']
+            MessageAttributeNames: ['.*'],
           }, () => {})
 
           setTimeout(() => {

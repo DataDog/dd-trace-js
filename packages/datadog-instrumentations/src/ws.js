@@ -5,7 +5,7 @@ const tracingChannel = require('dc-polyfill').tracingChannel
 const shimmer = require('../../datadog-shimmer')
 const {
   addHook,
-  channel
+  channel,
 } = require('./helpers/instrument')
 
 const serverCh = tracingChannel('ws:server:connect')
@@ -95,7 +95,7 @@ function wrapListener (originalOn) {
 function removeListener (originalOff) {
   return function (eventName, handler) {
     if (eventName === 'message') {
-      const wrappedHandler = eventHandlerMap.get(handler)
+      const wrappedHandler = eventHandlerMap.get(handler) || handler
       return originalOff.call(this, eventName, wrappedHandler)
     }
     return originalOff.apply(this, arguments)
@@ -119,7 +119,7 @@ function wrapClose (close) {
 addHook({
   name: 'ws',
   file: 'lib/websocket-server.js',
-  versions: ['>=8.0.0']
+  versions: ['>=8.0.0'],
 }, ws => {
   shimmer.wrap(ws.prototype, 'handleUpgrade', wrapHandleUpgrade)
   shimmer.wrap(ws.prototype, 'emit', createWrapEmit)
@@ -129,7 +129,7 @@ addHook({
 addHook({
   name: 'ws',
   file: 'lib/websocket.js',
-  versions: ['>=8.0.0']
+  versions: ['>=8.0.0'],
 }, ws => {
   shimmer.wrap(ws.prototype, 'send', wrapSend)
   shimmer.wrap(ws.prototype, 'close', wrapClose)

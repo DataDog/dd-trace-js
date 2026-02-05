@@ -11,15 +11,15 @@ function waitForMssql () {
       const connection = new tedious.Connection({
         server: 'localhost',
         options: {
-          trustServerCertificate: true
+          trustServerCertificate: true,
         },
         authentication: {
           options: {
             userName: 'sa',
-            password: 'DD_HUNTER2'
+            password: 'DD_HUNTER2',
           },
-          type: 'default'
-        }
+          type: 'default',
+        },
       }).on('connect', err => {
         if (operation.retry(err)) return
         if (err) return reject(err)

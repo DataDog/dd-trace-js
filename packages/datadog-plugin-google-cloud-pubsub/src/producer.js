@@ -64,7 +64,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
           traceId: firstAttrs['x-datadog-trace-id'],
           spanId: firstAttrs['x-datadog-parent-id'],
           traceIdUpper: firstAttrs['_dd.p.tid'],
-          samplingPriority: firstAttrs['x-datadog-sampling-priority']
+          samplingPriority: firstAttrs['x-datadog-sampling-priority'],
         }
       : null
 
@@ -81,12 +81,12 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         '_dd.base_service': this.tracer._service,
         '_dd.serviceoverride.type': 'integration',
         'pubsub.linked_message_count': spanLinkData.length || undefined,
-        operation: messageCount > 1 ? 'batched.pubsub.request' : 'pubsub.request'
+        operation: messageCount > 1 ? 'batched.pubsub.request' : 'pubsub.request',
       },
       metrics: {
         'pubsub.batch.message_count': messageCount,
-        'pubsub.batch': messageCount > 1 ? true : undefined
-      }
+        'pubsub.batch': messageCount > 1 ? true : undefined,
+      },
     }, ctx)
 
     const spanCtx = batchSpan.context()
@@ -102,12 +102,13 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         spanLinkData.map(link => ({
           trace_id: link.traceId,
           span_id: link.spanId,
-          flags: link.samplingPriority || 0
+          flags: link.samplingPriority || 0,
         }))
       ))
     }
 
-    messages.forEach((msg, i) => {
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i]
       msg.attributes ??= {}
 
       if (!hasTraceContext) {
@@ -121,7 +122,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         '_dd.batch.index': String(i),
         'gcloud.project_id': projectId,
         'pubsub.topic': topic,
-        'x-dd-publish-start-time': String(Math.floor(batchSpan._startTime))
+        'x-dd-publish-start-time': String(Math.floor(batchSpan._startTime)),
       })
 
       if (batchTraceIdUpper) {
@@ -136,7 +137,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         )
         DsmPathwayCodec.encode(dataStreamsContext, msg.attributes)
       }
-    })
+    }
 
     ctx.batchSpan = batchSpan
     return ctx.currentStore
@@ -171,14 +172,14 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       spanId: spanIdHex,
       samplingPriority: attrs['x-datadog-sampling-priority']
         ? Number.parseInt(attrs['x-datadog-sampling-priority'], 10)
-        : undefined
+        : undefined,
     }
   }
 
   #extractParentContext (data) {
     const carrier = {
       'x-datadog-trace-id': data.traceId,
-      'x-datadog-parent-id': data.spanId
+      'x-datadog-parent-id': data.spanId,
     }
     if (data.traceIdUpper) carrier['_dd.p.tid'] = data.traceIdUpper
     if (data.samplingPriority) carrier['x-datadog-sampling-priority'] = String(data.samplingPriority)

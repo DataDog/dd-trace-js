@@ -24,7 +24,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             'nonNormalizedSecretToken',
             'obj',
             'secret',
-            'weakMapKey'
+            'weakMapKey',
           ]
         )
 
@@ -37,7 +37,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         assert.ok('weakMapKey' in state)
         assert.deepStrictEqual(state.weakMapKey, {
           type: 'Object',
-          fields: { secret: { type: 'string', notCapturedReason: 'redactedIdent' } }
+          fields: { secret: { type: 'string', notCapturedReason: 'redactedIdent' } },
         })
         assert.ok('obj' in state)
         assert.strictEqual(state.obj.type, 'Object')
@@ -68,12 +68,12 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         assert.ok('nested' in fields)
         assert.deepStrictEqual(fields.nested, {
           type: 'Object',
-          fields: { secret: { type: 'string', notCapturedReason: 'redactedIdent' } }
+          fields: { secret: { type: 'string', notCapturedReason: 'redactedIdent' } },
         })
         assert.ok('arr' in fields)
         assert.deepStrictEqual(fields.arr, {
           type: 'Array',
-          elements: [{ type: 'Object', fields: { secret: { type: 'string', notCapturedReason: 'redactedIdent' } } }]
+          elements: [{ type: 'Object', fields: { secret: { type: 'string', notCapturedReason: 'redactedIdent' } } }],
         })
         assert.ok('map' in fields)
         assert.deepStrictEqual(fields.map, {
@@ -81,33 +81,33 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           entries: [
             [
               { type: 'string', value: 'foo' },
-              { type: 'string', value: 'bar' }
+              { type: 'string', value: 'bar' },
             ],
             [
               { type: 'string', value: 'secret' },
-              { type: 'string', notCapturedReason: 'redactedIdent' }
+              { type: 'string', notCapturedReason: 'redactedIdent' },
             ],
             [
               { type: 'string', value: '@Se-cret_$.' },
-              { type: 'string', notCapturedReason: 'redactedIdent' }
+              { type: 'string', notCapturedReason: 'redactedIdent' },
             ],
             [
               { type: 'symbol', value: 'Symbol(secret)' },
-              { type: 'string', notCapturedReason: 'redactedIdent' }
+              { type: 'string', notCapturedReason: 'redactedIdent' },
             ],
             [
               { type: 'symbol', value: 'Symbol(@Se-cret_$.)' },
-              { notCapturedReason: 'redactedIdent', type: 'string' }
-            ]
-          ]
+              { notCapturedReason: 'redactedIdent', type: 'string' },
+            ],
+          ],
         })
         assert.ok('weakmap' in fields)
         assert.deepStrictEqual(fields.weakmap, {
           type: 'WeakMap',
           entries: [[
             { type: 'Object', fields: { secret: { type: 'string', notCapturedReason: 'redactedIdent' } } },
-            { type: 'number', value: '42' }
-          ]]
+            { type: 'number', value: '42' },
+          ]],
         })
         assert.ok('password' in fields)
         assert.deepStrictEqual(fields.password, { type: 'string', notCapturedReason: 'redactedIdent' })

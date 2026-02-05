@@ -23,7 +23,7 @@ if (npm) {
   const packName = execSync(`npm pack ${ddtracePath}`, {
     cwd: binariesPath,
     stdio: [null, null, 'inherit'],
-    encoding: 'utf8'
+    encoding: 'utf8',
   }).slice(0, -1) // remove trailing newline
 
   writeFileSync(path.join(binariesPath, 'nodejs-load-from-npm'), `/binaries/${packName}`)
@@ -32,7 +32,7 @@ if (npm) {
 try {
   execSync(`./build.sh ${buildAll ? '' : '-i weblog'} && ./run.sh ${testArgs}`, {
     cwd: testDir,
-    stdio: [null, 'inherit', 'inherit']
+    stdio: [null, 'inherit', 'inherit'],
   })
 } catch (err) {
   process.exit(err.status || 1)
@@ -43,7 +43,7 @@ function parseArgs () {
     buildAll: false,
     npm: null,
     testDir: defaultTestPath,
-    testArgs: ''
+    testArgs: '',
   }
 
   for (let i = 2; i < process.argv.length; i++) {

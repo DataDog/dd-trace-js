@@ -19,5 +19,5 @@ function disableAllAnalyzers () {
 
 module.exports = {
   enableAllAnalyzers,
-  disableAllAnalyzers
+  disableAllAnalyzers,
 }

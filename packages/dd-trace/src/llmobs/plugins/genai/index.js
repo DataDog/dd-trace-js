@@ -9,7 +9,7 @@ const {
   formatInputMessages,
   formatEmbeddingInput,
   formatOutputMessages,
-  formatEmbeddingOutput
+  formatEmbeddingOutput,
 } = require('./util')
 
 class GenAiLLMObsPlugin extends LLMObsPlugin {
@@ -44,7 +44,7 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
       modelProvider: 'google',
       modelName: inputs.model,
       kind: operation,
-      name: 'google_genai.request'
+      name: 'google_genai.request',
     }
   }
 

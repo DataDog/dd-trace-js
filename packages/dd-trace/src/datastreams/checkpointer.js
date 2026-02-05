@@ -63,5 +63,5 @@ class DataStreamsCheckpointer {
 }
 
 module.exports = {
-  DataStreamsCheckpointer
+  DataStreamsCheckpointer,
 }

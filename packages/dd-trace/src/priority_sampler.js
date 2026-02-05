@@ -5,14 +5,14 @@ const {
     MANUAL_KEEP,
     MANUAL_DROP,
     SAMPLING_PRIORITY,
-    SERVICE_NAME
+    SERVICE_NAME,
   },
   priority: {
     AUTO_REJECT,
     AUTO_KEEP,
     USER_REJECT,
-    USER_KEEP
-  }
+    USER_KEEP,
+  },
 } = require('../../../ext')
 const log = require('./log')
 const RateLimiter = require('./rate_limiter')
@@ -30,7 +30,7 @@ const {
   SAMPLING_RULE_DECISION,
   SAMPLING_LIMIT_DECISION,
   SAMPLING_AGENT_DECISION,
-  DECISION_MAKER_KEY
+  DECISION_MAKER_KEY,
 } = require('./constants')
 
 const DEFAULT_KEY = 'service:,env:'

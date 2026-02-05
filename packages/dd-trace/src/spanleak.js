@@ -11,7 +11,7 @@ const MODES = {
   DISABLED: 0,
   // METRICS_ONLY
   LOG: 1,
-  GC_AND_LOG: 2
+  GC_AND_LOG: 2,
   // GC
 }
 

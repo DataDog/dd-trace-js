@@ -17,7 +17,7 @@ class ConfluentKafkaJsPlugin extends KafkajsPlugin {
     return {
       producer: ProducerPlugin,
       consumer: ConsumerPlugin,
-      batchConsumer: BatchConsumerPlugin
+      batchConsumer: BatchConsumerPlugin,
     }
   }
 }

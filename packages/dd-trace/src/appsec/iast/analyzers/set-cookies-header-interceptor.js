@@ -24,14 +24,14 @@ class SetCookiesHeaderInterceptor extends Plugin {
       const alreadyCheckedCookies = this._getAlreadyCheckedCookiesInResponse(res)
 
       let location
-      allCookies.forEach(cookieString => {
+      for (const cookieString of allCookies) {
         if (!alreadyCheckedCookies.includes(cookieString)) {
           alreadyCheckedCookies.push(cookieString)
           const parsedCookie = this._parseCookie(cookieString, location)
           setCookieChannel.publish(parsedCookie)
           location = parsedCookie.location
         }
-      })
+      }
     }
   }
 

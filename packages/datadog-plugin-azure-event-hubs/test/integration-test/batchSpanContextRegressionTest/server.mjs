@@ -8,7 +8,7 @@ const producer = new EventHubProducerClient(connectionString, eventHubName)
 
 const events = [
   { body: 'Test event 1' },
-  { body: 'Test event 2' }
+  { body: 'Test event 2' },
 ]
 
 // Test that tryAdd returns a boolean, not a Promise

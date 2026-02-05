@@ -10,8 +10,8 @@ describe('OpenTelemetry Logs Integration', () => {
   it('should send OTLP logs to test agent and receive 200', (done) => {
     const payload = JSON.stringify({
       resourceLogs: [{
-        scopeLogs: [{ logRecords: [{ body: { stringValue: 'test' }, timeUnixNano: String(Date.now() * 1000000) }] }]
-      }]
+        scopeLogs: [{ logRecords: [{ body: { stringValue: 'test' }, timeUnixNano: String(Date.now() * 1000000) }] }],
+      }],
     })
 
     const req = http.request({
@@ -19,7 +19,7 @@ describe('OpenTelemetry Logs Integration', () => {
       port: 4318,
       path: '/v1/logs',
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': payload.length }
+      headers: { 'Content-Type': 'application/json', 'Content-Length': payload.length },
     }, (res) => {
       assert.strictEqual(res.statusCode, 200)
       done()
@@ -38,7 +38,7 @@ describe('OpenTelemetry Logs Integration', () => {
       port: 4318,
       path: '/v3/logs',
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-protobuf', 'Content-Length': protobufPayload.length }
+      headers: { 'Content-Type': 'application/x-protobuf', 'Content-Length': protobufPayload.length },
     }, (res) => {
       // 404 Not Found - wrong path
       assert.strictEqual(res.statusCode, 404)

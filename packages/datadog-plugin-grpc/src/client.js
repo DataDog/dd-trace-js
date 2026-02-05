@@ -35,11 +35,11 @@ class GrpcClientPlugin extends ClientPlugin {
         'grpc.method.path': method.path,
         'grpc.method.name': method.name,
         'grpc.method.service': method.service,
-        'grpc.method.package': method.package
+        'grpc.method.package': method.package,
       },
       metrics: {
-        'grpc.status.code': 0
-      }
+        'grpc.status.code': 0,
+      },
     }, false)
     // needed as precursor for peer.service
     if (method.service && method.package) {

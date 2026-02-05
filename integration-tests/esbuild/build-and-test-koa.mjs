@@ -20,7 +20,7 @@ try {
     platform: 'node',
     target: 'es2022',
     plugins: [ddPlugin],
-    external: []
+    external: [],
   })
 
   // Verify instrumentation

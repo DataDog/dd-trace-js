@@ -61,7 +61,7 @@ describe('Plugin', () => {
           kafka = new Kafka({
             clientId: `kafkajs-test-${version}`,
             brokers: ['127.0.0.1:9092'],
-            logLevel: lib.logLevel.WARN
+            logLevel: lib.logLevel.WARN,
           })
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
@@ -69,8 +69,8 @@ describe('Plugin', () => {
             topics: [{
               topic: testTopic,
               numPartitions: 1,
-              replicationFactor: 1
-            }]
+              replicationFactor: 1,
+            }],
           })
           clusterIdAvailable = semver.intersects(version, '>=1.13')
           expectedProducerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, true, ENTRY_PARENT_HASH)
@@ -106,7 +106,7 @@ describe('Plugin', () => {
             await consumer.run({
               eachMessage: async () => {
                 runArgs.push(setDataStreamsContextSpy.lastCall.args[0])
-              }
+              },
             })
             await sendMessages(kafka, testTopic, messages)
             await consumer.disconnect()
@@ -120,7 +120,7 @@ describe('Plugin', () => {
             await consumer.run({
               eachBatch: async () => {
                 runArgs.push(setDataStreamsContextSpy.lastCall.args[0])
-              }
+              },
             })
             await sendMessages(kafka, testTopic, messages)
             await consumer.disconnect()
@@ -151,7 +151,7 @@ describe('Plugin', () => {
               eachMessage: async () => {
                 assert.ok(Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'))
                 recordCheckpointSpy.restore()
-              }
+              },
             })
           })
         })
@@ -189,11 +189,11 @@ describe('Plugin', () => {
                   commitMeta = {
                     topic,
                     partition,
-                    offset: Number(message.offset)
+                    offset: Number(message.offset),
                   }
                   deferred.resolve()
                 },
-                autoCommit: false
+                autoCommit: false,
               })
               await sendMessages(kafka, testTopic, messages)
               await deferred.promise
@@ -221,7 +221,7 @@ describe('Plugin', () => {
               assert.strictEqual(runArg?.topic, commitMeta.topic)
               assertObjectContains(runArg, {
                 type: 'kafka_commit',
-                consumer_group: 'test-group'
+                consumer_group: 'test-group',
               })
             })
           }
@@ -243,7 +243,7 @@ async function sendMessages (kafka, topic, messages) {
   await producer.connect()
   await producer.send({
     topic,
-    messages
+    messages,
   })
   await producer.disconnect()
 }

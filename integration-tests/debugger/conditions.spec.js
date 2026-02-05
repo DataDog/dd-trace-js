@@ -15,7 +15,7 @@ describe('Dynamic Instrumentation', function () {
       })
 
       t.agent.addRemoteConfig(t.generateRemoteConfig({
-        when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } }
+        when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } },
       }))
     })
 
@@ -34,13 +34,13 @@ describe('Dynamic Instrumentation', function () {
       })
 
       t.agent.addRemoteConfig(t.generateRemoteConfig({
-        when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } }
+        when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } },
       }))
     })
 
     it('should report error if condition cannot be compiled', function (done) {
       const rcConfig = t.generateRemoteConfig({
-        when: { dsl: 'original dsl', json: { ref: 'this is not a valid ref' } }
+        when: { dsl: 'original dsl', json: { ref: 'this is not a valid ref' } },
       })
 
       t.agent.on('debugger-diagnostics', ({ payload }) => {

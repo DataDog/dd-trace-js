@@ -54,13 +54,13 @@ const paramsByMethod = {
   utimes: ['path', 'atime', 'mtime'],
   write: ['fd'],
   writeFile: ['file', 'data', 'options'],
-  writev: ['fd']
+  writev: ['fd'],
 }
 
 const watchMethods = {
   unwatchFile: ['path', 'listener'],
   watch: ['path', 'options', 'listener'],
-  watchFile: ['path', 'options', 'listener']
+  watchFile: ['path', 'options', 'listener'],
 }
 
 const paramsByFileHandleMethods = {
@@ -82,10 +82,10 @@ const paramsByFileHandleMethods = {
   utimes: ['atime', 'mtime'],
   write: ['buffer', 'offset', 'length', 'position'],
   writeFile: ['data', 'options'],
-  writev: ['buffers', 'position']
+  writev: ['buffers', 'position'],
 }
 const names = ['fs', 'node:fs']
-names.forEach(name => {
+for (const name of names) {
   addHook({ name }, fs => {
     const asyncMethods = Object.keys(paramsByMethod)
     const syncMethods = asyncMethods.map(name => `${name}Sync`)
@@ -114,7 +114,7 @@ names.forEach(name => {
 
     return fs
   })
-})
+}
 function isFirstMethodReturningFileHandle (original) {
   return !kHandle && original.name === 'open'
 }
@@ -130,7 +130,7 @@ function wrapFileHandle (fh) {
         this[ddFhSym] = h
         wrap(this, 'close', createWrapFunction('filehandle.'))
       },
-      configurable: true
+      configurable: true,
     })
   }
   for (const name of Reflect.ownKeys(fileHandlePrototype)) {
@@ -181,7 +181,7 @@ function createWrapDirAsyncIterator () {
 function wrapCreateStream (original) {
   const classes = {
     createReadStream: 'ReadStream',
-    createWriteStream: 'WriteStream'
+    createWriteStream: 'WriteStream',
   }
   const name = classes[original.name]
 

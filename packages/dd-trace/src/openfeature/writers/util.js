@@ -34,5 +34,5 @@ function setAgentStrategy (config, setWriterEnabledValue) {
 }
 
 module.exports = {
-  setAgentStrategy
+  setAgentStrategy,
 }

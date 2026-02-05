@@ -15,8 +15,8 @@ function waitForCouchbase () {
         data: { statement: 'SELECT * FROM datatest', timeout: '75000000us' },
         auth: {
           username: 'Administrator',
-          password: 'password'
-        }
+          password: 'password',
+        },
       })
         .then(() => resolve())
         .catch(err => {

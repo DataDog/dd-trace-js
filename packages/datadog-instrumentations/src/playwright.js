@@ -7,11 +7,11 @@ const {
   parseAnnotations,
   getTestSuitePath,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
-  getIsFaultyEarlyFlakeDetection
+  getIsFaultyEarlyFlakeDetection,
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
 const {
-  getValueFromEnvSources
+  getValueFromEnvSources,
 } = require('../../dd-trace/src/config/helper')
 const { DD_MAJOR } = require('../../../version')
 const { addHook, channel } = require('./helpers/instrument')
@@ -51,7 +51,7 @@ const STATUS_TO_TEST_STATUS = {
   passed: 'pass',
   failed: 'fail',
   timedOut: 'fail',
-  skipped: 'skip'
+  skipped: 'skip',
 }
 
 let remainingTestsByFile = {}
@@ -120,13 +120,13 @@ function deepCloneSuite (suite, filterTest, tags = []) {
     } else {
       if (filterTest(entry)) {
         const copiedTest = entry._clone()
-        tags.forEach(tag => {
+        for (const tag of tags) {
           const resolvedTag = typeof tag === 'function' ? tag(entry) : tag
 
           if (resolvedTag) {
             copiedTest[resolvedTag] = true
           }
-        })
+        }
         copy._addTest(copiedTest)
       }
     }
@@ -302,9 +302,9 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   const {
     _requireFile: testSuiteAbsolutePath,
     location: {
-      line: testSourceLine
+      line: testSourceLine,
     },
-    _type
+    _type,
   } = test
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
@@ -337,7 +337,7 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
       testSuiteAbsolutePath,
       testSourceLine,
       browserName,
-      isDisabled: test._ddIsDisabled
+      isDisabled: test._ddIsDisabled,
     }
     testToCtx.set(test, testCtx)
 
@@ -352,7 +352,7 @@ function testEndHandler ({
   error,
   isTimeout,
   shouldCreateTestSpan,
-  projects
+  projects,
 }) {
   const {
     _requireFile: testSuiteAbsolutePath,
@@ -422,7 +422,7 @@ function testEndHandler ({
         hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
         isAtrRetry,
         isModified: test._ddIsModified,
-        ...testCtx.currentStore
+        ...testCtx.currentStore,
       })
     }
   }
@@ -456,7 +456,7 @@ function testEndHandler ({
         isNew: test._ddIsNew,
         isDisabled: test._ddIsDisabled,
         isModified: test._ddIsModified,
-        isQuarantined: test._ddIsQuarantined
+        isQuarantined: test._ddIsQuarantined,
       })
     }
     remainingTestsByFile[testSuiteAbsolutePath] = []
@@ -487,9 +487,9 @@ function dispatcherRunWrapperNew (run) {
     // Filter out disabled tests from testGroups before they get scheduled,
     // unless they have attemptToFix (in which case they should still run and be retried)
     if (isTestManagementTestsEnabled) {
-      testGroups.forEach(group => {
+      for (const group of testGroups) {
         group.tests = group.tests.filter(test => !test._ddIsDisabled || test._ddIsAttemptToFix)
-      })
+      }
       // Remove empty groups
       testGroups = testGroups.filter(group => group.tests.length > 0)
     }
@@ -534,7 +534,7 @@ function dispatcherHook (dispatcherExport) {
             error: testResult.error,
             isTimeout,
             shouldCreateTestSpan: true,
-            projects
+            projects,
           }
         )
       }
@@ -572,7 +572,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
           error: errors && errors[0],
           isTimeout,
           shouldCreateTestSpan,
-          projects
+          projects,
         }
       )
       const testResult = test.results.at(-1)
@@ -595,8 +595,8 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
           _ddHasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
           _ddHasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
           _ddIsAtrRetry: isAtrRetry,
-          _ddIsModified: test._ddIsModified
-        }
+          _ddIsModified: test._ddIsModified,
+        },
       })
     })
 
@@ -696,11 +696,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     // preventing them from being retried by ATR or `--retries`.
     const shouldSetATRRetries = isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0
     if (shouldSetATRRetries) {
-      projects.forEach(project => {
+      for (const project of projects) {
         if (project.retries === 0) { // Only if it hasn't been set by the user
           project.retries = flakyTestRetriesCount
         }
-      })
+      }
     }
 
     let runAllTestsReturn = await runAllTests.apply(this, arguments)
@@ -708,11 +708,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     // Tests that have only skipped tests may reach this point
     // Skipped tests may or may not go through `testBegin` or `testEnd`
     // depending on the playwright configuration
-    Object.values(remainingTestsByFile).forEach(tests => {
+    for (const tests of Object.values(remainingTestsByFile)) {
       // `tests` should normally be empty, but if it isn't,
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
-      tests.forEach(test => {
+      for (const test of tests) {
         const browser = getBrowserNameFromProjects(projects, test)
         testBeginHandler(test, browser, true)
         testEndHandler({
@@ -722,10 +722,10 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
           error: null,
           isTimeout: false,
           shouldCreateTestSpan: true,
-          projects
+          projects,
         })
-      })
-    })
+      }
+    }
 
     let preventedToFail = false
 
@@ -772,7 +772,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
-      onDone
+      onDone,
     })
     await flushWait
 
@@ -809,56 +809,56 @@ if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
   addHook({
     name: '@playwright/test',
     file: 'lib/runner.js',
-    versions: ['>=1.18.0 <=1.30.0']
+    versions: ['>=1.18.0 <=1.30.0'],
   }, runnerHook)
 
   addHook({
     name: '@playwright/test',
     file: 'lib/dispatcher.js',
-    versions: ['>=1.18.0 <1.30.0']
+    versions: ['>=1.18.0 <1.30.0'],
   }, dispatcherHook)
 
   addHook({
     name: '@playwright/test',
     file: 'lib/dispatcher.js',
-    versions: ['>=1.30.0 <1.31.0']
+    versions: ['>=1.30.0 <1.31.0'],
   }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapper))
 
   addHook({
     name: '@playwright/test',
     file: 'lib/runner/dispatcher.js',
-    versions: ['>=1.31.0 <1.38.0']
+    versions: ['>=1.31.0 <1.38.0'],
   }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
 
   addHook({
     name: '@playwright/test',
     file: 'lib/runner/runner.js',
-    versions: ['>=1.31.0 <1.38.0']
+    versions: ['>=1.31.0 <1.38.0'],
   }, runnerHook)
 }
 
 addHook({
   name: 'playwright',
   file: 'lib/runner/runner.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0'],
 }, runnerHook)
 
 addHook({
   name: 'playwright',
   file: 'lib/runner/testRunner.js',
-  versions: ['>=1.55.0']
+  versions: ['>=1.55.0'],
 }, runnerHookNew)
 
 addHook({
   name: 'playwright',
   file: 'lib/runner/dispatcher.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0'],
 }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
 
 addHook({
   name: 'playwright',
   file: 'lib/common/suiteUtils.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0'],
 }, suiteUtilsPackage => {
   // We grab `applyRepeatEachIndex` to use it later
   // `applyRepeatEachIndex` needs to be applied to a cloned suite
@@ -893,7 +893,7 @@ function applyRetriesToTests (fileSuitesWithTestsToRetry, filterTest, tagsToAppl
 addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0'],
 }, (loadUtilsPackage) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
@@ -952,7 +952,7 @@ addHook({
           (test) => test._ddIsQuarantined && '_ddIsQuarantined',
           (test) => test._ddIsDisabled && '_ddIsDisabled',
           '_ddIsAttemptToFix',
-          '_ddIsAttemptToFixRetry'
+          '_ddIsAttemptToFixRetry',
         ],
         testManagementAttemptToFixRetries
       )
@@ -964,13 +964,13 @@ addHook({
         isModifiedCh.publish({
           filePath: test._requireFile,
           modifiedFiles,
-          onDone: (isModified) => { isImpacted = isModified }
+          onDone: (isModified) => { isImpacted = isModified },
         })
         return isImpacted
       })
 
       const fileSuitesWithImpactedTestsToProjects = new Map()
-      impactedTests.forEach(impactedTest => {
+      for (const impactedTest of impactedTests) {
         impactedTest._ddIsModified = true
         if (isEarlyFlakeDetectionEnabled && impactedTest.expectedStatus !== 'skipped') {
           const fileSuite = getSuiteType(impactedTest, 'file')
@@ -978,7 +978,7 @@ addHook({
             fileSuitesWithImpactedTestsToProjects.set(fileSuite, getSuiteType(impactedTest, 'project'))
           }
         }
-      })
+      }
       // If something change in the file, all tests in the file are impacted, hence the () => true filter
       applyRetriesToTests(
         fileSuitesWithImpactedTestsToProjects,
@@ -986,7 +986,7 @@ addHook({
         [
           '_ddIsModified',
           '_ddIsEfdRetry',
-          (test) => (isKnownTestsEnabled && isNewTest(test) ? '_ddIsNew' : null)
+          (test) => (isKnownTestsEnabled && isNewTest(test) ? '_ddIsNew' : null),
         ],
         earlyFlakeDetectionNumRetries
       )
@@ -1007,7 +1007,7 @@ addHook({
         isEarlyFlakeDetectionFaulty = true
       } else {
         const fileSuitesWithNewTestsToProjects = new Map()
-        newTests.forEach(newTest => {
+        for (const newTest of newTests) {
           newTest._ddIsNew = true
           if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
             // Prevent ATR or `--retries` from retrying new tests if EFD is enabled
@@ -1017,7 +1017,7 @@ addHook({
               fileSuitesWithNewTestsToProjects.set(fileSuite, getSuiteType(newTest, 'project'))
             }
           }
-        })
+        }
 
         applyRetriesToTests(
           fileSuitesWithNewTestsToProjects,
@@ -1038,7 +1038,7 @@ addHook({
         return newCreateRootSuite
       }
       return target[prop]
-    }
+    },
   })
 
   return proxy
@@ -1048,13 +1048,13 @@ addHook({
 addHook({
   name: 'playwright',
   file: 'lib/runner/processHost.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0'],
 }, (processHostPackage) => {
   shimmer.wrap(processHostPackage.ProcessHost.prototype, 'startRunner', startRunner => async function () {
     this._extraEnv = {
       ...this._extraEnv,
       // Used to detect that we're in a playwright worker
-      DD_PLAYWRIGHT_WORKER: '1'
+      DD_PLAYWRIGHT_WORKER: '1',
     }
 
     const res = await startRunner.apply(this, arguments)
@@ -1076,7 +1076,7 @@ addHook({
 addHook({
   name: 'playwright-core',
   file: 'lib/client/page.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0'],
 }, (pagePackage) => {
   shimmer.wrap(pagePackage.Page.prototype, 'goto', goto => async function (url, options) {
     const response = await goto.apply(this, arguments)
@@ -1102,7 +1102,7 @@ addHook({
         if (isRumActive) {
           testPageGotoCh.publish({
             isRumActive,
-            page
+            page,
           })
         }
       }
@@ -1121,7 +1121,7 @@ addHook({
 addHook({
   name: 'playwright',
   file: 'lib/worker/workerMain.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0'],
 }, (workerPackage) => {
   // we assume there's only a test running at a time
   let steps = []
@@ -1136,8 +1136,8 @@ addHook({
     const {
       _requireFile: testSuiteAbsolutePath,
       location: {
-        line: testSourceLine
-      }
+        line: testSourceLine,
+      },
     } = test
     let res
 
@@ -1152,7 +1152,7 @@ addHook({
       testName,
       testSuiteAbsolutePath,
       testSourceLine,
-      browserName
+      browserName,
     }
     testToCtx.set(test, testCtx)
     // TODO - In the future we may need to implement a mechanism to send test properties
@@ -1193,7 +1193,7 @@ addHook({
                       name: 'datadog-ci-visibility-test-execution-id',
                       value: '',
                       domain,
-                      path: '/'
+                      path: '/',
                     }])
                   } else {
                     log.error('RUM is active but page.url() is not available')
@@ -1206,7 +1206,7 @@ addHook({
             }
           },
           title: 'afterEach hook',
-          _ddHook: true
+          _ddHook: true,
         })
       }
 
@@ -1271,7 +1271,7 @@ addHook({
       isAtrRetry: test._ddIsAtrRetry,
       isModified: test._ddIsModified,
       onDone,
-      ...testCtx.currentStore
+      ...testCtx.currentStore,
     })
 
     await flushPromise
@@ -1286,7 +1286,7 @@ addHook({
       stepInfoByStepId[payload.stepId] = {
         startTime: payload.wallTime,
         title: payload.title,
-        testId: payload.testId
+        testId: payload.testId,
       }
     } else if (event === 'stepEnd') {
       const stepInfo = stepInfoByStepId[payload.stepId]
@@ -1296,7 +1296,7 @@ addHook({
         startTime: new Date(stepInfo.startTime),
         title: stepInfo.title,
         duration: payload.wallTime - stepInfo.startTime,
-        error: payload.error
+        error: payload.error,
       })
     }
     return dispatchEvent.apply(this, arguments)
@@ -1318,7 +1318,7 @@ function generateSummaryWrapper (generateSummary) {
           _ddIsNew: isNew,
           _ddIsDisabled: isDisabled,
           _ddIsModified: isModified,
-          _ddIsQuarantined: isQuarantined
+          _ddIsQuarantined: isQuarantined,
         } = test
         const browserName = getBrowserNameFromProjects(sessionProjects, test)
 
@@ -1330,7 +1330,7 @@ function generateSummaryWrapper (generateSummary) {
           isNew,
           isDisabled,
           isModified,
-          isQuarantined
+          isQuarantined,
         })
       }
     }
@@ -1345,7 +1345,7 @@ function generateSummaryWrapper (generateSummary) {
 addHook({
   name: 'playwright',
   file: 'lib/reporters/base.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0'],
 }, (reportersPackage) => {
   // v1.50.0 changed the name of the base reporter from BaseReporter to TerminalReporter
   if (reportersPackage.TerminalReporter) {

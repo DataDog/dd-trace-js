@@ -9,7 +9,7 @@ const {
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
   TEST_BROWSER_VERSION,
-  TEST_TYPE
+  TEST_TYPE,
 } = require('../../dd-trace/src/plugins/util/test')
 const { SPAN_TYPE } = require('../../../ext/tags')
 
@@ -37,7 +37,7 @@ class SeleniumPlugin extends CiPlugin {
       seleniumVersion,
       browserName,
       browserVersion,
-      isRumActive
+      isRumActive,
     }) => {
       const store = storage('legacy').getStore()
       const span = store?.span

@@ -24,7 +24,7 @@ describe('command-injection-analyzer with kafkajs', () => {
 
         kafka = new Kafka({
           clientId: 'my-app',
-          brokers: ['127.0.0.1:9092']
+          brokers: ['127.0.0.1:9092'],
         })
 
         consumer = await kafka.consumer({ groupId: 'iast-test' })
@@ -45,13 +45,13 @@ describe('command-injection-analyzer with kafkajs', () => {
             } catch (e) {
               // do nothing
             }
-          }
+          },
         })
 
         const sendMessage = async (topic, messages) => {
           await producer.send({
             topic,
-            messages
+            messages,
           })
         }
 

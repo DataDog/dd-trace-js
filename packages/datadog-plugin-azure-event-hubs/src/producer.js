@@ -26,7 +26,7 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
         'messaging.system': 'eventhubs',
         'messaging.destination.name': entityPath,
         'network.destination.name': qualifiedNamespace,
-      }
+      },
     }, ctx)
 
     if (ctx.functionName === 'tryAdd') {
@@ -55,9 +55,9 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
       span.setTag('messaging.batch.message_count', eventDataLength)
 
       if (eventData.constructor.name !== 'EventDataBatchImpl' && Array.isArray(eventData)) {
-        eventData.forEach(event => {
+        for (const event of eventData) {
           injectTraceContext(this.tracer, span, event)
-        })
+        }
       } else {
         if (batchLinksAreEnabled()) {
           const contexts = spanContexts.get(eventData)

@@ -177,7 +177,7 @@ describe('Plugin', () => {
             couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
             couchbase.connect('couchbase://localhost', {
               username: 'Administrator',
-              password: 'password'
+              password: 'password',
             }).then(_cluster => {
               cluster = _cluster
               bucket = cluster.bucket('datadog-test')
@@ -264,7 +264,7 @@ describe('Plugin', () => {
                 // depending on version of node
                 'Cannot read property \'toString\' of undefined',
                 'Cannot read properties of undefined (reading \'toString\')',
-                'parsing failure' // sdk 4
+                'parsing failure', // sdk 4
               ].includes(e.message))
               done()
             }

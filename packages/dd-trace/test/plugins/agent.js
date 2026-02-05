@@ -120,7 +120,7 @@ function unformatSpanEvents (span) {
       return {
         name: event.name,
         startTime: event.time_unix_nano / 1e6, // Convert from nanoseconds back to milliseconds
-        attributes: event.attributes ? event.attributes : undefined
+        attributes: event.attributes ? event.attributes : undefined,
       }
     })
 
@@ -195,8 +195,8 @@ function handleTraceRequest (req, res, sendToTestAgent) {
         headers: {
           ...req.headers,
           'X-Datadog-Agent-Proxy-Disabled': 'True',
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       })
 
     testAgentReq.on('response', testAgentRes => {
@@ -340,7 +340,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
         error = new AggregateError(errors, 'Asserting traces failed. No result matched the expected one.')
         // Mark errors enumerable for older Node.js versions to be visible.
         Object.defineProperty(error, 'errors', {
-          enumerable: true
+          enumerable: true,
         })
       }
       // Hack for the information to be fully visible.
@@ -351,7 +351,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
 
   const handlerPayload = {
     handler,
-    spanResourceMatch: options.spanResourceMatch
+    spanResourceMatch: options.spanResourceMatch,
   }
 
   /**
@@ -418,13 +418,13 @@ module.exports = {
     const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
     const proxy = proxyquire('../../src/proxy', {
       './config': getConfigFresh,
-      './dogstatsd': dogstatsd
+      './dogstatsd': dogstatsd,
     })
     const TracerProxy = proxyquire('../../src', {
-      './proxy': proxy
+      './proxy': proxy,
     })
     tracer = proxyquire('../../', {
-      './src': TracerProxy
+      './src': TracerProxy,
     })
 
     agent = express()
@@ -448,7 +448,7 @@ module.exports = {
 
     agent.get('/info', (req, res) => {
       res.status(202).send({
-        endpoints: availableEndpoints
+        endpoints: availableEndpoints,
       })
     })
 
@@ -482,7 +482,7 @@ module.exports = {
     dsmStats = []
     agent.post('/v0.1/pipeline_stats', (req, res) => {
       dsmStats.push(req.body)
-      statsHandlers.forEach(({ handler, spanResourceMatch }) => {
+      statsHandlers.forEach(({ handler }) => {
         handler(dsmStats)
       })
       res.status(200).send()
@@ -509,7 +509,7 @@ module.exports = {
           env: 'tester',
           port,
           flushInterval: 0,
-          plugins: false
+          plugins: false,
         }, tracerConfig))
 
         tracer.setUrl(`http://127.0.0.1:${port}`)
@@ -741,5 +741,5 @@ module.exports = {
   getDsmStats,
   dsmStatsExist,
   dsmStatsExistWithParentHash,
-  unformatSpanEvents
+  unformatSpanEvents,
 }

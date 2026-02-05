@@ -1,10 +1,11 @@
 'use strict'
+const path = require('node:path')
 
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
-  VITEST_WORKER_LOGS_PAYLOAD_CODE
+  VITEST_WORKER_LOGS_PAYLOAD_CODE,
 } = require('../../dd-trace/src/plugins/util/test')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -36,6 +37,7 @@ const modifiedFilesCh = channel('ci:vitest:modified-files')
 
 const workerReportTraceCh = channel('ci:vitest:worker-report:trace')
 const workerReportLogsCh = channel('ci:vitest:worker-report:logs')
+const codeCoverageReportCh = channel('ci:vitest:coverage-report')
 
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
@@ -59,6 +61,7 @@ let isImpactedTestsEnabled = false
 let testManagementAttemptToFixRetries = 0
 let isDiEnabled = false
 let testCodeCoverageLinesTotal
+let coverageRootDir
 let isSessionStarted = false
 let vitestPool = null
 
@@ -93,7 +96,7 @@ function getProvidedContext () {
       _ddTestManagementTests: testManagementTests,
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
-      _ddModifiedFiles: modifiedFiles
+      _ddModifiedFiles: modifiedFiles,
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -107,7 +110,7 @@ function getProvidedContext () {
       testManagementTests,
       isFlakyTestRetriesEnabled,
       isImpactedTestsEnabled,
-      modifiedFiles
+      modifiedFiles,
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -122,7 +125,7 @@ function getProvidedContext () {
       testManagementTests: {},
       isFlakyTestRetriesEnabled: false,
       isImpactedTestsEnabled: false,
-      modifiedFiles: {}
+      modifiedFiles: {},
     }
   }
 }
@@ -278,7 +281,7 @@ function getSortWrapper (sort, frameworkVersion) {
             testFilepaths,
             onDone: (isFaulty) => {
               isEarlyFlakeDetectionFaulty = isFaulty
-            }
+            },
           })
           if (isEarlyFlakeDetectionFaulty) {
             isEarlyFlakeDetectionEnabled = false
@@ -354,6 +357,17 @@ function getSortWrapper (sort, frameworkVersion) {
     }
 
     if (this.ctx.coverageProvider?.generateCoverage) {
+      // Capture coverage root directory from config (default is 'coverage' in cwd)
+      try {
+        const coverageConfig = this.ctx.config?.coverage
+        const reportsDirectory = coverageConfig?.reportsDirectory || 'coverage'
+        const rootDir = this.ctx.config?.root || process.cwd()
+        coverageRootDir = path.isAbsolute(reportsDirectory) ? reportsDirectory : path.join(rootDir, reportsDirectory)
+      } catch {
+        // Fallback to cwd if we can't get config
+        coverageRootDir = process.cwd()
+      }
+
       shimmer.wrap(this.ctx.coverageProvider, 'generateCoverage', generateCoverage => async function () {
         const totalCodeCoverage = await generateCoverage.apply(this, arguments)
 
@@ -399,10 +413,17 @@ function getFinishWrapper (exitOrClose) {
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       vitestPool,
-      onFinish
+      onFinish,
     })
 
     await flushPromise
+
+    // If coverage was generated, publish coverage report channel for upload
+    if (coverageRootDir && codeCoverageReportCh.hasSubscribers) {
+      await new Promise((resolve) => {
+        codeCoverageReportCh.publish({ rootDir: coverageRootDir, onDone: resolve })
+      })
+    }
 
     return exitOrClose.apply(this, arguments)
   }
@@ -462,8 +483,10 @@ function threadHandler (thread) {
 function wrapTinyPoolRun (TinyPool) {
   shimmer.wrap(TinyPool.prototype, 'run', run => async function () {
     // We have to do this before and after because the threads list gets recycled, that is, the processes are re-created
+    // eslint-disable-next-line unicorn/no-array-for-each
     this.threads.forEach(threadHandler)
     const runResult = await run.apply(this, arguments)
+    // eslint-disable-next-line unicorn/no-array-for-each
     this.threads.forEach(threadHandler)
     return runResult
   })
@@ -472,20 +495,9 @@ function wrapTinyPoolRun (TinyPool) {
 addHook({
   name: 'tinypool',
   // version from tinypool@0.8 was used in vitest@1.6.0
-  versions: ['>=0.8.0 <1.0.0'],
-  file: 'dist/esm/index.js'
+  versions: ['>=0.8.0'],
 }, (TinyPool) => {
   wrapTinyPoolRun(TinyPool)
-  return TinyPool
-})
-
-addHook({
-  name: 'tinypool',
-  versions: ['>=1.0.0'],
-  file: 'dist/index.js'
-}, (TinyPool) => {
-  wrapTinyPoolRun(TinyPool)
-
   return TinyPool
 })
 
@@ -558,7 +570,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       testManagementAttemptToFixRetries,
       testManagementTests,
       isImpactedTestsEnabled,
-      modifiedFiles
+      modifiedFiles,
     } = getProvidedContext()
 
     if (isTestManagementTestsEnabled) {
@@ -573,7 +585,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
             attemptToFixTasks.add(task)
             taskToStatuses.set(task, [])
           }
-        }
+        },
       })
       isDisabledCh.publish({
         testManagementTests,
@@ -587,7 +599,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
               task.mode = 'skip'
             }
           }
-        }
+        },
       })
     }
 
@@ -604,7 +616,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
             modifiedTasks.add(task)
             taskToStatuses.set(task, [])
           }
-        }
+        },
       })
     }
 
@@ -622,7 +634,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
             newTasks.add(task)
             taskToStatuses.set(task, [])
           }
-        }
+        },
       })
     }
 
@@ -679,7 +691,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       isDiEnabled,
       isTestManagementTestsEnabled,
       testManagementTests,
-      isFlakyTestRetriesEnabled
+      isFlakyTestRetriesEnabled,
     } = getProvidedContext()
 
     if (isKnownTestsEnabled) {
@@ -696,7 +708,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
           if (isTestQuarantined) {
             quarantinedTasks.add(task)
           }
-        }
+        },
       })
     }
 
@@ -718,7 +730,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
           error: testError,
           shouldSetProbe,
           promises,
-          ...ctx.currentStore
+          ...ctx.currentStore,
         })
         // We wait for the probe to be set
         if (promises.setProbePromise) {
@@ -787,7 +799,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       isDisabled: disabledTasks.has(task),
       isQuarantined,
       isRetryReasonAtr,
-      isModified: modifiedTasks.has(task)
+      isModified: modifiedTasks.has(task),
     }
     taskToCtx.set(task, ctx)
 
@@ -843,7 +855,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
 addHook({
   name: 'vitest',
   versions: ['>=4.0.0'],
-  filePattern: 'dist/chunks/test.*'
+  filePattern: 'dist/chunks/test.*',
 }, (testPackage) => {
   if (!isTestPackage(testPackage)) {
     return testPackage
@@ -857,7 +869,7 @@ addHook({
 addHook({
   name: 'vitest',
   versions: ['>=1.6.0 <4.0.0'],
-  file: 'dist/runners.js'
+  file: 'dist/runners.js',
 }, (vitestPackage) => {
   const { VitestTestRunner } = vitestPackage
 
@@ -871,7 +883,7 @@ addHook({
 addHook({
   name: 'vitest',
   versions: ['>=1.6.0 <2.0.0'],
-  filePattern: 'dist/vendor/index.*'
+  filePattern: 'dist/vendor/index.*',
 }, (vitestPackage) => {
   if (isReporterPackage(vitestPackage)) {
     shimmer.wrap(vitestPackage.B.prototype, 'sort', getSortWrapper)
@@ -883,7 +895,7 @@ addHook({
 addHook({
   name: 'vitest',
   versions: ['>=2.0.0 <2.0.5'],
-  filePattern: 'dist/vendor/index.*'
+  filePattern: 'dist/vendor/index.*',
 }, (vitestPackage) => {
   if (isReporterPackageNew(vitestPackage)) {
     shimmer.wrap(vitestPackage.e.prototype, 'sort', getSortWrapper)
@@ -895,7 +907,7 @@ addHook({
 addHook({
   name: 'vitest',
   versions: ['>=2.0.5 <2.1.0'],
-  filePattern: 'dist/chunks/index.*'
+  filePattern: 'dist/chunks/index.*',
 }, (vitestPackage) => {
   if (isReporterPackageNewest(vitestPackage)) {
     shimmer.wrap(vitestPackage.h.prototype, 'sort', getSortWrapper)
@@ -907,7 +919,7 @@ addHook({
 addHook({
   name: 'vitest',
   versions: ['>=2.1.0 <3.0.0'],
-  filePattern: 'dist/chunks/RandomSequencer.*'
+  filePattern: 'dist/chunks/RandomSequencer.*',
 }, (randomSequencerPackage) => {
   shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
   return randomSequencerPackage
@@ -916,7 +928,7 @@ addHook({
 addHook({
   name: 'vitest',
   versions: ['>=3.0.9'],
-  filePattern: 'dist/chunks/coverage.*'
+  filePattern: 'dist/chunks/coverage.*',
 }, (coveragePackage) => {
   if (isBaseSequencer(coveragePackage)) {
     shimmer.wrap(coveragePackage.b.prototype, 'sort', getSortWrapper)
@@ -927,7 +939,7 @@ addHook({
 addHook({
   name: 'vitest',
   versions: ['>=3.0.0 <3.0.9'],
-  filePattern: 'dist/chunks/resolveConfig.*'
+  filePattern: 'dist/chunks/resolveConfig.*',
 }, (resolveConfigPackage) => {
   shimmer.wrap(resolveConfigPackage.B.prototype, 'sort', getSortWrapper)
   return resolveConfigPackage
@@ -938,25 +950,25 @@ addHook({
 addHook({
   name: 'vitest',
   versions: ['>=1.6.0 <2.0.5'],
-  filePattern: 'dist/vendor/cac.*'
+  filePattern: 'dist/vendor/cac.*',
 }, getCreateCliWrapper)
 
 addHook({
   name: 'vitest',
   versions: ['>=2.0.5'],
-  filePattern: 'dist/chunks/cac.*'
+  filePattern: 'dist/chunks/cac.*',
 }, getCreateCliWrapper)
 
 addHook({
   name: 'vitest',
   versions: ['>=1.6.0 <2.0.5'],
-  filePattern: 'dist/vendor/cli-api.*'
+  filePattern: 'dist/vendor/cli-api.*',
 }, getStartVitestWrapper)
 
 addHook({
   name: 'vitest',
   versions: ['>=2.0.5'],
-  filePattern: 'dist/chunks/cli-api.*'
+  filePattern: 'dist/chunks/cli-api.*',
 }, getStartVitestWrapper)
 
 // test suite start and finish
@@ -964,7 +976,6 @@ addHook({
 addHook({
   name: '@vitest/runner',
   versions: ['>=1.6.0'],
-  file: 'dist/index.js'
 }, (vitestPackage, frameworkVersion) => {
   shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPaths) {
     let testSuiteError = null
@@ -986,7 +997,7 @@ addHook({
     const testTasks = getTypeTasks(startTestsResponse[0].tasks)
 
     // Only one test task per test, even if there are retries
-    testTasks.forEach(task => {
+    for (const task of testTasks) {
       const testCtx = taskToCtx.get(task)
       const { result } = task
       // We have to trick vitest into thinking that the test has passed
@@ -1000,7 +1011,7 @@ addHook({
             testName: getTestName(task),
             testSuiteAbsolutePath: task.file.filepath,
             isNew: newTasks.has(task),
-            isDisabled: disabledTasks.has(task)
+            isDisabled: disabledTasks.has(task),
           })
         } else if (state === 'pass' && !isSwitchedStatus) {
           if (testCtx) {
@@ -1033,7 +1044,7 @@ addHook({
               error: testError,
               hasFailedAllRetries,
               attemptToFixFailed,
-              ...testCtx.currentStore
+              ...testCtx.currentStore,
             })
           }
           if (errors?.length) {
@@ -1045,10 +1056,10 @@ addHook({
           testName: getTestName(task),
           testSuiteAbsolutePath: task.file.filepath,
           isNew: newTasks.has(task),
-          isDisabled: disabledTasks.has(task)
+          isDisabled: disabledTasks.has(task),
         })
       }
-    })
+    }
 
     const testSuiteResult = startTestsResponse[0].result
 

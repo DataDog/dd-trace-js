@@ -27,7 +27,7 @@ const samples = [
   { ident: 'pass', value: 'm-ou4zr=vri2yl-0_ardsza7qbenvy3_2b1h8rsq2_n-.utj9nd3xyvqpg4xl37-nl0nkjwam1avbe9zl' },
   { ident: 'pwd', value: 'e8l=47jevvmz5=trchu6.uu3lwn0fb79bpt=fogw36r1srzb1o1w4f-nhihcni=kncnj9ubs0.2w2tey-b=u9f4-s5l_648p67hf4f2bccv6c4lr3mfcj8a77qv38dlzuhpyb=u' },
   { ident: 'pswd', value: '9rh_n.oooxynt-6._a7ho.2=v-gziqf3wz2vudn916jej_6xaq_1vczboi5rmt5_iuvxxf8oq.ghisjxum' },
-  { ident: 'passwd', value: 'vtecj=v6b7-qc1m-s6c=zidew-hw-=c-=4d83icy28-guc3g-vvrimsdf=jml.acy=q7sdwaxh_rl-okx1z48pihg=w4=tc4' }
+  { ident: 'passwd', value: 'vtecj=v6b7-qc1m-s6c=zidew-hw-=c-=4d83icy28-guc3g-vvrimsdf=jml.acy=q7sdwaxh_rl-okx1z48pihg=w4=tc4' },
 ]
 
 describe('Hardcoded Password Analyzer', () => {
@@ -56,9 +56,9 @@ describe('Hardcoded Password Analyzer', () => {
             locations: [{
               ident,
               line,
-              column
-            }]
-          }]
+              column,
+            }],
+          }],
         })
 
         sinon.assert.calledOnceWithExactly(report, { file: relFile, line, column, ident, data: ruleId })
@@ -76,7 +76,7 @@ describe('Hardcoded Password Analyzer', () => {
     it('should not report secrets in line 0', () => {
       hardcodedPasswordAnalyzer.analyze({
         file,
-        literals: [{ value: 'test', line: 0 }]
+        literals: [{ value: 'test', line: 0 }],
       })
 
       sinon.assert.notCalled(report)
@@ -95,9 +95,9 @@ describe('Hardcoded Password Analyzer', () => {
           locations: [{
             ident,
             line,
-            column
-          }]
-        }]
+            column,
+          }],
+        }],
       })
 
       const evidence = { value: ident }
@@ -134,9 +134,9 @@ describe('Hardcoded Password Analyzer', () => {
           experimental: {
             iast: {
               enabled: true,
-              requestSampling: 100
-            }
-          }
+              requestSampling: 100,
+            },
+          },
         })
         iast.enable(config, tracer)
         rewriter = require('../../../../src/appsec/iast/taint-tracking/rewriter')

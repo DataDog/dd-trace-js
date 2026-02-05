@@ -18,6 +18,12 @@ function makeSpan (...args) {
   return tracer.startSpan(...args)
 }
 
+function getTracer () {
+  const tracerProvider = new TracerProvider()
+  tracerProvider.register()
+  return tracerProvider.getTracer()
+}
+
 describe('OTel Context Manager', () => {
   let contextManager
   let db
@@ -29,7 +35,7 @@ describe('OTel Context Manager', () => {
       getSomeValue: async () => {
         await new Promise(resolve => setTimeout(resolve, 100))
         return { name: 'Dummy Name' }
-      }
+      },
     }
   })
 
@@ -128,7 +134,7 @@ describe('OTel Context Manager', () => {
 
   it('should propagate baggage from an otel span to a datadog span', () => {
     const entries = {
-      foo: { value: 'bar' }
+      foo: { value: 'bar' },
     }
     const baggage = propagation.createBaggage(entries)
     const contextWithBaggage = propagation.setBaggage(context.active(), baggage)
@@ -188,6 +194,15 @@ describe('OTel Context Manager', () => {
       assert.deepStrictEqual(JSON.parse(ddSpan.getAllBaggageItems()), { key2: 'dd2' })
       ddSpan.removeBaggageItem('key2')
       assert.deepStrictEqual(propagation.getActiveBaggage().getAllEntries(), [])
+    })
+  })
+
+  it('should return active span', () => {
+    const otelTracer = getTracer()
+    otelTracer.startActiveSpan('otel', (span) => {
+      const activeSpan = trace.getActiveSpan()
+      assert.strictEqual(activeSpan, span)
+      span.end()
     })
   })
 })

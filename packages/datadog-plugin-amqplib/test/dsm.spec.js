@@ -62,7 +62,7 @@ describe('Plugin', () => {
             'direction:out',
             'has_routing_key:true',
             `topic:${queue}`,
-            'type:rabbitmq'
+            'type:rabbitmq',
           ], ENTRY_PARENT_HASH)
 
           expectedProducerHashWithTopic = producerHashWithTopic.readBigUInt64LE(0).toString()
@@ -71,13 +71,13 @@ describe('Plugin', () => {
             'direction:out',
             'exchange:namedExchange',
             'has_routing_key:true',
-            'type:rabbitmq'
+            'type:rabbitmq',
           ], ENTRY_PARENT_HASH).readBigUInt64LE(0).toString()
 
           expectedConsumerHash = computePathwayHash('test', 'tester', [
             'direction:in',
             `topic:${queue}`,
-            'type:rabbitmq'
+            'type:rabbitmq',
           ], producerHashWithTopic).readBigUInt64LE(0).toString()
         })
 
@@ -97,7 +97,7 @@ describe('Plugin', () => {
               'direction:out',
               'has_routing_key:true',
               `topic:${queue}`,
-              'type:rabbitmq'
+              'type:rabbitmq',
             ])
             assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHashWithTopic), true)
           }, { timeoutMs: 10000 }).then(done, done)
@@ -125,7 +125,7 @@ describe('Plugin', () => {
               'direction:out',
               'exchange:namedExchange',
               'has_routing_key:true',
-              'type:rabbitmq'
+              'type:rabbitmq',
             ])
             assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHashWithExchange), true)
           }, { timeoutMs: 10000 }).then(done, done)
@@ -180,7 +180,7 @@ describe('Plugin', () => {
               'direction:out',
               'has_routing_key:true',
               `topic:${queue}`,
-              'type:rabbitmq'
+              'type:rabbitmq',
             ])
             assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHashWithTopic), true)
           }, { timeoutMs: 10000 }).then(done, done)
@@ -246,7 +246,7 @@ describe('Plugin', () => {
               }
 
               assertObjectContains(produceSpanMeta, {
-                'pathway.hash': expectedProducerHashWithTopic
+                'pathway.hash': expectedProducerHashWithTopic,
               })
             }, { timeoutMs: 10000 }).then(done, done)
           })
@@ -269,7 +269,7 @@ describe('Plugin', () => {
                 }
 
                 assertObjectContains(consumeSpanMeta, {
-                  'pathway.hash': expectedConsumerHash
+                  'pathway.hash': expectedConsumerHash,
                 })
               }, { timeoutMs: 10000 }).then(done, done)
             })

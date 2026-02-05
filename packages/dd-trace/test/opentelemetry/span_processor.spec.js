@@ -7,7 +7,7 @@ require('../setup/core')
 
 const {
   MultiSpanProcessor,
-  NoopSpanProcessor
+  NoopSpanProcessor,
 } = require('../../src/opentelemetry/span_processor')
 
 class TestSpanProcessor extends NoopSpanProcessor {
@@ -25,7 +25,7 @@ describe('OTel MultiSpanProcessor', () => {
   it('should call onStart', () => {
     const processors = [
       new TestSpanProcessor(),
-      new TestSpanProcessor()
+      new TestSpanProcessor(),
     ]
 
     const processor = new MultiSpanProcessor(processors)
@@ -39,7 +39,7 @@ describe('OTel MultiSpanProcessor', () => {
   it('should call onEnd', () => {
     const processors = [
       new TestSpanProcessor(),
-      new TestSpanProcessor()
+      new TestSpanProcessor(),
     ]
 
     const processor = new MultiSpanProcessor(processors)
@@ -53,7 +53,7 @@ describe('OTel MultiSpanProcessor', () => {
   it('should call flush', () => {
     const processors = [
       new TestSpanProcessor(),
-      new TestSpanProcessor()
+      new TestSpanProcessor(),
     ]
 
     const processor = new MultiSpanProcessor(processors)
@@ -67,7 +67,7 @@ describe('OTel MultiSpanProcessor', () => {
   it('should call onEnd', () => {
     const processors = [
       new TestSpanProcessor(),
-      new TestSpanProcessor()
+      new TestSpanProcessor(),
     ]
 
     const processor = new MultiSpanProcessor(processors)

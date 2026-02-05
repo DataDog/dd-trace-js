@@ -22,19 +22,19 @@ describe('OpenFeature Remote Config', () => {
       updateCapabilities: sinon.spy(),
       setProductHandler: sinon.spy((product, handler) => {
         handlers.set(product, handler)
-      })
+      }),
     }
 
     config = {
       experimental: {
         flaggingProvider: {
-          enabled: true
-        }
-      }
+          enabled: true,
+        },
+      },
     }
 
     openfeatureProxy = {
-      _setConfiguration: sinon.spy()
+      _setConfiguration: sinon.spy(),
     }
 
     getOpenfeatureProxy = sinon.stub().returns(openfeatureProxy)

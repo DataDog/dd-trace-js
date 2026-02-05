@@ -56,7 +56,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
       const req = {
         method: httpRequest.method,
         headers: Object.fromEntries(httpRequest.headers),
-        url: path
+        url: path,
       }
       const context = web.patch(req)
       context.config = this.config
@@ -79,7 +79,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
 function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
   let meta = {
     'aas.function.name': functionName,
-    'aas.function.trigger': mapTriggerTag(methodName)
+    'aas.function.trigger': mapTriggerTag(methodName),
   }
 
   if (triggerMap[methodName] === 'ServiceBus') {
@@ -91,7 +91,7 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
       'messaging.system': 'servicebus',
       'messaging.destination.name': triggerEntity,
       'resource.name': `ServiceBus ${functionName}`,
-      'span.kind': 'consumer'
+      'span.kind': 'consumer',
     }
   } else if (triggerMap[methodName] === 'EventHubs') {
     const partitionContext = invocationContext.triggerMetadata.triggerPartitionContext
@@ -101,7 +101,7 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
       'messaging.operation': 'receive',
       'messaging.system': 'eventhubs',
       'resource.name': `EventHubs ${functionName}`,
-      'span.kind': 'consumer'
+      'span.kind': 'consumer',
     }
   }
 
@@ -113,12 +113,11 @@ function mapTriggerTag (methodName) {
 }
 
 function extractTraceContext (tracer, ctx) {
-  switch (String(triggerMap[ctx.methodName])) {
-    case 'Http':
-      return tracer.extract('http_headers', Object.fromEntries(ctx.httpRequest.headers))
-    default:
-      null
+  if (triggerMap[ctx.methodName] === 'Http') {
+    return tracer.extract('http_headers', Object.fromEntries(ctx.httpRequest.headers))
   }
+  // Returning null indicates that the span is a root span
+  return null
 }
 
 // message & messages & batch with cardinality of 1 == applicationProperties
@@ -145,7 +144,9 @@ function setSpanLinks (triggerType, tracer, span, ctx) {
   }
 
   if (cardinality === 'many' && propertiesArray?.length > 0) {
-    propertiesArray.forEach(addLinkFromProperties)
+    for (const prop of propertiesArray) {
+      addLinkFromProperties(prop)
+    }
   } else if (cardinality === 'one') {
     addLinkFromProperties(properties)
   }

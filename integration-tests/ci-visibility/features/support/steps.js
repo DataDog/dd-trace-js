@@ -28,13 +28,13 @@ Before('@skip', function () {
 
 After(function () {
   tracer.scope().active().addTags({
-    'custom_tag.after': 'hello after'
+    'custom_tag.after': 'hello after',
   })
 })
 
 Before(function () {
   tracer.scope().active().addTags({
-    'custom_tag.before': 'hello before'
+    'custom_tag.before': 'hello before',
   })
 })
 
@@ -56,7 +56,7 @@ When('the greeter says yeah', function () {
 
 When('the greeter says greetings', function () {
   tracer.scope().active().addTags({
-    'custom_tag.when': 'hello when'
+    'custom_tag.when': 'hello when',
   })
   this.whatIHeard = new Greeter().sayGreetings()
 })

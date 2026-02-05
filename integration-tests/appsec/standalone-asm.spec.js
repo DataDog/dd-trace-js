@@ -9,7 +9,7 @@ const {
   FakeAgent,
   spawnProc,
   curlAndAssertMessage,
-  curl
+  curl,
 } = require('../helpers')
 const { USER_KEEP, AUTO_REJECT, AUTO_KEEP } = require('../../ext/priority')
 
@@ -51,7 +51,7 @@ describe('Standalone ASM', () => {
         AGENT_PORT: agent.port,
         DD_APM_TRACING_ENABLED: 'false',
         DD_APPSEC_ENABLED: 'true',
-        DD_API_SECURITY_ENABLED: 'false'
+        DD_API_SECURITY_ENABLED: 'false',
       }
 
       const execArgv = []
@@ -259,7 +259,7 @@ describe('Standalone ASM', () => {
       env = {
         AGENT_PORT: agent.port,
         DD_APM_TRACING_ENABLED: 'false',
-        DD_APPSEC_ENABLED: 'true'
+        DD_APPSEC_ENABLED: 'true',
       }
 
       const execArgv = []
@@ -309,7 +309,7 @@ describe('Standalone ASM', () => {
       agent = await new FakeAgent().start()
 
       env = {
-        AGENT_PORT: agent.port
+        AGENT_PORT: agent.port,
       }
 
       proc = await spawnProc(startupTestFile, { cwd, env })

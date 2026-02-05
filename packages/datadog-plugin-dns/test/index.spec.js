@@ -35,13 +35,13 @@ describe('Plugin', () => {
             assertObjectContains(traces[0][0], {
               name: 'dns.lookup',
               service: 'test',
-              resource: 'localhost'
+              resource: 'localhost',
             })
             assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
               'dns.hostname': 'localhost',
-              'dns.address': '127.0.0.1'
+              'dns.address': '127.0.0.1',
             })
           })
           .then(done)
@@ -56,14 +56,14 @@ describe('Plugin', () => {
             assertObjectContains(traces[0][0], {
               name: 'dns.lookup',
               service: 'test',
-              resource: 'localhost'
+              resource: 'localhost',
             })
             assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
               'dns.hostname': 'localhost',
               'dns.address': '127.0.0.1',
-              'dns.addresses': '127.0.0.1,::1'
+              'dns.addresses': '127.0.0.1,::1',
             })
           })
           .then(done)
@@ -79,14 +79,14 @@ describe('Plugin', () => {
               name: 'dns.lookup',
               service: 'test',
               resource: 'fakedomain.faketld',
-              error: 1
+              error: 1,
             })
             assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
               'dns.hostname': 'fakedomain.faketld',
               [ERROR_TYPE]: 'Error',
-              [ERROR_MESSAGE]: 'getaddrinfo ENOTFOUND fakedomain.faketld'
+              [ERROR_MESSAGE]: 'getaddrinfo ENOTFOUND fakedomain.faketld',
             })
           })
           .then(done)
@@ -103,15 +103,15 @@ describe('Plugin', () => {
             assertObjectContains(traces[0][0], {
               name: 'dns.lookup_service',
               service: 'test',
-              resource: '127.0.0.1:22'
+              resource: '127.0.0.1:22',
             })
             assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
-              'dns.address': '127.0.0.1'
+              'dns.address': '127.0.0.1',
             })
             assertObjectContains(traces[0][0].metrics, {
-              'dns.port': 22
+              'dns.port': 22,
             })
           })
           .then(done)
@@ -126,13 +126,13 @@ describe('Plugin', () => {
             assertObjectContains(traces[0][0], {
               name: 'dns.resolve',
               service: 'test',
-              resource: 'A lvh.me'
+              resource: 'A lvh.me',
             })
             assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
               'dns.hostname': 'lvh.me',
-              'dns.rrtype': 'A'
+              'dns.rrtype': 'A',
             })
           })
           .then(done)
@@ -147,13 +147,13 @@ describe('Plugin', () => {
             assertObjectContains(traces[0][0], {
               name: 'dns.resolve',
               service: 'test',
-              resource: 'ANY localhost'
+              resource: 'ANY localhost',
             })
             assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
               'dns.hostname': 'localhost',
-              'dns.rrtype': 'ANY'
+              'dns.rrtype': 'ANY',
             })
           })
           .then(done)
@@ -168,12 +168,12 @@ describe('Plugin', () => {
             assertObjectContains(traces[0][0], {
               name: 'dns.reverse',
               service: 'test',
-              resource: '127.0.0.1'
+              resource: '127.0.0.1',
             })
             assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
-              'dns.ip': '127.0.0.1'
+              'dns.ip': '127.0.0.1',
             })
           })
           .then(done)
@@ -213,12 +213,12 @@ describe('Plugin', () => {
             assertObjectContains(traces[0][0], {
               name: 'dns.resolve',
               service: 'test',
-              resource: 'A lvh.me'
+              resource: 'A lvh.me',
             })
             assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'dns.hostname': 'lvh.me',
-              'dns.rrtype': 'A'
+              'dns.rrtype': 'A',
             })
           })
           .then(done)

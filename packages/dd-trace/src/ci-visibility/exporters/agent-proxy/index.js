@@ -5,10 +5,10 @@ const AgentlessWriter = require('../agentless/writer')
 const CoverageWriter = require('../agentless/coverage-writer')
 const CiVisibilityExporter = require('../ci-visibility-exporter')
 const { fetchAgentInfo } = require('../../../agent/info')
+const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 
 const AGENT_EVP_PROXY_PATH_PREFIX = '/evp_proxy/v'
 const AGENT_EVP_PROXY_PATH_REGEX = /\/evp_proxy\/v(\d+)\/?/
-const AGENT_DEBUGGER_INPUT = '/debugger/v1/input'
 
 function getLatestEvpProxyVersion (err, agentInfo) {
   if (err) {
@@ -27,7 +27,7 @@ function getLatestEvpProxyVersion (err, agentInfo) {
 }
 
 function getCanForwardDebuggerLogs (err, agentInfo) {
-  return !err && agentInfo.endpoints.includes(AGENT_DEBUGGER_INPUT)
+  return !err && agentInfo.endpoints.includes(DEBUGGER_INPUT_V1)
 }
 
 class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
@@ -40,7 +40,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       lookup,
       protocolVersion,
       headers,
-      isTestDynamicInstrumentationEnabled
+      isTestDynamicInstrumentationEnabled,
     } = config
 
     fetchAgentInfo(this._url, (err, agentInfo) => {
@@ -61,19 +61,20 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
         this._writer = new AgentlessWriter({
           url: this._url,
           tags,
-          evpProxyPrefix
+          evpProxyPrefix,
         })
         this._coverageWriter = new CoverageWriter({
           url: this._url,
-          evpProxyPrefix
+          evpProxyPrefix,
         })
+        this._codeCoverageReportUrl = this._url
         if (isTestDynamicInstrumentationEnabled) {
           const canFowardLogs = getCanForwardDebuggerLogs(err, agentInfo)
           if (canFowardLogs) {
             const DynamicInstrumentationLogsWriter = require('../agentless/di-logs-writer')
             this._logsWriter = new DynamicInstrumentationLogsWriter({
               url: this._url,
-              isAgentProxy: true
+              isAgentProxy: true,
             })
             this._canForwardLogs = true
           }
@@ -84,7 +85,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           prioritySampler,
           lookup,
           protocolVersion,
-          headers
+          headers,
         })
         // coverages will never be used, so we discard them
         this._coverageBuffer = []

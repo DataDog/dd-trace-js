@@ -54,7 +54,7 @@ function encodePathwayContext (dataStreamsContext) {
   return Buffer.concat([
     dataStreamsContext.hash,
     Buffer.from(encodeVarint(Math.round(dataStreamsContext.pathwayStartNs / 1e6))),
-    Buffer.from(encodeVarint(Math.round(dataStreamsContext.edgeStartNs / 1e6)))
+    Buffer.from(encodeVarint(Math.round(dataStreamsContext.edgeStartNs / 1e6))),
   ], 20)
 }
 
@@ -123,6 +123,7 @@ const DsmPathwayCodec = {
     }
     carrier[CONTEXT_PROPAGATION_KEY_BASE64] = encodePathwayContextBase64(dataStreamsContext)
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Injected into DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
   },
 
@@ -131,6 +132,7 @@ const DsmPathwayCodec = {
    * @returns {ReturnType<typeof decodePathwayContext>|undefined}
    */
   decode (carrier) {
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Attempting extract from DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
 
     if (carrier == null) return
@@ -153,7 +155,7 @@ const DsmPathwayCodec = {
     }
 
     return ctx
-  }
+  },
 }
 
 module.exports = {
@@ -162,5 +164,5 @@ module.exports = {
   decodePathwayContext,
   encodePathwayContextBase64,
   decodePathwayContextBase64,
-  DsmPathwayCodec
+  DsmPathwayCodec,
 }

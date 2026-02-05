@@ -50,5 +50,5 @@ function parseResponseAndLog (err, code, eventsLength, url, eventType) {
 
 module.exports = {
   setAgentStrategy,
-  parseResponseAndLog
+  parseResponseAndLog,
 }

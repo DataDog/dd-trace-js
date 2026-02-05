@@ -2,7 +2,7 @@
 
 const tracer = require('dd-trace')
 tracer.init({
-  flushInterval: 0
+  flushInterval: 0,
 })
 
 const fastify = require('fastify')
@@ -31,7 +31,7 @@ app.mkcol('/example/near/:lat-:lng/radius/:r', async (_, reply) => reply.send('o
 app.route({
   method: ['POST', 'PUT', 'PATCH'],
   url: '/multi-method',
-  handler: async (_, reply) => reply.send('ok')
+  handler: async (_, reply) => reply.send('ok'),
 })
 
 // All supported methods route

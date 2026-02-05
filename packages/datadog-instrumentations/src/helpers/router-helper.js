@@ -61,7 +61,7 @@ function collectRoutesFromRouter (router, prefix) {
           if (!enabled) continue
           routeAddedChannel.publish({
             method: normalizeMethodName(method),
-            path: fullPath
+            path: fullPath,
           })
         }
       }
@@ -168,7 +168,7 @@ function extractMountPaths (path) {
   const paths = normalizeRoutePaths(path)
   return {
     mountPaths: paths.length ? paths : ['/'],
-    startIdx: 1
+    startIdx: 1,
   }
 }
 
@@ -202,8 +202,8 @@ function wrapRouteMethodsAndPublish (route, paths, publish) {
 
   const uniquePaths = new Set(filteredPaths)
 
-  METHODS.forEach(method => {
-    if (typeof route[method] !== 'function') return
+  for (const method of METHODS) {
+    if (typeof route[method] !== 'function') continue
 
     shimmer.wrap(route, method, (originalMethod) => function wrappedRouteMethod (...args) {
       const normalizedMethod = normalizeMethodName(method)
@@ -211,13 +211,13 @@ function wrapRouteMethodsAndPublish (route, paths, publish) {
       for (const path of uniquePaths) {
         publish({
           method: normalizedMethod,
-          path
+          path,
         })
       }
 
       return originalMethod.apply(this, args)
     })
-  })
+  }
 }
 
 module.exports = {
@@ -234,5 +234,5 @@ module.exports = {
   wrapRouteMethodsAndPublish,
   extractMountPaths,
   hasRouterCycle,
-  collectRoutesFromRouter
+  collectRoutesFromRouter,
 }

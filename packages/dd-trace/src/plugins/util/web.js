@@ -74,7 +74,7 @@ const web = {
       hooks,
       filter,
       middleware,
-      queryStringObfuscation
+      queryStringObfuscation,
     }
   },
 
@@ -188,7 +188,7 @@ const web = {
     analyticsSampler.sample(span, config.measured)
 
     span.addTags({
-      [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>'
+      [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>',
     })
 
     context.middleware.push(span)
@@ -218,7 +218,7 @@ const web = {
         span.addTags({
           [ERROR_TYPE]: error.name,
           [ERROR_MESSAGE]: error.message,
-          [ERROR_STACK]: error.stack
+          [ERROR_STACK]: error.stack,
         })
       }
 
@@ -250,7 +250,7 @@ const web = {
       paths: [],
       middleware: [],
       beforeEnd: [],
-      config: {}
+      config: {},
     }
 
     contexts.set(req, context)
@@ -406,9 +406,9 @@ const web = {
       },
       set (value) {
         ends.set(this, scope.bind(value, context.span))
-      }
+      },
     })
-  }
+  },
 }
 
 function addAllowHeaders (req, res, headers) {
@@ -420,7 +420,7 @@ function addAllowHeaders (req, res, headers) {
     'x-datadog-sampled', // Deprecated, but still accept it in case it's sent.
     'x-datadog-sampling-priority',
     'x-datadog-trace-id',
-    'x-datadog-tags'
+    'x-datadog-tags',
   ]
 
   for (const header of contextHeaders) {
@@ -462,7 +462,7 @@ function addRequestTags (context, spanType) {
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
     [SPAN_TYPE]: spanType,
-    [HTTP_USERAGENT]: req.headers['user-agent']
+    [HTTP_USERAGENT]: req.headers['user-agent'],
   })
 
   // if client ip has already been set by appsec, no need to run it again
@@ -493,10 +493,10 @@ function addResponseTags (context) {
   }
 
   span.addTags({
-    [HTTP_STATUS_CODE]: res.statusCode
+    [HTTP_STATUS_CODE]: res.statusCode,
   })
   inferredProxySpan?.addTags({
-    [HTTP_STATUS_CODE]: res.statusCode
+    [HTTP_STATUS_CODE]: res.statusCode,
   })
 
   web.addStatusError(req, res.statusCode)
@@ -518,7 +518,7 @@ function addResourceTag (context) {
 function addHeaders (context) {
   const { req, res, config, span, inferredProxySpan } = context
 
-  config.headers.forEach(([key, tag]) => {
+  for (const [key, tag] of config.headers) {
     const reqHeader = req.headers[key]
     const resHeader = res.getHeader(key)
 
@@ -531,7 +531,7 @@ function addHeaders (context) {
       span.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
       inferredProxySpan?.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
     }
-  })
+  }
 }
 
 function getHeadersToRecord (config) {

@@ -2,5 +2,5 @@
 
 module.exports = [
   ...require('./langchain'),
-  ...require('./bullmq')
+  ...require('./bullmq'),
 ]

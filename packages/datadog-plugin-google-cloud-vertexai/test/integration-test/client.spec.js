@@ -8,7 +8,7 @@ const {
   useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProcAndExpectExit,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -20,9 +20,9 @@ describe('esm', () => {
   withVersions('google-cloud-vertexai', '@google-cloud/vertexai', '>=1', version => {
     useSandbox([
       `@google-cloud/vertexai@${version}`,
-      'sinon'
+      'sinon',
     ], false, [
-      './packages/datadog-plugin-google-cloud-vertexai/test/integration-test/*'
+      './packages/datadog-plugin-google-cloud-vertexai/test/integration-test/*',
     ])
 
     beforeEach(async () => {

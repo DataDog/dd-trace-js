@@ -36,7 +36,7 @@ jobs:
           - name: yarn
             install: yarn add
           - name: yarn-berry
-            install: npm install -g corepack && yarn set version stable && yarn config set nodeLinker node-modules && yarn add
+            install: (command -v corepack >/dev/null 2>&1 || npm install -g corepack) && yarn set version stable && yarn config set nodeLinker node-modules && yarn add
           - name: bun
             install: bun add
     runs-on: ubuntu-latest
@@ -71,7 +71,7 @@ jobs:
       - run: yarn test:core:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:core:ci
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: platform-core
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
@@ -100,7 +100,7 @@ jobs:
       - run: yarn test:esbuild:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:esbuild:ci
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: platform-esbuild
 
@@ -392,7 +392,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:instrumentations:misc:ci
         shell: bash
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: platform-instrumentations-misc
       - if: always()
@@ -413,6 +413,7 @@ jobs:
       fail-fast: false
       matrix:
         version: [oldest, maintenance, active, latest]
+    name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -438,7 +439,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:trace:guardrails:ci
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: platform-unit-guardrails
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
@@ -452,7 +453,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: [14.0.0, 14, 16.0.0, 18.0.0, 20.0.0, 22.0.0, 24.0.0]
+        version: [16.0.0, 18.0.0, 20.0.0, 22.0.0, 24.0.0, 25]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -473,7 +474,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ['0.8', '0.10', '0.12', '4', '6', '8', '10', '12']
+        version: ['0.8', '0.10', '0.12', '4', '6', '8', '10', '12', '14.0.0', '14']
     runs-on: ubuntu-latest
     env:
       DD_TRACE_DEBUG: 'true' # This exercises more of the guardrails code
@@ -496,7 +497,7 @@ jobs:
       - run: yarn test:shimmer:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:shimmer:ci
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
         with:
           flags: platform-shimmer
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1

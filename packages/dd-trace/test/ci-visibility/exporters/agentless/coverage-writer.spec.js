@@ -24,17 +24,17 @@ describe('CI Visibility Coverage Writer', () => {
       makePayload: sinon.stub().returns({
         getHeaders: () => ({}),
         pipe: () => {},
-        size: () => 1
-      })
+        size: () => 1,
+      }),
     }
 
     url = {
       protocol: 'https:',
-      hostname: 'citestcov-intake.datadog.com'
+      hostname: 'citestcov-intake.datadog.com',
     }
 
     log = {
-      error: sinon.spy()
+      error: sinon.spy(),
     }
 
     const CoverageCIVisibilityEncoder = function () {
@@ -44,7 +44,7 @@ describe('CI Visibility Coverage Writer', () => {
     CoverageWriter = proxyquire('../../../../src/ci-visibility/exporters/agentless/coverage-writer.js', {
       '../../../exporters/common/request': request,
       '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
-      '../../../log': log
+      '../../../log': log,
     })
     coverageWriter = new CoverageWriter({ url })
   })
@@ -82,7 +82,7 @@ describe('CI Visibility Coverage Writer', () => {
       const payload = {
         getHeaders: () => ({}),
         pipe: () => {},
-        size: () => 1
+        size: () => 1,
       }
 
       encoder.makePayload.returns(payload)
@@ -90,7 +90,7 @@ describe('CI Visibility Coverage Writer', () => {
         sinon.assert.calledWithMatch(request, payload, {
           url,
           path: '/api/v2/citestcov',
-          method: 'POST'
+          method: 'POST',
         })
         done()
       })
@@ -104,7 +104,7 @@ describe('CI Visibility Coverage Writer', () => {
       const payload = {
         getHeaders: () => ({}),
         pipe: () => {},
-        size: () => 1
+        size: () => 1,
       }
 
       encoder.count.returns(1)

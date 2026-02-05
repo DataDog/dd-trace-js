@@ -34,7 +34,7 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
-  isModifiedTest
+  isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -46,7 +46,7 @@ const {
   TELEMETRY_CODE_COVERAGE_EMPTY,
   TELEMETRY_ITR_UNSKIPPABLE,
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
-  TELEMETRY_TEST_SESSION
+  TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const BREAKPOINT_SET_GRACE_PERIOD_MS = 200
@@ -79,7 +79,7 @@ class MochaPlugin extends CiPlugin {
       const formattedCoverage = {
         sessionId: _traceId,
         suiteId: _spanId,
-        files: relativeCoverageFiles
+        files: relativeCoverageFiles,
       }
 
       this.tracer._exporter.exportCoverage(formattedCoverage)
@@ -126,9 +126,9 @@ class MochaPlugin extends CiPlugin {
         tags: {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
-          ...testSuiteMetadata
+          ...testSuiteMetadata,
         },
-        integrationName: this.constructor.id
+        integrationName: this.constructor.id,
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (this.libraryConfig?.isCodeCoverageEnabled) {
@@ -211,7 +211,7 @@ class MochaPlugin extends CiPlugin {
       attemptToFixPassed,
       attemptToFixFailed,
       isAttemptToFixRetry,
-      isAtrRetry
+      isAtrRetry,
     }) => {
       if (span) {
         span.setTag(TEST_STATUS, status)
@@ -244,7 +244,7 @@ class MochaPlugin extends CiPlugin {
             hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
             isNew: spanTags[TEST_IS_NEW] === 'true',
             isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
-            browserDriver: spanTags[TEST_BROWSER_DRIVER]
+            browserDriver: spanTags[TEST_BROWSER_DRIVER],
           }
         )
 
@@ -318,7 +318,7 @@ class MochaPlugin extends CiPlugin {
             hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
             isNew: spanTags[TEST_IS_NEW] === 'true',
             isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
-            browserDriver: spanTags[TEST_BROWSER_DRIVER]
+            browserDriver: spanTags[TEST_BROWSER_DRIVER],
           }
         )
         if (isFirstAttempt && willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
@@ -357,7 +357,7 @@ class MochaPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled,
-      isParallel
+      isParallel,
     }) => {
       if (this.testSessionSpan) {
         const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
@@ -388,7 +388,7 @@ class MochaPlugin extends CiPlugin {
             skippingCount: numSkippedSuites,
             skippingType: 'suite',
             hasForcedToRunSuites,
-            hasUnskippableSuites
+            hasUnskippableSuites,
           }
         )
 
@@ -406,7 +406,7 @@ class MochaPlugin extends CiPlugin {
         finishAllTraceSpans(this.testSessionSpan)
         this.telemetry.count(TELEMETRY_TEST_SESSION, {
           provider: this.ciProviderName,
-          autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
+          autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
         })
       }
       this.libraryConfig = null
@@ -430,7 +430,7 @@ class MochaPlugin extends CiPlugin {
       isAttemptToFix,
       isDisabled,
       isQuarantined,
-      isModified
+      isModified,
     } = testInfo
 
     const extraTags = {}

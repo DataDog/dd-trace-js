@@ -34,19 +34,15 @@ describe('Dynamic Instrumentation', function () {
               // eslint-disable-next-line @stylistic/max-len
               value: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor i',
               truncated: true,
-              size: 445
+              size: 445,
             },
             sym: { type: 'symbol', value: 'Symbol(foo)' },
             regex: { type: 'RegExp', value: '/bar/i' },
             arr: {
               type: 'Array',
-              elements: [
-                { type: 'number', value: '1' },
-                { type: 'number', value: '2' },
-                { type: 'number', value: '3' },
-                { type: 'number', value: '4' },
-                { type: 'number', value: '5' }
-              ]
+              elements: Array.from({ length: 100 }, (_, i) => ({ type: 'number', value: (i + 1).toString() })),
+              notCapturedReason: 'collectionSize',
+              size: 200,
             },
             obj: {
               type: 'Object',
@@ -59,28 +55,28 @@ describe('Dynamic Instrumentation', function () {
                     undef: { type: 'undefined' },
                     deep: {
                       type: 'Object',
-                      fields: { nested: { type: 'Object', notCapturedReason: 'depth' } }
-                    }
-                  }
+                      fields: { nested: { type: 'Object', notCapturedReason: 'depth' } },
+                    },
+                  },
                 },
-                bar: { type: 'boolean', value: 'true' }
-              }
+                bar: { type: 'boolean', value: 'true' },
+              },
             },
             emptyObj: { type: 'Object', fields: {} },
             p: {
               type: 'Promise',
               fields: {
                 '[[PromiseState]]': { type: 'string', value: 'fulfilled' },
-                '[[PromiseResult]]': { type: 'undefined' }
-              }
+                '[[PromiseResult]]': { type: 'undefined' },
+              },
             },
             arrowFn: {
               type: 'Function',
               fields: {
                 length: { type: 'number', value: '0' },
-                name: { type: 'string', value: 'arrowFn' }
-              }
-            }
+                name: { type: 'string', value: 'arrowFn' },
+              },
+            },
           })
 
           // from local scope
@@ -90,7 +86,7 @@ describe('Dynamic Instrumentation', function () {
           assert.strictEqual(request.fields.id.type, 'string')
           assert.match(request.fields.id.value, /^req-\d+$/)
           assert.deepStrictEqual(request.fields.params, {
-            type: 'NullObject', fields: { name: { type: 'string', value: 'foo' } }
+            type: 'NullObject', fields: { name: { type: 'string', value: 'foo' } },
           })
           assert.deepStrictEqual(request.fields.query, { type: 'Object', fields: {} })
           assert.deepStrictEqual(request.fields.body, { type: 'undefined' })
@@ -104,8 +100,8 @@ describe('Dynamic Instrumentation', function () {
             type: 'Function',
             fields: {
               length: { type: 'number', value: '0' },
-              name: { type: 'string', value: 'getUndefined' }
-            }
+              name: { type: 'string', value: 'getUndefined' },
+            },
           })
 
           done()
@@ -133,7 +129,7 @@ describe('Dynamic Instrumentation', function () {
               // eslint-disable-next-line @stylistic/max-len
               value: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor i',
               truncated: true,
-              size: 445
+              size: 445,
             },
             sym: { type: 'symbol', value: 'Symbol(foo)' },
             regex: { type: 'RegExp', value: '/bar/i' },
@@ -141,7 +137,7 @@ describe('Dynamic Instrumentation', function () {
             obj: { type: 'Object', notCapturedReason: 'depth' },
             emptyObj: { type: 'Object', notCapturedReason: 'depth' },
             p: { type: 'Promise', notCapturedReason: 'depth' },
-            arrowFn: { type: 'Function', notCapturedReason: 'depth' }
+            arrowFn: { type: 'Function', notCapturedReason: 'depth' },
           })
 
           done()
@@ -158,7 +154,7 @@ describe('Dynamic Instrumentation', function () {
             type: 'string',
             value: 'Lorem ipsu',
             truncated: true,
-            size: 445
+            size: 445,
           })
 
           done()
@@ -176,10 +172,10 @@ describe('Dynamic Instrumentation', function () {
             elements: [
               { type: 'number', value: '1' },
               { type: 'number', value: '2' },
-              { type: 'number', value: '3' }
+              { type: 'number', value: '3' },
             ],
             notCapturedReason: 'collectionSize',
-            size: 5
+            size: 200,
           })
 
           done()
@@ -213,7 +209,7 @@ describe('Dynamic Instrumentation', function () {
             // Up to 3 properties from the closure scope
             'fastify', 'getUndefined',
             // Up to 3 properties from the local scope
-            'request', 'nil', 'undef'
+            'request', 'nil', 'undef',
           ].sort())
 
           assert.strictEqual(locals.request.type, 'Request')
@@ -234,6 +230,70 @@ describe('Dynamic Instrumentation', function () {
         })
 
         t.agent.addRemoteConfig(t.generateRemoteConfig({ captureSnapshot: true, capture: { maxFieldCount } }))
+      })
+
+      it('should capture a snapshot even if there is no capture object (DEBUG-4611)', function (done) {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe } } }] }) => {
+          assert.strictEqual(probe.id, config.config.id)
+          done()
+        })
+
+        const config = t.generateRemoteConfig({ captureSnapshot: true })
+        delete config.config.capture
+        t.agent.addRemoteConfig(config)
+      })
+
+      it('should use default value for maxReferenceDepth if not provided', function (done) {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
+          const { locals } = captures.lines[t.breakpoint.line]
+          assert.strictEqual(locals.obj.fields.foo.fields.deep.fields.nested.notCapturedReason, 'depth')
+          done()
+        })
+
+        const config = t.generateRemoteConfig({ captureSnapshot: true })
+        delete config.config.capture.maxReferenceDepth
+        t.agent.addRemoteConfig(config)
+      })
+
+      it('should use default value for maxLength if not provided', function (done) {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
+          const { locals } = captures.lines[t.breakpoint.line]
+          assert.strictEqual(locals.lstr.value.length, 255)
+          assert.strictEqual(locals.lstr.truncated, true)
+          assert.strictEqual(locals.lstr.size, 445)
+          done()
+        })
+
+        const config = t.generateRemoteConfig({ captureSnapshot: true })
+        delete config.config.capture.maxLength
+        t.agent.addRemoteConfig(config)
+      })
+
+      it('should use default value for maxCollectionSize if not provided', function (done) {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
+          const { locals } = captures.lines[t.breakpoint.line]
+          assert.strictEqual(locals.arr.notCapturedReason, 'collectionSize')
+          assert.strictEqual(locals.arr.elements.length, 100)
+          done()
+        })
+
+        const config = t.generateRemoteConfig({ captureSnapshot: true })
+        delete config.config.capture.maxCollectionSize
+        t.agent.addRemoteConfig(config)
+      })
+
+      it('should use default value for maxFieldCount if not provided', function (done) {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
+          const { raw } = captures.lines[t.breakpoint.line].locals.request.fields
+          assert.strictEqual(raw.notCapturedReason, 'fieldCount')
+          assert.strictEqual(Object.keys(raw.fields).length, 20)
+          assert.ok(raw.size > 20)
+          done()
+        })
+
+        const config = t.generateRemoteConfig({ captureSnapshot: true })
+        delete config.config.capture.maxFieldCount
+        t.agent.addRemoteConfig(config)
       })
     })
   })

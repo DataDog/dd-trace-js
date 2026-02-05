@@ -32,13 +32,13 @@ const {
   getLibraryCapabilitiesTags,
   TEST_RETRY_REASON_TYPES,
   isModifiedTest,
-  TEST_IS_MODIFIED
+  TEST_IS_MODIFIED,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED,
-  TELEMETRY_TEST_SESSION
+  TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const { DD_MAJOR } = require('../../../version')
 
@@ -69,7 +69,7 @@ class VitestPlugin extends CiPlugin {
       testManagementTests,
       testSuiteAbsolutePath,
       testName,
-      onDone
+      onDone,
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const { isAttemptToFix } = this.getTestProperties(testManagementTests, testSuite, testName)
@@ -101,7 +101,7 @@ class VitestPlugin extends CiPlugin {
     this.addSub('ci:vitest:is-early-flake-detection-faulty', ({
       knownTests,
       testFilepaths,
-      onDone
+      onDone,
     }) => {
       const isFaulty = getIsFaultyEarlyFlakeDetection(
         testFilepaths.map(testFilepath => getTestSuitePath(testFilepath, this.repositoryRoot)),
@@ -124,14 +124,14 @@ class VitestPlugin extends CiPlugin {
         isRetryReasonEfd,
         isRetryReasonAttemptToFix,
         isRetryReasonAtr,
-        isModified
+        isModified,
       } = ctx
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage('legacy').getStore()
 
       const extraTags = {
-        [TEST_SOURCE_FILE]: testSuite
+        [TEST_SOURCE_FILE]: testSuite,
       }
       if (isRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
@@ -207,7 +207,7 @@ class VitestPlugin extends CiPlugin {
     this.addSub('ci:vitest:test:pass', ({ span, task }) => {
       if (span) {
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-          hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS]
+          hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS],
         })
         span.setTag(TEST_STATUS, 'pass')
         span.finish(this.taskToFinishTime.get(task))
@@ -222,7 +222,7 @@ class VitestPlugin extends CiPlugin {
       shouldSetProbe,
       promises,
       hasFailedAllRetries,
-      attemptToFixFailed
+      attemptToFixFailed,
     }) => {
       if (!span) {
         return
@@ -237,7 +237,7 @@ class VitestPlugin extends CiPlugin {
         }
       }
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-        hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS]
+        hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS],
       })
       span.setTag(TEST_STATUS, 'fail')
 
@@ -269,11 +269,11 @@ class VitestPlugin extends CiPlugin {
           [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
           [TEST_STATUS]: 'skip',
           ...(isDisabled ? { [TEST_MANAGEMENT_IS_DISABLED]: 'true' } : {}),
-          ...(isNew ? { [TEST_IS_NEW]: 'true' } : {})
+          ...(isNew ? { [TEST_IS_NEW]: 'true' } : {}),
         }
       )
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-        hasCodeowners: !!testSpan.context()._tags[TEST_CODE_OWNERS]
+        hasCodeowners: !!testSpan.context()._tags[TEST_CODE_OWNERS],
       })
       testSpan.finish()
     })
@@ -285,7 +285,7 @@ class VitestPlugin extends CiPlugin {
       this.frameworkVersion = frameworkVersion
       const testSessionSpanContext = this.tracer.extract('text_map', {
         'x-datadog-trace-id': getValueFromEnvSources('DD_CIVISIBILITY_TEST_SESSION_ID'),
-        'x-datadog-parent-id': getValueFromEnvSources('DD_CIVISIBILITY_TEST_MODULE_ID')
+        'x-datadog-parent-id': getValueFromEnvSources('DD_CIVISIBILITY_TEST_MODULE_ID'),
       })
 
       const trimmedCommand = DD_MAJOR < 6 ? this.command : 'vitest run'
@@ -294,14 +294,14 @@ class VitestPlugin extends CiPlugin {
       const metadataTags = {}
       for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
         metadataTags[testLevel] = {
-          [TEST_SESSION_NAME]: testSessionName
+          [TEST_SESSION_NAME]: testSessionName,
         }
       }
       if (this.tracer._exporter.addMetadataTags) {
         const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id)
         metadataTags.test = {
           ...metadataTags.test,
-          ...libraryCapabilitiesTags
+          ...libraryCapabilitiesTags,
         }
         this.tracer._exporter.addMetadataTags(metadataTags)
       }
@@ -326,8 +326,8 @@ class VitestPlugin extends CiPlugin {
         tags: {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
-          ...testSuiteMetadata
-        }
+          ...testSuiteMetadata,
+        },
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       const store = storage('legacy').getStore()
@@ -374,7 +374,7 @@ class VitestPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       vitestPool,
-      onFinish
+      onFinish,
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
@@ -405,9 +405,30 @@ class VitestPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
+        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
       })
       this.tracer._exporter.flush(onFinish)
+    })
+
+    this.addSub('ci:vitest:coverage-report', ({ rootDir, onDone }) => {
+      this.handleCoverageReport(rootDir, onDone)
+    })
+  }
+
+  /**
+   * Handles the coverage report by discovering and uploading it if enabled.
+   * @param {string} rootDir - The root directory where coverage reports are located.
+   * @param {Function} [onDone] - Callback to signal completion.
+   */
+  handleCoverageReport (rootDir, onDone) {
+    if (!this.libraryConfig?.isCoverageReportUploadEnabled) {
+      onDone()
+      return
+    }
+    this.uploadCoverageReports({
+      rootDir,
+      testEnvironmentMetadata: this.testEnvironmentMetadata,
+      onDone,
     })
   }
 

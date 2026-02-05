@@ -6,7 +6,7 @@ const { withVersions } = require('../setup/mocha')
 const {
   schema,
   resolvers,
-  graphqlCommonTests
+  graphqlCommonTests,
 } = require('./graphql.test-utils')
 
 withVersions('apollo-server', '@apollo/server', apolloServerVersion => {
@@ -28,7 +28,7 @@ withVersions('apollo-server', '@apollo/server', apolloServerVersion => {
   before(async () => {
     server = new ApolloServer({
       typeDefs: schema,
-      resolvers
+      resolvers,
     })
 
     const { url } = await startStandaloneServer(server, { listen: { port: 0 } })
