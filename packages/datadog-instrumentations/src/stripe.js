@@ -62,6 +62,7 @@ function wrapStripe (Stripe) {
   return function wrappedStripe () {
     let stripe = Stripe.apply(this, arguments)
 
+    // to support both with and without "new" operator syntax
     if (this instanceof Stripe) {
       stripe = this
     }
