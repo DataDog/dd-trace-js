@@ -3,7 +3,8 @@
 const { format } = require('util')
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
-const DEBUG = process.env.DD_TRACE_DEBUG === 'true' || process.env.DD_TRACE_DEBUG === '1'
+const DD_TRACE_DEBUG = (process.env.DD_TRACE_DEBUG || '').trim().toLowerCase()
+const DEBUG = DD_TRACE_DEBUG === 'true' || DD_TRACE_DEBUG === '1'
 
 const noop = () => {}
 
