@@ -66,6 +66,11 @@ function isESMBuild (build) {
 }
 
 function getGitMetadata () {
+  /**
+   * @type {object}
+   * @property {string | null} repositoryURL
+   * @property {string | null} commitSHA
+   */
   const gitMetadata = {
     repositoryURL: null,
     commitSHA: null,
@@ -253,7 +258,7 @@ ${build.initialOptions.banner.js}`
       }
 
       try {
-        const packageJson = JSON.parse(fs.readFileSync(pathToPackageJson).toString())
+        const packageJson = JSON.parse(fs.readFileSync(/** @type {string} */ (pathToPackageJson)).toString())
 
         const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
         if (isESM && !interceptedESMModules.has(fullPathToModule)) {
@@ -403,5 +408,9 @@ function dotFriendlyResolve (path, directory, usesImportStatement) {
   if (path.startsWith('file://')) {
     path = fileURLToPath(path)
   }
-  return require.resolve(path, { paths: [directory], conditions })
+  return require.resolve(path, {
+    paths: [directory],
+    // @ts-expect-error - Node.js 22+ unofficially supports a conditions option
+    conditions,
+  })
 }
