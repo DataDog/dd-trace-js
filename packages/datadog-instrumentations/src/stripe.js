@@ -37,6 +37,8 @@ function wrapConstructEvent (constructEvent) {
   return function wrappedConstructEvent () {
     const result = constructEvent.apply(this, arguments)
 
+    // no need to check for hasSubscribers,
+    // if it's false, the publish function will be noop
     constructEventFinishCh.publish(result)
 
     return result
@@ -83,7 +85,7 @@ function wrapStripe (Stripe) {
 
 addHook({
   name: 'stripe',
-  versions: ['>=7.0.0']
+  versions: ['8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '>=20.0.0']
 }, Stripe => {
   return shimmer.wrapFunction(Stripe, wrapStripe)
 })
