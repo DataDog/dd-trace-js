@@ -244,6 +244,38 @@ describe('Plugin', () => {
           await promise
         })
       })
+
+      describe('with filter', () => {
+        before(() => {
+          return agent.load('redis', {
+            filter: (command) => command !== 'SET' && command !== 'CLIENT',
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          redis = require(`../../../versions/${moduleName}@${version}`).get()
+          client = redis.createClient()
+
+          await client.connect()
+        })
+
+        it('should be able to filter commands', (done) => {
+          const timer = setTimeout(done, 200)
+
+          agent
+            .assertSomeTraces((traces) => {
+              clearTimeout(timer)
+              done(new Error('Filtered commands should not be recorded.'))
+            })
+            .catch(done)
+
+          client.set('turtle', 'like')
+        })
+      })
     })
   })
 })
