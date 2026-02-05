@@ -129,7 +129,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       'pubsub.topic': topic,
       'pubsub.message_id': message.messageId,
       'span.kind': 'consumer',
-      'pubsub.subscription': subscription,
+      'pubsub.subscription': subscription.name,
       'pubsub.subscription_type': 'pull',
       'messaging.operation': 'receive',
       base_service: baseService,
