@@ -66,7 +66,10 @@ class GraphQLResolvePlugin extends TracingPlugin {
     }
 
     if (this.resolverStartCh.hasSubscribers) {
-      this.resolverStartCh.publish({ ctx: rootCtx, resolverInfo: getResolverInfo(info, args) })
+      this.resolverStartCh.publish({
+        abortController: rootCtx.abortController,
+        resolverInfo: getResolverInfo(info, args),
+      })
     }
 
     return fieldCtx.currentStore

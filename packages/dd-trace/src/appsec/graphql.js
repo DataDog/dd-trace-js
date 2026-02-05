@@ -32,7 +32,7 @@ function disable () {
   disableGraphql()
 }
 
-function onGraphqlStartResolver ({ context, resolverInfo }) {
+function onGraphqlStartResolver ({ abortController, resolverInfo }) {
   const req = storage('legacy').getStore()?.req
 
   if (!req) return
@@ -46,7 +46,7 @@ function onGraphqlStartResolver ({ context, resolverInfo }) {
     if (requestData?.isInGraphqlRequest) {
       requestData.blocked = true
       requestData.wafAction = blockingAction
-      context.abortController?.abort()
+      abortController?.abort()
     }
   }
 }

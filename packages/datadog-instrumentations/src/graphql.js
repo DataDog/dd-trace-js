@@ -165,7 +165,7 @@ function wrapExecute (execute) {
         docSource: documentSources.get(document),
         source,
         fields: {},
-        abortController: new AbortController(),
+        abortController: new AbortController(), // allow startExecuteCh/startResolveCh subscribers to block execution
       }
 
       return startExecuteCh.runStores(ctx, () => {

@@ -116,7 +116,7 @@ describe('GraphQL', () => {
         resolver: undefined,
       }
 
-      startGraphqlResolver.publish({ context })
+      startGraphqlResolver.publish(context)
 
       sinon.assert.notCalled(waf.run)
     })
@@ -126,32 +126,29 @@ describe('GraphQL', () => {
         resolver: '',
       }
 
-      startGraphqlResolver.publish({ context })
+      startGraphqlResolver.publish(context)
 
       sinon.assert.notCalled(waf.run)
     })
 
     it('Should not call waf if req is unavailable', () => {
-      const context = {}
       const resolverInfo = {
         user: [{ id: '1234' }],
       }
 
       storage('legacy').getStore().req = undefined
 
-      startGraphqlResolver.publish({ context, resolverInfo })
+      startGraphqlResolver.publish({ resolverInfo })
 
       sinon.assert.notCalled(waf.run)
     })
 
     it('Should call waf if resolvers is well formatted', () => {
-      const context = {}
-
       const resolverInfo = {
         user: [{ id: '1234' }],
       }
 
-      startGraphqlResolver.publish({ context, resolverInfo })
+      startGraphqlResolver.publish({ resolverInfo })
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
@@ -173,7 +170,7 @@ describe('GraphQL', () => {
       grpc_status_code: 10,
     }
 
-    let context, rootSpan
+    let abortController, rootSpan
 
     beforeEach(() => {
       sinon.stub(storage('legacy'), 'getStore').returns({ req, res })
@@ -181,10 +178,8 @@ describe('GraphQL', () => {
       graphql.enable()
       graphqlMiddlewareChannel.start.publish({ req, res })
       apolloChannel.start.publish()
-      context = {
-        abortController: {
-          abort: sinon.stub(),
-        },
+      abortController = {
+        abort: sinon.stub(),
       }
       rootSpan = { setTag: sinon.stub() }
     })
@@ -195,11 +190,9 @@ describe('GraphQL', () => {
     })
 
     it('Should not call abort', () => {
-      const abortController = {}
-
       sinon.stub(waf, 'run').returns([''])
 
-      startGraphqlResolver.publish({ context, resolverInfo })
+      startGraphqlResolver.publish({ abortController, resolverInfo })
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
@@ -207,16 +200,14 @@ describe('GraphQL', () => {
         },
       }, {})
 
-      sinon.assert.notCalled(context.abortController.abort)
+      sinon.assert.notCalled(abortController.abort)
 
-      apolloChannel.asyncEnd.publish({ abortController })
+      apolloChannel.asyncEnd.publish({ abortController: {} })
 
       sinon.assert.notCalled(blocking.getBlockingData)
     })
 
     it('Should call abort', () => {
-      const abortController = context.abortController
-
       sinon.stub(waf, 'run').returns({
         actions: {
           block_request: blockParameters,
@@ -225,7 +216,7 @@ describe('GraphQL', () => {
 
       sinon.stub(web, 'root').returns(rootSpan)
 
-      startGraphqlResolver.publish({ context, resolverInfo })
+      startGraphqlResolver.publish({ abortController, resolverInfo })
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
@@ -233,7 +224,7 @@ describe('GraphQL', () => {
         },
       }, {})
 
-      sinon.assert.called(context.abortController.abort)
+      sinon.assert.called(abortController.abort)
 
       const abortData = {}
       apolloChannel.asyncEnd.publish({ abortController, abortData })
@@ -247,8 +238,6 @@ describe('GraphQL', () => {
     it('Should catch error when block fails', () => {
       blocking.getBlockingData.returns(undefined)
 
-      const abortController = context.abortController
-
       sinon.stub(waf, 'run').returns({
         actions: {
           block_request: blockParameters,
@@ -257,7 +246,7 @@ describe('GraphQL', () => {
 
       sinon.stub(web, 'root').returns(rootSpan)
 
-      startGraphqlResolver.publish({ context, resolverInfo })
+      startGraphqlResolver.publish({ abortController, resolverInfo })
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
