@@ -4,6 +4,8 @@ on:
   pull_request:
     types:
       - opened
+      - reopened
+      - synchronize
 
 env:
   # Add Groups here to enable auto-merge for Dependabot PRs
