@@ -6,7 +6,6 @@ globalThis._ddChannelDebugPatched = true
 
 const dc = require('node:diagnostics_channel')
 const { performance } = require('node:perf_hooks')
-const Module = require('node:module')
 const Hook = require('../../src/ritm')
 
 // Config
@@ -66,12 +65,16 @@ function wrapSub (fn, name) {
 }
 
 dc.Channel.prototype.subscribe = function (fn) {
-  if (match(this.name)) log(`${ts()} ${c.blue('[SUB]')} ${c.cyan(this.name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
+  if (match(this.name)) {
+    log(`${ts()} ${c.blue('[SUB]')} ${c.cyan(this.name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
+  }
   return subscribe.call(this, wrapSub(fn, this.name))
 }
 
 dc.Channel.prototype.unsubscribe = function (fn) {
-  if (match(this.name)) log(`${ts()} ${c.gray('[UNSUB]')} ${c.cyan(this.name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
+  if (match(this.name)) {
+    log(`${ts()} ${c.gray('[UNSUB]')} ${c.cyan(this.name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
+  }
   return unsubscribe.call(this, wrappers.get(fn) || fn)
 }
 
@@ -89,14 +92,18 @@ dc.Channel.prototype.publish = function (msg) {
 if (dc.subscribe) {
   const orig = dc.subscribe
   dc.subscribe = function (name, fn) {
-    if (match(name)) log(`${ts()} ${c.blue('[SUB]')} ${c.cyan(name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
+    if (match(name)) {
+      log(`${ts()} ${c.blue('[SUB]')} ${c.cyan(name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
+    }
     return orig.call(this, name, wrapSub(fn, name))
   }
 }
 if (dc.unsubscribe) {
   const orig = dc.unsubscribe
   dc.unsubscribe = function (name, fn) {
-    if (match(name)) log(`${ts()} ${c.gray('[UNSUB]')} ${c.cyan(name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
+    if (match(name)) {
+      log(`${ts()} ${c.gray('[UNSUB]')} ${c.cyan(name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
+    }
     return orig.call(this, name, wrappers.get(fn) || fn)
   }
 }
@@ -104,13 +111,9 @@ if (dc.unsubscribe) {
 
 // TracingChannel patching (dc-polyfill)
 Hook(['dc-polyfill'], exp => {
-  if (exp._patched) return exp
-  exp._patched = true
   const orig = exp.tracingChannel
   exp.tracingChannel = function (name) {
     const tc = orig.call(this, name)
-    if (tc._patched) return tc
-    tc._patched = true
     for (const m of ['traceSync', 'tracePromise', 'traceCallback']) {
       const fn = tc[m]
       if (fn) {
@@ -130,9 +133,7 @@ Hook(['dc-polyfill'], exp => {
 })
 
 // Shimmer patching
-function patchShimmer (exp) {
-  if (exp._patched) return exp
-  exp._patched = true
+Hook(['shimmer', 'datadog-shimmer'], exp => {
   const origWrap = exp.wrap
   exp.wrap = function (obj, method, wrapper) {
     const name = obj?.constructor?.name || typeof obj
@@ -150,18 +151,16 @@ function patchShimmer (exp) {
     }
   }
   return exp
-}
-Hook(['shimmer', 'datadog-shimmer'], patchShimmer)
+})
 
-// Rewriter patching
+// Rewriter patching - log when code gets rewritten by orchestrion
 let instrumentations = []
 try { instrumentations = require('../../../datadog-instrumentations/src/helpers/rewriter/instrumentations') } catch {}
 
-function patchRewriter (exp) {
-  if (!exp?.rewrite || exp._patched) return
-  exp._patched = true
-  const orig = exp.rewrite
-  exp.rewrite = function (content, filename, format) {
+try {
+  const rewriter = require('../../../datadog-instrumentations/src/helpers/rewriter')
+  const orig = rewriter.rewrite
+  rewriter.rewrite = function (content, filename, format) {
     const result = orig.call(this, content, filename, format)
     if (result !== content) {
       const file = filename.replace('file://', '')
@@ -177,15 +176,7 @@ function patchRewriter (exp) {
     }
     return result
   }
-}
-try { patchRewriter(require('../../../datadog-instrumentations/src/helpers/rewriter')) } catch {}
-
-const origLoad = Module._load
-Module._load = function (req, ...args) {
-  const exp = origLoad.call(this, req, ...args)
-  if (req.includes('rewriter') && exp?.rewrite) patchRewriter(exp)
-  return exp
-}
+} catch {}
 
 // Span lifecycle logging
 const SKIP_TAGS = new Set(['runtime-id', 'process_id', 'service.name', 'resource.name', 'span.kind', 'error'])
@@ -246,4 +237,4 @@ process.stdout.write = function (chunk, enc, cb) {
   return origWrite(str.split('\n').map(l => l.trim() ? marker + l : l).join('\n'), enc, cb)
 }
 
-module.exports = { patchShimmer }
+module.exports = {}

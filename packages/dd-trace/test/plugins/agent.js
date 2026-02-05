@@ -15,8 +15,8 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 const { storage } = require('../../../datadog-core')
 const ritm = require('../../src/ritm')
 
-// Channel debug patching (enabled via TEST_CHANNEL_DEBUG env var)
-const channelDebug = process.env.TEST_CHANNEL_DEBUG ? require('../debug/channel-patch') : null
+// Channel debug patching (loaded via require side-effect when TEST_CHANNEL_DEBUG is set)
+if (process.env.TEST_CHANNEL_DEBUG) require('../debug/channel-patch')
 const traceHandlers = new Set()
 const statsHandlers = new Set()
 let llmobsSpanEventsRequests = []
@@ -429,13 +429,6 @@ module.exports = {
     tracer = proxyquire('../../', {
       './src': TracerProxy,
     })
-
-    // Apply channel debug patch to shimmer (span logging uses DC subscriptions)
-    if (channelDebug) {
-      try {
-        channelDebug.patchShimmer(require('../../../datadog-shimmer'))
-      } catch (e) {}
-    }
 
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
