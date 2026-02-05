@@ -11,7 +11,6 @@ const semver = require('semver')
 const externals = require('../packages/dd-trace/test/plugins/externals.json')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
-const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const { BUN, withBun } = require('../integration-tests/helpers/bun')
 const exec = require('./helpers/exec')
 
@@ -123,8 +122,6 @@ async function assertFolder (name, version) {
  * @param {string} dependencyVersionRange
  */
 async function assertPackage (name, version, dependencyVersionRange, external) {
-  // Early return to prevent filePaths from being installed, their non path counterparts should suffice
-  if (isRelativeRequire(name)) return
   const dependencies = {
     [name]: getCappedRange(name, dependencyVersionRange),
   }
