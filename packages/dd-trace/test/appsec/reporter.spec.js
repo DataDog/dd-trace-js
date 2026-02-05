@@ -489,7 +489,7 @@ describe('reporter', () => {
 
     it('should propagate _dd.appsec.json to inferred proxy span when present', () => {
       const inferredProxySpan = {
-        addTags: sinon.stub()
+        addTags: sinon.stub(),
       }
       web.getContext.returns({ inferredProxySpan })
 
@@ -497,13 +497,13 @@ describe('reporter', () => {
         events: [
           {
             rule: {},
-            rule_matches: [{}]
-          }
-        ]
+            rule_matches: [{}],
+          },
+        ],
       })
 
       sinon.assert.calledOnceWithExactly(inferredProxySpan.addTags, {
-        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}'
+        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
       })
     })
 
@@ -514,16 +514,16 @@ describe('reporter', () => {
         events: [
           {
             rule: {},
-            rule_matches: [{}]
-          }
-        ]
+            rule_matches: [{}],
+          },
+        ],
       })
 
       sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
-        'network.client.ip': '8.8.8.8'
+        'network.client.ip': '8.8.8.8',
       })
     })
 

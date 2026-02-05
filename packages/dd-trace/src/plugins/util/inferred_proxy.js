@@ -25,11 +25,11 @@ const PROXY_HEADER_AWS_USER = 'x-dd-proxy-user'
 const supportedProxies = {
   'aws-apigateway': {
     spanName: 'aws.apigateway',
-    component: 'aws-apigateway'
+    component: 'aws-apigateway',
   },
   'aws-httpapi': {
     spanName: 'aws.httpapi',
-    component: 'aws-httpapi'
+    component: 'aws-httpapi',
   },
 }
 
@@ -69,7 +69,7 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
       ...(proxyContext.accountId && { account_id: proxyContext.accountId }),
       ...(proxyContext.apiId && { apiid: proxyContext.apiId }),
       ...(proxyContext.region && { region: proxyContext.region }),
-      ...(proxyContext.awsUser && { aws_user: proxyContext.awsUser })
+      ...(proxyContext.awsUser && { aws_user: proxyContext.awsUser }),
     },
   }, traceCtx, config)
 

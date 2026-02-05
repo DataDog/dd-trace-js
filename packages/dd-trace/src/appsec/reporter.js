@@ -366,7 +366,7 @@ function reportAttack ({ events: attackData, actions }) {
   const context = web.getContext(req)
   if (context?.inferredProxySpan) {
     context.inferredProxySpan.addTags({
-      '_dd.appsec.json': newTags['_dd.appsec.json']
+      '_dd.appsec.json': newTags['_dd.appsec.json'],
     })
   }
 
