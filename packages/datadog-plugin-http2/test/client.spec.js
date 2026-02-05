@@ -955,8 +955,8 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              filter: (url) => !url.includes('/health')
-            }
+              filter: (url) => !url.includes('/health'),
+            },
           }
 
           return agent.load('http2', config)
@@ -968,7 +968,7 @@ describe('Plugin', () => {
         it('should skip recording if the url is filtered out', done => {
           const app = (stream, headers) => {
             stream.respond({
-              ':status': 200
+              ':status': 200,
             })
             stream.end()
           }

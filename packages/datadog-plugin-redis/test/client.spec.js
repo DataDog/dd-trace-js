@@ -248,7 +248,7 @@ describe('Plugin', () => {
       describe('with filter', () => {
         before(() => {
           return agent.load('redis', {
-            filter: (command) => command !== 'SET'
+            filter: (command) => command !== 'SET',
           })
         })
 

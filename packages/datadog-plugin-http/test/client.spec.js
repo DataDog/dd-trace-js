@@ -1425,8 +1425,8 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              filter: (url) => !url.includes('/health')
-            }
+              filter: (url) => !url.includes('/health'),
+            },
           }
 
           return agent.load('http', config)
