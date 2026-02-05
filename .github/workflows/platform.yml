@@ -344,16 +344,6 @@ jobs:
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
-  instrumentation-stripe:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: stripe
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-      - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
   instrumentation-url:
     runs-on: ubuntu-latest
     env:
