@@ -248,7 +248,7 @@ describe('Plugin', () => {
       describe('with filter', () => {
         before(() => {
           return agent.load('redis', {
-            filter: (command) => command !== 'SET',
+            filter: (command) => command !== 'SET' && command !== 'CLIENT',
           })
         })
 
@@ -263,14 +263,17 @@ describe('Plugin', () => {
           await client.connect()
         })
 
-        it('should be able to filter commands', async () => {
-          const promise = agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].resource, 'GET')
-          })
+        it('should be able to filter commands', (done) => {
+          const timer = setTimeout(done, 200)
 
-          await client.set('turtle', 'like')
-          await client.get('turtle')
-          await promise
+          agent
+            .assertSomeTraces((traces) => {
+              clearTimeout(timer)
+              done(new Error('Filtered commands should not be recorded.'))
+            })
+            .catch(done)
+
+          client.set('turtle', 'like')
         })
       })
     })
