@@ -1,36 +1,25 @@
 'use strict'
 
-// Guard against double-patching when this file is loaded multiple times
-// (e.g., via both --require and ritm hooks, or in test setup and subprocess).
+// Prevent double-patching when loaded multiple times
 if (globalThis._ddChannelDebugPatched) return
 globalThis._ddChannelDebugPatched = true
 
 const dc = require('node:diagnostics_channel')
 const { performance } = require('node:perf_hooks')
 const Module = require('node:module')
-
 const Hook = require('../../src/ritm')
 
-// Use TEST_ prefix to avoid confusion with production DD_ config variables
+// Config
 const filter = process.env.TEST_CHANNEL_FILTER || ''
 const showData = process.env.TEST_CHANNEL_SHOW_DATA === 'true'
 const verbose = process.env.TEST_CHANNEL_VERBOSE === 'true'
-const forceColor = process.env.FORCE_COLOR === '1'
-const noColor = (!process.stderr.isTTY && !forceColor) || process.env.NO_COLOR
+const noColor = (!process.stderr.isTTY && process.env.FORCE_COLOR !== '1') || process.env.NO_COLOR
 const startTime = performance.now()
 
-const identity = s => s
-const colors = noColor
-  ? {
-      cyan: identity,
-      yellow: identity,
-      green: identity,
-      gray: identity,
-      blue: identity,
-      red: identity,
-      magenta: identity,
-      white: identity,
-    }
+// Colors (disabled when not TTY)
+const id = s => s
+const c = noColor
+  ? { cyan: id, yellow: id, green: id, gray: id, blue: id, red: id, magenta: id, white: id }
   : {
       cyan: s => `\x1b[36m${s}\x1b[0m`,
       yellow: s => `\x1b[33m${s}\x1b[0m`,
@@ -42,431 +31,219 @@ const colors = noColor
       white: s => `\x1b[37m${s}\x1b[0m`,
     }
 
-const indent = '                    ' // 20 spaces - well past mocha's indentation
+const INDENT = '                    ' // 20 spaces to clear mocha indentation
+const SEP = c.gray('────────────────────')
 
-/**
- * Writes content to stderr synchronously to prevent interleaving with stdout.
- * @param {string} content - The content to write (can contain newlines)
- */
-function log (content) {
-  const indented = content.split('\n').map(line => indent + line).join('\n')
-  process.stderr.write(indented + '\n')
+function log (msg) {
+  process.stderr.write(msg.split('\n').map(line => INDENT + line).join('\n') + '\n')
 }
 
-/**
- * Converts a wildcard pattern to a RegExp.
- * @param {string} pattern - Wildcard pattern (e.g., `*foo*`, `foo*`, `*foo`)
- * @returns {RegExp} Compiled regular expression
- */
-function wildcardToRegex (pattern) {
-  // Escape regex special chars except *, then convert * to .*
-  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')
-  return new RegExp(`^${escaped}$`)
+function ts () {
+  return c.gray(`[+${(performance.now() - startTime).toFixed(0)}ms]`)
 }
 
-// Pre-compile filter regex for performance (null if no filter)
-const filterRegex = filter ? wildcardToRegex(filter) : null
+// Filter matching with wildcard support (*foo*, foo*, *foo)
+const filterRe = filter && new RegExp('^' + filter.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$')
+const match = name => !filterRe || filterRe.test(name)
 
-/**
- * Checks if a channel name matches the configured filter pattern.
- * Supports wildcard patterns: `*foo*` (contains), `*foo` (ends with), `foo*` (starts with).
- * @param {string} name - The channel name to check
- * @returns {boolean} True if the name matches the filter or no filter is set
- */
-function match (name) {
-  if (!filterRegex) return true
-  return filterRegex.test(name)
-}
-
-/**
- * Formats the elapsed time since module load as a timestamp string.
- * @returns {string} Gray-colored timestamp in format `[+Nms]`
- */
-function formatTimestamp () {
-  return colors.gray(`[+${(performance.now() - startTime).toFixed(0)}ms]`)
-}
-
-/**
- * Formats the duration since a given start time.
- * @param {number} start - The start time from performance.now()
- * @returns {string} Gray-colored duration in format `N.NNms`
- */
-function formatDuration (start) {
-  return colors.gray(`${(performance.now() - start).toFixed(2)}ms`)
-}
-
-// ============================================================
-// Channel Prototype Patching
-// ============================================================
-
-// Node.js optimizes diagnostics_channel - when channels HAVE subscribers,
-// publish() uses a native C++ fast path that bypasses JS-level prototype methods.
-// Our Channel.prototype.publish patch only runs when there are NO subscribers.
-// To log all publishes, we wrap subscriber functions to log when they're called.
-// WeakMap tracks original→wrapped mapping for proper unsubscribe support.
-
+// Channel patching
+// Node.js uses a native fast path when channels have subscribers, bypassing JS publish().
+// We wrap subscribers to log publishes since the prototype patch only catches no-subscriber cases.
 const { subscribe, unsubscribe, publish } = dc.Channel.prototype
-const subscriberWrappers = new WeakMap()
+const wrappers = new WeakMap()
 
-/**
- * Creates a logging wrapper around a subscriber function.
- * The wrapper logs the publish event before calling the original subscriber.
- * @param {Function} fn - The original subscriber function
- * @param {string} channelName - The channel name for logging
- * @returns {Function} The wrapped subscriber function
- */
-function wrapSubscriber (fn, channelName) {
+function wrapSub (fn, name) {
   const wrapped = function (msg) {
-    if (match(channelName)) {
-      let output = `${formatTimestamp()} ${colors.yellow('[PUB]')} ${colors.cyan(channelName)}`
-      if (showData && msg) output += ` ${colors.gray(JSON.stringify(msg).slice(0, 80))}`
-      log(output)
+    if (match(name)) {
+      let out = `${ts()} ${c.yellow('[PUB]')} ${c.cyan(name)}`
+      if (showData && msg) out += ` ${c.gray(JSON.stringify(msg).slice(0, 80))}`
+      log(out)
     }
     return fn.apply(this, arguments)
   }
-  // Store mapping for unsubscribe lookup
-  subscriberWrappers.set(fn, wrapped)
+  wrappers.set(fn, wrapped)
   return wrapped
 }
 
 dc.Channel.prototype.subscribe = function (fn) {
-  if (match(this.name)) {
-    const handler = colors.gray(`← ${fn.name || 'anon'}`)
-    log(`${formatTimestamp()} ${colors.blue('[SUB]')} ${colors.cyan(this.name)} ${handler}`)
-  }
-  // Wrap subscriber to log publishes (needed because native fast path bypasses JS publish)
-  const wrapped = wrapSubscriber(fn, this.name)
-  return subscribe.call(this, wrapped)
+  if (match(this.name)) log(`${ts()} ${c.blue('[SUB]')} ${c.cyan(this.name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
+  return subscribe.call(this, wrapSub(fn, this.name))
 }
 
 dc.Channel.prototype.unsubscribe = function (fn) {
-  // Look up the wrapped version we created during subscribe
-  const wrapped = subscriberWrappers.get(fn) || fn
-  if (match(this.name)) {
-    const handler = colors.gray(`← ${fn.name || 'anon'}`)
-    log(`${formatTimestamp()} ${colors.gray('[UNSUB]')} ${colors.cyan(this.name)} ${handler}`)
-  }
-  return unsubscribe.call(this, wrapped)
+  if (match(this.name)) log(`${ts()} ${c.gray('[UNSUB]')} ${c.cyan(this.name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
+  return unsubscribe.call(this, wrappers.get(fn) || fn)
 }
 
 dc.Channel.prototype.publish = function (msg) {
-  // This only runs when there are NO subscribers (native fast path bypasses this otherwise)
   if (match(this.name)) {
-    let output = `${formatTimestamp()} ${colors.yellow('[PUB]')} ${colors.cyan(this.name)}`
-    output += colors.red(' (no subscribers)')
-    if (showData && msg) output += ` ${colors.gray(JSON.stringify(msg).slice(0, 80))}`
-    log(output)
+    let out = `${ts()} ${c.yellow('[PUB]')} ${c.cyan(this.name)}${c.red(' (no subscribers)')}`
+    if (showData && msg) out += ` ${c.gray(JSON.stringify(msg).slice(0, 80))}`
+    log(out)
   }
   return publish.call(this, msg)
 }
 
-// Wrap module-level dc.subscribe/dc.unsubscribe as they don't go through prototype.
-// These APIs are available from Node.js 18.7.0+ (test-only code, so acceptable).
+// Module-level dc.subscribe/unsubscribe (Node 18.7+)
 /* eslint-disable n/no-unsupported-features/node-builtins */
 if (dc.subscribe) {
-  const origDcSubscribe = dc.subscribe
+  const orig = dc.subscribe
   dc.subscribe = function (name, fn) {
-    if (match(name)) {
-      const handler = colors.gray(`← ${fn.name || 'anon'}`)
-      log(`${formatTimestamp()} ${colors.blue('[SUB]')} ${colors.cyan(name)} ${handler}`)
-    }
-    // Wrap subscriber to log publishes (needed because native fast path bypasses JS publish)
-    const wrapped = wrapSubscriber(fn, name)
-    return origDcSubscribe.call(this, name, wrapped)
+    if (match(name)) log(`${ts()} ${c.blue('[SUB]')} ${c.cyan(name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
+    return orig.call(this, name, wrapSub(fn, name))
   }
 }
-
 if (dc.unsubscribe) {
-  const origDcUnsubscribe = dc.unsubscribe
+  const orig = dc.unsubscribe
   dc.unsubscribe = function (name, fn) {
-    // Look up the wrapped version we created during subscribe
-    const wrapped = subscriberWrappers.get(fn) || fn
-    if (match(name)) {
-      const handler = colors.gray(`← ${fn.name || 'anon'}`)
-      log(`${formatTimestamp()} ${colors.gray('[UNSUB]')} ${colors.cyan(name)} ${handler}`)
-    }
-    return origDcUnsubscribe.call(this, name, wrapped)
+    if (match(name)) log(`${ts()} ${c.gray('[UNSUB]')} ${c.cyan(name)} ${c.gray('← ' + (fn.name || 'anon'))}`)
+    return orig.call(this, name, wrappers.get(fn) || fn)
   }
 }
 /* eslint-enable n/no-unsupported-features/node-builtins */
 
-// NOTE: runStores patching was removed because it causes test timeouts.
-// TracingChannel caches runStores at creation time, and wrapping dc.channel()
-// to patch instances breaks async context propagation.
-// Use [TRACEPROMISE]/[TRACESYNC]/[TRACECALLBACK] logs instead.
-
-// ============================================================
-// TracingChannel Patching (dc-polyfill)
-// ============================================================
-
-// ritm hooks can fire multiple times for the same module (e.g., when required
-// from different paths or when module cache is cleared in tests). The
-// _channelDebugPatched guard prevents re-wrapping already-patched exports.
-Hook(['dc-polyfill'], exports => {
-  if (exports._channelDebugPatched) return exports
-  exports._channelDebugPatched = true
-  const orig = exports.tracingChannel
-  exports.tracingChannel = function (name) {
-    const tracingChannel = orig.call(this, name)
-    // TracingChannels are cached by name, so the same object can be returned
-    // on repeated calls - guard against re-patching the same instance.
-    if (tracingChannel._channelDebugPatched) return tracingChannel
-    tracingChannel._channelDebugPatched = true
-    for (const method of ['traceSync', 'tracePromise', 'traceCallback']) {
-      const fn = tracingChannel[method]
+// TracingChannel patching (dc-polyfill)
+Hook(['dc-polyfill'], exp => {
+  if (exp._patched) return exp
+  exp._patched = true
+  const orig = exp.tracingChannel
+  exp.tracingChannel = function (name) {
+    const tc = orig.call(this, name)
+    if (tc._patched) return tc
+    tc._patched = true
+    for (const m of ['traceSync', 'tracePromise', 'traceCallback']) {
+      const fn = tc[m]
       if (fn) {
-        tracingChannel[method] = function (...args) {
+        tc[m] = function (...args) {
           if (!match(name)) return fn.apply(this, args)
-          const start = performance.now()
-          const result = fn.apply(this, args)
-          const tag = colors.magenta(`[${method.toUpperCase()}]`)
-          log(`${formatTimestamp()} ${tag} ${colors.cyan(name)} ${formatDuration(start)}`)
-          return result
+          const t = performance.now()
+          const r = fn.apply(this, args)
+          const dur = (performance.now() - t).toFixed(2) + 'ms'
+          log(`${ts()} ${c.magenta(`[${m.toUpperCase()}]`)} ${c.cyan(name)} ${c.gray(dur)}`)
+          return r
         }
       }
     }
-    return tracingChannel
+    return tc
   }
-  return exports
+  return exp
 })
 
-// ============================================================
-// Shimmer Patching
-// ============================================================
-
-/**
- * Patches shimmer's wrap/massWrap functions to log method wrapping operations.
- * Guard against re-patching since ritm hooks can fire multiple times.
- * @param {object} exports - The shimmer module exports
- * @returns {object} The patched exports
- */
-function patchShimmer (exports) {
-  if (exports._channelDebugPatched) return exports
-  exports._channelDebugPatched = true
-  const origWrap = exports.wrap
-  exports.wrap = function (obj, method, wrapper) {
-    const objName = obj?.constructor?.name || typeof obj
-    if (match(method) || match(objName)) {
-      log(`${formatTimestamp()} ${colors.magenta('[WRAP]')} ${colors.yellow(objName)}.${colors.cyan(method)}`)
-    }
+// Shimmer patching
+function patchShimmer (exp) {
+  if (exp._patched) return exp
+  exp._patched = true
+  const origWrap = exp.wrap
+  exp.wrap = function (obj, method, wrapper) {
+    const name = obj?.constructor?.name || typeof obj
+    if (match(method) || match(name)) log(`${ts()} ${c.magenta('[WRAP]')} ${c.yellow(name)}.${c.cyan(method)}`)
     return origWrap.call(this, obj, method, wrapper)
   }
-  if (exports.massWrap) {
-    const origMass = exports.massWrap
-    exports.massWrap = function (obj, methods, wrapper) {
-      const objName = obj?.constructor?.name || typeof obj
-      for (const method of methods) {
-        if (match(method) || match(objName)) {
-          log(`${formatTimestamp()} ${colors.magenta('[WRAP]')} ${colors.yellow(objName)}.${colors.cyan(method)}`)
-        }
+  if (exp.massWrap) {
+    const origMass = exp.massWrap
+    exp.massWrap = function (obj, methods, wrapper) {
+      const name = obj?.constructor?.name || typeof obj
+      for (const m of methods) {
+        if (match(m) || match(name)) log(`${ts()} ${c.magenta('[WRAP]')} ${c.yellow(name)}.${c.cyan(m)}`)
       }
       return origMass.call(this, obj, methods, wrapper)
     }
   }
-  return exports
+  return exp
 }
-
 Hook(['shimmer', 'datadog-shimmer'], patchShimmer)
 
-// ============================================================
-// Rewriter Patching
-// ============================================================
-
+// Rewriter patching
 let instrumentations = []
-try {
-  instrumentations = require('../../../datadog-instrumentations/src/helpers/rewriter/instrumentations')
-} catch {
-  // Module not available in all test environments
-}
+try { instrumentations = require('../../../datadog-instrumentations/src/helpers/rewriter/instrumentations') } catch {}
 
-/**
- * Maps a function kind to its corresponding tracing operator.
- * @param {string} kind - The function kind ('Async', 'Callback', or other)
- * @returns {string} The tracing operator name
- */
-function getOperator (kind) {
-  if (kind === 'Async') return 'tracePromise'
-  if (kind === 'Callback') return 'traceCallback'
-  return 'traceSync'
-}
-
-/**
- * Patches the rewriter module to log code rewrite operations.
- * Called from both direct require and Module._load hook, so guard against re-patching.
- * @param {object} exports - The rewriter module exports
- */
-function patchRewriter (exports) {
-  if (!exports?.rewrite || exports._channelDebugPatched) return
-  exports._channelDebugPatched = true
-
-  const origRewrite = exports.rewrite
-  exports.rewrite = function (content, filename, format) {
-    const result = origRewrite.call(this, content, filename, format)
+function patchRewriter (exp) {
+  if (!exp?.rewrite || exp._patched) return
+  exp._patched = true
+  const orig = exp.rewrite
+  exp.rewrite = function (content, filename, format) {
+    const result = orig.call(this, content, filename, format)
     if (result !== content) {
-      const cleanFilename = filename.replace('file://', '')
-      for (const inst of instrumentations) {
-        const { functionQuery = {}, module: mod, channelName } = inst
+      const file = filename.replace('file://', '')
+      for (const { functionQuery = {}, module: mod, channelName } of instrumentations) {
+        if (!file.endsWith(`${mod.name}/${mod.filePath}`)) continue
         const { className, methodName, kind } = functionQuery
-        const operator = getOperator(kind)
-
-        if (cleanFilename.endsWith(`${mod.name}/${mod.filePath}`)) {
-          const target = className ? `${className}.${methodName}` : methodName || channelName
-          if (match(mod.name) || match(target) || match(channelName)) {
-            const parts = [
-              separator,
-              `${formatTimestamp()} ${colors.magenta('[REWRITE]')} ${colors.cyan(mod.name)}`,
-              `${colors.yellow(target)} ${colors.blue(operator)} ${colors.gray(mod.filePath)}`,
-            ]
-            log(parts.join('\n'))
-          }
+        const target = className ? `${className}.${methodName}` : methodName || channelName
+        if (match(mod.name) || match(target) || match(channelName)) {
+          const op = kind === 'Async' ? 'tracePromise' : kind === 'Callback' ? 'traceCallback' : 'traceSync'
+          log(`${SEP}\n${ts()} ${c.magenta('[REWRITE]')} ${c.cyan(mod.name)} ${c.yellow(target)} ${c.blue(op)}`)
         }
       }
     }
     return result
   }
 }
-
-try {
-  const rewriter = require('../../../datadog-instrumentations/src/helpers/rewriter')
-  patchRewriter(rewriter)
-} catch {
-  // Module not available in all test environments
-}
+try { patchRewriter(require('../../../datadog-instrumentations/src/helpers/rewriter')) } catch {}
 
 const origLoad = Module._load
-Module._load = function (request, parent, isMain) {
-  const exports = origLoad.apply(this, arguments)
-  if (request.includes('rewriter') && exports?.rewrite) {
-    patchRewriter(exports)
-  }
-  return exports
+Module._load = function (req, ...args) {
+  const exp = origLoad.call(this, req, ...args)
+  if (req.includes('rewriter') && exp?.rewrite) patchRewriter(exp)
+  return exp
 }
 
-// ============================================================
-// Span Lifecycle Logging (via diagnostic channels)
-// ============================================================
+// Span lifecycle logging
+const SKIP_TAGS = new Set(['runtime-id', 'process_id', 'service.name', 'resource.name', 'span.kind', 'error'])
 
-const skipTags = new Set([
-  'runtime-id', 'process_id',
-  // Already displayed on main span line
-  'service.name', 'resource.name', 'span.kind', 'error',
-])
-
-/**
- * Formats a short span ID for display (last 8 hex characters).
- * Helps correlate span start/end events when multiple spans run in parallel.
- * @param {object} span - The span object
- * @returns {string} Formatted span ID or empty string if unavailable
- */
-function formatSpanId (span) {
-  const spanId = span?._spanContext?._spanId
-  if (!spanId) return ''
-  const hex = spanId.toString(16).padStart(16, '0')
-  return colors.gray(`[${hex.slice(-8)}]`)
+function spanId (span) {
+  const id = span?._spanContext?._spanId
+  return id ? c.gray(`[${id.toString(16).padStart(16, '0').slice(-8)}]`) : ''
 }
 
-/**
- * Formats span tags for display, filtering out common/internal tags.
- * Groups tags on indented lines (3 per line) for readability.
- * Only outputs tags when TEST_CHANNEL_VERBOSE=true.
- * @param {object} tags - The span tags object
- * @returns {string} Formatted tag string or empty string if no relevant tags
- */
-function formatSpanMeta (tags) {
+function spanMeta (tags) {
   if (!verbose || !tags) return ''
-  const meta = []
-  for (const [key, value] of Object.entries(tags)) {
-    if (skipTags.has(key) || key.startsWith('_dd') || value === undefined || value === null) continue
-    let displayValue = value
-    if (typeof value === 'object') {
-      try {
-        displayValue = JSON.stringify(value)
-      } catch {
-        // Circular reference or other serialization error
-        displayValue = String(value)
-      }
-    }
-    if (typeof displayValue === 'string' && displayValue.length > 50) {
-      displayValue = displayValue.slice(0, 47) + '...'
-    }
-    meta.push(`${key}=${displayValue}`)
+  const items = []
+  for (const [k, v] of Object.entries(tags)) {
+    if (SKIP_TAGS.has(k) || k.startsWith('_dd') || v == null) continue
+    let val = typeof v === 'object' ? JSON.stringify(v) : v
+    if (typeof val === 'string' && val.length > 50) val = val.slice(0, 47) + '...'
+    items.push(`${k}=${val}`)
   }
-  if (!meta.length) return ''
-  // Group 3 tags per line with indentation
+  if (!items.length) return ''
   const lines = []
-  for (let i = 0; i < meta.length; i += 3) {
-    lines.push('    ' + meta.slice(i, i + 3).join('  '))
-  }
-  return '\n' + colors.gray(lines.join('\n'))
+  for (let i = 0; i < items.length; i += 3) lines.push('    ' + items.slice(i, i + 3).join('  '))
+  return '\n' + c.gray(lines.join('\n'))
 }
 
-const separator = noColor ? '────────────────────' : '\x1b[90m────────────────────\x1b[0m'
-
-// Subscribe to tracer's built-in span lifecycle channels using Channel API
-// for more reliable subscription timing across CJS/ESM loading scenarios.
-const spanStartCh = dc.channel('dd-trace:span:start')
-const spanFinishCh = dc.channel('dd-trace:span:finish')
-
-spanStartCh.subscribe(({ span, fields }) => {
+dc.channel('dd-trace:span:start').subscribe(({ span, fields }) => {
   const name = fields.operationName
   if (!match(name)) return
   const tags = span?._spanContext?._tags || fields.tags || {}
-  const service = tags['service.name'] || ''
-  const resource = tags['resource.name'] || ''
-  const kind = tags['span.kind'] || ''
-  const meta = formatSpanMeta(tags)
-  const resourcePart = resource ? colors.blue(` ${resource}`) : ''
-  const kindPart = kind ? colors.magenta(` ${kind}`) : ''
-  const spanIdPart = formatSpanId(span)
-  const tag = colors.green('[SPAN:START]')
-  const spanInfo = `${colors.white(name)} ${spanIdPart} ${colors.cyan(service)}${resourcePart}${kindPart}`
-  log(`${separator}\n${formatTimestamp()} ${tag} ${spanInfo}${meta}`)
+  const svc = tags['service.name'] || ''
+  const res = tags['resource.name']
+  const kind = tags['span.kind']
+  const info = `${c.white(name)} ${spanId(span)} ${c.cyan(svc)}${res ? c.blue(' ' + res) : ''}`
+  log(`${SEP}\n${ts()} ${c.green('[SPAN:START]')} ${info}${kind ? c.magenta(' ' + kind) : ''}${spanMeta(tags)}`)
 })
 
-spanFinishCh.subscribe((span) => {
+dc.channel('dd-trace:span:finish').subscribe(span => {
   const name = span._name
   if (!match(name)) return
   const tags = span._spanContext?._tags || {}
-  const error = tags.error
-  let errorMsg = ''
-  if (error) {
-    let msg
-    try {
-      msg = error.message || (typeof error === 'string' ? error : error.name || 'error')
-      // Truncate multiline errors to first line
-      if (typeof msg === 'string' && msg.includes('\n')) {
-        msg = msg.split('\n')[0] + '...'
-      }
-    } catch {
-      msg = '[circular or unserializable error]'
-    }
-    errorMsg = colors.red(` error=${msg}`)
+  let err = ''
+  if (tags.error) {
+    let msg = tags.error.message || tags.error.name || 'error'
+    if (msg.includes('\n')) msg = msg.split('\n')[0] + '...'
+    err = c.red(` error=${msg}`)
   }
-  const meta = formatSpanMeta(tags)
-  const spanIdPart = formatSpanId(span)
-  const tag = colors.red('[SPAN:END]')
-  log(`${formatTimestamp()} ${tag} ${colors.white(name)} ${spanIdPart}${errorMsg}${meta}\n${separator}`)
+  log(`${ts()} ${c.red('[SPAN:END]')} ${c.white(name)} ${spanId(span)}${err}${spanMeta(tags)}\n${SEP}`)
 })
 
-log(`${colors.green('[channel-debug]')} Filter: ${filter || '(all)'} | Verbose: ${verbose}`)
-log(separator)
+log(`${c.green('[channel-debug]')} Filter: ${filter || '(all)'} | Verbose: ${verbose}`)
+log(SEP)
 
-// ============================================================
-// Mocha Test Output Highlighting
-// ============================================================
-
-const testMarker = noColor ? '>>> ' : '\x1b[33;1m>>> \x1b[0m'
-const origStdoutWrite = process.stdout.write.bind(process.stdout)
-
-process.stdout.write = function (chunk, encoding, callback) {
+// Prefix mocha output to distinguish from debug logs
+const marker = noColor ? '>>> ' : '\x1b[33;1m>>> \x1b[0m'
+const origWrite = process.stdout.write.bind(process.stdout)
+process.stdout.write = function (chunk, enc, cb) {
   const str = typeof chunk === 'string' ? chunk : chunk.toString()
-  // Skip empty/whitespace-only
-  if (!str.trim()) return origStdoutWrite(chunk, encoding, callback)
-  // Add marker to all stdout content (mocha output)
-  const lines = str.split('\n').map(l => l.trim() ? `${testMarker}${l}` : l).join('\n')
-  return origStdoutWrite(lines, encoding, callback)
+  if (!str.trim()) return origWrite(chunk, enc, cb)
+  return origWrite(str.split('\n').map(l => l.trim() ? marker + l : l).join('\n'), enc, cb)
 }
 
-module.exports = {
-  patchShimmer,
-}
+module.exports = { patchShimmer }
