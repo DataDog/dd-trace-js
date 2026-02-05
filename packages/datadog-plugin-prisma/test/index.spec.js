@@ -309,6 +309,10 @@ describe('Plugin', () => {
           })
 
           after(() => {
+            fs.rm('versions/@prisma/generated/prisma', { recursive: true, force: true })
+          })
+
+          after(() => {
             return agent.close({ ritmReset: false })
           })
 

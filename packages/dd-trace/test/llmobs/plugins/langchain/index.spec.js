@@ -94,8 +94,7 @@ describe('integrations', () => {
     withVersions('langchain', ['@langchain/core'], (version, _, realVersion) => {
       describe('langchain', () => {
         beforeEach(() => {
-          langchainOpenai = require(`../../../../../../versions/langchain@${version}`)
-            .get('@langchain/openai')
+          langchainOpenai = require('../../../../../../versions/@langchain/openai@0.1.0').get()
           langchainAnthropic = require(`../../../../../../versions/@langchain/anthropic@${version}`).get()
           langchainCohere = require(`../../../../../../versions/@langchain/cohere@${version}`).get()
 

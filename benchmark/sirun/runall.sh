@@ -27,9 +27,9 @@ fi
 
 (
   cd ../../ &&
-  npm install --global yarn || (sleep 60 && npm install --global yarn) \
-    && yarn install --ignore-engines || (sleep 60 && yarn install --ignore-engines) \
-    && PLUGINS="bluebird|q|graphql|express" yarn services
+  npm install --global bun || (sleep 60 && npm install --global bun) \
+    && bun install --ignore-engines || (sleep 60 && bun install --ignore-engines) \
+    && PLUGINS="bluebird|q|graphql|express" bun services
 )
 
 # run each test in parallel for a given version of Node.js

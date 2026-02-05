@@ -1,7 +1,7 @@
 'use strict'
 
 const { createHash } = require('crypto')
-const { lstat, mkdir, readdir, writeFile } = require('fs/promises')
+const { mkdir, readdir, writeFile } = require('fs/promises')
 const { arch } = require('os')
 const { join } = require('path')
 
@@ -12,35 +12,26 @@ const externals = require('../packages/dd-trace/test/plugins/externals.json')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
+const { BUN, withBun } = require('../integration-tests/helpers/bun')
 const exec = require('./helpers/exec')
+
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
 // Can remove couchbase after removing support for couchbase <= 3.2.0
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
+// List of trusted transitive dependencies to execute scripts for.
+const trustedList = ['libpq']
 const workspaces = new Set()
-const externalDeps = new Map()
-
-for (const external of Object.keys(externals)) {
-  for (const thing of externals[external]) {
-    if (thing.dep) {
-      const depsArr = externalDeps.get(external)
-      if (depsArr) {
-        depsArr.push(thing)
-      } else {
-        externalDeps.set(external, [thing])
-      }
-    }
-  }
-}
+const externalDeps = Object.create(null)
+const plugins = Object.create(null)
 
 run()
 
 async function run () {
   await assertPrerequisites()
-  install()
-  await assertPeerDependencies(join(__dirname, '..', 'versions'))
-  install()
+  install(process.env.BUN_FORCE_INSTALL === 'true')
+  await assertPeerDependencies()
 }
 
 async function assertPrerequisites () {
@@ -52,7 +43,11 @@ async function assertPrerequisites () {
     .filter(file => !filter || filter.includes(file))
 
   const internals = moduleNames.reduce((/** @type {object[]} */ internals, moduleName) => {
-    internals.push(...getInstrumentation(moduleName))
+    const instrumentations = getInstrumentation(moduleName)
+    internals.push(...instrumentations)
+    for (const { name } of instrumentations) {
+      plugins[name] = moduleName
+    }
     return internals
   }, [])
 
@@ -64,7 +59,11 @@ async function assertPrerequisites () {
   const externalNames = Object.keys(externals).filter(name => moduleNames.includes(name))
 
   for (const name of externalNames) {
-    for (const inst of externals[name]) {
+    for (const inst of [externals[name]].flat()) {
+      if (inst.dep) {
+        externalDeps[name] ??= []
+        externalDeps[name].push(inst)
+      }
       // eslint-disable-next-line no-await-in-loop
       await assertInstrumentation(inst, true)
     }
@@ -89,25 +88,24 @@ async function assertInstrumentation (instrumentation, external) {
       const result = semver.coerce(version)
       if (!result) throw new Error(`Invalid version: ${version}`)
       // eslint-disable-next-line no-await-in-loop
-      await assertModules(instrumentation.name, result.version, external)
+      await assertModules(instrumentation.name, result.version)
     }
 
     // eslint-disable-next-line no-await-in-loop
-    await assertModules(instrumentation.name, version, external)
+    await assertModules(instrumentation.name, version)
   }
 }
 
 /**
  * @param {string} name
  * @param {string} version
- * @param {boolean} external
  */
-async function assertModules (name, version, external) {
+async function assertModules (name, version) {
   const range = process.env.RANGE
   if (range && !semver.subset(version, range)) return
   await Promise.all([
-    assertPackage(name, null, version, external),
-    assertPackage(name, version, version, external),
+    assertPackage(name, null, version),
+    assertPackage(name, version, version),
   ])
 }
 
@@ -123,9 +121,8 @@ async function assertFolder (name, version) {
  * @param {string} name
  * @param {string|null} version
  * @param {string} dependencyVersionRange
- * @param {boolean} external
  */
-async function assertPackage (name, version, dependencyVersionRange, external) {
+async function assertPackage (name, version, dependencyVersionRange) {
   // Early return to prevent filePaths from being installed, their non path counterparts should suffice
   if (isRelativeRequire(name)) return
   const dependencies = {
@@ -137,18 +134,7 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     license: 'BSD-3-Clause',
     private: true,
     dependencies,
-  }
-
-  if (!external) {
-    if (name === 'aerospike') {
-      pkg.installConfig = {
-        hoistingLimits: 'workspaces',
-      }
-    } else {
-      pkg.workspaces = {
-        nohoist: ['**/**'],
-      }
-    }
+    trustedDependencies: [name, ...trustedList],
   }
 
   addFolderToWorkspaces(name, version)
@@ -159,37 +145,37 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
   ])
 }
 
-/**
- * @param {object} rootFolder
- * @param {string} parent
- */
-async function assertPeerDependencies (rootFolder, parent = '') {
-  const entries = await readdir(rootFolder)
+async function assertPeerDependencies () {
+  let hasPeers = false
 
-  for (const entry of entries) {
-    const folder = join(rootFolder, entry)
+  for (const workspace of workspaces) {
+    const folder = join(__dirname, '..', 'versions', workspace)
+    const externalName = workspace.split('@').slice(0, -1).join('@')
+    const pluginName = plugins[externalName]
 
-    // eslint-disable-next-line no-await-in-loop
-    const folderStat = await lstat(folder)
-    if (!folderStat.isDirectory()) continue
-    if (entry === 'node_modules') continue
-    if (entry.startsWith('@')) {
-      // eslint-disable-next-line no-await-in-loop
-      await assertPeerDependencies(folder, entry)
-      continue
-    }
-
-    const externalName = join(parent, entry.split('@')[0])
-
-    if (!externalDeps.has(externalName)) continue
+    if (!externalDeps[pluginName]) continue
 
     const versionPkgJsonPath = join(folder, 'package.json')
     const versionPkgJson = require(versionPkgJsonPath)
 
-    for (const { dep, name, node } of externalDeps.get(externalName)) {
-      if (node && !semver.satisfies(process.versions.node, node)) continue
-      const pkgJsonPath = require(folder).pkgJsonPath()
+    for (const { dep, name } of externalDeps[pluginName]) {
+      const pkgJsonPath = join(folder, 'node_modules', externalName, 'package.json')
       const pkgJson = require(pkgJsonPath)
+
+      // Add missing dependency to the module. While having to do this
+      // technically means the module itself is broken, a user could add the
+      // dependency manually as well, so we need to do the same thing in order
+      // to test that scenario.
+      if (typeof dep === 'string' && semver.validRange(dep)) {
+        versionPkgJson.dependencies[name] = dep
+
+        hasPeers = true
+
+        // eslint-disable-next-line no-await-in-loop
+        await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
+
+        continue
+      }
 
       for (const section of ['devDependencies', 'peerDependencies']) {
         if (pkgJson[section]?.[name]) {
@@ -203,6 +189,8 @@ async function assertPeerDependencies (rootFolder, parent = '') {
               : pkgJson[section][name]
           }
 
+          hasPeers = true
+
           // eslint-disable-next-line no-await-in-loop
           await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
 
@@ -210,6 +198,10 @@ async function assertPeerDependencies (rootFolder, parent = '') {
         }
       }
     }
+  }
+
+  if (hasPeers) {
+    install()
   }
 }
 
@@ -220,6 +212,7 @@ async function assertPeerDependencies (rootFolder, parent = '') {
 async function assertIndex (name, version) {
   const index = `'use strict'
 
+const { realpathSync } = require('fs')
 const requirePackageJson = require('${requirePackageJsonPath}')
 
 module.exports = {
@@ -230,6 +223,23 @@ module.exports = {
    * @returns {import('${name}') | never} The module.
    */
   get (id) { return require(id || '${name}') },
+  /**
+   * Load the module following pnpm-style symlinks.
+   *
+   * @param {...string} [ids] The names/ids of the transitive module to get.
+   * @returns {import('${name}') | never} The module.
+   */
+  follow (...ids) {
+    let prefix = __dirname + '/node_modules'
+
+    for (const [i, id] of ['${name}'].concat(ids).entries()) {
+      if (i === ids.length) return require(prefix + '/' + (id || '${name}'))
+      prefix = realpathSync(prefix + '/' + id)
+        .split('/node_modules')
+        .slice(0, -1)
+        .join('/node_modules') + '/node_modules'
+    }
+  },
   /**
    * Resolve the path for a module id.
    *
@@ -264,19 +274,29 @@ async function assertWorkspaces () {
     private: true,
     workspaces: {
       packages: [...workspaces].sort(),
+      nohoist: ['**/**'],
     },
   }, null, 2) + '\n')
 }
 
 /**
+ * @param {boolean} [force=false]
  * @param {boolean} [retry=true]
  */
-function install (retry = true) {
+function install (force = false, retry = true) {
+  const flags = ['--linker=isolated']
+
+  // Bun doesn't have a `rebuild` command, so the only way to rebuild native
+  // extensions is to force a reinstall.
+  if (force) {
+    flags.push('--force')
+  }
+
   try {
-    exec('yarn --ignore-engines', { cwd: folder() })
+    exec(`${BUN} install ${flags.join(' ')}`, { cwd: folder(), env: withBun() })
   } catch (err) {
     if (!retry) throw err
-    install(false) // retry in case of server error from registry
+    install(force, false) // retry in case of server error from registry
   }
 }
 
