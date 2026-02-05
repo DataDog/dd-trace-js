@@ -1,20 +1,16 @@
 'use strict'
 
-/* eslint-disable no-console */
+const { execSync } = require('node:child_process')
+const fs = require('node:fs')
+const RAW_BUILTINS = require('node:module').builtinModules
+const path = require('node:path')
+const { pathToFileURL, fileURLToPath } = require('node:url')
 
-const { execSync } = require('child_process')
-const fs = require('fs')
-const RAW_BUILTINS = require('module').builtinModules
-const path = require('path')
-const { pathToFileURL, fileURLToPath } = require('url')
-
-const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
-
-const extractPackageAndModulePath = require(
-  '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
-)
-const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
-const { processModule, isESMFile } = require('./src/utils.js')
+const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
+const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
+const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const { processModule, isESMFile } = require('./src/utils')
+const log = require('./src/log')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
@@ -51,8 +47,6 @@ for (const builtin of RAW_BUILTINS) {
 }
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
-const DEBUG = !!process.env.DD_TRACE_DEBUG
-// eslint-disable-next-line eslint-rules/eslint-process-env
 const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
 
 module.exports.name = 'datadog-esbuild'
@@ -66,6 +60,11 @@ function isESMBuild (build) {
 }
 
 function getGitMetadata () {
+  /**
+   * @type {object}
+   * @property {string | null} repositoryURL
+   * @property {string | null} commitSHA
+   */
   const gitMetadata = {
     repositoryURL: null,
     commitSHA: null,
@@ -78,9 +77,7 @@ function getGitMetadata () {
       cwd: process.cwd(),
     }).trim()
   } catch (e) {
-    if (DEBUG) {
-      console.warn('Warning: failed to get git repository URL:', e.message)
-    }
+    log.warn('failed to get git repository URL:', e.message)
   }
 
   try {
@@ -90,9 +87,7 @@ function getGitMetadata () {
       cwd: process.cwd(),
     }).trim()
   } catch (e) {
-    if (DEBUG) {
-      console.warn('Warning: failed to get git commit SHA:', e.message)
-    }
+    log.warn('failed to get git commit SHA:', e.message)
   }
 
   return gitMetadata
@@ -157,13 +152,13 @@ ${build.initialOptions.banner.js}`
 }
 ${build.initialOptions.banner.js}`
 
-    if (DEBUG) {
-      console.log('Info: automatically injected git metadata:')
-      console.log(`DD_GIT_REPOSITORY_URL: ${gitMetadata.repositoryURL || 'not available'}`)
-      console.log(`DD_GIT_COMMIT_SHA: ${gitMetadata.commitSHA || 'not available'}`)
-    }
-  } else if (DEBUG) {
-    console.warn('Warning: No git metadata available - skipping injection')
+    log.debug(
+      'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
+      gitMetadata.repositoryURL || 'not available',
+      gitMetadata.commitSHA || 'not available'
+    )
+  } else {
+    log.warn('No git metadata available - skipping injection')
   }
 
   // first time is intercepted, proxy should be created, next time the original should be loaded
@@ -172,7 +167,7 @@ ${build.initialOptions.banner.js}`
   build.onResolve({ filter: /.*/ }, args => {
     if (externalModules.has(args.path)) {
       // Internal Node.js packages will still be instrumented via require()
-      if (DEBUG) console.log(`EXTERNAL: ${args.path}`)
+      log.debug('EXTERNAL: %s', args.path)
       return
     }
 
@@ -181,7 +176,7 @@ ${build.initialOptions.banner.js}`
         args.path.startsWith('@') &&
         !args.importer.includes('node_modules/')) {
       // This is the Next.js convention for loading local files
-      if (DEBUG) console.log(`@LOCAL: ${args.path}`)
+      log.debug('@LOCAL: %s', args.path)
       return
     }
 
@@ -189,16 +184,13 @@ ${build.initialOptions.banner.js}`
     try {
       fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir, args.kind === 'import-statement')
     } catch {
-      if (DEBUG) {
-        console.warn(`Warning: Unable to find "${args.path}".` +
-          "Unless it's dead code this could cause a problem at runtime.")
-      }
+      log.warn('Unable to find "%s". Unless it\'s dead code this could cause a problem at runtime.', args.path)
       return
     }
 
     if (args.path.startsWith('.') && !args.importer.includes('node_modules/')) {
       // It is local application code, not an instrumented package
-      if (DEBUG) console.log(`APP: ${args.path}`)
+      log.debug('APP: %s', args.path)
 
       return {
         path: fullPathToModule,
@@ -243,9 +235,11 @@ ${build.initialOptions.banner.js}`
         pathToPackageJson = extractPackageAndModulePath(pathToPackageJson).pkgJson
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
-          if (!internal && DEBUG) {
-            console.warn(`Warning: Unable to find "${extracted.pkg}/package.json".` +
-              "Unless it's dead code this could cause a problem at runtime.")
+          if (!internal) {
+            log.warn(
+              'Unable to find "%s/package.json". Unless it\'s dead code this could cause a problem at runtime.',
+              extracted.pkg
+            )
           }
           return
         }
@@ -253,14 +247,14 @@ ${build.initialOptions.banner.js}`
       }
 
       try {
-        const packageJson = JSON.parse(fs.readFileSync(pathToPackageJson).toString())
+        const packageJson = JSON.parse(fs.readFileSync(/** @type {string} */ (pathToPackageJson)).toString())
 
         const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
         if (isESM && !interceptedESMModules.has(fullPathToModule)) {
           fullPathToModule += ESM_INTERCEPTED_SUFFIX
         }
 
-        if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
+        log.debug('RESOLVE: %s@%s', args.path, packageJson.version)
 
         // https://esbuild.github.io/plugins/#on-resolve-arguments
         return {
@@ -283,12 +277,10 @@ ${build.initialOptions.banner.js}`
         // since those files should be treated as regular files and not modules
         // even though they are in a `node_modules` folder.
         if (e.code === 'ENOENT') {
-          if (DEBUG) {
-            console.log([
-              'Skipping `package.json` lookup.',
-              'This usually means the package was vendored but could indicate an issue otherwise.',
-            ].join(' '))
-          }
+          log.debug(
+            // eslint-disable-next-line @stylistic/max-len
+            'Skipping `package.json` lookup. This usually means the package was vendored but could indicate an issue otherwise.'
+          )
         } else {
           throw e
         }
@@ -300,7 +292,7 @@ ${build.initialOptions.banner.js}`
     if (args.pluginData?.pkgOfInterest) {
       const data = args.pluginData
 
-      if (DEBUG) console.log(`LOAD: ${data.pkg}@${data.version}, pkg "${data.path}"`)
+      log.debug('LOAD: %s@%s, pkg "%s"', data.pkg, data.version, data.path)
 
       const pkgPath = data.raw === data.pkg
         ? data.pkg
@@ -376,7 +368,7 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
       const isJs = /^\.(js|mjs|cjs)$/.test(ext)
       if (!isJs) return
 
-      if (DEBUG) console.log(`REWRITE: ${args.path}`)
+      log.debug('REWRITE: %s', args.path)
       const fileCode = fs.readFileSync(args.path, 'utf8')
       const rewritten = rewriter.rewrite(fileCode, args.path, ['iast'])
       return {
@@ -403,5 +395,9 @@ function dotFriendlyResolve (path, directory, usesImportStatement) {
   if (path.startsWith('file://')) {
     path = fileURLToPath(path)
   }
-  return require.resolve(path, { paths: [directory], conditions })
+  return require.resolve(path, {
+    paths: [directory],
+    // @ts-expect-error - Node.js 22+ unofficially supports a conditions option
+    conditions,
+  })
 }
