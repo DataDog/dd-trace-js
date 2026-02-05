@@ -6,7 +6,6 @@ globalThis._ddChannelDebugPatched = true
 
 const dc = require('node:diagnostics_channel')
 const { performance } = require('node:perf_hooks')
-const Hook = require('../../src/ritm')
 
 // Config
 const filter = process.env.TEST_CHANNEL_FILTER || ''
@@ -109,10 +108,11 @@ if (dc.unsubscribe) {
 }
 /* eslint-enable n/no-unsupported-features/node-builtins */
 
-// TracingChannel patching (dc-polyfill)
-Hook(['dc-polyfill'], exp => {
-  const orig = exp.tracingChannel
-  exp.tracingChannel = function (name) {
+// TracingChannel patching (dc-polyfill) - direct require, no ritm needed
+try {
+  const dcPolyfill = require('dc-polyfill')
+  const orig = dcPolyfill.tracingChannel
+  dcPolyfill.tracingChannel = function (name) {
     const tc = orig.call(this, name)
     for (const m of ['traceSync', 'tracePromise', 'traceCallback']) {
       const fn = tc[m]
@@ -129,20 +129,20 @@ Hook(['dc-polyfill'], exp => {
     }
     return tc
   }
-  return exp
-})
+} catch {}
 
-// Shimmer patching
-Hook(['shimmer', 'datadog-shimmer'], exp => {
-  const origWrap = exp.wrap
-  exp.wrap = function (obj, method, wrapper) {
+// Shimmer patching - direct require, no ritm needed
+try {
+  const shimmer = require('datadog-shimmer')
+  const origWrap = shimmer.wrap
+  shimmer.wrap = function (obj, method, wrapper) {
     const name = obj?.constructor?.name || typeof obj
     if (match(method) || match(name)) log(`${ts()} ${c.magenta('[WRAP]')} ${c.yellow(name)}.${c.cyan(method)}`)
     return origWrap.call(this, obj, method, wrapper)
   }
-  if (exp.massWrap) {
-    const origMass = exp.massWrap
-    exp.massWrap = function (obj, methods, wrapper) {
+  if (shimmer.massWrap) {
+    const origMass = shimmer.massWrap
+    shimmer.massWrap = function (obj, methods, wrapper) {
       const name = obj?.constructor?.name || typeof obj
       for (const m of methods) {
         if (match(m) || match(name)) log(`${ts()} ${c.magenta('[WRAP]')} ${c.yellow(name)}.${c.cyan(m)}`)
@@ -150,8 +150,7 @@ Hook(['shimmer', 'datadog-shimmer'], exp => {
       return origMass.call(this, obj, methods, wrapper)
     }
   }
-  return exp
-})
+} catch {}
 
 // Rewriter patching - log when code gets rewritten by orchestrion
 let instrumentations = []

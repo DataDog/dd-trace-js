@@ -731,9 +731,8 @@ function buildDebugNodeOptions (envArgs) {
   let nodeOptions = `--loader=${hookFile}`
 
   if (process.env.TEST_CHANNEL_DEBUG) {
-    const channelPatchCjs = path.join(__dirname, '../../packages/dd-trace/test/debug/channel-patch.js')
-    // Use --require for CJS context (--import would run in separate loader thread)
-    nodeOptions = `--require=${channelPatchCjs} ${nodeOptions}`
+    const channelPatch = path.join(__dirname, '../../packages/dd-trace/test/debug/channel-patch.js')
+    nodeOptions = `--require=${channelPatch} ${nodeOptions}`
     if (!process.env.NO_COLOR) {
       result.FORCE_COLOR = '1'
     }
