@@ -2155,6 +2155,62 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       ])
     })
 
+    it('preserves test errors when ATR retry suppression is active due to EFD', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      // All tests are considered new, so EFD will be active
+      receiver.setKnownTests({ jest: {} })
+      const NUM_RETRIES_EFD = 2
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+        flaky_test_retries_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const failingTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+
+          // Verify that all failing tests have error messages preserved
+          // even though ATR retry suppression is active (due to EFD)
+          failingTests.forEach(test => {
+            assert.ok(
+              ERROR_MESSAGE in test.meta,
+              'Test error message should be preserved when ATR retry suppression is active'
+            )
+            assert.ok(test.meta[ERROR_MESSAGE].length > 0, 'Test error message should not be empty')
+            // The error should contain information about the assertion failure
+            assert.match(test.meta[ERROR_MESSAGE], /deepStrictEqual|Expected|actual/i)
+          })
+
+          // Verify EFD is active (ATR should be suppressed)
+          const efdRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd)
+          const atrRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
+          assert.strictEqual(efdRetries.length, NUM_RETRIES_EFD)
+          assert.strictEqual(atrRetries.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: { ...getCiVisAgentlessConfig(receiver.port), TESTS_TO_RUN: 'jest-flaky/flaky-fails.js' },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+    })
+
     it(
       'sets final_status tag only on last ATR retry when EFD is enabled but not active and ATR is active',
       async () => {
@@ -4471,6 +4527,69 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             assert.strictEqual(tests.length, 3)
+            const atfRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atf)
+            const atrRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
+            assert.strictEqual(atfRetries.length, 2)
+            assert.strictEqual(atrRetries.length, 0)
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'jest-flaky/flaky-fails.js',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+      })
+
+      it('preserves test errors when ATR retry suppression is active due to attempt to fix', async () => {
+        receiver.setSettings({
+          test_management: { enabled: true, attempt_to_fix_retries: 2 },
+          flaky_test_retries_enabled: true,
+        })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/jest-flaky/flaky-fails.js': {
+                tests: {
+                  'test-flaky-test-retries can retry failed tests': {
+                    properties: {
+                      attempt_to_fix: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const failingTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+
+            // Verify that all failing tests have error messages preserved
+            // even though ATR retry suppression is active (due to attempt to fix)
+            failingTests.forEach(test => {
+              assert.ok(
+                ERROR_MESSAGE in test.meta,
+                'Test error message should be preserved when ATR retry suppression is active due to attempt to fix'
+              )
+              assert.ok(test.meta[ERROR_MESSAGE].length > 0, 'Test error message should not be empty')
+              // The error should contain information about the assertion failure
+              assert.match(test.meta[ERROR_MESSAGE], /deepStrictEqual|Expected|actual/i)
+            })
+
+            // Verify attempt to fix is active (ATR should be suppressed)
             const atfRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atf)
             const atrRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
             assert.strictEqual(atfRetries.length, 2)
