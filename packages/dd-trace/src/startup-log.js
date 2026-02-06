@@ -75,6 +75,7 @@ function tracerInfo () {
     profiling_enabled: config.profiling?.enabled === 'true' || config.profiling?.enabled === 'auto',
     integrations_loaded: Object.keys(pluginManager._pluginsByName),
     appsec_enabled: !!config.appsec.enabled,
+    data_streams_enabled: !!config.dsmEnabled,
   }
 
   return out

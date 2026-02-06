@@ -14,8 +14,8 @@
 /packages/dd-trace/src/debugger/ @DataDog/dd-trace-js @DataDog/debugger-nodejs
 /packages/dd-trace/test/debugger/ @DataDog/dd-trace-js @DataDog/debugger-nodejs
 
-/packages/dd-trace/src/lambda/ @DataDog/serverless-aws
-/packages/dd-trace/test/lambda/ @DataDog/serverless-aws
+/packages/dd-trace/src/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
+/packages/dd-trace/test/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
 
 /packages/datadog-plugin-*/ @Datadog/dd-trace-js @Datadog/apm-idm-js
 /packages/datadog-instrumentations/ @Datadog/dd-trace-js @Datadog/apm-idm-js
