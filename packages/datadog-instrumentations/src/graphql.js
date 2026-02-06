@@ -164,7 +164,7 @@ function wrapExecute (execute) {
         args,
         docSource: documentSources.get(document),
         source,
-        fields: {}, // fields to be published in `finishResolveCh` before finishing execution
+        fields: new Map(), // fields to be published in `finishResolveCh` before finishing execution; keyed by Path
         abortController: new AbortController(), // allow startExecuteCh/startResolveCh subscribers to block execution
       }
 
@@ -208,9 +208,7 @@ function wrapResolve (resolve) {
 
     startResolveCh.publish(fieldCtx)
 
-    const path = pathToArray(info.path)
-    const pathString = path.join('.')
-    ctx.fields[pathString] = fieldCtx // register for later publishing in `finishResolveCh` (see `finishResolvers`)
+    ctx.fields.set(info.path, fieldCtx) // register for later publishing in `finishResolveCh` (see `finishResolvers`)
 
     return callInAsyncScope(resolve, this, arguments, ctx.abortController.signal, (err, res) => {
       fieldCtx.error = err
@@ -251,16 +249,6 @@ function callInAsyncScope (fn, thisArg, args, abortSignal, cb) {
   } // else
   cb(null, result)
   return result
-}
-
-function pathToArray (path) {
-  const flattened = []
-  let curr = path
-  while (curr) {
-    flattened.push(curr.key)
-    curr = curr.prev
-  }
-  return flattened.reverse()
 }
 
 function createField (rootCtx, info, args) {
@@ -309,8 +297,7 @@ function wrapFieldType (field) {
 }
 
 function finishResolvers (fields) {
-  for (const key of Object.keys(fields).reverse()) {
-    const field = fields[key]
+  for (const field of [...fields.values()].reverse()) {
     if (field.error) {
       resolveErrorCh.publish(field)
     }

@@ -12,21 +12,18 @@ class GraphQLResolvePlugin extends TracingPlugin {
   start (fieldCtx) {
     const { info, rootCtx, args } = fieldCtx
 
-    const path = getPath(info, this.config)
-
     // we need to get the parent span to the field if it exists for correct span parenting
     // of nested fields
-    const parentField = getParentField(rootCtx, pathToArray(info && info.path))
+    const parentField = getParentField(rootCtx, info.path)
     const childOf = parentField?.currentStore?.span
 
     fieldCtx.parent = parentField
 
+    const path = getPath(info, this.config)
     if (!shouldInstrument(this.config, path)) return
     const computedPathString = path.join('.')
 
     if (this.config.collapse) {
-      if (rootCtx.fields[computedPathString]) return
-
       if (!rootCtx[collapsedPathSym]) {
         rootCtx[collapsedPathSym] = {}
       } else if (rootCtx[collapsedPathSym][computedPathString]) {
@@ -119,10 +116,10 @@ function shouldInstrument (config, path) {
 }
 
 function getPath (info, config) {
-  const responsePathAsArray = config.collapse
-    ? withCollapse(pathToArray)
-    : pathToArray
-  return responsePathAsArray(info && info.path)
+  const path = pathToArray(info.path)
+  return config.collapse
+    ? collapsePath(path)
+    : path
 }
 
 function pathToArray (path) {
@@ -135,11 +132,8 @@ function pathToArray (path) {
   return flattened.reverse()
 }
 
-function withCollapse (responsePathAsArray) {
-  return function () {
-    return responsePathAsArray.apply(this, arguments)
-      .map(segment => typeof segment === 'number' ? '*' : segment)
-  }
+function collapsePath (pathArray) {
+  return pathArray.map(segment => typeof segment === 'number' ? '*' : segment)
 }
 
 function getResolverInfo (info, args) {
@@ -174,18 +168,13 @@ function getResolverInfo (info, args) {
 }
 
 function getParentField (parentCtx, path) {
-  for (let i = path.length - 1; i > 0; i--) {
-    const field = getField(parentCtx, path.slice(0, i))
-    if (field) {
-      return field
-    }
+  let curr = path.prev
+  // Skip segments in (nested) lists
+  // Could also be done by `while (!parentCtx.fields.has(curr))`
+  while (curr && typeof curr.key === 'number') {
+    curr = curr.prev
   }
-
-  return null
-}
-
-function getField (parentCtx, path) {
-  return parentCtx.fields[path.join('.')]
+  return parentCtx.fields.get(curr) ?? null
 }
 
 module.exports = GraphQLResolvePlugin
