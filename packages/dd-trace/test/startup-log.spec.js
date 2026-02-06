@@ -51,6 +51,7 @@ describe('startup logging', () => {
       runtimeMetrics: true,
       startupLogs: true,
       appsec: { enabled: true },
+      dsmEnabled: true,
     })
     setSamplingRules([
       new SamplingRule({ name: 'rule1', sampleRate: 0.4 }),
@@ -98,6 +99,7 @@ describe('startup logging', () => {
       profiling_enabled: false,
       integrations_loaded: ['http', 'fs', 'semver'],
       appsec_enabled: true,
+      data_streams_enabled: true,
     })
   })
 
