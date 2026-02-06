@@ -258,10 +258,20 @@ function createField (rootCtx, info, args) {
     args,
     error: null,
     res: null,
-    parent: null, // populated by GraphQLResolvePlugin in `resolve:start` handler
+    parentField: getParentField(rootCtx, info.path),
     finishTime: 0, // populated by GraphQLResolvePlugin in `resolve:updateField` handler
     // currentStore, parentStore - sometimes populated by GraphQLResolvePlugin.startSpan in `resolve:start` handler
   }
+}
+
+function getParentField (rootCtx, path) {
+  let curr = path.prev
+  // Skip segments in (nested) lists
+  // Could also be done by `while (!rootCtx.fields.has(curr))`
+  while (curr && typeof curr.key === 'number') {
+    curr = curr.prev
+  }
+  return rootCtx.fields.get(curr) ?? null
 }
 
 function wrapFields (type) {

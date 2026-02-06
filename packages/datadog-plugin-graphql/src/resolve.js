@@ -10,14 +10,11 @@ class GraphQLResolvePlugin extends TracingPlugin {
   static operation = 'resolve'
 
   start (fieldCtx) {
-    const { info, rootCtx, args } = fieldCtx
+    const { info, rootCtx, args, parentField } = fieldCtx
 
     // we need to get the parent span to the field if it exists for correct span parenting
     // of nested fields
-    const parentField = getParentField(rootCtx, info.path)
     const childOf = parentField?.currentStore?.span
-
-    fieldCtx.parent = parentField
 
     const path = getPath(info, this.config)
     if (!shouldInstrument(this.config, path)) return
@@ -165,16 +162,6 @@ function getResolverInfo (info, args) {
   }
 
   return resolverInfo
-}
-
-function getParentField (parentCtx, path) {
-  let curr = path.prev
-  // Skip segments in (nested) lists
-  // Could also be done by `while (!parentCtx.fields.has(curr))`
-  while (curr && typeof curr.key === 'number') {
-    curr = curr.prev
-  }
-  return parentCtx.fields.get(curr) ?? null
 }
 
 module.exports = GraphQLResolvePlugin
