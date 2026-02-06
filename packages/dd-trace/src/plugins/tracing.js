@@ -170,6 +170,10 @@ class TracingPlugin extends Plugin {
       links: childOf?._links,
     })
 
+    if (service && component) {
+      span._hasIntegrationService = true
+    }
+
     analyticsSampler.sample(span, config.measured)
 
     // TODO: Remove this after migration to TracingChannel is done.

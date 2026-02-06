@@ -74,6 +74,7 @@ class DatadogSpan {
     // This is necessary for span count metrics.
     this._name = operationName
     this._integrationName = fields.integrationName || 'opentracing'
+    this._hasIntegrationService = false
 
     getIntegrationCounter('spans_created', this._integrationName).inc()
 
@@ -395,6 +396,10 @@ class DatadogSpan {
 
   _addTags (keyValuePairs) {
     tagger.add(this._spanContext._tags, keyValuePairs)
+
+    if (this._hasIntegrationService && keyValuePairs?.['service.name'] !== undefined) {
+      this._hasIntegrationService = false
+    }
 
     this._prioritySampler.sample(this, false)
   }

@@ -171,6 +171,10 @@ function extractTags (formattedSpan, span) {
         addTag(formattedSpan.meta, formattedSpan.metrics, tag, value)
     }
   }
+  if (span._hasIntegrationService) {
+    addTag(formattedSpan.meta, formattedSpan.metrics, '_dd.srv_src', '1')
+  }
+
   setSingleSpanIngestionTags(formattedSpan, context._spanSampling)
 
   addTag(formattedSpan.meta, formattedSpan.metrics, 'language', 'javascript')
