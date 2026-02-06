@@ -74,6 +74,10 @@ function extractContext (args) {
   let context = args.length > 1 ? args[1] : null
   if (context === null || context.getRemainingTimeInMillis === undefined) {
     context = args.length > 2 ? args[2] : null
+    if (context === null || context.getRemainingTimeInMillis === undefined) {
+      log.debug('Could not extract the context from the Lambda handler arguments. No timeout will be tracked.')
+      return null
+    }
   }
   return context
 }
