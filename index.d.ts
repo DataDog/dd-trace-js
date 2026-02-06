@@ -295,7 +295,14 @@ interface Plugins {
 }
 
 declare namespace tracer {
-  export type SpanOptions = opentracing.SpanOptions;
+  export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf'> & {
+  /**
+   * Set childOf to 'null' to create a root span without a parent, even when a parent span
+   * exists in the current async context. If 'undefined' the parent will be inferred from the
+   * existing async context.
+   */
+    childOf?: opentracing.Span | opentracing.SpanContext | null
+  };
   export { Tracer };
 
   export interface TraceOptions extends Analyzable {
