@@ -2371,26 +2371,33 @@ versions.forEach((version) => {
 
           const coverageReportPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/cicovreprt', (payloads) => {
-              // Should receive at least 1 batch
-              assert.ok(payloads.length >= 1, 'Should receive at least 1 batch')
+              // Should receive exactly 1 request with both reports batched together
+              assert.strictEqual(payloads.length, 1, 'Should receive exactly 1 batch with both reports')
 
-              // Verify batching format is correct for all batches
-              for (const batch of payloads) {
-                assert.ok(batch.coverageFiles.length >= 1, 'Batch should have at least 1 coverage file')
-                assert.strictEqual(batch.coverageFiles.length, batch.eventFiles.length,
-                  'Each batch should have equal coverage and event files')
+              const batch = payloads[0]
 
-                // Verify indexed field names in each batch (indexes should start at 1 for each batch)
-                for (let i = 0; i < batch.coverageFiles.length; i++) {
-                  const index = i + 1
-                  assert.strictEqual(batch.coverageFiles[i].name, `coverage${index}`,
-                    `Coverage file ${i} should be named coverage${index}`)
-                  assert.strictEqual(batch.eventFiles[i].name, `event${index}`,
-                    `Event file ${i} should be named event${index}`)
-                  assert.strictEqual(batch.eventFiles[i].content.type, 'coverage_report')
-                  assert.strictEqual(batch.eventFiles[i].content[GIT_COMMIT_SHA], gitCommitSha)
-                  assert.strictEqual(batch.eventFiles[i].content[GIT_REPOSITORY_URL], gitRepositoryUrl)
-                }
+              // Verify the single batch contains exactly 2 coverage reports (lcov and cobertura)
+              assert.strictEqual(batch.coverageFiles.length, 2, 'Should have exactly 2 coverage files in the batch')
+              assert.strictEqual(batch.eventFiles.length, 2, 'Should have exactly 2 event files in the batch')
+
+              // Verify indexed field names (should start at 1)
+              assert.strictEqual(batch.coverageFiles[0].name, 'coverage1')
+              assert.strictEqual(batch.coverageFiles[1].name, 'coverage2')
+              assert.strictEqual(batch.eventFiles[0].name, 'event1')
+              assert.strictEqual(batch.eventFiles[1].name, 'event2')
+
+              // Verify both formats are present
+              const formats = batch.eventFiles.map(f => f.content.format)
+              assert.ok(formats.includes('lcov'), 'Should include lcov format')
+              assert.ok(formats.includes('cobertura'), 'Should include cobertura format')
+
+              // Verify each report has correct metadata
+              for (let i = 0; i < batch.coverageFiles.length; i++) {
+                assert.strictEqual(batch.eventFiles[i].content.type, 'coverage_report')
+                assert.ok(['lcov', 'cobertura'].includes(batch.eventFiles[i].content.format),
+                  `Coverage format should be lcov or cobertura, got: ${batch.eventFiles[i].content.format}`)
+                assert.strictEqual(batch.eventFiles[i].content[GIT_COMMIT_SHA], gitCommitSha)
+                assert.strictEqual(batch.eventFiles[i].content[GIT_REPOSITORY_URL], gitRepositoryUrl)
               }
             })
 
@@ -2402,6 +2409,7 @@ versions.forEach((version) => {
                 ...getCiVisAgentlessConfig(receiver.port),
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
                 COVERAGE_PROVIDER: 'v8',
+                VITEST_COVERAGE_MULTIPLE_REPORTERS: 'true',
                 TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
                 DD_GIT_COMMIT_SHA: gitCommitSha,
                 DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
@@ -2413,12 +2421,6 @@ versions.forEach((version) => {
             coverageReportPromise,
             once(childProcess, 'exit'),
           ])
-
-          // Cleanup
-          const coverageDir = path.join(cwd, 'coverage')
-          if (fs.existsSync(coverageDir)) {
-            fs.rmSync(coverageDir, { recursive: true, force: true })
-          }
         })
       })
     }
