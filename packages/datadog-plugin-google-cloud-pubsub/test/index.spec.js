@@ -10,6 +10,7 @@ const id = require('../../dd-trace/src/id')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { DataStreamsProcessor, ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
@@ -186,6 +187,10 @@ describe('Plugin', () => {
 
         describe('onmessage', () => {
           it('should be instrumented', async () => {
+            const [topic] = await pubsub.createTopic(topicName)
+            const [sub] = await topic.createSubscription('foo')
+            const subscriptionName = sub.name
+
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
@@ -194,16 +199,31 @@ describe('Plugin', () => {
                 component: 'google-cloud-pubsub',
                 'span.kind': 'consumer',
                 'pubsub.topic': resource,
+                'pubsub.subscription_type': 'pull',
               },
               metrics: {
                 'pubsub.ack': 1,
               },
             })
-            const [topic] = await pubsub.createTopic(topicName)
-            const [sub] = await topic.createSubscription('foo')
-            sub.on('message', msg => msg.ack())
+
+            // Verify all consumer tags are present
+            const tagsVerificationPromise = agent.assertFirstTraceSpan({
+              name: expectedSchema.receive.opName,
+              type: 'worker',
+              meta: {
+                'span.kind': 'consumer',
+                'pubsub.subscription_type': 'pull',
+                'pubsub.message_id': ANY_STRING,
+                'pubsub.subscription': subscriptionName,
+              }
+            }, { timeoutMs: 10000 })
+
+            sub.on('message', msg => {
+              msg.ack()
+            })
             await publish(topic, { data: Buffer.from('hello') })
-            return expectedSpanPromise
+            await expectedSpanPromise
+            await tagsVerificationPromise
           })
 
           it('should give the current span a parentId from the sender', async () => {
