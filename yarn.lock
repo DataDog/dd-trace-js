@@ -182,10 +182,10 @@
   dependencies:
     "@datadog/flagging-core" "0.3.3"
 
-"@datadog/pprof@5.13.2":
-  version "5.13.2"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.13.2.tgz#9361809e712417e04c21e7f7ea239bfb3513c358"
-  integrity sha512-Th8u7pvoguTfbUx/mlZLHD9TxFCHO+wRAvlEaYFAYAmMvbPLww4YowvTy1UMvpi8LbUbwil3Fo8rKCrilvXHhQ==
+"@datadog/pprof@5.13.3":
+  version "5.13.3"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.13.3.tgz#7080d38b6c05736cb8a027835707ee4ee43eedf3"
+  integrity sha512-G25IicP7pc5CXmAfVz7nrIERsKK9hvPz6p7xsLTUwG4Qs+Zgd5KFedKCVsnvNasLc7l7OXQ6839ajowgQLWTyw==
   dependencies:
     delay "^5.0.0"
     node-gyp-build "<4.0"
