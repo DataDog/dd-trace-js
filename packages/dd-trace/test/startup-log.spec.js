@@ -108,6 +108,72 @@ describe('startup logging', () => {
   })
 })
 
+describe('data_streams_enabled', () => {
+  afterEach(() => {
+    delete process.env.DD_DATA_STREAMS_ENABLED
+  })
+
+  it('should be true when env var is true and config is unset', () => {
+    sinon.stub(console, 'info')
+    delete require.cache[require.resolve('../src/startup-log')]
+    const {
+      setStartupLogConfig,
+      setStartupLogPluginManager,
+      startupLog,
+    } = require('../src/startup-log')
+    process.env.DD_DATA_STREAMS_ENABLED = 'true'
+    process.env.DD_TRACE_STARTUP_LOGS = 'true'
+    setStartupLogConfig(getConfigFresh())
+    setStartupLogPluginManager({ _pluginsByName: {} })
+    startupLog()
+    /* eslint-disable-next-line no-console */
+    const infoStub = /** @type {sinon.SinonStub} */ (console.info)
+    const logObj = JSON.parse(infoStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+    infoStub.restore()
+    assert.strictEqual(logObj.data_streams_enabled, true)
+  })
+
+  it('should be true when env var is not set and config is true', () => {
+    sinon.stub(console, 'info')
+    delete require.cache[require.resolve('../src/startup-log')]
+    const {
+      setStartupLogConfig,
+      setStartupLogPluginManager,
+      startupLog,
+    } = require('../src/startup-log')
+    delete process.env.DD_DATA_STREAMS_ENABLED
+    process.env.DD_TRACE_STARTUP_LOGS = 'true'
+    setStartupLogConfig(getConfigFresh({ dsmEnabled: true }))
+    setStartupLogPluginManager({ _pluginsByName: {} })
+    startupLog()
+    /* eslint-disable-next-line no-console */
+    const infoStub = /** @type {sinon.SinonStub} */ (console.info)
+    const logObj = JSON.parse(infoStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+    infoStub.restore()
+    assert.strictEqual(logObj.data_streams_enabled, true)
+  })
+
+  it('should be false when env var is true but config is false', () => {
+    sinon.stub(console, 'info')
+    delete require.cache[require.resolve('../src/startup-log')]
+    const {
+      setStartupLogConfig,
+      setStartupLogPluginManager,
+      startupLog,
+    } = require('../src/startup-log')
+    process.env.DD_DATA_STREAMS_ENABLED = 'true'
+    process.env.DD_TRACE_STARTUP_LOGS = 'true'
+    setStartupLogConfig(getConfigFresh({ dsmEnabled: false }))
+    setStartupLogPluginManager({ _pluginsByName: {} })
+    startupLog()
+    /* eslint-disable-next-line no-console */
+    const infoStub = /** @type {sinon.SinonStub} */ (console.info)
+    const logObj = JSON.parse(infoStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+    infoStub.restore()
+    assert.strictEqual(logObj.data_streams_enabled, false)
+  })
+})
+
 describe('profiling_enabled', () => {
   it('should be correctly logged', () => {
     [
