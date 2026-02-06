@@ -10,6 +10,7 @@ const id = require('../../dd-trace/src/id')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { DataStreamsProcessor, ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
@@ -186,6 +187,10 @@ describe('Plugin', () => {
 
         describe('onmessage', () => {
           it('should be instrumented', async () => {
+            const [topic] = await pubsub.createTopic(topicName)
+            const [sub] = await topic.createSubscription('foo')
+            const subscriptionName = sub.name
+
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
@@ -200,13 +205,35 @@ describe('Plugin', () => {
                 'pubsub.ack': 1,
               },
             })
-            const [topic] = await pubsub.createTopic(topicName)
-            const [sub] = await topic.createSubscription('foo')
+
+            // Verify all tags from consumer.js lines 130-133 are present
+            const tagsVerificationPromise = agent.assertSomeTraces(traces => {
+              for (const trace of traces) {
+                for (const span of trace) {
+                  if (span.name === expectedSchema.receive.opName &&
+                      span.type === 'worker' && span.meta?.['span.kind'] === 'consumer' &&
+                      span.meta?.['pubsub.subscription_type'] === 'pull') {
+                    assertObjectContains(span.meta, {
+                      'span.kind': 'consumer',
+                      'pubsub.subscription_type': 'pull',
+                    })
+                    assert.ok(span.meta['pubsub.message_id'], 'pubsub.message_id should be set')
+                    assert.ok(span.meta['pubsub.subscription'], 'pubsub.subscription should be set')
+                    assert.strictEqual(span.meta['pubsub.subscription'], subscriptionName,
+                      'pubsub.subscription should match the subscription name')
+                    return span
+                  }
+                }
+              }
+              return null
+            }, { timeoutMs: 10000 })
+
             sub.on('message', msg => {
               msg.ack()
             })
             await publish(topic, { data: Buffer.from('hello') })
-            return expectedSpanPromise
+            await expectedSpanPromise
+            await tagsVerificationPromise
           })
 
           it('should give the current span a parentId from the sender', async () => {
