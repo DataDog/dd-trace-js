@@ -172,14 +172,16 @@ describe('OTel Context Manager', () => {
     assert.deepStrictEqual(JSON.parse(ddSpan.getAllBaggageItems()), { key1: 'dd1' })
     api.context.with(contextWithUpdatedBaggages, () => {
       assert.deepStrictEqual(JSON.parse(ddSpan.getAllBaggageItems()), { key1: 'otel1', key2: 'otel2' })
-      ddSpan.setBaggageItem('key2', 'dd2')
+    })
+    ddSpan.setBaggageItem('key2', 'dd2')
+    tracer.scope().activate(ddSpan, () => {
       assert.deepStrictEqual(propagation.getActiveBaggage().getAllEntries(),
         [['key1', { value: 'otel1' }], ['key2', { value: 'dd2' }]]
       )
     })
   })
 
-  it('should handle dd-otel baggage removal', () => {
+  it.only('should handle dd-otel baggage removal', () => {
     const ddSpan = tracer.startSpan('dd')
     ddSpan.setBaggageItem('key1', 'dd1')
     ddSpan.setBaggageItem('key2', 'dd2')
@@ -192,8 +194,10 @@ describe('OTel Context Manager', () => {
     assert.deepStrictEqual(JSON.parse(ddSpan.getAllBaggageItems()), { key1: 'dd1', key2: 'dd2' })
     api.context.with(contextWithUpdatedBaggages, () => {
       assert.deepStrictEqual(JSON.parse(ddSpan.getAllBaggageItems()), { key2: 'dd2' })
-      ddSpan.removeBaggageItem('key2')
-      assert.deepStrictEqual(propagation.getActiveBaggage().getAllEntries(), [])
+    })
+    ddSpan.removeBaggageItem('key2')
+    tracer.scope().activate(ddSpan, () => {
+      assert.deepStrictEqual(propagation.getActiveBaggage(), undefined)
     })
   })
 

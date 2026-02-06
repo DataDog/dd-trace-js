@@ -14,6 +14,7 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { getValueFromEnvSources } = require('../config/helper')
 const SpanContext = require('./span_context')
+const { setBaggageItem, removeBaggageItem, removeAllBaggageItems } = require('../baggage')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -163,6 +164,7 @@ class DatadogSpan {
 
   setBaggageItem (key, value) {
     this._spanContext._baggageItems[key] = value
+    setBaggageItem(key, value)
     return this
   }
 
@@ -176,10 +178,12 @@ class DatadogSpan {
 
   removeBaggageItem (key) {
     delete this._spanContext._baggageItems[key]
+    removeBaggageItem(key)
   }
 
   removeAllBaggageItems () {
     this._spanContext._baggageItems = {}
+    removeAllBaggageItems()
   }
 
   setTag (key, value) {
