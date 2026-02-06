@@ -17,7 +17,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     // we need to get the parent span to the field if it exists for correct span parenting
     // of nested fields
     const parentField = getParentField(rootCtx, pathToArray(info && info.path))
-    const childOf = parentField?.ctx?.currentStore?.span
+    const childOf = parentField?.currentStore?.span
 
     fieldCtx.parent = parentField
 
@@ -78,16 +78,13 @@ class GraphQLResolvePlugin extends TracingPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addTraceSub('updateField', (ctx) => {
-      const { field, info, error } = ctx
-
-      const path = getPath(info, this.config)
+    this.addTraceSub('updateField', (fieldCtx) => {
+      const path = getPath(fieldCtx.info, this.config)
 
       if (!shouldInstrument(this.config, path)) return
 
-      const span = ctx?.currentStore?.span || this.activeSpan
-      field.finishTime = span._getTime ? span._getTime() : 0
-      field.error = field.error || error
+      const span = fieldCtx?.currentStore?.span || this.activeSpan
+      fieldCtx.finishTime = span._getTime ? span._getTime() : 0
     })
 
     this.resolverStartCh = dc.channel('datadog:graphql:resolver:start')
@@ -98,13 +95,13 @@ class GraphQLResolvePlugin extends TracingPlugin {
     super.configure(config.depth === 0 ? false : config)
   }
 
-  finish (ctx) {
-    const { finishTime } = ctx
+  finish (fieldCtx) {
+    const { finishTime } = fieldCtx
 
-    const span = ctx?.currentStore?.span || this.activeSpan
+    const span = fieldCtx?.currentStore?.span || this.activeSpan
     span.finish(finishTime)
 
-    return ctx.parentStore
+    return fieldCtx.parentStore
   }
 }
 

@@ -164,7 +164,7 @@ function wrapExecute (execute) {
         args,
         docSource: documentSources.get(document),
         source,
-        fields: {},
+        fields: {}, // fields to be published in `finishResolveCh` before finishing execution
         abortController: new AbortController(), // allow startExecuteCh/startResolveCh subscribers to block execution
       }
 
@@ -177,7 +177,7 @@ function wrapExecute (execute) {
         contexts.set(contextValue, ctx)
 
         return callInAsyncScope(exe, this, arguments, ctx.abortController.signal, (err, res) => {
-          if (finishResolveCh.hasSubscribers) finishResolvers(ctx)
+          if (finishResolveCh.hasSubscribers) finishResolvers(ctx.fields)
 
           const error = err || (res && res.errors && res.errors[0])
 
@@ -204,13 +204,18 @@ function wrapResolve (resolve) {
 
     if (!ctx) return resolve.apply(this, arguments)
 
-    const field = assertField(ctx, info, args)
+    const fieldCtx = createField(ctx, info, args)
 
-    return callInAsyncScope(resolve, this, arguments, ctx.abortController.signal, (err) => {
-      field.ctx.error = err
-      field.ctx.info = info
-      field.ctx.field = field
-      updateFieldCh.publish(field.ctx)
+    startResolveCh.publish(fieldCtx)
+
+    const path = pathToArray(info.path)
+    const pathString = path.join('.')
+    ctx.fields[pathString] = fieldCtx // register for later publishing in `finishResolveCh` (see `finishResolvers`)
+
+    return callInAsyncScope(resolve, this, arguments, ctx.abortController.signal, (err, res) => {
+      fieldCtx.error = err
+      fieldCtx.res = res
+      updateFieldCh.publish(fieldCtx)
     })
   }
 
@@ -258,26 +263,17 @@ function pathToArray (path) {
   return flattened.reverse()
 }
 
-function assertField (rootCtx, info, args) {
-  const pathInfo = info && info.path
-
-  const path = pathToArray(pathInfo)
-
-  const pathString = path.join('.')
-  const fields = rootCtx.fields
-
-  let field = fields[pathString]
-
-  if (!field) {
-    const fieldCtx = { info, rootCtx, args }
-    startResolveCh.publish(fieldCtx)
-    field = fields[pathString] = {
-      error: null,
-      ctx: fieldCtx,
-    }
+function createField (rootCtx, info, args) {
+  return {
+    rootCtx,
+    info,
+    args,
+    error: null,
+    res: null,
+    parent: null, // populated by GraphQLResolvePlugin in `resolve:start` handler
+    finishTime: 0, // populated by GraphQLResolvePlugin in `resolve:updateField` handler
+    // currentStore, parentStore - sometimes populated by GraphQLResolvePlugin.startSpan in `resolve:start` handler
   }
-
-  return field
 }
 
 function wrapFields (type) {
@@ -312,16 +308,13 @@ function wrapFieldType (field) {
   wrapFields(unwrappedType)
 }
 
-function finishResolvers ({ fields }) {
+function finishResolvers (fields) {
   for (const key of Object.keys(fields).reverse()) {
     const field = fields[key]
-    field.ctx.finishTime = field.finishTime
-    field.ctx.field = field
     if (field.error) {
-      field.ctx.error = field.error
-      resolveErrorCh.publish(field.ctx)
+      resolveErrorCh.publish(field)
     }
-    finishResolveCh.publish(field.ctx)
+    finishResolveCh.publish(field)
   }
 }
 
