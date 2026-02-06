@@ -194,6 +194,7 @@ describe('Plugin', () => {
                 component: 'google-cloud-pubsub',
                 'span.kind': 'consumer',
                 'pubsub.topic': resource,
+                'pubsub.subscription_type': 'pull',
               },
               metrics: {
                 'pubsub.ack': 1,
@@ -201,7 +202,9 @@ describe('Plugin', () => {
             })
             const [topic] = await pubsub.createTopic(topicName)
             const [sub] = await topic.createSubscription('foo')
-            sub.on('message', msg => msg.ack())
+            sub.on('message', msg => {
+              msg.ack()
+            })
             await publish(topic, { data: Buffer.from('hello') })
             return expectedSpanPromise
           })
