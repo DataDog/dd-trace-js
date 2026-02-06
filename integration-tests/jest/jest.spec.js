@@ -6006,80 +6006,52 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(coverageReportUploaded, false, 'coverage report should not be uploaded')
     })
 
-    it('batches multiple coverage reports in groups of 10', async () => {
+    it('batches multiple coverage reports in a single request', async () => {
       receiver.setSettings({
         coverage_report_upload_enabled: true,
       })
 
-      // Create 12 mock coverage files to test batching (should result in 2 requests: 10 + 2)
-      const coverageDir = path.join(cwd, 'coverage')
-      if (!fs.existsSync(coverageDir)) {
-        fs.mkdirSync(coverageDir, { recursive: true })
-      }
-
-      const mockLcovContent = 'SF:test.js\nDA:1,1\nDA:2,1\nend_of_record\n'
-      const mockCoberturaContent = '<?xml version="1.0"?><coverage></coverage>'
-      const mockJacocoContent = '<?xml version="1.0"?><report></report>'
-      const mockCloverContent = '<?xml version="1.0"?><coverage></coverage>'
-      const mockOpenCoverContent = '<?xml version="1.0"?><CoverageSession></CoverageSession>'
-
-      // Create multiple coverage files in different formats
-      fs.writeFileSync(path.join(coverageDir, 'lcov.info'), mockLcovContent)
-      fs.writeFileSync(path.join(coverageDir, 'cobertura-coverage.xml'), mockCoberturaContent)
-      fs.writeFileSync(path.join(coverageDir, 'jacoco.xml'), mockJacocoContent)
-      fs.writeFileSync(path.join(coverageDir, 'clover.xml'), mockCloverContent)
-
-      // Create additional files to reach 12 total (using different paths)
-      fs.writeFileSync(path.join(cwd, 'lcov.info'), mockLcovContent)
-      fs.writeFileSync(path.join(cwd, 'cobertura-coverage.xml'), mockCoberturaContent)
-      fs.writeFileSync(path.join(cwd, 'jacoco.xml'), mockJacocoContent)
-      fs.writeFileSync(path.join(cwd, 'clover.xml'), mockCloverContent)
-      fs.writeFileSync(path.join(coverageDir, 'opencover.xml'), mockOpenCoverContent)
-      fs.writeFileSync(path.join(cwd, 'opencover.xml'), mockOpenCoverContent)
-      fs.writeFileSync(path.join(coverageDir, '.resultset.json'), '{"RSpec":{"coverage":{}}}')
-      fs.writeFileSync(path.join(cwd, '.resultset.json'), '{"RSpec":{"coverage":{}}}')
-
       const coverageReportPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/cicovreprt', (payloads) => {
-          // Should receive 2 requests (batches of 10 and 2)
-          assert.strictEqual(payloads.length, 2, 'Should receive 2 batched requests')
+          // Should receive exactly 1 request with both reports batched together
+          assert.strictEqual(payloads.length, 1, 'Should receive exactly 1 batch with both reports')
 
-          const firstBatch = payloads[0]
-          const secondBatch = payloads[1]
+          const batch = payloads[0]
 
-          // First batch should have 10 reports
-          assert.strictEqual(firstBatch.coverageFiles.length, 10, 'First batch should have 10 coverage files')
-          assert.strictEqual(firstBatch.eventFiles.length, 10, 'First batch should have 10 event files')
+          // Verify the single batch contains exactly 2 coverage reports (lcov and cobertura)
+          assert.strictEqual(batch.coverageFiles.length, 2, 'Should have exactly 2 coverage files in the batch')
+          assert.strictEqual(batch.eventFiles.length, 2, 'Should have exactly 2 event files in the batch')
 
-          // Verify indexed field names in first batch
-          for (let i = 1; i <= 10; i++) {
-            assert.strictEqual(firstBatch.coverageFiles[i - 1].name, `coverage${i}`)
-            assert.strictEqual(firstBatch.eventFiles[i - 1].name, `event${i}`)
-            assert.strictEqual(firstBatch.eventFiles[i - 1].content.type, 'coverage_report')
-            assert.ok(['lcov', 'cobertura', 'jacoco', 'clover', 'opencover', 'simplecov'].includes(
-              firstBatch.eventFiles[i - 1].content.format
-            ))
-            assert.strictEqual(firstBatch.eventFiles[i - 1].content[GIT_COMMIT_SHA], gitCommitSha)
-            assert.strictEqual(firstBatch.eventFiles[i - 1].content[GIT_REPOSITORY_URL], gitRepositoryUrl)
+          // Verify indexed field names (should start at 1)
+          assert.strictEqual(batch.coverageFiles[0].name, 'coverage1')
+          assert.strictEqual(batch.coverageFiles[1].name, 'coverage2')
+          assert.strictEqual(batch.eventFiles[0].name, 'event1')
+          assert.strictEqual(batch.eventFiles[1].name, 'event2')
+
+          // Verify both formats are present
+          const formats = batch.eventFiles.map(f => f.content.format)
+          assert.ok(formats.includes('lcov'), 'Should include lcov format')
+          assert.ok(formats.includes('cobertura'), 'Should include cobertura format')
+
+          // Verify each report has correct metadata
+          for (let i = 0; i < batch.coverageFiles.length; i++) {
+            assert.strictEqual(batch.eventFiles[i].content.type, 'coverage_report')
+            assert.ok(['lcov', 'cobertura'].includes(batch.eventFiles[i].content.format),
+              `Coverage format should be lcov or cobertura, got: ${batch.eventFiles[i].content.format}`)
+            assert.strictEqual(batch.eventFiles[i].content[GIT_COMMIT_SHA], gitCommitSha)
+            assert.strictEqual(batch.eventFiles[i].content[GIT_REPOSITORY_URL], gitRepositoryUrl)
           }
-
-          // Second batch should have 2 reports
-          assert.strictEqual(secondBatch.coverageFiles.length, 2, 'Second batch should have 2 coverage files')
-          assert.strictEqual(secondBatch.eventFiles.length, 2, 'Second batch should have 2 event files')
-
-          // Verify indexed field names in second batch (should start at 1 again)
-          assert.strictEqual(secondBatch.coverageFiles[0].name, 'coverage1')
-          assert.strictEqual(secondBatch.coverageFiles[1].name, 'coverage2')
-          assert.strictEqual(secondBatch.eventFiles[0].name, 'event1')
-          assert.strictEqual(secondBatch.eventFiles[1].name, 'event2')
         })
 
       childProcess = exec(
-        'node ./node_modules/.bin/jest',
+        runTestsCommand,
         {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
+            ENABLE_CODE_COVERAGE: 'true',
+            COVERAGE_REPORTERS: 'lcov,cobertura',
+            COLLECT_COVERAGE_FROM: 'ci-visibility/test/*.js',
             DD_GIT_COMMIT_SHA: gitCommitSha,
             DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
           },
@@ -6090,15 +6062,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         coverageReportPromise,
         once(childProcess, 'exit'),
       ])
-
-      // Cleanup
-      fs.rmSync(coverageDir, { recursive: true, force: true })
-      fs.unlinkSync(path.join(cwd, 'lcov.info'))
-      fs.unlinkSync(path.join(cwd, 'cobertura-coverage.xml'))
-      fs.unlinkSync(path.join(cwd, 'jacoco.xml'))
-      fs.unlinkSync(path.join(cwd, 'clover.xml'))
-      fs.unlinkSync(path.join(cwd, 'opencover.xml'))
-      fs.unlinkSync(path.join(cwd, '.resultset.json'))
     })
   })
 })
