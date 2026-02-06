@@ -87,9 +87,11 @@ const registerLambdaHook = () => {
 
     const lambdaStylePath = path.resolve(lambdaTaskRoot, moduleRoot, _module)
     const lambdaFilePaths = _getLambdaFilePaths(lambdaStylePath)
+    console.log(`Registering hook for Lambda handler. Looking for files: ${lambdaFilePaths.join(', ')}`)
 
     // TODO: Redo this like any other instrumentation.
     Hook(lambdaFilePaths, (moduleExports, name) => {
+      console.log(`Applying Datadog patch to Lambda handler in file ${name}`)
       require('./patch')
 
       for (const { hook } of instrumentations[name]) {
@@ -104,7 +106,9 @@ const registerLambdaHook = () => {
     })
   } else {
     const moduleToPatch = 'datadog-lambda-js'
+    console.log(`Registering hook for ${moduleToPatch} to patch Lambda handler. Looking for file: ${moduleToPatch}.js`)
     Hook([moduleToPatch], (moduleExports, moduleName, _) => {
+      console.log(`Applying Datadog patch to Lambda handler in module ${moduleName}`)
       moduleName = moduleName.replace(pathSepExpr, '/')
 
       require('./patch')

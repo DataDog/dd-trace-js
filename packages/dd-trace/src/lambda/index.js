@@ -12,6 +12,9 @@ const _disabledInstrumentations = new Set(
   _DD_TRACE_DISABLED_INSTRUMENTATIONS ? _DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',') : []
 )
 
+console.log('REY: Disabled instrumentations:', _disabledInstrumentations)
+
 if (!_disabledInstrumentations.has('lambda')) {
+  console.log('Registering Lambda hook')
   registerLambdaHook()
 }
