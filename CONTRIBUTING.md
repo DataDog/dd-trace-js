@@ -407,6 +407,8 @@ You can also run the tests for multiple plugins at once by separating them with 
 PLUGINS="amqplib|bluebird" yarn test:plugins
 ```
 
+The necessary shell commands for the setup can also be executed at once by the `yarn env` script.
+
 ### Other Unit Tests
 
 There are several types of unit tests, for various types of components. The
