@@ -207,25 +207,15 @@ describe('Plugin', () => {
             })
 
             // Verify all consumer tags are present
-            const tagsVerificationPromise = agent.assertSomeTraces(traces => {
-              for (const trace of traces) {
-                for (const span of trace) {
-                  if (span.name === expectedSchema.receive.opName &&
-                      span.type === 'worker' && span.meta?.['span.kind'] === 'consumer' &&
-                      span.meta?.['pubsub.subscription_type'] === 'pull') {
-                    assertObjectContains(span.meta, {
-                      'span.kind': 'consumer',
-                      'pubsub.subscription_type': 'pull',
-                    })
-                    assert.ok(span.meta['pubsub.message_id'], 'pubsub.message_id should be set')
-                    assert.ok(span.meta['pubsub.subscription'], 'pubsub.subscription should be set')
-                    assert.strictEqual(span.meta['pubsub.subscription'], subscriptionName,
-                      'pubsub.subscription should match the subscription name')
-                    return span
-                  }
-                }
+            const tagsVerificationPromise = agent.assertFirstTraceSpan({
+              name: expectedSchema.receive.opName,
+              type: 'worker',
+              meta: {
+                'span.kind': 'consumer',
+                'pubsub.subscription_type': 'pull',
+                'pubsub.message_id': ANY_STRING,
+                'pubsub.subscription': subscriptionName,
               }
-              return null
             }, { timeoutMs: 10000 })
 
             sub.on('message', msg => {
