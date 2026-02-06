@@ -750,6 +750,14 @@ declare namespace tracer {
     dbmPropagationMode?: 'disabled' | 'service' | 'full'
 
     /**
+     * Whether to enable Data Streams Monitoring.
+     * Can also be enabled via the DD_DATA_STREAMS_ENABLED environment variable.
+     * When not provided, the value of DD_DATA_STREAMS_ENABLED is used.
+     * @default false
+     */
+    dsmEnabled?: boolean
+
+    /**
      * Configuration of the AppSec protection. Can be a boolean as an alias to `appsec.enabled`.
      */
     appsec?: boolean | {
