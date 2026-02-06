@@ -63,15 +63,20 @@ function crashFlush () {
 /**
  * Extracts the context from the given Lambda handler arguments.
  *
+ * It is possible for users to define a lambda function without specifying a
+ * context arg. In these cases, this function returns null instead of throwing
+ * an error.
+ *
  * @param {unknown[]} args any amount of arguments
- * @returns the context, if extraction was succesful.
+ * @returns the context if extraction was successful, null otherwise.
  */
 function extractContext (args) {
-  let context = args.length > 1 ? args[1] : undefined
-  if (context === undefined || context.getRemainingTimeInMillis === undefined) {
-    context = args.length > 2 ? args[2] : undefined
-    if (context === undefined || context.getRemainingTimeInMillis === undefined) {
-      throw new Error('Could not extract context')
+  let context = args.length > 1 ? args[1] : null
+  if (context === null || context.getRemainingTimeInMillis === undefined) {
+    context = args.length > 2 ? args[2] : null
+    if (context === null || context.getRemainingTimeInMillis === undefined) {
+      log.debug('Could not extract the context from the Lambda handler arguments. No timeout will be tracked.')
+      return null
     }
   }
   return context
@@ -86,7 +91,10 @@ exports.datadog = function datadog (lambdaHandler) {
   return (...args) => {
     const context = extractContext(args)
 
-    checkTimeout(context)
+    if (context) {
+      checkTimeout(context)
+    }
+
     const result = lambdaHandler.apply(this, args)
     if (result && typeof result.then === 'function') {
       return result.then((res) => {

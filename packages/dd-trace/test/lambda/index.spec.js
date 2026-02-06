@@ -218,6 +218,125 @@ describe('lambda', () => {
     })
   })
 
+  describe('lambda authorizers (no context)', () => {
+    beforeEach(setup)
+
+    afterEach(() => {
+      restoreEnv()
+      return closeAgent()
+    })
+
+    it('patches async lambda authorizer correctly (event only, no context)', async () => {
+      // Set the desired handler to patch
+      process.env.DD_LAMBDA_HANDLER = 'handler.authorizerHandler'
+      // Load the agent and re-register hook for patching.
+      await loadAgent()
+
+      // Lambda Authorizers only receive an event, no context
+      const _event = {
+        type: 'REQUEST',
+        methodArn: 'arn:aws:execute-api:us-east-1:123456789012:api-id/stage/GET/resource',
+        headers: {
+          Authorization: 'Bearer token123',
+        },
+      }
+
+      // Mock `datadog-lambda` handler resolve and import.
+      const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
+      const app = require(_handlerPath)
+      datadog = require('./fixtures/datadog-lambda')
+
+      // Run the function without context - this should NOT throw
+      const result = await datadog(app.authorizerHandler)(_event)
+
+      assert.notStrictEqual(result, undefined)
+      assert.strictEqual(result.principalId, 'user123')
+      assert.strictEqual(result.policyDocument.Statement[0].Effect, 'Allow')
+
+      // Expect traces to be correct.
+      const checkTraces = agent.assertSomeTraces((_traces) => {
+        const traces = _traces[0]
+        assert.strictEqual(traces.length, 1)
+        traces.forEach((trace) => {
+          assert.strictEqual(trace.error, 0)
+        })
+      })
+      await checkTraces
+    })
+
+    it('patches sync lambda authorizer correctly (event only, no context)', async () => {
+      // Set the desired handler to patch
+      process.env.DD_LAMBDA_HANDLER = 'handler.authorizerHandlerSync'
+      // Load the agent and re-register hook for patching.
+      await loadAgent()
+
+      // Lambda Authorizers only receive an event, no context
+      const _event = {
+        type: 'REQUEST',
+        methodArn: 'arn:aws:execute-api:us-east-1:123456789012:api-id/stage/GET/resource',
+      }
+
+      // Mock `datadog-lambda` handler resolve and import.
+      const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
+      const app = require(_handlerPath)
+      datadog = require('./fixtures/datadog-lambda')
+
+      // Run the function without context - this should NOT throw
+      // Note: datadog-lambda mock wraps in async, so we need to await
+      const result = await datadog(app.authorizerHandlerSync)(_event)
+
+      assert.notStrictEqual(result, undefined)
+      assert.strictEqual(result.principalId, 'user123')
+      assert.strictEqual(result.policyDocument.Statement[0].Effect, 'Allow')
+
+      // Expect traces to be correct.
+      const checkTraces = agent.assertSomeTraces((_traces) => {
+        const traces = _traces[0]
+        assert.strictEqual(traces.length, 1)
+        traces.forEach((trace) => {
+          assert.strictEqual(trace.error, 0)
+        })
+      })
+      await checkTraces
+    })
+
+    it('handles errors in lambda authorizer correctly (event only, no context)', async () => {
+      // Set the desired handler to patch
+      process.env.DD_LAMBDA_HANDLER = 'handler.authorizerErrorHandler'
+      // Load the agent and re-register hook for patching.
+      await loadAgent()
+
+      const _event = {
+        type: 'REQUEST',
+        methodArn: 'arn:aws:execute-api:us-east-1:123456789012:api-id/stage/GET/resource',
+      }
+
+      // Mock `datadog-lambda` handler resolve and import.
+      const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
+      const app = require(_handlerPath)
+      datadog = require('./fixtures/datadog-lambda')
+
+      // Run the function - should throw but not because of missing context
+      try {
+        await datadog(app.authorizerErrorHandler)(_event)
+        assert.fail('Expected error to be thrown')
+      } catch (e) {
+        assert.strictEqual(e.name, 'AuthorizationError')
+        assert.strictEqual(e.message, 'Unauthorized')
+      }
+
+      // Expect traces to be correct with error.
+      const checkTraces = agent.assertSomeTraces((_traces) => {
+        const traces = _traces[0]
+        assert.strictEqual(traces.length, 1)
+        traces.forEach((trace) => {
+          assert.strictEqual(trace.error, 1)
+        })
+      })
+      await checkTraces
+    })
+  })
+
   describe('timeout spans', () => {
     beforeEach(setup)
 
