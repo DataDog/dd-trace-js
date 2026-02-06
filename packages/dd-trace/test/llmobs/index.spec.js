@@ -25,7 +25,7 @@ describe('module', () => {
 
   beforeEach(() => {
     store = {}
-    logger = { debug: sinon.stub() }
+    logger = { debug: sinon.stub(), error: sinon.stub() }
 
     LLMObsSpanWriterSpy = sinon.stub().returns({
       destroy: sinon.stub(),
@@ -116,23 +116,25 @@ describe('module', () => {
 
   describe('with agentlessEnabled set to `true`', () => {
     describe('when no api key is provided', () => {
-      it('throws an error', () => {
-        assert.throws(() => llmobsModule.enable({
+      it('logs an error and disables LLMObs', () => {
+        llmobsModule.enable({
           llmobs: {
             agentlessEnabled: true,
           },
-        }),
-        {
-          message: 'Cannot send LLM Observability data without a running agent ' +
-            'or without both a Datadog API key and site.\n' +
-            'Ensure these configurations are set before running your application.',
         })
+
+        sinon.assert.calledOnce(logger.error)
+        assert.ok(logger.error.firstCall.args[0].includes(
+          'Cannot send LLM Observability data without a running agent or without both a Datadog API key and site'
+        ))
       })
     })
 
     describe('when no site is provided', () => {
-      it('throws an error', () => {
-        assert.throws(() => llmobsModule.enable({ llmobs: { agentlessEnabled: true, apiKey: 'test' } }))
+      it('logs an error and disables LLMObs', () => {
+        llmobsModule.enable({ llmobs: { agentlessEnabled: true }, apiKey: 'test' })
+
+        sinon.assert.calledOnce(logger.error)
       })
     })
 
@@ -179,14 +181,18 @@ describe('module', () => {
         })
 
         describe('when no API key is provided', () => {
-          it('throws an error', () => {
-            assert.throws(() => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } }))
+          it('logs an error and disables LLMObs', () => {
+            llmobsModule.enable({ llmobs: { mlApp: 'test' }, site: 'datadoghq.com' })
+
+            sinon.assert.calledOnce(logger.error)
           })
         })
 
         describe('when no site is provided', () => {
-          it('throws an error', () => {
-            assert.throws(() => llmobsModule.enable({ llmobs: { mlApp: 'test', apiKey: 'test' } }))
+          it('logs an error and disables LLMObs', () => {
+            llmobsModule.enable({ llmobs: { mlApp: 'test' }, apiKey: 'test' })
+
+            sinon.assert.calledOnce(logger.error)
           })
         })
 
@@ -226,21 +232,21 @@ describe('module', () => {
       })
 
       describe('when no API key is provided', () => {
-        it('throws an error', () => {
-          assert.throws(
-            () => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } }),
-            {
-              message: 'Cannot send LLM Observability data without a running agent ' +
-                'or without both a Datadog API key and site.\n' +
-                'Ensure these configurations are set before running your application.',
-            }
-          )
+        it('logs an error and disables LLMObs', () => {
+          llmobsModule.enable({ llmobs: { mlApp: 'test' }, site: 'datadoghq.com' })
+
+          sinon.assert.calledOnce(logger.error)
+          assert.ok(logger.error.firstCall.args[0].includes(
+            'Cannot send LLM Observability data without a running agent or without both a Datadog API key and site'
+          ))
         })
       })
 
       describe('when no site is provided', () => {
-        it('throws an error', () => {
-          assert.throws(() => llmobsModule.enable({ llmobs: {}, apiKey: 'test' }))
+        it('logs an error and disables LLMObs', () => {
+          llmobsModule.enable({ llmobs: {}, apiKey: 'test' })
+
+          sinon.assert.calledOnce(logger.error)
         })
       })
 
