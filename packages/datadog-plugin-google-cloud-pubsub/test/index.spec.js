@@ -206,7 +206,7 @@ describe('Plugin', () => {
               },
             })
 
-            // Verify all tags from consumer.js lines 130-133 are present
+            // Verify all consumer tags are present
             const tagsVerificationPromise = agent.assertSomeTraces(traces => {
               for (const trace of traces) {
                 for (const span of trace) {
