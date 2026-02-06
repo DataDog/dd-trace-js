@@ -2301,14 +2301,16 @@ versions.forEach((version) => {
 
               assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
 
-              assert.strictEqual(coverageReport.coverageFile.name, 'coverage')
-              assert.ok(coverageReport.coverageFile.content.includes('SF:')) // LCOV format
+              assert.strictEqual(coverageReport.coverageFiles.length, 1)
+              assert.strictEqual(coverageReport.coverageFiles[0].name, 'coverage1')
+              assert.ok(coverageReport.coverageFiles[0].content.includes('SF:')) // LCOV format
 
-              assert.strictEqual(coverageReport.eventFile.name, 'event')
-              assert.strictEqual(coverageReport.eventFile.content.type, 'coverage_report')
-              assert.strictEqual(coverageReport.eventFile.content.format, 'lcov')
-              assert.strictEqual(coverageReport.eventFile.content[GIT_COMMIT_SHA], gitCommitSha)
-              assert.strictEqual(coverageReport.eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
+              assert.strictEqual(coverageReport.eventFiles.length, 1)
+              assert.strictEqual(coverageReport.eventFiles[0].name, 'event1')
+              assert.strictEqual(coverageReport.eventFiles[0].content.type, 'coverage_report')
+              assert.strictEqual(coverageReport.eventFiles[0].content.format, 'lcov')
+              assert.strictEqual(coverageReport.eventFiles[0].content[GIT_COMMIT_SHA], gitCommitSha)
+              assert.strictEqual(coverageReport.eventFiles[0].content[GIT_REPOSITORY_URL], gitRepositoryUrl)
             })
 
           childProcess = exec(
@@ -2360,6 +2362,65 @@ versions.forEach((version) => {
           await once(childProcess, 'exit')
 
           assert.strictEqual(coverageReportUploaded, false, 'coverage report should not be uploaded')
+        })
+
+        it('uploads coverage reports with batching support', async () => {
+          receiver.setSettings({
+            coverage_report_upload_enabled: true,
+          })
+
+          const coverageReportPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/cicovreprt', (payloads) => {
+              // Should receive exactly 1 request with both reports batched together
+              assert.strictEqual(payloads.length, 1, 'Should receive exactly 1 batch with both reports')
+
+              const batch = payloads[0]
+
+              // Verify the single batch contains exactly 2 coverage reports (lcov and cobertura)
+              assert.strictEqual(batch.coverageFiles.length, 2, 'Should have exactly 2 coverage files in the batch')
+              assert.strictEqual(batch.eventFiles.length, 2, 'Should have exactly 2 event files in the batch')
+
+              // Verify indexed field names (should start at 1)
+              assert.strictEqual(batch.coverageFiles[0].name, 'coverage1')
+              assert.strictEqual(batch.coverageFiles[1].name, 'coverage2')
+              assert.strictEqual(batch.eventFiles[0].name, 'event1')
+              assert.strictEqual(batch.eventFiles[1].name, 'event2')
+
+              // Verify both formats are present
+              const formats = batch.eventFiles.map(f => f.content.format)
+              assert.ok(formats.includes('lcov'), 'Should include lcov format')
+              assert.ok(formats.includes('cobertura'), 'Should include cobertura format')
+
+              // Verify each report has correct metadata
+              for (let i = 0; i < batch.coverageFiles.length; i++) {
+                assert.strictEqual(batch.eventFiles[i].content.type, 'coverage_report')
+                assert.ok(['lcov', 'cobertura'].includes(batch.eventFiles[i].content.format),
+                  `Coverage format should be lcov or cobertura, got: ${batch.eventFiles[i].content.format}`)
+                assert.strictEqual(batch.eventFiles[i].content[GIT_COMMIT_SHA], gitCommitSha)
+                assert.strictEqual(batch.eventFiles[i].content[GIT_REPOSITORY_URL], gitRepositoryUrl)
+              }
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --coverage',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                COVERAGE_PROVIDER: 'v8',
+                VITEST_COVERAGE_MULTIPLE_REPORTERS: 'true',
+                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
+                DD_GIT_COMMIT_SHA: gitCommitSha,
+                DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+              },
+            }
+          )
+
+          await Promise.all([
+            coverageReportPromise,
+            once(childProcess, 'exit'),
+          ])
         })
       })
     }

@@ -176,26 +176,32 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
-    // Coverage report upload endpoint - one file per request
+    // Coverage report upload endpoint - supports batching up to 10 reports per request
     app.post([
       '/api/v2/cicovreprt',
       '/evp_proxy/:version/api/v2/cicovreprt',
     ], upload.any(), (req, res) => {
       res.status(200).send('OK')
 
-      const coverageFile = req.files.find(f => f.fieldname === 'coverage')
-      const eventFile = req.files.find(f => f.fieldname === 'event')
+      // Extract all coverage and event files (coverage1, event1, coverage2, event2, etc.)
+      const coverageFiles = req.files
+        .filter(f => f.fieldname.startsWith('coverage'))
+        .map(f => ({
+          name: f.fieldname,
+          content: zlib.gunzipSync(f.buffer).toString('utf8'),
+        }))
+
+      const eventFiles = req.files
+        .filter(f => f.fieldname.startsWith('event'))
+        .map(f => ({
+          name: f.fieldname,
+          content: JSON.parse(f.buffer.toString('utf8')),
+        }))
 
       this.emit('message', {
         headers: req.headers,
-        coverageFile: coverageFile && {
-          name: coverageFile.fieldname,
-          content: zlib.gunzipSync(coverageFile.buffer).toString('utf8'),
-        },
-        eventFile: eventFile && {
-          name: eventFile.fieldname,
-          content: JSON.parse(eventFile.buffer.toString('utf8')),
-        },
+        coverageFiles,
+        eventFiles,
         url: req.url,
       })
     })
