@@ -301,7 +301,11 @@ declare namespace tracer {
    * exists in the current async context. If 'undefined' the parent will be inferred from the
    * existing async context.
    */
-    childOf?: opentracing.Span | opentracing.SpanContext | null
+    childOf?: opentracing.Span | opentracing.SpanContext | null;
+    /**
+     * Optional name of the integration that crated this span.
+     */
+    integrationName?: string;
   };
   export { Tracer };
 
