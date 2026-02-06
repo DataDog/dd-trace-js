@@ -25,7 +25,7 @@ function request (http2, url, options = {}) {
       .on('error', reject)
 
     const req = client.request({
-      ':path': urlObj.pathname,
+      ':path': urlObj.pathname + urlObj.search,
       ':method': 'GET',
     })
     req.on('error', reject)
@@ -331,6 +331,125 @@ describe('Plugin', () => {
           }, 100)
 
           request(http2, `http://localhost:${port}/health`).catch(done)
+        })
+      })
+
+      describe('with queryStringObfuscation', () => {
+        describe('set to a regex pattern', () => {
+          beforeEach(() => {
+            return agent.load('http2', { client: false, queryStringObfuscation: 'secret=.*?(&|$)' })
+              .then(() => {
+                http2 = require(pluginToBeLoaded)
+              })
+          })
+
+          beforeEach(done => {
+            const server = http2.createServer(listener)
+            appListener = server
+              .listen(0, 'localhost', () => {
+                port = appListener.address().port
+                done()
+              })
+          })
+
+          it('should obfuscate matching query string parameters', done => {
+            agent
+              .assertFirstTraceSpan({
+                name: 'web.request',
+                service: 'test',
+                type: 'web',
+                resource: 'GET',
+                meta: {
+                  'span.kind': 'server',
+                  'http.url': `http://localhost:${port}/user?<redacted>foo=bar`,
+                  'http.method': 'GET',
+                  'http.status_code': '200',
+                  component: 'http2',
+                },
+              })
+              .then(done)
+              .catch(done)
+
+            request(http2, `http://localhost:${port}/user?secret=password&foo=bar`).catch(done)
+          })
+        })
+
+        describe('set to true', () => {
+          beforeEach(() => {
+            return agent.load('http2', { client: false, queryStringObfuscation: true })
+              .then(() => {
+                http2 = require(pluginToBeLoaded)
+              })
+          })
+
+          beforeEach(done => {
+            const server = http2.createServer(listener)
+            appListener = server
+              .listen(0, 'localhost', () => {
+                port = appListener.address().port
+                done()
+              })
+          })
+
+          it('should remove the entire query string', done => {
+            agent
+              .assertFirstTraceSpan({
+                name: 'web.request',
+                service: 'test',
+                type: 'web',
+                resource: 'GET',
+                meta: {
+                  'span.kind': 'server',
+                  'http.url': `http://localhost:${port}/user`,
+                  'http.method': 'GET',
+                  'http.status_code': '200',
+                  component: 'http2',
+                },
+              })
+              .then(done)
+              .catch(done)
+
+            request(http2, `http://localhost:${port}/user?secret=password&foo=bar`).catch(done)
+          })
+        })
+
+        describe('set to false', () => {
+          beforeEach(() => {
+            return agent.load('http2', { client: false, queryStringObfuscation: false })
+              .then(() => {
+                http2 = require(pluginToBeLoaded)
+              })
+          })
+
+          beforeEach(done => {
+            const server = http2.createServer(listener)
+            appListener = server
+              .listen(0, 'localhost', () => {
+                port = appListener.address().port
+                done()
+              })
+          })
+
+          it('should not obfuscate the query string', done => {
+            agent
+              .assertFirstTraceSpan({
+                name: 'web.request',
+                service: 'test',
+                type: 'web',
+                resource: 'GET',
+                meta: {
+                  'span.kind': 'server',
+                  'http.url': `http://localhost:${port}/user?secret=password&foo=bar`,
+                  'http.method': 'GET',
+                  'http.status_code': '200',
+                  component: 'http2',
+                },
+              })
+              .then(done)
+              .catch(done)
+
+            request(http2, `http://localhost:${port}/user?secret=password&foo=bar`).catch(done)
+          })
         })
       })
     })
