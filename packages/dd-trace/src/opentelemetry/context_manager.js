@@ -12,11 +12,11 @@ class ContextManager {
     this._store = storage('opentelemetry')
   }
 
-  _mergeGlobalBaggageWith(baggages) {
+  _mergeGlobalBaggageWith (baggages) {
     baggages = baggages || {}
     const globalActiveBaggages = getAllBaggageItems()
     for (const [key, value] of Object.entries(globalActiveBaggages)) {
-      baggages[key] = baggages[key] ? baggages[key] : value
+      if (!baggages[key]) baggages[key] = value
     }
     return baggages
   }

@@ -13,8 +13,8 @@ const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { getValueFromEnvSources } = require('../config/helper')
-const SpanContext = require('./span_context')
 const { setBaggageItem, removeBaggageItem, removeAllBaggageItems } = require('../baggage')
+const SpanContext = require('./span_context')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 

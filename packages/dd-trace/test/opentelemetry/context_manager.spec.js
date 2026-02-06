@@ -181,7 +181,7 @@ describe('OTel Context Manager', () => {
     })
   })
 
-  it.only('should handle dd-otel baggage removal', () => {
+  it('should handle dd-otel baggage removal', () => {
     const ddSpan = tracer.startSpan('dd')
     ddSpan.setBaggageItem('key1', 'dd1')
     ddSpan.setBaggageItem('key2', 'dd2')
