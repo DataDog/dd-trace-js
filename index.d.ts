@@ -295,7 +295,18 @@ interface Plugins {
 }
 
 declare namespace tracer {
-  export type SpanOptions = opentracing.SpanOptions;
+  export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf'> & {
+  /**
+   * Set childOf to 'null' to create a root span without a parent, even when a parent span
+   * exists in the current async context. If 'undefined' the parent will be inferred from the
+   * existing async context.
+   */
+    childOf?: opentracing.Span | opentracing.SpanContext | null;
+    /**
+     * Optional name of the integration that crated this span.
+     */
+    integrationName?: string;
+  };
   export { Tracer };
 
   export interface TraceOptions extends Analyzable {
@@ -748,6 +759,14 @@ declare namespace tracer {
      * @default 'disabled'
      */
     dbmPropagationMode?: 'disabled' | 'service' | 'full'
+
+    /**
+     * Whether to enable Data Streams Monitoring.
+     * Can also be enabled via the DD_DATA_STREAMS_ENABLED environment variable.
+     * When not provided, the value of DD_DATA_STREAMS_ENABLED is used.
+     * @default false
+     */
+    dsmEnabled?: boolean
 
     /**
      * Configuration of the AppSec protection. Can be a boolean as an alias to `appsec.enabled`.
