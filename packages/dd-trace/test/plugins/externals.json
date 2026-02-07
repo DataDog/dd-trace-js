@@ -514,6 +514,22 @@
       "dep": "@prisma/adapter-pg",
       "versions": [">=7.0.0"],
       "node": ">=20"
+    },
+    {
+      "name": "@prisma/adapter-mariadb",
+      "dep": "@prisma/adapter-mariadb",
+      "versions": [
+        ">=7.0.0"
+      ],
+      "node": ">=20"
+    },
+    {
+      "name": "@prisma/adapter-mssql",
+      "dep": "@prisma/adapter-mssql",
+      "versions": [
+        ">=7.0.0"
+      ],
+      "node": ">=20"
     }
   ],
   "q": [
