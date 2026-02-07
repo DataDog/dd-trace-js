@@ -24,7 +24,7 @@ jobs:
         with:
           path: dd-trace-js
       - name: Pack dd-trace-js
-        run: mkdir -p ./binaries && echo /binaries/$(npm pack --pack-destination ./binaries ./dd-trace-js) > ./binaries/nodejs-load-from-npm
+        run: mkdir -p ./binaries && echo /binaries/$(npm pack --silent --pack-destination ./binaries ./dd-trace-js) > ./binaries/nodejs-load-from-npm
       - name: Upload artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
