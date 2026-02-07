@@ -80,6 +80,7 @@ describe('Plugin', () => {
         describe('checkpoints', () => {
           let consumer
           let setDataStreamsContextSpy
+          let syncToStoreSpy
 
           beforeEach(async () => {
             tracer.init()
@@ -88,10 +89,12 @@ describe('Plugin', () => {
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
             setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+            syncToStoreSpy = sinon.spy(DataStreamsContext, 'syncToStore')
           })
 
           afterEach(async () => {
             setDataStreamsContextSpy.restore()
+            syncToStoreSpy.restore()
             await consumer.disconnect()
           })
 
@@ -153,6 +156,21 @@ describe('Plugin', () => {
                 recordCheckpointSpy.restore()
               },
             })
+          })
+
+          it('Should call syncToStore after producing', async () => {
+            const messages = [{ key: 'syncTest1', value: 'test' }]
+            await sendMessages(kafka, testTopic, messages)
+            assert.ok(syncToStoreSpy.called, 'syncToStore should be called on produce')
+          })
+
+          it('Should call syncToStore after consuming', async () => {
+            await consumer.run({
+              eachMessage: async () => {},
+            })
+            await sendMessages(kafka, testTopic, messages)
+            await consumer.disconnect()
+            assert.ok(syncToStoreSpy.called, 'syncToStore should be called on consume')
           })
         })
 

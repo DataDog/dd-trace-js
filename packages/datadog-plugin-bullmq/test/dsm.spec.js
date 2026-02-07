@@ -45,13 +45,16 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
 
     describe('checkpoints', () => {
       let setDataStreamsContextSpy
+      let syncToStoreSpy
 
       beforeEach(() => {
         setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+        syncToStoreSpy = sinon.spy(DataStreamsContext, 'syncToStore')
       })
 
       afterEach(() => {
         setDataStreamsContextSpy.restore()
+        syncToStoreSpy.restore()
       })
 
       it('should set a checkpoint on produce (Queue.add)', async () => {
@@ -75,6 +78,17 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
           return call.args[0]?.hash?.equals?.(expectedConsumerHash)
         })
         assert.ok(consumerCall, 'Consumer checkpoint call not found')
+      })
+
+      it('should call syncToStore after producing', async () => {
+        await testSetup.queueAdd()
+        assert.ok(syncToStoreSpy.called, 'syncToStore should be called on produce')
+      })
+
+      it('should call syncToStore after consuming', async function () {
+        this.timeout(10000)
+        await testSetup.workerProcessJob()
+        assert.ok(syncToStoreSpy.called, 'syncToStore should be called on consume')
       })
     })
 
