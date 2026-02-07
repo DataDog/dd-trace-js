@@ -11,7 +11,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { channel } = require('../src/helpers/instrument')
 describe('mysql2 instrumentation', () => {
-  withVersions('mysql2', 'mysql2', version => {
+  withVersions('mysql2', 'mysql2', (version) => {
     function abort ({ sql, abortController }) {
       assert.strictEqual(typeof sql, 'string')
       const error = new Error('Test')
@@ -274,6 +274,52 @@ describe('mysql2 instrumentation', () => {
         })
 
         describe('with sql as string', () => {
+          it('should wrap onResult once for Prepare commands', (done) => {
+            const paramCount = 50
+            const placeholders = Array.from({ length: paramCount }, () => '?').join(', ')
+            const values = Array.from({ length: paramCount }, (_, index) => index)
+            const addCommand = connection.addCommand
+            let prepareCommand
+            let onResultSetCount = 0
+            let wrappedAtAddCommand = false
+
+            connection.addCommand = function (cmd) {
+              if (cmd?.constructor?.name === 'Prepare') {
+                prepareCommand = cmd
+
+                let currentOnResult = cmd.onResult
+                const originalOnResult = currentOnResult
+                Object.defineProperty(cmd, 'onResult', {
+                  configurable: true,
+                  enumerable: true,
+                  get () { return currentOnResult },
+                  set (value) {
+                    if (value !== currentOnResult) {
+                      onResultSetCount++
+                    }
+                    currentOnResult = value
+                  }
+                })
+
+                const result = addCommand.apply(this, arguments)
+                wrappedAtAddCommand = onResultSetCount === 1 && prepareCommand.onResult !== originalOnResult
+                return result
+              }
+
+              return addCommand.apply(this, arguments)
+            }
+
+            connection.execute(`SELECT ${placeholders}`, values, (err) => {
+              assert.strictEqual(err, null)
+              assert.ok(prepareCommand)
+              assert.strictEqual(prepareCommand.parameterCount, paramCount)
+              assert.strictEqual(prepareCommand.parameterDefinitions.length, paramCount)
+              assert.strictEqual(wrappedAtAddCommand, true)
+              assert.strictEqual(onResultSetCount, 1)
+              done()
+            })
+          })
+
           it('should abort the query on abortController.abort()', (done) => {
             startCh.subscribe(abort)
 
