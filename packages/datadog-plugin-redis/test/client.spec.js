@@ -75,6 +75,7 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].meta['redis.raw_command'], 'GET foo')
               assert.strictEqual(traces[0][0].meta.component, 'redis')
               assert.strictEqual(traces[0][0].meta['_dd.integration'], 'redis')
+              assert.strictEqual(traces[0][0].meta['_dd.srv_src'], '1')
               assert.strictEqual(traces[0][0].meta['out.host'], '127.0.0.1')
               assert.strictEqual(traces[0][0].metrics['network.destination.port'], 6379)
             })

@@ -80,6 +80,7 @@ describe('Plugin', () => {
                   'db.type': 'postgres',
                   component: 'pg',
                   '_dd.integration': 'pg',
+                  '_dd.srv_src': '1',
                 },
                 metrics: {
                   'network.destination.port': 5432,
