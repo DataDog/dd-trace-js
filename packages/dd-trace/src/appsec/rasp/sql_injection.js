@@ -52,8 +52,7 @@ function analyzeSqlInjection (query, dbSystem, abortController) {
   const store = storage('legacy').getStore()
   if (!store) return
 
-  const req = getValue(store.req)
-  const res = getValue(store.res)
+  const { req, res } = store
 
   if (!req) return
 
@@ -80,10 +79,6 @@ function analyzeSqlInjection (query, dbSystem, abortController) {
   handleResult(result, req, res, abortController, config, raspRule)
 }
 
-function getValue (maybeWeakRef) {
-  return maybeWeakRef && typeof maybeWeakRef.deref === 'function' ? maybeWeakRef.deref() : maybeWeakRef
-}
-
 function hasInputAddress (payload) {
   return hasAddressesObjectInputAddress(payload.ephemeral) || hasAddressesObjectInputAddress(payload.persistent)
 }
@@ -99,7 +94,7 @@ function clearQuerySet ({ payload }) {
   const store = storage('legacy').getStore()
   if (!store) return
 
-  const req = getValue(store.req)
+  const { req } = store
   if (!req) return
 
   const executedQueries = reqQueryMap.get(req)

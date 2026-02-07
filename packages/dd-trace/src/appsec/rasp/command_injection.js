@@ -28,7 +28,7 @@ function analyzeCommandInjection ({ file, fileArgs, shell, abortController }) {
   if (!file) return
 
   const store = storage('legacy').getStore()
-  const req = getValue(store && store.req)
+  const req = store?.req
   if (!req) return
 
   const ephemeral = {}
@@ -46,12 +46,8 @@ function analyzeCommandInjection ({ file, fileArgs, shell, abortController }) {
 
   const result = waf.run({ ephemeral }, req, raspRule)
 
-  const res = getValue(store && store.res)
+  const res = store?.res
   handleResult(result, req, res, abortController, config, raspRule)
-}
-
-function getValue (maybeWeakRef) {
-  return maybeWeakRef && typeof maybeWeakRef.deref === 'function' ? maybeWeakRef.deref() : maybeWeakRef
 }
 
 module.exports = {

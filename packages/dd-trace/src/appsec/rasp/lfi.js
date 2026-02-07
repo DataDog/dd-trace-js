@@ -53,25 +53,19 @@ function analyzeLfiInResponseRender (ctx) {
   const store = storage('legacy').getStore()
   if (!store) return
 
-  analyzeLfiPath(ctx.view, ctx.req, getValue(store.res), ctx.abortController)
+  analyzeLfiPath(ctx.view, ctx.req, store.res, ctx.abortController)
 }
 
 function analyzeLfi (ctx) {
   const store = storage('legacy').getStore()
   if (!store) return
 
-  const req = getValue(store.req)
-  const res = getValue(store.res)
-  const fs = store.fs
+  const { req, fs, res } = store
   if (!req || !fs) return
 
   getPaths(ctx, fs).forEach(path => {
     analyzeLfiPath(path, req, res, ctx.abortController)
   })
-}
-
-function getValue (maybeWeakRef) {
-  return maybeWeakRef && typeof maybeWeakRef.deref === 'function' ? maybeWeakRef.deref() : maybeWeakRef
 }
 
 function analyzeLfiPath (path, req, res, abortController) {

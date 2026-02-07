@@ -28,16 +28,6 @@ let WAFManager = null
  * @typedef {import('./waf_manager').WAFManagerConfig & { rateLimit: number }} WAFConfig
  */
 
-/**
- * Minimal shape used throughout AppSec/RASP.
- * @typedef {{
- *   actions?: unknown,
- *   events?: unknown,
- *   attributes?: unknown,
- *   keep?: boolean
- * }} WafRunResult
- */
-
 const waf = {
   /** @type {WAFManager | null} */
   wafManager: null,
@@ -46,8 +36,8 @@ const waf = {
   updateConfig,
   removeConfig,
   checkAsmDdFallback,
-  run: noopRun,
-  disposeContext: noopDispose,
+  run: noop,
+  disposeContext: noop,
   WafUpdateError
 }
 
@@ -75,8 +65,8 @@ function destroy () {
     waf.wafManager = null
   }
 
-  waf.run = noopRun
-  waf.disposeContext = noopDispose
+  waf.run = noop
+  waf.disposeContext = noop
 }
 
 function checkAsmDdFallback () {
@@ -120,27 +110,19 @@ function removeConfig (configPath) {
   }
 }
 
-/**
- * @param {object} data
- * @param {object} [req]
- * @param {object} [raspRule]
- * @returns {WafRunResult | undefined}
- */
 function run (data, req, raspRule) {
-  if (!waf.wafManager) return
-
   if (!req) {
     const store = storage('legacy').getStore()
-    req = getValue(store && store.req)
-
-    if (!req) {
+    if (!store || !store.req) {
       log.warn('[ASM] Request object not available in waf.run')
       return
     }
+
+    req = store.req
   }
 
   const wafContext = waf.wafManager.getWAFContext(req)
-  const result = /** @type {WafRunResult | undefined} */ (wafContext.run(data, raspRule))
+  const result = wafContext.run(data, raspRule)
 
   if (result?.keep) {
     if (limiter.isAllowed()) {
@@ -154,13 +136,7 @@ function run (data, req, raspRule) {
   return result
 }
 
-function getValue (maybeWeakRef) {
-  return maybeWeakRef && typeof maybeWeakRef.deref === 'function' ? maybeWeakRef.deref() : maybeWeakRef
-}
-
 function disposeContext (req) {
-  if (!waf.wafManager) return
-
   const wafContext = waf.wafManager.getWAFContext(req)
 
   if (wafContext && !wafContext.ddwafContext.disposed) {
@@ -168,13 +144,6 @@ function disposeContext (req) {
   }
 }
 
-/**
- * @returns {WafRunResult | undefined}
- */
-function noopRun (..._args) {
-  return /** @type {WafRunResult} */ ({})
-}
-
-function noopDispose (..._args) {}
+function noop () {}
 
 module.exports = waf
