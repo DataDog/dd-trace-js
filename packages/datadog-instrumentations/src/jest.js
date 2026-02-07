@@ -515,6 +515,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
       if (event.name === 'test_done') {
+        const originalError = event.test?.errors?.[0]
         let status = 'pass'
         if (event.test.errors && event.test.errors.length) {
           status = 'fail'
@@ -594,7 +595,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const shouldSetProbe = this.isDiEnabled && willBeRetriedByFailedTestReplay && numTestExecutions === 1
           testErrCh.publish({
             ...ctx.currentStore,
-            error: formatJestError(event.test.errors[0]),
+            error: formatJestError(originalError),
             shouldSetProbe,
             promises,
             finalStatus,
