@@ -10,6 +10,14 @@ const { channel, addHook } = require('./helpers/instrument')
 const wrappedOnResult = new WeakMap()
 
 /**
+ * @param {unknown} sql
+ * @returns {string|undefined}
+ */
+function resolveSqlString (sql) {
+  return typeof sql === 'string' ? sql : /** @type {{ sql?: string }} */ (sql)?.sql
+}
+
+/**
  * @param {Function} Connection
  * @param {string} version
  * @returns {Function}
@@ -49,8 +57,8 @@ function wrapConnection (Connection, version) {
   shimmer.wrap(Connection.prototype, 'query', query => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
 
-    const resolvedSql = /** @type {{ sql?: unknown }} */ (sql)?.sql
-    if (!resolvedSql) return query.apply(this, arguments)
+    const resolvedSql = resolveSqlString(sql)
+    if (resolvedSql === undefined) return query.apply(this, arguments)
 
     const abortController = new AbortController()
     startOuterQueryCh.publish({ sql: resolvedSql, abortController })
@@ -89,8 +97,8 @@ function wrapConnection (Connection, version) {
   shimmer.wrap(Connection.prototype, 'execute', execute => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
 
-    const resolvedSql = /** @type {{ sql?: unknown }} */ (sql)?.sql
-    if (!resolvedSql) return execute.apply(this, arguments)
+    const resolvedSql = resolveSqlString(sql)
+    if (resolvedSql === undefined) return execute.apply(this, arguments)
 
     const abortController = new AbortController()
     startOuterQueryCh.publish({ sql: resolvedSql, abortController })
@@ -215,8 +223,8 @@ function wrapPool (Pool, version) {
   shimmer.wrap(Pool.prototype, 'query', query => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
 
-    const resolvedSql = /** @type {{ sql?: unknown }} */ (sql)?.sql
-    if (!resolvedSql) return query.apply(this, arguments)
+    const resolvedSql = resolveSqlString(sql)
+    if (resolvedSql === undefined) return query.apply(this, arguments)
 
     const abortController = new AbortController()
     startOuterQueryCh.publish({ sql: resolvedSql, abortController })
@@ -253,8 +261,8 @@ function wrapPool (Pool, version) {
   shimmer.wrap(Pool.prototype, 'execute', execute => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
 
-    const resolvedSql = /** @type {{ sql?: unknown }} */ (sql)?.sql
-    if (!resolvedSql) return execute.apply(this, arguments)
+    const resolvedSql = resolveSqlString(sql)
+    if (resolvedSql === undefined) return execute.apply(this, arguments)
 
     const abortController = new AbortController()
     startOuterQueryCh.publish({ sql: resolvedSql, abortController })
@@ -291,8 +299,8 @@ function wrapPoolCluster (PoolCluster) {
 
     if (startOuterQueryCh.hasSubscribers && !wrappedPoolNamespaces.has(poolNamespace)) {
       shimmer.wrap(poolNamespace, 'query', query => function (sql, values, cb) {
-        const resolvedSql = /** @type {{ sql?: unknown }} */ (sql)?.sql
-        if (!resolvedSql) return query.apply(this, arguments)
+        const resolvedSql = resolveSqlString(sql)
+        if (resolvedSql === undefined) return query.apply(this, arguments)
 
         const abortController = new AbortController()
         startOuterQueryCh.publish({ sql: resolvedSql, abortController })
@@ -325,8 +333,8 @@ function wrapPoolCluster (PoolCluster) {
       })
 
       shimmer.wrap(poolNamespace, 'execute', execute => function (sql, values, cb) {
-        const resolvedSql = /** @type {{ sql?: unknown }} */ (sql)?.sql
-        if (!resolvedSql) return execute.apply(this, arguments)
+        const resolvedSql = resolveSqlString(sql)
+        if (resolvedSql === undefined) return execute.apply(this, arguments)
 
         const abortController = new AbortController()
         startOuterQueryCh.publish({ sql: resolvedSql, abortController })
