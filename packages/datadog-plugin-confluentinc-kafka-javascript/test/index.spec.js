@@ -65,6 +65,10 @@ describe('Plugin', () => {
               replicationFactor: 1,
             }],
           })
+
+          // `createTopics()` returns before leaders are guaranteed to be elected in this client.
+          // If we race ahead immediately, consumers/producers can stall on metadata/leader availability.
+          await waitForTopicReady(admin, testTopic)
         })
 
         afterEach(() => admin.disconnect())
@@ -153,15 +157,23 @@ describe('Plugin', () => {
                 type: 'worker',
               })
 
-              const consumerReceiveMessagePromise = /** @type {Promise<void>} */(new Promise(resolve => {
+              const consumerReceiveMessagePromise = /** @type {Promise<void>} */(new Promise((resolve, reject) => {
                 consumer.run({
                   eachMessage: () => {
                     resolve()
                   },
                 })
               }))
-              await sendMessages(kafka, testTopic, messages).then(
-                async () => await consumerReceiveMessagePromise
+
+              await withTimeout(
+                sendMessages(kafka, testTopic, messages),
+                20000,
+                `Timeout: Did not produce message on topic "${testTopic}" within 20000ms`
+              )
+              await withTimeout(
+                consumerReceiveMessagePromise,
+                20000,
+                `Timeout: Did not receive message on topic "${testTopic}" within 20000ms`
               )
               return expectedSpanPromise
             })
@@ -177,6 +189,7 @@ describe('Plugin', () => {
                   assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
                   done()
                 } catch (e) {
+                  done(e)
                 } finally {
                   eachMessage = async () => {} // avoid being called for each message
                 }
@@ -478,32 +491,6 @@ describe('Plugin', () => {
               return expectedSpanPromise
             })
 
-            // TODO: Fix this test case, fails with 'done() called multiple times'
-            // it('should be instrumented with error', async () => {
-            //   const fakeError = new Error('Oh No!')
-
-            //   const expectedSpanPromise = agent.assertSomeTraces(traces => {
-            //     const errorSpans = traces[0].filter(span => span.error === 1)
-            //     expect(errorSpans.length).to.be.at.least(1)
-
-            //     const errorSpan = errorSpans[0]
-            //     expect(errorSpan).to.exist
-            //     expect(errorSpan.name).to.equal(expectedSchema.receive.opName)
-            //     expect(errorSpan.meta).to.include({
-            //       component: 'confluentinc-kafka-javascript'
-            //     })
-
-            //     expect(errorSpan.meta[ERROR_TYPE]).to.equal(fakeError.name)
-            //     expect(errorSpan.meta[ERROR_MESSAGE]).to.equal(fakeError.message)
-            //   })
-
-            //   nativeConsumer.consume(1, (err, messages) => {
-            //     // Ensure we resolve before throwing
-            //     throw fakeError
-            //   })
-
-            //   return expectedSpanPromise
-            // })
           })
         })
       })
@@ -529,4 +516,40 @@ async function sendMessages (kafka, topic, messages) {
     messages,
   })
   await producer.disconnect()
+}
+
+async function withTimeout (promise, timeoutMs, message) {
+  let timeoutId
+  const timeoutPromise = new Promise((resolve, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs)
+  })
+
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+async function waitForTopicReady (admin, topic, timeoutMs = 20000) {
+  if (typeof admin?.fetchTopicMetadata !== 'function') return
+
+  const start = Date.now()
+  while ((Date.now() - start) < timeoutMs) {
+    try {
+      const meta = await admin.fetchTopicMetadata({ topics: [topic], timeout: 1000 })
+      const topicMeta = Array.isArray(meta) ? meta[0] : meta?.topics?.[0]
+
+      const partitions = topicMeta?.partitions
+      if (Array.isArray(partitions) && partitions.length > 0 && partitions.every(p => typeof p.leader === 'number' && p.leader >= 0)) {
+        return
+      }
+    } catch {
+      // Topic creation is async; metadata/leader errors can be transient.
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+
+  throw new Error(`Timeout: Topic "${topic}" metadata was not ready within ${timeoutMs}ms`)
 }
