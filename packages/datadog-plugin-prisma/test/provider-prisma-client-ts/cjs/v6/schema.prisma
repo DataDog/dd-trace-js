@@ -5,9 +5,9 @@ generator client {
   importFileExtension = "js"
 }
 
-datasource db {
+datasource primary {
   provider = "postgresql"
-  url      = "postgres://postgres:postgres@localhost:5432/postgres"
+  url      = env("PRISMA_TEST_DATABASE_URL")
 }
 
 model User {
