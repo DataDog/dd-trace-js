@@ -4,7 +4,7 @@ const RemoteConfigCapabilities = require('../remote_config/capabilities')
 const log = require('../log')
 
 module.exports = {
-  enable
+  enable,
 }
 
 /**
@@ -126,50 +126,23 @@ class RCClientLibConfigManager {
   }
 
   /**
-   * Get merged lib_config by taking first non-null value for each field
-   * Configs are sorted by priority (highest first)
+   * Get merged lib_config with higher priority configs overriding lower priority ones
    *
    * @returns {RemoteConfigOptions|null} Merged config object or null if no configs present
    */
   getMergedLibConfig () {
-    if (this.configs.size === 0) {
-      // When no configs are present, return null to signal config.js to reset all RC fields
-      return null
-    }
+    if (this.configs.size === 0) return null
 
-    // Sort configs by priority (highest first)
-    const sortedConfigs = [...this.configs.values()]
-      .sort((a, b) => b.priority - a.priority)
+    let hasLibConfig = false
 
-    const merged = {}
-    let libConfigCount = 0
+    const merged = [...this.configs.values()]
+      .sort((a, b) => a.priority - b.priority)
+      .reduce((merged, { conf }) => {
+        if (conf.lib_config != null) hasLibConfig = true
+        return Object.assign(merged, conf.lib_config)
+      }, {})
 
-    // Merge configs: take first non-null/undefined value for each field
-    // If a field is explicitly set to null, that means "reset to default"
-    for (const { conf } of sortedConfigs) {
-      const libConfig = conf.lib_config
-      if (libConfig == null) continue
-      libConfigCount++
-
-      for (const [key, value] of Object.entries(libConfig)) {
-        if (Object.hasOwn(merged, key)) continue
-
-        // Set the value even if it's null (to reset) but not if it's undefined (missing)
-        if (value === null) {
-          merged[key] = undefined // TODO: Should this be null?
-        } else if (value !== undefined) {
-          merged[key] = value
-        }
-      }
-    }
-
-    if (libConfigCount === 0) {
-      // When no configs are present, return null to signal config.js to reset all RC fields
-      return null
-    }
-
-    log.debug('[config/remote_config] Merged %d configs into lib_config', libConfigCount)
-    return merged
+    return hasLibConfig ? merged : null
   }
 }
 
@@ -196,6 +169,7 @@ function enable (rc, config, onConfigUpdated) {
 
   // Debugger
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING, true)
 
   // Code Origin
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN, true)

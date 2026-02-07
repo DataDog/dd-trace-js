@@ -28,7 +28,7 @@ module.exports = function extractPackageAndModulePath (fullPath) {
     return {
       pkg,
       path: subPath.slice(Math.max(0, firstSlash + 1 + secondSlash + 1)),
-      pkgJson: firstPath + pkg + '/package.json'
+      pkgJson: firstPath + pkg + '/package.json',
     }
   }
 
@@ -37,6 +37,6 @@ module.exports = function extractPackageAndModulePath (fullPath) {
   return {
     pkg,
     path: firstSlashSubPath,
-    pkgJson: firstPath + pkg + '/package.json'
+    pkgJson: firstPath + pkg + '/package.json',
   }
 }

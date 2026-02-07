@@ -22,22 +22,22 @@ describe('set_user', () => {
 
     beforeEach(() => {
       rootSpan = {
-        setTag: sinon.stub()
+        setTag: sinon.stub(),
       }
       getRootSpan = sinon.stub().returns(rootSpan)
 
       log = {
-        warn: sinon.stub()
+        warn: sinon.stub(),
       }
 
       waf = {
-        run: sinon.stub()
+        run: sinon.stub(),
       }
 
       const setUserModule = proxyquire('../../../src/appsec/sdk/set_user', {
         './utils': { getRootSpan },
         '../../log': log,
-        '../waf': waf
+        '../waf': waf,
       })
 
       setUser = setUserModule.setUser
@@ -74,7 +74,7 @@ describe('set_user', () => {
           id: '123',
           email: 'a@b.c',
           custom: 'hello',
-          session_id: '133769'
+          session_id: '133769',
         }
 
         setUser(tracer, user)
@@ -88,8 +88,8 @@ describe('set_user', () => {
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             'usr.id': '123',
-            'usr.session_id': '133769'
-          }
+            'usr.session_id': '133769',
+          },
         })
       })
     })
@@ -99,8 +99,8 @@ describe('set_user', () => {
     const config = getConfigFresh({
       appsec: {
         enabled: true,
-        rules: path.join(__dirname, './user_blocking_rules.json')
-      }
+        rules: path.join(__dirname, './user_blocking_rules.json'),
+      },
     })
 
     let http
@@ -144,7 +144,7 @@ describe('set_user', () => {
             id: 'blockedUser',
             email: 'a@b.c',
             custom: 'hello',
-            session_id: '133769'
+            session_id: '133769',
           })
           res.end()
         }

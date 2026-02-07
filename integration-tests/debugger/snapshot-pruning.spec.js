@@ -28,8 +28,8 @@ describe('Dynamic Instrumentation', function () {
             // ensure we get a large snapshot
             maxCollectionSize: Number.MAX_SAFE_INTEGER,
             maxFieldCount: Number.MAX_SAFE_INTEGER,
-            maxLength: Number.MAX_SAFE_INTEGER
-          }
+            maxLength: Number.MAX_SAFE_INTEGER,
+          },
         }))
       })
     })

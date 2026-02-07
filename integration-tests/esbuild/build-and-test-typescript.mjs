@@ -16,7 +16,7 @@ try {
     platform: 'node',
     target: 'es2022',
     plugins: [ddPlugin],
-    external: []
+    external: [],
   })
   console.log('ok') // eslint-disable-line no-console
 } finally {

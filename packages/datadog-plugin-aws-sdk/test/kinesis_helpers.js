@@ -5,7 +5,7 @@ const id = require('../../dd-trace/src/id')
 const dataBuffer = Buffer.from(JSON.stringify({
   custom: 'data',
   for: 'my users',
-  from: 'Aaron Stuyvenberg'
+  from: 'Aaron Stuyvenberg',
 }))
 
 const dataBufferCustom = (n) => {
@@ -13,7 +13,7 @@ const dataBufferCustom = (n) => {
     number: n,
     custom: 'data',
     for: 'my users',
-    from: 'Aaron Stuyvenberg'
+    from: 'Aaron Stuyvenberg',
   }))
 }
 
@@ -36,12 +36,12 @@ function getTestRecord (kinesis, streamName, { ShardId, SequenceNumber }, cb) {
     ShardId,
     ShardIteratorType: 'AT_SEQUENCE_NUMBER',
     StartingSequenceNumber: SequenceNumber,
-    StreamName: streamName
+    StreamName: streamName,
   }, (err, { ShardIterator } = {}) => {
     if (err) return cb(err)
 
     kinesis.getRecords({
-      ShardIterator
+      ShardIterator,
     }, cb)
   })
 }
@@ -50,7 +50,7 @@ function putTestRecord (kinesis, streamName, data, cb) {
   kinesis.putRecord({
     PartitionKey: id().toString(),
     Data: data,
-    StreamName: streamName
+    StreamName: streamName,
   }, cb)
 }
 
@@ -60,25 +60,25 @@ function putTestRecords (kinesis, streamName, cb) {
       Records: [
         {
           PartitionKey: id().toString(),
-          Data: dataBufferCustom(1)
+          Data: dataBufferCustom(1),
         },
         {
           PartitionKey: id().toString(),
-          Data: dataBufferCustom(2)
+          Data: dataBufferCustom(2),
         },
         {
           PartitionKey: id().toString(),
-          Data: dataBufferCustom(3)
-        }
+          Data: dataBufferCustom(3),
+        },
       ],
-      StreamName: streamName
+      StreamName: streamName,
     }, cb)
   })
 }
 
 function waitForActiveStream (kinesis, streamName, cb) {
   kinesis.describeStream({
-    StreamName: streamName
+    StreamName: streamName,
   }, (err, data) => {
     if (err) {
       return waitForActiveStream(kinesis, streamName, cb)
@@ -93,7 +93,7 @@ function waitForActiveStream (kinesis, streamName, cb) {
 
 function waitForDeletedStream (kinesis, streamName, cb) {
   kinesis.describeStream({
-    StreamName: streamName
+    StreamName: streamName,
   }, (err, data) => {
     if (!err) return waitForDeletedStream(kinesis, streamName, cb)
     cb()
@@ -107,5 +107,5 @@ module.exports = {
   putTestRecord,
   putTestRecords,
   waitForActiveStream,
-  waitForDeletedStream
+  waitForDeletedStream,
 }

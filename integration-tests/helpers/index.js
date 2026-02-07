@@ -60,7 +60,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
       // Debug adds this, which we don't care about in these tests
       out = out.replace('Flushing 0 metrics via HTTP\n', '')
     }
-    assert.match(out, new RegExp(expectedOut), `output "${out} does not contain expected output "${expectedOut}"`)
+    assert.match(out, new RegExp(expectedOut), `output "${out}" does not contain expected output "${expectedOut}"`)
   }
 
   if (expectedSource) {
@@ -127,7 +127,7 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
     for (let i = 0; i < args.length; i += 2) {
       expectedPoints.push({
         name: 'library_entrypoint.' + args[i],
-        tags: args[i + 1].split(',').filter(Boolean)
+        tags: args[i + 1].split(',').filter(Boolean),
       })
     }
     return expectedPoints
@@ -144,7 +144,7 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
       runtime_name: 'nodejs',
       runtime_version: process.versions.node,
       tracer_version: require('../../package.json').version,
-      pid
+      pid,
     }
 
     // Validate basic metadata
@@ -211,7 +211,7 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
       urlValue = value
     },
     enumerable: true,
-    configurable: true
+    configurable: true,
   })
 
   return new Promise((resolve, reject) => {
@@ -314,13 +314,75 @@ function execHelper (command, options) {
         execSync('sleep 60')
         log('Exec RETRY START: ', command)
         execSync(command, options)
-        log('Exec RETRY SUCESS: ', command)
+        log('Exec RETRY SUCCESS: ', command)
       } catch (retryError) {
         error('Exec RETRY ERROR', command, retryError)
         throw retryError
       }
     } else {
       throw execError
+    }
+  }
+}
+
+/**
+ * Pack dd-trace into a tarball at the specified path.
+ *
+ * @param {string} tarballPath - The path where the tarball should be created
+ * @param {NodeJS.ProcessEnv} env - The environment to use for the pack command
+ */
+function packTarball (tarballPath, env) {
+  execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
+  log('Tarball packed successfully:', tarballPath)
+}
+
+/**
+ * Pack the tarball with file locking to coordinate between parallel workers.
+ * Only one worker will pack the tarball, others will wait for it to be ready.
+ *
+ * @param {string} tarballPath - The path where the tarball should be created
+ * @param {NodeJS.ProcessEnv} env - The environment to use for the pack command
+ * @returns {Promise<void>}
+ */
+async function packTarballWithLock (tarballPath, env) {
+  if (existsSync(tarballPath)) {
+    log('Tarball already exists:', tarballPath)
+    return
+  }
+
+  const lockFile = `${tarballPath}.lock`
+  let lockFd
+
+  try {
+    // Try to acquire the lock by creating the lock file exclusively
+    lockFd = await fs.open(lockFile, 'wx')
+    log('Lock acquired, packing tarball:', tarballPath)
+
+    // Double-check if tarball was created while we were acquiring the lock
+    if (existsSync(tarballPath)) {
+      log('Tarball already exists (created while waiting for lock):', tarballPath)
+      return
+    }
+
+    // We have the lock, pack the tarball
+    packTarball(tarballPath, env)
+  } catch (err) {
+    if (err.code === 'EEXIST') {
+      // Lock exists, another process is packing - wait for the tarball to appear
+      log('Lock file exists, waiting for tarball:', tarballPath)
+
+      while (!existsSync(tarballPath)) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+
+      log('Tarball ready:', tarballPath)
+    } else {
+      throw err
+    }
+  } finally {
+    // Strictly no need to clean up the lock - it's in a temp directory
+    if (lockFd) {
+      lockFd.close().catch(() => {})
     }
   }
 }
@@ -365,15 +427,17 @@ async function createSandbox (
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
   const folder = path.join(sandboxRoot, id().toString())
-  const out = path.join(sandboxRoot, 'dd-trace.tgz')
+  const tarballEnv = process.env.DD_TEST_SANDBOX_TARBALL_PATH
+  const out = tarballEnv && tarballEnv !== '0' && tarballEnv !== 'false'
+    ? tarballEnv
+    : path.join(sandboxRoot, 'dd-trace.tgz')
   const deps = cappedDependencies.concat(`file:${out}`)
 
   await fs.mkdir(folder, { recursive: true })
   const addOptions = { cwd: folder, env: restOfEnv }
   const addFlags = ['--trust']
-  if (!existsSync(out)) {
-    execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${out}`, { env: restOfEnv })
-  }
+
+  await packTarballWithLock(out, restOfEnv)
 
   if (process.env.OFFLINE === '1' || process.env.OFFLINE === 'true') {
     addFlags.push('--prefer-offline')
@@ -389,7 +453,7 @@ async function createSandbox (
 
   execHelper(`${BUN} add ${deps.join(' ')} ${addFlags.join(' ')}`, {
     ...addOptions,
-    timeout: 90_000
+    timeout: 90_000,
   })
 
   for (const path of integrationTestsPaths) {
@@ -439,12 +503,12 @@ async function createSandbox (
       } else {
         return execHelper(`rm -rf ${folder}`)
       }
-    }
+    },
   }
 }
 
 /**
- * @typedef {{ default: string, star: string, destructure: string }} Variants
+ * @typedef {{ default?: string, star: string, destructure: string }} Variants
  */
 /**
  * @overload
@@ -475,7 +539,7 @@ function varySandbox (filename, variants, namedExport, packageName = variants, b
       ? {
           // eslint-disable-next-line @stylistic/max-len
           star: `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.${namedExport}`,
-          destructure: `import { ${namedExport} } from '${packageName}'`
+          destructure: `import { ${namedExport} } from '${packageName}'`,
         }
       : {
           default: `import ${bindingName} from '${packageName}'`,
@@ -484,7 +548,7 @@ function varySandbox (filename, variants, namedExport, packageName = variants, b
             : `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.default`,
           destructure: namedExport
             ? `import { ${namedExport} } from '${packageName}'; const ${bindingName} = { ${namedExport} }`
-            : `import { default as ${bindingName}} from '${packageName}'`
+            : `import { default as ${bindingName}} from '${packageName}'`,
         }
   }
 
@@ -498,7 +562,9 @@ function varySandbox (filename, variants, namedExport, packageName = variants, b
     variantFilenames[variant] = variantFilename
     let newFileData = origFileData
     if (variant !== baseVariant) {
-      newFileData = origFileData.replace(variants[baseVariant], `${value}`)
+      const baseValue = variants[baseVariant]
+      assert(baseValue, `Missing ${baseVariant} variant`)
+      newFileData = origFileData.replace(baseValue, `${value}`)
       // Error out when the default import does not match that of server.mjs
       if (newFileData === origFileData) throw Error(`Unable to match ${baseVariant}`)
     }
@@ -609,6 +675,7 @@ async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMess
 
 /**
  * @param {number} port
+ * @returns {NodeJS.ProcessEnv}
  */
 function getCiVisAgentlessConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
@@ -617,15 +684,16 @@ function getCiVisAgentlessConfig (port) {
   return {
     ...rest,
     DD_API_KEY: '1',
-    DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
+    DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
     NODE_OPTIONS: '-r dd-trace/ci/init',
-    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
+    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
   }
 }
 
 /**
  * @param {number} port
+ * @returns {NodeJS.ProcessEnv}
  */
 function getCiVisEvpProxyConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
@@ -633,10 +701,10 @@ function getCiVisEvpProxyConfig (port) {
   const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
-    DD_TRACE_AGENT_PORT: port,
+    DD_TRACE_AGENT_PORT: String(port),
     NODE_OPTIONS: '-r dd-trace/ci/init',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
-    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
+    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
   }
 }
 
@@ -688,11 +756,11 @@ function preparePluginIntegrationTestSpawnOptions (
         NODE_OPTIONS,
         DD_TRACE_AGENT_PORT: String(agentPort),
         DD_TRACE_FLUSH_INTERVAL: '0',
-        ...additionalEnvArgs
+        ...additionalEnvArgs,
       },
-      execArgv
+      execArgv,
     },
-    stdioHandler
+    stdioHandler,
   }
 }
 
@@ -848,12 +916,19 @@ const assertObjectContains = function assertObjectContains (actual, expected, ms
 
   try {
     assertionFn(actual, expected, msg)
-  } catch (originalError) {
+  } catch {
     // First attempt failed, retry with matcher support
     try {
       assertObjectContainsImpl(actual, expected, msg, true)
-    } catch {
-      throw originalError
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error)
+
+      throw new assert.AssertionError({
+        actual,
+        expected,
+        operator: 'partialDeepStrictEqual',
+      })
     }
   }
 }
@@ -890,5 +965,5 @@ module.exports = {
   setShouldKill,
   sandboxCwd,
   useSandbox,
-  varySandbox
+  varySandbox,
 }

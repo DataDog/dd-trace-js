@@ -11,16 +11,16 @@ describe('RASP - ssrf.js', () => {
 
   beforeEach(() => {
     legacyStorage = {
-      getStore: sinon.stub()
+      getStore: sinon.stub(),
     }
 
     waf = {
-      run: sinon.stub()
+      run: sinon.stub(),
     }
 
     ssrf = proxyquire('../../../src/appsec/rasp/ssrf', {
       '../../../../datadog-core': { storage: () => legacyStorage },
-      '../waf': waf
+      '../waf': waf,
     })
 
     const config = {
@@ -28,9 +28,9 @@ describe('RASP - ssrf.js', () => {
         stackTrace: {
           enabled: true,
           maxStackTraces: 2,
-          maxDepth: 42
-        }
-      }
+          maxDepth: 42,
+        },
+      },
     }
 
     ssrf.enable(config)
@@ -45,8 +45,8 @@ describe('RASP - ssrf.js', () => {
     it('should analyze ssrf', () => {
       const ctx = {
         args: {
-          uri: 'http://example.com'
-        }
+          uri: 'http://example.com',
+        },
       }
       const req = {}
       legacyStorage.getStore.returns({ req })
@@ -61,8 +61,8 @@ describe('RASP - ssrf.js', () => {
       ssrf.disable()
       const ctx = {
         args: {
-          uri: 'http://example.com'
-        }
+          uri: 'http://example.com',
+        },
       }
       const req = {}
       legacyStorage.getStore.returns({ req })
@@ -75,8 +75,8 @@ describe('RASP - ssrf.js', () => {
     it('should not analyze ssrf if no store', () => {
       const ctx = {
         args: {
-          uri: 'http://example.com'
-        }
+          uri: 'http://example.com',
+        },
       }
       legacyStorage.getStore.returns(undefined)
 
@@ -88,8 +88,8 @@ describe('RASP - ssrf.js', () => {
     it('should not analyze ssrf if no req', () => {
       const ctx = {
         args: {
-          uri: 'http://example.com'
-        }
+          uri: 'http://example.com',
+        },
       }
       legacyStorage.getStore.returns({})
 
@@ -100,7 +100,7 @@ describe('RASP - ssrf.js', () => {
 
     it('should not analyze ssrf if no url', () => {
       const ctx = {
-        args: {}
+        args: {},
       }
       legacyStorage.getStore.returns({})
 

@@ -8,12 +8,12 @@ const process = require('process')
 const { performance, PerformanceObserver, monitorEventLoopDelay } = require('perf_hooks')
 const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
-const { getEnvironmentVariable } = require('../config/helper')
+const { getValueFromEnvSources } = require('../config/helper')
 
 const { NODE_MAJOR } = require('../../../../version')
 // TODO: This environment variable may not be changed, since the agent expects a flush every ten seconds.
 // It is only a variable for testing. Think about alternatives.
-const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getEnvironmentVariable('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
+const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getValueFromEnvSources('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
 const INTERVAL = Number.parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
 
 const eventLoopDelayResolution = 4
@@ -117,7 +117,7 @@ module.exports = {
       const handle = nativeMetrics.track(span)
 
       return {
-        finish: () => nativeMetrics.finish(handle)
+        finish: () => nativeMetrics.finish(handle),
       }
     }
 
@@ -146,7 +146,7 @@ module.exports = {
 
   decrement (name, tag) {
     this.count(name, -1, tag)
-  }
+  },
 }
 
 function captureCpuUsage () {
@@ -206,7 +206,7 @@ function captureEventLoopDelay () {
         total: sum,
         avg,
         count: eventLoopDelayObserver.count,
-        p95: Math.max(eventLoopDelayObserver.percentile(95) - minimum, 0)
+        p95: Math.max(eventLoopDelayObserver.percentile(95) - minimum, 0),
       }
 
       histogram('runtime.node.event_loop.delay', stats)

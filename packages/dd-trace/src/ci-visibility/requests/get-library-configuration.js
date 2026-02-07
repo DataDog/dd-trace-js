@@ -3,15 +3,16 @@
 const request = require('../../exporters/common/request')
 const id = require('../../id')
 const log = require('../../log')
-const { getEnvironmentVariable } = require('../../config/helper')
+const { getValueFromEnvSources } = require('../../config/helper')
 const {
   incrementCountMetric,
   distributionMetric,
   TELEMETRY_GIT_REQUESTS_SETTINGS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_MS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
-  TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE
+  TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
 } = require('../telemetry')
+const { writeSettingsToCache } = require('../test-optimization-cache')
 
 const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
 const DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD = 30
@@ -32,23 +33,23 @@ function getLibraryConfiguration ({
   branch,
   testLevel = 'suite',
   custom,
-  tag
+  tag,
 }, done) {
   const options = {
     path: '/api/v2/libraries/tests/services/setting',
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
     url,
-    timeout: 20_000
+    timeout: 20_000,
   }
 
   if (isEvpProxy) {
     options.path = `${evpProxyPrefix}/api/v2/libraries/tests/services/setting`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const apiKey = getEnvironmentVariable('DD_API_KEY')
+    const apiKey = getValueFromEnvSources('DD_API_KEY')
     if (!apiKey) {
       return done(new Error('Request to settings endpoint was not done because Datadog API key is not defined.'))
     }
@@ -67,15 +68,15 @@ function getLibraryConfiguration ({
           'os.architecture': osArchitecture,
           'runtime.name': runtimeName,
           'runtime.version': runtimeVersion,
-          custom
+          custom,
         },
         service,
         env,
         repository_url: repositoryUrl,
         sha,
-        branch: branch || tag
-      }
-    }
+        branch: branch || tag,
+      },
+    },
   })
 
   incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS)
@@ -100,9 +101,10 @@ function getLibraryConfiguration ({
               di_enabled: isDiEnabled,
               known_tests_enabled: isKnownTestsEnabled,
               test_management: testManagementConfig,
-              impacted_tests_enabled: isImpactedTestsEnabled
-            }
-          }
+              impacted_tests_enabled: isImpactedTestsEnabled,
+              coverage_report_upload_enabled: isCoverageReportUploadEnabled,
+            },
+          },
         } = JSON.parse(res)
 
         const settings = {
@@ -121,21 +123,24 @@ function getLibraryConfiguration ({
           isTestManagementEnabled: (testManagementConfig?.enabled ?? false),
           testManagementAttemptToFixRetries:
             testManagementConfig?.attempt_to_fix_retries,
-          isImpactedTestsEnabled
+          isImpactedTestsEnabled,
+          isCoverageReportUploadEnabled: isCoverageReportUploadEnabled ?? false,
         }
 
         log.debug('Remote settings: %j', settings)
 
-        if (getEnvironmentVariable('DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE')) {
+        if (getValueFromEnvSources('DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE')) {
           settings.isCodeCoverageEnabled = true
           log.debug('Dangerously set code coverage to true')
         }
-        if (getEnvironmentVariable('DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING')) {
+        if (getValueFromEnvSources('DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING')) {
           settings.isSuitesSkippingEnabled = true
           log.debug('Dangerously set test skipping to true')
         }
 
         incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE, settings)
+
+        writeSettingsToCache(settings)
 
         done(null, settings)
       } catch (err) {

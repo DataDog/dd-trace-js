@@ -20,7 +20,7 @@ describe('git_metadata', () => {
   // same character range but invalid length
   const badLatestCommits = [
     '87ce64f636853fbebc05edfcefe9cccc28a7968b8b',
-    'cc424c261da5e261b76d982d5d361a023556e2aacc424c261da5e261b76d982d5d361a023556e2aa'
+    'cc424c261da5e261b76d982d5d361a023556e2aacc424c261da5e261b76d982d5d361a023556e2aa',
   ]
 
   const temporaryPackFile = `${os.tmpdir()}/1111-87ce64f636853fbebc05edfcefe9cccc28a7968b.pack`
@@ -62,8 +62,8 @@ describe('git_metadata', () => {
         generatePackFilesForCommits: generatePackFilesForCommitsStub,
         getCommitsRevList: getCommitsRevListStub,
         isShallowRepository: isShallowRepositoryStub,
-        unshallowRepository: unshallowRepositoryStub
-      }
+        unshallowRepository: unshallowRepositoryStub,
+      },
     })
   })
 
@@ -247,7 +247,7 @@ describe('git_metadata', () => {
       temporaryPackFile,
       secondTemporaryPackFile,
       temporaryPackFile,
-      secondTemporaryPackFile
+      secondTemporaryPackFile,
     ])
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
@@ -262,7 +262,7 @@ describe('git_metadata', () => {
       const invalidUrls = [
         'www.test.com/repo/dummy.git',
         'test.com/repo/dummy.git',
-        'test.com/repo/dummy'
+        'test.com/repo/dummy',
       ]
       invalidUrls.forEach((invalidUrl) => {
         assert.strictEqual(validateGitRepositoryUrl(invalidUrl), false)
@@ -278,7 +278,7 @@ describe('git_metadata', () => {
         'https://github.com/DataDog/dd-trace-js',
         'git@github.com:DataDog/dd-trace-js.git',
         'git@github.com:user/repo.git',
-        'git@github.com:user/repo'
+        'git@github.com:user/repo',
       ]
 
       validUrls.forEach((validUrl) => {
@@ -322,7 +322,7 @@ describe('git_metadata', () => {
 
     generatePackFilesForCommitsStub.returns([
       'not-there',
-      'not there either'
+      'not there either',
     ])
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {

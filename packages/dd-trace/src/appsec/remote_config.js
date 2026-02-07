@@ -80,8 +80,8 @@ function enableOrDisableAppsec (action, rcConfig, config, appsec) {
       {
         name: 'appsec.enabled',
         origin: isRemoteConfigControlling ? 'remote_config' : config.getOrigin('appsec.enabled'),
-        value: shouldEnable
-      }
+        value: shouldEnable,
+      },
     ], config)
   }
 }
@@ -173,5 +173,5 @@ function disableWafUpdate () {
 module.exports = {
   enable,
   enableWafUpdate,
-  disableWafUpdate
+  disableWafUpdate,
 }

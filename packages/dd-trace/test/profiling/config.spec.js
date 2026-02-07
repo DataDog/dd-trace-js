@@ -28,11 +28,30 @@ describe('config', () => {
     debug () { },
     info () { },
     warn () { },
-    error () { }
+    error () { },
   }
 
   beforeEach(() => {
-    Config = require('../../src/profiling/config').Config
+    const ProfilingConfig = require('../../src/profiling/config').Config
+    // Wrap the real profiling Config so tests see a valid default URL when none
+    // is provided, matching what the tracer Config singleton would provide at runtime.
+    Config = class TestConfig extends ProfilingConfig {
+      constructor (options = {}) {
+        const hasAddress =
+          options.url !== undefined ||
+          options.hostname !== undefined ||
+          options.port !== undefined
+
+        if (hasAddress) {
+          super(options)
+        } else {
+          super({
+            url: 'http://127.0.0.1:8126',
+            ...options,
+          })
+        }
+      }
+    }
     env = process.env
     process.env = {}
   })
@@ -46,12 +65,12 @@ describe('config', () => {
 
     assertObjectContains(config, {
       service: 'node',
-      flushInterval: 65 * 1000
+      flushInterval: 65 * 1000,
     })
 
     assert.deepStrictEqual(config.tags, {
       service: 'node',
-      host: os.hostname()
+      host: os.hostname(),
     })
 
     assert.ok(config.logger instanceof ConsoleLogger)
@@ -73,7 +92,7 @@ describe('config', () => {
       exporters: 'agent,file',
       profilers: 'space,wall',
       url: 'http://localhost:1234/',
-      codeHotspotsEnabled: false
+      codeHotspotsEnabled: false,
     }
 
     const config = new Config(options)
@@ -110,9 +129,9 @@ describe('config', () => {
         warn () {},
         error (error) {
           errors.push(error)
-        }
+        },
       },
-      profilers: 'nope,also_nope'
+      profilers: 'nope,also_nope',
     }
 
     const config = new Config(options)
@@ -127,10 +146,10 @@ describe('config', () => {
 
   it('should support profiler config with empty DD_PROFILING_PROFILERS', () => {
     process.env = {
-      DD_PROFILING_PROFILERS: ''
+      DD_PROFILING_PROFILERS: '',
     }
     const options = {
-      logger: nullLogger
+      logger: nullLogger,
     }
 
     const config = new Config(options)
@@ -142,13 +161,13 @@ describe('config', () => {
   it('should support profiler config with DD_PROFILING_PROFILERS', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall',
-      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0'
+      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0',
     }
     if (samplingContextsAvailable) {
       process.env.DD_PROFILING_EXPERIMENTAL_CPU_ENABLED = '1'
     }
     const options = {
-      logger: nullLogger
+      logger: nullLogger,
     }
 
     const config = new Config(options)
@@ -168,10 +187,10 @@ describe('config', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall',
       DD_PROFILING_WALLTIME_ENABLED: '0',
-      DD_PROFILING_HEAP_ENABLED: '1'
+      DD_PROFILING_HEAP_ENABLED: '1',
     }
     const options = {
-      logger: nullLogger
+      logger: nullLogger,
     }
 
     const config = new Config(options)
@@ -184,10 +203,10 @@ describe('config', () => {
   it('should ensure space profiler is ordered first with DD_PROFILING_HEAP_ENABLED', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall',
-      DD_PROFILING_HEAP_ENABLED: '1'
+      DD_PROFILING_HEAP_ENABLED: '1',
     }
     const options = {
-      logger: nullLogger
+      logger: nullLogger,
     }
 
     const config = new Config(options)
@@ -201,10 +220,10 @@ describe('config', () => {
   it('should ensure space profiler order is preserved when explicitly set with DD_PROFILING_PROFILERS', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall,space',
-      DD_PROFILING_HEAP_ENABLED: '1'
+      DD_PROFILING_HEAP_ENABLED: '1',
     }
     const options = {
-      logger: nullLogger
+      logger: nullLogger,
     }
 
     const config = new Config(options)
@@ -222,11 +241,11 @@ describe('config', () => {
       DD_PROFILING_HEAP_SAMPLING_INTERVAL: '1000',
       DD_PROFILING_PPROF_PREFIX: 'test-prefix',
       DD_PROFILING_UPLOAD_TIMEOUT: '10000',
-      DD_PROFILING_TIMELINE_ENABLED: '0'
+      DD_PROFILING_TIMELINE_ENABLED: '0',
     }
 
     const options = {
-      logger: nullLogger
+      logger: nullLogger,
     }
 
     const config = new Config(options)
@@ -242,10 +261,10 @@ describe('config', () => {
   it('should deduplicate profilers', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall,wall',
-      DD_PROFILING_WALLTIME_ENABLED: '1'
+      DD_PROFILING_WALLTIME_ENABLED: '1',
     }
     const options = {
-      logger: nullLogger
+      logger: nullLogger,
     }
 
     const config = new Config(options)
@@ -265,13 +284,13 @@ describe('config', () => {
 
     process.env = {
       DD_PROFILING_PROFILERS: 'space',
-      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '1'
+      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '1',
     }
     const options = {
       logger: nullLogger,
       profilers: ['wall'],
       codeHotspotsEnabled: false,
-      endpointCollection: false
+      endpointCollection: false,
     }
 
     const config = new Config(options)
@@ -294,7 +313,7 @@ describe('config', () => {
       DD_PROFILING_CODEHOTSPOTS_ENABLED: '0',
       DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED: '1',
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '0',
-      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED: '1'
+      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED: '1',
     }
     const warnings = []
     const options = {
@@ -304,8 +323,8 @@ describe('config', () => {
         warn (warning) {
           warnings.push(warning)
         },
-        error () {}
-      }
+        error () {},
+      },
     }
 
     const config = new Config(options)
@@ -320,7 +339,7 @@ describe('config', () => {
 
   function optionOnlyWorksWithGivenCondition (property, name, condition) {
     const options = {
-      [property]: true
+      [property]: true,
     }
 
     if (condition) {
@@ -360,7 +379,7 @@ describe('config', () => {
 
   it('should support tags', () => {
     const tags = {
-      env: 'dev'
+      env: 'dev',
     }
 
     const config = new Config({ tags })
@@ -375,7 +394,7 @@ describe('config', () => {
     const tags = {
       env: 'dev',
       service: 'bar',
-      version: '3.2.1'
+      version: '3.2.1',
     }
 
     const config = new Config({ env, service, version, tags })
@@ -389,7 +408,7 @@ describe('config', () => {
 
     const config = new Config({
       repositoryUrl: DUMMY_REPOSITORY_URL,
-      commitSHA: DUMMY_GIT_SHA
+      commitSHA: DUMMY_GIT_SHA,
     })
 
     assertObjectContains(config.tags, { 'git.repository_url': DUMMY_REPOSITORY_URL, 'git.commit.sha': DUMMY_GIT_SHA })
@@ -397,7 +416,8 @@ describe('config', () => {
 
   it('should support IPv6 hostname', () => {
     const options = {
-      hostname: '::1'
+      hostname: '::1',
+      port: '8126',
     }
 
     const config = new Config(options)
@@ -409,7 +429,7 @@ describe('config', () => {
 
   it('should support OOM heap profiler configuration', () => {
     process.env = {
-      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: 'false'
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: 'false',
     }
     const config = new Config({})
 
@@ -418,7 +438,7 @@ describe('config', () => {
       heapLimitExtensionSize: 0,
       maxHeapExtensionCount: 0,
       exportStrategies: [],
-      exportCommand: undefined
+      exportCommand: undefined,
     })
   })
 
@@ -436,8 +456,8 @@ describe('config', () => {
           path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
           'http://127.0.0.1:8126/',
           `host:${config.host},service:node,snapshot:on_oom`,
-          'space'
-        ]
+          'space',
+        ],
       })
     } else {
       assert.strictEqual(config.oomMonitoring.enabled, false)
@@ -447,13 +467,13 @@ describe('config', () => {
   it('should allow configuring exporters by string or string array', async () => {
     const checks = [
       'agent',
-      ['agent']
+      ['agent'],
     ]
 
     for (const exporters of checks) {
       const config = new Config({
         sourceMap: false,
-        exporters
+        exporters,
       })
 
       assert.strictEqual(typeof config.exporters[0].export, 'function')
@@ -467,13 +487,13 @@ describe('config', () => {
       ['space,wall', SpaceProfiler, WallProfiler, EventsProfiler],
       ['wall,space', WallProfiler, SpaceProfiler, EventsProfiler],
       [['space', 'wall'], SpaceProfiler, WallProfiler, EventsProfiler],
-      [['wall', 'space'], WallProfiler, SpaceProfiler, EventsProfiler]
+      [['wall', 'space'], WallProfiler, SpaceProfiler, EventsProfiler],
     ].map(profilers => profilers.filter(profiler => samplingContextsAvailable || profiler !== EventsProfiler))
 
     for (const [profilers, ...expected] of checks) {
       const config = new Config({
         sourceMap: false,
-        profilers
+        profilers,
       })
 
       assert.strictEqual(config.profilers.length, expected.length)
@@ -489,7 +509,7 @@ describe('config', () => {
         DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: '1',
         DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '1000000',
         DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '2',
-        DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process,async,process'
+        DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process,async,process',
       }
 
       const config = new Config({})
@@ -504,8 +524,8 @@ describe('config', () => {
           path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
           'http://127.0.0.1:8126/',
           `host:${config.host},service:node,snapshot:on_oom`,
-          'space'
-        ]
+          'space',
+        ],
       })
     })
   }
@@ -528,7 +548,10 @@ describe('config', () => {
         } else {
           process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = '0'
           try {
-            const config = new Config({})
+            const config = new Config({
+              // In production this comes from the tracer Config singleton; we mimic it here.
+              url: 'http://127.0.0.1:8126',
+            })
             assert.strictEqual(config.asyncContextFrameEnabled, false)
           } finally {
             delete process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
@@ -553,7 +576,7 @@ describe('config', () => {
         } else {
           process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED = '1'
           try {
-            const config = new Config({})
+            const config = new Config()
             assert.strictEqual(config.asyncContextFrameEnabled, false)
           } finally {
             delete process.env.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
@@ -566,7 +589,7 @@ describe('config', () => {
   describe('upload compression settings', () => {
     const expectConfig = (env, method, level, warning) => {
       process.env = {
-        DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: env
+        DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: env,
       }
 
       const logger = {
@@ -576,9 +599,13 @@ describe('config', () => {
         warn (message) {
           this.warnings.push(message)
         },
-        error () {}
+        error () {},
       }
-      const config = new Config({ logger })
+      const config = new Config({
+        logger,
+        // In production this comes from the tracer Config singleton; we mimic it here.
+        url: 'http://127.0.0.1:8126',
+      })
 
       if (warning) {
         assert.strictEqual(logger.warnings.length, 1)

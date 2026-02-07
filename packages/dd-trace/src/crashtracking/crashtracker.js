@@ -1,13 +1,11 @@
 'use strict'
 
-const { URL } = require('url')
-
 // Load binding first to not import other modules if it throws
 const libdatadog = require('@datadog/libdatadog')
 const binding = libdatadog.load('crashtracker')
 
 const log = require('../log')
-const defaults = require('../config/defaults')
+const { getAgentUrl } = require('../agent/url')
 const pkg = require('../../../../package.json')
 const processTags = require('../process-tags')
 
@@ -52,8 +50,7 @@ class Crashtracker {
 
   // TODO: Send only configured values when defaults are fixed.
   #getConfig (config) {
-    const { hostname = defaults.hostname, port = defaults.port } = config
-    const url = config.url || new URL(`http://${hostname}:${port}`)
+    const url = getAgentUrl(config)
 
     return {
       additional_files: [],
@@ -66,13 +63,13 @@ class Crashtracker {
           authority: url.protocol === 'unix:'
             ? Buffer.from(url.pathname).toString('hex')
             : url.host,
-          path_and_query: ''
+          path_and_query: '',
         },
-        timeout_ms: 3000
+        timeout_ms: 3000,
       },
       timeout_ms: 5000,
       // TODO: Use `EnabledWithSymbolsInReceiver` instead for Linux when fixed.
-      resolve_frames: 'EnabledWithInprocessSymbols'
+      resolve_frames: 'EnabledWithInprocessSymbols',
     }
   }
 
@@ -97,8 +94,8 @@ class Crashtracker {
         `library_version:${pkg.version}`,
         'runtime:nodejs',
         `runtime_version:${process.versions.node}`,
-        'severity:crash'
-      ]
+        'severity:crash',
+      ],
     }
   }
 
@@ -108,7 +105,7 @@ class Crashtracker {
       env: [],
       path_to_receiver_binary: libdatadog.find('crashtracker-receiver', true),
       stderr_filename: null,
-      stdout_filename: null
+      stdout_filename: null,
     }
   }
 }

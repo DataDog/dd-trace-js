@@ -81,9 +81,9 @@ function testOutsideRequestHasVulnerability (fnToTest, vulnerability, plugins, t
       experimental: {
         iast: {
           enabled: true,
-          requestSampling: 100
-        }
-      }
+          requestSampling: 100,
+        },
+      },
     })
     iast.enable(config, tracer)
     rewriter.enable(config)
@@ -125,14 +125,14 @@ function beforeEachIastTest (iastConfig) {
     enabled: true,
     requestSampling: 100,
     maxConcurrentRequests: 100,
-    maxContextOperations: 100
+    maxContextOperations: 100,
   }
 
   beforeEach(() => {
     overheadController.clearGlobalRouteMap()
     vulnerabilityReporter.clearCache()
     const config = getConfigFresh({
-      iast: iastConfig
+      iast: iastConfig,
     })
     iast.enable(config)
     rewriter.enable(config)
@@ -563,5 +563,5 @@ module.exports = {
   copyFileToTmp,
   prepareTestServerForIast,
   prepareTestServerForIastInExpress,
-  prepareTestServerForIastInFastify
+  prepareTestServerForIastInFastify,
 }

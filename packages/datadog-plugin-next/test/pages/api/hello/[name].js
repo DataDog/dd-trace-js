@@ -5,7 +5,7 @@ export default (req, res) => {
 
   if (req.query.createChildSpan === 'true') {
     const childSpan = tracer.startSpan('child.operation', {
-      childOf: tracer.scope().active()
+      childOf: tracer.scope().active(),
     })
 
     tracer.scope().activate(childSpan, () => {

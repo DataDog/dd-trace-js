@@ -1,5 +1,6 @@
 'use strict'
-const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+
+const { getValueFromEnvSources } = require('./config/helper')
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
@@ -11,12 +12,13 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
+const { IS_SERVERLESS } = require('./serverless')
 const {
   setBaggageItem,
   getBaggageItem,
   getAllBaggageItems,
   removeBaggageItem,
-  removeAllBaggageItems
+  removeAllBaggageItems,
 } = require('./baggage')
 
 class LazyModule {
@@ -34,11 +36,11 @@ class LazyModule {
   }
 }
 
-function lazyProxy (obj, property, config, getClass, ...args) {
-  if (config?._isInServerlessEnvironment?.() === false) {
-    defineEagerly(obj, property, getClass, ...args)
+function lazyProxy (...args) {
+  if (IS_SERVERLESS === false) {
+    defineEagerly(...args)
   } else {
-    defineLazily(obj, property, getClass, ...args)
+    defineLazily(...args)
   }
 }
 
@@ -59,7 +61,7 @@ function defineLazily (obj, property, getClass, ...args) {
       return value
     },
     configurable: true,
-    enumerable: true
+    enumerable: true,
   })
 }
 
@@ -85,7 +87,7 @@ class Tracer extends NoopProxy {
       iast: new LazyModule(() => require('./appsec/iast')),
       llmobs: new LazyModule(() => require('./llmobs')),
       rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter')),
-      openfeature: new LazyModule(() => require('./openfeature'))
+      openfeature: new LazyModule(() => require('./openfeature')),
     }
   }
 
@@ -112,7 +114,7 @@ class Tracer extends NoopProxy {
 
       if (config.dogstatsd) {
         // Custom Metrics
-        lazyProxy(this, 'dogstatsd', config, () => require('./dogstatsd').CustomMetrics, config)
+        lazyProxy(this, 'dogstatsd', () => require('./dogstatsd').CustomMetrics, config)
       }
 
       if (config.spanLeakDebug > 0) {
@@ -199,7 +201,7 @@ class Tracer extends NoopProxy {
         this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
       if (config.ciVisAgentlessLogSubmissionEnabled) {
-        if (getEnvironmentVariable('DD_API_KEY')) {
+        if (getValueFromEnvSources('DD_API_KEY')) {
           const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
           const automaticLogPlugin = new LogSubmissionPlugin(this)
           automaticLogPlugin.configure({ ...config, enabled: true })
@@ -259,17 +261,16 @@ class Tracer extends NoopProxy {
           : undefined
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
-        lazyProxy(this, 'appsec', config, () => require('./appsec/sdk'), this._tracer, config)
-        lazyProxy(this, 'llmobs', config, () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
+        lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
+        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
         if (config.experimental?.aiguard?.enabled) {
-          lazyProxy(this, 'aiguard', config, () => require('./aiguard/sdk'), this._tracer, config)
+          lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
         }
         this._tracingInitialized = true
       }
       if (config.experimental.flaggingProvider.enabled) {
         this._modules.openfeature.enable(config)
-        lazyProxy(this, 'openfeature', config, () =>
-          require('./openfeature/flagging_provider'), this._tracer, config)
+        lazyProxy(this, 'openfeature', () => require('./openfeature/flagging_provider'), this._tracer, config)
       }
       if (config.iast.enabled) {
         this._modules.iast.enable(config, this._tracer)

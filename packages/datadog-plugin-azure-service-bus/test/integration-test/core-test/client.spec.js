@@ -8,7 +8,7 @@ const {
   sandboxCwd,
   useSandbox,
   spawnPluginIntegrationTestProcAndExpectExit,
-  varySandbox
+  varySandbox,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
@@ -60,8 +60,8 @@ describe('esm', () => {
               'messaging.system': 'servicebus',
               'messaging.destination.name': 'queue.1',
               'messaging.operation': 'send',
-              'network.destination.name': '127.0.0.1'
-            }
+              'network.destination.name': '127.0.0.1',
+            },
           })
           // queue array of messages
           assertObjectContains(payload[1][0], {
@@ -70,16 +70,16 @@ describe('esm', () => {
               'span.kind': 'producer',
               'messaging.system': 'servicebus',
               'messaging.operation': 'create',
-              'network.destination.name': '127.0.0.1'
-            }
+              'network.destination.name': '127.0.0.1',
+            },
           })
           assert.strictEqual(payload[2][0].name, 'azure.servicebus.create')
           assertObjectContains(payload[3][0], {
             name: 'azure.servicebus.send',
             meta: {
               'messaging.operation': 'send',
-              'messaging.destination.name': 'queue.1'
-            }
+              'messaging.destination.name': 'queue.1',
+            },
           })
           // queue amqp messages
           assert.strictEqual(payload[1][0].name, 'azure.servicebus.create')
@@ -88,16 +88,16 @@ describe('esm', () => {
               'span.kind': 'producer',
               'messaging.system': 'servicebus',
               'messaging.operation': 'create',
-              'network.destination.name': '127.0.0.1'
-            }
+              'network.destination.name': '127.0.0.1',
+            },
           })
           assert.strictEqual(payload[5][0].name, 'azure.servicebus.create')
           assertObjectContains(payload[6][0], {
             name: 'azure.servicebus.send',
             meta: {
               'messaging.operation': 'send',
-              'messaging.destination.name': 'queue.1'
-            }
+              'messaging.destination.name': 'queue.1',
+            },
           })
 
           // topic message
@@ -108,8 +108,8 @@ describe('esm', () => {
               'messaging.system': 'servicebus',
               'messaging.destination.name': 'topic.1',
               'messaging.operation': 'send',
-              'network.destination.name': '127.0.0.1'
-            }
+              'network.destination.name': '127.0.0.1',
+            },
           })
           // topic array of messages
           assertObjectContains(payload[8][0], {
@@ -118,16 +118,16 @@ describe('esm', () => {
               'span.kind': 'producer',
               'messaging.system': 'servicebus',
               'messaging.operation': 'create',
-              'network.destination.name': '127.0.0.1'
-            }
+              'network.destination.name': '127.0.0.1',
+            },
           })
           assert.strictEqual(payload[9][0].name, 'azure.servicebus.create')
           assertObjectContains(payload[10][0], {
             name: 'azure.servicebus.send',
             meta: {
               'messaging.operation': 'send',
-              'messaging.destination.name': 'topic.1'
-            }
+              'messaging.destination.name': 'topic.1',
+            },
           })
 
           // topic amqp messages
@@ -137,16 +137,16 @@ describe('esm', () => {
               'span.kind': 'producer',
               'messaging.system': 'servicebus',
               'messaging.operation': 'create',
-              'network.destination.name': '127.0.0.1'
-            }
+              'network.destination.name': '127.0.0.1',
+            },
           })
           assert.strictEqual(payload[12][0].name, 'azure.servicebus.create')
           assertObjectContains(payload[13][0], {
             name: 'azure.servicebus.send',
             meta: {
               'messaging.operation': 'send',
-              'messaging.destination.name': 'topic.1'
-            }
+              'messaging.destination.name': 'topic.1',
+            },
           })
           // scheduled message
           assertObjectContains(payload[14][0], {
@@ -156,8 +156,8 @@ describe('esm', () => {
               'messaging.system': 'servicebus',
               'messaging.destination.name': 'queue.1',
               'messaging.operation': 'send',
-              'network.destination.name': '127.0.0.1'
-            }
+              'network.destination.name': '127.0.0.1',
+            },
           })
           // scheduled array of messages
           assertObjectContains(payload[15][0], {
@@ -167,8 +167,8 @@ describe('esm', () => {
               'messaging.system': 'servicebus',
               'messaging.destination.name': 'queue.1',
               'messaging.operation': 'send',
-              'network.destination.name': '127.0.0.1'
-            }
+              'network.destination.name': '127.0.0.1',
+            },
           })
           // scheduled amqp messages
           assertObjectContains(payload[16][0], {
@@ -178,8 +178,8 @@ describe('esm', () => {
               'messaging.system': 'servicebus',
               'messaging.destination.name': 'queue.1',
               'messaging.operation': 'send',
-              'network.destination.name': '127.0.0.1'
-            }
+              'network.destination.name': '127.0.0.1',
+            },
           })
 
           // queue batch
@@ -189,18 +189,18 @@ describe('esm', () => {
               'span.kind': 'producer',
               'messaging.system': 'servicebus',
               'messaging.operation': 'create',
-              'network.destination.name': '127.0.0.1'
-            }
+              'network.destination.name': '127.0.0.1',
+            },
           })
           assert.strictEqual(payload[18][0].name, 'azure.servicebus.create')
           assertObjectContains(payload[19][0], {
             name: 'azure.servicebus.send',
             meta: {
-              'messaging.destination.name': 'queue.1'
+              'messaging.destination.name': 'queue.1',
             },
             metrics: {
-              'messaging.batch.message_count': 2
-            }
+              'messaging.batch.message_count': 2,
+            },
           })
           assert.strictEqual(parseLinks(payload[19][0]).length, 2)
 
@@ -211,18 +211,18 @@ describe('esm', () => {
               'span.kind': 'producer',
               'messaging.system': 'servicebus',
               'messaging.operation': 'create',
-              'network.destination.name': '127.0.0.1'
-            }
+              'network.destination.name': '127.0.0.1',
+            },
           })
           assert.strictEqual(payload[21][0].name, 'azure.servicebus.create')
           assertObjectContains(payload[22][0], {
             name: 'azure.servicebus.send',
             meta: {
-              'messaging.destination.name': 'topic.1'
+              'messaging.destination.name': 'topic.1',
             },
             metrics: {
-              'messaging.batch.message_count': 2
-            }
+              'messaging.batch.message_count': 2,
+            },
           })
           assert.strictEqual(parseLinks(payload[22][0]).length, 2)
         })

@@ -1,6 +1,6 @@
 'use strict'
 
-const { getEnvironmentVariable } = require('./config/helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 const { isFalse } = require('./util')
 
 function getIsGCPFunction () {
@@ -19,7 +19,7 @@ function getIsGCPFunction () {
  * PUSH: GCP sends HTTP POST requests to the service with message data in headers.
  */
 function enableGCPPubSubPushSubscription () {
-  const isGCPPubSubPushSubscriptionEnabled = getEnvironmentVariable('DD_TRACE_GCP_PUBSUB_PUSH_ENABLED')
+  const isGCPPubSubPushSubscriptionEnabled = getValueFromEnvSources('DD_TRACE_GCP_PUBSUB_PUSH_ENABLED')
   return getEnvironmentVariable('K_SERVICE') !== undefined && !isFalse(isGCPPubSubPushSubscriptionEnabled)
 }
 
@@ -48,5 +48,5 @@ module.exports = {
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
-  isInServerlessEnvironment
+  IS_SERVERLESS: isInServerlessEnvironment(),
 }

@@ -37,12 +37,12 @@ class NoopSpan {
         traceId: parent._traceId,
         spanId,
         parentId: parent._spanId,
-        baggageItems: { ...parent._baggageItems }
+        baggageItems: { ...parent._baggageItems },
       })
       : new NoopSpanContext({
         noop: this,
         traceId: spanId,
-        spanId
+        spanId,
       })
   }
 }

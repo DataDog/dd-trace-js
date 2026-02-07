@@ -4,7 +4,7 @@ const execSync = require('child_process').execSync
 const color = require('./color')
 
 function exec (command, options) {
-  options = Object.assign({ stdio: [0, 1, 2] }, options)
+  options = { stdio: [0, 1, 2], ...options }
 
   execSync(`echo "${color.GRAY}$ ${command}${color.NONE}"`, { stdio: [0, 1, 2] })
 
@@ -12,7 +12,7 @@ function exec (command, options) {
 }
 
 function pipe (command, options) {
-  return exec(command, Object.assign({ stdio: 'pipe' }, options))
+  return exec(command, { stdio: 'pipe', ...options })
     .toString()
     .replace(/\n$/, '')
 }

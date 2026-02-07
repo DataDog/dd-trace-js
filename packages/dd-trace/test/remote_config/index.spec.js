@@ -29,7 +29,7 @@ describe('RemoteConfig', () => {
 
     scheduler = {
       start: sinon.spy(),
-      stop: sinon.spy()
+      stop: sinon.spy(),
     }
 
     Scheduler = sinon.stub().returns(scheduler)
@@ -37,11 +37,11 @@ describe('RemoteConfig', () => {
     request = sinon.stub()
 
     log = {
-      error: sinon.spy()
+      error: sinon.spy(),
     }
 
     tagger = {
-      add: sinon.stub()
+      add: sinon.stub(),
     }
 
     extraServices = []
@@ -54,8 +54,8 @@ describe('RemoteConfig', () => {
       '../log': log,
       '../tagger': tagger,
       '../service-naming/extra-services': {
-        getExtraServices: () => extraServices
-      }
+        getExtraServices: () => extraServices,
+      },
     })
 
     config = {
@@ -63,14 +63,14 @@ describe('RemoteConfig', () => {
       hostname: '127.0.0.1',
       port: '1337',
       tags: {
-        'runtime-id': 'runtimeId'
+        'runtime-id': 'runtimeId',
       },
       service: 'serviceName',
       env: 'serviceEnv',
       version: 'appVersion',
       remoteConfig: {
-        pollInterval: 5
-      }
+        pollInterval: 5,
+      },
     }
 
     rc = new RemoteConfig(config)
@@ -89,10 +89,10 @@ describe('RemoteConfig', () => {
 
     assert.strictEqual(rc.scheduler, scheduler)
 
-    assert.deepStrictEqual(rc.url, config.url)
+    assert.strictEqual(rc.url.toString(), 'http://127.0.0.1:1337/')
 
     sinon.assert.calledOnceWithExactly(tagger.add, config.tags, {
-      '_dd.rc.client_id': '1234-5678'
+      '_dd.rc.client_id': '1234-5678',
     })
 
     assert.deepStrictEqual(rc.state, {
@@ -103,7 +103,7 @@ describe('RemoteConfig', () => {
           config_states: [],
           has_error: false,
           error: '',
-          backend_client_state: ''
+          backend_client_state: '',
         },
         id: '1234-5678',
         products: [],
@@ -117,11 +117,11 @@ describe('RemoteConfig', () => {
           app_version: config.version,
           extra_services: [],
           tags: ['runtime-id:runtimeId'],
-          process_tags: rc.state.client.client_tracer.process_tags
+          process_tags: rc.state.client.client_tracer.process_tags,
         },
-        capabilities: 'AA=='
+        capabilities: 'AA==',
       },
-      cached_target_files: []
+      cached_target_files: [],
     })
 
     assert.ok(rc.appliedConfigs instanceof Map)
@@ -147,13 +147,13 @@ describe('RemoteConfig', () => {
     const configWithGit = {
       ...config,
       repositoryUrl: 'https://github.com/DataDog/dd-trace-js',
-      commitSHA: '1234567890'
+      commitSHA: '1234567890',
     }
     const rc = new RemoteConfig(configWithGit)
     assert.deepStrictEqual(rc.state.client.client_tracer.tags, [
       'runtime-id:runtimeId',
       'git.repository_url:https://github.com/DataDog/dd-trace-js',
-      'git.commit.sha:1234567890'
+      'git.commit.sha:1234567890',
     ])
   })
 
@@ -236,7 +236,7 @@ describe('RemoteConfig', () => {
         url: rc.url,
         method: 'POST',
         path: '/v0.7/config',
-        headers: { 'Content-Type': 'application/json; charset=utf-8' }
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
       }
     })
 
@@ -370,10 +370,10 @@ describe('RemoteConfig', () => {
         targets: toBase64({
           signed: {
             targets: {
-              'datadog/42/OTHERPRODUCT/confId/config': {}
-            }
-          }
-        })
+              'datadog/42/OTHERPRODUCT/confId/config': {},
+            },
+          },
+        }),
       }
 
       assert.throws(parsePayload, { message: 'Unable to find target for path datadog/42/PRODUCT/confId/config' })
@@ -389,12 +389,12 @@ describe('RemoteConfig', () => {
             targets: {
               'datadog/42/PRODUCT/confId/config': {
                 hashes: {
-                  sha256: 'haaaxx'
-                }
-              }
-            }
-          }
-        })
+                  sha256: 'haaaxx',
+                },
+              },
+            },
+          },
+        }),
       }
 
       assert.throws(parsePayload, { message: 'Unable to find file for path datadog/42/PRODUCT/confId/config' })
@@ -410,16 +410,16 @@ describe('RemoteConfig', () => {
             targets: {
               'datadog/42/confId/config': {
                 hashes: {
-                  sha256: 'haaaxx'
-                }
-              }
-            }
-          }
+                  sha256: 'haaaxx',
+                },
+              },
+            },
+          },
         }),
         target_files: [{
           path: 'datadog/42/confId/config',
-          raw: toBase64({})
-        }]
+          raw: toBase64({}),
+        }],
       }
 
       assert.throws(parsePayload, { message: 'Unable to parse path datadog/42/confId/config' })
@@ -437,7 +437,7 @@ describe('RemoteConfig', () => {
         apply_error: '',
         length: 147,
         hashes: { sha256: 'anotherHash' },
-        file: { asm: { enabled: true } }
+        file: { asm: { enabled: true } },
       })
       rc.appliedConfigs.set('datadog/42/IGNORE/confId/config', {
         path: 'datadog/42/IGNORE/confId/config',
@@ -448,7 +448,7 @@ describe('RemoteConfig', () => {
         apply_error: '',
         length: 420,
         hashes: { sha256: 'sameHash' },
-        file: {}
+        file: {},
       })
       rc.appliedConfigs.set('datadog/42/MODIFY/confId/config', {
         path: 'datadog/42/MODIFY/confId/config',
@@ -459,62 +459,62 @@ describe('RemoteConfig', () => {
         apply_error: '',
         length: 147,
         hashes: { sha256: 'oldHash' },
-        file: { config: 'oldConf' }
+        file: { config: 'oldConf' },
       })
 
       payload = {
         client_configs: [
           'datadog/42/IGNORE/confId/config',
           'datadog/42/MODIFY/confId/config',
-          'datadog/42/APPLY/confId/config'
+          'datadog/42/APPLY/confId/config',
         ],
         targets: toBase64({
           signed: {
             custom: {
-              opaque_backend_state: 'opaquestateinbase64'
+              opaque_backend_state: 'opaquestateinbase64',
             },
             targets: {
               'datadog/42/IGNORE/confId/config': {
                 custom: {
-                  v: 43
+                  v: 43,
                 },
                 hashes: {
-                  sha256: 'sameHash'
+                  sha256: 'sameHash',
                 },
-                length: 420
+                length: 420,
               },
               'datadog/42/MODIFY/confId/config': {
                 custom: {
-                  v: 12
+                  v: 12,
                 },
                 hashes: {
-                  sha256: 'newHash'
+                  sha256: 'newHash',
                 },
-                length: 147
+                length: 147,
               },
               'datadog/42/APPLY/confId/config': {
                 custom: {
-                  v: 1
+                  v: 1,
                 },
                 hashes: {
-                  sha256: 'haaaxx'
+                  sha256: 'haaaxx',
                 },
-                length: 0
-              }
+                length: 0,
+              },
             },
-            version: 12345
-          }
+            version: 12345,
+          },
         }),
         target_files: [
           {
             path: 'datadog/42/MODIFY/confId/config',
-            raw: toBase64({ config: 'newConf' })
+            raw: toBase64({ config: 'newConf' }),
           },
           {
             path: 'datadog/42/APPLY/confId/config',
-            raw: ''
-          }
-        ]
+            raw: '',
+          },
+        ],
       }
 
       // Calling parsePayload should not throw.
@@ -533,7 +533,7 @@ describe('RemoteConfig', () => {
         apply_error: '',
         length: 147,
         hashes: { sha256: 'anotherHash' },
-        file: { asm: { enabled: true } }
+        file: { asm: { enabled: true } },
       }], 'unapply', sinon.match.instanceOf(Set))
       sinon.assert.calledWithMatch(rc.dispatch.secondCall, [{
         path: 'datadog/42/APPLY/confId/config',
@@ -544,7 +544,7 @@ describe('RemoteConfig', () => {
         apply_error: '',
         length: 0,
         hashes: { sha256: 'haaaxx' },
-        file: null
+        file: null,
       }], 'apply', sinon.match.instanceOf(Set))
       sinon.assert.calledWithMatch(rc.dispatch.thirdCall, [{
         path: 'datadog/42/MODIFY/confId/config',
@@ -555,7 +555,7 @@ describe('RemoteConfig', () => {
         apply_error: '',
         length: 147,
         hashes: { sha256: 'newHash' },
-        file: { config: 'newConf' }
+        file: { config: 'newConf' },
       }], 'modify', sinon.match.instanceOf(Set))
 
       assert.deepStrictEqual(rc.state.client.state.config_states, [
@@ -564,39 +564,39 @@ describe('RemoteConfig', () => {
           version: 43,
           product: 'IGNORE',
           apply_state: ACKNOWLEDGED,
-          apply_error: ''
+          apply_error: '',
         },
         {
           id: 'confId',
           version: 12,
           product: 'MODIFY',
           apply_state: ACKNOWLEDGED,
-          apply_error: ''
+          apply_error: '',
         },
         {
           id: 'confId',
           version: 1,
           product: 'APPLY',
           apply_state: ACKNOWLEDGED,
-          apply_error: ''
-        }
+          apply_error: '',
+        },
       ])
       assert.deepStrictEqual(rc.state.cached_target_files, [
         {
           path: 'datadog/42/IGNORE/confId/config',
           length: 420,
-          hashes: [{ algorithm: 'sha256', hash: 'sameHash' }]
+          hashes: [{ algorithm: 'sha256', hash: 'sameHash' }],
         },
         {
           path: 'datadog/42/MODIFY/confId/config',
           length: 147,
-          hashes: [{ algorithm: 'sha256', hash: 'newHash' }]
+          hashes: [{ algorithm: 'sha256', hash: 'newHash' }],
         },
         {
           path: 'datadog/42/APPLY/confId/config',
           length: 0,
-          hashes: [{ algorithm: 'sha256', hash: 'haaaxx' }]
-        }
+          hashes: [{ algorithm: 'sha256', hash: 'haaaxx' }],
+        },
       ])
     })
 
@@ -612,7 +612,7 @@ describe('RemoteConfig', () => {
         apply_error: '',
         length: 1,
         hashes: { sha256: 'oldHash' },
-        file: { a: 1 }
+        file: { a: 1 },
       })
 
       const handler = sinon.spy()
@@ -631,10 +631,10 @@ describe('RemoteConfig', () => {
           signed: {
             custom: { opaque_backend_state: 'state' },
             targets: {},
-            version: 2
-          }
+            version: 2,
+          },
         }),
-        target_files: []
+        target_files: [],
       }
 
       // Act
@@ -656,7 +656,7 @@ describe('RemoteConfig', () => {
         apply_error: '',
         length: 1,
         hashes: { sha256: 'oldHash' },
-        file: { a: 1 }
+        file: { a: 1 },
       }
       rc.appliedConfigs.set(unapplyPath, conf)
 
@@ -675,10 +675,10 @@ describe('RemoteConfig', () => {
           signed: {
             custom: { opaque_backend_state: 'state' },
             targets: {},
-            version: 2
-          }
+            version: 2,
+          },
         }),
-        target_files: []
+        target_files: [],
       }
 
       parsePayload()
@@ -720,7 +720,7 @@ describe('RemoteConfig', () => {
           product: `PRODUCT_${i}`,
           apply_state: UNACKNOWLEDGED,
           apply_error: '',
-          file: { index: i }
+          file: { index: i },
         }
       }
 
@@ -790,7 +790,7 @@ describe('RemoteConfig', () => {
         product: 'ASM_FEATURES',
         apply_state: ACKNOWLEDGED,
         apply_error: '',
-        file: { asm: { enabled: true } }
+        file: { asm: { enabled: true } },
       })
 
       rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply', new Set())

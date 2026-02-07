@@ -12,7 +12,7 @@ function waitForPostgres () {
         user: 'postgres',
         password: 'postgres',
         database: 'postgres',
-        application_name: 'test'
+        application_name: 'test',
       })
 
       client.connect((err) => {

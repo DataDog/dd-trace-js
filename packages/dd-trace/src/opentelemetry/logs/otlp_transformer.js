@@ -35,7 +35,7 @@ const SEVERITY_MAP = {
   [SeverityNumber.FATAL]: 'SEVERITY_NUMBER_FATAL',
   [SeverityNumber.FATAL2]: 'SEVERITY_NUMBER_FATAL2',
   [SeverityNumber.FATAL3]: 'SEVERITY_NUMBER_FATAL3',
-  [SeverityNumber.FATAL4]: 'SEVERITY_NUMBER_FATAL4'
+  [SeverityNumber.FATAL4]: 'SEVERITY_NUMBER_FATAL4',
 }
 
 /**
@@ -82,7 +82,7 @@ class OtlpTransformer extends OtlpTransformerBase {
       resourceLogs: [{
         resource: this.transformResource(),
         scopeLogs: this.#transformScope(logRecords),
-      }]
+      }],
     }
 
     return this.serializeToProtobuf(protoLogsService, logsData)
@@ -97,8 +97,8 @@ class OtlpTransformer extends OtlpTransformerBase {
     const logsData = {
       resourceLogs: [{
         resource: this.transformResource(),
-        scopeLogs: this.#transformScope(logRecords)
-      }]
+        scopeLogs: this.#transformScope(logRecords),
+      }],
     }
     return this.serializeToJson(logsData)
   }
@@ -119,10 +119,10 @@ class OtlpTransformer extends OtlpTransformerBase {
           name: records[0]?.instrumentationScope?.name || 'dd-trace-js',
           version: records[0]?.instrumentationScope?.version || '',
           attributes: [],
-          droppedAttributesCount: 0
+          droppedAttributesCount: 0,
         },
         schemaUrl,
-        logRecords: records.map(record => this.#transformLogRecord(record))
+        logRecords: records.map(record => this.#transformLogRecord(record)),
       })
     }
 
@@ -139,7 +139,7 @@ class OtlpTransformer extends OtlpTransformerBase {
 
     const result = {
       timeUnixNano: logRecord.timestamp,
-      body: this.#transformBody(logRecord.body)
+      body: this.#transformBody(logRecord.body),
     }
 
     // Add optional fields only if they are set
@@ -233,9 +233,9 @@ class OtlpTransformer extends OtlpTransformerBase {
         kvlistValue: {
           values: Object.entries(body).map(([key, value]) => ({
             key,
-            value: this.transformAnyValue(value)
-          }))
-        }
+            value: this.transformAnyValue(value),
+          })),
+        },
       }
     }
     return { stringValue: String(body) }

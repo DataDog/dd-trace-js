@@ -16,7 +16,7 @@ function patch (file) {
   addHook({
     name: 'knex',
     versions: ['>=0.8.0'],
-    file
+    file,
   }, Builder => {
     shimmer.wrap(Builder.prototype, 'then', wrapThen)
     return Builder
@@ -30,7 +30,7 @@ function finish (context, cb) {
 addHook({
   name: 'knex',
   versions: ['>=2'],
-  file: 'lib/knex-builder/Knex.js'
+  file: 'lib/knex-builder/Knex.js',
 }, Knex => {
   shimmer.wrap(Knex.Client.prototype, 'raw', raw => function () {
     if (!startRawQueryCh.hasSubscribers) {

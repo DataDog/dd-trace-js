@@ -51,7 +51,7 @@ describe('breakpoints', function () {
       post: sinon.stub().callsFake((method, { location } = {}) => {
         if (method === 'Debugger.setBreakpoint') {
           return Promise.resolve({
-            breakpointId: `bp-${location.scriptId}:${location.lineNumber}:${location.columnNumber}`
+            breakpointId: `bp-${location.scriptId}:${location.lineNumber}:${location.columnNumber}`,
           })
         }
         return Promise.resolve({})
@@ -59,7 +59,7 @@ describe('breakpoints', function () {
       on (event, callback) {
         if (event === 'scriptLoadingStabilized') callback()
       },
-      '@noCallThru': true
+      '@noCallThru': true,
     }
 
     stateMock = {
@@ -67,18 +67,18 @@ describe('breakpoints', function () {
         url: 'file:///path/to/test.js',
         scriptId: 'script-1',
         sourceMapURL: null,
-        source: null
+        source: null,
       }),
       clearState: sinon.stub(),
       locationToBreakpoint: new Map(),
       breakpointToProbes: new Map(),
       probeToLocation: new Map(),
-      '@noCallThru': true
+      '@noCallThru': true,
     }
 
     breakpoints = proxyquire('../../../src/debugger/devtools_client/breakpoints', {
       './session': sessionMock,
-      './state': stateMock
+      './state': stateMock,
     })
   })
 
@@ -91,9 +91,9 @@ describe('breakpoints', function () {
         location: {
           scriptId: 'script-1',
           lineNumber: 9,
-          columnNumber: 0
+          columnNumber: 0,
         },
-        condition: undefined
+        condition: undefined,
       })
       sinon.assert.calledTwice(sessionMock.post)
     })
@@ -114,7 +114,7 @@ describe('breakpoints', function () {
 
       await Promise.all([
         addProbe(),
-        addProbe({ id: 'probe-2', where: { sourceFile: 'test2.js', lines: ['20'] } })
+        addProbe({ id: 'probe-2', where: { sourceFile: 'test2.js', lines: ['20'] } }),
       ])
 
       sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.enable')
@@ -166,8 +166,8 @@ describe('breakpoints', function () {
         await addProbe({
           when: {
             json: { eq: [{ ref: 'foo' }, 42] },
-            dsl: 'foo = 42'
-          }
+            dsl: 'foo = 42',
+          },
         })
         sessionMock.post.resetHistory()
 
@@ -176,15 +176,15 @@ describe('breakpoints', function () {
 
         // Should remove previous breakpoint and create a new one with both conditions
         sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', {
-          breakpointId: 'bp-script-1:9:0'
+          breakpointId: 'bp-script-1:9:0',
         })
         sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
           location: {
             scriptId: 'script-1',
             lineNumber: 9,
-            columnNumber: 0
+            columnNumber: 0,
           },
-          condition: undefined
+          condition: undefined,
         })
         sinon.assert.calledTwice(sessionMock.post)
       })
@@ -198,8 +198,8 @@ describe('breakpoints', function () {
           id: 'probe-2',
           when: {
             json: { eq: [{ ref: 'foo' }, 42] },
-            dsl: 'foo = 42'
-          }
+            dsl: 'foo = 42',
+          },
         })
 
         sinon.assert.notCalled(sessionMock.post)
@@ -209,8 +209,8 @@ describe('breakpoints', function () {
         await addProbe({
           when: {
             json: { eq: [{ ref: 'foo' }, 42] },
-            dsl: 'foo == 42'
-          }
+            dsl: 'foo == 42',
+          },
         })
         sessionMock.post.resetHistory()
 
@@ -219,23 +219,23 @@ describe('breakpoints', function () {
           id: 'probe-2',
           when: {
             json: { eq: [{ ref: 'foo' }, 43] },
-            dsl: 'foo == 43'
-          }
+            dsl: 'foo == 43',
+          },
         })
 
         // Should remove previous breakpoint and create a new one with both conditions
         sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', {
-          breakpointId: 'bp-script-1:9:0'
+          breakpointId: 'bp-script-1:9:0',
         })
         sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
           location: {
             scriptId: 'script-1',
             lineNumber: 9,
-            columnNumber: 0
+            columnNumber: 0,
           },
           condition:
             '(() => { try { return (foo) === (42) } catch { return false } })() || ' +
-            '(() => { try { return (foo) === (43) } catch { return false } })()'
+            '(() => { try { return (foo) === (43) } catch { return false } })()',
         })
         sinon.assert.calledTwice(sessionMock.post)
       })
@@ -244,7 +244,7 @@ describe('breakpoints', function () {
         // Test we don't hit a race condition where the internal state isn't updated before we try to add a new probe
         await Promise.all([
           addProbe(),
-          addProbe({ id: 'probe-2' })
+          addProbe({ id: 'probe-2' }),
         ])
         sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.enable')
         sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint')
@@ -269,8 +269,8 @@ describe('breakpoints', function () {
       const config = {
         when: {
           json: { invalid: 'condition' },
-          dsl: 'this is an invalid condition'
-        }
+          dsl: 'this is an invalid condition',
+        },
       }
 
       await addProbe(config)
@@ -317,7 +317,7 @@ describe('breakpoints', function () {
 
       await Promise.all([
         breakpoints.removeBreakpoint({ id: 'probe-1' }),
-        addProbe({ id: 'probe-2', where: { sourceFile: 'test2.js', lines: ['20'] } })
+        addProbe({ id: 'probe-2', where: { sourceFile: 'test2.js', lines: ['20'] } }),
       ])
 
       sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.disable')
@@ -333,7 +333,7 @@ describe('breakpoints', function () {
 
       await Promise.all([
         addProbe({ id: 'probe-2', where: { sourceFile: 'test2.js', lines: ['20'] } }),
-        breakpoints.removeBreakpoint({ id: 'probe-1' })
+        breakpoints.removeBreakpoint({ id: 'probe-1' }),
       ])
 
       sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.setBreakpoint')
@@ -358,23 +358,23 @@ describe('breakpoints', function () {
           id: 'probe-2',
           when: {
             json: { eq: [{ ref: 'foo' }, 42] },
-            dsl: 'foo = 42'
-          }
+            dsl: 'foo = 42',
+          },
         })
         sessionMock.post.resetHistory()
 
         await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
         sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', {
-          breakpointId: 'bp-script-1:9:0'
+          breakpointId: 'bp-script-1:9:0',
         })
         sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
           location: {
             scriptId: 'script-1',
             lineNumber: 9,
-            columnNumber: 0
+            columnNumber: 0,
           },
-          condition: '(foo) === (42)'
+          condition: '(foo) === (42)',
         })
         sinon.assert.calledTwice(sessionMock.post)
       })
@@ -383,8 +383,8 @@ describe('breakpoints', function () {
         await addProbe({
           when: {
             json: { eq: [{ ref: 'foo' }, 42] },
-            dsl: 'foo = 42'
-          }
+            dsl: 'foo = 42',
+          },
         })
         await addProbe({ id: 'probe-2' })
         sessionMock.post.resetHistory()
@@ -398,30 +398,30 @@ describe('breakpoints', function () {
         await addProbe({
           when: {
             json: { eq: [{ ref: 'foo' }, 42] },
-            dsl: 'foo = 42'
-          }
+            dsl: 'foo = 42',
+          },
         })
         await addProbe({
           id: 'probe-2',
           when: {
             json: { eq: [{ ref: 'foo' }, 43] },
-            dsl: 'foo = 43'
-          }
+            dsl: 'foo = 43',
+          },
         })
         sessionMock.post.resetHistory()
 
         await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
         sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', {
-          breakpointId: 'bp-script-1:9:0'
+          breakpointId: 'bp-script-1:9:0',
         })
         sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
           location: {
             scriptId: 'script-1',
             lineNumber: 9,
-            columnNumber: 0
+            columnNumber: 0,
           },
-          condition: '(foo) === (43)'
+          condition: '(foo) === (43)',
         })
         sinon.assert.calledTwice(sessionMock.post)
       })
@@ -461,8 +461,8 @@ describe('breakpoints', function () {
         version: 2,
         when: {
           json: { eq: [{ ref: 'foo' }, 42] },
-          dsl: 'foo = 42'
-        }
+          dsl: 'foo = 42',
+        },
       })
       await breakpoints.modifyBreakpoint(probe)
 
@@ -472,9 +472,9 @@ describe('breakpoints', function () {
         location: {
           scriptId: 'script-1',
           lineNumber: 9,
-          columnNumber: 0
+          columnNumber: 0,
         },
-        condition: '(foo) === (42)'
+        condition: '(foo) === (42)',
       })
       sinon.assert.calledThrice(sessionMock.post)
     })
@@ -489,21 +489,21 @@ describe('breakpoints', function () {
         version: 2,
         when: {
           json: { eq: [{ ref: 'foo' }, 42] },
-          dsl: 'foo = 42'
-        }
+          dsl: 'foo = 42',
+        },
       })
       await breakpoints.modifyBreakpoint(probe)
 
       sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', {
-        breakpointId: 'bp-script-1:9:0'
+        breakpointId: 'bp-script-1:9:0',
       })
       sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
         location: {
           scriptId: 'script-1',
           lineNumber: 9,
-          columnNumber: 0
+          columnNumber: 0,
         },
-        condition: '(foo) === (42)'
+        condition: '(foo) === (42)',
       })
       sinon.assert.calledTwice(sessionMock.post)
     })
@@ -531,6 +531,6 @@ function genProbeConfig ({ id, version, where, when, ...rest } = {}) {
     version: version || 1,
     where: where || { sourceFile: 'test.js', lines: ['10'] },
     when,
-    ...rest
+    ...rest,
   }
 }

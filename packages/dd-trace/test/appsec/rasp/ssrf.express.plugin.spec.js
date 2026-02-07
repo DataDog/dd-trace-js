@@ -35,14 +35,14 @@ describe('RASP - ssrf', () => {
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
-          rasp: { enabled: true }
-        }
+          rasp: { enabled: true },
+        },
       }))
 
       server = expressApp.listen(0, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({
-          baseURL: `http://localhost:${port}`
+          baseURL: `http://localhost:${port}`,
         })
         done()
       })
@@ -243,14 +243,14 @@ describe('RASP - ssrf', () => {
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
-          rasp: { enabled: true }
-        }
+          rasp: { enabled: true },
+        },
       }))
 
       server.listen(0, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({
-          baseURL: `http://localhost:${port}`
+          baseURL: `http://localhost:${port}`,
         })
 
         done()
@@ -287,8 +287,8 @@ describe('RASP - ssrf', () => {
 
       const response = await axios.get('/', {
         headers: {
-          host: 'localhost/ifconfig.pro'
-        }
+          host: 'localhost/ifconfig.pro',
+        },
       })
 
       assert.strictEqual(response.status, 200)

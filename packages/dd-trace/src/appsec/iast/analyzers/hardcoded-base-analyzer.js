@@ -43,14 +43,15 @@ class HardcodedBaseAnalyzer extends Analyzer {
     if (matches.length) {
       const file = getRelativePath(secrets.file)
 
-      matches
-        .forEach(match => this._report({
+      for (const match of matches) {
+        this._report({
           file,
           line: match.location.line,
           column: match.location.column,
           ident: match.location.ident,
-          data: match.ruleId
-        }))
+          data: match.ruleId,
+        })
+      }
     }
   }
 
@@ -63,7 +64,7 @@ class HardcodedBaseAnalyzer extends Analyzer {
       path: value.file,
       line: value.line,
       column: value.column,
-      isInternal: false
+      isInternal: false,
     }
   }
 }

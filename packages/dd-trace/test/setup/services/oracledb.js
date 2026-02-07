@@ -14,7 +14,7 @@ function waitForOracledb () {
           user: 'sys',
           password: 'Oracle18',
           connectString: `${hostname}:1521/xepdb1`,
-          privilege: 2
+          privilege: 2,
         })
         .then(connection => {
           return ensureTestUser(connection)

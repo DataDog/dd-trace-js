@@ -3,7 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 const startCh = channel('apm:redis:command:start')
@@ -139,7 +139,7 @@ function getStartCtx (client, command, args, url = {}) {
     db: client.selected_db,
     command,
     args,
-    connectionOptions: client.connection_options || client.connection_option || client.connectionOption || url
+    connectionOptions: client.connection_options || client.connection_option || client.connectionOption || url,
   }
 }
 

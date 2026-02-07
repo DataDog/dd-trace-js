@@ -29,7 +29,7 @@ const tags = {
   // Messaging
 
   // DSM Specific
-  PATHWAY_HASH: 'pathway.hash'
+  PATHWAY_HASH: 'pathway.hash',
 }
 
 // Deprecated

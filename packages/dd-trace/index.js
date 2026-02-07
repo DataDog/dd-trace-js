@@ -7,7 +7,7 @@ if (!global._ddtrace) {
     value: new TracerProxy(),
     enumerable: false,
     configurable: true,
-    writable: true
+    writable: true,
   })
 
   const ddTraceSymbol = Symbol.for('dd-trace')
@@ -18,7 +18,7 @@ if (!global._ddtrace) {
     },
     enumerable: false,
     configurable: true, // Allow this to be overridden by loading the tracer
-    writable: false
+    writable: false,
   })
 
   process.once('beforeExit', function mainBeforeExit () {

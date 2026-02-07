@@ -8,7 +8,7 @@ const {
   useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProcAndExpectExit,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
@@ -43,7 +43,7 @@ describe('esm', () => {
 
         proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
           AWS_SECRET_ACCESS_KEY: '0000000000/00000000000000000000000000000',
-          AWS_ACCESS_KEY_ID: '00000000000000000000'
+          AWS_ACCESS_KEY_ID: '00000000000000000000',
         })
 
         await res

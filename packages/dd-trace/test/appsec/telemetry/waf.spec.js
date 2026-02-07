@@ -25,10 +25,10 @@ describe('Appsec Waf Telemetry metrics', () => {
     inc = sinon.spy()
     track = sinon.spy()
     count = sinon.stub(appsecNamespace, 'count').returns({
-      inc
+      inc,
     })
     distribution = sinon.stub(appsecNamespace, 'distribution').returns({
-      track
+      track,
     })
 
     appsecNamespace.metrics.clear()
@@ -40,7 +40,7 @@ describe('Appsec Waf Telemetry metrics', () => {
   describe('if enabled', () => {
     const metrics = {
       wafVersion,
-      rulesVersion
+      rulesVersion,
     }
 
     beforeEach(() => {
@@ -70,7 +70,7 @@ describe('Appsec Waf Telemetry metrics', () => {
           rule_triggered: false,
           waf_error: false,
           waf_timeout: false,
-          waf_version: wafVersion
+          waf_version: wafVersion,
         })
       })
 
@@ -82,7 +82,7 @@ describe('Appsec Waf Telemetry metrics', () => {
           rateLimited: true,
           errorCode: -1,
           maxTruncatedString: 5000,
-          ...metrics
+          ...metrics,
         }, req)
 
         assert.deepStrictEqual(result, {
@@ -94,7 +94,7 @@ describe('Appsec Waf Telemetry metrics', () => {
           rule_triggered: true,
           waf_error: true,
           waf_timeout: true,
-          waf_version: wafVersion
+          waf_version: wafVersion,
         })
       })
 
@@ -104,7 +104,7 @@ describe('Appsec Waf Telemetry metrics', () => {
         const result2 = appsecTelemetry.updateWafRequestsMetricTags({
           ruleTriggered: true,
           rateLimited: true,
-          ...metrics
+          ...metrics,
         }, req)
 
         assert.strictEqual(result, result2)
@@ -118,7 +118,7 @@ describe('Appsec Waf Telemetry metrics', () => {
           rule_triggered: true,
           waf_error: false,
           waf_timeout: false,
-          waf_version: wafVersion
+          waf_version: wafVersion,
         })
       })
 
@@ -129,7 +129,7 @@ describe('Appsec Waf Telemetry metrics', () => {
           wafTimeout: true,
           rateLimited: true,
           maxTruncatedContainerSize: 300,
-          ...metrics
+          ...metrics,
         }, req)
 
         const req2 = {}
@@ -138,7 +138,7 @@ describe('Appsec Waf Telemetry metrics', () => {
           ruleTriggered: false,
           wafTimeout: false,
           rateLimited: false,
-          ...metrics
+          ...metrics,
         }, req2)
 
         assert.notStrictEqual(result, result2)
@@ -152,19 +152,19 @@ describe('Appsec Waf Telemetry metrics', () => {
           rule_triggered: true,
           waf_error: false,
           waf_timeout: true,
-          waf_version: wafVersion
+          waf_version: wafVersion,
         })
       })
 
       it('should sum waf.duration metrics', () => {
         appsecTelemetry.updateWafRequestsMetricTags({
           duration: 42,
-          durationExt: 52
+          durationExt: 52,
         }, req)
 
         appsecTelemetry.updateWafRequestsMetricTags({
           duration: 24,
-          durationExt: 25
+          durationExt: 25,
         }, req)
 
         const { duration, durationExt } = appsecTelemetry.getRequestMetrics(req)
@@ -186,14 +186,14 @@ describe('Appsec Waf Telemetry metrics', () => {
         sinon.assert.calledWithExactly(count, 'waf.error', {
           waf_version: wafVersion,
           event_rules_version: rulesVersion,
-          waf_error: -1
+          waf_error: -1,
         })
 
         appsecTelemetry.updateWafRequestsMetricTags({ wafVersion, rulesVersion, errorCode: -3 }, req)
         sinon.assert.calledWithExactly(count, 'waf.error', {
           waf_version: wafVersion,
           event_rules_version: rulesVersion,
-          waf_error: -3
+          waf_error: -3,
         })
 
         const { wafErrorCode } = appsecTelemetry.getRequestMetrics(req)
@@ -208,7 +208,7 @@ describe('Appsec Waf Telemetry metrics', () => {
         sinon.assert.calledOnceWithExactly(count, 'waf.init', {
           waf_version: wafVersion,
           event_rules_version: rulesVersion,
-          success: true
+          success: true,
         })
         sinon.assert.calledOnce(inc)
       })
@@ -259,7 +259,7 @@ describe('Appsec Waf Telemetry metrics', () => {
         sinon.assert.calledOnceWithExactly(count, 'waf.updates', {
           waf_version: wafVersion,
           event_rules_version: rulesVersion,
-          success: true
+          success: true,
         })
         sinon.assert.calledOnce(inc)
       })
@@ -290,7 +290,7 @@ describe('Appsec Waf Telemetry metrics', () => {
         sinon.assert.calledOnceWithExactly(count, 'waf.config_errors', {
           waf_version: wafVersion,
           event_rules_version: rulesVersion,
-          action: 'update'
+          action: 'update',
         })
         sinon.assert.calledOnce(inc)
       })
@@ -325,7 +325,7 @@ describe('Appsec Waf Telemetry metrics', () => {
           rateLimited: true,
           maxTruncatedString: 5000,
           wafVersion,
-          rulesVersion
+          rulesVersion,
         }, req)
 
         appsecTelemetry.incrementWafRequestsMetric(req)
@@ -340,7 +340,7 @@ describe('Appsec Waf Telemetry metrics', () => {
           rate_limited: true,
           input_truncated: true,
           waf_version: wafVersion,
-          event_rules_version: rulesVersion
+          event_rules_version: rulesVersion,
         })
       })
 
@@ -399,7 +399,7 @@ describe('Appsec Waf Telemetry metrics', () => {
         const result = appsecTelemetry.updateWafRequestsMetricTags({
           maxTruncatedString: 5000,
           maxTruncatedContainerSize: 300,
-          maxTruncatedContainerDepth: 20
+          maxTruncatedContainerDepth: 20,
         }, req)
         assert.ok('input_truncated' in result)
         assert.strictEqual(result.input_truncated, true)
@@ -422,7 +422,7 @@ describe('Appsec Waf Telemetry metrics', () => {
     it('should not increment any metric if telemetry is disabled', () => {
       appsecTelemetry.enable({
         enabled: false,
-        metrics: true
+        metrics: true,
       })
 
       appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
@@ -434,7 +434,7 @@ describe('Appsec Waf Telemetry metrics', () => {
     it('should not increment any metric if telemetry metrics are disabled', () => {
       appsecTelemetry.enable({
         enabled: true,
-        metrics: false
+        metrics: false,
       })
 
       appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
@@ -459,17 +459,17 @@ describe('Appsec Waf Telemetry metrics', () => {
       it('should sum waf.duration and waf.durationExt request metrics', () => {
         appsecTelemetry.enable({
           enabled: false,
-          metrics: true
+          metrics: true,
         })
 
         appsecTelemetry.updateWafRequestsMetricTags({
           duration: 42,
-          durationExt: 52
+          durationExt: 52,
         }, req)
 
         appsecTelemetry.updateWafRequestsMetricTags({
           duration: 24,
-          durationExt: 25
+          durationExt: 25,
         }, req)
 
         const { duration, durationExt } = appsecTelemetry.getRequestMetrics(req)
@@ -481,17 +481,17 @@ describe('Appsec Waf Telemetry metrics', () => {
       it('should sum waf.duration and waf.durationExt with telemetry enabled and metrics disabled', () => {
         appsecTelemetry.enable({
           enabled: true,
-          metrics: false
+          metrics: false,
         })
 
         appsecTelemetry.updateWafRequestsMetricTags({
           duration: 42,
-          durationExt: 52
+          durationExt: 52,
         }, req)
 
         appsecTelemetry.updateWafRequestsMetricTags({
           duration: 24,
-          durationExt: 25
+          durationExt: 25,
         }, req)
 
         const { duration, durationExt } = appsecTelemetry.getRequestMetrics(req)

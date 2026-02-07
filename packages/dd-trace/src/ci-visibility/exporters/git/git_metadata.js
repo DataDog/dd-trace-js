@@ -5,7 +5,7 @@ const path = require('path')
 
 const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
-const { getEnvironmentVariable } = require('../../../config/helper')
+const { getValueFromEnvSources } = require('../../../config/helper')
 
 const log = require('../../../log')
 const { isFalse } = require('../../../util')
@@ -16,7 +16,7 @@ const {
   getCommitsRevList,
   isShallowRepository,
   unshallowRepository,
-  isGitAvailable
+  isGitAvailable,
 } = require('../../../plugins/util/git')
 
 const {
@@ -29,7 +29,7 @@ const {
   TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES,
   TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_MS,
   TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_ERRORS,
-  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_BYTES
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_BYTES,
 } = require('../../../ci-visibility/telemetry')
 
 const isValidSha1 = (sha) => /^[0-9a-f]{40}$/.test(sha)
@@ -51,10 +51,10 @@ function getCommonRequestOptions (url) {
   return {
     method: 'POST',
     headers: {
-      'dd-api-key': getEnvironmentVariable('DD_API_KEY')
+      'dd-api-key': getValueFromEnvSources('DD_API_KEY'),
     },
     timeout: 15_000,
-    url
+    url,
   }
 }
 
@@ -70,9 +70,9 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
     ...commonOptions,
     headers: {
       ...commonOptions.headers,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
-    path: '/api/v2/git/repository/search_commits'
+    path: '/api/v2/git/repository/search_commits',
   }
 
   if (isEvpProxy) {
@@ -83,12 +83,12 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
 
   const localCommitData = JSON.stringify({
     meta: {
-      repository_url: repositoryUrl
+      repository_url: repositoryUrl,
     },
     data: latestCommits.map(commit => ({
       id: commit,
-      type: 'commit'
-    }))
+      type: 'commit',
+    })),
   })
 
   incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS)
@@ -134,11 +134,11 @@ function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, re
   const pushedSha = JSON.stringify({
     data: {
       id: headCommit,
-      type: 'commit'
+      type: 'commit',
     },
     meta: {
-      repository_url: repositoryUrl
-    }
+      repository_url: repositoryUrl,
+    },
   })
 
   form.append('pushedSha', pushedSha, { contentType: 'application/json' })
@@ -149,7 +149,7 @@ function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, re
     const [, filename] = path.basename(packFileToUpload).split('-')
     form.append('packfile', packFileContent, {
       filename,
-      contentType: 'application/octet-stream'
+      contentType: 'application/octet-stream',
     })
   } catch {
     callback(new Error(`Could not read "${packFileToUpload}"`))
@@ -163,8 +163,8 @@ function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, re
     path: '/api/v2/git/repository/packfile',
     headers: {
       ...commonOptions.headers,
-      ...form.getHeaders()
-    }
+      ...form.getHeaders(),
+    },
   }
 
   if (isEvpProxy) {
@@ -195,7 +195,7 @@ function generateAndUploadPackFiles ({
   evpProxyPrefix,
   commitsToUpload,
   repositoryUrl,
-  headCommit
+  headCommit,
 }, callback) {
   log.debug('There are %s commits to upload', commitsToUpload.length)
 
@@ -224,7 +224,7 @@ function generateAndUploadPackFiles ({
         isEvpProxy,
         evpProxyPrefix,
         repositoryUrl,
-        headCommit
+        headCommit,
       },
       uploadPackFileCallback
     )
@@ -237,7 +237,7 @@ function generateAndUploadPackFiles ({
       isEvpProxy,
       evpProxyPrefix,
       repositoryUrl,
-      headCommit
+      headCommit,
     },
     uploadPackFileCallback
   )
@@ -283,12 +283,12 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
         evpProxyPrefix,
         commitsToUpload,
         repositoryUrl,
-        headCommit
+        headCommit,
       }, callback)
     }
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
-    if (!isFalse(getEnvironmentVariable('DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED'))) {
+    if (!isFalse(getValueFromEnvSources('DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED'))) {
       unshallowRepository(false)
     }
 
@@ -299,7 +299,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
       repositoryUrl,
       latestCommits,
       isEvpProxy,
-      evpProxyPrefix
+      evpProxyPrefix,
     }, getOnFinishGetCommitsToUpload(true))
   }
 
@@ -308,10 +308,10 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     repositoryUrl,
     latestCommits,
     isEvpProxy,
-    evpProxyPrefix
+    evpProxyPrefix,
   }, getOnFinishGetCommitsToUpload(false))
 }
 
 module.exports = {
-  sendGitMetadata
+  sendGitMetadata,
 }

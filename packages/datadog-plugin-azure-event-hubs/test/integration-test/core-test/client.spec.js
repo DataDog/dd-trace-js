@@ -10,7 +10,7 @@ const {
   assertObjectContains,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProcAndExpectExit,
-  varySandbox
+  varySandbox,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
@@ -61,11 +61,11 @@ describe('esm', () => {
               'messaging.system': 'eventhubs',
               'messaging.destination.name': 'eh1',
               'messaging.operation': 'send',
-              'network.destination.name': '127.0.0.1:5673'
+              'network.destination.name': '127.0.0.1:5673',
             },
             metrics: {
-              'messaging.batch.message_count': 2
-            }
+              'messaging.batch.message_count': 2,
+            },
           })
           // list of AMPQ messages
           assertObjectContains(payload[1][0], {
@@ -74,11 +74,11 @@ describe('esm', () => {
               'messaging.system': 'eventhubs',
               'messaging.destination.name': 'eh1',
               'messaging.operation': 'send',
-              'network.destination.name': '127.0.0.1:5673'
+              'network.destination.name': '127.0.0.1:5673',
             },
             metrics: {
-              'messaging.batch.message_count': 2
-            }
+              'messaging.batch.message_count': 2,
+            },
           })
           // Batch -> EventDataBatchImpl
           assertObjectContains(payload[2][0], {
@@ -87,8 +87,8 @@ describe('esm', () => {
               'messaging.system': 'eventhubs',
               'messaging.destination.name': 'eh1',
               'messaging.operation': 'create',
-              'network.destination.name': '127.0.0.1:5673'
-            }
+              'network.destination.name': '127.0.0.1:5673',
+            },
           })
           assertObjectContains(payload[3][0], {
             name: 'azure.eventhubs.create',
@@ -96,8 +96,8 @@ describe('esm', () => {
               'messaging.system': 'eventhubs',
               'messaging.destination.name': 'eh1',
               'messaging.operation': 'create',
-              'network.destination.name': '127.0.0.1:5673'
-            }
+              'network.destination.name': '127.0.0.1:5673',
+            },
           })
           assertObjectContains(payload[4][0], {
             name: 'azure.eventhubs.send',
@@ -105,11 +105,11 @@ describe('esm', () => {
               'messaging.system': 'eventhubs',
               'messaging.destination.name': 'eh1',
               'messaging.operation': 'send',
-              'network.destination.name': '127.0.0.1:5673'
+              'network.destination.name': '127.0.0.1:5673',
             },
             metrics: {
-              'messaging.batch.message_count': 4
-            }
+              'messaging.batch.message_count': 4,
+            },
           })
           assert.strictEqual(parseLinks(payload[4][0]).length, 2)
         })

@@ -14,7 +14,7 @@ const rrtypes = {
   resolveSrv: 'SRV',
   resolvePtr: 'PTR',
   resolveNaptr: 'NAPTR',
-  resolveSoa: 'SOA'
+  resolveSoa: 'SOA',
 }
 
 const rrtypeMap = new WeakMap()
@@ -85,7 +85,7 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
         return fn.apply(this, arguments)
       // TODO deal with promise versions when we support `dns/promises`
       } catch (error) {
-        error.stack // trigger getting the stack at the original throwing point
+        void error.stack // trigger getting the stack at the original throwing point
         ctx.error = error
         errorCh.publish(ctx)
 

@@ -8,7 +8,7 @@ const {
   useSandbox,
   curlAndAssertMessage,
   spawnPluginIntegrationTestProc,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 describe('esm', () => {
   let agent

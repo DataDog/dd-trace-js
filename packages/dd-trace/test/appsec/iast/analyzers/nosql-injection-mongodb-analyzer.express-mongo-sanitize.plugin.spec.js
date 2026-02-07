@@ -7,6 +7,7 @@ const path = require('node:path')
 
 const axios = require('axios')
 const { before, describe } = require('mocha')
+const satisfies = require('semifies')
 
 const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../../setup/mocha')
@@ -27,7 +28,14 @@ describe('nosql injection detection in mongodb - whole feature', () => {
 
       before(async () => {
         const { MongoClient } = mongodb.get()
-        const client = new MongoClient('mongodb://127.0.0.1:27017')
+
+        const options = {}
+        if (satisfies(mongodbVersion, '<6.0.0')) {
+          options.useNewUrlParser = true
+          options.useUnifiedTopology = true
+        }
+        const client = new MongoClient('mongodb://127.0.0.1:27017', options)
+
         await client.connect()
 
         const db = client.db('test')
@@ -47,7 +55,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
         (expressApp) => {
           expressApp.get('/path/:parameter', async function (req, res) {
             await collection.find({
-              key: req.params.parameter
+              key: req.params.parameter,
             })
             res.end()
           })
@@ -56,7 +64,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
           testThatRequestHasVulnerability({
             fn: async (req, res) => {
               await collection.find({
-                key: req.query.key
+                key: req.query.key,
               })
               res.end()
             },
@@ -74,7 +82,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               })
 
               assert.strictEqual(someRedacted, true)
-            }
+            },
           })
 
           testThatRequestHasVulnerability({
@@ -82,8 +90,8 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             fn: async (req, res) => {
               await collection.find({
                 key: {
-                  $or: [req.query.key, 'test']
-                }
+                  $or: [req.query.key, 'test'],
+                },
               })
               res.end()
             },
@@ -101,7 +109,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               })
 
               assert.strictEqual(someRedacted, true)
-            }
+            },
           })
 
           testThatRequestHasNoVulnerability({
@@ -109,15 +117,15 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             fn: async (req, res) => {
               await collection.find({
                 key: {
-                  $eq: req.query.key
-                }
+                  $eq: req.query.key,
+                },
               })
               res.end()
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
               axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
-            }
+            },
           })
 
           testThatRequestHasNoVulnerability({
@@ -128,7 +136,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               const modifiedData = _ddiast.plusOperator('modified' + data, 'modified', data)
 
               await collection.find({
-                key: modifiedData
+                key: modifiedData,
               })
 
               res.end()
@@ -136,7 +144,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
               axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
-            }
+            },
           })
 
           testThatRequestHasNoVulnerability({
@@ -162,7 +170,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
               axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
-            }
+            },
           })
 
           testThatRequestHasNoVulnerability({
@@ -171,14 +179,14 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
               axios.get(`http://localhost:${config.port}/path/parameterValue`).catch(done)
-            }
+            },
           })
 
           testThatRequestHasVulnerability({
             testDescription: 'should have NOSQL_MONGODB_INJECTION vulnerability in correct file and line',
             fn: async (req, res) => {
               const filter = {
-                key: req.query.key
+                key: req.query.key,
               }
               await require(tmpFilePath)(collection, filter)
 
@@ -192,14 +200,14 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               occurrences: 1,
               location: {
                 path: vulnerableMethodFilename,
-                line: 5
-              }
-            }
+                line: 5,
+              },
+            },
           })
 
           testThatRequestHasNoVulnerability(async (req, res) => {
             await collection.find({
-              key: 'test'
+              key: 'test',
             })
 
             res.end()
@@ -211,7 +219,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
           testThatRequestHasVulnerability({
             fn: async (req, res) => {
               await collection.find({
-                key: req.query.key
+                key: req.query.key,
               })
               res.end()
             },
@@ -229,14 +237,14 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               })
 
               assert.strictEqual(someRedacted, false)
-            }
+            },
           })
         }, {
           enabled: true,
           requestSampling: 100,
           maxConcurrentRequests: 100,
           maxContextOperations: 100,
-          redactionEnabled: false
+          redactionEnabled: false,
         })
 
       withVersions('express-mongo-sanitize', 'express-mongo-sanitize', expressMongoSanitizeVersion => {
@@ -248,7 +256,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
           testThatRequestHasNoVulnerability({
             fn: async (req, res) => {
               await collection.find({
-                key: req.query.key
+                key: req.query.key,
               })
 
               res.end()
@@ -256,7 +264,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
               axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
-            }
+            },
           })
         })
       })

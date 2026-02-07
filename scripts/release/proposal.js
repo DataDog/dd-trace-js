@@ -15,7 +15,7 @@ const {
   params,
   pass,
   start,
-  run
+  run,
 } = require('./helpers/terminal')
 const { checkAll } = require('./helpers/requirements')
 
@@ -95,7 +95,7 @@ try {
   try {
     // Pull latest changes in case the release was started by someone else.
     run(`git remote show origin | grep v${newVersion} && git pull --ff-only`)
-  } catch (e) {
+  } catch {
     // Either there is no remote to pull from or the local and remote branches
     // have diverged. In both cases we ignore the error and will just use our
     // changes.
@@ -108,7 +108,7 @@ try {
   // Get the hashes of the last version and the commits to add.
   const lastCommit = capture('git log -1 --pretty=%B')
   const proposalDiff = capture(`${diffCmd} --format=sha --reverse v${newVersion}-proposal ${main}`)
-    .replace(/\n/g, ' ').trim()
+    .replaceAll('\n', ' ').trim()
 
   if (proposalDiff) {
     // Get new changes since last commit of the proposal branch.
@@ -128,7 +128,7 @@ try {
       run(`git cherry-pick ${proposalDiff}`)
 
       pass()
-    } catch (err) {
+    } catch {
       run('git cherry-pick --abort')
 
       fatal(
@@ -165,7 +165,7 @@ try {
   if (isMinor) {
     try {
       previousPullRequest = JSON.parse(capture(`gh pr view ${newMinor} --json isDraft,url`))
-    } catch (e) {
+    } catch {
       // No existing PR for minor release proposal.
     }
   }
@@ -173,7 +173,7 @@ try {
   if (!previousPullRequest) {
     try {
       previousPullRequest = JSON.parse(capture(`gh pr view ${newPatch} --json isDraft,url`))
-    } catch (e) {
+    } catch {
       // No existing PR for patch release proposal.
     }
   }
@@ -201,7 +201,7 @@ try {
   // Create or edit the PR. This will also automatically output a link to the PR.
   try {
     run(`gh pr create -d -B v${releaseLine}.x -t "v${newVersion} proposal" -F ${notesFile}`)
-  } catch (e) {
+  } catch {
     // PR already exists so update instead.
     // TODO: Keep existing non-release-notes PR description if there is one.
     run(`gh pr edit -F "${notesFile}"`)
@@ -213,7 +213,7 @@ try {
   if (isMinor) {
     try {
       run(`gh pr close v${newPatch}-proposal --delete-branch --comment "Superseded by #${pullRequest.number}."`)
-    } catch (e) {
+    } catch {
       // PR didn't exist so nothing to close.
     }
   }

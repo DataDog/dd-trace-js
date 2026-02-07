@@ -25,7 +25,7 @@ describe('Instrumentation', () => {
               cb(null, {})
             })
           },
-          destroy () {}
+          destroy () {},
         })
       })
 
@@ -52,7 +52,7 @@ describe('Instrumentation', () => {
           create () {
             return Promise.resolve({})
           },
-          destroy () {}
+          destroy () {},
         })
       })
 

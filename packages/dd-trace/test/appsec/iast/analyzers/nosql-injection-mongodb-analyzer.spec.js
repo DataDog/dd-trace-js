@@ -10,7 +10,7 @@ const {
   createTransaction,
   newTaintedString,
   removeTransaction,
-  getRanges
+  getRanges,
 } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const { NOSQL_MONGODB_INJECTION_MARK } = require('../../../../src/appsec/iast/taint-tracking/secure-marks')
 
@@ -30,8 +30,8 @@ describe('nosql injection detection in mongodb', () => {
             '../iast-context': {
               getIastContext () {
                 return iastContext
-              }
-            }
+              },
+            },
           })
     })
 
@@ -55,7 +55,7 @@ describe('nosql injection detection in mongodb', () => {
 
           sanitizeMiddlewareFinished.publish({
             sanitizedProperties: ['body', 'query'],
-            req
+            req,
           })
 
           const sanitizedRanges = getRanges(iastContext, req.query.param)
@@ -74,7 +74,7 @@ describe('nosql injection detection in mongodb', () => {
 
           sanitizeMiddlewareFinished.publish({
             sanitizedProperties: ['body'],
-            req
+            req,
           })
 
           const sanitizedRanges = getRanges(iastContext, req.body.key1.key2)
@@ -94,7 +94,7 @@ describe('nosql injection detection in mongodb', () => {
           const sanitizedObject = { param: taintedString }
 
           sanitizeMethodFinished.publish({
-            sanitizedObject
+            sanitizedObject,
           })
 
           const sanitizedRanges = getRanges(iastContext, sanitizedObject.param)
@@ -112,7 +112,7 @@ describe('nosql injection detection in mongodb', () => {
           const sanitizedObject = { key1: { key2: taintedString } }
 
           sanitizeMethodFinished.publish({
-            sanitizedObject
+            sanitizedObject,
           })
 
           const sanitizedRanges = getRanges(iastContext, sanitizedObject.key1.key2)

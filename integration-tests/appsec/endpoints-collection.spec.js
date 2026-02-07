@@ -148,7 +148,7 @@ describe('Endpoints collection', () => {
               path: endpoint.path,
               type: endpoint.type,
               operation_name: endpoint.operation_name,
-              resource_name: endpoint.resource_name
+              resource_name: endpoint.resource_name,
             })
           })
         }
@@ -159,8 +159,8 @@ describe('Endpoints collection', () => {
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
-          DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: '10'
-        }
+          DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: '10',
+        },
       })
 
       await telemetryPromise

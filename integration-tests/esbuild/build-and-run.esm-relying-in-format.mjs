@@ -8,7 +8,7 @@ import commonConfig from './build.esm.common-config.js'
 
 await esbuild.build({
   ...commonConfig,
-  outfile: 'out.js'
+  outfile: 'out.js',
 })
 
 // to force being executed as module

@@ -1,13 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
+const { once } = require('node:events')
 const { exec } = require('child_process')
 const {
   sandboxCwd,
   useSandbox,
   getCiVisAgentlessConfig,
-  assertObjectContains
+  assertObjectContains,
+  getCiVisEvpProxyConfig,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
@@ -16,7 +17,7 @@ const {
   TEST_BROWSER_VERSION,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_IS_RUM_ACTIVE,
-  TEST_TYPE
+  TEST_TYPE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { NODE_MAJOR } = require('../../version')
 
@@ -35,14 +36,18 @@ versionRange.forEach(version => {
       'mocha',
       'jest',
       '@cucumber/cucumber',
-      `selenium-webdriver@${version}`
+      `selenium-webdriver@${version}`,
     ])
 
     before(function (done) {
       cwd = sandboxCwd()
 
       webAppServer.listen(0, () => {
-        webAppPort = webAppServer.address().port
+        const address = webAppServer.address()
+        if (!address || typeof address === 'string') {
+          return done(new Error('Failed to determine web app server port'))
+        }
+        webAppPort = address.port
         done()
       })
     })
@@ -63,22 +68,22 @@ versionRange.forEach(version => {
     const testFrameworks = [
       {
         name: 'mocha',
-        command: 'mocha ./ci-visibility/test/selenium-test.js --timeout 10000'
+        command: 'mocha ./ci-visibility/test/selenium-test.js --timeout 10000',
       },
       {
         name: 'jest',
-        command: 'node ./node_modules/jest/bin/jest --config config-jest.js'
+        command: 'node ./node_modules/jest/bin/jest --config config-jest.js',
       },
       {
         name: 'cucumber',
-        command: './node_modules/.bin/cucumber-js ci-visibility/features-selenium/*.feature'
-      }
+        command: './node_modules/.bin/cucumber-js ci-visibility/features-selenium/*.feature',
+      },
     ]
     testFrameworks.forEach(({ name, command }) => {
       if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && name === 'cucumber') return
 
       context(`with ${name}`, () => {
-        it('identifies tests using selenium as browser tests', (done) => {
+        it('identifies tests using selenium as browser tests', async () => {
           const assertionPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
@@ -90,11 +95,29 @@ versionRange.forEach(version => {
                   [TEST_BROWSER_NAME]: 'chrome',
                   [TEST_TYPE]: 'browser',
                   [TEST_IS_RUM_ACTIVE]: 'true',
-                }
+                },
               })
 
               assert.ok(Object.hasOwn(seleniumTest.meta, TEST_BROWSER_VERSION))
               assert.ok(Object.hasOwn(seleniumTest.meta, TEST_BROWSER_DRIVER_VERSION))
+            })
+
+          const telemetryPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+              const telemetryEvents = payloads.flatMap(({ payload }) => payload.payload.series)
+
+              const testSessionMetric = telemetryEvents.find(
+                ({ metric }) => metric === 'test_session'
+              )
+              assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+
+              const eventFinishedTestEvents = telemetryEvents
+                .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
+
+              eventFinishedTestEvents.forEach(({ tags }) => {
+                assert.ok(tags.includes('is_rum'))
+                assert.ok(tags.includes('browser_driver:selenium'))
+              })
             })
 
           childProcess = exec(
@@ -102,19 +125,19 @@ versionRange.forEach(version => {
             {
               cwd,
               env: {
-                ...getCiVisAgentlessConfig(receiver.port),
+                ...getCiVisEvpProxyConfig(receiver.port),
                 WEB_APP_URL: `http://localhost:${webAppPort}`,
-                TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*'
+                TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*',
+                DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
               },
-              stdio: 'inherit'
             }
           )
 
-          childProcess.on('exit', () => {
-            assertionPromise.then(() => {
-              done()
-            }).catch(done)
-          })
+          await Promise.all([
+            once(childProcess, 'exit'),
+            assertionPromise,
+            telemetryPromise,
+          ])
         })
       })
     })
@@ -128,9 +151,8 @@ versionRange.forEach(version => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             WEB_APP_URL: `http://localhost:${webAppPort}`,
-            TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*'
+            TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*',
           },
-          stdio: 'pipe'
         }
       )
 
@@ -140,10 +162,10 @@ versionRange.forEach(version => {
         done()
       })
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
     })

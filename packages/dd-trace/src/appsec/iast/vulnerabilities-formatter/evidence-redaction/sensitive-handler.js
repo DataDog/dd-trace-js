@@ -185,7 +185,7 @@ class SensitiveHandler {
       }
       redactedSourcesContext[sourceIndex].push({
         start,
-        end
+        end,
       })
     }
   }
@@ -222,7 +222,7 @@ class SensitiveHandler {
         let _value = partValue
         const dedupedSourceRedactionContexts = []
 
-        sourceRedactionContext.forEach(_sourceRedactionContext => {
+        for (const _sourceRedactionContext of sourceRedactionContext) {
           const isPresentInDeduped = dedupedSourceRedactionContexts.some(_dedupedSourceRedactionContext =>
             _dedupedSourceRedactionContext.start === _sourceRedactionContext.start &&
             _dedupedSourceRedactionContext.end === _sourceRedactionContext.end
@@ -231,14 +231,14 @@ class SensitiveHandler {
           if (!isPresentInDeduped) {
             dedupedSourceRedactionContexts.push(_sourceRedactionContext)
           }
-        })
+        }
 
         let offset = 0
-        dedupedSourceRedactionContexts.forEach((_sourceRedactionContext) => {
+        for (const _sourceRedactionContext of dedupedSourceRedactionContexts) {
           if (_sourceRedactionContext.start > 0) {
             valueParts.push({
               source: sourceIndex,
-              value: _value.substring(0, _sourceRedactionContext.start - offset)
+              value: _value.substring(0, _sourceRedactionContext.start - offset),
             })
 
             _value = _value.substring(_sourceRedactionContext.start - offset)
@@ -256,17 +256,17 @@ class SensitiveHandler {
           valueParts.push({
             redacted: true,
             source: sourceIndex,
-            pattern
+            pattern,
           })
 
           _value = _value.slice(pattern.length)
           offset += pattern.length
-        })
+        }
 
         if (_value.length) {
           valueParts.push({
             source: sourceIndex,
-            value: _value
+            value: _value,
           })
         }
       }

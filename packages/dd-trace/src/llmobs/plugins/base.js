@@ -46,7 +46,7 @@ class LLMObsPlugin extends TracingPlugin {
       this._tagger.registerLLMObsSpan(span, {
         parent: parentStore?.span,
         integration: this.constructor.integration,
-        ...registerOptions
+        ...registerOptions,
       })
     }
   }

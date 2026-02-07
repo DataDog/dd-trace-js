@@ -5,8 +5,8 @@ const {
     config,
     breakpointSetChannel,
     breakpointHitChannel,
-    breakpointRemoveChannel
-  }
+    breakpointRemoveChannel,
+  },
 } = require('worker_threads')
 const { randomUUID } = require('crypto')
 
@@ -19,7 +19,7 @@ const { getLocalStateForCallFrame } = require('../../../debugger/devtools_client
 // TODO: move debugger/devtools_client/state to common place
 const {
   findScriptFromPartialPath,
-  getStackFromCallFrames
+  getStackFromCallFrames,
 } = require('../../../debugger/devtools_client/state')
 const log = require('../../../log')
 const processTags = require('../../../process-tags')
@@ -36,7 +36,7 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     return session.post('Debugger.resume')
   }
 
-  const stack = getStackFromCallFrames(callFrames)
+  const stack = await getStackFromCallFrames(callFrames)
 
   const { processLocalState } = await getLocalStateForCallFrame(callFrames[0])
 
@@ -48,13 +48,13 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     probe: {
       id: probe.id,
       version: '0',
-      location: probe.location
+      location: probe.location,
     },
     captures: {
-      lines: { [probe.location.lines[0]]: { locals: processLocalState() } }
+      lines: { [probe.location.lines[0]]: { locals: processLocalState() } },
     },
     stack,
-    language: 'javascript'
+    language: 'javascript',
   }
 
   if (config.propagateProcessTags?.enabled) {
@@ -126,8 +126,8 @@ async function addBreakpoint (probe) {
       location: {
         scriptId,
         lineNumber: lineNumber - 1,
-        columnNumber
-      }
+        columnNumber,
+      },
     })
 
     breakpointIdToProbe.set(breakpointId, probe)

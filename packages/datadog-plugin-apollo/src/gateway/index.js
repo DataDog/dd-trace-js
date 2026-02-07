@@ -18,7 +18,7 @@ class ApolloGatewayPlugin extends CompositePlugin {
       request: ApolloGatewayRequestPlugin,
       plan: ApolloGatewayPlanPlugin,
       fetch: ApolloGatewayFetchPlugin,
-      validate: ApolloGatewayValidatePlugin
+      validate: ApolloGatewayValidatePlugin,
     }
   }
 

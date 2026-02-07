@@ -1,6 +1,6 @@
 require('dd-trace/init')
 
-// @ts-ignore - fastify will be available at runtime
+// @ts-expect-error - fastify will be available at runtime
 import Fastify from 'fastify'
 
 const app = Fastify({

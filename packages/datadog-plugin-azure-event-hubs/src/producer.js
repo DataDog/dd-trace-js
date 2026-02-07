@@ -1,6 +1,6 @@
 'use strict'
 
-const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 
 const spanContexts = new WeakMap()
@@ -26,7 +26,7 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
         'messaging.system': 'eventhubs',
         'messaging.destination.name': entityPath,
         'network.destination.name': qualifiedNamespace,
-      }
+      },
     }, ctx)
 
     if (ctx.functionName === 'tryAdd') {
@@ -55,9 +55,9 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
       span.setTag('messaging.batch.message_count', eventDataLength)
 
       if (eventData.constructor.name !== 'EventDataBatchImpl' && Array.isArray(eventData)) {
-        eventData.forEach(event => {
+        for (const event of eventData) {
           injectTraceContext(this.tracer, span, event)
-        })
+        }
       } else {
         if (batchLinksAreEnabled()) {
           const contexts = spanContexts.get(eventData)
@@ -89,7 +89,7 @@ function injectTraceContext (tracer, span, event) {
 }
 
 function batchLinksAreEnabled () {
-  const eh = getEnvironmentVariable('DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED')
+  const eh = getValueFromEnvSources('DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED')
   return eh !== 'false'
 }
 

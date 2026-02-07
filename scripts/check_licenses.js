@@ -14,7 +14,7 @@ const licenses = new Set()
 let isHeader = true
 
 const lineReader = readline.createInterface({
-  input: createReadStream(filePath)
+  input: createReadStream(filePath),
 })
 
 lineReader.on('line', line => {
@@ -56,7 +56,7 @@ function addProdDeps (deps, cwd) {
   const stdout = execSync('yarn list --production --json', {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'inherit'],
-    cwd
+    cwd,
   })
 
   for (const line of stdout.split('\n')) {

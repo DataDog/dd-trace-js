@@ -7,7 +7,7 @@ import commonConfig from './build.esm.common-config.js'
 
 await esbuild.build({
   ...commonConfig,
-  format: undefined
+  format: undefined,
 })
 
 const { status, stdout, stderr } = spawnSync('node', ['out.mjs'])

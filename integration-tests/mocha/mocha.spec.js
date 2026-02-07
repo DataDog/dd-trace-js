@@ -11,7 +11,7 @@ const {
   sandboxCwd,
   useSandbox,
   getCiVisAgentlessConfig,
-  getCiVisEvpProxyConfig
+  getCiVisEvpProxyConfig,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
@@ -62,11 +62,13 @@ const {
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
+  GIT_COMMIT_SHA,
+  GIT_REPOSITORY_URL,
   TEST_IS_MODIFIED,
   CI_APP_ORIGIN,
   TEST_FRAMEWORK_VERSION,
   LIBRARY_VERSION,
-  TEST_PARAMETERS
+  TEST_PARAMETERS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const {
@@ -74,7 +76,7 @@ const {
   ORIGIN_KEY,
   COMPONENT,
   ERROR_STACK,
-  ERROR_TYPE
+  ERROR_TYPE,
 } = require('../../packages/dd-trace/src/constants')
 const { VERSION: ddTraceVersion } = require('../../version')
 
@@ -99,7 +101,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       `mocha@${MOCHA_VERSION}`,
       'nyc',
       'mocha-each',
-      'workerpool'
+      'workerpool',
     ],
     true
   )
@@ -128,7 +130,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       assertObjectContains(resourceNames,
         [
           'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
-          'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
+          'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2',
         ]
       )
 
@@ -159,22 +161,55 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       env: {
         DD_TRACE_AGENT_PORT: receiver.port,
         NODE_OPTIONS: '-r dd-trace/ci/init',
-        DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+        DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
       },
-      stdio: 'pipe'
+      stdio: 'pipe',
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
+  })
+
+  // TODO: This should also run in agentless mode
+  it('sends telemetry with test_session metric when telemetry is enabled', async () => {
+    receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+    const telemetryPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+        const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+
+        const testSessionMetric = telemetryMetrics.find(
+          ({ metric }) => metric === 'test_session'
+        )
+
+        assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+      })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          DD_TRACE_AGENT_PORT: String(receiver.port),
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+        },
+      }
+    )
+
+    await Promise.all([
+      once(childProcess, 'exit'),
+      telemetryPromise,
+    ])
   })
 
   const nonLegacyReportingOptions = ['evp proxy', 'agentless']
 
   nonLegacyReportingOptions.forEach((reportingOption) => {
-    let envVars = {}
+    let envVars = /** @type {NodeJS.ProcessEnv} */ ({})
     context(`(${reportingOption}) can run and report`, () => {
       beforeEach(() => {
         if (reportingOption === 'agentless') {
@@ -207,7 +242,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assertObjectContains(resourceNames,
               [
                 'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
-                'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
+                'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2',
               ]
             )
             assert.strictEqual(suites.length, 2)
@@ -243,15 +278,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ...envVars,
             DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
             DD_TEST_SESSION_NAME: 'my-test-session',
-            DD_SERVICE: undefined
+            DD_SERVICE: undefined,
           },
-          stdio: 'pipe'
+          stdio: 'pipe',
         })
 
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
 
@@ -259,7 +294,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           eventsPromise,
           once(childProcess.stdout, 'end'),
           once(childProcess.stderr, 'end'),
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
         assert.match(testOutput, new RegExp(expectedStdout))
         assert.match(testOutput, new RegExp(extraStdout))
@@ -270,7 +305,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           'mocha-test-pass can pass',
           'mocha-test-pass can pass two',
           'mocha-test-pass-two can pass',
-          'mocha-test-pass-two can pass two'
+          'mocha-test-pass-two can pass two',
         ]
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -296,13 +331,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -336,13 +370,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -351,7 +384,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           'mocha-test-skip can skip',
           'mocha-test-skip-different can skip too',
           'mocha-test-skip-different can skip twice',
-          'mocha-test-programmatic-skip can skip too'
+          'mocha-test-programmatic-skip can skip too',
         ]
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -377,13 +410,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -408,13 +440,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -442,13 +473,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: getCiVisAgentlessConfig(receiver.port),
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -473,13 +503,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -507,13 +536,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -538,13 +566,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -572,13 +599,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -606,13 +632,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -637,13 +662,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -673,13 +697,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -721,13 +744,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -754,20 +776,19 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
       it('tests using active span in hooks', async () => {
         const testNames = [
           'mocha-active-span-in-hooks first test',
-          'mocha-active-span-in-hooks second test'
+          'mocha-active-span-in-hooks second test',
         ]
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -787,13 +808,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -802,28 +822,28 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             name: 'mocha-fail-hook-async will run but be reported as failed',
             status: 'fail',
-            errorMsg: 'mocha-fail-hook-async "after each" hook for "will run but be reported as failed": yeah error'
+            errorMsg: 'mocha-fail-hook-async "after each" hook for "will run but be reported as failed": yeah error',
           },
           {
             name: 'mocha-fail-hook-async-other will run and be reported as passed',
-            status: 'pass'
+            status: 'pass',
           },
           {
             name: 'mocha-fail-hook-async-other-before will not run and be reported as failed',
             status: 'fail',
             errorMsg: 'mocha-fail-hook-async-other-before ' +
-              '"before each" hook for "will not run and be reported as failed": yeah error'
+              '"before each" hook for "will not run and be reported as failed": yeah error',
           },
           {
             name: 'mocha-fail-hook-async-other-second-after will run and be reported as failed',
             status: 'fail',
             errorMsg: 'mocha-fail-hook-async-other-second-after ' +
-              '"after each" hook for "will run and be reported as failed": yeah error'
+              '"after each" hook for "will run and be reported as failed": yeah error',
           },
           {
             name: 'mocha-fail-test-after-each-passes will fail and be reported as failed',
-            status: 'fail'
-          }
+            status: 'fail',
+          },
         ]
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -849,13 +869,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -879,13 +898,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -929,20 +947,19 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
       it('tests when skipping "describe"', async () => {
         const testNames = [
           { name: 'mocha-test-skip-describe will be skipped', status: 'skip' },
-          { name: 'mocha-test-skip-describe-pass will pass', status: 'pass' }
+          { name: 'mocha-test-skip-describe-pass will pass', status: 'pass' },
         ]
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -963,13 +980,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
 
@@ -978,7 +994,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           'ci-visibility/mocha-plugin-tests/suite-level-fail-after-each.js',
           'ci-visibility/mocha-plugin-tests/suite-level-fail-skip-describe.js',
           'ci-visibility/mocha-plugin-tests/suite-level-fail-test.js',
-          'ci-visibility/mocha-plugin-tests/suite-level-pass.js'
+          'ci-visibility/mocha-plugin-tests/suite-level-pass.js',
         ]
 
         const eventsPromise = receiver
@@ -1052,14 +1068,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: envVars,
-            stdio: 'inherit',
-            shell: true
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
     })
@@ -1079,14 +1093,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             DD_TRACE_AGENT_PORT: receiver.port,
             NODE_OPTIONS: '-r dd-trace/ci/init',
-            [envVar]: 'false'
+            [envVar]: 'false',
           },
-          stdio: 'pipe'
+          stdio: 'pipe',
         })
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
         childProcess.on('message', () => {
@@ -1108,8 +1122,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             meta: {
               'custom_tag.beforeEach': 'true',
               'custom_tag.it': 'true',
-              'custom_tag.afterEach': 'true'
-            }
+              'custom_tag.afterEach': 'true',
+            },
           })
         })
 
@@ -1120,10 +1134,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './test-custom-tags/custom-tags.js'
-            ])
+              './test-custom-tags/custom-tags.js',
+            ]),
           },
-          stdio: 'inherit'
         }
       )
 
@@ -1141,14 +1154,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: receiver.port,
-          NODE_OPTIONS: '-r dd-trace/init'
+          NODE_OPTIONS: '-r dd-trace/init',
         },
-        stdio: 'pipe'
+        stdio: 'pipe',
       })
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
       childProcess.on('message', () => {
@@ -1178,9 +1191,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       {
         cwd: `${cwd}/ci-visibility/subproject`,
         env: {
-          ...getCiVisAgentlessConfig(receiver.port)
+          ...getCiVisAgentlessConfig(receiver.port),
         },
-        stdio: 'inherit'
       }
     )
 
@@ -1207,15 +1219,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         ...restEnvVars,
         DD_TRACE_DEBUG: '1',
         DD_TRACE_LOG_LEVEL: 'error',
-        DD_SITE: '= invalid = url'
+        DD_SITE: '= invalid = url',
       },
-      stdio: 'pipe'
     })
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('exit', () => {
@@ -1251,7 +1262,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           meta,
           test_suite_id: testSuiteId,
           test_module_id: testModuleId,
-          test_session_id: testSessionId
+          test_session_id: testSessionId,
         }) => {
           assert.ok(meta[TEST_COMMAND])
           assert.ok(meta[TEST_MODULE])
@@ -1265,7 +1276,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           metrics,
           test_suite_id: testSuiteId,
           test_module_id: testModuleId,
-          test_session_id: testSessionId
+          test_session_id: testSessionId,
         }) => {
           assert.ok(meta[TEST_COMMAND])
           assert.ok(meta[TEST_MODULE])
@@ -1281,17 +1292,17 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       cwd,
       env: {
         ...getCiVisAgentlessConfig(receiver.port),
-        RUN_IN_PARALLEL: true,
+        RUN_IN_PARALLEL: 'true',
         DD_TRACE_DEBUG: '1',
         DD_TRACE_LOG_LEVEL: 'warn',
-        DD_TEST_SESSION_NAME: 'my-test-session'
+        DD_TEST_SESSION_NAME: 'my-test-session',
       },
-      stdio: 'pipe'
+      stdio: 'pipe',
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
@@ -1319,12 +1330,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       'node node_modules/mocha/bin/mocha --parallel --jobs 2 ./ci-visibility/test/ci-visibility-test*', {
         cwd,
         env: getCiVisAgentlessConfig(receiver.port),
-        stdio: 'pipe'
       })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('exit', () => {
@@ -1339,12 +1349,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     childProcess = exec('node ./ci-visibility/run-workerpool.js', {
       cwd,
       env: getCiVisAgentlessConfig(receiver.port),
-      stdio: 'pipe'
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('exit', (code) => {
@@ -1371,10 +1380,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           TESTS_TO_RUN: JSON.stringify([
-            './test/fail-test.js'
-          ])
+            './test/fail-test.js',
+          ]),
         },
-        stdio: 'inherit'
       }
     )
     childProcess.on('exit', () => {
@@ -1393,14 +1401,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       cwd,
       env: {
         DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
-        NODE_OPTIONS: '-r dd-trace/ci/init'
+        NODE_OPTIONS: '-r dd-trace/ci/init',
       },
-      stdio: 'pipe'
+      stdio: 'pipe',
     })
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
@@ -1423,7 +1431,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     Promise.all([
       searchCommitsRequestPromise,
       packfileRequestPromise,
-      eventsRequestPromise
+      eventsRequestPromise,
     ]).then(([searchCommitRequest, packfileRequest, eventsRequest]) => {
       assert.strictEqual(searchCommitRequest.headers['dd-api-key'], '1')
       assert.strictEqual(packfileRequest.headers['dd-api-key'], '1')
@@ -1441,7 +1449,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     childProcess = fork(startupTestFile, {
       cwd,
       env: getCiVisAgentlessConfig(receiver.port),
-      stdio: 'pipe'
+      stdio: 'pipe',
     })
   })
 
@@ -1474,7 +1482,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assertObjectContains(resourceNames,
             [
               'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
-              'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
+              'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2',
             ]
           )
         }, ({ url }) => url === '/v0.4/traces').then(() => done()).catch(done)
@@ -1482,13 +1490,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         childProcess = fork(startupTestFile, {
           cwd,
           env: getCiVisEvpProxyConfig(receiver.port),
-          stdio: 'pipe'
+          stdio: 'pipe',
         })
       })
     })
 
     it('can report code coverage', (done) => {
-      let testOutput
+      let testOutput = ''
       const libraryConfigRequestPromise = receiver.payloadReceived(
         ({ url }) => url === '/api/v2/libraries/tests/services/setting'
       )
@@ -1498,22 +1506,22 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       Promise.all([
         libraryConfigRequestPromise,
         codeCovRequestPromise,
-        eventsRequestPromise
+        eventsRequestPromise,
       ]).then(([libraryConfigRequest, codeCovRequest, eventsRequest]) => {
         assert.strictEqual(libraryConfigRequest.headers['dd-api-key'], '1')
 
         assertObjectContains(codeCovRequest, {
           headers: {
-            'dd-api-key': '1'
+            'dd-api-key': '1',
           },
           payload: [{
             name: 'coverage1',
             filename: 'coverage1.msgpack',
             type: 'application/msgpack',
             content: {
-              version: 2
-            }
-          }]
+              version: 2,
+            },
+          }],
         })
 
         const allCoverageFiles = codeCovRequest.payload
@@ -1525,7 +1533,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           [
             'ci-visibility/test/sum.js',
             'ci-visibility/test/ci-visibility-test.js',
-            'ci-visibility/test/ci-visibility-test-2.js'
+            'ci-visibility/test/ci-visibility-test-2.js',
           ]
         )
 
@@ -1549,10 +1557,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'pipe'
         }
       )
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
       childProcess.on('exit', () => {
@@ -1566,7 +1573,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.setSettings({
         itr_enabled: false,
         code_coverage: false,
-        tests_skipping: false
+        tests_skipping: false,
       })
 
       receiver.assertPayloadReceived(() => {
@@ -1594,7 +1601,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
     })
@@ -1603,8 +1609,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.setSuitesToSkip([{
         type: 'suite',
         attributes: {
-          suite: 'ci-visibility/test/ci-visibility-test.js'
-        }
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
       }])
 
       const skippableRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/ci/tests/skippable')
@@ -1614,7 +1620,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       Promise.all([
         skippableRequestPromise,
         coverageRequestPromise,
-        eventsRequestPromise
+        eventsRequestPromise,
       ]).then(([skippableRequest, coverageRequest, eventsRequest]) => {
         assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
         const [coveragePayload] = coverageRequest.payload
@@ -1656,7 +1662,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
     })
@@ -1667,15 +1672,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             type: 'suite',
             attributes: {
-              suite: 'ci-visibility/test/ci-visibility-test.js'
-            }
+              suite: 'ci-visibility/test/ci-visibility-test.js',
+            },
           },
           {
             type: 'suite',
             attributes: {
-              suite: 'ci-visibility/test/ci-visibility-test-2.js'
-            }
-          }
+              suite: 'ci-visibility/test/ci-visibility-test-2.js',
+            },
+          },
         ]
       )
 
@@ -1690,7 +1695,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -1704,8 +1708,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.setSuitesToSkip([{
         type: 'suite',
         attributes: {
-          suite: 'ci-visibility/test/ci-visibility-test.js'
-        }
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
       }])
 
       receiver.setGitUploadStatus(404)
@@ -1739,7 +1743,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
     })
@@ -1748,14 +1751,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
-        tests_skipping: false
+        tests_skipping: false,
       })
 
       receiver.setSuitesToSkip([{
         type: 'suite',
         attributes: {
-          suite: 'ci-visibility/test/ci-visibility-test.js'
-        }
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
       }])
 
       receiver.assertPayloadReceived(() => {
@@ -1779,7 +1782,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
     })
@@ -1789,15 +1791,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           type: 'suite',
           attributes: {
-            suite: 'ci-visibility/unskippable-test/test-to-skip.js'
-          }
+            suite: 'ci-visibility/unskippable-test/test-to-skip.js',
+          },
         },
         {
           type: 'suite',
           attributes: {
-            suite: 'ci-visibility/unskippable-test/test-unskippable.js'
-          }
-        }
+            suite: 'ci-visibility/unskippable-test/test-unskippable.js',
+          },
+        },
       ])
 
       const eventsPromise = receiver
@@ -1825,12 +1827,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           )
           // It does not mark as unskippable if there is no docblock
           assert.strictEqual(passedSuite.content.meta[TEST_STATUS], 'pass')
-          assert.ok(!('TEST_ITR_UNSKIPPABLE' in passedSuite.content.meta))
-          assert.ok(!('TEST_ITR_FORCED_RUN' in passedSuite.content.meta))
+          assert.ok(!(TEST_ITR_UNSKIPPABLE in passedSuite.content.meta))
+          assert.ok(!(TEST_ITR_FORCED_RUN in passedSuite.content.meta))
 
           assert.strictEqual(skippedSuite.content.meta[TEST_STATUS], 'skip')
-          assert.ok(!('TEST_ITR_UNSKIPPABLE' in skippedSuite.content.meta))
-          assert.ok(!('TEST_ITR_FORCED_RUN' in skippedSuite.content.meta))
+          assert.ok(!(TEST_ITR_UNSKIPPABLE in skippedSuite.content.meta))
+          assert.ok(!(TEST_ITR_FORCED_RUN in skippedSuite.content.meta))
 
           assert.strictEqual(forcedToRunSuite.content.meta[TEST_STATUS], 'pass')
           assert.strictEqual(forcedToRunSuite.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
@@ -1846,10 +1848,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             TESTS_TO_RUN: JSON.stringify([
               './unskippable-test/test-to-run.js',
               './unskippable-test/test-to-skip.js',
-              './unskippable-test/test-unskippable.js'
-            ])
+              './unskippable-test/test-unskippable.js',
+            ]),
           },
-          stdio: 'inherit'
         }
       )
 
@@ -1865,9 +1866,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           type: 'suite',
           attributes: {
-            suite: 'ci-visibility/unskippable-test/test-to-skip.js'
-          }
-        }
+            suite: 'ci-visibility/unskippable-test/test-to-skip.js',
+          },
+        },
       ])
 
       const eventsPromise = receiver
@@ -1879,9 +1880,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           const testSession = events.find(event => event.type === 'test_session_end').content
           const testModule = events.find(event => event.type === 'test_module_end').content
-          assert.ok(!('TEST_ITR_FORCED_RUN' in testSession.meta))
+          assert.ok(!(TEST_ITR_FORCED_RUN in testSession.meta))
           assert.strictEqual(testSession.meta[TEST_ITR_UNSKIPPABLE], 'true')
-          assert.ok(!('TEST_ITR_FORCED_RUN' in testModule.meta))
+          assert.ok(!(TEST_ITR_FORCED_RUN in testModule.meta))
           assert.strictEqual(testModule.meta[TEST_ITR_UNSKIPPABLE], 'true')
 
           const passedSuite = suites.find(
@@ -1896,15 +1897,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           // It does not mark as unskippable if there is no docblock
           assert.strictEqual(passedSuite.content.meta[TEST_STATUS], 'pass')
-          assert.ok(!('TEST_ITR_UNSKIPPABLE' in passedSuite.content.meta))
-          assert.ok(!('TEST_ITR_FORCED_RUN' in passedSuite.content.meta))
+          assert.ok(!(TEST_ITR_UNSKIPPABLE in passedSuite.content.meta))
+          assert.ok(!(TEST_ITR_FORCED_RUN in passedSuite.content.meta))
 
           assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
 
           assert.strictEqual(nonSkippedSuite.meta[TEST_STATUS], 'pass')
           assert.strictEqual(nonSkippedSuite.meta[TEST_ITR_UNSKIPPABLE], 'true')
           // it was not forced to run because it wasn't going to be skipped
-          assert.ok(!('TEST_ITR_FORCED_RUN' in nonSkippedSuite.meta))
+          assert.ok(!(TEST_ITR_FORCED_RUN in nonSkippedSuite.meta))
         }, 25000)
 
       childProcess = exec(
@@ -1916,10 +1917,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             TESTS_TO_RUN: JSON.stringify([
               './unskippable-test/test-to-run.js',
               './unskippable-test/test-to-skip.js',
-              './unskippable-test/test-unskippable.js'
-            ])
+              './unskippable-test/test-unskippable.js',
+            ]),
           },
-          stdio: 'inherit'
         }
       )
 
@@ -1934,8 +1934,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.setSuitesToSkip([{
         type: 'suite',
         attributes: {
-          suite: 'ci-visibility/test/not-existing-test.js'
-        }
+          suite: 'ci-visibility/test/not-existing-test.js',
+        },
       }])
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -1955,7 +1955,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -1981,7 +1980,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -1995,7 +1993,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
-        tests_skipping: false
+        tests_skipping: false,
       })
 
       const codeCoveragesPromise = receiver
@@ -2008,7 +2006,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           assertObjectContains(coveredFiles, [
             'ci-visibility/subproject/dependency.js',
-            'ci-visibility/subproject/subproject-test.js'
+            'ci-visibility/subproject/subproject-test.js',
           ])
         }, 5000)
 
@@ -2017,9 +2015,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd: `${cwd}/ci-visibility/subproject`,
           env: {
-            ...getCiVisAgentlessConfig(receiver.port)
+            ...getCiVisAgentlessConfig(receiver.port),
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2036,19 +2033,19 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
         mocha: {
-          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
-        }
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests'],
+        },
       })
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
-            '5s': NUM_RETRIES_EFD
+            '5s': NUM_RETRIES_EFD,
           },
-          faulty_session_threshold: 100
+          faulty_session_threshold: 100,
         },
-        known_tests_enabled: true
+        known_tests_enabled: true,
       })
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -2064,7 +2061,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
           )
           oldTests.forEach(test => {
-            assert.ok(!('TEST_IS_NEW' in test.meta))
+            assert.ok(!(TEST_IS_NEW in test.meta))
           })
           assert.strictEqual(oldTests.length, 1)
 
@@ -2095,10 +2092,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
               './test/ci-visibility-test.js',
-              './test/ci-visibility-test-2.js'
-            ])
+              './test/ci-visibility-test-2.js',
+            ]),
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2113,18 +2109,18 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       // Tests from ci-visibility/test-early-flake-detection/test-parameterized.js will be considered new
       receiver.setKnownTests({
         mocha: {
-          'ci-visibility/test-early-flake-detection/test.js': ['ci visibility can report tests']
-        }
+          'ci-visibility/test-early-flake-detection/test.js': ['ci visibility can report tests'],
+        },
       })
       receiver.setSettings({
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
-            '5s': 3
+            '5s': 3,
           },
-          faulty_session_threshold: 100
+          faulty_session_threshold: 100,
         },
-        known_tests_enabled: true
+        known_tests_enabled: true,
       })
 
       const eventsPromise = receiver
@@ -2172,10 +2168,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
               './test-early-flake-detection/test.js',
-              './test-early-flake-detection/mocha-parameterized.js'
-            ])
+              './test-early-flake-detection/mocha-parameterized.js',
+            ]),
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2189,25 +2184,25 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
         mocha: {
-          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
-        }
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests'],
+        },
       })
       receiver.setSettings({
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
-            '5s': 3
+            '5s': 3,
           },
-          faulty_session_threshold: 100
+          faulty_session_threshold: 100,
         },
-        known_tests_enabled: true
+        known_tests_enabled: true,
       })
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+          assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           const newTests = tests.filter(test =>
@@ -2229,11 +2224,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
               './test/ci-visibility-test.js',
-              './test/ci-visibility-test-2.js'
+              './test/ci-visibility-test-2.js',
             ]),
-            DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
+            DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false',
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2247,7 +2241,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     it('retries flaky tests', (done) => {
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
       receiver.setKnownTests({
-        mocha: {}
+        mocha: {},
       })
 
       const NUM_RETRIES_EFD = 5
@@ -2255,11 +2249,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
-            '5s': NUM_RETRIES_EFD
+            '5s': NUM_RETRIES_EFD,
           },
-          faulty_session_threshold: 100
+          faulty_session_threshold: 100,
         },
-        known_tests_enabled: true
+        known_tests_enabled: true,
       })
 
       const eventsPromise = receiver
@@ -2294,10 +2288,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './test-early-flake-detection/occasionally-failing-test.js'
-            ])
+              './test-early-flake-detection/occasionally-failing-test.js',
+            ]),
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2313,7 +2306,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     it('does not retry new tests that are skipped', (done) => {
       // Tests from ci-visibility/test/skipped-and-todo-test will be considered new
       receiver.setKnownTests({
-        mocha: {}
+        mocha: {},
       })
 
       const NUM_RETRIES_EFD = 5
@@ -2321,11 +2314,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
-            '5s': NUM_RETRIES_EFD
+            '5s': NUM_RETRIES_EFD,
           },
-          faulty_session_threshold: 100
+          faulty_session_threshold: 100,
         },
-        known_tests_enabled: true
+        known_tests_enabled: true,
       })
 
       const eventsPromise = receiver
@@ -2341,7 +2334,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test => test.meta[TEST_NAME] === 'ci visibility skip will not be retried'
           )
           assert.strictEqual(newSkippedTests.length, 1)
-          assert.ok(!('TEST_IS_RETRY' in newSkippedTests[0].meta))
+          assert.ok(!(TEST_IS_RETRY in newSkippedTests[0].meta))
         })
 
       childProcess = exec(
@@ -2351,10 +2344,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './test-early-flake-detection/skipped-and-todo-test.js'
-            ])
+              './test-early-flake-detection/skipped-and-todo-test.js',
+            ]),
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2370,20 +2362,20 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
-            '5s': 3
+            '5s': 3,
           },
-          faulty_session_threshold: 100
+          faulty_session_threshold: 100,
         },
-        known_tests_enabled: true
+        known_tests_enabled: true,
       })
       // Tests from ci-visibility/test/skipped-and-todo-test will be considered new
       receiver.setKnownTests({
         mocha: {
           'ci-visibility/test-early-flake-detection/weird-test-names.js': [
             'no describe can do stuff',
-            'describe  trailing space '
-          ]
-        }
+            'describe  trailing space ',
+          ],
+        },
       })
 
       const eventsPromise = receiver
@@ -2398,7 +2390,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assertObjectContains(resourceNames,
             [
               'ci-visibility/test-early-flake-detection/weird-test-names.js.no describe can do stuff',
-              'ci-visibility/test-early-flake-detection/weird-test-names.js.describe  trailing space '
+              'ci-visibility/test-early-flake-detection/weird-test-names.js.describe  trailing space ',
             ]
           )
 
@@ -2416,10 +2408,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './test-early-flake-detection/weird-test-names.js'
-            ])
+              './test-early-flake-detection/weird-test-names.js',
+            ]),
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -2437,11 +2428,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
-            '5s': NUM_RETRIES_EFD
+            '5s': NUM_RETRIES_EFD,
           },
-          faulty_session_threshold: 100
+          faulty_session_threshold: 100,
         },
-        known_tests_enabled: true
+        known_tests_enabled: true,
       })
 
       const eventsPromise = receiver
@@ -2449,7 +2440,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+          assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -2468,10 +2459,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
               './test/ci-visibility-test.js',
-              './test/ci-visibility-test-2.js'
-            ])
+              './test/ci-visibility-test-2.js',
+            ]),
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2483,7 +2473,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     it('retries flaky tests and sets exit code to 0 as long as one attempt passes', (done) => {
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
       receiver.setKnownTests({
-        mocha: {}
+        mocha: {},
       })
 
       const NUM_RETRIES_EFD = 3
@@ -2491,11 +2481,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
-            '5s': NUM_RETRIES_EFD
+            '5s': NUM_RETRIES_EFD,
           },
-          faulty_session_threshold: 100
+          faulty_session_threshold: 100,
         },
-        known_tests_enabled: true
+        known_tests_enabled: true,
       })
 
       const eventsPromise = receiver
@@ -2529,16 +2519,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: '**/ci-visibility/test-early-flake-detection/occasionally-failing-test*'
+            TESTS_TO_RUN: '**/ci-visibility/test-early-flake-detection/occasionally-failing-test*',
           },
-          stdio: 'inherit'
         }
       )
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
 
@@ -2559,17 +2548,17 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
-            '5s': NUM_RETRIES_EFD
+            '5s': NUM_RETRIES_EFD,
           },
-          faulty_session_threshold: 0
+          faulty_session_threshold: 0,
         },
-        known_tests_enabled: true
+        known_tests_enabled: true,
       })
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
         mocha: {
-          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
-        }
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests'],
+        },
       })
 
       const eventsPromise = receiver
@@ -2577,7 +2566,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+          assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
           assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -2597,10 +2586,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
               './test/ci-visibility-test.js',
-              './test/ci-visibility-test-2.js'
-            ])
+              './test/ci-visibility-test-2.js',
+            ]),
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2615,7 +2603,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       onlyLatestIt('retries new tests', (done) => {
         // Tests from ci-visibility/test/occasionally-failing-test will be considered new
         receiver.setKnownTests({
-          mocha: {}
+          mocha: {},
         })
 
         // The total number of executions need to be an odd number, so that we
@@ -2626,11 +2614,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
+              '5s': NUM_RETRIES_EFD,
             },
-            faulty_session_threshold: 100
+            faulty_session_threshold: 100,
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         const eventsPromise = receiver
@@ -2665,7 +2653,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           '--parallel ./ci-visibility/test-early-flake-detection/occasionally-failing-test.js', {
             cwd,
             env: getCiVisAgentlessConfig(receiver.port),
-            stdio: 'inherit'
           })
 
         childProcess.on('exit', (exitCode) => {
@@ -2679,7 +2666,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       onlyLatestIt('retries new tests when using the programmatic API', (done) => {
         // Tests from ci-visibility/test/occasionally-failing-test will be considered new
         receiver.setKnownTests({
-          mocha: {}
+          mocha: {},
         })
 
         const NUM_RETRIES_EFD = 5
@@ -2687,11 +2674,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
+              '5s': NUM_RETRIES_EFD,
             },
-            faulty_session_threshold: 100
+            faulty_session_threshold: 100,
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         const eventsPromise = receiver
@@ -2726,12 +2713,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              RUN_IN_PARALLEL: true,
+              RUN_IN_PARALLEL: 'true',
               TESTS_TO_RUN: JSON.stringify([
-                './test-early-flake-detection/occasionally-failing-test.js'
-              ])
+                './test-early-flake-detection/occasionally-failing-test.js',
+              ]),
             },
-            stdio: 'inherit'
           }
         )
         childProcess.on('exit', (exitCode) => {
@@ -2749,17 +2735,17 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
+              '5s': NUM_RETRIES_EFD,
             },
-            faulty_session_threshold: 0
+            faulty_session_threshold: 0,
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
         // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
         receiver.setKnownTests({
           mocha: {
-            'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
-          }
+            'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests'],
+          },
         })
 
         const eventsPromise = receiver
@@ -2767,7 +2753,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
             assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
 
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -2785,13 +2771,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              RUN_IN_PARALLEL: true,
+              RUN_IN_PARALLEL: 'true',
               TESTS_TO_RUN: JSON.stringify([
                 './test/ci-visibility-test.js',
-                './test/ci-visibility-test-2.js'
-              ])
+                './test/ci-visibility-test-2.js',
+              ]),
             },
-            stdio: 'inherit'
           }
         )
 
@@ -2809,17 +2794,17 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
+              '5s': NUM_RETRIES_EFD,
             },
-            faulty_session_threshold: 0
+            faulty_session_threshold: 0,
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
           'not-mocha': {
-            'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
-          }
+            'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests'],
+          },
         })
 
         const eventsPromise = receiver
@@ -2827,7 +2812,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -2844,13 +2829,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              RUN_IN_PARALLEL: true,
+              RUN_IN_PARALLEL: 'true',
               TESTS_TO_RUN: JSON.stringify([
                 './test/ci-visibility-test.js',
-                './test/ci-visibility-test-2.js'
-              ])
+                './test/ci-visibility-test-2.js',
+              ]),
             },
-            stdio: 'inherit'
           }
         )
 
@@ -2866,16 +2850,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
-            '5s': 3
-          }
+            '5s': 3,
+          },
         },
-        known_tests_enabled: false
+        known_tests_enabled: false,
       })
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
         mocha: {
-          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
-        }
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests'],
+        },
       })
 
       const eventsPromise = receiver
@@ -2883,7 +2867,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+          assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -2891,14 +2875,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
           )
           oldTests.forEach(test => {
-            assert.ok(!('TEST_IS_NEW' in test.meta))
+            assert.ok(!(TEST_IS_NEW in test.meta))
           })
           assert.strictEqual(oldTests.length, 1)
           const newTests = tests.filter(test =>
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
           )
           newTests.forEach(test => {
-            assert.ok(!('TEST_IS_NEW' in test.meta))
+            assert.ok(!(TEST_IS_NEW in test.meta))
           })
           const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
           assert.strictEqual(retriedTests.length, 0)
@@ -2912,10 +2896,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
               './test/ci-visibility-test.js',
-              './test/ci-visibility-test-2.js'
-            ])
+              './test/ci-visibility-test-2.js',
+            ]),
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2936,8 +2919,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         tests_skipping: false,
         flaky_test_retries_enabled: true,
         early_flake_detection: {
-          enabled: false
-        }
+          enabled: false,
+        },
       })
 
       childProcess = exec(
@@ -2947,10 +2930,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './test-flaky-test-retries/eventually-passing-test.js'
-            ])
+              './test-flaky-test-retries/eventually-passing-test.js',
+            ]),
           },
-          stdio: 'inherit'
         }
       )
 
@@ -2996,8 +2978,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         tests_skipping: false,
         flaky_test_retries_enabled: true,
         early_flake_detection: {
-          enabled: false
-        }
+          enabled: false,
+        },
       })
 
       const eventsPromise = receiver
@@ -3018,11 +3000,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './test-flaky-test-retries/eventually-passing-test.js'
+              './test-flaky-test-retries/eventually-passing-test.js',
             ]),
-            DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false'
+            DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3040,8 +3021,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         tests_skipping: false,
         flaky_test_retries_enabled: true,
         early_flake_detection: {
-          enabled: false
-        }
+          enabled: false,
+        },
       })
 
       const eventsPromise = receiver
@@ -3067,11 +3048,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './test-flaky-test-retries/eventually-passing-test.js'
+              './test-flaky-test-retries/eventually-passing-test.js',
             ]),
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3101,20 +3081,19 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       {
         cwd,
         env: getCiVisAgentlessConfig(receiver.port),
-        stdio: 'inherit'
       }
     )
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
 
     childProcess.on('exit', () => {
       linePctMatch = testOutput.match(linePctMatchRegex)
-      linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : null
+      linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : -Infinity
 
       assert.strictEqual(linesPctFromNyc, codeCoverageWithUntestedFiles,
         'nyc --all output does not match the reported coverage')
@@ -3128,7 +3107,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'inherit'
         }
       )
 
@@ -3139,16 +3117,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           codeCoverageWithoutUntestedFiles = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
         })
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
 
       childProcess.on('exit', () => {
         linePctMatch = testOutput.match(linePctMatchRegex)
-        linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : null
+        linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : -Infinity
 
         assert.strictEqual(linesPctFromNyc, codeCoverageWithoutUntestedFiles,
           'nyc output does not match the reported coverage (no --all flag)')
@@ -3167,7 +3145,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       (done) => {
         receiver.setSettings({
           flaky_test_retries_enabled: true,
-          di_enabled: true
+          di_enabled: true,
         })
 
         const eventsPromise = receiver
@@ -3202,12 +3180,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TESTS_TO_RUN: JSON.stringify([
-                './dynamic-instrumentation/test-hit-breakpoint'
+                './dynamic-instrumentation/test-hit-breakpoint',
               ]),
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
-              DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
+              DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
             },
-            stdio: 'inherit'
           }
         )
 
@@ -3222,7 +3199,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     onlyLatestIt('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
-        di_enabled: false
+        di_enabled: false,
       })
 
       const eventsPromise = receiver
@@ -3257,11 +3234,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './dynamic-instrumentation/test-hit-breakpoint'
+              './dynamic-instrumentation/test-hit-breakpoint',
             ]),
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3276,7 +3252,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     onlyLatestIt('runs retries with dynamic instrumentation', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
-        di_enabled: true
+        di_enabled: true,
       })
 
       let snapshotIdByTest, snapshotIdByLog
@@ -3317,22 +3293,22 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const [{ logMessage: [diLog] }] = payloads
           assertObjectContains(diLog, {
             ddsource: 'dd_debugger',
-            level: 'error'
+            level: 'error',
           })
           assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
           assertObjectContains(diLog.debugger.snapshot.captures.lines['6'].locals, {
             a: {
               type: 'number',
-              value: '11'
+              value: '11',
             },
             b: {
               type: 'number',
-              value: '3'
+              value: '3',
             },
             localVariable: {
               type: 'number',
-              value: '2'
-            }
+              value: '2',
+            },
           })
           spanIdByLog = diLog.dd.span_id
           traceIdByLog = diLog.dd.trace_id
@@ -3346,11 +3322,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './dynamic-instrumentation/test-hit-breakpoint'
+              './dynamic-instrumentation/test-hit-breakpoint',
             ]),
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3367,7 +3342,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     onlyLatestIt('does not crash if the retry does not hit the breakpoint', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
-        di_enabled: true
+        di_enabled: true,
       })
 
       const eventsPromise = receiver
@@ -3401,11 +3376,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './dynamic-instrumentation/test-not-hit-breakpoint'
+              './dynamic-instrumentation/test-not-hit-breakpoint',
             ]),
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3421,16 +3395,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     it('detects new tests without retrying them', (done) => {
       receiver.setSettings({
         early_flake_detection: {
-          enabled: false
+          enabled: false,
         },
-        known_tests_enabled: true
+        known_tests_enabled: true,
       })
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
         mocha: {
-          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
-        }
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests'],
+        },
       })
 
       const eventsPromise = receiver
@@ -3438,7 +3412,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+          assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -3447,7 +3421,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
           )
           oldTests.forEach(test => {
-            assert.ok(!('TEST_IS_NEW' in test.meta))
+            assert.ok(!(TEST_IS_NEW in test.meta))
           })
           assert.strictEqual(oldTests.length, 1)
 
@@ -3470,10 +3444,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
               './test/ci-visibility-test.js',
-              './test/ci-visibility-test-2.js'
-            ])
+              './test/ci-visibility-test-2.js',
+            ]),
           },
-          stdio: 'inherit'
         }
       )
 
@@ -3504,11 +3477,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           ...getCiVisAgentlessConfig(receiver.port),
           TESTS_TO_RUN: JSON.stringify([
             './test/ci-visibility-test.js',
-            './test/ci-visibility-test-2.js'
+            './test/ci-visibility-test-2.js',
           ]),
-          DD_SERVICE: 'my-service'
+          DD_SERVICE: 'my-service',
         },
-        stdio: 'inherit'
       }
     )
 
@@ -3529,13 +3501,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 tests: {
                   'attempt to fix tests can attempt to fix a test': {
                     properties: {
-                      attempt_to_fix: true
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      attempt_to_fix: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         })
       })
 
@@ -3544,7 +3516,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         shouldAlwaysPass,
         shouldFailSometimes,
         isQuarantined,
-        isDisabled
+        isDisabled,
       }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -3555,14 +3527,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isAttemptToFix) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             } else {
-              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+              assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
             }
 
             const resourceNames = tests.map(span => span.resource)
 
             assertObjectContains(resourceNames,
               [
-                'ci-visibility/test-management/test-attempt-to-fix-1.js.attempt to fix tests can attempt to fix a test'
+                'ci-visibility/test-management/test-attempt-to-fix-1.js.attempt to fix tests can attempt to fix a test',
               ]
             )
 
@@ -3575,16 +3547,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               const isFirstAttempt = i === 0
               const isLastAttempt = i === retriedTests.length - 1
               if (!isAttemptToFix) {
-                assert.ok(!('TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX' in test.meta))
-                assert.ok(!('TEST_IS_RETRY' in test.meta))
-                assert.ok(!('TEST_RETRY_REASON' in test.meta))
+                assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in test.meta))
+                assert.ok(!(TEST_IS_RETRY in test.meta))
+                assert.ok(!(TEST_RETRY_REASON in test.meta))
                 continue
               }
 
               assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
               if (isFirstAttempt) {
-                assert.ok(!('TEST_IS_RETRY' in test.meta))
-                assert.ok(!('TEST_RETRY_REASON' in test.meta))
+                assert.ok(!(TEST_IS_RETRY in test.meta))
+                assert.ok(!(TEST_RETRY_REASON in test.meta))
               } else {
                 assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
                 assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
@@ -3601,9 +3573,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               if (isLastAttempt) {
                 if (shouldAlwaysPass) {
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
-                  assert.ok(!('TEST_HAS_FAILED_ALL_RETRIES' in test.meta))
+                  assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
                 } else if (shouldFailSometimes) {
-                  assert.ok(!('TEST_HAS_FAILED_ALL_RETRIES' in test.meta))
+                  assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                 } else {
                   assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
@@ -3613,13 +3585,24 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             }
           })
 
+      /**
+       * @param {() => void} done
+       * @param {{
+       *   isAttemptToFix?: boolean,
+       *   isQuarantined?: boolean,
+       *   isDisabled?: boolean,
+       *   shouldAlwaysPass?: boolean,
+       *   shouldFailSometimes?: boolean,
+       *   extraEnvVars?: Record<string, string>
+       * }} [options]
+       */
       const runAttemptToFixTest = (done, {
         isAttemptToFix,
         shouldAlwaysPass,
         shouldFailSometimes,
         isQuarantined,
         isDisabled,
-        extraEnvVars = {}
+        extraEnvVars = {},
       } = {}) => {
         let stdout = ''
         const testAssertionsPromise = getTestAssertions({
@@ -3627,7 +3610,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           shouldAlwaysPass,
           shouldFailSometimes,
           isQuarantined,
-          isDisabled
+          isDisabled,
         })
 
         childProcess = exec(
@@ -3637,18 +3620,17 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TESTS_TO_RUN: JSON.stringify([
-                './test-management/test-attempt-to-fix-1.js'
+                './test-management/test-attempt-to-fix-1.js',
               ]),
               SHOULD_CHECK_RESULTS: '1',
               ...extraEnvVars,
               ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
-              ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {})
+              ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
             },
-            stdio: 'inherit'
           }
         )
 
-        childProcess.stdout.on('data', (data) => {
+        childProcess.stdout?.on('data', (data) => {
           stdout += data
         })
 
@@ -3706,13 +3688,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                   'attempt to fix tests can attempt to fix a test': {
                     properties: {
                       attempt_to_fix: true,
-                      quarantined: true
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         })
 
         runAttemptToFixTest(done, { isAttemptToFix: true, isQuarantined: true })
@@ -3728,13 +3710,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                   'attempt to fix tests can attempt to fix a test': {
                     properties: {
                       attempt_to_fix: true,
-                      disabled: true
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      disabled: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         })
 
         runAttemptToFixTest(done, { isAttemptToFix: true, isDisabled: true })
@@ -3750,13 +3732,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 tests: {
                   'disable tests can disable a test': {
                     properties: {
-                      disabled: true
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      disabled: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         })
       })
 
@@ -3770,14 +3752,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isDisabling) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             } else {
-              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+              assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
             }
 
             const resourceNames = tests.map(span => span.resource)
 
             assertObjectContains(resourceNames,
               [
-                'ci-visibility/test-management/test-disabled-1.js.disable tests can disable a test'
+                'ci-visibility/test-management/test-disabled-1.js.disable tests can disable a test',
               ]
             )
 
@@ -3790,7 +3772,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               assert.strictEqual(skippedTests.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
             } else {
               assert.strictEqual(skippedTests.meta[TEST_STATUS], 'fail')
-              assert.ok(!('TEST_MANAGEMENT_IS_DISABLED' in skippedTests.meta))
+              assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in skippedTests.meta))
             }
           })
 
@@ -3805,16 +3787,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TESTS_TO_RUN: JSON.stringify([
-                './test-management/test-disabled-1.js'
+                './test-management/test-disabled-1.js',
               ]),
               SHOULD_CHECK_RESULTS: '1',
-              ...extraEnvVars
+              ...extraEnvVars,
             },
-            stdio: 'inherit'
           }
         )
 
-        childProcess.stdout.on('data', (data) => {
+        childProcess.stdout?.on('data', (data) => {
           stdout += data
         })
 
@@ -3846,8 +3827,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             RUN_IN_PARALLEL: '1',
             TESTS_TO_RUN: JSON.stringify([
               './test-management/test-disabled-1.js',
-              './test-management/test-disabled-2.js'
-            ])
+              './test-management/test-disabled-2.js',
+            ]),
           }
         )
       })
@@ -3874,13 +3855,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 tests: {
                   'quarantine tests can quarantine a test': {
                     properties: {
-                      quarantined: true
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         })
       })
 
@@ -3894,7 +3875,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isQuarantining) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             } else {
-              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+              assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
             }
 
             const resourceNames = tests.map(span => span.resource)
@@ -3902,7 +3883,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assertObjectContains(resourceNames,
               [
                 'ci-visibility/test-management/test-quarantine-1.js.quarantine tests can quarantine a test',
-                'ci-visibility/test-management/test-quarantine-1.js.quarantine tests can pass normally'
+                'ci-visibility/test-management/test-quarantine-1.js.quarantine tests can pass normally',
               ]
             )
 
@@ -3915,7 +3896,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isQuarantining) {
               assert.strictEqual(failedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
             } else {
-              assert.ok(!('TEST_MANAGEMENT_IS_QUARANTINED' in failedTest.meta))
+              assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in failedTest.meta))
             }
           })
 
@@ -3930,16 +3911,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TESTS_TO_RUN: JSON.stringify([
-                './test-management/test-quarantine-1.js'
+                './test-management/test-quarantine-1.js',
               ]),
               SHOULD_CHECK_RESULTS: '1',
-              ...extraEnvVars
+              ...extraEnvVars,
             },
-            stdio: 'inherit'
           }
         )
 
-        childProcess.stdout.on('data', (data) => {
+        childProcess.stdout?.on('data', (data) => {
           stdout += data
         })
 
@@ -3971,8 +3951,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             RUN_IN_PARALLEL: '1',
             TESTS_TO_RUN: JSON.stringify([
               './test-management/test-quarantine-1.js',
-              './test-management/test-quarantine-2.js'
-            ])
+              './test-management/test-quarantine-2.js',
+            ]),
           }
         )
       })
@@ -3994,7 +3974,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       let testOutput = ''
       receiver.setSettings({
         test_management: { enabled: true },
-        flaky_test_retries_enabled: false
+        flaky_test_retries_enabled: false,
       })
       receiver.setTestManagementTestsResponseCode(500)
 
@@ -4002,7 +3982,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+          assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           // it is not retried
           assert.strictEqual(tests.length, 1)
@@ -4015,18 +3995,17 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './test-management/test-attempt-to-fix-1.js'
+              './test-management/test-attempt-to-fix-1.js',
             ]),
-            DD_TRACE_DEBUG: '1'
+            DD_TRACE_DEBUG: '1',
           },
-          stdio: 'inherit'
         }
       )
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
 
@@ -4034,7 +4013,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         once(childProcess, 'exit'),
         once(childProcess.stdout, 'end'),
         once(childProcess.stderr, 'end'),
-        eventsPromise
+        eventsPromise,
       ])
       assert.match(testOutput, /Test management tests could not be fetched/)
     })
@@ -4053,12 +4032,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           code_coverage: false,
           tests_skipping: false,
           flaky_test_retries_enabled: false,
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
         receiver.setTestManagementTests({
           mocha: {
-            suites: {}
-          }
+            suites: {},
+          },
         })
 
         const eventsPromise = receiver
@@ -4098,14 +4077,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           {
             cwd,
             env: getCiVisAgentlessConfig(receiver.port),
-            stdio: 'inherit'
           }
         )
 
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
 
@@ -4113,7 +4091,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           once(childProcess, 'exit'),
           once(childProcess.stdout, 'end'),
           once(childProcess.stderr, 'end'),
-          eventsPromise
+          eventsPromise,
         ])
 
         // Verify no "invalid state transition" error occurred
@@ -4155,9 +4133,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             DD_TEST_SESSION_NAME: 'my-test-session-name',
-            ...extraEnvVars
+            ...extraEnvVars,
           },
-          stdio: 'inherit'
         }
       )
       childProcess.on('exit', () => {
@@ -4171,7 +4148,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
     onlyLatestIt('adds capabilities to tests (parallel)', (done) => {
       runTest(done, true, {
-        RUN_IN_PARALLEL: '1'
+        RUN_IN_PARALLEL: '1',
       })
     })
   })
@@ -4187,7 +4164,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
         assertObjectContains(tests.map(test => test.meta[TEST_STATUS]), [
           'pass',
-          'pass'
+          'pass',
         ])
 
         assertObjectContains(tests.map(test => test.resource), [
@@ -4203,21 +4180,20 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './test-nested-hooks/test-nested-hooks.js'
-            ])
+              './test-nested-hooks/test-nested-hooks.js',
+            ]),
           },
-          stdio: 'inherit'
         }
       )
 
-      childProcess.stdout.on('data', (data) => {
+      childProcess.stdout?.on('data', (data) => {
         stdout += data
       })
 
       await Promise.all([
         once(childProcess, 'exit'),
         once(childProcess.stdout, 'end'),
-        eventsPromise
+        eventsPromise,
       ])
 
       assert.match(stdout, /beforeEach/)
@@ -4238,7 +4214,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), [
           'fail',
           'pass',
-          'pass'
+          'pass',
         ])
 
         assert.deepStrictEqual(tests.map(test => test.resource), [
@@ -4269,22 +4245,21 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './test-nested-hooks/test-nested-hooks.js'
+              './test-nested-hooks/test-nested-hooks.js',
             ]),
-            SHOULD_FAIL: '1'
+            SHOULD_FAIL: '1',
           },
-          stdio: 'inherit'
         }
       )
 
-      childProcess.stdout.on('data', (data) => {
+      childProcess.stdout?.on('data', (data) => {
         stdout += data
       })
 
       await Promise.all([
         once(childProcess, 'exit'),
         once(childProcess.stdout, 'end'),
-        eventsPromise
+        eventsPromise,
       ])
 
       assert.match(stdout, /beforeEach/)
@@ -4301,8 +4276,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     beforeEach(() => {
       receiver.setKnownTests({
         mocha: {
-          'ci-visibility/test-impacted-test/test-impacted-1.js': ['impacted tests can pass normally']
-        }
+          'ci-visibility/test-impacted-test/test-impacted-1.js': ['impacted tests can pass normally'],
+        },
       })
     })
 
@@ -4343,7 +4318,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           if (isEfd) {
             assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
           } else {
-            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
           }
 
           const resourceNames = tests.map(span => span.resource)
@@ -4351,7 +4326,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assertObjectContains(resourceNames,
             [
               'ci-visibility/test-impacted-test/test-impacted-1.js.impacted tests can pass normally',
-              'ci-visibility/test-impacted-test/test-impacted-1.js.impacted tests can fail'
+              'ci-visibility/test-impacted-test/test-impacted-1.js.impacted tests can fail',
             ]
           )
 
@@ -4361,7 +4336,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             // so we can be sure that parallel mode is on
             assertObjectContains(resourceNames, [
               'ci-visibility/test-impacted-test/test-impacted-2.js.impacted tests 2 can pass normally',
-              'ci-visibility/test-impacted-test/test-impacted-2.js.impacted tests 2 can fail'
+              'ci-visibility/test-impacted-test/test-impacted-2.js.impacted tests 2 can fail',
             ])
           }
 
@@ -4379,12 +4354,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isModified) {
               assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
             } else {
-              assert.ok(!('TEST_IS_MODIFIED' in impactedTest.meta))
+              assert.ok(!(TEST_IS_MODIFIED in impactedTest.meta))
             }
             if (isNew) {
               assert.strictEqual(impactedTest.meta[TEST_IS_NEW], 'true')
             } else {
-              assert.ok(!('TEST_IS_NEW' in impactedTest.meta))
+              assert.ok(!(TEST_IS_NEW in impactedTest.meta))
             }
           }
 
@@ -4425,20 +4400,19 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './test-impacted-test/test-impacted-1'
+              './test-impacted-test/test-impacted-1',
             ]),
             // we need to trick this process into not reading the event.json contents for GitHub,
             // otherwise we'll take the diff from the base repository, not from the test project in `cwd`
             GITHUB_BASE_REF: '',
-            ...extraEnvVars
+            ...extraEnvVars,
           },
-          stdio: 'inherit'
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        testAssertionsPromise
+        testAssertionsPromise,
       ])
     }
 
@@ -4474,9 +4448,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             // we need to run more than 1 suite for parallel mode to kick in
             TESTS_TO_RUN: JSON.stringify([
               './test-impacted-test/test-impacted-1',
-              './test-impacted-test/test-impacted-2'
+              './test-impacted-test/test-impacted-2',
             ]),
-            RUN_IN_PARALLEL: true
+            RUN_IN_PARALLEL: 'true',
           }
         )
       })
@@ -4484,17 +4458,17 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       context('test is new', () => {
         it('should be retried and marked both as new and modified', async () => {
           receiver.setKnownTests({
-            mocha: {}
+            mocha: {},
           })
           receiver.setSettings({
             impacted_tests_enabled: true,
             early_flake_detection: {
               enabled: true,
               slow_test_retries: {
-                '5s': NUM_RETRIES
-              }
+                '5s': NUM_RETRIES,
+              },
             },
-            known_tests_enabled: true
+            known_tests_enabled: true,
           })
           await runImpactedTest(
             { isModified: true, isEfd: true, isNew: true }
@@ -4534,15 +4508,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './mocha-retries-test-fn/mocha-done.js'
-            ])
-          }
+              './mocha-retries-test-fn/mocha-done.js',
+            ]),
+          },
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        getTestAssertions()
+        getTestAssertions(),
       ])
     })
     it('respects async/await', async () => {
@@ -4553,15 +4527,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './mocha-retries-test-fn/mocha-async.js'
-            ])
-          }
+              './mocha-retries-test-fn/mocha-async.js',
+            ]),
+          },
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        getTestAssertions()
+        getTestAssertions(),
       ])
     })
     it('respects promises', async () => {
@@ -4572,15 +4546,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './mocha-retries-test-fn/mocha-promise.js'
-            ])
-          }
+              './mocha-retries-test-fn/mocha-promise.js',
+            ]),
+          },
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        getTestAssertions()
+        getTestAssertions(),
       ])
     })
     it('respects sync functions', async () => {
@@ -4591,16 +4565,93 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './mocha-retries-test-fn/mocha-sync.js'
-            ])
-          }
+              './mocha-retries-test-fn/mocha-sync.js',
+            ]),
+          },
         }
       )
 
       await Promise.all([
         once(childProcess, 'exit'),
-        getTestAssertions()
+        getTestAssertions(),
       ])
+    })
+  })
+
+  context('coverage report upload', () => {
+    const gitCommitSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    const gitRepositoryUrl = 'https://github.com/datadog/test-repo.git'
+
+    it('uploads coverage report when coverage_report_upload_enabled is true', async () => {
+      receiver.setSettings({
+        coverage_report_upload_enabled: true,
+      })
+
+      const coverageReportPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/cicovreprt', (payloads) => {
+          assert.strictEqual(payloads.length, 1)
+
+          const coverageReport = payloads[0]
+
+          assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
+
+          assert.strictEqual(coverageReport.coverageFile.name, 'coverage')
+          assert.ok(coverageReport.coverageFile.content.includes('SF:')) // LCOV format
+
+          assert.strictEqual(coverageReport.eventFile.name, 'event')
+          assert.strictEqual(coverageReport.eventFile.content.type, 'coverage_report')
+          assert.strictEqual(coverageReport.eventFile.content.format, 'lcov')
+          assert.strictEqual(coverageReport.eventFile.content[GIT_COMMIT_SHA], gitCommitSha)
+          assert.strictEqual(coverageReport.eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
+        })
+
+      const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov ${runTestsCommand}`
+
+      childProcess = exec(
+        runTestsWithLcovCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_GIT_COMMIT_SHA: gitCommitSha,
+            DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+          },
+        }
+      )
+
+      await Promise.all([
+        coverageReportPromise,
+        once(childProcess, 'exit'),
+      ])
+    })
+
+    it('does not upload coverage report when coverage_report_upload_enabled is false', async () => {
+      receiver.setSettings({
+        coverage_report_upload_enabled: false,
+      })
+
+      let coverageReportUploaded = false
+      receiver.assertPayloadReceived(() => {
+        coverageReportUploaded = true
+      }, ({ url }) => url === '/api/v2/cicovreprt')
+
+      const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov -r=text-summary ${runTestsCommand}`
+
+      childProcess = exec(
+        runTestsWithLcovCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_GIT_COMMIT_SHA: gitCommitSha,
+            DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+          },
+        }
+      )
+
+      await once(childProcess, 'exit')
+
+      assert.strictEqual(coverageReportUploaded, false, 'coverage report should not be uploaded')
     })
   })
 })

@@ -22,11 +22,11 @@ function createChaiShim () {
           be: {
             a: (type) => {
               assert.strictEqual(typeof value, type)
-            }
-          }
-        }
+            },
+          },
+        },
       }
-    }
+    },
   }
 }
 
@@ -54,7 +54,7 @@ describe('OpenTracing API', () => {
     return tracer.init({
       service: 'test',
       flushInterval: 0,
-      plugins: false
+      plugins: false,
     })
   })
 })

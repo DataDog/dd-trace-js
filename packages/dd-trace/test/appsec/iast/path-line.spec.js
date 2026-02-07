@@ -29,7 +29,7 @@ describe('path-line', function () {
   const DIAGNOSTICS_CHANNEL_PATHS = [
     path.join(rootPath, 'path', 'node_modules', 'dc-polyfill'),
     'node:diagnostics_channel',
-    'diagnostics_channel'
+    'diagnostics_channel',
   ]
   let mockPath, pathLine, mockProcess
 
@@ -38,7 +38,7 @@ describe('path-line', function () {
     mockProcess = {}
     pathLine = proxyquire('../../../src/appsec/iast/path-line', {
       path: mockPath,
-      process: mockProcess
+      process: mockProcess,
     })
   })
 
@@ -81,7 +81,7 @@ describe('path-line', function () {
         const callsites = []
         const expectedFilePaths = [
           path.join('first', 'file', 'out', 'of', 'dd.js'),
-          path.join('second', 'file', 'out', 'of', 'dd.js')
+          path.join('second', 'file', 'out', 'of', 'dd.js'),
         ]
         const firstFileOutOfDD = path.join(PROJECT_PATH, expectedFilePaths[0])
         const secondFileOutOfDD = path.join(PROJECT_PATH, expectedFilePaths[1])
@@ -157,7 +157,7 @@ describe('path-line', function () {
         const callsites = []
         const expectedFilePaths = [
           path.join('first', 'file', 'out', 'of', 'dd.js'),
-          path.join('second', 'file', 'out', 'of', 'dd.js')
+          path.join('second', 'file', 'out', 'of', 'dd.js'),
         ]
         const firstFileOutOfDD = path.join(PROJECT_PATH, expectedFilePaths[0])
         const secondFileOutOfDD = path.join(PROJECT_PATH, expectedFilePaths[1])
@@ -196,10 +196,10 @@ describe('path-line', function () {
                 return {
                   path: path.join(line % 2 ? DD_BASE_PATH : PROJECT_PATH, 'file.js'),
                   line,
-                  column
+                  column,
                 }
-              }
-            }
+              },
+            },
           })
 
           previousDDBasePath = pathLine.ddBasePath

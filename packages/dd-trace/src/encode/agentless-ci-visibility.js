@@ -5,7 +5,7 @@ const id = require('../../src/id')
 const {
   distributionMetric,
   TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
-  TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT
+  TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT,
 } = require('../ci-visibility/telemetry')
 const { AgentEncoder } = require('./0.4')
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
@@ -28,7 +28,7 @@ function formatSpan (span) {
   return {
     type: ALLOWED_CONTENT_TYPES.has(span.type) ? span.type : 'span',
     version: encodingVersion,
-    content: normalizeSpan(truncateSpan(span))
+    content: normalizeSpan(truncateSpan(span)),
   }
 }
 
@@ -49,14 +49,14 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   addMetadataTags (tags) {
-    ALLOWED_CONTENT_TYPES.forEach(type => {
+    for (const type of ALLOWED_CONTENT_TYPES) {
       if (tags[type]) {
         this.metadataTags[type] = {
           ...this.metadataTags[type],
-          ...tags[type]
+          ...tags[type],
         }
       }
-    })
+    }
   }
 
   _encodeTestSuite (bytes, content) {
@@ -315,11 +315,11 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       metadata: {
         '*': {
           language: 'javascript',
-          library_version: ddTraceVersion
+          library_version: ddTraceVersion,
         },
-        ...this.metadataTags
+        ...this.metadataTags,
       },
-      events: []
+      events: [],
     }
 
     if (this.env) {

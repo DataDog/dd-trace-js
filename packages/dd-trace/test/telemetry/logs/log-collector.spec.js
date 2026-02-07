@@ -37,19 +37,19 @@ describe('telemetry log collector', () => {
         message: 'Error 1',
         level: 'ERROR',
         stack_trace: `Error: msg\n${ddFrame1}`,
-        errorType: 'Error'
+        errorType: 'Error',
       }), true)
       assert.strictEqual(logCollector.add({
         message: 'Error 1',
         level: 'ERROR',
         stack_trace: `Error: msg\n${ddFrame2}`,
-        errorType: 'Error'
+        errorType: 'Error',
       }), true)
       assert.strictEqual(logCollector.add({
         message: 'Error 1',
         level: 'ERROR',
         stack_trace: `Error: msg\n${ddFrame3}`,
-        errorType: 'Error'
+        errorType: 'Error',
       }), true)
     })
 
@@ -59,19 +59,19 @@ describe('telemetry log collector', () => {
         message: 'Error 1',
         level: 'ERROR',
         stack_trace: `Error: msg\n${ddFrame}`,
-        errorType: 'Error'
+        errorType: 'Error',
       }), true)
       assert.strictEqual(logCollector.add({
         message: 'Error 1',
         level: 'WARN',
         stack_trace: `Error: msg\n${ddFrame}`,
-        errorType: 'Error'
+        errorType: 'Error',
       }), true)
       assert.strictEqual(logCollector.add({
         message: 'Error 1',
         level: 'DEBUG',
         stack_trace: `Error: msg\n${ddFrame}`,
-        errorType: 'Error'
+        errorType: 'Error',
       }), true)
     })
 
@@ -79,7 +79,7 @@ describe('telemetry log collector', () => {
       assert.strictEqual(logCollector.add({
         message: 'Generic Error',
         level: 'ERROR',
-        stack_trace: 'stack 1\n/not/a/dd/frame'
+        stack_trace: 'stack 1\n/not/a/dd/frame',
       })
       , false)
     })
@@ -99,13 +99,13 @@ describe('telemetry log collector', () => {
         message: 'Error 1',
         level: 'ERROR',
         stack_trace: stack,
-        errorType: 'TypeError'
+        errorType: 'TypeError',
       }), true)
 
       assert.strictEqual(logCollector.hasEntry({
         message: 'Error 1',
         level: 'ERROR',
-        stack_trace: `TypeError: redacted${EOL}${ddFrames}`
+        stack_trace: `TypeError: redacted${EOL}${ddFrames}`,
       }), true)
     })
 
@@ -120,20 +120,20 @@ describe('telemetry log collector', () => {
         ...stack
           .split(EOL)
           .filter(line => line.includes(ddBasePath))
-          .map(line => line.replace(ddBasePath, ''))
+          .map(line => line.replace(ddBasePath, '')),
       ].join(EOL)
 
       assert.strictEqual(logCollector.add({
         message: 'Error 1',
         level: 'ERROR',
         stack_trace: stack,
-        errorType: 'TypeError'
+        errorType: 'TypeError',
       }), true)
 
       assert.strictEqual(logCollector.hasEntry({
         message: 'Error 1',
         level: 'ERROR',
-        stack_trace: ddFrames
+        stack_trace: ddFrames,
       }), true)
     })
 
@@ -152,13 +152,13 @@ describe('telemetry log collector', () => {
         message: 'Git plugin error',
         level: 'ERROR',
         stack_trace: multiLineError,
-        errorType: 'Error'
+        errorType: 'Error',
       }), true)
 
       assert.strictEqual(logCollector.hasEntry({
         message: 'Git plugin error',
         level: 'ERROR',
-        stack_trace: `Error: redacted${EOL}${ddFrames}`
+        stack_trace: `Error: redacted${EOL}${ddFrames}`,
       }), true)
     })
   })

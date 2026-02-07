@@ -116,8 +116,8 @@ class RouterPlugin extends WebPlugin {
       integrationName: this.constructor.id,
       tags: {
         [COMPONENT]: this.constructor.id,
-        'resource.name': name || '<anonymous>'
-      }
+        'resource.name': name || '<anonymous>',
+      },
     })
 
     analyticsSampler.sample(span, this.config.measured)
@@ -146,7 +146,7 @@ class RouterPlugin extends WebPlugin {
         span,
         stack: [route],
         route,
-        middleware: []
+        middleware: [],
       }
 
       this.#contexts.set(req, context)

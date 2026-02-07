@@ -59,10 +59,10 @@ function waitAndSend (config, application, host) {
     if (retryData) {
       payload = [{
         request_type: 'app-dependencies-loaded',
-        payload
+        payload,
       }, {
         request_type: retryData.reqType,
-        payload: retryData.payload
+        payload: retryData.payload,
       }]
       reqType = 'message-batch'
     } else if (!dependencies.length) {
@@ -81,9 +81,9 @@ function waitAndSend (config, application, host) {
 function loadAllTheLoadedModules () {
   if (require.cache) {
     const filenames = Object.keys(require.cache)
-    filenames.forEach(filename => {
+    for (const filename of filenames) {
       onModuleLoad({ filename })
-    })
+    }
   }
 }
 

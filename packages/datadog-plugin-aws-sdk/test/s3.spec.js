@@ -66,7 +66,7 @@ describe('Plugin', () => {
           (done) => s3.putObject({
             Bucket: bucketName,
             Key: 'test-key',
-            Body: 'test body'
+            Body: 'test body',
           }, done),
           bucketName, 'bucketname')
 
@@ -74,7 +74,7 @@ describe('Plugin', () => {
           (done) => s3.putObject({
             Bucket: bucketName,
             Key: 'test-key',
-            Body: 'test body'
+            Body: 'test body',
           }, (err) => err && done(err)),
           rawExpectedSchema.outbound
         )
@@ -91,7 +91,7 @@ describe('Plugin', () => {
                   'ptr.kind': S3_PTR_KIND,
                   'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
                   'ptr.hash': '6d1a2fe194c6579187408f827f942be3',
-                  'link.kind': 'span-pointer'
+                  'link.kind': 'span-pointer',
                 })
                 done()
               } catch (error) {
@@ -102,7 +102,7 @@ describe('Plugin', () => {
             s3.putObject({
               Bucket: bucketName,
               Key: 'test-key',
-              Body: 'test body'
+              Body: 'test body',
             }, (err) => {
               if (err) {
                 done(err)
@@ -121,7 +121,7 @@ describe('Plugin', () => {
                   'ptr.kind': S3_PTR_KIND,
                   'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
                   'ptr.hash': '1542053ce6d393c424b1374bac1fc0c5',
-                  'link.kind': 'span-pointer'
+                  'link.kind': 'span-pointer',
                 })
                 done()
               } catch (error) {
@@ -132,7 +132,7 @@ describe('Plugin', () => {
             s3.copyObject({
               Bucket: bucketName,
               Key: 'new-key',
-              CopySource: `${bucketName}/test-key`
+              CopySource: `${bucketName}/test-key`,
             }, (err) => {
               if (err) {
                 done(err)
@@ -149,7 +149,7 @@ describe('Plugin', () => {
             // Start the multipart upload process
             s3.createMultipartUpload({
               Bucket: bucketName,
-              Key: 'multipart-test'
+              Key: 'multipart-test',
             }, (err, multipartData) => {
               if (err) return done(err)
 
@@ -161,7 +161,7 @@ describe('Plugin', () => {
                     Key: 'multipart-test',
                     PartNumber: 1,
                     UploadId: multipartData.UploadId,
-                    Body: part1Data
+                    Body: part1Data,
                   }, (err, data) => err ? reject(err) : resolve({ PartNumber: 1, ETag: data.ETag }))
                 }),
                 new Promise((resolve, reject) => {
@@ -170,9 +170,9 @@ describe('Plugin', () => {
                     Key: 'multipart-test',
                     PartNumber: 2,
                     UploadId: multipartData.UploadId,
-                    Body: part2Data
+                    Body: part2Data,
                   }, (err, data) => err ? reject(err) : resolve({ PartNumber: 2, ETag: data.ETag }))
-                })
+                }),
               ]).then(parts => {
                 // Now complete the multipart upload
                 const completeParams = {
@@ -180,8 +180,8 @@ describe('Plugin', () => {
                   Key: 'multipart-test',
                   UploadId: multipartData.UploadId,
                   MultipartUpload: {
-                    Parts: parts
-                  }
+                    Parts: parts,
+                  },
                 }
 
                 s3.completeMultipartUpload(completeParams, (err) => {
@@ -197,7 +197,7 @@ describe('Plugin', () => {
                           'ptr.kind': S3_PTR_KIND,
                           'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
                           'ptr.hash': '422412aa6b472a7194f3e24f4b12b4a6',
-                          'link.kind': 'span-pointer'
+                          'link.kind': 'span-pointer',
                         })
                         done()
                       } catch (error) {
@@ -218,13 +218,13 @@ describe('Plugin', () => {
             const span = traces[0][0]
             assertObjectContains(span, {
               name: 'aws.request',
-              resource: `putObject ${bucketName}`
+              resource: `putObject ${bucketName}`,
             })
 
             assertObjectContains(span.meta, {
               bucketname: bucketName,
               aws_service: 'S3',
-              region: 'us-east-1'
+              region: 'us-east-1',
             })
 
             total++
@@ -233,7 +233,7 @@ describe('Plugin', () => {
           s3.putObject({
             Bucket: bucketName,
             Key: 'test-key',
-            Body: 'test body'
+            Body: 'test body',
           }, (err) => {
             if (err) return done(err)
 

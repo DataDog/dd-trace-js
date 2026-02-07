@@ -9,8 +9,8 @@ describe('check-require-cache', () => {
   const opts = {
     cwd: __dirname,
     env: {
-      DD_TRACE_DEBUG: 'true'
-    }
+      DD_TRACE_DEBUG: 'true',
+    },
   }
 
   it('should be no warnings when tracer is loaded first', (done) => {

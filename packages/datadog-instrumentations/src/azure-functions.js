@@ -3,7 +3,7 @@
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const {
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 const azureFunctionsChannel = dc.tracingChannel('datadog:azure:functions:invoke')

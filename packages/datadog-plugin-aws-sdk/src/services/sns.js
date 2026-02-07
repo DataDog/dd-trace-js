@@ -24,7 +24,7 @@ class Sns extends BaseAwsSdkPlugin {
     return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
       'aws.sns.topic_arn': TopicArn,
-      topicname: topicName
+      topicname: topicName,
     }
 
     // TODO: should arn be sanitized or quantized in some way here,
@@ -37,7 +37,7 @@ class Sns extends BaseAwsSdkPlugin {
       case 'publishBatch':
         return this.operationName({
           type: 'messaging',
-          kind: 'producer'
+          kind: 'producer',
         })
     }
 
@@ -45,7 +45,7 @@ class Sns extends BaseAwsSdkPlugin {
       id: 'aws',
       type: 'web',
       kind: 'client',
-      awsService: 'sns'
+      awsService: 'sns',
     })
   }
 
@@ -86,7 +86,7 @@ class Sns extends BaseAwsSdkPlugin {
       // add ddInfo before checking DSM so we can include DD attributes in payload size
       params.MessageAttributes._datadog = {
         DataType: 'Binary',
-        BinaryValue: ddInfo
+        BinaryValue: ddInfo,
       }
     }
 
@@ -94,7 +94,7 @@ class Sns extends BaseAwsSdkPlugin {
       if (!params.MessageAttributes._datadog) {
         params.MessageAttributes._datadog = {
           DataType: 'Binary',
-          BinaryValue: ddInfo
+          BinaryValue: ddInfo,
         }
       }
 

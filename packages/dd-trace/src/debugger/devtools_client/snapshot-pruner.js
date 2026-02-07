@@ -74,7 +74,7 @@ class TreeNode {
         this.notCapturedDepth ? 1 : 0,
         this.level,
         this.notCaptured ? 1 : 0,
-        this.size
+        this.size,
       ]
     }
     return this.#priorityKeyCache

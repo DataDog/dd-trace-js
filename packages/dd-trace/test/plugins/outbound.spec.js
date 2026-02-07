@@ -66,7 +66,7 @@ describe('OuboundPlugin', () => {
 
     it('should not set tags if no precursor tags are available', () => {
       const res = instance.getPeerService({
-        fooIsNotAPrecursor: 'bar'
+        fooIsNotAPrecursor: 'bar',
       })
       assert.strictEqual(res, undefined)
     })
@@ -74,22 +74,22 @@ describe('OuboundPlugin', () => {
     it('should grab from remote host in datadog format', () => {
       const res = instance.getPeerService({
         fooIsNotAPrecursor: 'bar',
-        'out.host': 'mypeerservice'
+        'out.host': 'mypeerservice',
       })
       assert.deepStrictEqual(res, {
         'peer.service': 'mypeerservice',
-        '_dd.peer.service.source': 'out.host'
+        '_dd.peer.service.source': 'out.host',
       })
     })
 
     it('should grab from remote host in OTel format', () => {
       const res = instance.getPeerService({
         fooIsNotAPrecursor: 'bar',
-        'net.peer.name': 'mypeerservice'
+        'net.peer.name': 'mypeerservice',
       })
       assert.deepStrictEqual(res, {
         'peer.service': 'mypeerservice',
-        '_dd.peer.service.source': 'net.peer.name'
+        '_dd.peer.service.source': 'net.peer.name',
       })
     })
 
@@ -100,11 +100,11 @@ describe('OuboundPlugin', () => {
       const res = new WithPrecursors().getPeerService({
         fooIsNotAPrecursor: 'bar',
         bar: 'barPeerService',
-        foo: 'fooPeerService'
+        foo: 'fooPeerService',
       })
       assert.deepStrictEqual(res, {
         'peer.service': 'fooPeerService',
-        '_dd.peer.service.source': 'foo'
+        '_dd.peer.service.source': 'foo',
       })
     })
   })
@@ -114,7 +114,7 @@ describe('OuboundPlugin', () => {
     let mappingStub = null
     const peerData = {
       'peer.service': 'foosvc',
-      '_dd.peer.service.source': 'out.host'
+      '_dd.peer.service.source': 'out.host',
     }
 
     beforeEach(() => {
@@ -141,8 +141,8 @@ describe('OuboundPlugin', () => {
       mappingStub = sinon.stub(instance, '_tracerConfig').value({
         peerServiceMapping: {
           barsvc: 'bar',
-          bazsvc: 'baz'
-        }
+          bazsvc: 'baz',
+        },
       })
       const mappingData = instance.getPeerServiceRemap(peerData)
       assert.deepStrictEqual(mappingData, peerData)
@@ -152,14 +152,14 @@ describe('OuboundPlugin', () => {
       mappingStub = sinon.stub(instance, '_tracerConfig').value({
         peerServiceMapping: {
           foosvc: 'foo',
-          bazsvc: 'baz'
-        }
+          bazsvc: 'baz',
+        },
       })
       const mappingData = instance.getPeerServiceRemap(peerData)
       assert.deepStrictEqual(mappingData, {
         'peer.service': 'foo',
         '_dd.peer.service.source': 'out.host',
-        '_dd.peer.service.remapped_from': 'foosvc'
+        '_dd.peer.service.remapped_from': 'foosvc',
       })
     })
   })
@@ -171,9 +171,9 @@ describe('OuboundPlugin', () => {
       const tracerStub = {
         _tracer: {
           startSpan: sinon.stub().returns({
-            addTags: sinon.spy()
-          })
-        }
+            addTags: sinon.spy(),
+          }),
+        },
       }
       instance = new OutboundPlugin(tracerStub)
     })
@@ -182,7 +182,7 @@ describe('OuboundPlugin', () => {
       const configs = [
         { codeOriginForSpans: { enabled: false, experimental: { exit_spans: { enabled: false } } } },
         { codeOriginForSpans: { enabled: false, experimental: { exit_spans: { enabled: true } } } },
-        { codeOriginForSpans: { enabled: true, experimental: { exit_spans: { enabled: false } } } }
+        { codeOriginForSpans: { enabled: true, experimental: { exit_spans: { enabled: false } } } },
       ]
 
       for (const config of configs) {

@@ -4,12 +4,12 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 const {
   WEBSOCKET_PTR_KIND,
   SPAN_POINTER_DIRECTION,
-  SPAN_POINTER_DIRECTION_NAME
+  SPAN_POINTER_DIRECTION_NAME,
 } = require('../../dd-trace/src/constants')
 const {
   incrementWebSocketCounter,
   buildWebSocketSpanPointerHash,
-  hasDistributedTracingContext
+  hasDistributedTracingContext,
 } = require('./util')
 
 class WSClosePlugin extends TracingPlugin {
@@ -21,14 +21,14 @@ class WSClosePlugin extends TracingPlugin {
   bindStart (ctx) {
     const {
       traceWebsocketMessagesInheritSampling,
-      traceWebsocketMessagesSeparateTraces
+      traceWebsocketMessagesSeparateTraces,
     } = this.config
 
     const { code, data, socket, isPeerClose } = ctx
     if (!socket?.spanContext) return
 
     const spanKind = isPeerClose ? 'consumer' : 'producer'
-    const spanTags = socket.spanContext.spanTags
+    const spanTags = socket.spanTags
     const path = spanTags['resource.name'].split(' ')[1]
     const service = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
@@ -37,9 +37,9 @@ class WSClosePlugin extends TracingPlugin {
         'resource.name': `websocket ${path}`,
         'span.type': 'websocket',
         'span.kind': spanKind,
-        'websocket.close.code': code
+        'websocket.close.code': code,
 
-      }
+      },
     }, ctx)
 
     if (data?.toString().length > 0) {
@@ -76,14 +76,13 @@ class WSClosePlugin extends TracingPlugin {
       linkAttributes['dd.kind'] = isIncoming ? 'executed_by' : 'resuming'
 
       // Add span pointer for context propagation
-      if (this.config.traceWebsocketMessagesEnabled && ctx.socket.handshakeSpan) {
-        const handshakeSpan = ctx.socket.handshakeSpan
+      if (this.config.traceWebsocketMessagesEnabled && ctx.socket.spanContext) {
+        const handshakeContext = ctx.socket.spanContext
 
         // Only add span pointers if distributed tracing is enabled and handshake has distributed context
-        if (hasDistributedTracingContext(handshakeSpan, ctx.socket)) {
+        if (hasDistributedTracingContext(handshakeContext, ctx.socket)) {
           const counterType = isIncoming ? 'receiveCounter' : 'sendCounter'
           const counter = incrementWebSocketCounter(ctx.socket, counterType)
-          const handshakeContext = handshakeSpan.context()
 
           const ptrHash = buildWebSocketSpanPointerHash(
             handshakeContext._traceId,
@@ -111,7 +110,7 @@ class WSClosePlugin extends TracingPlugin {
 
       ctx.span.addLink({
         context: ctx.socket.spanContext,
-        attributes: linkAttributes
+        attributes: linkAttributes,
       })
     }
 

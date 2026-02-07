@@ -29,8 +29,8 @@ class AmqplibClientPlugin extends ClientPlugin {
         'amqp.routingKey': fields.routingKey,
         'amqp.consumerTag': fields.consumerTag,
         'amqp.source': fields.source,
-        'amqp.destination': fields.destination
-      }
+        'amqp.destination': fields.destination,
+      },
     }, ctx)
 
     fields.headers = fields.headers || {}

@@ -1,14 +1,14 @@
 import 'dd-trace/init.js'
-import { FlowProducer } from 'bullmq'
+import bullmq from 'bullmq'
 
 const connection = {
   host: '127.0.0.1',
-  port: 6379
+  port: 6379,
 }
 
 const queueName = 'esm-test-flow-producer'
 
-const flowProducer = new FlowProducer({ connection })
+const flowProducer = new bullmq.FlowProducer({ connection })
 
 // Test FlowProducer.add() - tests FlowProducer_add channel
 await flowProducer.add({
@@ -19,9 +19,9 @@ await flowProducer.add({
     {
       name: 'child-job-1',
       queueName,
-      data: { type: 'child', message: 'Child job' }
-    }
-  ]
+      data: { type: 'child', message: 'Child job' },
+    },
+  ],
 })
 
 await flowProducer.close()

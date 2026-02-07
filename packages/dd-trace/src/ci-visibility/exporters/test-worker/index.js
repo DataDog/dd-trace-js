@@ -8,9 +8,9 @@ const {
   JEST_WORKER_LOGS_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
-  VITEST_WORKER_LOGS_PAYLOAD_CODE
+  VITEST_WORKER_LOGS_PAYLOAD_CODE,
 } = require('../../../plugins/util/test')
-const { getEnvironmentVariable } = require('../../../config/helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../../../config/helper')
 const Writer = require('./writer')
 
 function getInterprocessTraceCode () {
@@ -23,13 +23,13 @@ function getInterprocessTraceCode () {
   if (getEnvironmentVariable('MOCHA_WORKER_ID')) {
     return MOCHA_WORKER_TRACE_PAYLOAD_CODE
   }
-  if (getEnvironmentVariable('DD_PLAYWRIGHT_WORKER')) {
+  if (getValueFromEnvSources('DD_PLAYWRIGHT_WORKER')) {
     return PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
   }
   if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {
     return VITEST_WORKER_TRACE_PAYLOAD_CODE
   }
-  if (getEnvironmentVariable('DD_VITEST_WORKER')) {
+  if (getValueFromEnvSources('DD_VITEST_WORKER')) {
     return VITEST_WORKER_TRACE_PAYLOAD_CODE
   }
   return null
@@ -50,7 +50,7 @@ function getInterprocessLogsCode () {
   if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {
     return VITEST_WORKER_LOGS_PAYLOAD_CODE
   }
-  if (getEnvironmentVariable('DD_VITEST_WORKER')) {
+  if (getValueFromEnvSources('DD_VITEST_WORKER')) {
     return VITEST_WORKER_LOGS_PAYLOAD_CODE
   }
   return null

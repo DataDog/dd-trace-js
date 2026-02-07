@@ -7,8 +7,9 @@ const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligen
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
 const { getTestManagementTests: getTestManagementTestsRequest } =
   require('../test-management/get-test-management-tests')
+const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
 const log = require('../../log')
-const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
+const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 
@@ -34,7 +35,7 @@ function getIsTestSessionTrace (trace) {
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
 
-class CiVisibilityExporter extends AgentInfoExporter {
+class CiVisibilityExporter extends BufferingExporter {
   constructor (config) {
     super(config)
     this._timer = undefined
@@ -103,10 +104,6 @@ class CiVisibilityExporter extends AgentInfoExporter {
     )
   }
 
-  shouldRequestLibraryConfiguration () {
-    return this._config.isIntelligentTestRunnerEnabled
-  }
-
   canReportSessionTraces () {
     return this._canUseCiVisProtocol
   }
@@ -124,7 +121,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       isGzipCompatible: this._isGzipCompatible,
       evpProxyPrefix: this.evpProxyPrefix,
       custom: getTestConfigurationTags(this._config.tags),
-      ...testConfiguration
+      ...testConfiguration,
     }
   }
 
@@ -163,9 +160,6 @@ class CiVisibilityExporter extends AgentInfoExporter {
   getLibraryConfiguration (testConfiguration, callback) {
     const { repositoryUrl } = testConfiguration
     this.sendGitMetadata(repositoryUrl)
-    if (!this.shouldRequestLibraryConfiguration()) {
-      return callback(null, {})
-    }
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
       if (!canUseCiVisProtocol) {
         return callback(null, {})
@@ -218,7 +212,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       isKnownTestsEnabled,
       isTestManagementEnabled,
       testManagementAttemptToFixRetries,
-      isImpactedTestsEnabled
+      isImpactedTestsEnabled,
+      isCoverageReportUploadEnabled,
     } = remoteConfiguration
     return {
       isCodeCoverageEnabled,
@@ -235,7 +230,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       isTestManagementEnabled: isTestManagementEnabled && this._config.isTestManagementEnabled,
       testManagementAttemptToFixRetries:
         testManagementAttemptToFixRetries ?? this._config.testManagementAttemptToFixRetries,
-      isImpactedTestsEnabled: isImpactedTestsEnabled && this._config.isImpactedTestsEnabled
+      isImpactedTestsEnabled: isImpactedTestsEnabled && this._config.isImpactedTestsEnabled,
+      isCoverageReportUploadEnabled,
     }
   }
 
@@ -291,7 +287,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
   formatLogMessage (testEnvironmentMetadata, logMessage) {
     const {
       [GIT_REPOSITORY_URL]: gitRepositoryUrl,
-      [GIT_COMMIT_SHA]: gitCommitSha
+      [GIT_COMMIT_SHA]: gitCommitSha,
     } = testEnvironmentMetadata
 
     const { service, env, version } = this._config
@@ -300,7 +296,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       ddtags: [
         ...(logMessage.ddtags || []),
         `${GIT_REPOSITORY_URL}:${gitRepositoryUrl}`,
-        `${GIT_COMMIT_SHA}:${gitCommitSha}`
+        `${GIT_COMMIT_SHA}:${gitCommitSha}`,
       ].join(','),
       level: 'error',
       service,
@@ -308,10 +304,10 @@ class CiVisibilityExporter extends AgentInfoExporter {
         ...(logMessage.dd || []),
         service,
         env,
-        version
+        version,
       },
       ddsource: 'dd_debugger',
-      ...logMessage
+      ...logMessage,
     }
   }
 
@@ -338,7 +334,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
     const writers = [
       this._writer,
       this._coverageWriter,
-      this._logsWriter
+      this._logsWriter,
     ].filter(Boolean)
 
     let remaining = writers.length
@@ -354,13 +350,13 @@ class CiVisibilityExporter extends AgentInfoExporter {
       }
     }
 
-    writers.forEach(writer => writer.flush(onFlushComplete))
+    for (const writer of writers) writer.flush(onFlushComplete)
   }
 
   exportUncodedCoverages () {
-    this._coverageBuffer.forEach(oldCoveragePayload => {
+    for (const oldCoveragePayload of this._coverageBuffer) {
       this.exportCoverage(oldCoveragePayload)
-    })
+    }
     this._coverageBuffer = []
   }
 
@@ -392,6 +388,29 @@ class CiVisibilityExporter extends AgentInfoExporter {
         }
       })
     }
+  }
+
+  /**
+   * Uploads a single coverage report to the CI intake.
+   * @param {object} options - Upload options
+   * @param {string} options.filePath - Path to the coverage report file
+   * @param {string} options.format - Format of the coverage report
+   * @param {object} options.testEnvironmentMetadata - Test environment metadata containing git/CI tags
+   * @param {Function} callback - Callback function (err)
+   */
+  uploadCoverageReport ({ filePath, format, testEnvironmentMetadata }, callback) {
+    if (!this._codeCoverageReportUrl) {
+      return callback(new Error('Coverage report upload URL not configured'))
+    }
+
+    uploadCoverageReportRequest({
+      filePath,
+      format,
+      testEnvironmentMetadata,
+      url: this._codeCoverageReportUrl,
+      isEvpProxy: !!this._isUsingEvpProxy,
+      evpProxyPrefix: this.evpProxyPrefix,
+    }, callback)
   }
 }
 

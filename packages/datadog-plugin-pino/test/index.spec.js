@@ -121,7 +121,7 @@ describe('Plugin', () => {
 
               assertObjectContains(record.dd, {
                 trace_id: span.context().toTraceId(true),
-                span_id: span.context().toSpanId()
+                span_id: span.context().toSpanId(),
               })
 
               assert.ok('msg' in record)
@@ -161,7 +161,7 @@ describe('Plugin', () => {
           it('should not alter the original record', () => {
             tracer.scope().activate(span, () => {
               const record = {
-                foo: 'bar'
+                foo: 'bar',
               }
 
               logger.info(record)
@@ -203,7 +203,7 @@ describe('Plugin', () => {
 
                 assertObjectContains(record.dd, {
                   trace_id: span.context().toTraceId(true),
-                  span_id: span.context().toSpanId()
+                  span_id: span.context().toSpanId(),
                 })
 
                 assert.ok('msg' in record)

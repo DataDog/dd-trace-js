@@ -17,9 +17,9 @@ function getRanges (string, secureMarks, type = HTTP_REQUEST_PARAMETER) {
     iinfo: {
       parameterName: 'param',
       parameterValue: string,
-      type
+      type,
     },
-    secureMarks
+    secureMarks,
   }
 
   return [range]
@@ -33,8 +33,8 @@ describe('InjectionAnalyzer', () => {
 
     const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
       '../taint-tracking/operations': {
-        getRanges: sinon.stub().callsFake(() => ranges)
-      }
+        getRanges: sinon.stub().callsFake(() => ranges),
+      },
     })
 
     analyzer = new InjectionAnalyzer(SQL_INJECTION)

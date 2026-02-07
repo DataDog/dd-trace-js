@@ -12,7 +12,7 @@ const pool = new genericPool.Pool({
       cb(null, {})
     })
   },
-  destroy () {}
+  destroy () {},
 })
 
 let counter = 0

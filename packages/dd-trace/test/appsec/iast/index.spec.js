@@ -55,9 +55,9 @@ describe('IAST Index', () => {
             experimental: {
               iast: {
                 enabled: true,
-                requestSampling: 100
-              }
-            }
+                requestSampling: 100,
+              },
+            },
           }))
         })
 
@@ -128,36 +128,36 @@ describe('IAST Index', () => {
       experimental: {
         iast: {
           enabled: true,
-          requestSampling: 100
-        }
-      }
+          requestSampling: 100,
+        },
+      },
     })
 
     beforeEach(() => {
       mockVulnerabilityReporter = {
         start: sinon.stub(),
         stop: sinon.stub(),
-        sendVulnerabilities: sinon.stub()
+        sendVulnerabilities: sinon.stub(),
       }
       mockOverheadController = {
         acquireRequest: sinon.stub(),
         releaseRequest: sinon.stub(),
         initializeRequestContext: sinon.stub(),
         startGlobalContext: sinon.stub(),
-        finishGlobalContext: sinon.stub()
+        finishGlobalContext: sinon.stub(),
       }
       appsecFsPlugin = {
         enable: sinon.stub(),
-        disable: sinon.stub()
+        disable: sinon.stub(),
       }
       analyzers = {
-        enableAllAnalyzers: sinon.stub()
+        enableAllAnalyzers: sinon.stub(),
       }
       mockIast = proxyquire('../../../src/appsec/iast', {
         './vulnerability-reporter': mockVulnerabilityReporter,
         './overhead-controller': mockOverheadController,
         '../rasp/fs-plugin': appsecFsPlugin,
-        './analyzers': analyzers
+        './analyzers': analyzers,
       })
     })
 

@@ -71,14 +71,14 @@ class UndiciPlugin extends HttpClientPlugin {
         'span.kind': 'client',
         'http.method': method,
         'http.url': uri,
-        'out.host': hostname
+        'out.host': hostname,
       },
       metrics: {
-        [CLIENT_PORT_KEY]: port ? Number.parseInt(port, 10) : undefined
+        [CLIENT_PORT_KEY]: port ? Number.parseInt(port, 10) : undefined,
       },
       service: this.serviceName({ pluginConfig: this.config, sessionDetails: { host: hostname, port } }),
       resource: method,
-      type: 'http'
+      type: 'http',
     }, false)
 
     // Disable recording if not allowed
@@ -108,7 +108,7 @@ class UndiciPlugin extends HttpClientPlugin {
     requestContexts.set(request, {
       span,
       store,
-      uri
+      uri,
     })
 
     // Enter the span context
@@ -285,7 +285,7 @@ function normalizeConfig (config) {
   return {
     ...config,
     validateStatus,
-    hooks
+    hooks,
   }
 }
 

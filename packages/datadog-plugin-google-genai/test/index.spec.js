@@ -15,7 +15,7 @@ describe('Plugin', () => {
       const { GoogleGenAI } = require(`../../../versions/@google/genai@${version}`).get()
       client = new GoogleGenAI({
         apiKey: process.env.GOOGLE_API_KEY || '<not-a-real-key>',
-        httpOptions: { baseUrl: 'http://127.0.0.1:9126/vcr/genai' }
+        httpOptions: { baseUrl: 'http://127.0.0.1:9126/vcr/genai' },
       })
     })
 
@@ -35,7 +35,7 @@ describe('Plugin', () => {
 
         const result = await client.models.generateContent({
           model: 'gemini-2.0-flash',
-          contents: 'Hello, world!'
+          contents: 'Hello, world!',
         })
 
         assert.ok(result)
@@ -56,7 +56,7 @@ describe('Plugin', () => {
 
         const stream = await client.models.generateContentStream({
           model: 'gemini-2.0-flash',
-          contents: 'Hello, world!'
+          contents: 'Hello, world!',
         })
 
         for await (const chunk of stream) {
@@ -79,7 +79,7 @@ describe('Plugin', () => {
 
         const result = await client.models.embedContent({
           model: 'text-embedding-004',
-          contents: 'Hello, world!'
+          contents: 'Hello, world!',
         })
 
         assert.ok(result)

@@ -6,7 +6,7 @@ const { wrapThen } = require('./helpers/promise')
 
 addHook({
   name: 'q',
-  versions: ['1']
+  versions: ['1'],
 }, Q => {
   shimmer.wrap(Q.makePromise.prototype, 'then', wrapThen)
   return Q
@@ -14,7 +14,7 @@ addHook({
 
 addHook({
   name: 'q',
-  versions: ['>=2']
+  versions: ['>=2'],
 }, Q => {
   shimmer.wrap(Q.Promise.prototype, 'then', wrapThen)
   return Q

@@ -3,7 +3,7 @@
 const log = require('../../log')
 const { stableStringify } = require('../otlp/otlp_transformer_base')
 const {
-  METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE
+  METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE,
 } = require('./constants')
 
 /**
@@ -138,7 +138,7 @@ class PeriodicMetricReader {
    */
   forceFlush () {
     if (this.#isShutdown) {
-      log.warn(`PeriodicMetricReader is shutdown. ${this.#droppedCount} measurement(s) were dropped`)
+      log.warn('PeriodicMetricReader is shutdown. %d measurement(s) were dropped', this.#droppedCount)
       return
     }
     this.#collectAndExport()
@@ -210,10 +210,8 @@ class PeriodicMetricReader {
     }
 
     if (this.#droppedCount > 0) {
-      log.warn(
-        `Metric queue exceeded limit (max: ${DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE}). ` +
-        `Dropping ${this.#droppedCount} measurements. `
-      )
+      log.warn('Metric queue exceeded limit (max: %d). Dropping %d measurements.',
+        DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE, this.#droppedCount)
       this.#droppedCount = 0
     }
 
@@ -296,7 +294,7 @@ class MetricAggregator {
         instrumentationScope,
         value,
         attributes,
-        timestamp
+        timestamp,
       } = measurement
 
       const scopeKey = this.#getScopeKey(instrumentationScope)
@@ -308,9 +306,11 @@ class MetricAggregator {
       if (!metric) {
         if (metricsMap.size >= this.#maxBatchedQueueSize) {
           log.warn(
-            `Metric queue exceeded limit (max: ${this.#maxBatchedQueueSize}). ` +
-            `Dropping metric: ${metricKey}, value: ${value}. ` +
-            'Consider increasing OTEL_BSP_MAX_QUEUE_SIZE or decreasing OTEL_METRIC_EXPORT_INTERVAL.'
+            // eslint-disable-next-line @stylistic/max-len
+            'Metric queue exceeded limit (max: %d). Dropping metric: %s, value: %s. Consider increasing OTEL_BSP_MAX_QUEUE_SIZE or decreasing OTEL_METRIC_EXPORT_INTERVAL.',
+            this.#maxBatchedQueueSize,
+            metricKey,
+            value
           )
           continue
         }
@@ -321,7 +321,7 @@ class MetricAggregator {
           type,
           instrumentationScope,
           temporality: this.#getTemporality(type),
-          dataPointMap: new Map()
+          dataPointMap: new Map(),
         }
         metricsMap.set(metricKey, metric)
       }
@@ -398,14 +398,14 @@ class MetricAggregator {
             const lastState = lastExportedState.get(stateKey) || {
               count: 0,
               sum: 0,
-              bucketCounts: new Array(dataPoint.bucketCounts.length).fill(0)
+              bucketCounts: new Array(dataPoint.bucketCounts.length).fill(0),
             }
             const currentState = {
               count: dataPoint.count,
               sum: dataPoint.sum,
               min: dataPoint.min,
               max: dataPoint.max,
-              bucketCounts: [...dataPoint.bucketCounts]
+              bucketCounts: [...dataPoint.bucketCounts],
             }
             dataPoint.count = currentState.count - lastState.count
             dataPoint.sum = currentState.sum - lastState.sum
@@ -455,7 +455,7 @@ class MetricAggregator {
     if (!cumulativeState.has(stateKey)) {
       cumulativeState.set(stateKey, {
         value: 0,
-        startTime: metric.temporality === TEMPORALITY.CUMULATIVE ? this.#startTime : timestamp
+        startTime: metric.temporality === TEMPORALITY.CUMULATIVE ? this.#startTime : timestamp,
       })
     }
 
@@ -465,7 +465,7 @@ class MetricAggregator {
     const dataPoint = this.#findOrCreateDataPoint(metric, attributes, attrKey, () => ({
       startTimeUnixNano: state.startTime,
       timeUnixNano: timestamp,
-      value: 0
+      value: 0,
     }))
 
     dataPoint.value = state.value
@@ -485,7 +485,7 @@ class MetricAggregator {
   #aggregateLastValue (metric, value, attributes, attrKey, timestamp) {
     const dataPoint = this.#findOrCreateDataPoint(metric, attributes, attrKey, () => ({
       timeUnixNano: timestamp,
-      value: 0
+      value: 0,
     }))
 
     dataPoint.value = value
@@ -514,7 +514,7 @@ class MetricAggregator {
         min: Infinity,
         max: -Infinity,
         bucketCounts: new Array(DEFAULT_HISTOGRAM_BUCKETS.length + 1).fill(0),
-        startTime: metric.temporality === TEMPORALITY.CUMULATIVE ? this.#startTime : timestamp
+        startTime: metric.temporality === TEMPORALITY.CUMULATIVE ? this.#startTime : timestamp,
       })
     }
 
@@ -542,7 +542,7 @@ class MetricAggregator {
       min: Infinity,
       max: -Infinity,
       bucketCounts: new Array(DEFAULT_HISTOGRAM_BUCKETS.length + 1).fill(0),
-      explicitBounds: DEFAULT_HISTOGRAM_BUCKETS
+      explicitBounds: DEFAULT_HISTOGRAM_BUCKETS,
     }))
 
     dataPoint.count = state.count

@@ -23,7 +23,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
     clock = sinon.useFakeTimers()
 
     mockTracer = {
-      _config: { service: 'test-service' }
+      _config: { service: 'test-service' },
     }
 
     mockConfig = {
@@ -33,14 +33,14 @@ describe('FlaggingProvider Initialization Timeout', () => {
       experimental: {
         flaggingProvider: {
           enabled: true,
-          initializationTimeoutMs: 30_000 // Default timeout
-        }
-      }
+          initializationTimeoutMs: 30_000, // Default timeout
+        },
+      },
     }
 
     mockChannel = {
       publish: sinon.spy(),
-      hasSubscribers: false
+      hasSubscribers: false,
     }
 
     channelStub = sinon.stub().returns(mockChannel)
@@ -48,14 +48,14 @@ describe('FlaggingProvider Initialization Timeout', () => {
     log = {
       debug: sinon.spy(),
       error: sinon.spy(),
-      warn: sinon.spy()
+      warn: sinon.spy(),
     }
 
     FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
-        channel: channelStub
+        channel: channelStub,
       },
-      '../log': log
+      '../log': log,
     })
   })
 
@@ -108,10 +108,10 @@ describe('FlaggingProvider Initialization Timeout', () => {
           key: 'test-flag',
           variations: [
             { key: 'on', value: true },
-            { key: 'off', value: false }
-          ]
-        }
-      }
+            { key: 'off', value: false },
+          ],
+        },
+      },
     }
     provider._setConfiguration(ufc)
 
@@ -187,9 +187,9 @@ describe('FlaggingProvider Initialization Timeout', () => {
         experimental: {
           flaggingProvider: {
             enabled: true,
-            initializationTimeoutMs: 5000 // Custom 5-second timeout
-          }
-        }
+            initializationTimeoutMs: 5000, // Custom 5-second timeout
+          },
+        },
       }
 
       const provider = new FlaggingProvider(mockTracer, customConfig)
@@ -226,9 +226,9 @@ describe('FlaggingProvider Initialization Timeout', () => {
         experimental: {
           flaggingProvider: {
             enabled: true,
-            initializationTimeoutMs: 10_000 // Custom 10-second timeout
-          }
-        }
+            initializationTimeoutMs: 10_000, // Custom 10-second timeout
+          },
+        },
       }
 
       const provider = new FlaggingProvider(mockTracer, customConfig)
@@ -253,6 +253,105 @@ describe('FlaggingProvider Initialization Timeout', () => {
       const errorArg = setErrorSpy.firstCall.args[0]
       assert.ok(errorArg instanceof Error)
       assert.strictEqual(errorArg.message, 'Initialization timeout after 10000ms')
+    })
+  })
+
+  describe('environment variable timeout configuration', () => {
+    let originalEnv
+
+    beforeEach(() => {
+      // Save original environment variable
+      originalEnv = {
+        DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS:
+          process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
+      }
+    })
+
+    afterEach(() => {
+      // Restore original environment variable
+      if (originalEnv.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS !== undefined) {
+        process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS =
+          originalEnv.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS
+      } else {
+        delete process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS
+      }
+    })
+
+    it('should use DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variable', async () => {
+      // Set environment variable for 6-second timeout
+      process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS = '6000'
+
+      // Need to reload the config module to pick up env var
+      delete require.cache[require.resolve('../../src/config')]
+      const Config = require('../../src/config')
+      const config = new Config({})
+
+      const provider = new FlaggingProvider(mockTracer, config)
+
+      // Spy on setError method to verify timeout message
+      const setErrorSpy = sinon.spy(provider, 'setError')
+
+      const initPromise = provider.initialize()
+
+      // Attach catch handler
+      initPromise.catch(() => {
+        // Expected to reject
+      })
+
+      // Advance time to trigger env var timeout
+      await clock.tickAsync(6000)
+
+      await initPromise.catch(() => {})
+
+      // Verify setError was called with env var timeout error
+      assert.strictEqual(setErrorSpy.calledOnce, true)
+      const errorArg = setErrorSpy.firstCall.args[0]
+      assert.ok(errorArg instanceof Error)
+      assert.ok(errorArg.message.includes('Initialization timeout'))
+      assert.ok(errorArg.message.includes('6000ms'))
+    })
+
+    it('should use config object value over environment variables', async () => {
+      // Set environment variable
+      process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS = '7000'
+
+      // Config with explicit timeout (should override env var)
+      const configWithTimeout = {
+        ...mockConfig,
+        experimental: {
+          flaggingProvider: {
+            enabled: true,
+            initializationTimeoutMs: 3000, // This should override env var
+          },
+        },
+      }
+
+      const provider = new FlaggingProvider(mockTracer, configWithTimeout)
+
+      const initPromise = provider.initialize()
+
+      // Attach catch handler
+      initPromise.catch(() => {
+        // Expected to reject on timeout
+      })
+
+      // Verify initialization is in progress
+      assert.strictEqual(provider.initController.isInitializing(), true)
+
+      // Advance time by 2.9 seconds (before config timeout)
+      await clock.tickAsync(2900)
+
+      // Should still be initializing
+      assert.strictEqual(provider.initController.isInitializing(), true)
+
+      // Advance by another 200ms to trigger the 3-second timeout (config takes priority)
+      await clock.tickAsync(200)
+
+      // Wait for promise to settle
+      await initPromise.catch(() => {})
+
+      // Should now be timed out (using config value, not env var)
+      assert.strictEqual(provider.initController.isInitializing(), false)
     })
   })
 })

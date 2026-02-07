@@ -3,7 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   addHook,
-  channel
+  channel,
 } = require('./helpers/instrument')
 
 const routeChannel = channel('apm:hono:request:route')
@@ -97,7 +97,7 @@ function wrapMiddleware (middleware, route) {
 addHook({
   name: 'hono',
   versions: ['>=4'],
-  file: 'dist/hono.js'
+  file: 'dist/hono.js',
 }, hono => {
   class Hono extends hono.Hono {
     constructor (...args) {
@@ -114,7 +114,7 @@ addHook({
 addHook({
   name: 'hono',
   versions: ['>=4'],
-  file: 'dist/cjs/hono.js'
+  file: 'dist/cjs/hono.js',
 }, hono => {
   class Hono extends hono.Hono {
     constructor (...args) {
@@ -129,14 +129,14 @@ addHook({
         return Hono
       },
       enumerable: true,
-    }
+    },
   })
 })
 
 addHook({
   name: 'hono',
   versions: ['>=4'],
-  file: 'dist/cjs/compose.js'
+  file: 'dist/cjs/compose.js',
 }, Compose => {
   return shimmer.wrap(Compose, 'compose', wrapCompose, { replaceGetter: true })
 })
@@ -144,7 +144,7 @@ addHook({
 addHook({
   name: 'hono',
   versions: ['>=4'],
-  file: 'dist/compose.js'
+  file: 'dist/compose.js',
 }, Compose => {
   return shimmer.wrap(Compose, 'compose', wrapCompose)
 })

@@ -27,7 +27,7 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
       chat_model: new LangChainLanguageModelHandler(this._tracerConfig),
       llm: new LangChainLanguageModelHandler(this._tracerConfig),
       embedding: new LangChainEmbeddingHandler(this._tracerConfig),
-      default: new LangChainHandler(this._tracerConfig)
+      default: new LangChainHandler(this._tracerConfig),
     }
   }
 
@@ -59,8 +59,8 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
       resource,
       kind: 'client',
       meta: {
-        [MEASURED]: 1
-      }
+        [MEASURED]: 1,
+      },
     }, false)
 
     const tags = {}
@@ -151,5 +151,5 @@ module.exports = [
   EmbeddingsEmbedDocumentsPlugin,
   ToolInvokePlugin,
   VectorStoreSimilaritySearchPlugin,
-  VectorStoreSimilaritySearchWithScorePlugin
+  VectorStoreSimilaritySearchWithScorePlugin,
 ]

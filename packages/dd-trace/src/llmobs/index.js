@@ -1,14 +1,12 @@
 'use strict'
 
-const util = require('node:util')
-
 const { channel } = require('dc-polyfill')
 
 const log = require('../log')
 const {
   ML_APP,
   PROPAGATED_ML_APP_KEY,
-  PROPAGATED_PARENT_ID_KEY
+  PROPAGATED_PARENT_ID_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
 const telemetry = require('./telemetry')
@@ -78,7 +76,7 @@ function enable (config) {
     spanWriter?.setAgentless(useAgentless)
 
     telemetry.recordLLMObsEnabled(startTime, config)
-    log.debug(`[LLMObs] Enabled LLM Observability with configuration: ${util.inspect(config.llmobs)}`)
+    log.debug('[LLMObs] Enabled LLM Observability with configuration: %o', config.llmobs)
   })
 }
 
@@ -136,9 +134,9 @@ function handleSpanProcess (span) {
   spanProcessor.process(span)
 }
 
-function handleEvalMetricAppend (payload) {
+function handleEvalMetricAppend ({ payload, routing }) {
   try {
-    evalWriter.append(payload)
+    evalWriter.append(payload, routing)
   } catch (e) {
     log.warn(
       // eslint-disable-next-line @stylistic/max-len

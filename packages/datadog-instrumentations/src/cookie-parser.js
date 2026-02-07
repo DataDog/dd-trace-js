@@ -23,7 +23,7 @@ function publishRequestCookieAndNext (req, res, next) {
 
 addHook({
   name: 'cookie-parser',
-  versions: ['>=1.0.0']
+  versions: ['>=1.0.0'],
 }, cookieParser => {
   return shimmer.wrapFunction(cookieParser, cookieParser => function () {
     const cookieMiddleware = cookieParser.apply(this, arguments)

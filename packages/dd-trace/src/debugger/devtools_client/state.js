@@ -2,14 +2,31 @@
 
 const { join, dirname } = require('path')
 const { normalize } = require('../../../../../vendor/dist/source-map/lib/util')
-const { loadSourceMapSync } = require('./source-maps')
+const { loadSourceMapSync, getOriginalPosition } = require('./source-maps')
 const session = require('./session')
 const log = require('./log')
+
+/**
+ * @typedef {object} StackFrame
+ * @property {string} fileName - The file name
+ * @property {string} function - The function name
+ * @property {number} lineNumber - The line number (1-indexed)
+ * @property {number} columnNumber - The column number (1-indexed)
+ */
+
+/**
+ * @typedef {object} ScriptInfo
+ * @property {string | null} url - The URL of the script
+ * @property {string | null} scriptId - The script identifier
+ * @property {string | null} sourceMapURL - The source map URL if available
+ * @property {string | null} source - The source content if available
+ */
 
 const WINDOWS_DRIVE_LETTER_REGEX = /[a-zA-Z]/
 
 const loadedScripts = []
 const scriptUrls = new Map()
+const scriptSourceMaps = new Map()
 let reEvaluateProbesTimer = null
 
 module.exports = {
@@ -24,7 +41,8 @@ module.exports = {
    * Find the script to inspect based on a partial or absolute path. Handles both Windows and POSIX paths.
    *
    * @param {string} path - Partial or absolute path to match against loaded scripts
-   * @returns {object | null} - Object containing `url`, `scriptId`, `sourceMapURL`, and `source` - or null if no match
+   * @returns {ScriptInfo | null} - Object containing `url`, `scriptId`, `sourceMapURL`, and `source` - or null
+   *   if no match
    */
   findScriptFromPartialPath (path) {
     if (!path) return null // This shouldn't happen, but better safe than sorry
@@ -101,21 +119,55 @@ module.exports = {
     return maxMatchLength === -1 ? null : bestMatch
   },
 
+  /**
+   * Get the stack from call frames.
+   *
+   * @param {Array<import('inspector').Debugger.CallFrame>} callFrames - The call frames to get the stack from.
+   * @returns {Promise<Array<StackFrame>>} - The stack from call frames.
+   */
   getStackFromCallFrames (callFrames) {
-    return callFrames.map((frame) => {
+    return Promise.all(callFrames.map(async (frame) => {
       // TODO: Possible race condition: If the breakpoint is in the process of being removed, and this is the last
       // breakpoint, it will also stop the debugging session, which in turn will clear the state, which means clearing
       // the `scriptUrls` map. That might result in this the `scriptUrls.get` call above returning `undefined`, which
       // will throw when `startsWith` is called on it.
       let fileName = scriptUrls.get(frame.location.scriptId)
       if (fileName.startsWith('file://')) fileName = fileName.slice(7) // TODO: This might not be required
+
+      let lineNumber = frame.location.lineNumber + 1 // Beware! lineNumber is zero-indexed
+      let columnNumber = (frame.location.columnNumber ?? 0) + 1 // Beware! columnNumber is zero-indexed
+
+      // Check if this script has a source map
+      const sourceMapInfo = scriptSourceMaps.get(frame.location.scriptId)
+      if (sourceMapInfo) {
+        try {
+          const original = await getOriginalPosition(
+            sourceMapInfo.url,
+            frame.location.lineNumber + 1, // CDP uses 0-indexed
+            (frame.location.columnNumber ?? 0) + 1,
+            sourceMapInfo.sourceMapURL
+          )
+
+          if (original.source && original.line !== null) {
+            // Convert source map source path to absolute file path
+            const dir = dirname(new URL(sourceMapInfo.url).pathname)
+            fileName = new URL(join(dir, original.source), 'file:').href.slice(7)
+            lineNumber = original.line
+            columnNumber = original.column ?? columnNumber
+          }
+        } catch (err) {
+          // If source map transformation fails, use generated positions
+          log.warn('[debugger:devtools_client] Failed to apply source map to stack frame', err)
+        }
+      }
+
       return {
         fileName,
         function: frame.functionName,
-        lineNumber: frame.location.lineNumber + 1, // Beware! lineNumber is zero-indexed
-        columnNumber: frame.location.columnNumber + 1 // Beware! columnNumber is zero-indexed
+        lineNumber,
+        columnNumber,
       }
-    })
+    }))
   },
 
   // The maps locationToBreakpoint, breakpointToProbes, and probeToLocation are always updated when breakpoints are
@@ -124,7 +176,8 @@ module.exports = {
   clearState () {
     loadedScripts.length = 0
     scriptUrls.clear()
-  }
+    scriptSourceMaps.clear()
+  },
 }
 
 // Known params.url protocols:
@@ -138,6 +191,10 @@ session.on('Debugger.scriptParsed', ({ params }) => {
   scriptUrls.set(params.scriptId, params.url)
   if (params.url.startsWith('file:')) {
     if (params.sourceMapURL) {
+      scriptSourceMaps.set(params.scriptId, {
+        url: params.url,
+        sourceMapURL: params.sourceMapURL,
+      })
       const dir = dirname(new URL(params.url).pathname)
       let sources
       try {
@@ -163,7 +220,7 @@ session.on('Debugger.scriptParsed', ({ params }) => {
           // the `source-map` dependency will not be able to find the generated position. Below we use the same
           // internal `normalize` function, to ensure compatibility.
           // TODO: Consider swapping out the `source-map` dependency for something better so we don't have to do this.
-          source: normalize(source)
+          source: normalize(source),
         })
       }
     } else {

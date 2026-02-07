@@ -74,13 +74,13 @@ describe('Sns', function () {
             subParams = {
               Protocol: 'sqs',
               Endpoint: QueueArn,
-              TopicArn
+              TopicArn,
             }
 
             receiveParams = {
               QueueUrl,
               MessageAttributeNames: ['.*'],
-              WaitTimeSeconds: 1
+              WaitTimeSeconds: 1,
             }
 
             cb()
@@ -97,8 +97,8 @@ describe('Sns', function () {
           cloudPayloadTagging: {
             request: '$.MessageAttributes.foo,$.MessageAttributes.redacted.StringValue.foo',
             response: '$.MessageId,$.Attributes.DisplayName',
-            maxDepth: 5
-          }
+            maxDepth: 5,
+          },
         })
       })
 
@@ -132,8 +132,8 @@ describe('Sns', function () {
             'aws.request.body.MessageAttributes.keyOne.StringValue': 'keyOne',
             'aws.request.body.MessageAttributes.keyTwo.DataType': 'String',
             'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo',
-            'aws.response.body.MessageId': 'redacted'
-          }
+            'aws.response.body.MessageId': 'redacted',
+          },
         }, { timeoutMs: 20000 }).then(done, done)
 
         sns.publish({
@@ -142,8 +142,8 @@ describe('Sns', function () {
           MessageAttributes: {
             baz: { DataType: 'String', StringValue: 'bar' },
             keyOne: { DataType: 'String', StringValue: 'keyOne' },
-            keyTwo: { DataType: 'String', StringValue: 'keyTwo' }
-          }
+            keyTwo: { DataType: 'String', StringValue: 'keyTwo' },
+          },
         }, e => e && done(e))
       })
 
@@ -160,8 +160,8 @@ describe('Sns', function () {
             'aws.request.body.MessageAttributes.redacted.StringValue.foo': 'redacted',
             'aws.request.body.MessageAttributes.unredacted.StringValue.foo': 'bar',
             'aws.request.body.MessageAttributes.unredacted.StringValue.baz': 'yup',
-            'aws.response.body.MessageId': 'redacted'
-          }
+            'aws.response.body.MessageId': 'redacted',
+          },
         }, { timeoutMs: 20000 }).then(done, done)
 
         sns.publish({
@@ -169,8 +169,8 @@ describe('Sns', function () {
           Message: 'message 1',
           MessageAttributes: {
             unredacted: { DataType: 'String', StringValue: '{"foo": "bar", "baz": "yup"}' },
-            redacted: { DataType: 'String', StringValue: '{"foo": "bar"}' }
-          }
+            redacted: { DataType: 'String', StringValue: '{"foo": "bar"}' },
+          },
         }, e => e && done(e))
       })
 
@@ -192,8 +192,8 @@ describe('Sns', function () {
                 'aws.request.body.MessageAttributes.keyOne.DataType': 'String',
                 'aws.request.body.MessageAttributes.keyOne.StringValue': 'keyOne',
                 'aws.request.body.MessageAttributes.keyTwo.DataType': 'String',
-                'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo'
-              }
+                'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo',
+              },
             })
 
             assert.ok(Object.hasOwn(span.meta, 'aws.response.body.MessageId'))
@@ -205,8 +205,8 @@ describe('Sns', function () {
             MessageAttributes: {
               foo: { DataType: 'String', StringValue: 'bar' },
               keyOne: { DataType: 'String', StringValue: 'keyOne' },
-              keyTwo: { DataType: 'String', StringValue: 'keyTwo' }
-            }
+              keyTwo: { DataType: 'String', StringValue: 'keyTwo' },
+            },
           }, e => e && done(e))
         })
 
@@ -220,8 +220,8 @@ describe('Sns', function () {
               aws_service: 'SNS',
               region: 'us-east-1',
               'aws.request.body.TopicArn': TopicArn,
-              'aws.response.body.Attributes.DisplayName': 'redacted'
-            }
+              'aws.response.body.Attributes.DisplayName': 'redacted',
+            },
           }, { timeoutMs: 20000 }).then(done, done)
 
           sns.getTopicAttributes({ TopicArn }, e => e && done(e))
@@ -261,13 +261,13 @@ describe('Sns', function () {
                   aws_service: 'SNS',
                   region: 'us-east-1',
                   'aws.request.body.PhoneNumber': 'redacted',
-                  'aws.request.body.Message': 'message 1'
-                }
+                  'aws.request.body.Message': 'message 1',
+                },
               }, { timeoutMs: 20000 }).then(done, done)
 
               sns.publish({
                 PhoneNumber: '+33628606135',
-                Message: 'message 1'
+                Message: 'message 1',
               }, e => e && done(e))
             })
 
@@ -277,13 +277,13 @@ describe('Sns', function () {
                 meta: {
                   aws_service: 'SNS',
                   region: 'us-east-1',
-                  'aws.response.body.PhoneNumber': 'redacted'
-                }
+                  'aws.response.body.PhoneNumber': 'redacted',
+                },
               }, { timeoutMs: 20000 }).then(done, done)
 
               sns.listSMSSandboxPhoneNumbers({
                 PhoneNumber: '+33628606135',
-                Message: 'message 1'
+                Message: 'message 1',
               }, e => e && done(e))
             })
           })
@@ -299,13 +299,13 @@ describe('Sns', function () {
                 topicname: 'TestTopic',
                 region: 'us-east-1',
                 'aws.request.body.Token': 'redacted',
-                'aws.request.body.TopicArn': TopicArn
-              }
+                'aws.request.body.TopicArn': TopicArn,
+              },
             }).then(done, done)
 
             sns.confirmSubscription({
               TopicArn,
-              Token: '1234'
+              Token: '1234',
             }, () => {})
           })
 
@@ -352,28 +352,28 @@ describe('Sns', function () {
         'aws-sdk',
         (done) => sns.publish({
           TopicArn,
-          Message: 'message 1'
+          Message: 'message 1',
         }, done),
         'TestTopic', 'topicname')
 
       withNamingSchema(
         (done) => sns.publish({
           TopicArn,
-          Message: 'message 1'
+          Message: 'message 1',
         }, (err) => err && done()),
         rawExpectedSchema.producer,
         {
-          desc: 'producer'
+          desc: 'producer',
         }
       )
 
       withNamingSchema(
         (done) => sns.getTopicAttributes({
-          TopicArn
+          TopicArn,
         }, (err) => err && done(err)),
         rawExpectedSchema.client,
         {
-          desc: 'client'
+          desc: 'client',
         }
       )
 
@@ -404,8 +404,8 @@ describe('Sns', function () {
               TopicArn,
               PublishBatchRequestEntries: [
                 { Id: '1', Message: 'message 1' },
-                { Id: '2', Message: 'message 2' }
-              ]
+                { Id: '2', Message: 'message 2' },
+              ],
             }, e => e && done(e))
           })
         })
@@ -432,8 +432,8 @@ describe('Sns', function () {
               PublishBatchRequestEntries: [
                 { Id: '1', Message: 'message 1' },
                 { Id: '2', Message: 'message 2' },
-                { Id: '3', Message: 'message 3' }
-              ]
+                { Id: '3', Message: 'message 3' },
+              ],
             }, e => e && done(e))
           })
         })
@@ -469,8 +469,8 @@ describe('Sns', function () {
                 keySeven: { DataType: 'String', StringValue: 'keySeven' },
                 keyEight: { DataType: 'String', StringValue: 'keyEight' },
                 keyNine: { DataType: 'String', StringValue: 'keyNine' },
-                keyTen: { DataType: 'String', StringValue: 'keyTen' }
-              }
+                keyTen: { DataType: 'String', StringValue: 'keyTen' },
+              },
             }, e => e && done(e))
           })
         })
@@ -483,8 +483,8 @@ describe('Sns', function () {
             'aws.sns.topic_arn': TopicArn,
             topicname: 'TestTopic',
             aws_service: 'SNS',
-            region: 'us-east-1'
-          }
+            region: 'us-east-1',
+          },
         }).then(done, done)
 
         sns.publish({ TopicArn, Message: 'message 1' }, e => e && done(e))

@@ -28,7 +28,7 @@ const spanKindNames = {
   [api.SpanKind.SERVER]: kinds.SERVER,
   [api.SpanKind.CLIENT]: kinds.CLIENT,
   [api.SpanKind.PRODUCER]: kinds.PRODUCER,
-  [api.SpanKind.CONSUMER]: kinds.CONSUMER
+  [api.SpanKind.CONSUMER]: kinds.CONSUMER,
 }
 
 function makeSpan (...args) {
@@ -65,8 +65,8 @@ describe('OTel Span', () => {
     it('should map span name from operation.name', () => {
       const span = makeSpan(undefined, {
         attributes: {
-          'operation.name': 'test'
-        }
+          'operation.name': 'test',
+        },
       })
 
       assert.strictEqual(span.name, 'test')
@@ -88,8 +88,8 @@ describe('OTel Span', () => {
       const span = makeSpan(undefined, {
         kind: api.SpanKind.CLIENT,
         attributes: {
-          'db.system': 'mysql'
-        }
+          'db.system': 'mysql',
+        },
       })
 
       assert.strictEqual(span.name, 'mysql.query')
@@ -100,13 +100,13 @@ describe('OTel Span', () => {
       api.SpanKind.CLIENT,
       api.SpanKind.SERVER,
       api.SpanKind.PRODUCER,
-      api.SpanKind.CONSUMER
+      api.SpanKind.CONSUMER,
     ]) {
       const kindName = spanKindNames[kind]
       it(`should map span name from messaging.system and messaging.operation when ${kindName} kind`, () => {
         const attributes = {
           'messaging.system': kindName,
-          'messaging.operation': 'send'
+          'messaging.operation': 'send',
         }
         const span = makeSpan(undefined, { kind, attributes })
         assert.strictEqual(span.name, `${kindName}.send`)
@@ -118,8 +118,8 @@ describe('OTel Span', () => {
       const span = makeSpan(undefined, {
         kind: api.SpanKind.CLIENT,
         attributes: {
-          'rpc.system': 'aws-api'
-        }
+          'rpc.system': 'aws-api',
+        },
       })
 
       assert.strictEqual(span.name, 'aws.client.request')
@@ -130,8 +130,8 @@ describe('OTel Span', () => {
         kind: api.SpanKind.CLIENT,
         attributes: {
           'rpc.system': 'aws-api',
-          'rpc.service': 's3'
-        }
+          'rpc.service': 's3',
+        },
       })
 
       assert.strictEqual(span.name, 'aws.s3.request')
@@ -144,8 +144,8 @@ describe('OTel Span', () => {
         const span = makeSpan(undefined, {
           kind,
           attributes: {
-            'rpc.system': 'system'
-          }
+            'rpc.system': 'system',
+          },
         })
 
         assert.strictEqual(span.name, `system.${kindName}.request`)
@@ -158,8 +158,8 @@ describe('OTel Span', () => {
         kind: api.SpanKind.CLIENT,
         attributes: {
           'faas.invoked_provider': 'provider',
-          'faas.invoked_name': 'name'
-        }
+          'faas.invoked_name': 'name',
+        },
       })
 
       assert.strictEqual(span.name, 'provider.name.invoke')
@@ -169,8 +169,8 @@ describe('OTel Span', () => {
       const span = makeSpan(undefined, {
         kind: api.SpanKind.SERVER,
         attributes: {
-          'faas.trigger': 'trigger'
-        }
+          'faas.trigger': 'trigger',
+        },
       })
 
       assert.strictEqual(span.name, 'trigger.invoke')
@@ -180,8 +180,8 @@ describe('OTel Span', () => {
     it('should map span name from graphql.operation.type', () => {
       const span = makeSpan(undefined, {
         attributes: {
-          'graphql.operation.type': 'query'
-        }
+          'graphql.operation.type': 'query',
+        },
       })
 
       assert.strictEqual(span.name, 'graphql.server.request')
@@ -195,8 +195,8 @@ describe('OTel Span', () => {
         const span = makeSpan(undefined, {
           kind,
           attributes: {
-            'network.protocol.name': 'protocol'
-          }
+            'network.protocol.name': 'protocol',
+          },
         })
 
         assert.strictEqual(span.name, `protocol.${kindName}.request`)
@@ -204,7 +204,7 @@ describe('OTel Span', () => {
 
       it(`should map span name when ${kindName} kind without network.protocol.name`, () => {
         const span = makeSpan(undefined, {
-          kind
+          kind,
         })
 
         assert.strictEqual(span.name, `${kindName}.request`)
@@ -215,7 +215,7 @@ describe('OTel Span', () => {
     for (const kind of [
       api.SpanKind.INTERNAL,
       api.SpanKind.PRODUCER,
-      api.SpanKind.CONSUMER
+      api.SpanKind.CONSUMER,
     ]) {
       const kindName = spanKindNames[kind]
       it(`should map span name with ${kindName} kind`, () => {
@@ -262,7 +262,7 @@ describe('OTel Span', () => {
   it('should expose trace provider resource', () => {
     const resource = 'resource'
     const tracerProvider = new TracerProvider({
-      resource
+      resource,
     })
     const tracer = tracerProvider.getTracer()
 
@@ -279,7 +279,7 @@ describe('OTel Span', () => {
 
     assert.deepStrictEqual(span.instrumentationLibrary, {
       name: 'library name',
-      version: '1.2.3'
+      version: '1.2.3',
     })
   })
 
@@ -336,6 +336,39 @@ describe('OTel Span', () => {
     assert.strictEqual(_links.length, 2)
   })
 
+  it('should accept standard OTel SpanContext objects in startSpan links', () => {
+    // Regression test for https://github.com/DataDog/dd-trace-js/issues/7193
+    // Standard OTel SpanContext objects do not have Datadog methods like toTraceId()/toSpanId().
+    const otelSpanContext = {
+      traceId: '0123456789abcdef0123456789abcdef',
+      spanId: '0123456789abcdef',
+      traceFlags: 1,
+    }
+
+    const span = makeSpan('name', {
+      links: [{
+        context: otelSpanContext,
+        attributes: {
+          foo: 'bar',
+        },
+      }],
+    })
+
+    span.end()
+
+    const formatted = spanFormat(span._ddSpan)
+    assert.ok(Object.hasOwn(formatted.meta, '_dd.span_links'))
+
+    const links = JSON.parse(formatted.meta['_dd.span_links'])
+    assert.strictEqual(links.length, 1)
+    assert.deepStrictEqual(links[0], {
+      trace_id: otelSpanContext.traceId,
+      span_id: otelSpanContext.spanId,
+      attributes: { foo: 'bar' },
+      flags: 1,
+    })
+  })
+
   it('should add span pointers', () => {
     const span = makeSpan('name')
     const { _links } = span._ddSpan
@@ -346,7 +379,7 @@ describe('OTel Span', () => {
       'ptr.kind': 'pointer_kind',
       'ptr.dir': 'd',
       'ptr.hash': 'abc123',
-      'link.kind': 'span-pointer'
+      'link.kind': 'span-pointer',
     })
     assert.strictEqual(_links[0].context.toTraceId(), '0')
     assert.strictEqual(_links[0].context.toSpanId(), '0')
@@ -357,7 +390,7 @@ describe('OTel Span', () => {
       'ptr.kind': 'another_kind',
       'ptr.dir': 'd',
       'ptr.hash': '1234567',
-      'link.kind': 'span-pointer'
+      'link.kind': 'span-pointer',
     })
     assert.strictEqual(_links[1].context.toTraceId(), '0')
     assert.strictEqual(_links[1].context.toSpanId(), '0')
@@ -403,9 +436,9 @@ describe('OTel Span', () => {
       name: error.name,
       attributes: {
         'exception.message': error.message,
-        'exception.stacktrace': error.stack
+        'exception.stacktrace': error.stack,
       },
-      startTime: datenow
+      startTime: datenow,
     }])
 
     let formatted = spanFormat(span._ddSpan)
@@ -454,9 +487,9 @@ describe('OTel Span', () => {
       name: error.name,
       attributes: {
         'exception.message': error.message,
-        'exception.stacktrace': error.stack
+        'exception.stacktrace': error.stack,
       },
-      startTime: timeInMilliseconds
+      startTime: timeInMilliseconds,
     }])
     stub.restore()
   })
@@ -524,8 +557,8 @@ describe('OTel Span', () => {
       startTime: datenow,
       attributes: {
         'error.code': '403',
-        'unknown values': [1]
-      }
+        'unknown values': [1],
+      },
     }])
     assert.strictEqual(events2.length, 2)
   })

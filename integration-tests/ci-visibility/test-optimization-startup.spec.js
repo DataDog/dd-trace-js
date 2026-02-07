@@ -36,23 +36,22 @@ describe('test optimization startup', () => {
           env: {
             ...process.env,
             NODE_OPTIONS: '-r dd-trace/ci/init',
-            DD_TRACE_DEBUG: '1'
+            DD_TRACE_DEBUG: '1',
           },
-          stdio: 'pipe'
         }
       )
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         processOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         processOutput += chunk.toString()
       })
 
       await Promise.all([
         once(childProcess, 'exit'),
         once(childProcess.stdout, 'end'),
-        once(childProcess.stderr, 'end')
+        once(childProcess.stderr, 'end'),
       ])
 
       assert.match(processOutput, /dd-trace is not initialized in a package manager/)
@@ -66,23 +65,22 @@ describe('test optimization startup', () => {
         env: {
           ...process.env,
           NODE_OPTIONS: '-r dd-trace/ci/init',
-          DD_TRACE_DEBUG: '1'
+          DD_TRACE_DEBUG: '1',
         },
-        stdio: 'pipe'
       }
     )
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
 
     await Promise.all([
       once(childProcess, 'exit'),
       once(childProcess.stdout, 'end'),
-      once(childProcess.stderr, 'end')
+      once(childProcess.stderr, 'end'),
     ])
 
     assert.match(processOutput, /hello!/)
@@ -99,21 +97,20 @@ describe('test optimization startup', () => {
           DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
           DD_API_KEY: '',
         },
-        stdio: 'pipe'
       }
     )
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
 
     await Promise.all([
       once(childProcess, 'exit'),
       once(childProcess.stdout, 'end'),
-      once(childProcess.stderr, 'end')
+      once(childProcess.stderr, 'end'),
     ])
 
     assert.match(processOutput, /hello!/)
@@ -129,23 +126,22 @@ describe('test optimization startup', () => {
           NODE_OPTIONS: '-r dd-trace/ci/init',
           DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
           DD_API_KEY: '',
-          JEST_WORKER_ID: '1' // worker id is set in jest workers
+          JEST_WORKER_ID: '1', // worker id is set in jest workers
         },
-        stdio: 'pipe'
       }
     )
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
 
     await Promise.all([
       once(childProcess, 'exit'),
       once(childProcess.stdout, 'end'),
-      once(childProcess.stderr, 'end')
+      once(childProcess.stderr, 'end'),
     ])
 
     assert.match(processOutput, /hello!/)

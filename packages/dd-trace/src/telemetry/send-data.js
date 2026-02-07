@@ -3,17 +3,100 @@
 const request = require('../exporters/common/request')
 const log = require('../log')
 const { isTrue } = require('../util')
-const { getEnvironmentVariable } = require('../config/helper')
+const { getValueFromEnvSources } = require('../config/helper')
+
+/**
+ * @typedef {Record<string, unknown>} TelemetryPayloadObject
+ */
+/**
+ * Telemetry "request_type" values sent by this library.
+ *
+ * @typedef {'app-started'
+ *   | 'app-integrations-change'
+ *   | 'app-heartbeat'
+ *   | 'app-extended-heartbeat'
+ *   | 'app-client-configuration-change'
+ *   | 'app-closing'
+ *   | 'app-dependencies-loaded'
+ *   | 'app-endpoints'
+ *   | 'generate-metrics'
+ *   | 'distributions'
+ *   | 'logs'
+ *   | 'message-batch'} TelemetryRequestType
+ */
+/**
+ * @typedef {{ request_type: string, payload: TelemetryPayloadObject }} MessageBatchItem
+ */
+/**
+ * @typedef {MessageBatchItem[]} MessageBatchPayload
+ */
+/**
+ * Telemetry payloads are usually single objects, but some request types (e.g. `message-batch`)
+ * send arrays.
+ *
+ * @typedef {TelemetryPayloadObject | MessageBatchPayload} TelemetryPayload
+ */
+/**
+ * @typedef {{language_name: string, tracer_version: string} & Record<string, unknown>} TelemetryApplication
+ */
+/**
+ * @typedef {Exclude<TelemetryRequestType, 'message-batch'>} NonBatchTelemetryRequestType
+ */
+/**
+ * @typedef {{
+ *   payload: TelemetryPayloadObject,
+ *   reqType: NonBatchTelemetryRequestType
+ * } | {
+ *   payload: MessageBatchPayload,
+ *   reqType: 'message-batch'
+ * }} SendDataRetryObject
+ */
+/**
+ * @typedef {{
+ *   hostname: string,
+ *   os: string,
+ *   architecture: string,
+ *   os_version?: string,
+ *   kernel_version?: string,
+ *   kernel_release?: string,
+ *   kernel_name?: string
+ * } & Record<string, unknown>} TelemetryHost
+ */
+/**
+ * @typedef {{
+ *   hostname?: string,
+ *   port?: string | number,
+ *   url?: string | URL,
+ *   site?: string,
+ *   apiKey?: string,
+ *   isCiVisibility?: boolean,
+ *   spanAttributeSchema?: string,
+ *   tags: Record<string, string>,
+ *   telemetry?: { debug?: boolean }
+ * }} TelemetryConfig
+ */
+/**
+ * @callback SendDataCallback
+ * @param {Error | null | undefined} error
+ * @param {SendDataRetryObject} retryObj
+ * @returns {void}
+ */
 
 let agentTelemetry = true
 
+/**
+ * @param {TelemetryConfig} config
+ * @param {TelemetryApplication} application
+ * @param {TelemetryRequestType} reqType
+ * @returns {Record<string, string>}
+ */
 function getHeaders (config, application, reqType) {
   const headers = {
     'content-type': 'application/json',
     'dd-telemetry-api-version': 'v2',
     'dd-telemetry-request-type': reqType,
     'dd-client-library-language': application.language_name,
-    'dd-client-library-version': application.tracer_version
+    'dd-client-library-version': application.tracer_version,
   }
   const debug = config.telemetry && config.telemetry.debug
   if (debug) {
@@ -25,6 +108,9 @@ function getHeaders (config, application, reqType) {
   return headers
 }
 
+/**
+ * @param {string | undefined} site
+ */
 function getAgentlessTelemetryEndpoint (site) {
   if (site === 'datad0g.com') { // staging
     return 'https://all-http-intake.logs.datad0g.com'
@@ -34,6 +120,10 @@ function getAgentlessTelemetryEndpoint (site) {
 
 let seqId = 0
 
+/**
+ * @param {TelemetryPayload} payload
+ * @returns {TelemetryPayload}
+ */
 function getPayload (payload) {
   // Some telemetry endpoints payloads accept collections of elements such as the 'logs' endpoint.
   // 'logs' request type payload is meant to send library logs to Datadog’s backend.
@@ -44,17 +134,26 @@ function getPayload (payload) {
   return trimmedPayload
 }
 
+// TODO(BridgeAR): Simplify this code. A lot does not need to be recalculated on every call.
+/**
+ * @param {TelemetryConfig} config
+ * @param {TelemetryApplication} application
+ * @param {TelemetryHost} host
+ * @param {TelemetryRequestType} reqType
+ * @param {TelemetryPayload} [payload]
+ * @param {SendDataCallback} [cb]
+ */
 function sendData (config, application, host, reqType, payload = {}, cb = () => {}) {
   const {
     hostname,
     port,
-    isCiVisibility
+    isCiVisibility,
   } = config
 
   let url = config.url
 
   const isCiVisibilityAgentlessMode = isCiVisibility &&
-                                      isTrue(getEnvironmentVariable('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
+                                      isTrue(getValueFromEnvSources('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
 
   if (isCiVisibilityAgentlessMode) {
     try {
@@ -72,7 +171,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     port,
     method: 'POST',
     path: isCiVisibilityAgentlessMode ? '/api/v2/apmtelemetry' : '/telemetry/proxy/api/v2/apmtelemetry',
-    headers: getHeaders(config, application, reqType)
+    headers: getHeaders(config, application, reqType),
   }
 
   const data = JSON.stringify({
@@ -84,23 +183,23 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     seq_id: ++seqId,
     payload: getPayload(payload),
     application,
-    host
+    host,
   })
 
   request(data, options, (error) => {
-    if (error && getEnvironmentVariable('DD_API_KEY') && config.site) {
+    if (error && getValueFromEnvSources('DD_API_KEY') && config.site) {
       if (agentTelemetry) {
         log.warn('Agent telemetry failed, started agentless telemetry')
         agentTelemetry = false
       }
       // figure out which data center to send to
       const backendUrl = getAgentlessTelemetryEndpoint(config.site)
-      const backendHeader = { ...options.headers, 'DD-API-KEY': getEnvironmentVariable('DD_API_KEY') }
+      const backendHeader = { ...options.headers, 'DD-API-KEY': getValueFromEnvSources('DD_API_KEY') }
       const backendOptions = {
         ...options,
         url: backendUrl,
         headers: backendHeader,
-        path: '/api/v2/apmtelemetry'
+        path: '/api/v2/apmtelemetry',
       }
       if (backendUrl) {
         request(data, backendOptions, (error) => {

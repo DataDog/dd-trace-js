@@ -12,10 +12,10 @@ const Writer = proxyquire('../packages/dd-trace/src/exporters/agent/writer', {
     AgentEncoder: function () {
       return {
         encode () {},
-        count () {}
+        count () {},
       }
-    }
-  }
+    },
+  },
 })
 const Sampler = require('../packages/dd-trace/src/sampler')
 const spanFormat = require('../packages/dd-trace/src/span_format')
@@ -52,7 +52,7 @@ suite
     },
     fn () {
       tracer.startSpan()
-    }
+    },
   })
   .add('TextMapPropagator#inject', {
     onStart () {
@@ -61,12 +61,12 @@ suite
       spanContext = new DatadogSpanContext({
         traceId: id('1234567812345678'),
         spanId: id('1234567812345678'),
-        baggageItems: { foo: 'bar' }
+        baggageItems: { foo: 'bar' },
       })
     },
     fn () {
       propagator.inject(spanContext, carrier)
-    }
+    },
   })
   .add('TextMapPropagator#extract', {
     onStart () {
@@ -74,12 +74,12 @@ suite
       carrier = {
         'x-datadog-trace-id': '1234567891234567',
         'x-datadog-parent-id': '1234567891234567',
-        'ot-baggage-foo': 'bar'
+        'ot-baggage-foo': 'bar',
       }
     },
     fn () {
       propagator.extract(carrier)
-    }
+    },
   })
   .add('Writer#append', {
     onStart () {
@@ -87,7 +87,7 @@ suite
     },
     fn () {
       writer.append([span])
-    }
+    },
   })
   .add('Sampler#isSampled', {
     onStart () {
@@ -95,68 +95,68 @@ suite
     },
     fn () {
       sampler.isSampled(span)
-    }
+    },
   })
   .add('spanFormat', {
     fn () {
       spanFormat(spanStub)
-    }
+    },
   })
   .add('encode (0.4)', {
     fn () {
       encoder04.encode([span])
-    }
+    },
   })
   .add('encode (0.5)', {
     fn () {
       encoder05.encode([span])
-    }
+    },
   })
   .add('id', {
     fn () {
       id()
-    }
+    },
   })
   .add('Histogram', {
     fn () {
       histogram.record(Math.round(Math.random() * 3.6e12))
-    }
+    },
   })
   .add('metrics#boolean', {
     fn () {
       runtimeMetrics.boolean('test', Math.random() < 0.5)
-    }
+    },
   })
   .add('metrics#histogram', {
     fn () {
       runtimeMetrics.histogram('test', Math.random() * 3.6e12)
-    }
+    },
   })
   .add('metrics#gauge', {
     fn () {
       runtimeMetrics.gauge('test', Math.random())
-    }
+    },
   })
   .add('metrics#increment', {
     fn () {
       runtimeMetrics.boolean('test')
-    }
+    },
   })
   .add('metrics#increment (monotonic)', {
     fn () {
       runtimeMetrics.boolean('test', true)
-    }
+    },
   })
   .add('metrics#decrement', {
     fn () {
       runtimeMetrics.boolean('test')
-    }
+    },
   })
   .add('log (debug)', {
     onStart () {
       log.use({
         debug: () => {},
-        error: () => {}
+        error: () => {},
       })
       log.toggle(true, 'debug')
     },
@@ -167,13 +167,13 @@ suite
 
     fn () {
       log.debug('hello')
-    }
+    },
   })
   .add('log (error)', {
     onStart () {
       log.use({
         debug: () => {},
-        error: () => {}
+        error: () => {},
       })
       log.toggle(true, 'error')
     },
@@ -184,13 +184,13 @@ suite
 
     fn () {
       log.error('boom')
-    }
+    },
   })
   .add('log (none)', {
     onStart () {
       log.use({
         debug: () => {},
-        error: () => {}
+        error: () => {},
       })
       log.toggle(true, 'error')
     },
@@ -201,37 +201,37 @@ suite
 
     fn () {
       log.debug(() => (new Error('boom')).message)
-    }
+    },
   })
   .add('calculateHttpEndpoint (simple)', {
     fn () {
       calculateHttpEndpoint('/api/users')
-    }
+    },
   })
   .add('calculateHttpEndpoint (with integers)', {
     fn () {
       calculateHttpEndpoint('/api/users/12345/posts/67890')
-    }
+    },
   })
   .add('calculateHttpEndpoint (with hex)', {
     fn () {
       calculateHttpEndpoint('/api/sessions/a1b2c3d4e5f6/data')
-    }
+    },
   })
   .add('calculateHttpEndpoint (mixed patterns)', {
     fn () {
       calculateHttpEndpoint('/v1/users/123/sessions/a1b2c3/orders/456-789')
-    }
+    },
   })
   .add('calculateHttpEndpoint (deep path)', {
     fn () {
       calculateHttpEndpoint('/a/b/c/d/e/f/g/h/i/j/k/l/m')
-    }
+    },
   })
   .add('calculateHttpEndpoint (full URL)', {
     fn () {
       calculateHttpEndpoint('https://api.example.com:8080/v2/products/98765/reviews')
-    }
+    },
   })
 
 suite.run()
