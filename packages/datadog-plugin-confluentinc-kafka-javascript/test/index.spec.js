@@ -153,13 +153,13 @@ describe('Plugin', () => {
                 type: 'worker',
               })
 
-              const consumerReceiveMessagePromise = new Promise(resolve => {
+              const consumerReceiveMessagePromise = /** @type {Promise<void>} */(new Promise(resolve => {
                 consumer.run({
                   eachMessage: () => {
                     resolve()
                   },
                 })
-              })
+              }))
               await sendMessages(kafka, testTopic, messages).then(
                 async () => await consumerReceiveMessagePromise
               )
@@ -177,9 +177,8 @@ describe('Plugin', () => {
                   assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
                   done()
                 } catch (e) {
-                  done(e)
                 } finally {
-                  eachMessage = () => {} // avoid being called for each message
+                  eachMessage = async () => {} // avoid being called for each message
                 }
               }
 
@@ -271,25 +270,25 @@ describe('Plugin', () => {
               dr_cb: true,
             })
 
-            await new Promise((resolve, reject) => {
+            await /** @type {Promise<void>} */(new Promise((resolve, reject) => {
               nativeProducer.connect({}, (err) => {
                 if (err) {
                   return reject(err)
                 }
                 resolve()
               })
-            })
+            }))
           })
 
           afterEach(async () => {
-            await new Promise((resolve, reject) => {
+            await /** @type {Promise<void>} */(new Promise((resolve, reject) => {
               nativeProducer.disconnect((err) => {
                 if (err) {
                   return reject(err)
                 }
                 resolve()
               })
-            })
+            }))
           })
 
           describe('producer', () => {
@@ -354,37 +353,57 @@ describe('Plugin', () => {
                 'auto.offset.reset': 'earliest',
               })
 
-              await new Promise((resolve, reject) => {
+              await /** @type {Promise<void>} */(new Promise((resolve, reject) => {
                 nativeConsumer.connect({}, (err) => {
                   if (err) {
                     return reject(err)
                   }
                   resolve()
                 })
-              })
+              }))
             })
 
             afterEach(async () => {
               await nativeConsumer.unsubscribe()
-              await new Promise((resolve, reject) => {
+              await /** @type {Promise<void>} */(new Promise((resolve, reject) => {
                 nativeConsumer.disconnect((err) => {
                   if (err) {
                     return reject(err)
                   }
                   resolve()
                 })
-              })
+              }))
             })
 
             function consume (consumer, producer, topic, message, timeoutMs = 9500) {
-              return new Promise((resolve, reject) => {
+              return /** @type {Promise<void>} */(new Promise((resolve, reject) => {
                 const timeoutId = setTimeout(() => {
                   reject(new Error(`Timeout: Did not consume message on topic "${topic}" within ${timeoutMs}ms`))
                 }, timeoutMs)
 
+                function shouldRetryConsumeError (err) {
+                  if (!err) return false
+
+                  const code = typeof err.code === 'number' ? err.code : err.errno
+                  const codes = nativeApi?.CODES?.ERRORS
+
+                  if (codes && typeof code === 'number') {
+                    // Topic creation is asynchronous and the broker may briefly respond with errors while the topic is being created
+                    // and/or a leader is being elected for the partition.
+                    return code === codes.ERR_UNKNOWN_TOPIC_OR_PART ||
+                      code === codes.ERR_LEADER_NOT_AVAILABLE ||
+                      code === codes.ERR_NOT_LEADER_FOR_PARTITION
+                  }
+
+                  const msg = err.message?.toLowerCase() ?? ''
+                  return msg.includes('unknown topic or partition') ||
+                    msg.includes('leader not available') ||
+                    msg.includes('not leader for partition')
+                }
+
                 function doConsume () {
                   consumer.consume(1, function (err, messages) {
-                    if (err) {
+                    if (err && !shouldRetryConsumeError(err)) {
                       clearTimeout(timeoutId)
                       return reject(err)
                     }
@@ -408,7 +427,7 @@ describe('Plugin', () => {
                 }
                 doConsume()
                 producer.produce(topic, null, message, 'native-consumer-key')
-              })
+              }))
             }
 
             it('should be instrumented', async () => {
