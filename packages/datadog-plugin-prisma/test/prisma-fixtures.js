@@ -3,6 +3,8 @@
 // Shared test constants for prisma plugin tests.
 
 const TEST_DATABASE_URL = 'postgres://postgres:postgres@localhost:5432/postgres'
+const TEST_DATABASE_ENV_NAME = 'PRISMA_TEST_DATABASE_URL'
+const FALLBACK_DATABASE_URL = 'postgres://postgres:postgres@localhost:5432/fallback'
 
 const PRISMA_CLIENT_OUTPUT_RELATIVE = '../generated/prisma'
 
@@ -17,7 +19,9 @@ const SCHEMA_FIXTURES = {
 }
 
 module.exports = {
+  FALLBACK_DATABASE_URL,
   PRISMA_CLIENT_OUTPUT_RELATIVE,
   SCHEMA_FIXTURES,
+  TEST_DATABASE_ENV_NAME,
   TEST_DATABASE_URL,
 }
