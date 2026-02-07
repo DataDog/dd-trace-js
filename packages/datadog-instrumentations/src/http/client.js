@@ -14,6 +14,7 @@ const finishChannel = channel('apm:http:client:request:finish')
 const endChannel = channel('apm:http:client:request:end')
 const asyncStartChannel = channel('apm:http:client:request:asyncStart')
 const errorChannel = channel('apm:http:client:request:error')
+const responseFinishChannel = channel('apm:http:client:response:finish')
 
 const names = ['http', 'https', 'node:http', 'node:https']
 
@@ -37,6 +38,124 @@ function normalizeHeaders (options) {
 
 function normalizeCallback (inputOptions, callback, inputURL) {
   return typeof inputOptions === 'function' ? [inputOptions, inputURL || {}] : [callback, inputOptions]
+}
+
+/**
+ * Wires the downstream response so we can observe when the customer consumes
+ * the body and when the stream finishes
+ *
+ * @param {object} ctx - Instrumentation context
+ * @param {import('http').IncomingMessage} res - The downstream response object.
+ * @returns {{ finalizeIfNeeded: () => void }|null} Cleanup helper used for drain.
+ */
+function setupResponseInstrumentation (ctx, res) {
+  const shouldInstrumentFinish = responseFinishChannel.hasSubscribers
+
+  if (!shouldInstrumentFinish) {
+    return null
+  }
+
+  let bodyConsumed = false
+  let finishCalled = false
+  let originalRead = null
+  let dataListenerAdded = false
+
+  const { shouldCollectBody } = ctx
+  const bodyChunks = shouldCollectBody ? [] : null
+
+  const collectChunk = chunk => {
+    if (!shouldCollectBody || !chunk) return
+
+    if (typeof chunk === 'string') {
+      bodyChunks.push(chunk)
+    } else if (Buffer.isBuffer(chunk)) {
+      bodyChunks.push(chunk)
+    } else {
+      // Handle Uint8Array or other array-like types
+      bodyChunks.push(Buffer.from(chunk))
+    }
+  }
+
+  // Listen for body consumption
+  const onNewListener = (eventName) => {
+    if (eventName === 'data' || eventName === 'readable') {
+      bodyConsumed = true
+
+      // For 'data' events, add our own listener to collect chunks
+      if (eventName === 'data' && !dataListenerAdded) {
+        dataListenerAdded = true
+        res.on('data', collectChunk)
+      }
+
+      // For 'readable' events, wrap the read() method
+      if (eventName === 'readable' && !originalRead && typeof res.read === 'function') {
+        originalRead = res.read
+        res.read = function () {
+          const chunk = originalRead.apply(this, arguments)
+          collectChunk(chunk)
+          return chunk
+        }
+      }
+    }
+  }
+
+  res.on('newListener', onNewListener)
+
+  // Cleanup function to restore original behavior
+  const cleanup = () => {
+    res.off('newListener', onNewListener)
+    res.off('data', collectChunk)
+
+    if (originalRead) {
+      res.read = originalRead
+      originalRead = null
+    }
+  }
+
+  const notifyFinish = () => {
+    if (finishCalled) return
+    finishCalled = true
+
+    // Combine collected chunks into a single body
+    let body = null
+    if (bodyChunks?.length) {
+      const firstChunk = bodyChunks[0]
+      body = typeof firstChunk === 'string'
+        ? bodyChunks.join('')
+        : Buffer.concat(bodyChunks)
+    }
+
+    responseFinishChannel.publish({ ctx, res, body })
+    cleanup()
+  }
+
+  res.once('end', notifyFinish)
+  res.once('close', notifyFinish)
+
+  return {
+    finalizeIfNeeded () {
+      if (!bodyConsumed) {
+        // Body not consumed, resume to complete the response
+        notifyFinish()
+        resumeResponse(res)
+      }
+    },
+  }
+}
+
+/**
+ * Resumes the response stream to drain unconsumed data.
+ *
+ * @param {import('http').IncomingMessage} res
+ */
+function resumeResponse (res) {
+  if (!res) return
+  if (typeof res.resume !== 'function') return
+  if (res.destroyed) return
+  if (res.readableFlowing) return
+  if (res.readable === false) return
+
+  res.resume()
 }
 
 function patch (http, methodName) {
@@ -103,7 +222,18 @@ function patch (http, methodName) {
                 ctx.res = res
                 res.once('end', finish)
                 res.once(errorMonitor, finish)
-                break
+
+                const instrumentation = setupResponseInstrumentation(ctx, res)
+
+                if (!instrumentation) {
+                  break
+                }
+
+                const result = emit.apply(this, arguments)
+
+                instrumentation.finalizeIfNeeded()
+
+                return result
               }
               case 'connect':
               case 'upgrade':
