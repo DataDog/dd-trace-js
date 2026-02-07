@@ -10,6 +10,7 @@ const TEST_MSSQL_DATABASE_URL = [
   'sqlserver://localhost:1433;database=master;user=sa;password=DD_HUNTER2;',
   'encrypt=true;trustServerCertificate=true',
 ].join('')
+const TEST_MONGODB_DATABASE_URL = 'mongodb://localhost:27017/prisma?replicaSet=rs0'
 
 const PRISMA_CLIENT_OUTPUT_RELATIVE = '../generated/prisma'
 
@@ -21,6 +22,7 @@ const SCHEMA_FIXTURES = {
   tsEsmV6: 'provider-prisma-client-ts/esm/v6/schema.prisma',
   tsEsmV7: 'provider-prisma-client-ts/esm/v7/schema.prisma',
   tsEsmV7Config: 'provider-prisma-client-ts/esm/v7/prisma.config.ts',
+  tsEsmV6Mongo: 'provider-prisma-client-ts/esm/v6-mongo/schema.prisma',
   tsEsmV7Mariadb: 'provider-prisma-client-ts/esm/v7-mariadb/schema.prisma',
   tsEsmV7MariadbConfig: 'provider-prisma-client-ts/esm/v7-mariadb/prisma.config.ts',
   tsEsmV7Mssql: 'provider-prisma-client-ts/esm/v7-mssql/schema.prisma',
@@ -35,4 +37,5 @@ module.exports = {
   TEST_DATABASE_URL,
   TEST_MARIADB_DATABASE_URL,
   TEST_MSSQL_DATABASE_URL,
+  TEST_MONGODB_DATABASE_URL,
 }

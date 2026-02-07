@@ -15,14 +15,45 @@ const {
   assertObjectContains,
   varySandbox,
 } = require('../../../../integration-tests/helpers')
+const mongodb = require('../../../../versions/mongodb').get()
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const waitForMongoReplicaSet = require('../../../dd-trace/test/setup/services/mongo-replica-set')
 const waitForMssql = require('../../../dd-trace/test/setup/services/mssql')
 const {
   SCHEMA_FIXTURES,
   TEST_DATABASE_URL,
+  TEST_MONGODB_DATABASE_URL,
   TEST_MARIADB_DATABASE_URL,
   TEST_MSSQL_DATABASE_URL,
 } = require('../prisma-fixtures')
+
+/**
+ * @param {string} dbUrl
+ * @returns {string}
+ */
+function getMongoDbName (dbUrl) {
+  try {
+    const pathname = new URL(dbUrl).pathname
+    return pathname && pathname !== '/' ? pathname.slice(1) : 'test'
+  } catch {
+    return 'test'
+  }
+}
+
+/**
+ * @param {string} dbUrl
+ * @returns {Promise<void>}
+ */
+async function resetMongoDb (dbUrl) {
+  const client = new mongodb.MongoClient(dbUrl)
+  try {
+    await client.connect()
+    const dbName = getMongoDbName(dbUrl)
+    await client.db(dbName).dropDatabase()
+  } finally {
+    await client.close().catch(() => {})
+  }
+}
 
 const prismaClientConfigs = [{
   name: 'prisma-generator-js with no output',
@@ -77,6 +108,29 @@ const prismaClientConfigs = [{
   },
   ts: true,
   variant: 'star',
+},
+{
+  name: 'prisma-generator v6 mongodb',
+  serverFile: 'server-ts-v6.mjs',
+  importPath: './dist/client.js',
+  schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV6Mongo}`,
+  env: {
+    PRISMA_CLIENT_OUTPUT: './generated/prisma',
+    DATABASE_URL: TEST_MONGODB_DATABASE_URL,
+  },
+  ts: true,
+  waitForService: waitForMongoReplicaSet,
+  skipMigrateReset: true,
+  variant: 'destructure',
+  dbSpan: {
+    name: 'prisma.engine',
+    meta: {
+      'db.name': 'prisma',
+      'db.type': 'mongodb',
+      'out.host': 'localhost',
+      'network.destination.port': '27017',
+    },
+  },
 },
 {
   name: 'prisma-generator v7 mariadb adapter (url)',
@@ -196,12 +250,17 @@ describe('esm', () => {
           if (config.waitForService) {
             await config.waitForService()
           }
+          if (config.env?.DATABASE_URL?.startsWith('mongodb')) {
+            await resetMongoDb(config.env.DATABASE_URL)
+          }
           agent = await new FakeAgent().start()
           const commands = [
-            './node_modules/.bin/prisma migrate reset --force',
             './node_modules/.bin/prisma db push --accept-data-loss',
             './node_modules/.bin/prisma generate',
           ]
+          if (!config.skipMigrateReset) {
+            commands.unshift('./node_modules/.bin/prisma migrate reset --force')
+          }
           const cwd = sandboxCwd()
 
           if (config.ts) {
