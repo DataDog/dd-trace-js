@@ -298,7 +298,7 @@ describe('mysql2 instrumentation', () => {
                       onResultSetCount++
                     }
                     currentOnResult = value
-                  }
+                  },
                 })
 
                 const result = addCommand.apply(this, arguments)
