@@ -66,6 +66,8 @@
     "@playwright/test": "1.57.0",
     "@prisma/client": "7.2.0",
     "@prisma/adapter-pg": "7.2.0",
+    "@prisma/adapter-mariadb": "7.2.0",
+    "@prisma/adapter-mssql": "7.2.0",
     "@redis/client": "5.10.0",
     "@smithy/smithy-client": "4.10.9",
     "@types/node": "25.0.9",
