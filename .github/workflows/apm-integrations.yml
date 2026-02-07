@@ -1124,9 +1124,30 @@ jobs:
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2019-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          SA_PASSWORD: DD_HUNTER2
+          MSSQL_PID: Express
+        ports:
+          - 1433:1433
+      mongodb:
+        image: circleci/mongo
+        ports:
+          - 27017:27017
+      mysql:
+        image: mariadb:10.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: 'db'
+        ports:
+          - 3306:3306
+
     env:
       PLUGINS: prisma
-      SERVICES: prisma
+      TEST_MSSQL_DATABASE_URL: 'sqlserver://localhost:1433;database=master;user=sa;password=DD_HUNTER2;encrypt=true;trustServerCertificate=true'
+      SERVICES: postgres|mssql|mongo|mariadb
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
