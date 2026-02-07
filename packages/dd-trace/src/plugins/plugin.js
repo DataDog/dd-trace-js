@@ -155,13 +155,8 @@ module.exports = class Plugin {
 
     if (!store || !store.span) return
 
-    /**
-     * @type {{ _spanContext: { _tags: Record<string, unknown> }, setTag: (key: string, value: unknown) => void }}
-     */
-    const span = /** @type {typeof span} */ (store.span)
-
-    if (!span._spanContext._tags.error) {
-      span.setTag('error', error || 1)
+    if (!store.span._spanContext._tags.error) {
+      store.span.setTag('error', error || 1)
     }
   }
 
