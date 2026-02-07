@@ -3,8 +3,14 @@
 const mutex = require('../../../../../vendor/dist/mutexify/promise')()
 const { getGeneratedPosition } = require('./source-maps')
 const session = require('./session')
-const { compile: compileCondition, compileSegments, templateRequiresEvaluation } = require('./condition')
+const { compile, compileSegments, templateRequiresEvaluation } = require('./condition')
 const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
+const {
+  DEFAULT_MAX_REFERENCE_DEPTH,
+  DEFAULT_MAX_COLLECTION_SIZE,
+  DEFAULT_MAX_FIELD_COUNT,
+  DEFAULT_MAX_LENGTH,
+} = require('./snapshot/constants')
 const {
   findScriptFromPartialPath,
   clearState,
@@ -99,12 +105,50 @@ async function addBreakpoint (probe) {
   }
 
   try {
-    probe.condition = probe.when?.json && compileCondition(probe.when.json)
+    probe.condition = probe.when?.json && compile(probe.when.json)
   } catch (err) {
     throw new Error(
       `Cannot compile expression: ${probe.when.dsl} (probe: ${probe.id}, version: ${probe.version})`,
       { cause: err }
     )
+  }
+
+  if (probe.captureSnapshot) {
+    probe.capture = {
+      maxReferenceDepth: probe.capture?.maxReferenceDepth ?? DEFAULT_MAX_REFERENCE_DEPTH,
+      maxCollectionSize: probe.capture?.maxCollectionSize ?? DEFAULT_MAX_COLLECTION_SIZE,
+      maxFieldCount: probe.capture?.maxFieldCount ?? DEFAULT_MAX_FIELD_COUNT,
+      maxLength: probe.capture?.maxLength ?? DEFAULT_MAX_LENGTH,
+    }
+  }
+
+  if (probe.captureExpressions?.length > 0) {
+    probe.compiledCaptureExpressions = []
+    for (const captureExpr of probe.captureExpressions) {
+      const limits = {
+        maxReferenceDepth: captureExpr.capture?.maxReferenceDepth ??
+          probe.capture?.maxReferenceDepth ?? DEFAULT_MAX_REFERENCE_DEPTH,
+        maxCollectionSize: captureExpr.capture?.maxCollectionSize ??
+          probe.capture?.maxCollectionSize ?? DEFAULT_MAX_COLLECTION_SIZE,
+        maxFieldCount: captureExpr.capture?.maxFieldCount ??
+          probe.capture?.maxFieldCount ?? DEFAULT_MAX_FIELD_COUNT,
+        maxLength: captureExpr.capture?.maxLength ??
+          probe.capture?.maxLength ?? DEFAULT_MAX_LENGTH,
+      }
+
+      try {
+        probe.compiledCaptureExpressions.push({
+          name: captureExpr.name,
+          expression: compile(captureExpr.expr.json),
+          limits,
+        })
+      } catch (err) {
+        throw new Error(
+          `Cannot compile capture expression: ${captureExpr.name} (probe: ${probe.id}, version: ${probe.version})`,
+          { cause: err }
+        )
+      }
+    }
   }
 
   const locationKey = generateLocationKey(scriptId, lineNumber, columnNumber)
