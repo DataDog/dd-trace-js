@@ -40,10 +40,8 @@ class HttpServerPlugin extends ServerPlugin {
     // Only AppSec needs the request scope to be active for any async work that
     // may be scheduled after the synchronous `request` event returns (e.g.
     // Fastify).
-    // TODO: The current implementation is not correct. This causes a memory leak.
-    if (incomingHttpRequestStart.hasSubscribers && store) {
-      store.req = req
-      store.res = res
+    if (incomingHttpRequestStart.hasSubscribers) {
+      store = { ...store, req, res }
     }
 
     this.enter(span, store)
