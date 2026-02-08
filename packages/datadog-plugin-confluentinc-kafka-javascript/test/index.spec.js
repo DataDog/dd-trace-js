@@ -394,29 +394,9 @@ describe('Plugin', () => {
                   reject(new Error(`Timeout: Did not consume message on topic "${topic}" within ${timeoutMs}ms`))
                 }, timeoutMs)
 
-                function shouldRetryConsumeError (err) {
-                  if (!err) return false
-
-                  const code = typeof err.code === 'number' ? err.code : err.errno
-                  const codes = nativeApi?.CODES?.ERRORS
-
-                  if (codes && typeof code === 'number') {
-                    // Topic creation is asynchronous and the broker may briefly respond with errors while the topic is being created
-                    // and/or a leader is being elected for the partition.
-                    return code === codes.ERR_UNKNOWN_TOPIC_OR_PART ||
-                      code === codes.ERR_LEADER_NOT_AVAILABLE ||
-                      code === codes.ERR_NOT_LEADER_FOR_PARTITION
-                  }
-
-                  const msg = err.message?.toLowerCase() ?? ''
-                  return msg.includes('unknown topic or partition') ||
-                    msg.includes('leader not available') ||
-                    msg.includes('not leader for partition')
-                }
-
                 function doConsume () {
                   consumer.consume(1, function (err, messages) {
-                    if (err && !shouldRetryConsumeError(err)) {
+                    if (err) {
                       clearTimeout(timeoutId)
                       return reject(err)
                     }
@@ -490,7 +470,6 @@ describe('Plugin', () => {
 
               return expectedSpanPromise
             })
-
           })
         })
       })
@@ -541,7 +520,9 @@ async function waitForTopicReady (admin, topic, timeoutMs = 20000) {
       const topicMeta = Array.isArray(meta) ? meta[0] : meta?.topics?.[0]
 
       const partitions = topicMeta?.partitions
-      if (Array.isArray(partitions) && partitions.length > 0 && partitions.every(p => typeof p.leader === 'number' && p.leader >= 0)) {
+      if (Array.isArray(partitions) &&
+          partitions.length > 0 &&
+          partitions.every(p => typeof p.leader === 'number' && p.leader >= 0)) {
         return
       }
     } catch {
