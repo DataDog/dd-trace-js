@@ -5,6 +5,7 @@ const { channel } = require('../../../datadog-instrumentations/src/helpers/instr
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
 const { getValueFromEnvSources } = require('../config/helper')
 const { ImpendingTimeout } = require('./runtime/errors')
+const { extractContext } = require('./context')
 
 const globalTracer = global._ddtrace
 const tracer = globalTracer._tracer
@@ -58,28 +59,6 @@ function crashFlush () {
   if (activeSpan !== null) {
     activeSpan.finish()
   }
-}
-
-/**
- * Extracts the context from the given Lambda handler arguments.
- *
- * It is possible for users to define a lambda function without specifying a
- * context arg. In these cases, this function returns null instead of throwing
- * an error.
- *
- * @param {unknown[]} args any amount of arguments
- * @returns {object | null}
- */
-function extractContext (args) {
-  let context = args.length > 1 ? args[1] : null
-  if (context === null || context.getRemainingTimeInMillis === undefined) {
-    context = args.length > 2 ? args[2] : null
-    if (context === null || context.getRemainingTimeInMillis === undefined) {
-      log.debug('Could not extract the context from the Lambda handler arguments. No timeout will be tracked.')
-      return null
-    }
-  }
-  return context
 }
 
 /**
