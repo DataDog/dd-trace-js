@@ -68,7 +68,7 @@ function crashFlush () {
  * an error.
  *
  * @param {unknown[]} args any amount of arguments
- * @returns the context if extraction was successful, null otherwise.
+ * @returns {object | null}
  */
 function extractContext (args) {
   let context = args.length > 1 ? args[1] : null
