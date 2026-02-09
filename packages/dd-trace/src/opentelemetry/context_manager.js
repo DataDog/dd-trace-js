@@ -3,12 +3,13 @@
 const { trace, ROOT_CONTEXT, propagation } = require('@opentelemetry/api')
 const { storage } = require('../../../datadog-core')
 const { getAllBaggageItems, setBaggageItem, removeAllBaggageItems } = require('../baggage')
+const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 
 const tracer = require('../../')
 const SpanContext = require('./span_context')
 
 function mergeGlobalBaggageWith (baggages) {
-  const combinedBaggages = structuredClone(baggages) || {}
+  const combinedBaggages = baggages ? rfdc(baggages) : {}
   const globalActiveBaggages = getAllBaggageItems()
   for (const [key, value] of Object.entries(globalActiveBaggages)) {
     if (!combinedBaggages[key]) combinedBaggages[key] = value
