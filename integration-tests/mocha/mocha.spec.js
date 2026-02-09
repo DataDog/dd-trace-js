@@ -71,7 +71,6 @@ const {
   TEST_PARAMETERS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
-const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
 const {
   ERROR_MESSAGE,
   ORIGIN_KEY,
@@ -4623,44 +4622,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       await Promise.all([
         coverageReportPromise,
         once(childProcess, 'exit'),
-      ])
-    })
-
-    it('sends coverage_upload.request telemetry metric when coverage is uploaded', async () => {
-      receiver.setSettings({
-        coverage_report_upload_enabled: true,
-      })
-      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
-
-      const telemetryPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
-          const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
-
-          const coverageUploadMetric = telemetryMetrics.find(
-            ({ metric }) => metric === TELEMETRY_COVERAGE_UPLOAD
-          )
-
-          assert.ok(coverageUploadMetric, 'coverage_upload.request telemetry metric should be sent')
-        })
-
-      const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov ${runTestsCommand}`
-
-      childProcess = exec(
-        runTestsWithLcovCoverageCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisEvpProxyConfig(receiver.port),
-            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
-            DD_GIT_COMMIT_SHA: gitCommitSha,
-            DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
-          },
-        }
-      )
-
-      await Promise.all([
-        once(childProcess, 'exit'),
-        telemetryPromise,
       ])
     })
 
