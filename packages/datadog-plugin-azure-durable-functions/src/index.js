@@ -1,7 +1,6 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const log = require('../../dd-trace/src/log')
 
 class AzureDurableFunctionsPlugin extends TracingPlugin {
   static get id () { return 'azure-durable-functions' }
@@ -11,15 +10,6 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
   static get kind () { return 'server' }
 
   bindStart (ctx) {
-    log.debug('in durable-functions plugin for method: %s. ctx:\n%o ', ctx.methodName, ctx)
-    // Object.entries(ctx).forEach(([key, value]) => {
-    //   log.debug('{ %s: %o }', key, value)
-    // })
-    // const span =
-
-    // const opName = this.operationName()
-    // console.log('opname in azdurable:', opName)
-
     const span = this.startSpan(this.operationName(), {
       kind: 'internal',
 
@@ -36,12 +26,10 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
   }
 
   asyncEnd (ctx) {
-    log.debug('async end in durable-functions plugin for method: %s', ctx.methodName)
     super.finish(ctx)
   }
 
   end (ctx) {
-    log.debug('end in durable-functions plugin for method: %s', ctx.methodName)
     super.finish(ctx)
   }
 }
