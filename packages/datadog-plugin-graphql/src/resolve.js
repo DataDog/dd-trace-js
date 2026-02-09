@@ -11,13 +11,15 @@ class GraphQLResolvePlugin extends TracingPlugin {
 
   start (field) {
     const { info, rootCtx, args, parentField } = field
+    // FIXME - https://github.com/DataDog/dd-trace-js/issues/7468
+    if (this.config.collapse) field.depth += getListLevel(info.path)
+    if (!this.shouldInstrument(field)) return
 
     // we need to get the parent span to the field if it exists for correct span parenting
     // of nested fields
     const childOf = parentField?.currentStore?.span
 
     const path = getPath(info, this.config)
-    if (!shouldInstrument(this.config, path)) return
     const computedPathString = path.join('.')
 
     if (this.config.collapse) {
@@ -76,20 +78,23 @@ class GraphQLResolvePlugin extends TracingPlugin {
     super(...args)
 
     this.addTraceSub('updateField', (field) => {
-      const path = getPath(field.info, this.config)
-
-      if (!shouldInstrument(this.config, path)) return
+      if (!this.shouldInstrument(field)) return
 
       const span = field?.currentStore?.span || this.activeSpan
       field.finishTime = span._getTime ? span._getTime() : 0
     })
 
     this.resolverStartCh = dc.channel('datadog:graphql:resolver:start')
+    this.shouldInstrument = _field => false
   }
 
   configure (config) {
     // this will disable resolve subscribers if `config.depth` is set to 0
     super.configure(config.depth === 0 ? false : config)
+
+    this.shouldInstrument = config.depth < 0
+      ? _field => true
+      : field => config.depth >= field.depth
   }
 
   finish (fieldCtx) {
@@ -104,15 +109,15 @@ class GraphQLResolvePlugin extends TracingPlugin {
 
 // helpers
 
-function shouldInstrument (config, path) {
-  let depth = 0
-  for (const item of path) {
-    if (typeof item === 'string') {
-      depth += 1
-    }
+/** Count `*` chars in front of last path segment for a collapsed path */
+function getListLevel (path) {
+  let lvl = 0
+  let curr = path.prev
+  while (curr && typeof curr.key === 'number') {
+    lvl++
+    curr = curr.prev
   }
-
-  return config.depth < 0 || config.depth >= depth
+  return lvl
 }
 
 function getPath (info, config) {

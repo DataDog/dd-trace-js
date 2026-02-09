@@ -259,13 +259,15 @@ function callInAsyncScope (fn, thisArg, args, abortSignal, cb) {
 }
 
 function createField (rootCtx, info, args) {
+  const parentField = getParentField(rootCtx, info.path)
   return {
     rootCtx,
     info,
     args,
     error: null,
     res: null,
-    parentField: getParentField(rootCtx, info.path),
+    parentField,
+    depth: parentField ? parentField.depth + 1 : 1,
     finishCtx: null, // sometimes populated by GraphQLResolvePlugin in `resolve:start` handler
     finishTime: 0, // populated by GraphQLResolvePlugin in `resolve:updateField` handler
     // currentStore, parentStore - sometimes populated by GraphQLResolvePlugin.startSpan in `resolve:start` handler
