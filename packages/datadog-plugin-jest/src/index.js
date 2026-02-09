@@ -25,8 +25,6 @@ const {
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   JEST_DISPLAY_NAME,
-  TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER,
   getFormattedError,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
@@ -391,19 +389,10 @@ class JestPlugin extends CiPlugin {
         span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
       }
 
-      const spanTags = span.context()._tags
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,
         'test',
-        {
-          hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
-          isNew: spanTags[TEST_IS_NEW] === 'true',
-          isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
-          browserDriver: spanTags[TEST_BROWSER_DRIVER],
-          isQuarantined: spanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' || undefined,
-          isDisabled: spanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true' || undefined,
-          isModified: spanTags[TEST_IS_MODIFIED] === 'true' || undefined,
-        }
+        this.getTestTelemetryTags(span)
       )
 
       span.finish()

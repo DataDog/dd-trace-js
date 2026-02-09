@@ -388,9 +388,9 @@ class PlaywrightPlugin extends CiPlugin {
           isNew,
           isRum: isRUMActive,
           browserDriver: 'playwright',
-          isQuarantined: isQuarantined || undefined,
-          isDisabled: isDisabled || undefined,
-          isModified: isModified || undefined,
+          isQuarantined,
+          isDisabled,
+          isModified,
         }
       )
       span.finish()

@@ -15,7 +15,27 @@ const {
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES,
 } = require('../telemetry')
 
-const { getNumFromKnownTests } = require('../../plugins/util/test')
+// Calculate the number of tests from the test management tests response, which has a shape like:
+// { module: { suites: { suite: { tests: { testName: { properties: {...} } } } } } }
+function getNumFromTestManagementTests (testManagementTests) {
+  if (!testManagementTests) {
+    return 0
+  }
+
+  let totalNumTests = 0
+
+  for (const testModule of Object.values(testManagementTests)) {
+    const { suites } = testModule
+    if (!suites) continue
+    for (const testSuite of Object.values(suites)) {
+      const { tests } = testSuite
+      if (!tests) continue
+      totalNumTests += Object.keys(tests).length
+    }
+  }
+
+  return totalNumTests
+}
 
 function getTestManagementTests ({
   url,
@@ -83,7 +103,7 @@ function getTestManagementTests ({
       try {
         const { data: { attributes: { modules: testManagementTests } } } = JSON.parse(res)
 
-        const numTests = getNumFromKnownTests(testManagementTests)
+        const numTests = getNumFromTestManagementTests(testManagementTests)
 
         incrementCountMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS, {}, numTests)
         distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES, {}, res.length)

@@ -982,9 +982,9 @@ class CypressPlugin {
           isNew,
           isRum: isRUMActive,
           browserDriver: 'cypress',
-          isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' || undefined,
-          isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true' || undefined,
-          isModified: activeSpanTags[TEST_IS_MODIFIED] === 'true' || undefined,
+          isQuarantined: isQuarantinedFromSupport,
+          isModified,
+          isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
         })
         this.activeTestSpan = null
 
