@@ -167,8 +167,11 @@ function request (data, options, callback) {
     })
   }
 
-  // TODO: Figure out why setTimeout is needed to avoid losing the async context
-  // in the retry request before socket.connect() is called.
+  // The setTimeout is needed to avoid losing the async context in the retry
+  // request before socket.connect() is called. This is a workaround for the
+  // issue that the AsyncLocalStorage.run() method does not call the
+  // AsyncLocalStorage.enterWith() method when not using AsyncContextFrame.
+  //
   // TODO: Test that this doesn't trace itself on retry when the diagnostics
   // channel events are available in the agent exporter.
   makeRequest(() => setTimeout(() => makeRequest(callback)))
