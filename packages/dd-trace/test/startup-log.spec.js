@@ -17,7 +17,7 @@ describe('startup logging', () => {
   let tracerInfoMethod
 
   before(() => {
-    sinon.stub(console, 'info')
+    sinon.stub(console, 'error')
     sinon.stub(console, 'warn')
     delete require.cache[require.resolve('../src/startup-log')]
     const {
@@ -60,13 +60,13 @@ describe('startup logging', () => {
     ])
     // Use sinon's stub instance directly to avoid type errors
     // eslint-disable-next-line no-console
-    const infoStub = /** @type {sinon.SinonStub} */ (console.info)
+    const errorStub = /** @type {sinon.SinonStub} */ (console.error)
     // eslint-disable-next-line no-console
     const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
     startupLog({ message: 'Error: fake error' })
-    firstStderrCall = infoStub.firstCall
+    firstStderrCall = errorStub.firstCall
     secondStderrCall = warnStub.firstCall
-    infoStub.restore()
+    errorStub.restore()
     warnStub.restore()
   })
 
@@ -183,7 +183,7 @@ describe('profiling_enabled', () => {
       ['auto', true],
       ['true', true],
     ].forEach(([envVar, expected]) => {
-      sinon.stub(console, 'info')
+      sinon.stub(console, 'error')
       delete require.cache[require.resolve('../src/startup-log')]
       const {
         setStartupLogConfig,
@@ -196,9 +196,9 @@ describe('profiling_enabled', () => {
       setStartupLogPluginManager({ _pluginsByName: {} })
       startupLog()
       /* eslint-disable-next-line no-console */
-      const infoStub = /** @type {sinon.SinonStub} */ (console.info)
-      const logObj = JSON.parse(infoStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
-      infoStub.restore()
+      const errorStub = /** @type {sinon.SinonStub} */ (console.error)
+      const logObj = JSON.parse(errorStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+      errorStub.restore()
       assert.strictEqual(logObj.profiling_enabled, expected)
     })
   })
