@@ -631,14 +631,21 @@ module.exports = class CiPlugin extends Plugin {
 
     log.debug('Coverage report upload is enabled, found %d report(s) to upload', coverageReports.length)
 
-    // Upload reports sequentially (one file per request)
+    // Upload reports in batches of up to 10 per request
+    const BATCH_SIZE = 10
+    const batches = []
+
+    for (let i = 0; i < coverageReports.length; i += BATCH_SIZE) {
+      batches.push(coverageReports.slice(i, i + BATCH_SIZE))
+    }
+
     let uploadedCount = 0
     let failedCount = 0
-    let reportIndex = 0
+    let batchIndex = 0
 
-    const uploadNextReport = () => {
-      if (reportIndex >= coverageReports.length) {
-        // All reports processed, log summary
+    const uploadNextBatch = () => {
+      if (batchIndex >= batches.length) {
+        // All batches processed, log summary
         if (failedCount > 0) {
           log.warn('Coverage report upload completed: %d succeeded, %d failed', uploadedCount, failedCount)
         } else {
@@ -648,25 +655,25 @@ module.exports = class CiPlugin extends Plugin {
         return
       }
 
-      const { filePath, format } = coverageReports[reportIndex]
-      reportIndex++
+      const batch = batches[batchIndex]
+      batchIndex++
 
       this.tracer._exporter.uploadCoverageReport(
-        { filePath, format, testEnvironmentMetadata: this.testEnvironmentMetadata },
+        { reports: batch, testEnvironmentMetadata: this.testEnvironmentMetadata },
         (err) => {
           if (err) {
-            failedCount++
-            log.error('Failed to upload coverage report %s: %s', filePath, err.message)
+            failedCount += batch.length
+            log.error('Failed to upload batch of %d coverage report(s): %s', batch.length, err.message)
           } else {
-            uploadedCount++
+            uploadedCount += batch.length
           }
 
-          // Process next report
-          uploadNextReport()
+          // Process next batch
+          uploadNextBatch()
         }
       )
     }
 
-    uploadNextReport()
+    uploadNextBatch()
   }
 }

@@ -11,11 +11,10 @@ const { getValueFromEnvSources } = require('../../config/helper')
 const UPLOAD_TIMEOUT_MS = 30_000
 
 /**
- * Uploads a single coverage report to the Datadog CI intake.
- * One file per request with field names 'coverage' and 'event'.
+ * Uploads coverage reports to the Datadog CI intake.
+ * Supports batching up to 10 reports per request with field names 'coverage1', 'event1', 'coverage2', 'event2', etc.
  * @param {object} options - Upload options
- * @param {string} options.filePath - Path to the coverage report file
- * @param {string} options.format - Format of the coverage report (e.g., 'lcov', 'cobertura')
+ * @param {Array<{filePath: string, format: string}>} options.reports - Array of coverage reports to upload (max 10)
  * @param {object} options.testEnvironmentMetadata - Test environment metadata containing git/CI tags
  * @param {URL} options.url - The base URL for the coverage report upload
  * @param {boolean} [options.isEvpProxy] - Whether to use EVP proxy for the upload
@@ -23,7 +22,7 @@ const UPLOAD_TIMEOUT_MS = 30_000
  * @param {Function} callback - Callback function (err)
  */
 function uploadCoverageReport (
-  { filePath, format, testEnvironmentMetadata, url, isEvpProxy, evpProxyPrefix },
+  { reports, testEnvironmentMetadata, url, isEvpProxy, evpProxyPrefix },
   callback
 ) {
   const apiKey = getValueFromEnvSources('DD_API_KEY')
@@ -32,33 +31,47 @@ function uploadCoverageReport (
     return callback(new Error('DD_API_KEY is required for coverage report upload'))
   }
 
-  let compressedCoverage
-  try {
-    const coverageContent = readFileSync(filePath)
-    compressedCoverage = gzipSync(coverageContent)
-  } catch (err) {
-    return callback(new Error(`Failed to read coverage report at ${filePath}: ${err.message}`))
+  if (!reports || !Array.isArray(reports) || reports.length === 0) {
+    return callback(new Error('At least one coverage report is required'))
   }
 
-  // Build the event payload with format, type, and all tags from test environment metadata
-  const eventPayload = {
-    type: 'coverage_report',
-    format,
-    ...testEnvironmentMetadata,
+  if (reports.length > 10) {
+    return callback(new Error(`Cannot upload more than 10 reports per request (got ${reports.length})`))
   }
 
   // Create multipart form
   const form = new FormData()
 
-  form.append('coverage', compressedCoverage, {
-    filename: 'coverage.gz',
-    contentType: 'application/gzip',
-  })
+  // Add each report to the form with indexed field names
+  for (let i = 0; i < reports.length; i++) {
+    const { filePath, format } = reports[i]
+    const index = i + 1
 
-  form.append('event', JSON.stringify(eventPayload), {
-    filename: 'event.json',
-    contentType: 'application/json',
-  })
+    let compressedCoverage
+    try {
+      const coverageContent = readFileSync(filePath)
+      compressedCoverage = gzipSync(coverageContent)
+    } catch (err) {
+      return callback(new Error(`Failed to read coverage report at ${filePath}: ${err.message}`))
+    }
+
+    // Build the event payload with format, type, and all tags from test environment metadata
+    const eventPayload = {
+      type: 'coverage_report',
+      format,
+      ...testEnvironmentMetadata,
+    }
+
+    form.append(`coverage${index}`, compressedCoverage, {
+      filename: `coverage${index}.gz`,
+      contentType: 'application/gzip',
+    })
+
+    form.append(`event${index}`, JSON.stringify(eventPayload), {
+      filename: `event${index}.json`,
+      contentType: 'application/json',
+    })
+  }
 
   const options = {
     method: 'POST',
@@ -77,14 +90,14 @@ function uploadCoverageReport (
     options.headers['dd-api-key'] = apiKey
   }
 
-  log.debug('Uploading coverage report %s to %s%s', filePath, url, options.path)
+  log.debug('Uploading %d coverage report(s) to %s%s', reports.length, url, options.path)
 
   request(form, options, (err, res, statusCode) => {
     if (err) {
-      log.error('Error uploading coverage report: %s', err.message)
+      log.error('Error uploading coverage reports: %s', err.message)
       return callback(err)
     }
-    log.debug('Coverage report uploaded successfully (status: %d)', statusCode)
+    log.debug('%d coverage report(s) uploaded successfully (status: %d)', reports.length, statusCode)
     callback(null)
   })
 }
