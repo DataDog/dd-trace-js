@@ -49,7 +49,13 @@ function wrapConnection (Connection, version) {
     }
 
     wrapCommandOnResult(command, ctx)
-    command.execute = bindExecute(command.execute, ctx)
+
+    command.execute = shimmer.wrapFunction(
+      command.execute,
+      execute => function executeWithTrace (_packet_, _connection_) {
+        return commandStartCh.runStores(ctx, execute, this, ...arguments)
+      }
+    )
 
     return commandAddCh.runStores(ctx, addCommand, this, ...arguments)
   })
@@ -145,17 +151,6 @@ function wrapConnection (Connection, version) {
 
     wrappedOnResult.set(cmd, wrapped)
     cmd.onResult = wrapped
-  }
-
-  /**
-   * @param {Function} execute
-   * @param {object} ctx
-   * @returns {Function}
-   */
-  function bindExecute (execute, ctx) {
-    return shimmer.wrapFunction(execute, execute => function executeWithTrace (packet, connection) {
-      return commandStartCh.runStores(ctx, execute, this, ...arguments)
-    })
   }
 
   /**
