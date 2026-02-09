@@ -7,18 +7,18 @@ const { getAllBaggageItems, setBaggageItem, removeAllBaggageItems } = require('.
 const tracer = require('../../')
 const SpanContext = require('./span_context')
 
+function mergeGlobalBaggageWith (baggages) {
+  const combinedBaggages = baggages || {}
+  const globalActiveBaggages = getAllBaggageItems()
+  for (const [key, value] of Object.entries(globalActiveBaggages)) {
+    if (!combinedBaggages[key]) combinedBaggages[key] = value
+  }
+  return combinedBaggages
+}
+
 class ContextManager {
   constructor () {
     this._store = storage('opentelemetry')
-  }
-
-  _mergeGlobalBaggageWith (baggages) {
-    baggages = baggages || {}
-    const globalActiveBaggages = getAllBaggageItems()
-    for (const [key, value] of Object.entries(globalActiveBaggages)) {
-      if (!baggages[key]) baggages[key] = value
-    }
-    return baggages
   }
 
   // converts dd to otel
@@ -31,7 +31,7 @@ class ContextManager {
 
     // If stored span wraps the active DD span, prefer the stored context
     if (storedSpan && storedSpan._ddSpan === activeSpan) {
-      const baggages = this._mergeGlobalBaggageWith(JSON.parse(activeSpan.getAllBaggageItems()))
+      const baggages = mergeGlobalBaggageWith(JSON.parse(activeSpan.getAllBaggageItems()))
       if (Object.keys(baggages).length > 0) {
         const entries = {}
         for (const [key, value] of Object.entries(baggages)) {
@@ -44,7 +44,7 @@ class ContextManager {
     }
 
     if (!activeSpan) {
-      const storedBaggageItems = this._mergeGlobalBaggageWith(storedSpan?._spanContext?._ddContext?._baggageItems)
+      const storedBaggageItems = mergeGlobalBaggageWith(storedSpan?._spanContext?._ddContext?._baggageItems)
       if (storedBaggageItems) {
         const baggages = storedBaggageItems
         const entries = {}
@@ -64,7 +64,7 @@ class ContextManager {
     }
 
     // Convert DD baggage to OTel format
-    const baggages = this._mergeGlobalBaggageWith(JSON.parse(activeSpan.getAllBaggageItems()))
+    const baggages = mergeGlobalBaggageWith(JSON.parse(activeSpan.getAllBaggageItems()))
     const hasBaggage = Object.keys(baggages).length > 0
     let otelBaggages
     if (hasBaggage) {
