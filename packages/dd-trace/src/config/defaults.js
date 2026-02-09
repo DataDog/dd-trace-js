@@ -188,7 +188,7 @@ module.exports = {
   spanComputePeerService: false,
   spanLeakDebug: 0,
   spanRemoveIntegrationFromService: false,
-  startupLogs: false,
+  startupLogs: true,
   'stats.enabled': false,
   tags: {},
   tagsHeaderMaxLength: 512,
