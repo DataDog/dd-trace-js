@@ -59,28 +59,47 @@ class DatadogStorage extends AsyncLocalStorage {
       return stores.get(handle)
     }
   }
+}
+
+
+// To handle all versions always correct, feature detect AsyncContextFrame and
+// fallback to manual approach if not active.
+const isACFActive = (() => {
+  let active = false
+  const als = new AsyncLocalStorage()
+  const orig = als.enterWith
+  als.enterWith = () => { active = true }
+  als.run(1, () => {})
+  als.enterWith = orig
+  return active
+})()
+
+if (!isACFActive) {
+  const superGetStore = AsyncLocalStorage.prototype.getStore
+  const superEnterWith = AsyncLocalStorage.prototype.enterWith
 
   /**
-   * Here, we replicate the behavior of the original `run()` method. We ensure
-   * that our `enterWith()` is called internally, so that the handle to the
-   * store is set. As an optimization, we use super for getStore and enterWith
-   * when dealing with the parent store, so that we don't have to access the
-   * WeakMap.
+   * Override the `run` method to manually call `enterWith` and `getStore`
+   * when not using AsyncContextFrame.
+   *
+   * Without ACF, super.run() won't call this.enterWith(), so the WeakMap handle
+   * is never created and getStore() would fail.
+   *
    * @template R
-   * @template TArgs = unknown[]
+   * @template {unknown[]} TArgs
    * @param {Store<unknown>} store
-   * @param {() => R} fn
-   * @param {...TArgs} args
+   * @param {(...args: TArgs) => R} fn
+   * @param {TArgs} args
    * @returns {R}
    * @override
    */
-  run (store, fn, ...args) {
-    const prior = super.getStore()
+  DatadogStorage.prototype.run = function run (store, fn, ...args) {
+    const prior = superGetStore.call(this)
     this.enterWith(store)
     try {
       return Reflect.apply(fn, null, args)
     } finally {
-      super.enterWith(prior)
+      superEnterWith.call(this, prior)
     }
   }
 }
