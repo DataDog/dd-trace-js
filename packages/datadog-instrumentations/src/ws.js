@@ -1,6 +1,6 @@
 'use strict'
 
-const tracingChannel = require('dc-polyfill').tracingChannel
+const { tracingChannel } = /** @type {import('node:diagnostics_channel')} */ (require('dc-polyfill'))
 
 const shimmer = require('../../datadog-shimmer')
 const {
@@ -15,7 +15,50 @@ const closeCh = tracingChannel('ws:close')
 const emitCh = channel('tracing:ws:server:connect:emit')
 // TODO: Add a error channel / handle error events properly.
 
-const eventHandlerMap = new WeakMap()
+/**
+ * @typedef {object} WebSocketServerPrototype
+ * @property {(...args: unknown[]) => unknown} handleUpgrade
+ * @property {(...args: unknown[]) => unknown} emit
+ */
+
+/**
+ * @typedef {{ prototype: WebSocketServerPrototype }} WebSocketServerClass
+ */
+
+/**
+ * @typedef {object} WebSocketPrototype
+ * @property {(...args: unknown[]) => unknown} send
+ * @property {(...args: unknown[]) => unknown} close
+ * @property {(...args: unknown[]) => unknown} setSocket
+ */
+
+/**
+ * @typedef {{ prototype: WebSocketPrototype }} WebSocketClass
+ */
+
+/**
+ * @typedef {object} ReceiverPrototype
+ * @property {(eventName: string, listener: (...args: unknown[]) => unknown) => unknown} on
+ * @property {(eventName: string, listener: (...args: unknown[]) => unknown) => unknown} addListener
+ */
+
+/**
+ * @typedef {{ prototype: ReceiverPrototype }} ReceiverClass
+ */
+
+/**
+ * @typedef {string | Buffer | ArrayBuffer | ArrayBufferView | Blob | Buffer[]} WebSocketMessageData
+ */
+
+/**
+ * @typedef {object} WebSocketInstance
+ * @property {(...args: unknown[]) => unknown} emit
+ * @property {(eventName: string) => number} [listenerCount]
+ * @property {{ _socket?: unknown } | undefined} [_sender]
+ * @property {unknown} [_receiver]
+ */
+
+let kWebSocketSymbol
 
 function wrapHandleUpgrade (handleUpgrade) {
   return function () {
@@ -41,7 +84,9 @@ function wrapHandleUpgrade (handleUpgrade) {
 
 function wrapSend (send) {
   return function wrappedSend (...args) {
-    if (!producerCh.start.hasSubscribers) return send.apply(this, arguments)
+    if (!producerCh.start.hasSubscribers) {
+      return send.apply(this, arguments)
+    }
 
     const [data, options, cb] = arguments
 
@@ -55,7 +100,9 @@ function wrapSend (send) {
 
 function createWrapEmit (emit) {
   return function (title, headers, req) {
-    if (!serverCh.start.hasSubscribers || title !== 'headers') return emit.apply(this, arguments)
+    if (!serverCh.start.hasSubscribers || title !== 'headers') {
+      return emit.apply(this, arguments)
+    }
 
     const ctx = { req }
     ctx.req.resStatus = headers[0].split(' ')[1]
@@ -70,35 +117,42 @@ function createWrapEmit (emit) {
   }
 }
 
-function createWrappedHandler (handler) {
-  return shimmer.wrapFunction(handler, originalHandler => function (data, binary) {
-    const byteLength = dataLength(data)
-
-    const ctx = { data, binary, socket: this._sender?._socket, byteLength }
-
-    return receiverCh.traceSync(originalHandler, ctx, this, data, binary)
-  })
-}
-
-function wrapListener (originalOn) {
-  return function (eventName, handler) {
-    if (eventName === 'message') {
-      // Prevent multiple wrapping of the same handler in case the user adds the listener multiple times
-      const wrappedHandler = eventHandlerMap.get(handler) ?? createWrappedHandler(handler)
-      eventHandlerMap.set(handler, wrappedHandler)
-      return originalOn.call(this, eventName, wrappedHandler)
+/**
+ * @param {Function} setSocket
+ * @returns {(...args: unknown[]) => unknown}
+ */
+/**
+ * @param {Function} on
+ * @returns {(...args: unknown[]) => unknown}
+ */
+function wrapReceiverOn (on) {
+  return function wrappedOn (eventName, handler) {
+    if (eventName !== 'message' || typeof handler !== 'function') {
+      return on.apply(this, arguments)
     }
-    return originalOn.apply(this, arguments)
-  }
-}
 
-function removeListener (originalOff) {
-  return function (eventName, handler) {
-    if (eventName === 'message') {
-      const wrappedHandler = eventHandlerMap.get(handler)
-      return originalOff.call(this, eventName, wrappedHandler)
+    const wrappedHandler = function (data, isBinary) {
+      if (!receiverCh.start.hasSubscribers || !kWebSocketSymbol) {
+        return handler.call(this, data, isBinary)
+      }
+
+      const websocket = /** @type {WebSocketInstance | undefined} */ (this[kWebSocketSymbol])
+      // Avoid receive spans when no one listens to messages.
+      if (websocket && typeof websocket.listenerCount === 'function' && websocket.listenerCount('message') === 0) {
+        return handler.call(this, data, isBinary)
+      }
+      const socket = websocket?._sender?._socket
+      if (!socket) {
+        return handler.call(this, data, isBinary)
+      }
+
+      const byteLength = dataLength(/** @type {WebSocketMessageData} */ (data))
+      const ctx = { data, binary: isBinary, socket, byteLength }
+
+      return receiverCh.traceSync(handler, ctx, this, data, isBinary)
     }
-    return originalOff.apply(this, arguments)
+
+    return on.call(this, eventName, wrappedHandler)
   }
 }
 
@@ -120,7 +174,8 @@ addHook({
   name: 'ws',
   file: 'lib/websocket-server.js',
   versions: ['>=8.0.0'],
-}, ws => {
+}, moduleExports => {
+  const ws = /** @type {WebSocketServerClass} */ (moduleExports)
   shimmer.wrap(ws.prototype, 'handleUpgrade', wrapHandleUpgrade)
   shimmer.wrap(ws.prototype, 'emit', createWrapEmit)
   return ws
@@ -130,20 +185,39 @@ addHook({
   name: 'ws',
   file: 'lib/websocket.js',
   versions: ['>=8.0.0'],
-}, ws => {
+}, moduleExports => {
+  const ws = /** @type {WebSocketClass} */ (moduleExports)
   shimmer.wrap(ws.prototype, 'send', wrapSend)
   shimmer.wrap(ws.prototype, 'close', wrapClose)
-
-  // TODO: Do not wrap these methods. Instead, add a listener to the websocket instance when one is created.
-  // That way it avoids producing too many spans for the same websocket instance and less user code is impacted.
-  shimmer.wrap(ws.prototype, 'on', wrapListener)
-  shimmer.wrap(ws.prototype, 'addListener', wrapListener)
-  shimmer.wrap(ws.prototype, 'off', removeListener)
-  shimmer.wrap(ws.prototype, 'removeListener', removeListener)
 
   return ws
 })
 
+addHook({
+  name: 'ws',
+  file: 'lib/constants.js',
+  versions: ['>=8.0.0'],
+}, moduleExports => {
+  const constants = /** @type {{ kWebSocket?: symbol }} */ (moduleExports)
+  kWebSocketSymbol = constants.kWebSocket
+  return constants
+})
+
+addHook({
+  name: 'ws',
+  file: 'lib/receiver.js',
+  versions: ['>=8.0.0'],
+}, moduleExports => {
+  const Receiver = /** @type {ReceiverClass} */ (moduleExports)
+  shimmer.wrap(Receiver.prototype, 'on', wrapReceiverOn)
+  shimmer.wrap(Receiver.prototype, 'addListener', wrapReceiverOn)
+  return Receiver
+})
+
+/**
+ * @param {WebSocketMessageData} data
+ * @returns {number}
+ */
 function dataLength (data) {
   if (typeof data === 'string') {
     return Buffer.byteLength(data)
@@ -151,5 +225,18 @@ function dataLength (data) {
   if (data instanceof Blob) {
     return data.size
   }
-  return data?.length ?? 0
+  if (ArrayBuffer.isView(data)) {
+    return data.byteLength
+  }
+  if (data instanceof ArrayBuffer) {
+    return data.byteLength
+  }
+  let total = 0
+  if (Array.isArray(data)) {
+    const chunks = /** @type {Buffer[]} */ (data)
+    for (const chunk of chunks) {
+      total += chunk.length
+    }
+  }
+  return total
 }

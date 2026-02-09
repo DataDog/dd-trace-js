@@ -21,12 +21,18 @@ const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'ora
 const workspaces = new Set()
 const externalDeps = new Map()
 
-Object.keys(externals).forEach(external => externals[external].forEach(thing => {
-  if (thing.dep) {
-    const depsArr = externalDeps.get(external)
-    depsArr ? depsArr.push(thing) : externalDeps.set(external, [thing])
+for (const external of Object.keys(externals)) {
+  for (const thing of externals[external]) {
+    if (thing.dep) {
+      const depsArr = externalDeps.get(external)
+      if (depsArr) {
+        depsArr.push(thing)
+      } else {
+        externalDeps.set(external, [thing])
+      }
+    }
   }
-}))
+}
 
 run()
 

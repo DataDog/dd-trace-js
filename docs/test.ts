@@ -434,6 +434,8 @@ span = tracer.startSpan('test', {
     foo: 'bar'
   }
 });
+span = tracer.startSpan('test', { childOf: null })
+span = tracer.startSpan('test', { integrationName: 'testIntegration' })
 
 tracer.trace('test', () => {})
 tracer.trace('test', { tags: { foo: 'bar' } }, () => {})

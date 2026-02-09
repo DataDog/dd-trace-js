@@ -31,11 +31,18 @@ function buildResourceID (subscriptionID, siteName, resourceGroup) {
     .toLowerCase()
 }
 
+/**
+ * @param {Record<string | symbol, unknown>} obj
+ * @returns {Partial<Record<string | symbol, unknown>>}
+ */
 function trimObject (obj) {
-  Object.entries(obj)
-    .filter(([_, value]) => value === undefined)
-    .forEach(([key, _]) => { delete obj[key] })
-  return obj
+  const cleanedObj = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      cleanedObj[key] = value
+    }
+  }
+  return cleanedObj
 }
 
 function buildMetadata () {

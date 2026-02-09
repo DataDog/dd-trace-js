@@ -69,12 +69,12 @@ function buildOperationContext (schema, operationDocument, operationName) {
   let operationCount = 0
   const fragments = Object.create(null)
   try {
-    operationDocument.definitions.forEach(definition => {
+    for (const definition of operationDocument.definitions) {
       switch (definition.kind) {
         case OPERATION_DEFINITION:
           operationCount++
           if (!operationName && operationCount > 1) {
-            return
+            continue
           }
           if (
             !operationName ||
@@ -87,7 +87,7 @@ function buildOperationContext (schema, operationDocument, operationName) {
           fragments[definition.name.value] = definition
           break
       }
-    })
+    }
   } catch {
     // safety net
   }

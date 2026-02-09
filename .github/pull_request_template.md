@@ -1,4 +1,6 @@
-<ins>**Please make sure your changes are properly tested**!</ins>
+<!-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! -->
+<!-- Please make sure your changes are properly tested -->
+<!-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! -->
 
 ### What does this PR do?
 <!-- A brief description of the change being made with this pull request. -->

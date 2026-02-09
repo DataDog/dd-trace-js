@@ -4,12 +4,14 @@ const vulnerabilities = require('../vulnerabilities')
 const { getNextSecureMark } = require('./secure-marks-generator')
 
 const marks = {}
-Object.keys(vulnerabilities).forEach(vulnerability => {
+for (const vulnerability of Object.keys(vulnerabilities)) {
   marks[vulnerability + '_MARK'] = getNextSecureMark()
-})
+}
 
 let asterisk = 0x0
-Object.values(marks).forEach(mark => { asterisk |= mark })
+for (const mark of Object.values(marks)) {
+  asterisk |= mark
+}
 
 marks.ASTERISK_MARK = asterisk
 marks.CUSTOM_SECURE_MARK = getNextSecureMark()

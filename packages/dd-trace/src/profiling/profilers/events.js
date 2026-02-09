@@ -183,15 +183,15 @@ class FilesystemDecorator {
   decorateSample (sampleInput, item) {
     const labels = sampleInput.label
     const stringTable = this.stringTable
-    Object.entries(item.detail).forEach(([k, v]) => {
-      switch (typeof v) {
+    for (const [key, value] of Object.entries(item.detail)) {
+      switch (typeof value) {
         case 'string':
-          labels.push(labelFromStrStr(stringTable, k, v))
+          labels.push(labelFromStrStr(stringTable, key, value))
           break
         case 'number':
-          labels.push(new Label({ key: stringTable.dedup(k), num: v }))
+          labels.push(new Label({ key: stringTable.dedup(key), num: value }))
       }
-    })
+    }
   }
 }
 
@@ -365,14 +365,18 @@ class DatadogInstrumentationEventSource {
 
   start () {
     if (!this.started) {
-      this.plugins.forEach(p => p.configure({ enabled: true }))
+      for (const plugin of this.plugins) {
+        plugin.configure({ enabled: true })
+      }
       this.started = true
     }
   }
 
   stop () {
     if (this.started) {
-      this.plugins.forEach(p => p.configure({ enabled: false }))
+      for (const plugin of this.plugins) {
+        plugin.configure({ enabled: false })
+      }
       this.started = false
     }
   }
@@ -428,11 +432,15 @@ class EventsProfiler {
   }
 
   start () {
-    this.#eventSources.forEach(s => s.start())
+    for (const source of this.#eventSources) {
+      source.start()
+    }
   }
 
   stop () {
-    this.#eventSources.forEach(s => s.stop())
+    for (const source of this.#eventSources) {
+      source.stop()
+    }
   }
 
   profile (restart, startDate, endDate) {

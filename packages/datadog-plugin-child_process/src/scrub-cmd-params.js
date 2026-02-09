@@ -33,7 +33,7 @@ function getTokensByExpression (expressionTokens) {
   let wipExpressionTokens = []
   let isNewExpression = true
 
-  expressionTokens.forEach(token => {
+  for (const token of expressionTokens) {
     if (isNewExpression) {
       expressionListTokens.push(wipExpressionTokens)
       isNewExpression = false
@@ -45,7 +45,7 @@ function getTokensByExpression (expressionTokens) {
       wipExpressionTokens = []
       isNewExpression = true
     }
-  })
+  }
   return expressionListTokens
 }
 
@@ -56,7 +56,7 @@ function scrubChildProcessCmd (expression) {
   const expressionListTokens = getTokensByExpression(expressionTokens)
 
   const result = []
-  expressionListTokens.forEach((expressionTokens) => {
+  for (const expressionTokens of expressionListTokens) {
     let foundBinary = false
     for (let index = 0; index < expressionTokens.length; index++) {
       const token = expressionTokens[index]
@@ -119,7 +119,7 @@ function scrubChildProcessCmd (expression) {
         }
       }
     }
-  })
+  }
 
   return result
 }

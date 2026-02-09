@@ -154,6 +154,16 @@ jobs:
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
+  body-parser:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: body-parser
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/plugins/upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
   bullmq:
     runs-on: ubuntu-latest
     services:
@@ -672,9 +682,19 @@ jobs:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ldapjs:
-    runs-on: 'ubuntu-latest'
+    runs-on: ubuntu-latest
     env:
       PLUGINS: ldapjs
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  light-my-request:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: 'light-my-request'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
@@ -702,7 +722,7 @@ jobs:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
   lodash:
-    runs-on: 'ubuntu-latest'
+    runs-on: ubuntu-latest
     env:
       PLUGINS: lodash
     steps:
@@ -1056,6 +1076,16 @@ jobs:
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
+
+  passport-http:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: passport-http
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   postgres:
     runs-on: ubuntu-latest

@@ -213,7 +213,9 @@ class DatadogSpan {
   }
 
   addLinks (links) {
-    links.forEach(link => this.addLink(link))
+    for (const link of links) {
+      this.addLink(link)
+    }
     return this
   }
 
@@ -297,23 +299,21 @@ class DatadogSpan {
       }
     }
 
-    Object.entries(attributes).forEach(entry => {
-      const [key, value] = entry
+    for (const [key, value] of Object.entries(attributes)) {
       addArrayOrScalarAttributes(key, value)
-    })
+    }
     return sanitizedAttributes
   }
 
   _sanitizeEventAttributes (attributes = {}) {
     const sanitizedAttributes = {}
 
-    for (const key in attributes) {
-      const value = attributes[key]
+    for (const [key, value] of Object.entries(attributes)) {
       if (Array.isArray(value)) {
         const newArray = []
-        for (const subkey in value) {
-          if (ALLOWED.has(typeof value[subkey])) {
-            newArray.push(value[subkey])
+        for (const subvalue of Object.values(value)) {
+          if (ALLOWED.has(typeof subvalue)) {
+            newArray.push(subvalue)
           } else {
             log.warn('Dropping span event attribute. It is not of an allowed type')
           }

@@ -301,7 +301,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         quarantined: [],
       }
 
-      Object.entries(testManagementTestsForSuite).forEach(([testName, { properties }]) => {
+      for (const [testName, { properties }] of Object.entries(testManagementTestsForSuite)) {
         if (properties?.attempt_to_fix) {
           result.attemptToFix.push(testName)
         }
@@ -311,7 +311,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (properties?.quarantined) {
           result.quarantined.push(testName)
         }
-      })
+      }
 
       return result
     }
@@ -515,6 +515,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
       if (event.name === 'test_done') {
+        const originalError = event.test?.errors?.[0]
         let status = 'pass'
         if (event.test.errors && event.test.errors.length) {
           status = 'fail'
@@ -594,7 +595,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const shouldSetProbe = this.isDiEnabled && willBeRetriedByFailedTestReplay && numTestExecutions === 1
           testErrCh.publish({
             ...ctx.currentStore,
-            error: formatJestError(event.test.errors[0]),
+            error: formatJestError(originalError),
             shouldSetProbe,
             promises,
             finalStatus,
@@ -1319,9 +1320,9 @@ function configureTestEnvironment (readConfigsResult) {
   testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
   // We can't directly use isCodeCoverageEnabled when reporting coverage in `jestAdapterWrapper`
   // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
-  configs.forEach(config => {
+  for (const config of configs) {
     config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
-  })
+  }
 
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
 

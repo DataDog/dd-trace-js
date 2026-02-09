@@ -105,7 +105,7 @@ function wrapParse (parse) {
 
         return ctx.document
       } catch (err) {
-        err.stack
+        void err.stack
         ctx.error = err
         parseErrorCh.publish(ctx)
 
@@ -134,7 +134,7 @@ function wrapValidate (validate) {
         }
         return errors
       } catch (err) {
-        err.stack
+        void err.stack
         ctx.error = err
         validateErrorCh.publish(ctx)
 
@@ -295,12 +295,12 @@ function wrapFields (type) {
 
   patchedTypes.add(type)
 
-  Object.keys(type._fields).forEach(key => {
+  for (const key of Object.keys(type._fields)) {
     const field = type._fields[key]
 
     wrapFieldResolve(field)
     wrapFieldType(field)
-  })
+  }
 }
 
 function wrapFieldResolve (field) {
@@ -321,7 +321,7 @@ function wrapFieldType (field) {
 }
 
 function finishResolvers ({ fields }) {
-  Object.keys(fields).reverse().forEach(key => {
+  for (const key of Object.keys(fields).reverse()) {
     const field = fields[key]
     field.ctx.finishTime = field.finishTime
     field.ctx.field = field
@@ -330,7 +330,7 @@ function finishResolvers ({ fields }) {
       resolveErrorCh.publish(field.ctx)
     }
     finishResolveCh.publish(field.ctx)
-  })
+  }
 }
 
 addHook({ name: '@graphql-tools/executor', versions: ['>=0.0.14'] }, executor => {

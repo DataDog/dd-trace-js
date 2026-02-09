@@ -9,10 +9,19 @@ jobs:
   update-3rdparty-licenses:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+      id-token: write
     env:
       REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
     steps:
+      - name: Mint GitHub App token (octo-sts) for bot PR updates
+        if: github.event.pull_request.user.type == 'Bot' && github.event_name == 'pull_request'
+        uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: update-3rdparty-licenses
+
       - name: Check out PR branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -72,6 +81,7 @@ jobs:
           GITHUB_HEAD_REF: ${{ github.head_ref }}
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           BASE_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
         run: |
           set -e
 
@@ -83,13 +93,28 @@ jobs:
             if [[ "$PR_USER_TYPE" == "Bot" ]] && [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]] && [[ "$PR_HEAD_REPO" == "$BASE_REPO" ]]; then
               echo "🤖 Bot-created PR detected. Auto-committing LICENSE-3rdparty.csv changes..."
 
-              git config --local user.email "action@github.com"
-              git config --local user.name "GitHub Action"
+              expected_head_oid="$(git rev-parse HEAD)"
+              contents="$(base64 -w 0 LICENSE-3rdparty.csv)"
 
-              git add LICENSE-3rdparty.csv
-              git commit -m "Update LICENSE-3rdparty.csv"
+              variables="$(jq -c \
+                --arg repo "$GITHUB_REPOSITORY" \
+                --arg branch "$GITHUB_HEAD_REF" \
+                --arg msg "Update LICENSE-3rdparty.csv" \
+                --arg expected "$expected_head_oid" \
+                --arg path "LICENSE-3rdparty.csv" \
+                --arg contents "$contents" \
+                '{
+                  input: {
+                    branch: { repositoryNameWithOwner: $repo, branchName: $branch },
+                    message: { headline: $msg },
+                    expectedHeadOid: $expected,
+                    fileChanges: { additions: [{ path: $path, contents: $contents }] }
+                  }
+                }'
+              )"
 
-              git push origin HEAD:${GITHUB_HEAD_REF}
+              query='mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid url } } }'
+              gh api graphql -f query="$query" -f variables="$variables" -q '.data.createCommitOnBranch.commit.url' >/dev/null
 
               echo "✅ Successfully committed and pushed LICENSE-3rdparty.csv updates"
             else

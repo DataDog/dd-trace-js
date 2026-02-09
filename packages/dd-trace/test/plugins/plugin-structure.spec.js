@@ -38,6 +38,7 @@ const missingPlugins = [
   'datadog-plugin-vm', // vm does not produce spans
   'datadog-plugin-sequelize', // sequelize does not produce spans
   'datadog-plugin-body-parser', // body-parser does not produce spans
+  'datadog-plugin-light-my-request', // light-my-request does not produce spans
 ]
 
 // instrumentations that do not have a hook, but are still instrumented

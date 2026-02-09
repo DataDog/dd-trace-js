@@ -107,7 +107,8 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       ))
     }
 
-    messages.forEach((msg, i) => {
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i]
       msg.attributes ??= {}
 
       if (!hasTraceContext) {
@@ -136,7 +137,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         )
         DsmPathwayCodec.encode(dataStreamsContext, msg.attributes)
       }
-    })
+    }
 
     ctx.batchSpan = batchSpan
     return ctx.currentStore

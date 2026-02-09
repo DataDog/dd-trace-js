@@ -125,9 +125,9 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
 
   const cleanupOtherListeners = function () {
     socket.removeListener('connect', localListener)
-    events.forEach(event => {
+    for (const event of events) {
       socket.removeListener(event, wrapListener)
-    })
+    }
   }
 
   // TODO: Identify why the connect listener should remove the other listeners.
@@ -137,7 +137,7 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
     events.push('connect')
   }
 
-  events.forEach(event => {
+  for (const event of events) {
     socket.once(event, wrapListener)
-  })
+  }
 }
