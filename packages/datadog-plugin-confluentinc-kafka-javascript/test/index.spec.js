@@ -165,17 +165,11 @@ describe('Plugin', () => {
                 })
               }))
 
-              await withTimeout(
+              await Promise.all([
                 sendMessages(kafka, testTopic, messages),
-                20000,
-                `Timeout: Did not produce message on topic "${testTopic}" within 20000ms`
-              )
-              await withTimeout(
                 consumerReceiveMessagePromise,
-                20000,
-                `Timeout: Did not receive message on topic "${testTopic}" within 20000ms`
-              )
-              return expectedSpanPromise
+                expectedSpanPromise,
+              ])
             })
 
             it('should run the consumer in the context of the consumer span', done => {
@@ -495,19 +489,6 @@ async function sendMessages (kafka, topic, messages) {
     messages,
   })
   await producer.disconnect()
-}
-
-async function withTimeout (promise, timeoutMs, message) {
-  let timeoutId
-  const timeoutPromise = new Promise((resolve, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs)
-  })
-
-  try {
-    return await Promise.race([promise, timeoutPromise])
-  } finally {
-    clearTimeout(timeoutId)
-  }
 }
 
 async function waitForTopicReady (admin, topic, timeoutMs = 20000) {
