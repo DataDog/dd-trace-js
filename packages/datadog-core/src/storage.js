@@ -62,14 +62,14 @@ class DatadogStorage extends AsyncLocalStorage {
 }
 
 // To handle all versions always correct, feature detect AsyncContextFrame and
-// fallback to manual approach if not active.
+// fallback to manual approach if not active. With ACF `run` delegates to
+// `enterWith`, without ACF `run` does not.
 const isACFActive = (() => {
   let active = false
   const als = new AsyncLocalStorage()
-  const orig = als.enterWith
   als.enterWith = () => { active = true }
   als.run(1, () => {})
-  als.enterWith = orig
+  als.disable()
   return active
 })()
 
