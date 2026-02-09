@@ -351,6 +351,11 @@
     {
       "name": "@langchain/classic",
       "versions": [">=1.0"]
+    },
+    {
+      "name": "@langchain/core",
+      "versions": [">=0.1"],
+      "dep": true
     }
   ],
   "ldapjs": [
