@@ -1,7 +1,6 @@
 'use strict'
 
 const dc = require('dc-polyfill')
-const log = require('../../dd-trace/src/log')
 const shimmer = require('../../datadog-shimmer')
 const {
   addHook,
@@ -10,7 +9,6 @@ const {
 const azureFunctionsChannel = dc.tracingChannel('datadog:azure:functions:invoke')
 
 addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (azureFunction) => {
-  log.debug('adding az functions hook OLIVIER')
   const { app } = azureFunction
 
   // Http triggers
