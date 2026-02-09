@@ -9,8 +9,8 @@ class GraphQLResolvePlugin extends TracingPlugin {
   static id = 'graphql'
   static operation = 'resolve'
 
-  start (fieldCtx) {
-    const { info, rootCtx, args, parentField } = fieldCtx
+  start (field) {
+    const { info, rootCtx, args, parentField } = field
 
     // we need to get the parent span to the field if it exists for correct span parenting
     // of nested fields
@@ -24,6 +24,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
       if (!rootCtx[collapsedPathSym]) {
         rootCtx[collapsedPathSym] = {}
       } else if (rootCtx[collapsedPathSym][computedPathString]) {
+        field.finishCtx = field
         return
       }
 
@@ -46,7 +47,9 @@ class GraphQLResolvePlugin extends TracingPlugin {
         'graphql.field.type': info.returnType.name,
         'graphql.source': source,
       },
-    }, fieldCtx)
+    }, field)
+    // make this.finish(fieldCtx) be called before operation execution ends:
+    field.finishCtx = field
 
     if (fieldNode && this.config.variables && fieldNode.arguments) {
       const variables = this.config.variables(info.variableValues)
@@ -66,19 +69,19 @@ class GraphQLResolvePlugin extends TracingPlugin {
       })
     }
 
-    return fieldCtx.currentStore
+    return field.currentStore
   }
 
   constructor (...args) {
     super(...args)
 
-    this.addTraceSub('updateField', (fieldCtx) => {
-      const path = getPath(fieldCtx.info, this.config)
+    this.addTraceSub('updateField', (field) => {
+      const path = getPath(field.info, this.config)
 
       if (!shouldInstrument(this.config, path)) return
 
-      const span = fieldCtx?.currentStore?.span || this.activeSpan
-      fieldCtx.finishTime = span._getTime ? span._getTime() : 0
+      const span = field?.currentStore?.span || this.activeSpan
+      field.finishTime = span._getTime ? span._getTime() : 0
     })
 
     this.resolverStartCh = dc.channel('datadog:graphql:resolver:start')

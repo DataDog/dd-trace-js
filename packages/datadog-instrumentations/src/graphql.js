@@ -164,7 +164,8 @@ function wrapExecute (execute) {
         args,
         docSource: documentSources.get(document),
         source,
-        fields: new Map(), // fields to be published in `finishResolveCh` before finishing execution; keyed by Path
+        fields: new WeakMap(), // fields keyed by their Path object
+        finishContexts: [], // field contexts to be published in `finishResolveCh` before finishing execution
         abortController: new AbortController(), // allow startExecuteCh/startResolveCh subscribers to block execution
       }
 
@@ -177,7 +178,9 @@ function wrapExecute (execute) {
         contexts.set(contextValue, ctx)
 
         return callInAsyncScope(exe, this, arguments, ctx.abortController.signal, (err, res) => {
-          if (finishResolveCh.hasSubscribers) finishResolvers(ctx.fields)
+          if (finishResolveCh.hasSubscribers && ctx.finishContexts.length) {
+            finishResolvers(ctx.finishContexts)
+          }
 
           const error = err || (res && res.errors && res.errors[0])
 
@@ -204,16 +207,20 @@ function wrapResolve (resolve) {
 
     if (!ctx) return resolve.apply(this, arguments)
 
-    const fieldCtx = createField(ctx, info, args)
+    const field = createField(ctx, info, args)
+    ctx.fields.set(info.path, field)
 
-    startResolveCh.publish(fieldCtx)
+    startResolveCh.publish(field)
 
-    ctx.fields.set(info.path, fieldCtx) // register for later publishing in `finishResolveCh` (see `finishResolvers`)
+    if (field.finishCtx) {
+      // register for later publishing in `finishResolveCh` (see `finishResolvers`)
+      ctx.finishContexts.push(field.finishCtx)
+    }
 
     return callInAsyncScope(resolve, this, arguments, ctx.abortController.signal, (err, res) => {
-      fieldCtx.error = err
-      fieldCtx.res = res
-      updateFieldCh.publish(fieldCtx)
+      field.error = err
+      field.res = res
+      updateFieldCh.publish(field)
     })
   }
 
@@ -259,6 +266,7 @@ function createField (rootCtx, info, args) {
     error: null,
     res: null,
     parentField: getParentField(rootCtx, info.path),
+    finishCtx: null, // sometimes populated by GraphQLResolvePlugin in `resolve:start` handler
     finishTime: 0, // populated by GraphQLResolvePlugin in `resolve:updateField` handler
     // currentStore, parentStore - sometimes populated by GraphQLResolvePlugin.startSpan in `resolve:start` handler
   }
@@ -306,12 +314,12 @@ function wrapFieldType (field) {
   wrapFields(unwrappedType)
 }
 
-function finishResolvers (fields) {
-  for (const field of [...fields.values()].reverse()) {
-    if (field.error) {
-      resolveErrorCh.publish(field)
+function finishResolvers (finishContexts) {
+  for (const fieldCtx of finishContexts.reverse()) {
+    if (fieldCtx.error) {
+      resolveErrorCh.publish(fieldCtx)
     }
-    finishResolveCh.publish(field)
+    finishResolveCh.publish(fieldCtx)
   }
 }
 
