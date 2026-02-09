@@ -76,6 +76,7 @@ const {
 const { SAMPLING_PRIORITY } = require('../../ext/tags')
 const { AUTO_KEEP } = require('../../ext/priority')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
 const { NODE_MAJOR } = require('../../version')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../packages/dd-trace/src/constants')
 
@@ -3061,6 +3062,44 @@ describe(`cucumber@${version} commonJS`, () => {
       await Promise.all([
         coverageReportPromise,
         once(childProcess, 'exit'),
+      ])
+    })
+
+    it('sends coverage_upload.request telemetry metric when coverage is uploaded', async () => {
+      receiver.setSettings({
+        coverage_report_upload_enabled: true,
+      })
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+      const telemetryPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+          const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+
+          const coverageUploadMetric = telemetryMetrics.find(
+            ({ metric }) => metric === TELEMETRY_COVERAGE_UPLOAD
+          )
+
+          assert.ok(coverageUploadMetric, 'coverage_upload.request telemetry metric should be sent')
+        })
+
+      const runTestsWithLcovCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=lcov ${runTestsCommand}`
+
+      childProcess = exec(
+        runTestsWithLcovCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+            DD_GIT_COMMIT_SHA: gitCommitSha,
+            DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        telemetryPromise,
       ])
     })
 
