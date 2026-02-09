@@ -245,6 +245,9 @@ class MochaPlugin extends CiPlugin {
             isNew: spanTags[TEST_IS_NEW] === 'true',
             isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
             browserDriver: spanTags[TEST_BROWSER_DRIVER],
+            isQuarantined: spanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' || undefined,
+            isDisabled: spanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true' || undefined,
+            isModified: spanTags[TEST_IS_MODIFIED] === 'true' || undefined,
           }
         )
 
@@ -319,6 +322,9 @@ class MochaPlugin extends CiPlugin {
             isNew: spanTags[TEST_IS_NEW] === 'true',
             isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
             browserDriver: spanTags[TEST_BROWSER_DRIVER],
+            isQuarantined: spanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' || undefined,
+            isDisabled: spanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true' || undefined,
+            isModified: spanTags[TEST_IS_MODIFIED] === 'true' || undefined,
           }
         )
         if (isFirstAttempt && willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {

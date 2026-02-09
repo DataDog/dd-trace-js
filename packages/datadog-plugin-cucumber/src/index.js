@@ -368,6 +368,9 @@ class CucumberPlugin extends CiPlugin {
         isNew,
         isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
         browserDriver: spanTags[TEST_BROWSER_DRIVER],
+        isQuarantined: isQuarantined || undefined,
+        isDisabled: isDisabled || undefined,
+        isModified: isModified || undefined,
       }
       span.finish()
       if (!isStep) {

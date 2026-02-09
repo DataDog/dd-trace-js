@@ -208,6 +208,9 @@ class VitestPlugin extends CiPlugin {
       if (span) {
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
           hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS],
+          isQuarantined: span.context()._tags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' || undefined,
+          isDisabled: span.context()._tags[TEST_MANAGEMENT_IS_DISABLED] === 'true' || undefined,
+          isModified: span.context()._tags[TEST_IS_MODIFIED] === 'true' || undefined,
         })
         span.setTag(TEST_STATUS, 'pass')
         span.finish(this.taskToFinishTime.get(task))
@@ -238,6 +241,9 @@ class VitestPlugin extends CiPlugin {
       }
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
         hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS],
+        isQuarantined: span.context()._tags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' || undefined,
+        isDisabled: span.context()._tags[TEST_MANAGEMENT_IS_DISABLED] === 'true' || undefined,
+        isModified: span.context()._tags[TEST_IS_MODIFIED] === 'true' || undefined,
       })
       span.setTag(TEST_STATUS, 'fail')
 
@@ -274,6 +280,9 @@ class VitestPlugin extends CiPlugin {
       )
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
         hasCodeowners: !!testSpan.context()._tags[TEST_CODE_OWNERS],
+        isQuarantined: testSpan.context()._tags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' || undefined,
+        isDisabled: isDisabled || undefined,
+        isModified: testSpan.context()._tags[TEST_IS_MODIFIED] === 'true' || undefined,
       })
       testSpan.finish()
     })

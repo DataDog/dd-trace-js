@@ -5,6 +5,18 @@ const id = require('../../id')
 const { getValueFromEnvSources } = require('../../config/helper')
 const log = require('../../log')
 
+const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_TEST_MANAGEMENT_TESTS,
+  TELEMETRY_TEST_MANAGEMENT_TESTS_MS,
+  TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS,
+  TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS,
+  TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES,
+} = require('../telemetry')
+
+const { getNumFromKnownTests } = require('../../plugins/util/test')
+
 function getTestManagementTests ({
   url,
   isEvpProxy,
@@ -58,12 +70,23 @@ function getTestManagementTests ({
 
   log.debug('Requesting test management tests: %s', data)
 
-  request(data, options, (err, res) => {
+  incrementCountMetric(TELEMETRY_TEST_MANAGEMENT_TESTS)
+
+  const startTime = Date.now()
+
+  request(data, options, (err, res, statusCode) => {
+    distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_MS, {}, Date.now() - startTime)
     if (err) {
+      incrementCountMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS, { statusCode })
       done(err)
     } else {
       try {
         const { data: { attributes: { modules: testManagementTests } } } = JSON.parse(res)
+
+        const numTests = getNumFromKnownTests(testManagementTests)
+
+        incrementCountMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS, {}, numTests)
+        distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES, {}, res.length)
 
         log.debug('Test management tests received: %j', testManagementTests)
 
