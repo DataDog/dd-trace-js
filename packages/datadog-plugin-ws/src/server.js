@@ -1,5 +1,6 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 const tags = require('../../../ext/tags.js')
 const { HTTP_HEADERS } = require('../../../ext/formats')
@@ -16,6 +17,21 @@ class WSServerPlugin extends TracingPlugin {
   static get prefix () { return 'tracing:ws:server:connect' }
   static get type () { return 'websocket' }
   static get kind () { return 'request' }
+
+  constructor (...args) {
+    super(...args)
+
+    // Bind the setSocket channel so internal ws event handlers (data, close)
+    // don't capture the connection span in their async context.
+    this.addBind('tracing:ws:server:connect:setSocket', () => {
+      const store = storage('legacy').getStore()
+      if (store?.span) {
+        const { span: _, ...storeWithoutSpan } = store
+        return storeWithoutSpan
+      }
+      return store
+    })
+  }
 
   bindStart (ctx) {
     const req = ctx.req
