@@ -61,7 +61,6 @@ class DatadogStorage extends AsyncLocalStorage {
   }
 }
 
-
 // To handle all versions always correct, feature detect AsyncContextFrame and
 // fallback to manual approach if not active.
 const isACFActive = (() => {
@@ -130,4 +129,4 @@ function storage (namespace) {
   return storages[namespace]
 }
 
-module.exports = { storage }
+module.exports = { storage, isACFActive }

@@ -15,6 +15,7 @@ const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking
 
 const { prepareTestServerForIast } = require('../utils')
 const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
+const { isACFActive } = require('../../../../../datadog-core/src/storage')
 
 const iastContext = {
   rootSpan: {
@@ -499,7 +500,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
         const callArgs = [fsAsyncWayMethodPath]
         callArgs[0] = newTaintedString(iastCtx, callArgs[0], 'param', 'Request')
         return require(fsAsyncWayMethodPath).doubleCallIgnoringCb('stat', callArgs)
-      }, 'PATH_TRAVERSAL', { occurrences: 2 })
+      }, 'PATH_TRAVERSAL', { occurrences: isACFActive ? 1 : 2 })
     })
   })
 
