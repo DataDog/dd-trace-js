@@ -8,7 +8,7 @@ const tracer = require('../../')
 const SpanContext = require('./span_context')
 
 function mergeGlobalBaggageWith (baggages) {
-  const combinedBaggages = baggages || {}
+  const combinedBaggages = structuredClone(baggages) || {}
   const globalActiveBaggages = getAllBaggageItems()
   for (const [key, value] of Object.entries(globalActiveBaggages)) {
     if (!combinedBaggages[key]) combinedBaggages[key] = value
