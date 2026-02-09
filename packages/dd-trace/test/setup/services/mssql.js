@@ -1,10 +1,11 @@
 'use strict'
 
 const RetryOperation = require('../operation')
-const tedious = require('../../../../../versions/tedious').get()
 
 function waitForMssql () {
-  return new Promise((resolve, reject) => {
+  const tedious = require('../../../../../versions/tedious').get()
+
+  return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
     const operation = new RetryOperation('mssql')
 
     operation.attempt(currentAttempt => {
@@ -36,7 +37,7 @@ function waitForMssql () {
       })
       connection.connect()
     })
-  })
+  }))
 }
 
 module.exports = waitForMssql

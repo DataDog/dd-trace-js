@@ -24,15 +24,6 @@ const prismaHelperInit = channel('apm:prisma:helper:init')
  */
 
 /**
- * @typedef {object} DbConfigInput
- * @property {string|undefined} [user]
- * @property {string|undefined} [password]
- * @property {string|undefined} [host]
- * @property {string|number|undefined} [port]
- * @property {string|undefined} [database]
- */
-
-/**
  * @typedef {object} DbConfig
  * @property {string|undefined} [user]
  * @property {string|undefined} [password]
@@ -65,11 +56,17 @@ const prismaHelperInit = channel('apm:prisma:helper:init')
  */
 
 /**
+ * @typedef {object} PrismaHelperCtx
+ * @property {DbConfig} [dbConfig]
+ * @property {import('../../datadog-plugin-prisma/src/datadog-tracing-helper')} [helper]
+ */
+
+/**
  * @param {string|EnvValue|undefined} envValue
  * @returns {string|undefined}
  */
 function resolveEnvValue (envValue) {
-  return typeof envValue === 'object'
+  return typeof envValue === 'object' && envValue
     ? (envValue.value || getEnvironmentVariable(envValue.fromEnvVar ?? ''))
     : envValue
 }
@@ -87,11 +84,11 @@ function resolveDatasourceUrl (config, datasourceName) {
 }
 
 /**
- * @param {DbConfigInput} dbConfig
+ * @param {DbConfig} dbConfig
  * @returns {DbConfig|undefined}
  */
 function normalizeDbConfig (dbConfig) {
-  dbConfig.port = dbConfig.port ? `${dbConfig.port}` : undefined
+  dbConfig.port = dbConfig.port == null ? undefined : String(dbConfig.port)
   const hasValues = dbConfig.user || dbConfig.password || dbConfig.host || dbConfig.port || dbConfig.database
   return hasValues ? dbConfig : undefined
 }
@@ -101,12 +98,20 @@ function normalizeDbConfig (dbConfig) {
  * @returns {DbConfig|undefined}
  */
 function resolveAdapterDbConfig (adapter) {
-  if (!adapter) return
-  const adapterConfig = adapter.config || adapter.externalPool?.options
-  if (!adapterConfig) return
-  if (typeof adapterConfig === 'string') return parseDBString(adapterConfig)
+  const adapterConfig = adapter?.config || adapter?.externalPool?.options
+  if (!adapterConfig) {
+    return
+  }
+
+  if (typeof adapterConfig === 'string') {
+    return parseDBString(adapterConfig)
+  }
+
   const parsed = parseDBString(adapterConfig.connectionString)
-  if (parsed) return parsed
+  if (parsed) {
+    return parsed
+  }
+
   return normalizeDbConfig({
     user: adapterConfig.user,
     password: adapterConfig.password,
@@ -136,11 +141,19 @@ function resolveClientDbConfig (clientConfig, datasourceName, runtimeDbConfig) {
  * @returns {object}
  */
 const prismaHook = (runtime, versions, name, isIitm) => {
-  const prismaRuntime = /** @type {{ getPrismaClient?: (...args: unknown[]) => Function }} */ (runtime)
+  /**
+   * @typedef {{ getPrismaClient?: (config: PrismaRuntimeConfig, ...args: unknown[]) => Function }} PrismaRuntime
+   */
+  const prismaRuntime = /** @type {PrismaRuntime} */ (runtime)
   const originalGetPrismaClient = prismaRuntime.getPrismaClient
 
-  if (!originalGetPrismaClient) return runtime
+  if (!originalGetPrismaClient) {
+    return runtime
+  }
 
+  /**
+   * @param {PrismaRuntimeConfig|undefined} config
+   */
   const wrappedGetPrismaClient = function (config) {
     const datasourceName = config?.datasourceNames?.[0] || 'db'
     const runtimeDatasourceUrl = resolveDatasourceUrl(config, datasourceName)
@@ -150,6 +163,9 @@ const prismaHook = (runtime, versions, name, isIitm) => {
     return class WrappedPrismaClientClass extends PrismaClient {
       constructor (clientConfig) {
         super(clientConfig)
+        /**
+         * @type {PrismaHelperCtx}
+         */
         const prismaHelperCtx = {
           dbConfig: resolveClientDbConfig(clientConfig, datasourceName, runtimeDbConfig),
         }
@@ -192,9 +208,14 @@ for (const config of prismaConfigs) {
  * @returns {DbConfig|undefined}
  */
 function parseDBString (dbString) {
-  if (!dbString || typeof dbString !== 'string') return
+  if (!dbString || typeof dbString !== 'string') {
+    return
+  }
+
   const sqlServerConfig = parseSqlServerConnectionString(dbString)
-  if (sqlServerConfig) return sqlServerConfig
+  if (sqlServerConfig) {
+    return sqlServerConfig
+  }
 
   try {
     const url = new URL(dbString)
@@ -213,9 +234,13 @@ function parseDBString (dbString) {
  * @returns {DbConfig|undefined}
  */
 function parseSqlServerConnectionString (dbString) {
-  if (!dbString.startsWith('sqlserver://')) return
+  if (!dbString.startsWith('sqlserver://')) {
+    return
+  }
   const segments = dbString.slice(12).split(';').filter(Boolean)
-  if (!segments.length) return
+  if (!segments.length) {
+    return
+  }
 
   let hostPart = segments.shift()
   let user
@@ -231,7 +256,9 @@ function parseSqlServerConnectionString (dbString) {
     const [rawKey, ...rawValue] = segment.split('=')
     const value = rawValue.join('=').trim()
     const key = rawKey?.trim().toLowerCase()
-    if (!key || !value) continue
+    if (!key || !value) {
+      continue
+    }
     if (key === 'database' || key === 'databasename' || key === 'db') database = value
     else if (key === 'user' || key === 'username' || key === 'uid') user = value
     else if (key === 'password' || key === 'pwd') password = value

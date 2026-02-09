@@ -10,21 +10,12 @@ const allowedClientSpanOperations = new Set([
   'transaction',
 ])
 
-/**
- * @typedef {object} DbConfig
- * @property {string} [user]
- * @property {string} [password]
- * @property {string} [host]
- * @property {string} [port]
- * @property {string} [database]
- */
-
 class DatadogTracingHelper {
   #prismaClient
   #dbConfig
 
   /**
-   * @param {DbConfig|undefined} dbConfig
+   * @param {import('../../datadog-instrumentations/src/prisma').DbConfig|undefined} dbConfig
    * @param {import('./index')} prismaClient
    */
   constructor (dbConfig, prismaClient) {
@@ -66,7 +57,9 @@ class DatadogTracingHelper {
    * @param {object[]} spans
    */
   dispatchEngineSpans (spans) {
-    if (!spans?.length) return
+    if (!spans?.length) {
+      return
+    }
     const childrenByParent = new Map()
     for (const span of spans) {
       const parentId = span.parentId
@@ -79,7 +72,9 @@ class DatadogTracingHelper {
     }
 
     const roots = childrenByParent.get(null)
-    if (!roots) return
+    if (!roots) {
+      return
+    }
     for (const span of roots) {
       this.#prismaClient.startEngineSpan({ engineSpan: span, childrenByParent, dbConfig: this.#dbConfig })
     }
@@ -92,7 +87,7 @@ class DatadogTracingHelper {
 
   /**
    * @param {object} options
-   * @param {function} callback
+   * @param {Function} callback
    * @returns {unknown}
    */
   runInChildSpan (options, callback) {

@@ -15,8 +15,8 @@ const {
   assertObjectContains,
   varySandbox,
 } = require('../../../../integration-tests/helpers')
-const mongodb = require('../../../../versions/mongodb').get()
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const externals = require('../../../dd-trace/test/plugins/externals')
 const waitForMongoReplicaSet = require('../../../dd-trace/test/setup/services/mongo-replica-set')
 const waitForMssql = require('../../../dd-trace/test/setup/services/mssql')
 const {
@@ -45,7 +45,8 @@ function getMongoDbName (dbUrl) {
  * @returns {Promise<void>}
  */
 async function resetMongoDb (dbUrl) {
-  const client = new mongodb.MongoClient(dbUrl)
+  const { MongoClient } = require('../../../../versions/mongodb').get()
+  const client = new MongoClient(dbUrl)
   try {
     await client.connect()
     const dbName = getMongoDbName(dbUrl)
@@ -143,7 +144,6 @@ const prismaClientConfigs = [{
     DATABASE_URL: TEST_MARIADB_DATABASE_URL,
   },
   ts: true,
-  adapterDeps: ['@prisma/adapter-mariadb', 'mariadb'],
   variant: 'star',
   dbSpan: {
     name: 'mariadb.query',
@@ -165,9 +165,7 @@ const prismaClientConfigs = [{
     DATABASE_URL: TEST_MSSQL_DATABASE_URL,
   },
   ts: true,
-  adapterDeps: ['@prisma/adapter-mssql', 'tedious'],
   waitForService: waitForMssql,
-  skip: () => process.arch === 'arm64',
   variant: 'destructure',
   dbSpan: {
     name: 'mssql.query',
@@ -190,9 +188,7 @@ const prismaClientConfigs = [{
     PRISMA_MSSQL_ADAPTER_CONFIG: 'fields',
   },
   ts: true,
-  adapterDeps: ['@prisma/adapter-mssql', 'tedious'],
   waitForService: waitForMssql,
-  skip: () => process.arch === 'arm64',
   variant: 'star',
   dbSpan: {
     name: 'mssql.query',
@@ -227,12 +223,13 @@ describe('esm', () => {
 
         if (isPrismaV7) paths.push(config.configFile)
 
-        const deps = [`prisma@${version}`, `@prisma/client@${version}`, 'typescript']
-        if (isPrismaV7) {
-          if (config.adapterDeps?.length) {
-            deps.push(...config.adapterDeps)
-          } else {
-            deps.push('@prisma/adapter-pg')
+        const deps = [`@prisma/client@${version}`]
+        for (const ext of externals['@prisma/client']) {
+          if (ext.node && !semifies(semver.clean(process.version), ext.node)) continue
+          if (ext.dep === '@prisma/client') {
+            deps.push(`${ext.name}@${version}`)
+          } else if (ext.dep || isPrismaV7 && ext.node) {
+            deps.push(ext.name)
           }
         }
         useSandbox(deps, false, paths)
@@ -299,7 +296,7 @@ describe('esm', () => {
 
         afterEach(async () => {
           proc?.kill()
-          await agent.stop()
+          await agent?.stop()
         })
 
         const variant = config.variant

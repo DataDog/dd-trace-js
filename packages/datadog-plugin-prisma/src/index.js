@@ -32,7 +32,9 @@ class PrismaPlugin extends DatabasePlugin {
     super(...args)
 
     // Subscribe to helper initialization to inject callbacks
-    this.addSub('apm:prisma:helper:init', (prismaHelperCtx) => {
+    this.addSub('apm:prisma:helper:init', (ctx) => {
+      const prismaHelperCtx =
+        /** @type {import('../../datadog-instrumentations/src/prisma').PrismaHelperCtx} */ (ctx)
       prismaHelperCtx.helper = new DatadogTracingHelper(prismaHelperCtx.dbConfig, this)
     })
   }
@@ -71,7 +73,7 @@ class PrismaPlugin extends DatabasePlugin {
 
     const activeSpan = this.startSpan(this.operationName({ operation: 'engine' }), options)
     activeSpan._startTime = hrTimeToUnixTimeMs(engineSpan.startTime)
-    const children = childrenByParent?.get(engineSpan.id)
+    const children = childrenByParent.get(engineSpan.id)
     if (children) {
       for (const span of children) {
         const startCtx = { engineSpan: span, childrenByParent, childOf: activeSpan, dbConfig }

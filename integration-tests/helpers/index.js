@@ -537,23 +537,23 @@ async function createSandbox (
 function varySandbox (filename, variants, namedExport, packageName, byPassDefault) {
   if (typeof variants === 'string') {
     const bindingName = variants
-    const resolvedPackageName = packageName || bindingName
+    const resolvedName = packageName || bindingName
     // Default namedVariant to bindingName when bypassing default export
     if (byPassDefault && !namedExport) namedExport = bindingName
     variants = byPassDefault
       ? {
           // eslint-disable-next-line @stylistic/max-len
-          star: `import * as mod${bindingName} from '${resolvedPackageName}'; const ${bindingName} = mod${bindingName}.${namedExport}`,
-          destructure: `import { ${namedExport} } from '${resolvedPackageName}'`,
+          star: `import * as mod${bindingName} from '${resolvedName}'; const ${bindingName} = mod${bindingName}.${namedExport}`,
+          destructure: `import { ${namedExport} } from '${resolvedName}'`,
         }
       : {
-          default: `import ${bindingName} from '${resolvedPackageName}'`,
+          default: `import ${bindingName} from '${resolvedName}'`,
           star: namedExport
-            ? `import * as ${bindingName} from '${resolvedPackageName}'`
-            : `import * as mod${bindingName} from '${resolvedPackageName}'; const ${bindingName} = mod${bindingName}.default`,
+            ? `import * as ${bindingName} from '${resolvedName}'`
+            : `import * as mod${bindingName} from '${resolvedName}'; const ${bindingName} = mod${bindingName}.default`,
           destructure: namedExport
-            ? `import { ${namedExport} } from '${resolvedPackageName}'; const ${bindingName} = { ${namedExport} }`
-            : `import { default as ${bindingName}} from '${resolvedPackageName}'`,
+            ? `import { ${namedExport} } from '${resolvedName}'; const ${bindingName} = { ${namedExport} }`
+            : `import { default as ${bindingName}} from '${resolvedName}'`,
         }
   }
 
