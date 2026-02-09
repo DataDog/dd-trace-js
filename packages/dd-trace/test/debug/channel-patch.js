@@ -1,33 +1,28 @@
 'use strict'
 
-// Prevent double-patching when loaded multiple times
-if (globalThis._ddChannelDebugPatched) return
-globalThis._ddChannelDebugPatched = true
+// Loaded for side effects only (via --require or require()).
+// Patches diagnostic channels, shimmer, rewriter, and span lifecycle for debug logging.
 
 const dc = require('node:diagnostics_channel')
 const { performance } = require('node:perf_hooks')
+const { inspect } = require('node:util')
 
 // Config
 const filter = process.env.TEST_CHANNEL_FILTER || ''
 const showData = process.env.TEST_CHANNEL_SHOW_DATA === 'true'
 const verbose = process.env.TEST_CHANNEL_VERBOSE === 'true'
-const noColor = (!process.stderr.isTTY && process.env.FORCE_COLOR !== '1') || process.env.NO_COLOR
+const useColor = process.env.NO_COLOR
+  ? false
+  : (process.stderr.hasColors?.() || process.env.FORCE_COLOR === '1')
 const startTime = performance.now()
 
-// Colors (disabled when not TTY)
-const id = s => s
-const c = noColor
-  ? { cyan: id, yellow: id, green: id, gray: id, blue: id, red: id, magenta: id, white: id }
-  : {
-      cyan: s => `\x1b[36m${s}\x1b[0m`,
-      yellow: s => `\x1b[33m${s}\x1b[0m`,
-      green: s => `\x1b[32m${s}\x1b[0m`,
-      gray: s => `\x1b[90m${s}\x1b[0m`,
-      blue: s => `\x1b[34m${s}\x1b[0m`,
-      red: s => `\x1b[31m${s}\x1b[0m`,
-      magenta: s => `\x1b[35m${s}\x1b[0m`,
-      white: s => `\x1b[37m${s}\x1b[0m`,
-    }
+// Colors via util.inspect.colors (disabled when not TTY or NO_COLOR is set)
+const c = {}
+for (const name of ['cyan', 'yellow', 'green', 'gray', 'blue', 'red', 'magenta', 'white']) {
+  if (!useColor) { c[name] = s => s; continue }
+  const [open, close] = inspect.colors[name]
+  c[name] = s => `\x1b[${open}m${s}\x1b[${close}m`
+}
 
 const INDENT = '                    ' // 20 spaces to clear mocha indentation
 const SEP = c.gray('────────────────────')
@@ -108,74 +103,66 @@ if (dc.unsubscribe) {
 }
 /* eslint-enable n/no-unsupported-features/node-builtins */
 
-// TracingChannel patching (dc-polyfill) - direct require, no ritm needed
-try {
-  const dcPolyfill = require('dc-polyfill')
-  const orig = dcPolyfill.tracingChannel
-  dcPolyfill.tracingChannel = function (name) {
-    const tc = orig.call(this, name)
-    for (const m of ['traceSync', 'tracePromise', 'traceCallback']) {
-      const fn = tc[m]
-      if (fn) {
-        tc[m] = function (...args) {
-          if (!match(name)) return fn.apply(this, args)
-          const t = performance.now()
-          const r = fn.apply(this, args)
-          const dur = (performance.now() - t).toFixed(2) + 'ms'
-          log(`${ts()} ${c.magenta(`[${m.toUpperCase()}]`)} ${c.cyan(name)} ${c.gray(dur)}`)
-          return r
-        }
+// TracingChannel patching (dc-polyfill provides TracingChannel for Node <20)
+const dcPolyfill = require('dc-polyfill')
+const origTracingChannel = dcPolyfill.tracingChannel
+dcPolyfill.tracingChannel = function (name) {
+  const tc = origTracingChannel.call(this, name)
+  for (const m of ['traceSync', 'tracePromise', 'traceCallback']) {
+    const fn = tc[m]
+    if (fn) {
+      tc[m] = function (...args) {
+        if (!match(name)) return fn.apply(this, args)
+        const t = performance.now()
+        const r = fn.apply(this, args)
+        const dur = (performance.now() - t).toFixed(2) + 'ms'
+        log(`${ts()} ${c.magenta(`[${m.toUpperCase()}]`)} ${c.cyan(name)} ${c.gray(dur)}`)
+        return r
       }
     }
-    return tc
   }
-} catch {}
+  return tc
+}
 
-// Shimmer patching - direct require, no ritm needed
-try {
-  const shimmer = require('datadog-shimmer')
-  const origWrap = shimmer.wrap
-  shimmer.wrap = function (obj, method, wrapper) {
-    const name = obj?.constructor?.name || typeof obj
-    if (match(method) || match(name)) log(`${ts()} ${c.magenta('[WRAP]')} ${c.yellow(name)}.${c.cyan(method)}`)
-    return origWrap.call(this, obj, method, wrapper)
-  }
-  if (shimmer.massWrap) {
-    const origMass = shimmer.massWrap
-    shimmer.massWrap = function (obj, methods, wrapper) {
-      const name = obj?.constructor?.name || typeof obj
-      for (const m of methods) {
-        if (match(m) || match(name)) log(`${ts()} ${c.magenta('[WRAP]')} ${c.yellow(name)}.${c.cyan(m)}`)
-      }
-      return origMass.call(this, obj, methods, wrapper)
+// Shimmer patching
+const shimmer = require('../../../datadog-shimmer')
+const origWrap = shimmer.wrap
+shimmer.wrap = function (obj, method, wrapper) {
+  const name = inspect(obj, { depth: -1 })
+  if (match(method) || match(name)) log(`${ts()} ${c.magenta('[WRAP]')} ${c.yellow(name)}.${c.cyan(method)}`)
+  return origWrap.call(this, obj, method, wrapper)
+}
+if (shimmer.massWrap) {
+  const origMass = shimmer.massWrap
+  shimmer.massWrap = function (obj, methods, wrapper) {
+    const name = inspect(obj, { depth: -1 })
+    for (const m of methods) {
+      if (match(m) || match(name)) log(`${ts()} ${c.magenta('[WRAP]')} ${c.yellow(name)}.${c.cyan(m)}`)
     }
+    return origMass.call(this, obj, methods, wrapper)
   }
-} catch {}
+}
 
 // Rewriter patching - log when code gets rewritten by orchestrion
-let instrumentations = []
-try { instrumentations = require('../../../datadog-instrumentations/src/helpers/rewriter/instrumentations') } catch {}
-
-try {
-  const rewriter = require('../../../datadog-instrumentations/src/helpers/rewriter')
-  const orig = rewriter.rewrite
-  rewriter.rewrite = function (content, filename, format) {
-    const result = orig.call(this, content, filename, format)
-    if (result !== content) {
-      const file = filename.replace('file://', '')
-      for (const { functionQuery = {}, module: mod, channelName } of instrumentations) {
-        if (!file.endsWith(`${mod.name}/${mod.filePath}`)) continue
-        const { className, methodName, kind } = functionQuery
-        const target = className ? `${className}.${methodName}` : methodName || channelName
-        if (match(mod.name) || match(target) || match(channelName)) {
-          const op = kind === 'Async' ? 'tracePromise' : kind === 'Callback' ? 'traceCallback' : 'traceSync'
-          log(`${SEP}\n${ts()} ${c.magenta('[REWRITE]')} ${c.cyan(mod.name)} ${c.yellow(target)} ${c.blue(op)}`)
-        }
+const instrumentations = require('../../../datadog-instrumentations/src/helpers/rewriter/instrumentations')
+const rewriter = require('../../../datadog-instrumentations/src/helpers/rewriter')
+const origRewrite = rewriter.rewrite
+rewriter.rewrite = function (content, filename, format) {
+  const result = origRewrite.call(this, content, filename, format)
+  if (result !== content) {
+    const file = filename.replace('file://', '')
+    for (const { functionQuery = {}, module: mod, channelName } of instrumentations) {
+      if (!file.endsWith(`${mod.name}/${mod.filePath}`)) continue
+      const { className, methodName, kind } = functionQuery
+      const target = className ? `${className}.${methodName}` : methodName || channelName
+      if (match(mod.name) || match(target) || match(channelName)) {
+        const op = kind === 'Async' ? 'tracePromise' : kind === 'Callback' ? 'traceCallback' : 'traceSync'
+        log(`${SEP}\n${ts()} ${c.magenta('[REWRITE]')} ${c.cyan(mod.name)} ${c.yellow(target)} ${c.blue(op)}`)
       }
     }
-    return result
   }
-} catch {}
+  return result
+}
 
 // Span lifecycle logging
 const SKIP_TAGS = new Set(['runtime-id', 'process_id', 'service.name', 'resource.name', 'span.kind', 'error'])
@@ -228,7 +215,7 @@ log(`${c.green('[channel-debug]')} Filter: ${filter || '(all)'} | Verbose: ${ver
 log(SEP)
 
 // Prefix mocha output to distinguish from debug logs
-const marker = noColor ? '>>> ' : '\x1b[33;1m>>> \x1b[0m'
+const marker = useColor ? '\x1b[33;1m>>> \x1b[0m' : '>>> '
 const origWrite = process.stdout.write.bind(process.stdout)
 process.stdout.write = function (chunk, enc, cb) {
   const str = typeof chunk === 'string' ? chunk : chunk.toString()

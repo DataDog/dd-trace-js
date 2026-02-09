@@ -22,6 +22,7 @@ TEST_CHANNEL_DEBUG=true TEST_CHANNEL_SHOW_DATA=true PLUGINS=http yarn test:plugi
 | `TEST_CHANNEL_DEBUG` | Enable debug logging | `true` |
 | `TEST_CHANNEL_FILTER` | Filter pattern (supports `*` wildcards) | `*bullmq*`, `apm:express*`, `*:start` |
 | `TEST_CHANNEL_SHOW_DATA` | Show channel message payloads | `true` |
+| `TEST_CHANNEL_VERBOSE` | Show span tags in lifecycle logs | `true` |
 | `NO_COLOR` | Disable colored output | `1` |
 | `FORCE_COLOR` | Force colored output (for non-TTY) | `1` |
 
@@ -39,12 +40,6 @@ Logged when a message is published to a channel. Shows `(no subscribers)` if nob
 [+644ms] [PUB] tracing:orchestrion:bullmq:Queue_add:end (no subscribers)
 ```
 
-### `[RUN]` - Channel runStores
-Logged when `channel.runStores()` is called, with execution time.
-```
-[+234ms] [RUN] apm:express:middleware:start 0.45ms
-```
-
 ### `[TRACEPROMISE]` / `[TRACESYNC]` / `[TRACECALLBACK]` - TracingChannel
 Logged when tracing channel methods are called.
 ```
@@ -54,16 +49,15 @@ Logged when tracing channel methods are called.
 ### `[WRAP]` - Shimmer Wrap
 Logged when shimmer wraps a function.
 ```
-[+312ms] [WRAP] Router.use
+[+312ms] [WRAP] [Router].use
 ```
 
 ### `[REWRITE]` - Code Rewrite
 Logged when the orchestrion-style rewriter transforms code.
 ```
-[+511ms] [REWRITE] bullmq Queue.add tracePromise dist/cjs/classes/queue.js
-[+520ms] [REWRITE] bullmq Worker.callProcessJob tracePromise dist/esm/classes/worker.js
+[+511ms] [REWRITE] bullmq Queue.add tracePromise
+[+520ms] [REWRITE] bullmq Worker.callProcessJob tracePromise
 ```
-Format: `[REWRITE] <module> <Class.method> <operator> <filePath>`
 
 ### `[SPAN:START]` / `[SPAN:END]` - Span Lifecycle
 Logged when spans are created and finished. Includes a short span ID (last 8 hex chars) for correlating parallel spans.
@@ -85,7 +79,7 @@ The filter supports simple wildcard matching:
 | `bullmq` | Contains "bullmq" (default) |
 
 The filter applies to:
-- Channel names for SUB/PUB/RUN events
+- Channel names for SUB/PUB events
 - TracingChannel names
 - Module/method names for WRAP events
 - Module/target names for REWRITE events
@@ -109,11 +103,11 @@ NO_COLOR=1 TEST_CHANNEL_DEBUG=true PLUGINS=bullmq yarn test:plugins
 ## Example Output
 
 ```
-[channel-debug] Filter: *bullmq*
-[+274ms] [REWRITE] bullmq FlowProducer.add tracePromise dist/cjs/classes/flow-producer.js
-[+286ms] [REWRITE] bullmq Queue.add tracePromise dist/cjs/classes/queue.js
-[+286ms] [REWRITE] bullmq Queue.addBulk tracePromise dist/cjs/classes/queue.js
-[+294ms] [REWRITE] bullmq Worker.callProcessJob tracePromise dist/cjs/classes/worker.js
+[channel-debug] Filter: *bullmq* | Verbose: false
+[+274ms] [REWRITE] bullmq FlowProducer.add tracePromise
+[+286ms] [REWRITE] bullmq Queue.add tracePromise
+[+286ms] [REWRITE] bullmq Queue.addBulk tracePromise
+[+294ms] [REWRITE] bullmq Worker.callProcessJob tracePromise
 [+493ms] [SUB] tracing:orchestrion:bullmq:Queue_add:start ← anon
 [+493ms] [SUB] tracing:orchestrion:bullmq:Queue_add:asyncEnd ← anon
 [+493ms] [SUB] tracing:orchestrion:bullmq:Queue_add:error ← anon
@@ -137,8 +131,8 @@ NO_COLOR=1 TEST_CHANNEL_DEBUG=true PLUGINS=bullmq yarn test:plugins
 
 1. **Channel patching**: Wraps `Channel.prototype.subscribe` to log subscriptions and wrap subscriber functions
 2. **Subscriber wrapping**: Wraps each subscriber to log publish events (needed because Node.js uses a native C++ fast path that bypasses JS-level publish when there are subscribers)
-3. **TracingChannel hooking**: Uses ritm to hook `dc-polyfill` and patch `tracingChannel()`
-4. **Shimmer hooking**: Uses ritm to hook `shimmer`/`datadog-shimmer` and patch `wrap()`/`massWrap()`
+3. **TracingChannel hooking**: Patches `dc-polyfill`'s `tracingChannel()` to log trace operations
+4. **Shimmer hooking**: Patches `datadog-shimmer`'s `wrap()`/`massWrap()` to log wraps
 5. **Rewriter patching**: Patches the orchestrion rewriter to log code transforms
 6. **Span lifecycle**: Subscribes to `dd-trace:span:start` and `dd-trace:span:finish` diagnostic channels
 7. **Subprocess support**: Loaded via `--require` in NODE_OPTIONS for integration tests
