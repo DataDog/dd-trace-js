@@ -17,6 +17,7 @@ describe('startup logging', () => {
   let tracerInfoMethod
 
   before(() => {
+    sinon.stub(console, 'info')
     sinon.stub(console, 'warn')
     delete require.cache[require.resolve('../src/startup-log')]
     const {
@@ -24,7 +25,6 @@ describe('startup logging', () => {
       setStartupLogPluginManager,
       setSamplingRules,
       startupLog,
-      logAgentError,
       tracerInfo,
     } = require('../src/startup-log')
     tracerInfoMethod = tracerInfo
@@ -60,11 +60,13 @@ describe('startup logging', () => {
     ])
     // Use sinon's stub instance directly to avoid type errors
     // eslint-disable-next-line no-console
+    const infoStub = /** @type {sinon.SinonStub} */ (console.info)
+    // eslint-disable-next-line no-console
     const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-    startupLog()
-    logAgentError({ status: 500, message: 'Error: fake error' })
-    firstStderrCall = warnStub.firstCall
-    secondStderrCall = warnStub.secondCall
+    startupLog({ message: 'Error: fake error' })
+    firstStderrCall = infoStub.firstCall
+    secondStderrCall = warnStub.firstCall
+    infoStub.restore()
     warnStub.restore()
   })
 
@@ -101,7 +103,7 @@ describe('startup logging', () => {
     })
   })
 
-  it('logAgentError should correctly output the diagnostic message separately', () => {
+  it('startupLog should correctly also output the diagnostic message', () => {
     assert.strictEqual(secondStderrCall.args[0], 'DATADOG TRACER DIAGNOSTIC - Agent Error: Error: fake error')
   })
 })
@@ -112,7 +114,7 @@ describe('data_streams_enabled', () => {
   })
 
   it('should be true when env var is true and config is unset', () => {
-    sinon.stub(console, 'warn')
+    sinon.stub(console, 'info')
     delete require.cache[require.resolve('../src/startup-log')]
     const {
       setStartupLogConfig,
@@ -125,14 +127,14 @@ describe('data_streams_enabled', () => {
     setStartupLogPluginManager({ _pluginsByName: {} })
     startupLog()
     /* eslint-disable-next-line no-console */
-    const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-    const logObj = JSON.parse(warnStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
-    warnStub.restore()
+    const infoStub = /** @type {sinon.SinonStub} */ (console.info)
+    const logObj = JSON.parse(infoStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+    infoStub.restore()
     assert.strictEqual(logObj.data_streams_enabled, true)
   })
 
   it('should be true when env var is not set and config is true', () => {
-    sinon.stub(console, 'warn')
+    sinon.stub(console, 'info')
     delete require.cache[require.resolve('../src/startup-log')]
     const {
       setStartupLogConfig,
@@ -145,14 +147,14 @@ describe('data_streams_enabled', () => {
     setStartupLogPluginManager({ _pluginsByName: {} })
     startupLog()
     /* eslint-disable-next-line no-console */
-    const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-    const logObj = JSON.parse(warnStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
-    warnStub.restore()
+    const infoStub = /** @type {sinon.SinonStub} */ (console.info)
+    const logObj = JSON.parse(infoStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+    infoStub.restore()
     assert.strictEqual(logObj.data_streams_enabled, true)
   })
 
   it('should be false when env var is true but config is false', () => {
-    sinon.stub(console, 'warn')
+    sinon.stub(console, 'info')
     delete require.cache[require.resolve('../src/startup-log')]
     const {
       setStartupLogConfig,
@@ -165,9 +167,9 @@ describe('data_streams_enabled', () => {
     setStartupLogPluginManager({ _pluginsByName: {} })
     startupLog()
     /* eslint-disable-next-line no-console */
-    const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-    const logObj = JSON.parse(warnStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
-    warnStub.restore()
+    const infoStub = /** @type {sinon.SinonStub} */ (console.info)
+    const logObj = JSON.parse(infoStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+    infoStub.restore()
     assert.strictEqual(logObj.data_streams_enabled, false)
   })
 })
@@ -181,7 +183,7 @@ describe('profiling_enabled', () => {
       ['auto', true],
       ['true', true],
     ].forEach(([envVar, expected]) => {
-      sinon.stub(console, 'warn')
+      sinon.stub(console, 'info')
       delete require.cache[require.resolve('../src/startup-log')]
       const {
         setStartupLogConfig,
@@ -194,9 +196,9 @@ describe('profiling_enabled', () => {
       setStartupLogPluginManager({ _pluginsByName: {} })
       startupLog()
       /* eslint-disable-next-line no-console */
-      const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-      const logObj = JSON.parse(warnStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
-      warnStub.restore()
+      const infoStub = /** @type {sinon.SinonStub} */ (console.info)
+      const logObj = JSON.parse(infoStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+      infoStub.restore()
       assert.strictEqual(logObj.profiling_enabled, expected)
     })
   })
