@@ -2,7 +2,7 @@
 
 const { trace, ROOT_CONTEXT, propagation } = require('@opentelemetry/api')
 const { storage } = require('../../../datadog-core')
-const { getAllBaggageItems, setBaggageItem, getBaggageItem } = require('../baggage')
+const { getAllBaggageItems, setBaggageItem, removeAllBaggageItems } = require('../baggage')
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 
 const tracer = require('../../')
@@ -97,16 +97,14 @@ class ContextManager {
     if (baggages) {
       baggageItems = baggages.getAllEntries()
     }
+    removeAllBaggageItems()
     for (const baggage of baggageItems) {
-      if (!getBaggageItem(baggage[0])) {
-        setBaggageItem(baggage[0], baggage[1].value)
-      }
+      setBaggageItem(baggage[0], baggage[1].value)
     }
     if (span && span._ddSpan) {
+      span._ddSpan.removeAllBaggageItems()
       for (const baggage of baggageItems) {
-        if (!span._ddSpan.getBaggageItem(baggage[0])) {
-          span._ddSpan.setBaggageItem(baggage[0], baggage[1].value)
-        }
+        span._ddSpan.setBaggageItem(baggage[0], baggage[1].value)
       }
       return ddScope.activate(span._ddSpan, run)
     }
