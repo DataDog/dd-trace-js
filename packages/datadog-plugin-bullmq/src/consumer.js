@@ -16,9 +16,14 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
     const queueName = job?.queueName || job?.queue?.name || 'bullmq'
 
     let childOf
-    const datadogContext = job?.data?._datadog
-    if (datadogContext) {
-      childOf = this.tracer.extract('text_map', datadogContext)
+    const metadata = job?.opts?.telemetry?.metadata
+    if (metadata) {
+      try {
+        const carrier = JSON.parse(metadata)
+        childOf = this.tracer.extract('text_map', carrier)
+      } catch {
+        // Ignore malformed metadata
+      }
     }
 
     const span = this.startSpan({
@@ -47,9 +52,14 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
     const queueName = job.queueName || job.queue?.name || 'bullmq'
     const payloadSize = job.data ? getMessageSize(job.data) : 0
 
-    const datadogContext = job.data?._datadog
-    if (datadogContext) {
-      this.tracer.decodeDataStreamsContext(datadogContext)
+    const metadata = job.opts?.telemetry?.metadata
+    if (metadata) {
+      try {
+        const carrier = JSON.parse(metadata)
+        this.tracer.decodeDataStreamsContext(carrier)
+      } catch {
+        // Ignore malformed metadata
+      }
     }
 
     const edgeTags = ['direction:in', `topic:${queueName}`, 'type:bullmq']
