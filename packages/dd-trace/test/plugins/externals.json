@@ -358,6 +358,12 @@
       "dep": true
     }
   ],
+  "@langchain/langgraph": [
+    {
+      "name": "@langchain/core",
+      "dep": "@langchain/langgraph"
+    }
+  ],
   "ldapjs": [
     {
       "name": "ldapjs",
