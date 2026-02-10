@@ -25,6 +25,7 @@ describe('startup logging', () => {
       setStartupLogPluginManager,
       setSamplingRules,
       startupLog,
+      logAgentError,
       tracerInfo,
     } = require('../src/startup-log')
     tracerInfoMethod = tracerInfo
@@ -63,7 +64,8 @@ describe('startup logging', () => {
     const errorStub = /** @type {sinon.SinonStub} */ (console.error)
     // eslint-disable-next-line no-console
     const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-    startupLog({ message: 'Error: fake error' })
+    startupLog()
+    logAgentError({ status: 500, message: 'Error: fake error' })
     firstStderrCall = errorStub.firstCall
     secondStderrCall = warnStub.firstCall
     errorStub.restore()
@@ -103,7 +105,7 @@ describe('startup logging', () => {
     })
   })
 
-  it('startupLog should correctly also output the diagnostic message', () => {
+  it('logAgentError should correctly output the diagnostic message separately', () => {
     assert.strictEqual(secondStderrCall.args[0], 'DATADOG TRACER DIAGNOSTIC - Agent Error: Error: fake error')
   })
 })
