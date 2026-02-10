@@ -60,6 +60,7 @@ const {
   GIT_REPOSITORY_URL,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
 const { NODE_MAJOR } = require('../../version')
 
 const NUM_RETRIES_EFD = 3
@@ -2329,6 +2330,45 @@ versions.forEach((version) => {
           await Promise.all([
             coverageReportPromise,
             once(childProcess, 'exit'),
+          ])
+        })
+
+        it('sends coverage_upload.request telemetry metric when coverage is uploaded', async () => {
+          receiver.setSettings({
+            coverage_report_upload_enabled: true,
+          })
+          receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+          const telemetryPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+              const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+
+              const coverageUploadMetric = telemetryMetrics.find(
+                ({ metric }) => metric === TELEMETRY_COVERAGE_UPLOAD
+              )
+
+              assert.ok(coverageUploadMetric, 'coverage_upload.request telemetry metric should be sent')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --coverage',
+            {
+              cwd,
+              env: {
+                ...getCiVisEvpProxyConfig(receiver.port),
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+                COVERAGE_PROVIDER: 'v8',
+                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
+                DD_GIT_COMMIT_SHA: gitCommitSha,
+                DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+              },
+            }
+          )
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            telemetryPromise,
           ])
         })
 
