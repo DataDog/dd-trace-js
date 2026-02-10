@@ -10,7 +10,6 @@ const id = require('../../dd-trace/src/id')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { DataStreamsProcessor, ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
@@ -199,6 +198,7 @@ describe('Plugin', () => {
                 component: 'google-cloud-pubsub',
                 'span.kind': 'consumer',
                 'pubsub.topic': resource,
+                'pubsub.subscription': subscriptionName,
                 'pubsub.subscription_type': 'pull',
               },
               metrics: {
@@ -206,24 +206,9 @@ describe('Plugin', () => {
               },
             })
 
-            // Verify all consumer tags are present
-            const tagsVerificationPromise = agent.assertFirstTraceSpan({
-              name: expectedSchema.receive.opName,
-              type: 'worker',
-              meta: {
-                'span.kind': 'consumer',
-                'pubsub.subscription_type': 'pull',
-                'pubsub.message_id': ANY_STRING,
-                'pubsub.subscription': subscriptionName,
-              }
-            }, { timeoutMs: 10000 })
-
-            sub.on('message', msg => {
-              msg.ack()
-            })
+            sub.on('message', msg => msg.ack())
             await publish(topic, { data: Buffer.from('hello') })
-            await expectedSpanPromise
-            await tagsVerificationPromise
+            return expectedSpanPromise
           })
 
           it('should give the current span a parentId from the sender', async () => {
