@@ -64,6 +64,12 @@ const {
   getModifiedFilesFromDiff,
   getPullRequestBaseBranch,
   TEST_IS_TEST_FRAMEWORK_WORKER,
+  TEST_IS_NEW,
+  TEST_IS_RUM_ACTIVE,
+  TEST_BROWSER_DRIVER,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_IS_MODIFIED,
 } = require('./util/test')
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
@@ -668,5 +674,18 @@ module.exports = class CiPlugin extends Plugin {
     }
 
     uploadNextReport()
+  }
+
+  getTestTelemetryTags (testSpan) {
+    const activeSpanTags = testSpan.context()._tags
+    return {
+      hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS],
+      isNew: activeSpanTags[TEST_IS_NEW] === 'true',
+      isRum: activeSpanTags[TEST_IS_RUM_ACTIVE] === 'true',
+      browserDriver: activeSpanTags[TEST_BROWSER_DRIVER],
+      isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+      isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+      isModified: activeSpanTags[TEST_IS_MODIFIED] === 'true',
+    }
   }
 }
