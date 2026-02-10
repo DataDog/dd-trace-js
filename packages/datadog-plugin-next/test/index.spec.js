@@ -131,7 +131,11 @@ describe('Plugin', function () {
         if (NODE_MAJOR < 24) {
           buildEnv.NODE_OPTIONS = '--openssl-legacy-provider'
         }
-        execSync('yarn exec next build', {
+        // Next.js 16+ uses Turbopack by default, force webpack to avoid worker_threads bug
+        const buildCmd = satisfies(realVersion, '>=16.0.0')
+          ? 'yarn exec next build --webpack'
+          : 'yarn exec next build'
+        execSync(buildCmd, {
           cwd,
           env: buildEnv,
           stdio: ['pipe', 'ignore', 'pipe'],
