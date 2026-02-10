@@ -3,6 +3,7 @@
 const os = require('os')
 const path = require('path')
 const { pathToFileURL } = require('url')
+
 const satisfies = require('../../../../vendor/dist/semifies')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { getIsAzureFunction } = require('../serverless')
@@ -10,6 +11,8 @@ const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../config/helper')
 const { getAgentUrl } = require('../agent/url')
+const { isACFActive } = require('../../../datadog-core/src/storage')
+
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
@@ -18,12 +21,12 @@ const SpaceProfiler = require('./profilers/space')
 const EventsProfiler = require('./profilers/events')
 const { oomExportStrategies, snapshotKinds } = require('./constants')
 const { tagger } = require('./tagger')
+
 class Config {
   constructor (options = {}) {
     // TODO: Remove entries that were already resolved in config.
     // For the others, move them over to config.
     const AWS_LAMBDA_FUNCTION_NAME = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
-    const NODE_OPTIONS = getEnvironmentVariable('NODE_OPTIONS')
 
     // TODO: Move initialization of these values to packages/dd-trace/src/config/index.js, and just read from config
     const {
@@ -219,16 +222,8 @@ class Config {
       that.asyncContextFrameEnabled = false
     }
 
-    const hasExecArg = (arg) => process.execArgv.includes(arg) || String(NODE_OPTIONS).includes(arg)
+    const canUseAsyncContextFrame = samplingContextsAvailable && isACFActive
 
-    let canUseAsyncContextFrame = false
-    if (samplingContextsAvailable) {
-      if (isAtLeast24) {
-        canUseAsyncContextFrame = !hasExecArg('--no-async-context-frame')
-      } else if (satisfies(process.versions.node, '>=22.9.0')) {
-        canUseAsyncContextFrame = hasExecArg('--experimental-async-context-frame')
-      }
-    }
     this.asyncContextFrameEnabled = isTrue(DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED ?? canUseAsyncContextFrame)
     if (this.asyncContextFrameEnabled && !canUseAsyncContextFrame) {
       if (!samplingContextsAvailable) {
