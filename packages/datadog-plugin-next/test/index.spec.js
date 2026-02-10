@@ -103,6 +103,15 @@ describe('Plugin', function () {
         // https://nextjs.org/blog/next-9-5#webpack-5-support-beta
         if (realVersion.startsWith('9')) pkg.resolutions = { webpack: '^5.0.0' }
 
+        // Next.js 11+ requires React as peer dependencies
+        if (satisfies(realVersion, '>=11 <13')) {
+          pkg.dependencies.react = '^17.0.2'
+          pkg.dependencies['react-dom'] = '^17.0.2'
+        } else if (satisfies(realVersion, '>=13')) {
+          pkg.dependencies.react = '^18.2.0'
+          pkg.dependencies['react-dom'] = '^18.2.0'
+        }
+
         writeFileSync(path.join(__dirname, 'package.json'), JSON.stringify(pkg, null, 2))
 
         // installing here for standalone purposes, copying `nodules` above was not generating the server file properly
