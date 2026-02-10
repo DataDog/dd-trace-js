@@ -141,5 +141,4 @@ describe('Inferred Proxy Spans with AppSec', function () {
       assert.ok(spans[1].meta['_dd.appsec.json'], 'server span should have _dd.appsec.json')
     })
   })
-
 })
