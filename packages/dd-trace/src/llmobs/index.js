@@ -67,9 +67,8 @@ function enable (config) {
   setAgentStrategy(config, useAgentless => {
     if (useAgentless && !(config.apiKey && config.site)) {
       log.error(
-        // eslint-disable-next-line eslint-rules/eslint-log-printf-style -- concatenating strings to avoid long lines
-        '[LLMObs] Cannot send LLM Observability data without a running agent or without both a Datadog API key ' +
-        'and site. Ensure these configurations are set before running your application. Disabling LLM Observability.'
+        // eslint-disable-next-line @stylistic/max-len
+        '[LLMObs] Cannot send LLM Observability data without a running agent or without both a Datadog API key and site. Ensure these configurations are set before running your application. Disabling LLM Observability.'
       )
       disable()
       return
