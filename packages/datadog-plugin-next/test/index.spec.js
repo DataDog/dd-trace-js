@@ -17,7 +17,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
 
-const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
+const min = NODE_MAJOR >= 24 ? '>=13' : '>=11.1'
 
 describe('Plugin', function () {
   let server

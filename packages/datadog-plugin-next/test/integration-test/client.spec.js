@@ -17,7 +17,7 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 const { NODE_MAJOR } = require('../../../../version')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
-const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
+const min = NODE_MAJOR >= 24 ? '>=13' : '>=11.1'
 
 describe('esm', () => {
   let agent
