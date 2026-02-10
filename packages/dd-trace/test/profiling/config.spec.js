@@ -15,6 +15,7 @@ const WallProfiler = require('../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const EventsProfiler = require('../../src/profiling/profilers/events')
 const { ConsoleLogger } = require('../../src/profiling/loggers/console')
+const { isACFActive } = require('../../../datadog-core/src/storage')
 
 const samplingContextsAvailable = process.platform !== 'win32'
 const oomMonitoringSupported = process.platform !== 'win32'
@@ -531,7 +532,7 @@ describe('config', () => {
   }
 
   describe('async context', () => {
-    const isSupported = samplingContextsAvailable && isAtLeast24
+    const isSupported = samplingContextsAvailable && isACFActive
     describe('where supported', () => {
       it('should be on by default', function () {
         if (!isSupported) {
