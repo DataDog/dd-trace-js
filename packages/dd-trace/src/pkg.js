@@ -41,4 +41,4 @@ function findUp (name, root, directory) {
   }
 }
 
-module.exports = Object.assign(findPkg(), { findRoot, findUp })
+module.exports = { ...findPkg(), findRoot, findUp }
