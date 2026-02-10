@@ -154,15 +154,20 @@ function wrapSuper (state, node) {
       const { callee } = parent
 
       if (callee) {
+        // This is needed because for generator functions we have to move the
+        // original function to a nested wrapped function, but we can't use an
+        // arrow function because arrow function cannot be generator functions,
+        // and `super` cannot be called from a nested function, so we have to
+        // rewrite any `super` call to not use the keyword.
         const expression = parse(`
-          Reflect.get(Object.getPrototypeOf(this.constructor.prototype), '${method}').call(this)
+          Reflect.get(Reflect.getPrototypeOf(this.constructor.prototype), '${method}').call(this)
         `).body[0].expression
 
         parent.callee = expression.callee
         parent.arguments.unshift(...expression.arguments)
       } else {
         parent.expression = parse(`
-          Reflect.get(Object.getPrototypeOf(this.constructor.prototype), '${method}')
+          Reflect.get(Reflect.getPrototypeOf(this.constructor.prototype), '${method}')
         `).body[0]
       }
     }
