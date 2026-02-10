@@ -176,7 +176,7 @@ describe('AppSec Index', function () {
 
       sinon.assert.calledOnceWithExactly(blocking.setTemplates, config)
       sinon.assert.calledOnceWithExactly(RuleManager.loadRules, config.appsec)
-      sinon.assert.calledOnceWithExactly(Reporter.init, config.appsec)
+      sinon.assert.calledOnceWithExactly(Reporter.init, config.appsec, config.inferredProxyServicesEnabled)
       sinon.assert.calledOnceWithExactly(UserTracking.setCollectionMode, 'anon', false)
       sinon.assert.calledOnceWithExactly(incomingHttpRequestStart.subscribe, AppSec.incomingHttpStartTranslator)
       sinon.assert.calledOnceWithExactly(incomingHttpRequestEnd.subscribe, AppSec.incomingHttpEndTranslator)

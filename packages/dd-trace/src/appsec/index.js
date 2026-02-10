@@ -68,7 +68,7 @@ function enable (_config) {
 
     appsecRemoteConfig.enableWafUpdate(_config.appsec)
 
-    Reporter.init(_config.appsec)
+    Reporter.init(_config.appsec, _config.inferredProxyServicesEnabled)
 
     apiSecuritySampler.configure(_config)
 
