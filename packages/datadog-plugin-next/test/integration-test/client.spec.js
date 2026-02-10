@@ -25,7 +25,7 @@ describe('esm', () => {
   let variants
 
   // These next versions have a dependency which uses a deprecated node buffer and match versions tested with unit tests
-  withVersions('next', 'next', `${min} <15.4.1`, version => {
+  withVersions('next', 'next', `${min} <17`, version => {
     useSandbox([`'next@${version}'`, 'react@^18.2.0', 'react-dom@^18.2.0'],
       false, ['./packages/datadog-plugin-next/test/integration-test/*'])
 

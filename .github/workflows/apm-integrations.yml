@@ -931,6 +931,8 @@ jobs:
           - '>=14.0.0 <=14.2.6'
           - '>=14.2.7 <15'
           - '>=15.0.0 <15.4.1'
+          - '>=15.4.1 <16'
+          - '>=16.0.0 <17'
         include:
           - range: '>=10.2.0 <11'
             range_clean: gte.10.2.0.and.lt.11
@@ -947,7 +949,11 @@ jobs:
           - range: '>=14.2.7 <15'
             range_clean: gte.14.2.7.and.lt.15
           - range: '>=15.0.0 <15.4.1'
-            range_clean: gte.15.0.0
+            range_clean: gte.15.0.0.and.lt.15.4.1
+          - range: '>=15.4.1 <16'
+            range_clean: gte.15.4.1.and.lt.16
+          - range: '>=16.0.0 <17'
+            range_clean: gte.16.0.0.and.lt.17
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
