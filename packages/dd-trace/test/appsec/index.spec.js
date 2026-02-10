@@ -66,6 +66,7 @@ describe('AppSec Index', function () {
 
   beforeEach(() => {
     config = {
+      inferredProxyServicesEnabled: false,
       appsec: {
         enabled: true,
         rules: './path/rules.json',
@@ -363,64 +364,105 @@ describe('AppSec Index', function () {
       }, req)
     })
 
-    it('should add _dd.appsec.enabled to inferred proxy span when present', () => {
-      const rootSpan = {
-        addTags: sinon.stub(),
-      }
+    describe('inferred proxy spans', () => {
+      it('should add _dd.appsec.enabled to inferred proxy span when present', () => {
+        AppSec.disable()
+        config.inferredProxyServicesEnabled = true
+        AppSec.enable(config)
 
-      const inferredProxySpan = {
-        addTags: sinon.stub(),
-      }
+        const rootSpan = {
+          addTags: sinon.stub(),
+        }
 
-      web.root.returns(rootSpan)
-      web.getContext.returns({ inferredProxySpan })
+        const inferredProxySpan = {
+          addTags: sinon.stub(),
+        }
 
-      const req = {
-        url: '/path',
-        headers: {
-          'user-agent': 'Arachni',
-          host: 'localhost',
-        },
-        method: 'GET',
-        socket: {
-          remoteAddress: '127.0.0.1',
-          remotePort: 8080,
-        },
-      }
-      const res = {}
+        web.root.returns(rootSpan)
+        web.getContext.returns({ inferredProxySpan })
 
-      AppSec.incomingHttpStartTranslator({ req, res })
+        const req = {
+          url: '/path',
+          headers: {
+            'user-agent': 'Arachni',
+            host: 'localhost',
+          },
+          method: 'GET',
+          socket: {
+            remoteAddress: '127.0.0.1',
+            remotePort: 8080,
+          },
+        }
+        const res = {}
 
-      sinon.assert.calledOnceWithExactly(inferredProxySpan.addTags, {
-        '_dd.appsec.enabled': 1,
+        AppSec.incomingHttpStartTranslator({ req, res })
+
+        sinon.assert.calledOnceWithExactly(inferredProxySpan.addTags, {
+          '_dd.appsec.enabled': 1,
+        })
       })
-    })
 
-    it('should not fail when inferred proxy span is not present', () => {
-      const rootSpan = {
-        addTags: sinon.stub(),
-      }
+      it('should not fail when inferred proxy span is not present', () => {
+        AppSec.disable()
+        config.inferredProxyServicesEnabled = true
+        AppSec.enable(config)
 
-      web.root.returns(rootSpan)
-      web.getContext.returns({})
+        const rootSpan = {
+          addTags: sinon.stub(),
+        }
 
-      const req = {
-        url: '/path',
-        headers: {
-          'user-agent': 'Arachni',
-          host: 'localhost',
-        },
-        method: 'GET',
-        socket: {
-          remoteAddress: '127.0.0.1',
-          remotePort: 8080,
-        },
-      }
-      const res = {}
+        web.root.returns(rootSpan)
+        web.getContext.returns({})
 
-      AppSec.incomingHttpStartTranslator({ req, res })
+        const req = {
+          url: '/path',
+          headers: {
+            'user-agent': 'Arachni',
+            host: 'localhost',
+          },
+          method: 'GET',
+          socket: {
+            remoteAddress: '127.0.0.1',
+            remotePort: 8080,
+          },
+        }
+        const res = {}
 
-      sinon.assert.calledOnce(rootSpan.addTags)
+        AppSec.incomingHttpStartTranslator({ req, res })
+
+        sinon.assert.calledOnce(rootSpan.addTags)
+      })
+
+      it('should not add _dd.appsec.enabled to inferred proxy span when inferredProxyServicesEnabled is false', () => {
+        const rootSpan = {
+          addTags: sinon.stub(),
+        }
+
+        const inferredProxySpan = {
+          addTags: sinon.stub(),
+        }
+
+        web.root.returns(rootSpan)
+        web.getContext.returns({ inferredProxySpan })
+
+        const req = {
+          url: '/path',
+          headers: {
+            'user-agent': 'Arachni',
+            host: 'localhost',
+          },
+          method: 'GET',
+          socket: {
+            remoteAddress: '127.0.0.1',
+            remotePort: 8080,
+          },
+        }
+        const res = {}
+
+        AppSec.incomingHttpStartTranslator({ req, res })
+
+        sinon.assert.notCalled(inferredProxySpan.addTags)
+      })
     })
   })
 
