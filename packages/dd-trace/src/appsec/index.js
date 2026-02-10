@@ -168,11 +168,13 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     [HTTP_CLIENT_IP]: clientIp,
   })
 
-  const context = web.getContext(req)
-  if (context?.inferredProxySpan) {
-    context.inferredProxySpan.addTags({
-      '_dd.appsec.enabled': 1,
-    })
+  if (config.inferredProxyServicesEnabled) {
+    const context = web.getContext(req)
+    if (context?.inferredProxySpan) {
+      context.inferredProxySpan.addTags({
+        '_dd.appsec.enabled': 1,
+      })
+    }
   }
 
   const requestHeaders = { ...req.headers }
