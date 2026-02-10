@@ -78,6 +78,7 @@ const {
   GIT_REPOSITORY_URL,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
 const { ERROR_MESSAGE, ERROR_TYPE, ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { NODE_MAJOR } = require('../../version')
 const { version: ddTraceVersion } = require('../../package.json')
@@ -2135,6 +2136,62 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           assert.strictEqual(tests.length, 3)
+          const efdRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd)
+          const atrRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
+          assert.strictEqual(efdRetries.length, NUM_RETRIES_EFD)
+          assert.strictEqual(atrRetries.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: { ...getCiVisAgentlessConfig(receiver.port), TESTS_TO_RUN: 'jest-flaky/flaky-fails.js' },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+    })
+
+    it('preserves test errors when ATR retry suppression is active due to EFD', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      // All tests are considered new, so EFD will be active
+      receiver.setKnownTests({ jest: {} })
+      const NUM_RETRIES_EFD = 2
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+        flaky_test_retries_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const failingTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+
+          // Verify that all failing tests have error messages preserved
+          // even though ATR retry suppression is active (due to EFD)
+          failingTests.forEach(test => {
+            assert.ok(
+              ERROR_MESSAGE in test.meta,
+              'Test error message should be preserved when ATR retry suppression is active'
+            )
+            assert.ok(test.meta[ERROR_MESSAGE].length > 0, 'Test error message should not be empty')
+            // The error should contain information about the assertion failure
+            assert.match(test.meta[ERROR_MESSAGE], /deepStrictEqual|Expected|actual/i)
+          })
+
+          // Verify EFD is active (ATR should be suppressed)
           const efdRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd)
           const atrRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
           assert.strictEqual(efdRetries.length, NUM_RETRIES_EFD)
@@ -4494,6 +4551,69 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ])
       })
 
+      it('preserves test errors when ATR retry suppression is active due to attempt to fix', async () => {
+        receiver.setSettings({
+          test_management: { enabled: true, attempt_to_fix_retries: 2 },
+          flaky_test_retries_enabled: true,
+        })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/jest-flaky/flaky-fails.js': {
+                tests: {
+                  'test-flaky-test-retries can retry failed tests': {
+                    properties: {
+                      attempt_to_fix: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const failingTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+
+            // Verify that all failing tests have error messages preserved
+            // even though ATR retry suppression is active (due to attempt to fix)
+            failingTests.forEach(test => {
+              assert.ok(
+                ERROR_MESSAGE in test.meta,
+                'Test error message should be preserved when ATR retry suppression is active due to attempt to fix'
+              )
+              assert.ok(test.meta[ERROR_MESSAGE].length > 0, 'Test error message should not be empty')
+              // The error should contain information about the assertion failure
+              assert.match(test.meta[ERROR_MESSAGE], /deepStrictEqual|Expected|actual/i)
+            })
+
+            // Verify attempt to fix is active (ATR should be suppressed)
+            const atfRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atf)
+            const atrRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
+            assert.strictEqual(atfRetries.length, 2)
+            assert.strictEqual(atrRetries.length, 0)
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'jest-flaky/flaky-fails.js',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+      })
+
       it('attempt to fix takes precedence over EFD for new tests', async () => {
         const NUM_RETRIES_EFD = 2
         receiver.setKnownTests({ jest: {} })
@@ -5971,6 +6091,45 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       await Promise.all([
         coverageReportPromise,
         once(childProcess, 'exit'),
+      ])
+    })
+
+    it('sends coverage_upload.request telemetry metric when coverage is uploaded', async () => {
+      receiver.setSettings({
+        coverage_report_upload_enabled: true,
+      })
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+      const telemetryPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+          const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+
+          const coverageUploadMetric = telemetryMetrics.find(
+            ({ metric }) => metric === TELEMETRY_COVERAGE_UPLOAD
+          )
+
+          assert.ok(coverageUploadMetric, 'coverage_upload.request telemetry metric should be sent')
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+            ENABLE_CODE_COVERAGE: 'true',
+            COVERAGE_REPORTERS: 'lcov',
+            COLLECT_COVERAGE_FROM: 'ci-visibility/test/*.js',
+            DD_GIT_COMMIT_SHA: gitCommitSha,
+            DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        telemetryPromise,
       ])
     })
 
