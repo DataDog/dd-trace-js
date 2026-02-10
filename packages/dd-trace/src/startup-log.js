@@ -4,7 +4,7 @@ const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
 const { getAgentUrl } = require('./agent/url')
-const { error, warn } = require('./log/writer')
+const { warn } = require('./log/writer')
 
 const errors = {}
 let config
@@ -25,7 +25,7 @@ function startupLog () {
   startupLogRan = true
 
   const out = tracerInfo()
-  error('DATADOG TRACER CONFIGURATION - ' + out)
+  warn('DATADOG TRACER CONFIGURATION - ' + out)
 }
 
 /**
