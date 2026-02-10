@@ -5,6 +5,7 @@ const { channel } = require('../../../datadog-instrumentations/src/helpers/instr
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
 const { getValueFromEnvSources } = require('../config/helper')
 const { ImpendingTimeout } = require('./runtime/errors')
+const { extractContext } = require('./context')
 
 const globalTracer = global._ddtrace
 const tracer = globalTracer._tracer
@@ -61,23 +62,6 @@ function crashFlush () {
 }
 
 /**
- * Extracts the context from the given Lambda handler arguments.
- *
- * @param {unknown[]} args any amount of arguments
- * @returns the context, if extraction was succesful.
- */
-function extractContext (args) {
-  let context = args.length > 1 ? args[1] : undefined
-  if (context === undefined || context.getRemainingTimeInMillis === undefined) {
-    context = args.length > 2 ? args[2] : undefined
-    if (context === undefined || context.getRemainingTimeInMillis === undefined) {
-      throw new Error('Could not extract context')
-    }
-  }
-  return context
-}
-
-/**
  * Patches your AWS Lambda handler function to add some tracing support.
  *
  * @param {Function} lambdaHandler a Lambda handler function.
@@ -86,7 +70,10 @@ exports.datadog = function datadog (lambdaHandler) {
   return (...args) => {
     const context = extractContext(args)
 
-    checkTimeout(context)
+    if (context) {
+      checkTimeout(context)
+    }
+
     const result = lambdaHandler.apply(this, args)
     if (result && typeof result.then === 'function') {
       return result.then((res) => {
